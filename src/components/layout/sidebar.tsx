@@ -28,11 +28,11 @@ export default function Sidebar({
     <div className="mb-10">
 
       <h2 className="text-2xl font-bold tracking-tight">
-        Sari Express
+        Sari Express Forwarders
       </h2>
 
       <p className="text-zinc-400 text-sm mt-1">
-        Freight Management System
+        Freight Management System for Sari Express by DHER SOLUTIONS
       </p>
 
     </div>
