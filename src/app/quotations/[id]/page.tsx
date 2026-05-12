@@ -11,6 +11,21 @@ import {
 } from '@react-pdf/renderer'
 
 import QuotationPDF from '../../../components/pdf/quotation-pdf'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '../../../components/ui/tabs'
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '../../../components/ui/card'
+
+import { Badge } from '../../../components/ui/badge'
 
 export default function QuotationDetailPage() {
   const { profile } = useUser()
@@ -98,209 +113,247 @@ export default function QuotationDetailPage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
-      <h1 className="text-4xl font-bold mb-2">
-  {quotation.quotation_number || 'Sin número'}
-</h1>
+  <AppLayout role={profile?.rol || 'Ventas'}>
+    <div className="space-y-6">
 
-<p className="text-gray-500 mb-8">
-  Detalle de Cotización
-</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-bold">
+            {quotation.quotation_number || 'Sin número'}
+          </h1>
 
-<div className="mb-6">
-
-  <PDFDownloadLink
-    document={
-      <QuotationPDF
-        quotation={quotation}
-        selectedAgent={selectedAgent}
-      />
-    }
-    fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}
-    className="bg-black text-white px-6 py-3 rounded-xl inline-block"
-  >
-    {({ loading }) =>
-      loading
-        ? 'Generando PDF...'
-        : 'Descargar PDF'
-    }
-  </PDFDownloadLink>
-
-</div>
-
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="text-xl font-bold mb-4">
-            Información General
-          </h2>
-
-          <p><strong>Estado:</strong> {quotation.status}</p>
-          <p>
-  <strong>Cliente:</strong>{' '}
-  {quotation.clientes
-    ? `${quotation.clientes.codigo_cliente} — ${quotation.clientes.nombre}`
-    : 'Sin cliente'}
-</p>
-
-<p>
-  <strong>Teléfono:</strong>{' '}
-  {quotation.clientes?.telefono || 'N/A'}
-</p>
-
-<p>
-  <strong>Email:</strong>{' '}
-  {quotation.clientes?.email_1 || 'N/A'}
-</p>
-
-<p>
-  <strong>Ubicación:</strong>{' '}
-  {quotation.clientes
-    ? `${quotation.clientes.ciudad}, ${quotation.clientes.pais}`
-    : 'N/A'}
-</p>
-
-<p>
-  <strong>Condición:</strong>{' '}
-  {quotation.clientes?.condicion_pago}
-</p>
-          <p><strong>Incoterm:</strong> {quotation.incoterm}</p>
-          <p><strong>Transporte:</strong> {quotation.tipo_transporte}</p>
-          <p><strong>Origen:</strong> {quotation.origen}</p>
-          <p><strong>Destino:</strong> {quotation.destino}</p>
-          <p><strong>Peso:</strong> {quotation.peso_kg} KG</p>
-          <p><strong>CBM:</strong> {quotation.volumen_cbm}</p>
-          <p><strong>Bultos:</strong> {quotation.cantidad_bultos}</p>
+          <p className="text-gray-500 mt-2">
+            Detalle de Cotización
+          </p>
         </div>
 
-        <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="text-xl font-bold mb-4">
-            Observaciones
-          </h2>
-
-          <p>{quotation.observaciones || 'Sin observaciones'}</p>
-        </div>
+        <PDFDownloadLink
+          document={
+            <QuotationPDF
+              quotation={quotation}
+              selectedAgent={selectedAgent}
+            />
+          }
+          fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}
+          className="bg-zinc-950 text-white px-5 py-3 rounded-xl hover:bg-zinc-800 transition"
+        >
+          {({ loading }) =>
+            loading ? 'Generando PDF...' : 'Descargar PDF'
+          }
+        </PDFDownloadLink>
       </div>
 
-      <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <h2 className="text-xl font-bold mb-4">
-          Tarifas de Agentes
-        </h2>
+      <Tabs defaultValue="resumen" className="space-y-6">
+  <TabsList className="bg-white border rounded-xl p-1">
+    <TabsTrigger value="resumen">Resumen</TabsTrigger>
+    <TabsTrigger value="tarifas">Tarifas</TabsTrigger>
+    <TabsTrigger value="validaciones">Validaciones</TabsTrigger>
+    <TabsTrigger value="historial">Historial</TabsTrigger>
+  </TabsList>
 
-        {agentQuotes.length === 0 ? (
-          <p className="text-gray-500">
-            No hay tarifas registradas.
-          </p>
-        ) : (
-          <table className="w-full text-left">
-            <thead className="bg-black text-white">
-              <tr>
-                <th className="p-3">Agente</th>
-                <th className="p-3">Costo</th>
-                <th className="p-3">Moneda</th>
-                <th className="p-3">Tránsito</th>
-                <th className="p-3">Seleccionada</th>
-              </tr>
-            </thead>
+  <TabsContent value="resumen">
+          <div className="grid grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Información General</CardTitle>
+              </CardHeader>
 
-            <tbody>
-              {agentQuotes.map((agent) => (
-                <tr key={agent.id} className="border-b">
-                  <td className="p-3">{agent.agente_nombre}</td>
-                  <td className="p-3">{agent.costo}</td>
-                  <td className="p-3">{agent.moneda}</td>
-                  <td className="p-3">{agent.transit_time}</td>
-                  <td className="p-3">
-                    {agent.is_selected ? 'Sí' : 'No'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              <CardContent className="space-y-2">
+                <p>
+                  <strong>Estado:</strong>{' '}
+                  <Badge>{quotation.status || 'Sin estado'}</Badge>
+                </p>
 
-      <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <h2 className="text-xl font-bold mb-4">
-          Validaciones de Costos
-        </h2>
+                <p>
+                  <strong>Cliente:</strong>{' '}
+                  {quotation.clientes
+                    ? `${quotation.clientes.codigo_cliente} — ${quotation.clientes.nombre}`
+                    : 'Sin cliente'}
+                </p>
 
-        {validations.length === 0 ? (
-          <p className="text-gray-500">
-            No hay validaciones registradas.
-          </p>
-        ) : (
-          <table className="w-full text-left">
-            <thead className="bg-black text-white">
-              <tr>
-                <th className="p-3">Cotizado</th>
-                <th className="p-3">Facturado</th>
-                <th className="p-3">Diferencia</th>
-                <th className="p-3">Estado</th>
-                <th className="p-3">Observaciones</th>
-              </tr>
-            </thead>
+                <p><strong>Teléfono:</strong> {quotation.clientes?.telefono || 'N/A'}</p>
+                <p><strong>Email:</strong> {quotation.clientes?.email_1 || 'N/A'}</p>
+                <p>
+                  <strong>Ubicación:</strong>{' '}
+                  {quotation.clientes
+                    ? `${quotation.clientes.ciudad || 'N/A'}, ${quotation.clientes.pais || 'N/A'}`
+                    : 'N/A'}
+                </p>
+                <p><strong>Condición:</strong> {quotation.clientes?.condicion_pago || 'N/A'}</p>
+              </CardContent>
+            </Card>
 
-            <tbody>
-              {validations.map((validation) => (
-                <tr key={validation.id} className="border-b">
-                  <td className="p-3">{validation.quoted_cost}</td>
-                  <td className="p-3">{validation.invoiced_cost}</td>
-                  <td className="p-3">{validation.difference}</td>
-                  <td className="p-3">{validation.status}</td>
-                  <td className="p-3">{validation.observations}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Detalles del Embarque</CardTitle>
+              </CardHeader>
 
-      <div className="bg-white rounded-xl shadow p-6 mt-6">
-        <h2 className="text-xl font-bold mb-4">
-          Historial de Estados
-        </h2>
+              <CardContent className="space-y-2">
+                <p><strong>Tipo:</strong> {quotation.quote_type || 'N/A'}</p>
+                <p><strong>Incoterm:</strong> {quotation.incoterm || 'N/A'}</p>
+                <p><strong>Transporte:</strong> {quotation.tipo_transporte || 'N/A'}</p>
+                <p><strong>Origen:</strong> {quotation.origen || 'N/A'}</p>
+                <p><strong>Destino:</strong> {quotation.destino || 'N/A'}</p>
+                <p><strong>Puerto Origen:</strong> {quotation.puerto_origen || 'N/A'}</p>
+                <p><strong>Puerto Destino:</strong> {quotation.puerto_destino || 'N/A'}</p>
+                <p><strong>Contenedor:</strong> {quotation.container_type || 'N/A'}</p>
+                <p><strong>Peso:</strong> {quotation.peso_kg || 'N/A'} KG</p>
+                <p><strong>CBM:</strong> {quotation.volumen_cbm || 'N/A'}</p>
+                <p><strong>Bultos:</strong> {quotation.cantidad_bultos || 'N/A'}</p>
+                <p><strong>Mercancía:</strong> {quotation.commodity || 'N/A'}</p>
+              </CardContent>
+            </Card>
 
-        {statusHistory.length === 0 ? (
-          <p className="text-gray-500">
-            No hay cambios de estado registrados.
-          </p>
-        ) : (
-          <table className="w-full text-left">
-            <thead className="bg-black text-white">
-              <tr>
-                <th className="p-3">Estado Anterior</th>
-                <th className="p-3">Nuevo Estado</th>
-                <th className="p-3">Usuario</th>
-                <th className="p-3">Fecha</th>
-              </tr>
-            </thead>
+            <Card className="col-span-2">
+              <CardHeader>
+                <CardTitle>Observaciones</CardTitle>
+              </CardHeader>
 
-            <tbody>
-              {statusHistory.map((item) => (
-                <tr key={item.id} className="border-b">
-                  <td className="p-3">
-                    {item.old_status || 'Sin estado'}
-                  </td>
+              <CardContent>
+                <p>{quotation.observaciones || 'Sin observaciones'}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
-                  <td className="p-3">
-                    {item.new_status}
-                  </td>
+        <TabsContent value="tarifas">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tarifas de Agentes</CardTitle>
+            </CardHeader>
 
-                  <td className="p-3">
-                    {item.profiles
-                      ? `${item.profiles.nombre} ${item.profiles.apellido}`
-                      : 'Usuario no registrado'}
-                  </td>
+            <CardContent>
+              {agentQuotes.length === 0 ? (
+                <p className="text-gray-500">
+                  No hay tarifas registradas.
+                </p>
+              ) : (
+                <table className="w-full text-left">
+                  <thead className="bg-zinc-950 text-white">
+                    <tr>
+                      <th className="p-3">Agente</th>
+                      <th className="p-3">Costo</th>
+                      <th className="p-3">Moneda</th>
+                      <th className="p-3">Tránsito</th>
+                      <th className="p-3">Seleccionada</th>
+                    </tr>
+                  </thead>
 
-                  <td className="p-3">
-                    {new Date(item.created_at).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </AppLayout>
-  )
+                  <tbody>
+                    {agentQuotes.map((agent) => (
+                      <tr key={agent.id} className="border-b">
+                        <td className="p-3">{agent.agente_nombre}</td>
+                        <td className="p-3">{agent.costo}</td>
+                        <td className="p-3">{agent.moneda}</td>
+                        <td className="p-3">{agent.transit_time}</td>
+                        <td className="p-3">
+                          {agent.is_selected ? (
+                            <Badge className="bg-green-600 text-white">Sí</Badge>
+                          ) : (
+                            <Badge variant="secondary">No</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="validaciones">
+          <Card>
+            <CardHeader>
+              <CardTitle>Validaciones de Costos</CardTitle>
+            </CardHeader>
+
+            <CardContent>
+              {validations.length === 0 ? (
+                <p className="text-gray-500">
+                  No hay validaciones registradas.
+                </p>
+              ) : (
+                <table className="w-full text-left">
+                  <thead className="bg-zinc-950 text-white">
+                    <tr>
+                      <th className="p-3">Cotizado</th>
+                      <th className="p-3">Facturado</th>
+                      <th className="p-3">Diferencia</th>
+                      <th className="p-3">Estado</th>
+                      <th className="p-3">Observaciones</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {validations.map((validation) => (
+                      <tr key={validation.id} className="border-b">
+                        <td className="p-3">{validation.quoted_cost}</td>
+                        <td className="p-3">{validation.invoiced_cost}</td>
+                        <td className="p-3">{validation.difference}</td>
+                        <td className="p-3">{validation.status}</td>
+                        <td className="p-3">{validation.observations}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="historial">
+          <Card>
+            <CardHeader>
+              <CardTitle>Historial de Estados</CardTitle>
+            </CardHeader>
+
+            <CardContent>
+              {statusHistory.length === 0 ? (
+                <p className="text-gray-500">
+                  No hay cambios de estado registrados.
+                </p>
+              ) : (
+                <table className="w-full text-left">
+                  <thead className="bg-zinc-950 text-white">
+                    <tr>
+                      <th className="p-3">Estado Anterior</th>
+                      <th className="p-3">Nuevo Estado</th>
+                      <th className="p-3">Usuario</th>
+                      <th className="p-3">Fecha</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {statusHistory.map((item) => (
+                      <tr key={item.id} className="border-b">
+                        <td className="p-3">
+                          {item.old_status || 'Sin estado'}
+                        </td>
+
+                        <td className="p-3">
+                          {item.new_status}
+                        </td>
+
+                        <td className="p-3">
+                          {item.profiles
+                            ? `${item.profiles.nombre} ${item.profiles.apellido}`
+                            : 'Usuario no registrado'}
+                        </td>
+
+                        <td className="p-3">
+                          {new Date(item.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  </AppLayout>
+)
 }
