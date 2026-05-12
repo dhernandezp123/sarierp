@@ -35,6 +35,7 @@ export default function QuotationDetailPage() {
   const [selectedAgent, setSelectedAgent] = useState<any>(null)
 
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
+  const [pricingItems, setPricingItems] = useState<any[]>([])
   const [validations, setValidations] = useState<any[]>([])
   const [statusHistory, setStatusHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,20 +49,14 @@ export default function QuotationDetailPage() {
   const fetchData = async (id: string) => {
     const { data: quoteData } = await supabase
       .from('quotations')
-.select(`
-  *,
-  clientes (
-    codigo_cliente,
-    nombre,
-    nit,
-    telefono,
-    email_1,
-    ciudad,
-    pais,
-    condicion_pago,
-    dias_credito
-  )
-`)
+      .select(`
+        *,
+        clientes (*),
+        profiles:created_by (
+          nombre,
+          apellido
+        )
+      `)
       .eq('id', id)
       .single()
 
@@ -89,13 +84,20 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', id)
       .order('created_at', { ascending: false })
 
-    setQuotation(quoteData) 
+    const { data: pricingItemsData } = await supabase
+      .from('pricing_items')
+      .select('*')
+      .eq('quotation_id', id)
+      .order('created_at', { ascending: true })
+
+    setQuotation(quoteData)
+    setPricingItems(pricingItemsData || [])
     const { data: selectedPricing } = await supabase
-  .from('agent_quotes')
-  .select('*')
-  .eq('quotation_id', id)
-  .eq('selected', true)
-  .single()
+      .from('agent_quotes')
+      .select('*')
+      .eq('quotation_id', id)
+      .eq('selected', true)
+      .single()
 
     setSelectedAgent(selectedPricing)
     setAgentQuotes(agentData || [])
@@ -132,6 +134,7 @@ export default function QuotationDetailPage() {
             <QuotationPDF
               quotation={quotation}
               selectedAgent={selectedAgent}
+              pricingItems={pricingItems} 
             />
           }
           fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}

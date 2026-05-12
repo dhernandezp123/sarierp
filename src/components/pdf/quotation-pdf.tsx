@@ -8,150 +8,413 @@ import {
 
 const styles = StyleSheet.create({
   page: {
-    padding: 40,
-    fontSize: 10,
+    padding: 36,
+    fontSize: 9,
     fontFamily: 'Helvetica',
+    color: '#111827',
   },
   header: {
-    marginBottom: 24,
+    borderBottom: '3px solid #0f172a',
+    paddingBottom: 12,
+    marginBottom: 18,
   },
   company: {
-    fontSize: 18,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0f172a',
+  },
+  subtitle: {
+    fontSize: 9,
+    marginTop: 4,
+    color: '#4b5563',
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#0f172a',
+    color: 'white',
+    padding: '6 10',
+    borderRadius: 4,
+    marginTop: 8,
+    fontSize: 9,
     fontWeight: 'bold',
   },
-  title: {
-    fontSize: 14,
-    marginTop: 8,
+  topGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+  },
+  box: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    padding: 10,
+    borderRadius: 6,
   },
   section: {
-    marginBottom: 16,
-    padding: 12,
-    border: '1px solid #ddd',
+    marginBottom: 14,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
+    color: '#0f172a',
     marginBottom: 8,
+    textTransform: 'uppercase',
   },
   row: {
+    flexDirection: 'row',
     marginBottom: 4,
   },
   label: {
+    width: 88,
+    color: '#6b7280',
+  },
+  value: {
+    flex: 1,
+    color: '#111827',
+  },
+  table: {
+    border: '1px solid #e5e7eb',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#0f172a',
+    color: 'white',
+    padding: 7,
     fontWeight: 'bold',
   },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottom: '1px solid #e5e7eb',
+    padding: 7,
+  },
+  colConcept: {
+    flex: 2,
+  },
+  colAmount: {
+    flex: 1,
+    textAlign: 'right',
+  },
+  totalBox: {
+    alignSelf: 'flex-end',
+    width: 220,
+    border: '1px solid #0f172a',
+    padding: 10,
+    marginTop: 8,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  totalFinal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTop: '1px solid #0f172a',
+    paddingTop: 6,
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  notes: {
+    border: '1px solid #e5e7eb',
+    padding: 10,
+    borderRadius: 4,
+    marginTop: 8,
+  },
+  terms: {
+    marginTop: 18,
+    paddingTop: 10,
+    borderTop: '1px solid #e5e7eb',
+    fontSize: 8,
+    color: '#4b5563',
+  },
 })
+
+function formatMoney(value: any) {
+  const number = Number(value || 0)
+
+  return `USD ${number.toFixed(2)}`
+}
+
+function filterItems(pricingItems: any[], type: string) {
+  return pricingItems.filter((item) => item.item_type === type)
+}
+
+function getGroupTotal(items: any[]) {
+  return items.reduce(
+    (sum, item) => sum + Number(item.sale_amount || 0),
+    0
+  )
+}
+
+function ChargesTable({
+  title,
+  items,
+}: {
+  title: string
+  items: any[]
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+
+      <View style={styles.table}>
+        <View style={styles.tableHeader}>
+          <Text style={styles.colConcept}>Concepto</Text>
+          <Text style={styles.colAmount}>Valor</Text>
+        </View>
+
+        {items.map((item) => (
+          <View key={item.id} style={styles.tableRow}>
+            <Text style={styles.colConcept}>
+              {item.description}
+            </Text>
+
+            <Text style={styles.colAmount}>
+              {item.currency || 'USD'} {Number(item.sale_amount || 0).toFixed(2)}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+}
 
 export default function QuotationPDF({
   quotation,
   selectedAgent,
+  pricingItems = [],
 }: {
   quotation: any
   selectedAgent: any
+  pricingItems?: any[]
 }) {
+  const freightItems = filterItems(pricingItems, 'Flete')
+  const originItems = pricingItems.filter((item) =>
+    ['Origen', 'Documentación', 'Aduana'].includes(item.item_type)
+  )
+  const destinationItems = pricingItems.filter((item) =>
+    ['Destino', 'Inland'].includes(item.item_type)
+  )
+  const additionalItems = pricingItems.filter((item) =>
+    ['Seguro', 'Profit', 'Otro'].includes(item.item_type)
+  )
+
+  const freightTotal = getGroupTotal(freightItems)
+  const originTotal = getGroupTotal(originItems)
+  const destinationTotal = getGroupTotal(destinationItems)
+  const additionalTotal = getGroupTotal(additionalItems)
+
+  const finalTotal =
+    Number(quotation.total_sale || 0) ||
+    freightTotal + originTotal + destinationTotal + additionalTotal
+
+  const sellerName = quotation.profiles
+    ? `${quotation.profiles.nombre} ${quotation.profiles.apellido}`
+    : 'N/A'
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.company}>SARI EXPRESS HONDURAS</Text>
-          <Text style={styles.title}>
-            Cotización: {quotation.quotation_number || 'Sin número'}
-          </Text>
-          <Text>
-            Fecha: {new Date().toLocaleDateString()}
-          </Text>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cliente</Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>Nombre: </Text>
-            {quotation.clientes?.nombre || 'N/A'}
+          <Text style={styles.subtitle}>
+            Soluciones logísticas internacionales | Transporte marítimo, aéreo y terrestre
           </Text>
 
-          <Text style={styles.row}>
-            <Text style={styles.label}>RTN/NIT: </Text>
-            {quotation.clientes?.nit || 'N/A'}
-          </Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>Teléfono: </Text>
-            {quotation.clientes?.telefono || 'N/A'}
-          </Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>Email: </Text>
-            {quotation.clientes?.email_1 || 'N/A'}
+          <Text style={styles.badge}>
+            {quotation.quote_type || 'Cotización Logística'}
           </Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Información Logística</Text>
+        <View style={styles.topGrid}>
+          <View style={styles.box}>
+            <Text style={styles.sectionTitle}>
+              Información de Cotización
+            </Text>
 
-          <Text style={styles.row}>
-            <Text style={styles.label}>Origen: </Text>
-            {quotation.origen || 'N/A'}
-          </Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>Destino: </Text>
-            {quotation.destino || 'N/A'}
-          </Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>Incoterm: </Text>
-            {quotation.incoterm || 'N/A'}
-          </Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>Transporte: </Text>
-            {quotation.tipo_transporte || 'N/A'}
-          </Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>Peso: </Text>
-            {quotation.peso_kg || 'N/A'} KG
-          </Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>CBM: </Text>
-            {quotation.volumen_cbm || 'N/A'}
-          </Text>
-
-          <Text style={styles.row}>
-            <Text style={styles.label}>Bultos: </Text>
-            {quotation.cantidad_bultos || 'N/A'}
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tarifa Seleccionada</Text>
-
-          {selectedAgent ? (
-            <>
-              <Text style={styles.row}>
-                <Text style={styles.label}>Agente: </Text>
-                {selectedAgent.agente_nombre}
+            <View style={styles.row}>
+              <Text style={styles.label}>No. Cotización:</Text>
+              <Text style={styles.value}>
+                {quotation.quotation_number || 'N/A'}
               </Text>
+            </View>
 
-              <Text style={styles.row}>
-                <Text style={styles.label}>Costo: </Text>
-                {selectedAgent.moneda} {selectedAgent.costo}
+            <View style={styles.row}>
+              <Text style={styles.label}>Fecha:</Text>
+              <Text style={styles.value}>
+                {quotation.created_at
+                  ? new Date(quotation.created_at).toLocaleDateString()
+                  : new Date().toLocaleDateString()}
               </Text>
+            </View>
 
-              <Text style={styles.row}>
-                <Text style={styles.label}>Tránsito: </Text>
-                {selectedAgent.transit_time || 'N/A'}
+            <View style={styles.row}>
+              <Text style={styles.label}>Válida hasta:</Text>
+              <Text style={styles.value}>
+                {quotation.valid_until || 'N/A'}
               </Text>
-            </>
-          ) : (
-            <Text>No hay tarifa seleccionada.</Text>
-          )}
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Vendedor:</Text>
+              <Text style={styles.value}>
+                {sellerName}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.box}>
+            <Text style={styles.sectionTitle}>
+              Información del Cliente
+            </Text>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Empresa:</Text>
+              <Text style={styles.value}>
+                {quotation.clientes?.nombre || 'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Contacto:</Text>
+              <Text style={styles.value}>
+                {quotation.contact_name || quotation.clientes?.nombre || 'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Email:</Text>
+              <Text style={styles.value}>
+                {quotation.contact_email || quotation.clientes?.email_1 || 'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Teléfono:</Text>
+              <Text style={styles.value}>
+                {quotation.contact_phone || quotation.clientes?.telefono || 'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>País:</Text>
+              <Text style={styles.value}>
+                {quotation.clientes?.pais || 'N/A'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.box}>
+            <Text style={styles.sectionTitle}>
+              Detalles del Embarque
+            </Text>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Origen:</Text>
+              <Text style={styles.value}>{quotation.origen || 'N/A'}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Destino:</Text>
+              <Text style={styles.value}>{quotation.destino || 'N/A'}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Contenedor:</Text>
+              <Text style={styles.value}>{quotation.container_type || 'N/A'}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Peso:</Text>
+              <Text style={styles.value}>{quotation.peso_kg || 'N/A'} KG</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Volumen:</Text>
+              <Text style={styles.value}>{quotation.volumen_cbm || 'N/A'} CBM</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.label}>Incoterm:</Text>
+              <Text style={styles.value}>{quotation.incoterm || 'N/A'}</Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.section}>
+        <ChargesTable
+          title="Flete"
+          items={freightItems}
+        />
+
+        <ChargesTable
+          title="Gastos de Origen"
+          items={originItems}
+        />
+
+        <ChargesTable
+          title="Gastos en Destino"
+          items={destinationItems}
+        />
+
+        <ChargesTable
+          title="Servicios Adicionales"
+          items={additionalItems}
+        />
+
+        {pricingItems.length === 0 && (
+          <View style={styles.notes}>
+            <Text>
+              No hay cargos comerciales aprobados para esta cotización.
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.totalBox}>
+          <View style={styles.totalRow}>
+            <Text>Flete</Text>
+            <Text>{formatMoney(freightTotal)}</Text>
+          </View>
+
+          <View style={styles.totalRow}>
+            <Text>Gastos de Origen</Text>
+            <Text>{formatMoney(originTotal)}</Text>
+          </View>
+
+          <View style={styles.totalRow}>
+            <Text>Gastos en Destino</Text>
+            <Text>{formatMoney(destinationTotal)}</Text>
+          </View>
+
+          <View style={styles.totalRow}>
+            <Text>Servicios Adicionales</Text>
+            <Text>{formatMoney(additionalTotal)}</Text>
+          </View>
+
+          <View style={styles.totalFinal}>
+            <Text>Total</Text>
+            <Text>{formatMoney(finalTotal)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.notes}>
           <Text style={styles.sectionTitle}>Observaciones</Text>
-          <Text>{quotation.observaciones || 'Sin observaciones'}</Text>
+          <Text>
+            {quotation.observaciones || 'Sin observaciones'}
+          </Text>
+        </View>
+
+        <View style={styles.terms}>
+          <Text>
+            Términos: Tarifa sujeta a disponibilidad de espacio, equipo y confirmación final del proveedor.
+            No incluye cargos no especificados, impuestos, almacenajes, demoras, inspecciones, multas o gastos extraordinarios.
+            Los tiempos de tránsito son estimados y pueden variar por condiciones operativas.
+          </Text>
         </View>
       </Page>
     </Document>

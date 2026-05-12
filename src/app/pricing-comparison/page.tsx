@@ -242,8 +242,76 @@ export default function PricingComparisonPage() {
     }
   }
 
-  const markAsSentToClient = async () => {
+  const approvePricing = async () => {
     if (!selectedQuote) return
+
+    const { error } = await supabase
+      .from('quotations')
+      .update({
+        total_cost: totalCost,
+        total_sale: totalSale,
+        profit_amount: profit,
+        gp_percentage: gpPercentage,
+        pricing_approved: true,
+        pricing_approved_by: profile?.id,
+        pricing_approved_at: new Date().toISOString(),
+      })
+      .eq('id', selectedQuote.id)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    alert('Pricing aprobado correctamente')
+
+    await fetchQuotations()
+
+    setSelectedQuote({
+      ...selectedQuote,
+      total_cost: totalCost,
+      total_sale: totalSale,
+      profit_amount: profit,
+      gp_percentage: gpPercentage,
+      pricing_approved: true,
+    })
+  }
+
+  const markAsSentToClient = async () => {
+    const approvePricing = async () => {
+  if (!selectedQuote) return
+
+  const { error } = await supabase
+    .from('quotations')
+    .update({
+      total_cost: totalCost,
+      total_sale: totalSale,
+      profit_amount: profit,
+      gp_percentage: gpPercentage,
+      pricing_approved: true,
+      pricing_approved_by: profile?.id,
+      pricing_approved_at: new Date().toISOString(),
+    })
+    .eq('id', selectedQuote.id)
+
+  if (error) {
+    alert(error.message)
+    return
+  }
+
+  alert('Pricing aprobado correctamente')
+
+  await fetchQuotations()
+
+  setSelectedQuote({
+    ...selectedQuote,
+    total_cost: totalCost,
+    total_sale: totalSale,
+    profit_amount: profit,
+    gp_percentage: gpPercentage,
+    pricing_approved: true,
+  })
+}
 
     const { error } = await supabase
       .from('quotations')
@@ -781,14 +849,22 @@ const targetStatus =
                   </CardContent>
                 </Card>
 
-                <div className="flex justify-end">
-                  <button
-                    onClick={markAsSentToClient}
-                    className="bg-green-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-green-700 transition"
-                  >
-                    Marcar como Enviada al Cliente
-                  </button>
-                </div>
+                
+<div className="flex justify-end gap-4">
+  <button
+    onClick={approvePricing}
+    className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-700 transition"
+  >
+    Aprobar Pricing
+  </button>
+
+  <button
+    onClick={markAsSentToClient}
+    className="bg-green-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-green-700 transition"
+  >
+    Marcar como Enviada al Cliente
+  </button>
+</div>
               </>
             )}
           </div>
