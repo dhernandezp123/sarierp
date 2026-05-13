@@ -30,6 +30,8 @@ export default function NewQuotationPage() {
 
     incoterm: '',
     tipo_transporte: '',
+    transit_time: '',
+    service_frequency: '',
 
     origen: '',
     destino: '',
@@ -203,6 +205,8 @@ commercial_value: Number(formData.commercial_value),
 
           incoterm: formData.incoterm,
           tipo_transporte: formData.tipo_transporte,
+          transit_time: formData.transit_time,
+          service_frequency: formData.service_frequency,
 
           origen: formData.origen,
           destino: formData.destino,
@@ -252,6 +256,8 @@ commercial_value: Number(formData.commercial_value),
 
         incoterm: '',
         tipo_transporte: '',
+        transit_time: '',
+        service_frequency: '',
 
         origen: '',
         destino: '',
@@ -339,7 +345,7 @@ commercial_value: Number(formData.commercial_value),
               <input
                 type="date"
                 name="valid_until"
-                value={formData.valid_until}
+                value={formData.valid_until || ''}
                 onChange={handleChange}
                 className="border p-3 rounded"
               />
@@ -350,7 +356,7 @@ commercial_value: Number(formData.commercial_value),
                 onChange={handleChange}
                 className="border p-3 rounded"
               >
-                <option value="">Incoterm</option>
+                <option value="">Seleccionar Incoterm</option>
                 <option value="EXW">EXW</option>
                 <option value="FCA">FCA</option>
                 <option value="FOB">FOB</option>
@@ -415,7 +421,7 @@ commercial_value: Number(formData.commercial_value),
               <input
                 name="contact_state"
                 placeholder="Departamento / Estado"
-                value={formData.contact_state}
+                value={formData.contact_state || ''}
                 disabled
                 className="border p-3 rounded bg-gray-100"
                 />
@@ -432,7 +438,7 @@ commercial_value: Number(formData.commercial_value),
               <input
                 list="locations"
                 name="origen"
-                placeholder="Origen"
+                placeholder="País de origen"
                 value={formData.origen}
                 onChange={handleChange}
                 className="border p-3 rounded"
@@ -441,7 +447,7 @@ commercial_value: Number(formData.commercial_value),
               <input
                 list="locations"
                 name="destino"
-                placeholder="Destino"
+                placeholder="País de destino"
                 value={formData.destino}
                 onChange={handleChange}
                 className="border p-3 rounded"
@@ -467,8 +473,8 @@ commercial_value: Number(formData.commercial_value),
 
               <input
                 name="preferred_carrier"
-                placeholder="Naviera de preferencia"
-                value={formData.preferred_carrier}
+                placeholder="Carrier de preferencia"
+                value={formData.preferred_carrier || ''}
                 onChange={handleChange}
                 className="border p-3 rounded"
               />
@@ -476,7 +482,23 @@ commercial_value: Number(formData.commercial_value),
 <input
   name="target_rate"
   placeholder="Target $"
-  value={formData.target_rate}
+  value={formData.target_rate || ''}
+  onChange={handleChange}
+  className="border p-3 rounded"
+/>
+
+<input
+  name="transit_time"
+  placeholder="Tiempo de tránsito"
+  value={formData.transit_time || ''}
+  onChange={handleChange}
+  className="border p-3 rounded"
+/>
+
+<input
+  name="service_frequency"
+  placeholder="Frecuencia / Servicio"
+  value={formData.service_frequency || ''}
   onChange={handleChange}
   className="border p-3 rounded"
 />
@@ -485,7 +507,7 @@ commercial_value: Number(formData.commercial_value),
                 <textarea
                   name="pickup_address"
                   placeholder="Dirección de recolección EXW"
-                  value={formData.pickup_address}
+                  value={formData.pickup_address || ''}
                   onChange={handleChange}
                   className="border p-3 rounded col-span-2 h-24"
                 />

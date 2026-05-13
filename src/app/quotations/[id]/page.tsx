@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
 
 import { supabase } from '../../../lib/supabase/client'
 import AppLayout from '../../../components/layout/app-layout'
@@ -129,21 +130,30 @@ export default function QuotationDetailPage() {
           </p>
         </div>
 
-        <PDFDownloadLink
-          document={
-            <QuotationPDF
-              quotation={quotation}
-              selectedAgent={selectedAgent}
-              pricingItems={pricingItems} 
-            />
-          }
-          fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}
-          className="bg-zinc-950 text-white px-5 py-3 rounded-xl hover:bg-zinc-800 transition"
-        >
-          {({ loading }) =>
-            loading ? 'Generando PDF...' : 'Descargar PDF'
-          }
-        </PDFDownloadLink>
+        <div className="flex items-center gap-3">
+          <PDFDownloadLink
+            document={
+              <QuotationPDF
+                quotation={quotation}
+                selectedAgent={selectedAgent}
+                pricingItems={pricingItems} 
+              />
+            }
+            fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}
+            className="bg-zinc-950 text-white px-5 py-3 rounded-xl hover:bg-zinc-800 transition"
+          >
+            {({ loading }) =>
+              loading ? 'Generando PDF...' : 'Descargar PDF'
+            }
+          </PDFDownloadLink>
+
+          <Link
+            href={`/quotations/${quotation.id}/edit`}
+            className="bg-blue-600 text-white px-5 py-3 rounded-xl hover:bg-blue-700 transition"
+          >
+            Editar Qt.
+          </Link>
+        </div>
       </div>
 
       <Tabs defaultValue="resumen" className="space-y-6">

@@ -114,7 +114,7 @@ export default function ClientesPage() {
           tipo_persona: formData.tipo_persona,
           condicion_pago: formData.condicion_pago,
           dias_credito:
-            formData.condicion_pago === 'Credito'
+            formData.condicion_pago === 'Crédito'
               ? Number(formData.dias_credito)
               : 0,
           tipo_cliente: formData.tipo_cliente,
@@ -237,10 +237,10 @@ export default function ClientesPage() {
 
               <select name="condicion_pago" value={formData.condicion_pago} onChange={handleChange} className="border p-3 rounded">
                 <option value="Contado">Contado</option>
-                <option value="Credito">Crédito</option>
+                <option value="Crédito">Crédito</option>
               </select>
 
-              {formData.condicion_pago === 'Credito' && (
+              {formData.condicion_pago === 'Crédito' && (
                 <input
                   name="dias_credito"
                   placeholder="Días de crédito"

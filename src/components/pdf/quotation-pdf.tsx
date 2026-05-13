@@ -40,8 +40,21 @@ const styles = StyleSheet.create({
   },
   topGrid: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
+    marginBottom: 12,
+  },
+  shipmentBox: {
+    backgroundColor: '#f3f4f6',
+    padding: 10,
+    borderRadius: 6,
     marginBottom: 14,
+  },
+  shipmentGrid: {
+    flexDirection: 'row',
+    gap: 18,
+  },
+  shipmentCol: {
+    flex: 1,
   },
   box: {
     flex: 1,
@@ -309,43 +322,85 @@ export default function QuotationPDF({
               </Text>
             </View>
           </View>
-
-          <View style={styles.box}>
-            <Text style={styles.sectionTitle}>
-              Detalles del Embarque
-            </Text>
-
-            <View style={styles.row}>
-              <Text style={styles.label}>Origen:</Text>
-              <Text style={styles.value}>{quotation.origen || 'N/A'}</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.label}>Destino:</Text>
-              <Text style={styles.value}>{quotation.destino || 'N/A'}</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.label}>Contenedor:</Text>
-              <Text style={styles.value}>{quotation.container_type || 'N/A'}</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.label}>Peso:</Text>
-              <Text style={styles.value}>{quotation.peso_kg || 'N/A'} KG</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.label}>Volumen:</Text>
-              <Text style={styles.value}>{quotation.volumen_cbm || 'N/A'} CBM</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.label}>Incoterm:</Text>
-              <Text style={styles.value}>{quotation.incoterm || 'N/A'}</Text>
-            </View>
-          </View>
         </View>
+
+        <View style={styles.shipmentBox}>
+  <Text style={styles.sectionTitle}>
+    Detalles del Embarque
+  </Text>
+
+  <View style={styles.shipmentGrid}>
+    <View style={styles.shipmentCol}>
+      <View style={styles.row}>
+        <Text style={styles.label}>Origen:</Text>
+        <Text style={styles.value}>{quotation.origen || 'N/A'}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Destino:</Text>
+        <Text style={styles.value}>{quotation.destino || 'N/A'}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Contenedor:</Text>
+        <Text style={styles.value}>{quotation.container_type || 'N/A'}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Peso:</Text>
+        <Text style={styles.value}>{quotation.peso_kg || 'N/A'} KG</Text>
+      </View>
+    </View>
+
+    <View style={styles.shipmentCol}>
+      <View style={styles.row}>
+        <Text style={styles.label}>Volumen:</Text>
+        <Text style={styles.value}>{quotation.volumen_cbm || 'N/A'} CBM</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Incoterm:</Text>
+        <Text style={styles.value}>{quotation.incoterm || 'N/A'}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Tránsito:</Text>
+        <Text style={styles.value}>{quotation.transit_time || 'N/A'}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Frecuencia:</Text>
+        <Text style={styles.value}>{quotation.service_frequency || 'N/A'}</Text>
+      </View>
+    </View>
+
+    <View style={styles.shipmentCol}>
+      <View style={styles.row}>
+        <Text style={styles.label}>Carrier:</Text>
+        <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Commodity:</Text>
+        <Text style={styles.value}>{quotation.commodity || 'N/A'}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Transbordo:</Text>
+        <Text style={styles.value}>{quotation.transshipment || 'Directo'}</Text>
+      </View>
+
+      <View style={styles.row}>
+        <Text style={styles.label}>Valor FOB:</Text>
+        <Text style={styles.value}>
+          {quotation.commercial_value
+            ? `USD ${Number(quotation.commercial_value).toFixed(2)}`
+            : 'N/A'}
+        </Text>
+      </View>
+    </View>
+  </View>
+</View>
 
         <ChargesTable
           title="Flete"

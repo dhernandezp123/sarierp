@@ -35,9 +35,18 @@ export default function PricingComparisonPage() {
     description: '',
     cost_amount: '',
     sale_amount: '',
+    quantity: '1',
+    taxable: false,
     currency: 'USD',
     supplier: '',
     notes: '',
+  })
+
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+
+  const [editPricingForm, setEditPricingForm] = useState({
+    cost_amount: '',
+    sale_amount: '',
   })
 
   useEffect(() => {
@@ -199,6 +208,11 @@ export default function PricingComparisonPage() {
         description: pricingForm.description,
         cost_amount: Number(pricingForm.cost_amount || 0),
         sale_amount: Number(pricingForm.sale_amount || 0),
+        quantity: quantity,
+        taxable: pricingForm.taxable,
+        tax_rate: 15,
+        tax_amount: taxAmount,
+        total_amount: totalAmount,
         currency: pricingForm.currency,
         supplier: pricingForm.supplier,
         notes: pricingForm.notes,
@@ -218,6 +232,8 @@ export default function PricingComparisonPage() {
       description: '',
       cost_amount: '',
       sale_amount: '',
+      quantity: '1',
+      taxable: false,
       currency: 'USD',
       supplier: '',
       notes: '',
@@ -240,6 +256,53 @@ export default function PricingComparisonPage() {
     if (selectedQuote) {
       await fetchPricingItems(selectedQuote.id)
     }
+  }
+
+  const startEditingPricingItem = (item: any) => {
+    setEditingItemId(item.id)
+
+    setEditPricingForm({
+      cost_amount: item.cost_amount?.toString() || '',
+      sale_amount: item.sale_amount?.toString() || '',
+    })
+  }
+
+  const cancelEditingPricingItem = () => {
+    setEditingItemId(null)
+
+    setEditPricingForm({
+      cost_amount: '',
+      sale_amount: '',
+    })
+  }
+
+  const updatePricingItem = async (item: any) => {
+    if (!selectedQuote) return
+
+    const quantity = Number(item.quantity || 1)
+    const saleAmount = Number(editPricingForm.sale_amount || 0)
+    const subtotal = saleAmount * quantity
+    const taxAmount = item.taxable ? subtotal * 0.15 : 0
+    const totalAmount = subtotal + taxAmount
+
+    const { error } = await supabase
+      .from('pricing_items')
+      .update({
+        cost_amount: Number(editPricingForm.cost_amount || 0),
+        sale_amount: saleAmount,
+        tax_amount: taxAmount,
+        total_amount: totalAmount,
+      })
+      .eq('id', item.id)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setEditingItemId(null)
+
+    await fetchPricingItems(selectedQuote.id)
   }
 
   const approvePricing = async () => {
@@ -353,6 +416,18 @@ export default function PricingComparisonPage() {
   )
 
   const profit = totalSale - totalCost
+
+  const quantity = Number(pricingForm.quantity || 1)
+
+  const subtotal =
+    Number(pricingForm.sale_amount || 0) * quantity
+
+  const taxAmount =
+    pricingForm.taxable
+      ? subtotal * 0.15
+      : 0
+
+  const totalAmount = subtotal + taxAmount
 
   const gpPercentage =
     totalSale > 0 ? (profit / totalSale) * 100 : 0
@@ -753,6 +828,34 @@ const targetStatus =
                       />
 
                       <input
+                        type="number"
+                        placeholder="QTY"
+                        value={pricingForm.quantity}
+                        onChange={(e) =>
+                          setPricingForm({
+                            ...pricingForm,
+                            quantity: Number(e.target.value),
+                          })
+                        }
+                        className="border p-3 rounded-xl"
+                      />
+
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={pricingForm.taxable}
+                          onChange={(e) =>
+                            setPricingForm({
+                              ...pricingForm,
+                              taxable: e.target.checked,
+                            })
+                          }
+                        />
+
+                        Gravable ISV 15%
+                      </label>
+
+                      <input
                         name="sale_amount"
                         placeholder="Venta"
                         value={pricingForm.sale_amount}
@@ -794,6 +897,16 @@ const targetStatus =
                       </button>
                     </div>
 
+                    <div className="bg-zinc-100 rounded-xl p-4 text-sm">
+                      <p>Subtotal: USD {subtotal.toFixed(2)}</p>
+
+                      <p>ISV: USD {taxAmount.toFixed(2)}</p>
+
+                      <p className="font-bold text-lg mt-2">
+                        Total: USD {totalAmount.toFixed(2)}
+                      </p>
+                    </div>
+
                     {pricingItems.length === 0 ? (
                       <p className="text-gray-500">
                         No hay líneas de pricing.
@@ -815,33 +928,104 @@ const targetStatus =
                         <tbody>
                           {pricingItems.map((item) => (
                             <tr key={item.id} className="border-b">
-                              <td className="p-3">{item.item_type}</td>
-                              <td className="p-3">{item.description}</td>
-                              <td className="p-3">
-                                {item.currency} {item.cost_amount}
-                              </td>
-                              <td className="p-3">
-                                {item.currency} {item.sale_amount}
-                              </td>
-                              <td className="p-3 font-bold">
-                                {item.currency}{' '}
-                                {(
-                                  Number(item.sale_amount || 0) -
-                                  Number(item.cost_amount || 0)
-                                ).toFixed(2)}
-                              </td>
-                              <td className="p-3">
-                                {item.supplier || 'N/A'}
-                              </td>
-                              <td className="p-3">
-                                <button
-                                  onClick={() => deletePricingItem(item.id)}
-                                  className="text-red-600 font-medium"
-                                >
-                                  Eliminar
-                                </button>
-                              </td>
-                            </tr>
+  <td className="p-3">{item.item_type}</td>
+
+  <td className="p-3">{item.description}</td>
+
+  <td className="p-3">
+    {editingItemId === item.id ? (
+      <input
+        value={editPricingForm.cost_amount}
+        onChange={(e) =>
+          setEditPricingForm({
+            ...editPricingForm,
+            cost_amount: e.target.value,
+          })
+        }
+        className="border p-2 rounded w-28"
+      />
+    ) : (
+      <>
+        {item.currency} {item.cost_amount}
+      </>
+    )}
+  </td>
+
+  <td className="p-3">
+    {editingItemId === item.id ? (
+      <input
+        value={editPricingForm.sale_amount}
+        onChange={(e) =>
+          setEditPricingForm({
+            ...editPricingForm,
+            sale_amount: e.target.value,
+          })
+        }
+        className="border p-2 rounded w-28"
+      />
+    ) : (
+      <>
+        {item.currency} {item.sale_amount}
+      </>
+    )}
+  </td>
+
+  <td className="p-3 font-bold">
+    {item.currency}{' '}
+    {(
+      Number(
+        editingItemId === item.id
+          ? editPricingForm.sale_amount || 0
+          : item.sale_amount || 0
+      ) -
+      Number(
+        editingItemId === item.id
+          ? editPricingForm.cost_amount || 0
+          : item.cost_amount || 0
+      )
+    ).toFixed(2)}
+  </td>
+
+  <td className="p-3">
+    {item.supplier || 'N/A'}
+  </td>
+
+  <td className="p-3">
+    {editingItemId === item.id ? (
+      <div className="flex gap-2">
+        <button
+          onClick={() => updatePricingItem(item)}
+          className="text-green-600 font-medium"
+        >
+          Guardar
+        </button>
+
+        <button
+          onClick={cancelEditingPricingItem}
+          className="text-gray-500 font-medium"
+        >
+          Cancelar
+        </button>
+      </div>
+    ) : (
+      <div className="flex gap-3">
+        <button
+          onClick={() => startEditingPricingItem(item)}
+          className="text-blue-600 font-medium"
+        >
+          Modificar
+        </button>
+
+        <button
+          onClick={() => deletePricingItem(item.id)}
+          className="text-red-600 font-medium"
+        >
+          Eliminar
+        </button>
+      </div>
+    )}
+  </td>
+</tr>
                           ))}
                         </tbody>
                       </table>
