@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
@@ -9,6 +9,7 @@ import AppLayout from '../../../components/layout/app-layout'
 import { useUser } from '../../../hooks/useUser'
 import {
   PDFDownloadLink,
+  pdf,
 } from '@react-pdf/renderer'
 
 import QuotationPDF from '../../../components/pdf/quotation-pdf'
@@ -107,6 +108,23 @@ export default function QuotationDetailPage() {
     setLoading(false)
   }
 
+  const handlePrintQuotation = async () => {
+    const blob = await pdf(
+      <QuotationPDF
+        quotation={quotation}
+        selectedAgent={selectedAgent}
+        pricingItems={pricingItems}
+      />
+    ).toBlob()
+
+    const url = URL.createObjectURL(blob)
+
+    const newWindow = window.open(url, '_blank')
+    if (newWindow) {
+      newWindow.document.title = `${quotation.quotation_number}.pdf`
+    }
+  }
+
   if (loading) {
     return <p className="p-8">Cargando detalle...</p>
   }
@@ -136,20 +154,27 @@ export default function QuotationDetailPage() {
               <QuotationPDF
                 quotation={quotation}
                 selectedAgent={selectedAgent}
-                pricingItems={pricingItems} 
+                pricingItems={pricingItems}
               />
             }
             fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}
-            className="bg-zinc-950 text-white px-5 py-3 rounded-xl hover:bg-zinc-800 transition"
+            className="h-14 px-6 rounded-xl bg-black text-white hover:bg-gray-900 transition font-semibold shadow-sm flex items-center justify-center"
           >
             {({ loading }) =>
               loading ? 'Generando PDF...' : 'Descargar PDF'
             }
           </PDFDownloadLink>
 
+          <button
+            onClick={handlePrintQuotation}
+            className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center"
+          >
+            🖨️ Imprimir Cotización
+          </button>
+
           <Link
             href={`/quotations/${quotation.id}/edit`}
-            className="bg-blue-600 text-white px-5 py-3 rounded-xl hover:bg-blue-700 transition"
+            className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center"
           >
             Editar Qt.
           </Link>

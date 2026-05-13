@@ -8,10 +8,9 @@ import {
 
 const styles = StyleSheet.create({
   page: {
-    padding: 36,
+    padding: 24,
     fontSize: 9,
-    fontFamily: 'Helvetica',
-    color: '#111827',
+    color: '#0F172A',
   },
   header: {
     borderBottom: '3px solid #0f172a',
@@ -23,38 +22,66 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#0f172a',
   },
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
   subtitle: {
-    fontSize: 9,
-    marginTop: 4,
+    fontSize: 8,
+    marginBottom: 8,
     color: '#4b5563',
   },
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: '#0f172a',
     color: 'white',
-    padding: '6 10',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderRadius: 4,
-    marginTop: 8,
-    fontSize: 9,
+    marginBottom: 10,
+    fontSize: 8,
     fontWeight: 'bold',
+  },
+  headerDivider: {
+    marginBottom: 12,
   },
   topGrid: {
     flexDirection: 'row',
     gap: 12,
     marginBottom: 12,
   },
-  shipmentBox: {
-    backgroundColor: '#f3f4f6',
-    padding: 10,
+  infoGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 8,
+  },
+  infoBox: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    padding: 8,
     borderRadius: 6,
-    marginBottom: 14,
+  },
+  infoTitle: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    marginBottom: 2,
+  },
+  shipmentBox: {
+    backgroundColor: '#F3F4F6',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 10,
   },
   shipmentGrid: {
     flexDirection: 'row',
-    gap: 18,
+    justifyContent: 'space-between',
   },
-  shipmentCol: {
-    flex: 1,
+  shipmentColumn: {
+    width: '32%',
   },
   box: {
     flex: 1,
@@ -63,13 +90,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   section: {
-    marginBottom: 14,
+    marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 'bold',
     color: '#0f172a',
-    marginBottom: 8,
+    marginBottom: 5,
+    marginTop: 6,
     textTransform: 'uppercase',
   },
   row: {
@@ -77,12 +105,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   label: {
-    width: 88,
-    color: '#6b7280',
+    width: 70,
+    fontSize: 7,
+    color: '#64748B',
   },
   value: {
     flex: 1,
-    color: '#111827',
+    fontSize: 7,
+    fontWeight: 'bold',
   },
   table: {
     border: '1px solid #e5e7eb',
@@ -92,29 +122,51 @@ const styles = StyleSheet.create({
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#0f172a',
-    color: 'white',
-    padding: 7,
+    backgroundColor: '#0F172A',
+    color: '#FFFFFF',
+    paddingVertical: 5,
+    paddingHorizontal: 7,
+    fontSize: 7,
     fontWeight: 'bold',
   },
   tableRow: {
     flexDirection: 'row',
-    borderBottom: '1px solid #e5e7eb',
-    padding: 7,
+    paddingVertical: 4,
+    paddingHorizontal: 7,
+    fontSize: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   colConcept: {
-    flex: 2,
+    width: '40%',
   },
-  colAmount: {
-    flex: 1,
+  colSmall: {
+    width: '12%',
     textAlign: 'right',
   },
-  totalBox: {
-    alignSelf: 'flex-end',
-    width: 220,
-    border: '1px solid #0f172a',
-    padding: 10,
-    marginTop: 8,
+  colAmount: {
+    width: '16%',
+    textAlign: 'right',
+  },
+  summaryBox: {
+    width: 250,
+    marginLeft: 'auto',
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#0F172A',
+    padding: 8,
+  },
+  totalDivider: {
+    borderTopWidth: 1,
+    borderTopColor: '#111827',
+    marginVertical: 6,
+  },
+  grandTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   totalRow: {
     flexDirection: 'row',
@@ -155,11 +207,21 @@ function filterItems(pricingItems: any[], type: string) {
   return pricingItems.filter((item) => item.item_type === type)
 }
 
+function getItemTotals(item: any) {
+  const qty = Number(item.quantity || 1)
+  const sale = Number(item.sale_amount || 0)
+  const subtotal = qty * sale
+  const tax = item.taxable ? subtotal * 0.15 : 0
+  const total = subtotal + tax
+
+  return { qty, sale, subtotal, tax, total }
+}
+
 function getGroupTotal(items: any[]) {
-  return items.reduce(
-    (sum, item) => sum + Number(item.sale_amount || 0),
-    0
-  )
+  return items.reduce((sum, item) => {
+    const { total } = getItemTotals(item)
+    return sum + total
+  }, 0)
 }
 
 function ChargesTable({
@@ -178,20 +240,40 @@ function ChargesTable({
       <View style={styles.table}>
         <View style={styles.tableHeader}>
           <Text style={styles.colConcept}>Concepto</Text>
+          <Text style={styles.colSmall}>QTY</Text>
           <Text style={styles.colAmount}>Valor</Text>
+          <Text style={styles.colAmount}>ISV</Text>
+          <Text style={styles.colAmount}>Total</Text>
         </View>
 
-        {items.map((item) => (
-          <View key={item.id} style={styles.tableRow}>
-            <Text style={styles.colConcept}>
-              {item.description}
-            </Text>
+        {items.map((item) => {
+          const { qty, subtotal, tax, total } = getItemTotals(item)
+          const currency = item.currency || 'USD'
 
-            <Text style={styles.colAmount}>
-              {item.currency || 'USD'} {Number(item.sale_amount || 0).toFixed(2)}
-            </Text>
-          </View>
-        ))}
+          return (
+            <View key={item.id} style={styles.tableRow}>
+              <Text style={styles.colConcept}>
+                {item.description}
+              </Text>
+
+              <Text style={styles.colSmall}>
+                {qty}
+              </Text>
+
+              <Text style={styles.colAmount}>
+                {currency} {subtotal.toFixed(2)}
+              </Text>
+
+              <Text style={styles.colAmount}>
+                {currency} {tax.toFixed(2)}
+              </Text>
+
+              <Text style={styles.colAmount}>
+                {currency} {total.toFixed(2)}
+              </Text>
+            </View>
+          )
+        })}
       </View>
     </View>
   )
@@ -222,6 +304,21 @@ export default function QuotationPDF({
   const destinationTotal = getGroupTotal(destinationItems)
   const additionalTotal = getGroupTotal(additionalItems)
 
+  const subtotalGeneral = pricingItems.reduce((sum, item) => {
+    const qty = Number(item.quantity || 1)
+    const sale = Number(item.sale_amount || 0)
+    return sum + qty * sale
+  }, 0)
+
+  const taxGeneral = pricingItems.reduce((sum, item) => {
+    const qty = Number(item.quantity || 1)
+    const sale = Number(item.sale_amount || 0)
+    const subtotal = qty * sale
+    return sum + (item.taxable ? subtotal * 0.15 : 0)
+  }, 0)
+
+  const totalGeneral = subtotalGeneral + taxGeneral
+
   const finalTotal =
     Number(quotation.total_sale || 0) ||
     freightTotal + originTotal + destinationTotal + additionalTotal
@@ -233,8 +330,8 @@ export default function QuotationPDF({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.company}>SARI EXPRESS HONDURAS</Text>
+        <View style={[styles.header, styles.headerDivider]}>
+          <Text style={styles.title}>SARI EXPRESS HONDURAS</Text>
 
           <Text style={styles.subtitle}>
             Soluciones logísticas internacionales | Transporte marítimo, aéreo y terrestre
@@ -245,20 +342,20 @@ export default function QuotationPDF({
           </Text>
         </View>
 
-        <View style={styles.topGrid}>
-          <View style={styles.box}>
-            <Text style={styles.sectionTitle}>
-              Información de Cotización
+        <View style={styles.infoGrid}>
+          <View style={styles.infoBox}>
+            <Text style={styles.infoTitle}>
+              INFORMACIÓN DE COTIZACIÓN
             </Text>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>No. Cotización:</Text>
               <Text style={styles.value}>
                 {quotation.quotation_number || 'N/A'}
               </Text>
             </View>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>Fecha:</Text>
               <Text style={styles.value}>
                 {quotation.created_at
@@ -267,14 +364,14 @@ export default function QuotationPDF({
               </Text>
             </View>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>Válida hasta:</Text>
               <Text style={styles.value}>
                 {quotation.valid_until || 'N/A'}
               </Text>
             </View>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>Vendedor:</Text>
               <Text style={styles.value}>
                 {sellerName}
@@ -282,40 +379,40 @@ export default function QuotationPDF({
             </View>
           </View>
 
-          <View style={styles.box}>
-            <Text style={styles.sectionTitle}>
-              Información del Cliente
+          <View style={styles.infoBox}>
+            <Text style={styles.infoTitle}>
+              INFORMACIÓN DEL CLIENTE
             </Text>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>Empresa:</Text>
               <Text style={styles.value}>
                 {quotation.clientes?.nombre || 'N/A'}
               </Text>
             </View>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>Contacto:</Text>
               <Text style={styles.value}>
                 {quotation.contact_name || quotation.clientes?.nombre || 'N/A'}
               </Text>
             </View>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>Email:</Text>
               <Text style={styles.value}>
                 {quotation.contact_email || quotation.clientes?.email_1 || 'N/A'}
               </Text>
             </View>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>Teléfono:</Text>
               <Text style={styles.value}>
                 {quotation.contact_phone || quotation.clientes?.telefono || 'N/A'}
               </Text>
             </View>
 
-            <View style={styles.row}>
+            <View style={styles.infoRow}>
               <Text style={styles.label}>País:</Text>
               <Text style={styles.value}>
                 {quotation.clientes?.pais || 'N/A'}
@@ -330,7 +427,7 @@ export default function QuotationPDF({
   </Text>
 
   <View style={styles.shipmentGrid}>
-    <View style={styles.shipmentCol}>
+    <View style={styles.shipmentColumn}>
       <View style={styles.row}>
         <Text style={styles.label}>Origen:</Text>
         <Text style={styles.value}>{quotation.origen || 'N/A'}</Text>
@@ -352,7 +449,7 @@ export default function QuotationPDF({
       </View>
     </View>
 
-    <View style={styles.shipmentCol}>
+    <View style={styles.shipmentColumn}>
       <View style={styles.row}>
         <Text style={styles.label}>Volumen:</Text>
         <Text style={styles.value}>{quotation.volumen_cbm || 'N/A'} CBM</Text>
@@ -374,7 +471,7 @@ export default function QuotationPDF({
       </View>
     </View>
 
-    <View style={styles.shipmentCol}>
+    <View style={styles.shipmentColumn}>
       <View style={styles.row}>
         <Text style={styles.label}>Carrier:</Text>
         <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
@@ -430,30 +527,22 @@ export default function QuotationPDF({
           </View>
         )}
 
-        <View style={styles.totalBox}>
+        <View style={styles.summaryBox} wrap={false}>
           <View style={styles.totalRow}>
-            <Text>Flete</Text>
-            <Text>{formatMoney(freightTotal)}</Text>
+            <Text>Subtotal</Text>
+            <Text>USD {subtotalGeneral.toFixed(2)}</Text>
           </View>
 
           <View style={styles.totalRow}>
-            <Text>Gastos de Origen</Text>
-            <Text>{formatMoney(originTotal)}</Text>
+            <Text>ISV</Text>
+            <Text>USD {taxGeneral.toFixed(2)}</Text>
           </View>
 
-          <View style={styles.totalRow}>
-            <Text>Gastos en Destino</Text>
-            <Text>{formatMoney(destinationTotal)}</Text>
-          </View>
+          <View style={styles.totalDivider} />
 
-          <View style={styles.totalRow}>
-            <Text>Servicios Adicionales</Text>
-            <Text>{formatMoney(additionalTotal)}</Text>
-          </View>
-
-          <View style={styles.totalFinal}>
+          <View style={styles.grandTotalRow}>
             <Text>Total</Text>
-            <Text>{formatMoney(finalTotal)}</Text>
+            <Text>USD {totalGeneral.toFixed(2)}</Text>
           </View>
         </View>
 

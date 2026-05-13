@@ -834,7 +834,7 @@ const targetStatus =
                         onChange={(e) =>
                           setPricingForm({
                             ...pricingForm,
-                            quantity: Number(e.target.value),
+                            quantity: e.target.value,
                           })
                         }
                         className="border p-3 rounded-xl"
@@ -915,118 +915,84 @@ const targetStatus =
                       <table className="w-full text-left">
                         <thead className="bg-zinc-950 text-white">
                           <tr>
-                            <th className="p-3">Tipo</th>
                             <th className="p-3">Descripción</th>
-                            <th className="p-3">Costo</th>
-                            <th className="p-3">Venta</th>
-                            <th className="p-3">Profit</th>
                             <th className="p-3">Proveedor</th>
+                            <th className="p-3">QTY</th>
+                            <th className="p-3">Valor</th>
+                            <th className="p-3">ISV</th>
+                            <th className="p-3">Total</th>
                             <th className="p-3">Acción</th>
                           </tr>
                         </thead>
 
                         <tbody>
-                          {pricingItems.map((item) => (
-                            <tr key={item.id} className="border-b">
-  <td className="p-3">{item.item_type}</td>
+                          {pricingItems.map((item) => {
+                            const qty = Number(item.quantity || 1)
+                            const subtotal = qty * Number(item.sale_amount || 0)
+                            const tax = item.taxable ? subtotal * 0.15 : 0
+                            const total = subtotal + tax
+                            const currency = item.currency || 'USD'
 
-  <td className="p-3">{item.description}</td>
+                            return (
+                              <tr key={item.id} className="border-b">
+                                <td className="p-3">{item.description}</td>
 
-  <td className="p-3">
-    {editingItemId === item.id ? (
-      <input
-        value={editPricingForm.cost_amount}
-        onChange={(e) =>
-          setEditPricingForm({
-            ...editPricingForm,
-            cost_amount: e.target.value,
-          })
-        }
-        className="border p-2 rounded w-28"
-      />
-    ) : (
-      <>
-        {item.currency} {item.cost_amount}
-      </>
-    )}
-  </td>
+                                <td className="p-3">
+                                  {item.supplier || 'N/A'}
+                                </td>
 
-  <td className="p-3">
-    {editingItemId === item.id ? (
-      <input
-        value={editPricingForm.sale_amount}
-        onChange={(e) =>
-          setEditPricingForm({
-            ...editPricingForm,
-            sale_amount: e.target.value,
-          })
-        }
-        className="border p-2 rounded w-28"
-      />
-    ) : (
-      <>
-        {item.currency} {item.sale_amount}
-      </>
-    )}
-  </td>
+                                <td className="p-3">{qty}</td>
 
-  <td className="p-3 font-bold">
-    {item.currency}{' '}
-    {(
-      Number(
-        editingItemId === item.id
-          ? editPricingForm.sale_amount || 0
-          : item.sale_amount || 0
-      ) -
-      Number(
-        editingItemId === item.id
-          ? editPricingForm.cost_amount || 0
-          : item.cost_amount || 0
-      )
-    ).toFixed(2)}
-  </td>
+                                <td className="p-3">
+                                  {currency} {Number(item.sale_amount || 0).toFixed(2)}
+                                </td>
 
-  <td className="p-3">
-    {item.supplier || 'N/A'}
-  </td>
+                                <td className="p-3">
+                                  {currency} {tax.toFixed(2)}
+                                </td>
 
-  <td className="p-3">
-    {editingItemId === item.id ? (
-      <div className="flex gap-2">
-        <button
-          onClick={() => updatePricingItem(item)}
-          className="text-green-600 font-medium"
-        >
-          Guardar
-        </button>
+                                <td className="p-3 font-bold">
+                                  {currency} {total.toFixed(2)}
+                                </td>
 
-        <button
-          onClick={cancelEditingPricingItem}
-          className="text-gray-500 font-medium"
-        >
-          Cancelar
-        </button>
-      </div>
-    ) : (
-      <div className="flex gap-3">
-        <button
-          onClick={() => startEditingPricingItem(item)}
-          className="text-blue-600 font-medium"
-        >
-          Modificar
-        </button>
+                                <td className="p-3">
+                                  {editingItemId === item.id ? (
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => updatePricingItem(item)}
+                                        className="text-green-600 font-medium"
+                                      >
+                                        Guardar
+                                      </button>
 
-        <button
-          onClick={() => deletePricingItem(item.id)}
-          className="text-red-600 font-medium"
-        >
-          Eliminar
-        </button>
-      </div>
-    )}
-  </td>
-</tr>
-                          ))}
+                                      <button
+                                        onClick={cancelEditingPricingItem}
+                                        className="text-gray-500 font-medium"
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex gap-3">
+                                      <button
+                                        onClick={() => startEditingPricingItem(item)}
+                                        className="text-blue-600 font-medium"
+                                      >
+                                        Modificar
+                                      </button>
+
+                                      <button
+                                        onClick={() => deletePricingItem(item.id)}
+                                        className="text-red-600 font-medium"
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </tbody>
                       </table>
                     )}
