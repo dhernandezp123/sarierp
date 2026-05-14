@@ -4,7 +4,15 @@ import {
   View,
   Document,
   StyleSheet,
+  Image,
 } from '@react-pdf/renderer'
+
+function formatCurrency(value: number) {
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
 
 const styles = StyleSheet.create({
   page: {
@@ -13,9 +21,15 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   header: {
-    borderBottom: '3px solid #0f172a',
-    paddingBottom: 12,
-    marginBottom: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  logo: {
+    width: 150,
+    objectFit: 'contain',
+    marginBottom: 6,
   },
   company: {
     fontSize: 20,
@@ -26,23 +40,53 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  subtitle: {
-    fontSize: 8,
-    marginBottom: 8,
-    color: '#4b5563',
+  
+  companyInfo: {
+    marginTop: 2,
+  },
+  companyDetails: {
+    fontSize: 7,
+    color: '#475569',
+    marginTop: 1,
   },
   badge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#0f172a',
-    color: 'white',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    backgroundColor: '#0F172A',
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: 'bold',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
     borderRadius: 4,
-    marginBottom: 10,
+  },
+  headerRight: {
+    width: 230,
+    alignItems: 'flex-end',
+  },
+  headerQuoteBox: {
+    marginTop: 8,
+    width: 230,
+    backgroundColor: '#F3F4F6',
+    padding: 8,
+    borderRadius: 6,
+  },
+  headerQuoteTitle: {
     fontSize: 8,
+    fontWeight: 'bold',
+    color: '#B52A37',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  headerQuoteText: {
+    fontSize: 7,
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  boldValue: {
     fontWeight: 'bold',
   },
   headerDivider: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#B52A37',
     marginBottom: 12,
   },
   topGrid: {
@@ -61,27 +105,23 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 6,
   },
-  infoTitle: {
-    fontSize: 9,
+  boxTitle: {
+    fontSize: 10,
     fontWeight: 'bold',
-    marginBottom: 5,
+    color: '#B52A37',
+    marginBottom: 8,
+    textTransform: 'uppercase',
   },
   infoRow: {
     flexDirection: 'row',
-    marginBottom: 2,
-  },
-  shipmentBox: {
-    backgroundColor: '#F3F4F6',
-    padding: 8,
-    borderRadius: 6,
-    marginBottom: 10,
+    marginBottom: 1,
   },
   shipmentGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
   },
   shipmentColumn: {
-    width: '32%',
+    width: '48%',
   },
   box: {
     flex: 1,
@@ -95,7 +135,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#0f172a',
+    color: '#B52A37',
     marginBottom: 5,
     marginTop: 6,
     textTransform: 'uppercase',
@@ -105,13 +145,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   label: {
-    width: 70,
-    fontSize: 7,
+    width: 65,
+    fontSize: 8,
     color: '#64748B',
   },
   value: {
     flex: 1,
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: 'bold',
   },
   table: {
@@ -138,14 +178,14 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   colConcept: {
-    width: '40%',
+    width: '34%',
   },
   colSmall: {
-    width: '12%',
+    width: '10%',
     textAlign: 'right',
   },
   colAmount: {
-    width: '16%',
+    width: '18.6%',
     textAlign: 'right',
   },
   summaryBox: {
@@ -164,6 +204,7 @@ const styles = StyleSheet.create({
   grandTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    color: '#B52A37',
     marginTop: 4,
     fontSize: 12,
     fontWeight: 'bold',
@@ -189,12 +230,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   terms: {
-    marginTop: 18,
-    paddingTop: 10,
-    borderTop: '1px solid #e5e7eb',
-    fontSize: 8,
-    color: '#4b5563',
-  },
+  marginTop: 14,
+  paddingTop: 8,
+  fontSize: 7,
+  color: '#334155',
+  borderTopWidth: 1,
+  borderTopColor: '#E5E7EB',
+},
 })
 
 function formatMoney(value: any) {
@@ -261,15 +303,15 @@ function ChargesTable({
               </Text>
 
               <Text style={styles.colAmount}>
-                {currency} {subtotal.toFixed(2)}
+                {currency} {formatCurrency(subtotal)}
               </Text>
 
               <Text style={styles.colAmount}>
-                {currency} {tax.toFixed(2)}
+                {currency} {formatCurrency(tax)}
               </Text>
 
               <Text style={styles.colAmount}>
-                {currency} {total.toFixed(2)}
+                {currency} {formatCurrency(total)}
               </Text>
             </View>
           )
@@ -325,62 +367,63 @@ export default function QuotationPDF({
 
   const sellerName = quotation.profiles
     ? `${quotation.profiles.nombre} ${quotation.profiles.apellido}`
-    : 'N/A'
+    : quotation.salesperson || quotation.created_by || 'N/A'
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <View style={[styles.header, styles.headerDivider]}>
-          <Text style={styles.title}>SARI EXPRESS HONDURAS</Text>
+        <View style={styles.header}>
+          <View>
+            <Image src="/logo/sari-logo.png" style={styles.logo} />
 
-          <Text style={styles.subtitle}>
-            Soluciones logísticas internacionales | Transporte marítimo, aéreo y terrestre
-          </Text>
-
-          <Text style={styles.badge}>
-            {quotation.quote_type || 'Cotización Logística'}
-          </Text>
-        </View>
-
-        <View style={styles.infoGrid}>
-          <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>
-              INFORMACIÓN DE COTIZACIÓN
+            <Text style={styles.companyDetails}>
+              SARI EXPRESS S. DE R.L DE C.V
             </Text>
 
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>No. Cotización:</Text>
-              <Text style={styles.value}>
-                {quotation.quotation_number || 'N/A'}
-              </Text>
-            </View>
+            <Text style={styles.companyDetails}>
+              Bo. Los Andes 9 Calle "A" 12-13 Ave. Casa #1225
+            </Text>
 
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Fecha:</Text>
-              <Text style={styles.value}>
-                {quotation.created_at
-                  ? new Date(quotation.created_at).toLocaleDateString()
-                  : new Date().toLocaleDateString()}
-              </Text>
-            </View>
+            <Text style={styles.companyDetails}>
+              San Pedro Sula, Cortés, Honduras | RTN: 08019003239182
+            </Text>
+          </View>
 
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Válida hasta:</Text>
-              <Text style={styles.value}>
-                {quotation.valid_until || 'N/A'}
-              </Text>
-            </View>
+          <View style={styles.headerRight}>
+            <Text style={styles.badge}>
+              {quotation.quote_type || 'Cotización Logística'}
+            </Text>
 
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Vendedor:</Text>
-              <Text style={styles.value}>
-                {sellerName}
+            <View style={styles.headerQuoteBox}>
+              <Text style={styles.headerQuoteTitle}>Información de Cotización</Text>
+
+              <Text style={styles.headerQuoteText}>
+                No.: <Text style={styles.boldValue}>
+                  {quotation.quotation_number || 'N/A'}
+                </Text>
+              </Text>
+
+              <Text style={styles.headerQuoteText}>
+                Fecha: {quotation.created_at ? new Date(quotation.created_at).toLocaleDateString() : 'N/A'}
+              </Text>
+
+              <Text style={styles.headerQuoteText}>
+                Válida hasta: {quotation.valid_until || 'N/A'}
+              </Text>
+
+              <Text style={styles.headerQuoteText}>
+                Vendedor: {sellerName}
               </Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.headerDivider} />
+
+        <View style={styles.infoGrid}>
 
           <View style={styles.infoBox}>
-            <Text style={styles.infoTitle}>
+            <Text style={styles.boxTitle}>
               INFORMACIÓN DEL CLIENTE
             </Text>
 
@@ -419,12 +462,11 @@ export default function QuotationPDF({
               </Text>
             </View>
           </View>
-        </View>
 
-        <View style={styles.shipmentBox}>
-  <Text style={styles.sectionTitle}>
-    Detalles del Embarque
-  </Text>
+          <View style={styles.infoBox}>
+            <Text style={styles.boxTitle}>
+              DETALLES DEL EMBARQUE
+            </Text>
 
   <View style={styles.shipmentGrid}>
     <View style={styles.shipmentColumn}>
@@ -466,13 +508,6 @@ export default function QuotationPDF({
       </View>
 
       <View style={styles.row}>
-        <Text style={styles.label}>Frecuencia:</Text>
-        <Text style={styles.value}>{quotation.service_frequency || 'N/A'}</Text>
-      </View>
-    </View>
-
-    <View style={styles.shipmentColumn}>
-      <View style={styles.row}>
         <Text style={styles.label}>Carrier:</Text>
         <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
       </View>
@@ -491,13 +526,14 @@ export default function QuotationPDF({
         <Text style={styles.label}>Valor FOB:</Text>
         <Text style={styles.value}>
           {quotation.commercial_value
-            ? `USD ${Number(quotation.commercial_value).toFixed(2)}`
+            ? `USD ${formatCurrency(Number(quotation.commercial_value))}`
             : 'N/A'}
         </Text>
       </View>
     </View>
   </View>
-</View>
+          </View>
+        </View>
 
         <ChargesTable
           title="Flete"
@@ -530,36 +566,35 @@ export default function QuotationPDF({
         <View style={styles.summaryBox} wrap={false}>
           <View style={styles.totalRow}>
             <Text>Subtotal</Text>
-            <Text>USD {subtotalGeneral.toFixed(2)}</Text>
+            <Text>USD {formatCurrency(subtotalGeneral)}</Text>
           </View>
 
           <View style={styles.totalRow}>
             <Text>ISV</Text>
-            <Text>USD {taxGeneral.toFixed(2)}</Text>
+            <Text>USD {formatCurrency(taxGeneral)}</Text>
           </View>
 
           <View style={styles.totalDivider} />
 
           <View style={styles.grandTotalRow}>
             <Text>Total</Text>
-            <Text>USD {totalGeneral.toFixed(2)}</Text>
+            <Text>USD {formatCurrency(totalGeneral)}</Text>
           </View>
         </View>
 
-        <View style={styles.notes}>
-          <Text style={styles.sectionTitle}>Observaciones</Text>
-          <Text>
-            {quotation.observaciones || 'Sin observaciones'}
-          </Text>
-        </View>
+<View style={styles.notes}>
+  <Text style={styles.sectionTitle}>Observaciones</Text>
+  <Text>
+    {quotation.observaciones || 'Sin observaciones'}
+  </Text>
+</View>
 
-        <View style={styles.terms}>
-          <Text>
-            Términos: Tarifa sujeta a disponibilidad de espacio, equipo y confirmación final del proveedor.
-            No incluye cargos no especificados, impuestos, almacenajes, demoras, inspecciones, multas o gastos extraordinarios.
-            Los tiempos de tránsito son estimados y pueden variar por condiciones operativas.
-          </Text>
-        </View>
+<View style={styles.terms} wrap={false}>
+  <Text style={styles.sectionTitle}>Términos y Condiciones</Text>
+  <Text>
+    {'Tarifa sujeta a disponibilidad de espacio, equipo y confirmación final del carrier. No incluye cargos no especificados, impuestos, almacenajes, demoras, inspecciones, multas o gastos extraordinarios. Los tiempos de tránsito son estimados y pueden variar por condiciones operativas. Sari Express no asume responsabilidad alguna por demoras, detenciones o inspecciones de carga efectuadas por autoridades competentes en origen o destino. El cliente es responsable de proporcionar información precisa y completa sobre la carga, así como de cumplir con regulaciones aduaneras y de transporte aplicables. Esta cotización es válida por el período indicado. El pago debe realizarse según los términos acordados para garantizar la reserva del servicio. Al aceptar esta cotización, el cliente acepta estas condiciones y comprende que tales demoras no constituyen incumplimiento contractual. En caso de contar con seguro de carga con su propia aseguradora, sugerimos verificar la cobertura de posibles demoras o contingencias logísticas. En todo momento, haremos lo posible por mitigar cualquier impacto y mantenerlo informado.'}
+  </Text>
+</View>
       </Page>
     </Document>
   )
