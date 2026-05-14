@@ -20,12 +20,20 @@ export default function PricingComparisonPage() {
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
 
+  const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
 
   const [agentForm, setAgentForm] = useState({
+    agent_id: '',
     agente_nombre: '',
-    costo: '',
+    ocean_freight: '',
+    exw_cost: '',
+    mbl_fee: '',
+    profit_per_container: '',
+    containers_qty: '1',
+    free_days_destination: '',
+    carrier: '',
     moneda: 'USD',
     transit_time: '',
   })
@@ -51,6 +59,7 @@ export default function PricingComparisonPage() {
 
   useEffect(() => {
     fetchQuotations()
+    fetchAgents()
   }, [])
 
   const fetchQuotations = async () => {
@@ -71,6 +80,16 @@ export default function PricingComparisonPage() {
     }
 
     setQuotations(data || [])
+  }
+
+  const fetchAgents = async () => {
+    const { data } = await supabase
+      .from('agents')
+      .select('*')
+      .eq('active', true)
+      .order('name', { ascending: true })
+
+    setAgents(data || [])
   }
 
   const fetchAgentQuotes = async (quotationId: string) => {
@@ -133,11 +152,27 @@ export default function PricingComparisonPage() {
       return
     }
 
+    const suggestedSale =
+      Number(agentForm.ocean_freight || 0) +
+      Number(agentForm.exw_cost || 0) +
+      Number(agentForm.mbl_fee || 0) +
+      Number(agentForm.profit_per_container || 0) *
+        Number(agentForm.containers_qty || 1)
+
     const { error } = await supabase.from('agent_quotes').insert([
       {
         quotation_id: selectedQuote.id,
+        agent_id: agentForm.agent_id || null,
         agente_nombre: agentForm.agente_nombre,
-        costo: Number(agentForm.costo),
+        costo: Number(agentForm.ocean_freight || 0),
+        ocean_freight: Number(agentForm.ocean_freight || 0),
+        exw_cost: Number(agentForm.exw_cost || 0),
+        mbl_fee: Number(agentForm.mbl_fee || 0),
+        profit_per_container: Number(agentForm.profit_per_container || 0),
+        containers_qty: Number(agentForm.containers_qty || 1),
+        free_days_destination: Number(agentForm.free_days_destination || 0),
+        carrier: agentForm.carrier,
+        suggested_sale: suggestedSale,
         moneda: agentForm.moneda,
         transit_time: agentForm.transit_time,
         is_selected: false,
@@ -157,8 +192,15 @@ export default function PricingComparisonPage() {
     alert('Tarifa de agente agregada')
 
     setAgentForm({
+      agent_id: '',
       agente_nombre: '',
-      costo: '',
+      ocean_freight: '',
+      exw_cost: '',
+      mbl_fee: '',
+      profit_per_container: '',
+      containers_qty: '1',
+      free_days_destination: '',
+      carrier: '',
       moneda: 'USD',
       transit_time: '',
     })
@@ -687,18 +729,38 @@ const targetStatus =
                   </CardHeader>
 
                   <CardContent className="grid grid-cols-4 gap-4">
-                    <input
-                      name="agente_nombre"
-                      placeholder="Agente"
-                      value={agentForm.agente_nombre}
-                      onChange={handleAgentChange}
-                      className="border p-3 rounded"
-                    />
+                    <select
+                      value={agentForm.agent_id}
+                      onChange={(e) => {
+                        const agentId = e.target.value
+                        const selectedAgent = agents.find((a) => a.id === agentId)
+
+                        setAgentForm({
+                          ...agentForm,
+                          agent_id: agentId,
+                          agente_nombre: selectedAgent?.name || '',
+                          profit_per_container: String(
+                            selectedAgent?.profit_per_container || 0
+                          ),
+                          mbl_fee: String(selectedAgent?.mbl_fee || 0),
+                          moneda: selectedAgent?.currency || 'USD',
+                        })
+                      }}
+                      className="border rounded-xl px-3 py-2"
+                    >
+                      <option value="">Seleccionar agente/proveedor</option>
+
+                      {agents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name} — {agent.type}
+                        </option>
+                      ))}
+                    </select>
 
                     <input
-                      name="costo"
-                      placeholder="Costo"
-                      value={agentForm.costo}
+                      name="ocean_freight"
+                      placeholder="Ocean Freight"
+                      value={agentForm.ocean_freight}
                       onChange={handleAgentChange}
                       className="border p-3 rounded"
                     />
@@ -741,48 +803,60 @@ const targetStatus =
                         No hay tarifas de agentes registradas.
                       </p>
                     ) : (
-                      <table className="w-full text-left">
-                        <thead className="bg-zinc-950 text-white">
-                          <tr>
-                            <th className="p-3">Agente</th>
-                            <th className="p-3">Costo</th>
-                            <th className="p-3">Moneda</th>
-                            <th className="p-3">Tránsito</th>
-                            <th className="p-3">Seleccionada</th>
-                            <th className="p-3">Acción</th>
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {agentQuotes.map((agent) => (
-                            <tr key={agent.id} className="border-b">
-                              <td className="p-3">{agent.agente_nombre}</td>
-                              <td className="p-3">{agent.costo}</td>
-                              <td className="p-3">{agent.moneda}</td>
-                              <td className="p-3">{agent.transit_time}</td>
-                              <td className="p-3">
-                                {agent.is_selected ? (
-                                  <Badge className="bg-green-600 text-white">
-                                    Sí
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="secondary">
-                                    No
-                                  </Badge>
-                                )}
-                              </td>
-                              <td className="p-3">
-                                <button
-                                  onClick={() => selectAgentQuote(agent.id)}
-                                  className="bg-zinc-950 text-white px-4 py-2 rounded-lg"
-                                >
-                                  Seleccionar
-                                </button>
-                              </td>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[1100px] text-left text-sm">
+                          <thead className="bg-zinc-950 text-white">
+                            <tr>
+                              <th className="p-3">Agente</th>
+                              <th className="p-3">Carrier</th>
+                              <th className="p-3">Ocean Freight</th>
+                              <th className="p-3">EXW</th>
+                              <th className="p-3">MBL</th>
+                              <th className="p-3">Profit/Cont.</th>
+                              <th className="p-3">Cont.</th>
+                              <th className="p-3">Venta Sugerida</th>
+                              <th className="p-3">Tránsito</th>
+                              <th className="p-3">Días Libres</th>
+                              <th className="p-3">Seleccionar</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+
+                          <tbody>
+                            {agentQuotes.map((quote) => (
+                              <tr key={quote.id} className="border-b">
+                                <td className="p-3">{quote.agente_nombre}</td>
+                                <td className="p-3">{quote.carrier || 'N/A'}</td>
+                                <td className="p-3">
+                                  {quote.moneda} {Number(quote.ocean_freight || quote.costo || 0).toFixed(2)}
+                                </td>
+                                <td className="p-3">
+                                  {quote.moneda} {Number(quote.exw_cost || 0).toFixed(2)}
+                                </td>
+                                <td className="p-3">
+                                  {quote.moneda} {Number(quote.mbl_fee || 0).toFixed(2)}
+                                </td>
+                                <td className="p-3">
+                                  {quote.moneda} {Number(quote.profit_per_container || 0).toFixed(2)}
+                                </td>
+                                <td className="p-3">{quote.containers_qty || 1}</td>
+                                <td className="p-3">
+                                  {quote.moneda} {Number(quote.suggested_sale || 0).toFixed(2)}
+                                </td>
+                                <td className="p-3">{quote.transit_time || 'N/A'}</td>
+                                <td className="p-3">{quote.free_days_destination || 0}</td>
+                                <td className="p-3">
+                                  <button
+                                    onClick={() => selectAgentQuote(quote.id)}
+                                    className="bg-zinc-950 text-white px-4 py-2 rounded-lg"
+                                  >
+                                    Seleccionar
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </CardContent>
                 </Card>

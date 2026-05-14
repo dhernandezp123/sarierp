@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   },
   infoRow: {
     flexDirection: 'row',
-    marginBottom: 1,
+    marginBottom: 3,
   },
   shipmentGrid: {
     flexDirection: 'row',
@@ -130,14 +130,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   section: {
-    marginBottom: 8,
+    marginBottom: 4,
   },
   sectionTitle: {
     fontSize: 10,
     fontWeight: 'bold',
     color: '#B52A37',
-    marginBottom: 5,
-    marginTop: 6,
+    marginBottom: 3,
+    marginTop: 2,
     textTransform: 'uppercase',
   },
   row: {
@@ -395,29 +395,41 @@ export default function QuotationPDF({
             </Text>
 
             <View style={styles.headerQuoteBox}>
-              <Text style={styles.headerQuoteTitle}>Información de Cotización</Text>
+              <Text style={styles.headerQuoteTitle}>
+                INFORMACIÓN DE COTIZACIÓN
+              </Text>
 
               <Text style={styles.headerQuoteText}>
-                No.: <Text style={styles.boldValue}>
+                No.:{' '}
+                <Text style={styles.boldValue}>
                   {quotation.quotation_number || 'N/A'}
                 </Text>
               </Text>
 
               <Text style={styles.headerQuoteText}>
-                Fecha: {quotation.created_at ? new Date(quotation.created_at).toLocaleDateString() : 'N/A'}
+                Fecha:{' '}
+                <Text style={styles.boldValue}>
+                  {quotation.created_at
+                    ? new Date(quotation.created_at).toLocaleDateString()
+                    : 'N/A'}
+                </Text>
               </Text>
 
               <Text style={styles.headerQuoteText}>
-                Válida hasta: {quotation.valid_until || 'N/A'}
+                Válida hasta:{' '}
+                <Text style={styles.boldValue}>
+                  {quotation.valid_until
+                    ? new Date(quotation.valid_until).toLocaleDateString()
+                    : 'N/A'}
+                </Text>
               </Text>
 
               <Text style={styles.headerQuoteText}>
-                Vendedor: {sellerName}
+                Vendedor: <Text style={styles.boldValue}>{sellerName}</Text>
               </Text>
             </View>
           </View>
         </View>
-
         <View style={styles.headerDivider} />
 
         <View style={styles.infoGrid}>
@@ -468,70 +480,70 @@ export default function QuotationPDF({
               DETALLES DEL EMBARQUE
             </Text>
 
-  <View style={styles.shipmentGrid}>
-    <View style={styles.shipmentColumn}>
-      <View style={styles.row}>
-        <Text style={styles.label}>Origen:</Text>
-        <Text style={styles.value}>{quotation.origen || 'N/A'}</Text>
-      </View>
+            <View style={styles.shipmentGrid}>
+              <View style={styles.shipmentColumn}>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Origen:</Text>
+                  <Text style={styles.value}>{quotation.origen || 'N/A'}</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Destino:</Text>
-        <Text style={styles.value}>{quotation.destino || 'N/A'}</Text>
-      </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Destino:</Text>
+                  <Text style={styles.value}>{quotation.destino || 'N/A'}</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Contenedor:</Text>
-        <Text style={styles.value}>{quotation.container_type || 'N/A'}</Text>
-      </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Contenedor:</Text>
+                  <Text style={styles.value}>{quotation.container_type || 'N/A'}</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Peso:</Text>
-        <Text style={styles.value}>{quotation.peso_kg || 'N/A'} KG</Text>
-      </View>
-    </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Peso:</Text>
+                  <Text style={styles.value}>{quotation.peso_kg || 'N/A'} KG</Text>
+                </View>
+              </View>
 
-    <View style={styles.shipmentColumn}>
-      <View style={styles.row}>
-        <Text style={styles.label}>Volumen:</Text>
-        <Text style={styles.value}>{quotation.volumen_cbm || 'N/A'} CBM</Text>
-      </View>
+              <View style={styles.shipmentColumn}>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Volumen:</Text>
+                  <Text style={styles.value}>{quotation.volumen_cbm || 'N/A'} CBM</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Incoterm:</Text>
-        <Text style={styles.value}>{quotation.incoterm || 'N/A'}</Text>
-      </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Incoterm:</Text>
+                  <Text style={styles.value}>{quotation.incoterm || 'N/A'}</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Tránsito:</Text>
-        <Text style={styles.value}>{quotation.transit_time || 'N/A'}</Text>
-      </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Tránsito:</Text>
+                  <Text style={styles.value}>{quotation.transit_time || 'N/A'}</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Carrier:</Text>
-        <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
-      </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Carrier:</Text>
+                  <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Commodity:</Text>
-        <Text style={styles.value}>{quotation.commodity || 'N/A'}</Text>
-      </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Commodity:</Text>
+                  <Text style={styles.value}>{quotation.commodity || 'N/A'}</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Transbordo:</Text>
-        <Text style={styles.value}>{quotation.transshipment || 'Directo'}</Text>
-      </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Transbordo:</Text>
+                  <Text style={styles.value}>{quotation.transshipment || 'Directo'}</Text>
+                </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Valor FOB:</Text>
-        <Text style={styles.value}>
-          {quotation.commercial_value
-            ? `USD ${formatCurrency(Number(quotation.commercial_value))}`
-            : 'N/A'}
-        </Text>
-      </View>
-    </View>
-  </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Valor FOB:</Text>
+                  <Text style={styles.value}>
+                    {quotation.commercial_value
+                      ? `USD ${formatCurrency(Number(quotation.commercial_value))}`
+                      : 'N/A'}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
         </View>
 
@@ -582,19 +594,19 @@ export default function QuotationPDF({
           </View>
         </View>
 
-<View style={styles.notes}>
-  <Text style={styles.sectionTitle}>Observaciones</Text>
-  <Text>
-    {quotation.observaciones || 'Sin observaciones'}
-  </Text>
-</View>
+        <View style={styles.notes}>
+          <Text style={styles.sectionTitle}>Observaciones</Text>
+          <Text>
+            {quotation.observaciones || 'Sin observaciones'}
+          </Text>
+        </View>
 
-<View style={styles.terms} wrap={false}>
-  <Text style={styles.sectionTitle}>Términos y Condiciones</Text>
-  <Text>
-    {'Tarifa sujeta a disponibilidad de espacio, equipo y confirmación final del carrier. No incluye cargos no especificados, impuestos, almacenajes, demoras, inspecciones, multas o gastos extraordinarios. Los tiempos de tránsito son estimados y pueden variar por condiciones operativas. Sari Express no asume responsabilidad alguna por demoras, detenciones o inspecciones de carga efectuadas por autoridades competentes en origen o destino. El cliente es responsable de proporcionar información precisa y completa sobre la carga, así como de cumplir con regulaciones aduaneras y de transporte aplicables. Esta cotización es válida por el período indicado. El pago debe realizarse según los términos acordados para garantizar la reserva del servicio. Al aceptar esta cotización, el cliente acepta estas condiciones y comprende que tales demoras no constituyen incumplimiento contractual. En caso de contar con seguro de carga con su propia aseguradora, sugerimos verificar la cobertura de posibles demoras o contingencias logísticas. En todo momento, haremos lo posible por mitigar cualquier impacto y mantenerlo informado.'}
-  </Text>
-</View>
+        <View style={styles.terms} wrap={false}>
+          <Text style={styles.sectionTitle}>Términos y Condiciones</Text>
+          <Text>
+            {'Tarifa sujeta a disponibilidad de espacio, equipo y confirmación final del carrier. No incluye cargos no especificados, impuestos, almacenajes, demoras, inspecciones, multas o gastos extraordinarios. Los tiempos de tránsito son estimados y pueden variar por condiciones operativas. Sari Express no asume responsabilidad alguna por demoras, detenciones o inspecciones de carga efectuadas por autoridades competentes en origen o destino. El cliente es responsable de proporcionar información precisa y completa sobre la carga, así como de cumplir con regulaciones aduaneras y de transporte aplicables. Esta cotización es válida por el período indicado. El pago debe realizarse según los términos acordados para garantizar la reserva del servicio. Al aceptar esta cotización, el cliente acepta estas condiciones y comprende que tales demoras no constituyen incumplimiento contractual. En caso de contar con seguro de carga con su propia aseguradora, sugerimos verificar la cobertura de posibles demoras o contingencias logísticas. En todo momento, haremos lo posible por mitigar cualquier impacto y mantenerlo informado.'}
+          </Text>
+        </View>
       </Page>
     </Document>
   )

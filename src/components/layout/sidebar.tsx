@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
@@ -8,91 +9,119 @@ import {
   History,
   Scale,
   DollarSign,
+  Building2,
 } from 'lucide-react'
 
 interface SidebarProps {
   role: string
 }
 
-export default function Sidebar({
-  role
-}: SidebarProps) {
+export default function Sidebar({ role }: SidebarProps) {
+  const pathname = usePathname()
 
-  const canViewCosts =
-    ['Admin', 'Pricing', 'Contabilidad']
-      .includes(role)
+  const canViewCosts = ['Admin', 'Pricing', 'Contabilidad'].includes(role)
+
+  const navItems = [
+    {
+      label: 'Dashboard',
+      href: '/dashboard',
+      icon: LayoutDashboard,
+    },
+    {
+      label: 'Clientes',
+      href: '/clientes',
+      icon: Users,
+    },
+    {
+      label: 'Nueva Cotización',
+      href: '/quotations/new',
+      icon: FileText,
+    },
+    {
+      label: 'Histórico',
+      href: '/historico',
+      icon: History,
+    },
+  ]
+
+  const costItems = [
+    {
+      label: 'Agentes',
+      href: '/agents',
+      icon: Building2,
+    },
+    {
+      label: 'Comparativo',
+      href: '/pricing-comparison',
+      icon: Scale,
+    },
+    {
+      label: 'Validación',
+      href: '/cost-validation',
+      icon: DollarSign,
+    },
+  ]
+
+  const renderItem = (item: any) => {
+    const Icon = item.icon
+    const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+          isActive
+            ? 'bg-white text-zinc-950 shadow-sm'
+            : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
+        }`}
+      >
+        <Icon size={18} />
+        <span>{item.label}</span>
+      </Link>
+    )
+  }
 
   return (
-  <aside className="w-72 h-screen bg-zinc-950 text-white p-6 border-r border-zinc-800">
+    <aside className="relative w-64 min-h-screen bg-zinc-950 text-white border-r border-zinc-800 px-4 py-5 font-sans">
+      <div className="mb-8 border-b border-zinc-800 pb-5">
+        <p className="text-xs uppercase tracking-[0.25em] text-red-500 font-bold">
+          Sari Express
+        </p>
 
-    <div className="mb-10">
+        <h2 className="mt-2 text-xl font-bold tracking-tight leading-tight">
+          Forwarders ERP
+        </h2>
 
-      <h2 className="text-2xl font-bold tracking-tight">
-        Sari Express Forwarders
-      </h2>
+        <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+          Freight Management Platform
+        </p>
+      </div>
 
-      <p className="text-zinc-400 text-sm mt-1">
-        Freight Management System for Sari Express by DHER SOLUTIONS
-      </p>
-
-    </div>
-
-    <nav className="space-y-2">
-
-      <Link
-        href="/dashboard"
-        className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-zinc-800 transition"
-      >
-        <LayoutDashboard size={18} />
-        Dashboard
-      </Link>
-
-      <Link
-        href="/clientes"
-        className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-zinc-800 transition"
-      >
-        <Users size={18} />
-        Clientes
-      </Link>
-
-      <Link
-        href="/quotations/new"
-        className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-zinc-800 transition"
-      >
-        <FileText size={18} />
-        Nueva Cotización
-      </Link>
-
-      <Link
-        href="/historico"
-        className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-zinc-800 transition"
-      >
-        <History size={18} />
-        Histórico
-      </Link>
+      <nav className="space-y-1">
+        {navItems.map(renderItem)}
+      </nav>
 
       {canViewCosts && (
-        <>
-          <Link
-            href="/pricing-comparison"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-zinc-800 transition"
-          >
-            <Scale size={18} />
-            Comparativo
-          </Link>
+        <div className="mt-8">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Pricing
+          </p>
 
-          <Link
-            href="/cost-validation"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-zinc-800 transition"
-          >
-            <DollarSign size={18} />
-            Validación
-          </Link>
-        </>
+          <nav className="space-y-1">
+            {costItems.map(renderItem)}
+          </nav>
+        </div>
       )}
 
-    </nav>
-
-  </aside>
-)
+      <div className="mt-10 pt-6 border-t border-zinc-800">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
+          <p className="text-xs text-zinc-500">Rol activo</p>
+          <p className="mt-1 text-sm font-semibold text-white">
+            {role || 'Ventas'}
+          </p>
+        </div>
+      </div>
+    </aside>
+  )
 }

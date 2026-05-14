@@ -1,14 +1,6 @@
 'use client'
 
 import Sidebar from './sidebar'
-import {
-  LayoutDashboard,
-  Users,
-  FileText,
-  History,
-  Scale,
-  DollarSign,
-} from 'lucide-react'
 
 interface Props {
   children: React.ReactNode
@@ -20,7 +12,7 @@ export default function AppLayout({ children, role }: Props) {
     <div className="flex">
       <Sidebar role={role} />
 
-      <main className="flex-1 bg-gray-100 min-h-screen p-8">
+      <main className="flex-1 p-8 bg-zinc-50 overflow-y-auto">
         {children}
       </main>
     </div>

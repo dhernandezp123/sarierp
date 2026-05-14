@@ -118,11 +118,7 @@ export default function QuotationDetailPage() {
     ).toBlob()
 
     const url = URL.createObjectURL(blob)
-
-    const newWindow = window.open(url, '_blank')
-    if (newWindow) {
-      newWindow.document.title = `${quotation.quotation_number}.pdf`
-    }
+    window.open(url, '_blank')
   }
 
   if (loading) {
@@ -133,13 +129,47 @@ export default function QuotationDetailPage() {
     return <p className="p-8">Cotización no encontrada.</p>
   }
 
+  const formatCurrency = (value: number) =>
+  value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
+const pricingTotals = pricingItems.reduce(
+  (acc, item) => {
+    const qty = Number(item.quantity || 1)
+    const sale = Number(item.sale_amount || 0)
+    const cost = Number(item.cost_amount || 0)
+
+    const subtotal = qty * sale
+    const costTotal = qty * cost
+    const tax = item.taxable ? subtotal * 0.15 : 0
+    const total = subtotal + tax
+    const profit = subtotal - costTotal
+
+    acc.subtotal += subtotal
+    acc.tax += tax
+    acc.total += total
+    acc.cost += costTotal
+    acc.profit += profit
+
+    return acc
+  },
+  { subtotal: 0, tax: 0, total: 0, cost: 0, profit: 0 }
+)
+
+const gpPercent =
+  pricingTotals.subtotal > 0
+    ? (pricingTotals.profit / pricingTotals.subtotal) * 100
+    : 0
+
   return (
   <AppLayout role={profile?.rol || 'Ventas'}>
-    <div className="space-y-6">
+    <div className="space-y-6 !font-sans [&_*]:!font-sans">
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 !font-sans">
             {quotation.quotation_number || 'Sin número'}
           </h1>
 
@@ -190,61 +220,206 @@ export default function QuotationDetailPage() {
   </TabsList>
 
   <TabsContent value="resumen">
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <Card className="border border-slate-200 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm text-gray-500">Venta Total</p>
+                <p className="text-2xl font-bold text-red-700 !font-sans">
+                  USD {formatCurrency(pricingTotals.total)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Incluye ISV
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-slate-200 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm text-gray-500">Costo Total</p>
+                <p className="text-2xl font-bold !font-sans">
+                  USD {formatCurrency(pricingTotals.cost)}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-slate-200 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm text-gray-500">Profit</p>
+                <p className="text-2xl font-bold text-green-700 !font-sans">
+                  USD {formatCurrency(pricingTotals.profit)}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-slate-200 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-sm text-gray-500">GP%</p>
+                <p className="text-2xl font-bold !font-sans">
+                  {gpPercent.toFixed(2)}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Sobre venta sin ISV
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Información General</CardTitle>
+                <CardTitle className="text-lg font-semibold text-slate-900">
+                  Información General
+                </CardTitle>
               </CardHeader>
 
-              <CardContent className="space-y-2">
-                <p>
-                  <strong>Estado:</strong>{' '}
-                  <Badge>{quotation.status || 'Sin estado'}</Badge>
-                </p>
+              <CardContent className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500">Estado</p>
+                  <p className="font-semibold text-slate-900">
+                    <Badge>{quotation.status || 'Sin estado'}</Badge>
+                  </p>
+                </div>
 
-                <p>
-                  <strong>Cliente:</strong>{' '}
-                  {quotation.clientes
-                    ? `${quotation.clientes.codigo_cliente} — ${quotation.clientes.nombre}`
-                    : 'Sin cliente'}
-                </p>
+                <div>
+                  <p className="text-xs text-slate-500">Cliente</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.clientes
+                      ? `${quotation.clientes.codigo_cliente} — ${quotation.clientes.nombre}`
+                      : 'Sin cliente'}
+                  </p>
+                </div>
 
-                <p><strong>Teléfono:</strong> {quotation.clientes?.telefono || 'N/A'}</p>
-                <p><strong>Email:</strong> {quotation.clientes?.email_1 || 'N/A'}</p>
-                <p>
-                  <strong>Ubicación:</strong>{' '}
-                  {quotation.clientes
-                    ? `${quotation.clientes.ciudad || 'N/A'}, ${quotation.clientes.pais || 'N/A'}`
-                    : 'N/A'}
-                </p>
-                <p><strong>Condición:</strong> {quotation.clientes?.condicion_pago || 'N/A'}</p>
+                <div>
+                  <p className="text-xs text-slate-500">Teléfono</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.clientes?.telefono || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Email</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.clientes?.email_1 || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Ubicación</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.clientes
+                      ? `${quotation.clientes.ciudad || 'N/A'}, ${quotation.clientes.pais || 'N/A'}`
+                      : 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Condición</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.clientes?.condicion_pago || 'N/A'}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Detalles del Embarque</CardTitle>
+                <CardTitle className="text-lg font-semibold text-slate-900">
+                  Detalles del Embarque
+                </CardTitle>
               </CardHeader>
 
-              <CardContent className="space-y-2">
-                <p><strong>Tipo:</strong> {quotation.quote_type || 'N/A'}</p>
-                <p><strong>Incoterm:</strong> {quotation.incoterm || 'N/A'}</p>
-                <p><strong>Transporte:</strong> {quotation.tipo_transporte || 'N/A'}</p>
-                <p><strong>Origen:</strong> {quotation.origen || 'N/A'}</p>
-                <p><strong>Destino:</strong> {quotation.destino || 'N/A'}</p>
-                <p><strong>Puerto Origen:</strong> {quotation.puerto_origen || 'N/A'}</p>
-                <p><strong>Puerto Destino:</strong> {quotation.puerto_destino || 'N/A'}</p>
-                <p><strong>Contenedor:</strong> {quotation.container_type || 'N/A'}</p>
-                <p><strong>Peso:</strong> {quotation.peso_kg || 'N/A'} KG</p>
-                <p><strong>CBM:</strong> {quotation.volumen_cbm || 'N/A'}</p>
-                <p><strong>Bultos:</strong> {quotation.cantidad_bultos || 'N/A'}</p>
-                <p><strong>Mercancía:</strong> {quotation.commodity || 'N/A'}</p>
+              <CardContent className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500">Tipo</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.quote_type || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Incoterm</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.incoterm || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Transporte</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.tipo_transporte || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Origen</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.origen || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Destino</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.destino || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Puerto Origen</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.puerto_origen || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Puerto Destino</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.puerto_destino || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Contenedor</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.container_type || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Peso</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.peso_kg || 'N/A'} KG
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">CBM</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.volumen_cbm || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Bultos</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.cantidad_bultos || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Mercancía</p>
+                  <p className="font-semibold text-slate-900">
+                    {quotation.commodity || 'N/A'}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="col-span-2">
               <CardHeader>
-                <CardTitle>Observaciones</CardTitle>
+                <CardTitle className="text-lg font-semibold text-slate-900">
+                  Observaciones
+                </CardTitle>
               </CardHeader>
 
               <CardContent>
@@ -257,7 +432,9 @@ export default function QuotationDetailPage() {
         <TabsContent value="tarifas">
           <Card>
             <CardHeader>
-              <CardTitle>Tarifas de Agentes</CardTitle>
+              <CardTitle className="text-lg font-semibold text-slate-900">
+                Tarifas de Agentes
+              </CardTitle>
             </CardHeader>
 
             <CardContent>
@@ -303,7 +480,9 @@ export default function QuotationDetailPage() {
         <TabsContent value="validaciones">
           <Card>
             <CardHeader>
-              <CardTitle>Validaciones de Costos</CardTitle>
+              <CardTitle className="text-lg font-semibold text-slate-900">
+                Validaciones de Costos
+              </CardTitle>
             </CardHeader>
 
             <CardContent>
@@ -343,7 +522,9 @@ export default function QuotationDetailPage() {
         <TabsContent value="historial">
           <Card>
             <CardHeader>
-              <CardTitle>Historial de Estados</CardTitle>
+              <CardTitle className="text-lg font-semibold text-slate-900">
+                Historial de Estados
+              </CardTitle>
             </CardHeader>
 
             <CardContent>
