@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { CheckCircle, Pencil } from 'lucide-react'
 
 import { supabase } from '../../lib/supabase/client'
 import AppLayout from '../../components/layout/app-layout'
@@ -34,6 +35,7 @@ export default function PricingComparisonPage() {
     containers_qty: '1',
     free_days_destination: '',
     carrier: '',
+    transshipment: '',
     moneda: 'USD',
     transit_time: '',
   })
@@ -51,6 +53,7 @@ export default function PricingComparisonPage() {
   })
 
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editingAgentQuoteId, setEditingAgentQuoteId] = useState<string | null>(null)
 
   const [editPricingForm, setEditPricingForm] = useState({
     cost_amount: '',
@@ -146,6 +149,25 @@ export default function PricingComparisonPage() {
     })
   }
 
+  const handleEditAgentQuote = (quote: any) => {
+    setEditingAgentQuoteId(quote.id)
+
+    setAgentForm({
+      agent_id: quote.agent_id || '',
+      agente_nombre: quote.agente_nombre || '',
+      ocean_freight: String(quote.ocean_freight || quote.costo || ''),
+      exw_cost: String(quote.exw_cost || ''),
+      mbl_fee: String(quote.mbl_fee || ''),
+      profit_per_container: String(quote.profit_per_container || ''),
+      containers_qty: String(quote.containers_qty || '1'),
+      free_days_destination: String(quote.free_days_destination || ''),
+      carrier: quote.carrier || '',
+      transshipment: quote.transshipment || '',
+      moneda: quote.moneda || 'USD',
+      transit_time: quote.transit_time || '',
+    })
+  }
+
   const saveAgentQuote = async () => {
     if (!selectedQuote) {
       alert('Selecciona una cotización primero')
@@ -159,25 +181,35 @@ export default function PricingComparisonPage() {
       Number(agentForm.profit_per_container || 0) *
         Number(agentForm.containers_qty || 1)
 
-    const { error } = await supabase.from('agent_quotes').insert([
-      {
-        quotation_id: selectedQuote.id,
-        agent_id: agentForm.agent_id || null,
-        agente_nombre: agentForm.agente_nombre,
-        costo: Number(agentForm.ocean_freight || 0),
-        ocean_freight: Number(agentForm.ocean_freight || 0),
-        exw_cost: Number(agentForm.exw_cost || 0),
-        mbl_fee: Number(agentForm.mbl_fee || 0),
-        profit_per_container: Number(agentForm.profit_per_container || 0),
-        containers_qty: Number(agentForm.containers_qty || 1),
-        free_days_destination: Number(agentForm.free_days_destination || 0),
-        carrier: agentForm.carrier,
-        suggested_sale: suggestedSale,
-        moneda: agentForm.moneda,
-        transit_time: agentForm.transit_time,
-        is_selected: false,
-      },
-    ])
+    const agentQuotePayload = {
+      agent_id: agentForm.agent_id || null,
+      agente_nombre: agentForm.agente_nombre,
+      costo: Number(agentForm.ocean_freight || 0),
+      ocean_freight: Number(agentForm.ocean_freight || 0),
+      exw_cost: Number(agentForm.exw_cost || 0),
+      mbl_fee: Number(agentForm.mbl_fee || 0),
+      profit_per_container: Number(agentForm.profit_per_container || 0),
+      containers_qty: Number(agentForm.containers_qty || 1),
+      free_days_destination: Number(agentForm.free_days_destination || 0),
+      carrier: agentForm.carrier,
+      transshipment: agentForm.transshipment,
+      moneda: agentForm.moneda,
+      transit_time: agentForm.transit_time,
+      suggested_sale: suggestedSale,
+    }
+
+    const { error } = editingAgentQuoteId
+      ? await supabase
+          .from('agent_quotes')
+          .update(agentQuotePayload)
+          .eq('id', editingAgentQuoteId)
+      : await supabase
+          .from('agent_quotes')
+          .insert({
+            quotation_id: selectedQuote.id,
+            ...agentQuotePayload,
+            is_selected: false,
+          })
 
     if (error) {
       alert(error.message)
@@ -189,7 +221,11 @@ export default function PricingComparisonPage() {
       .update({ status: 'Pendiente de Fijar Precios' })
       .eq('id', selectedQuote.id)
 
-    alert('Tarifa de agente agregada')
+    alert(
+      editingAgentQuoteId
+        ? 'Tarifa de agente actualizada'
+        : 'Tarifa de agente agregada'
+    )
 
     setAgentForm({
       agent_id: '',
@@ -201,9 +237,12 @@ export default function PricingComparisonPage() {
       containers_qty: '1',
       free_days_destination: '',
       carrier: '',
+      transshipment: '',
       moneda: 'USD',
       transit_time: '',
     })
+
+    setEditingAgentQuoteId(null)
 
     await fetchAgentQuotes(selectedQuote.id)
     await fetchQuotations()
@@ -211,6 +250,34 @@ export default function PricingComparisonPage() {
 
   const selectAgentQuote = async (agentQuoteId: string) => {
     if (!selectedQuote) return
+
+    let selectedAgentQuote = agentQuotes.find((quote) => quote.id === agentQuoteId)
+
+    if (!selectedAgentQuote) {
+      const { data, error: agentQuoteError } = await supabase
+        .from('agent_quotes')
+        .select('*')
+        .eq('id', agentQuoteId)
+        .single()
+
+      if (agentQuoteError) {
+        alert(agentQuoteError.message)
+        return
+      }
+
+      selectedAgentQuote = data
+    }
+
+    const shouldReplacePricing = window.confirm(
+      '¿Deseas reemplazar el pricing actual con la tarifa seleccionada?\n\nEsto eliminará las líneas actuales de pricing y generará nuevas automáticamente.'
+    )
+
+    if (shouldReplacePricing) {
+      await supabase
+        .from('pricing_items')
+        .delete()
+        .eq('quotation_id', selectedQuote.id)
+    }
 
     await supabase
       .from('agent_quotes')
@@ -227,9 +294,99 @@ export default function PricingComparisonPage() {
       return
     }
 
+    const currency = selectedAgentQuote.moneda || 'USD'
+    const supplier = selectedAgentQuote.agente_nombre || ''
+    const containersQty = Number(selectedAgentQuote.containers_qty || 1)
+    const oceanFreight = Number(
+      selectedAgentQuote.ocean_freight || selectedAgentQuote.costo || 0
+    )
+    const exwCost = Number(selectedAgentQuote.exw_cost || 0)
+    const mblFee = Number(selectedAgentQuote.mbl_fee || 0)
+    const profit = Number(selectedAgentQuote.profit_per_container || 0)
+    const totalProfit = profit * containersQty
+
+    const pricingLines = [
+      {
+        quotation_id: selectedQuote.id,
+        item_type: 'Flete',
+        description: 'Ocean Freight',
+        cost_amount: oceanFreight,
+        sale_amount: oceanFreight,
+        quantity: 1,
+        taxable: false,
+        tax_rate: 15,
+        tax_amount: 0,
+        total_amount: oceanFreight,
+        currency,
+        supplier,
+        notes: '',
+        created_by: profile?.id,
+      },
+      {
+        quotation_id: selectedQuote.id,
+        item_type: 'Origen',
+        description: 'EXW',
+        cost_amount: exwCost,
+        sale_amount: exwCost,
+        quantity: 1,
+        taxable: false,
+        tax_rate: 15,
+        tax_amount: 0,
+        total_amount: exwCost,
+        currency,
+        supplier,
+        notes: '',
+        created_by: profile?.id,
+      },
+      {
+        quotation_id: selectedQuote.id,
+        item_type: 'Documentación',
+        description: 'MBL',
+        cost_amount: mblFee,
+        sale_amount: mblFee,
+        quantity: 1,
+        taxable: false,
+        tax_rate: 15,
+        tax_amount: 0,
+        total_amount: mblFee,
+        currency,
+        supplier,
+        notes: '',
+        created_by: profile?.id,
+      },
+      {
+        quotation_id: selectedQuote.id,
+        item_type: 'Profit',
+        description: `Profit (${containersQty} cont.)`,
+        cost_amount: 0,
+        sale_amount: totalProfit,
+        quantity: 1,
+        taxable: false,
+        tax_rate: 15,
+        tax_amount: 0,
+        total_amount: totalProfit,
+        currency,
+        supplier,
+        notes: '',
+        created_by: profile?.id,
+      },
+    ]
+
+    if (shouldReplacePricing) {
+      const { error: pricingError } = await supabase
+        .from('pricing_items')
+        .insert(pricingLines)
+
+      if (pricingError) {
+        alert(pricingError.message)
+        return
+      }
+    }
+
     alert('Tarifa seleccionada')
 
     await fetchAgentQuotes(selectedQuote.id)
+    await fetchPricingItems(selectedQuote.id)
   }
 
   const savePricingItem = async () => {
@@ -459,6 +616,12 @@ export default function PricingComparisonPage() {
 
   const profit = totalSale - totalCost
 
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+
   const quantity = Number(pricingForm.quantity || 1)
 
   const subtotal =
@@ -474,10 +637,14 @@ export default function PricingComparisonPage() {
   const gpPercentage =
     totalSale > 0 ? (profit / totalSale) * 100 : 0
 
-  const targetRate = Number(selectedQuote?.target_rate || 0)
+  const targetSale = Number(selectedQuote?.target_sale || 0)
+  const targetGp = Number(selectedQuote?.target_gp || 0)
 
-const targetDifference =
-  targetRate > 0 ? totalSale - targetRate : 0
+  const targetSaleDifference =
+    targetSale > 0 ? totalSale - targetSale : 0
+
+  const targetGpDifference =
+    targetGp > 0 ? gpPercentage - targetGp : 0
 
 const profitabilityStatus =
   gpPercentage >= 15
@@ -493,12 +660,54 @@ const profitabilityColor =
     ? 'bg-orange-500 text-white'
     : 'bg-red-600 text-white'
 
-const targetStatus =
-  targetRate === 0
-    ? 'Sin target'
-    : totalSale <= targetRate
-    ? 'Dentro del target'
-    : 'Sobre target'
+  const agentTotalCost =
+    Number(agentForm.ocean_freight || 0) +
+    Number(agentForm.exw_cost || 0) +
+    Number(agentForm.mbl_fee || 0) +
+    Number(agentForm.profit_per_container || 0) *
+      Number(agentForm.containers_qty || 1)
+
+  const suggestedSales = [8, 10, 15, 20, 25].map((margin) => ({
+    margin,
+    sale: agentTotalCost * (1 + margin / 100),
+  }))
+
+  function getStatusBadgeClass(status: string) {
+    switch (status) {
+      case 'Ganada':
+        return 'bg-green-600 text-white'
+
+      case 'Perdida':
+        return 'bg-red-600 text-white'
+
+      case 'Propuesta':
+        return 'bg-blue-600 text-white'
+
+      case 'Seguimiento':
+        return 'bg-orange-500 text-white'
+
+      case 'Pendiente de Fijar Precios':
+        return 'bg-gray-700 text-white'
+
+      case 'Enviada al Cliente':
+        return 'bg-indigo-600 text-white'
+
+      case 'En NegociaciÃ³n':
+        return 'bg-yellow-500 text-black'
+
+      case 'Tarifa Alta':
+        return 'bg-rose-500 text-white'
+
+      case 'Enviada tarde':
+        return 'bg-purple-600 text-white'
+
+      case 'No tenemos agente':
+        return 'bg-zinc-800 text-white'
+
+      default:
+        return 'bg-gray-200 text-gray-700'
+    }
+  }
 
   return (
     <AppLayout role={profile?.rol || 'Ventas'}>
@@ -544,9 +753,13 @@ const targetStatus =
                     {quote.origen} → {quote.destino}
                   </p>
 
-                  <Badge className="mt-2">
+                  <span
+                    className={`mt-2 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(
+                      quote.status || ''
+                    )}`}
+                  >
                     {quote.status || 'Sin estado'}
-                  </Badge>
+                  </span>
                 </button>
               ))}
             </CardContent>
@@ -607,7 +820,7 @@ const targetStatus =
 
                     <CardContent>
                       <p className="text-3xl font-bold">
-                        ${totalCost.toFixed(2)}
+                        USD {formatCurrency(totalCost)}
                       </p>
                     </CardContent>
                   </Card>
@@ -621,7 +834,7 @@ const targetStatus =
 
                     <CardContent>
                       <p className="text-3xl font-bold">
-                        ${totalSale.toFixed(2)}
+                        USD {formatCurrency(totalSale)}
                       </p>
                     </CardContent>
                   </Card>
@@ -637,7 +850,7 @@ const targetStatus =
                       <p className={`text-3xl font-bold ${
                         profit >= 0 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        ${profit.toFixed(2)}
+                        USD {formatCurrency(profit)}
                       </p>
                     </CardContent>
                   </Card>
@@ -688,11 +901,17 @@ const targetStatus =
                         Target Cliente
                       </p>
 
-                      <p className="text-2xl font-bold mt-2">
-                        {targetRate > 0
-                          ? `$${targetRate.toFixed(2)}`
+                      <p className="text-2xl font-bold">
+                        {targetSale > 0
+                          ? `USD ${formatCurrency(targetSale)}`
                           : 'N/A'}
                       </p>
+
+                      {targetGp > 0 && (
+                        <p className="text-sm text-slate-500 mt-1">
+                          GP objetivo: {targetGp.toFixed(2)}%
+                        </p>
+                      )}
                     </div>
 
                     <div className="rounded-xl border p-4">
@@ -700,25 +919,45 @@ const targetStatus =
                         Comparación Target
                       </p>
 
-                      <p
-                        className={`text-2xl font-bold mt-2 ${
-                          targetRate === 0
-                            ? 'text-gray-500'
-                            : targetDifference <= 0
-                            ? 'text-green-600'
-                            : 'text-red-600'
-                        }`}
-                      >
-                        {targetRate === 0
-                          ? 'Sin target'
-                          : targetDifference <= 0
-                          ? `-$${Math.abs(targetDifference).toFixed(2)}`
-                          : `+$${targetDifference.toFixed(2)}`}
-                      </p>
+                      {targetSale > 0 ? (
+                        <div>
+                          <p
+                            className={`text-2xl font-bold ${
+                              targetSaleDifference <= 0
+                                ? 'text-green-700'
+                                : 'text-red-700'
+                            }`}
+                          >
+                            {targetSaleDifference <= 0 ? '-' : '+'} USD{' '}
+                            {formatCurrency(Math.abs(targetSaleDifference))}
+                          </p>
 
-                      <p className="text-sm text-gray-500 mt-1">
-                        {targetStatus}
-                      </p>
+                          <p className="text-sm text-slate-500 mt-1">
+                            {targetSaleDifference <= 0
+                              ? 'Dentro o por debajo del target'
+                              : 'Arriba del target del cliente'}
+                          </p>
+                        </div>
+                      ) : targetGp > 0 ? (
+                        <div>
+                          <p
+                            className={`text-2xl font-bold ${
+                              targetGpDifference >= 0
+                                ? 'text-green-700'
+                                : 'text-red-700'
+                            }`}
+                          >
+                            {targetGpDifference >= 0 ? '+' : ''}
+                            {targetGpDifference.toFixed(2)}%
+                          </p>
+
+                          <p className="text-sm text-slate-500 mt-1">
+                            Comparado contra GP objetivo
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-2xl font-bold">N/A</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -783,11 +1022,83 @@ const targetStatus =
                       className="border p-3 rounded"
                     />
 
+                    <input
+                      className="border rounded-xl px-3 py-2"
+                      placeholder="Carrier / Naviera"
+                      value={agentForm.carrier}
+                      onChange={(e) =>
+                        setAgentForm({ ...agentForm, carrier: e.target.value })
+                      }
+                    />
+
+                    <select
+                      className="border rounded-xl px-3 py-2"
+                      value={agentForm.transshipment}
+                      onChange={(e) =>
+                        setAgentForm({ ...agentForm, transshipment: e.target.value })
+                      }
+                    >
+                      <option value="">Transbordo</option>
+                      <option value="Directo">Directo</option>
+                      <option value="Sí">Sí</option>
+                      <option value="Via Panamá">Via Panamá</option>
+                      <option value="Via Cartagena">Via Cartagena</option>
+                      <option value="Via Kingston">Via Kingston</option>
+                      <option value="Via Miami">Via Miami</option>
+                    </select>
+
+                    <input
+                      className="border rounded-xl px-3 py-2"
+                      placeholder="Días libres destino"
+                      value={agentForm.free_days_destination}
+                      onChange={(e) =>
+                        setAgentForm({
+                          ...agentForm,
+                          free_days_destination: e.target.value,
+                        })
+                      }
+                    />
+
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 col-span-4">
+                      <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
+                        Costo Total Sari
+                      </p>
+
+                      <p className="mt-2 text-3xl font-bold text-emerald-700">
+                        {agentForm.moneda || 'USD'}{' '}
+                        {agentTotalCost.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </p>
+
+                      <div className="mt-5 grid grid-cols-5 gap-3">
+                        {suggestedSales.map((item) => (
+                          <div
+                            key={item.margin}
+                            className="rounded-xl bg-white border border-emerald-100 p-3"
+                          >
+                            <p className="text-xs text-gray-500">
+                              +{item.margin}%
+                            </p>
+
+                            <p className="mt-1 font-bold text-emerald-700">
+                              {agentForm.moneda || 'USD'}{' '}
+                              {item.sale.toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                     <button
                       onClick={saveAgentQuote}
                       className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-4"
                     >
-                      Guardar Tarifa
+                      {editingAgentQuoteId ? 'Actualizar Tarifa' : 'Guardar Tarifa'}
                     </button>
                   </CardContent>
                 </Card>
@@ -845,12 +1156,28 @@ const targetStatus =
                                 <td className="p-3">{quote.transit_time || 'N/A'}</td>
                                 <td className="p-3">{quote.free_days_destination || 0}</td>
                                 <td className="p-3">
-                                  <button
-                                    onClick={() => selectAgentQuote(quote.id)}
-                                    className="bg-zinc-950 text-white px-4 py-2 rounded-lg"
-                                  >
-                                    Seleccionar
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleEditAgentQuote(quote)}
+                                      className="p-2 rounded-lg border hover:bg-gray-100"
+                                    >
+                                      <Pencil size={16} />
+                                    </button>
+
+                                    {quote.is_selected ? (
+                                      <div className="flex items-center gap-1 text-green-600 font-semibold text-sm">
+                                        <CheckCircle size={16} />
+                                        Seleccionada
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => selectAgentQuote(quote.id)}
+                                        className="px-3 py-1 rounded-lg bg-black text-white text-sm"
+                                      >
+                                        Seleccionar
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}

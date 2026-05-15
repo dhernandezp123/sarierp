@@ -11,12 +11,13 @@ export default function NewQuotationPage() {
 
   const [loading, setLoading] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
+  const [countries, setCountries] = useState<any[]>([])
+  const [ports, setPorts] = useState<any[]>([])
 
   const [formData, setFormData] = useState({
     cliente_id: '',
 
-    quote_type: 'Cotización Marítima FCL',
+    quote_type: '',
     valid_until: '',
 
     contact_name: '',
@@ -30,16 +31,18 @@ export default function NewQuotationPage() {
 
     incoterm: '',
     tipo_transporte: '',
-    transit_time: '',
-    service_frequency: '',
 
     origen: '',
     destino: '',
     puerto_origen: '',
     puerto_destino: '',
     pickup_address: '',
+    delivery_address: '',
 
     container_type: '',
+    container_qty: '',
+    package_type: '',
+    package_details: '',
     peso_kg: '',
     gross_weight: '',
     volumen_cbm: '',
@@ -58,7 +61,7 @@ export default function NewQuotationPage() {
 
   useEffect(() => {
     fetchClientes()
-    fetchLocations()
+    fetchCatalogs()
   }, [])
 
   const fetchClientes = async () => {
@@ -75,18 +78,31 @@ export default function NewQuotationPage() {
     setClientes(data || [])
   }
 
-  const fetchLocations = async () => {
-    const { data, error } = await supabase
-      .from('locations_catalog')
+  const fetchCatalogs = async () => {
+    const { data: countriesData, error: countriesError } = await supabase
+      .from('countries')
       .select('*')
+      .eq('active', true)
       .order('name', { ascending: true })
 
-    if (error) {
-      alert(error.message)
+    if (countriesError) {
+      alert(countriesError.message)
       return
     }
 
-    setLocations(data || [])
+    const { data: portsData, error: portsError } = await supabase
+      .from('ports')
+      .select('*, countries(name)')
+      .eq('active', true)
+      .order('name', { ascending: true })
+
+    if (portsError) {
+      alert(portsError.message)
+      return
+    }
+
+    setCountries(countriesData || [])
+    setPorts(portsData || [])
   }
 
   const calculateInsurance = (data: any) => {
@@ -156,25 +172,7 @@ export default function NewQuotationPage() {
     setFormData(updatedData)
   }
 
-  const saveLocationIfNeeded = async (name: string) => {
-    if (!name) return
-
-    await supabase
-      .from('locations_catalog')
-      .upsert(
-        [
-          {
-            name,
-            type: 'Puerto / Lugar',
-          },
-        ],
-        {
-          onConflict: 'name,country,type',
-        }
-      )
-  }
-
-  const handleSubmit = async () => {
+  const handleSubmit = async (status: string) => {
     if (!formData.cliente_id) {
       alert('Debes seleccionar un cliente')
       return
@@ -182,11 +180,6 @@ export default function NewQuotationPage() {
 
     try {
       setLoading(true)
-
-      await saveLocationIfNeeded(formData.origen)
-      await saveLocationIfNeeded(formData.destino)
-      await saveLocationIfNeeded(formData.puerto_origen)
-      await saveLocationIfNeeded(formData.puerto_destino)
 
       const { error } = await supabase.from('quotations').insert([
         {
@@ -200,21 +193,23 @@ export default function NewQuotationPage() {
           contact_phone: formData.contact_phone,
 
           preferred_carrier: formData.preferred_carrier,
-target_rate: Number(formData.target_rate),
-commercial_value: Number(formData.commercial_value),
+          target_rate: Number(formData.target_rate),
+          commercial_value: Number(formData.commercial_value),
 
           incoterm: formData.incoterm,
           tipo_transporte: formData.tipo_transporte,
-          transit_time: formData.transit_time,
-          service_frequency: formData.service_frequency,
 
           origen: formData.origen,
           destino: formData.destino,
           puerto_origen: formData.puerto_origen,
           puerto_destino: formData.puerto_destino,
           pickup_address: formData.pickup_address,
+          delivery_address: formData.delivery_address,
 
           container_type: formData.container_type,
+          container_qty: Number(formData.container_qty || 0),
+          package_type: formData.package_type,
+          package_details: formData.package_details,
           peso_kg: Number(formData.peso_kg),
           gross_weight: Number(formData.gross_weight),
           volumen_cbm: Number(formData.volumen_cbm),
@@ -231,7 +226,7 @@ commercial_value: Number(formData.commercial_value),
           insurance_cost: Number(formData.insurance_cost),
 
           observaciones: formData.observaciones,
-          status: 'Solicitud',
+          status,
           created_by: profile?.id,
         },
       ])
@@ -246,7 +241,7 @@ commercial_value: Number(formData.commercial_value),
       setFormData({
         cliente_id: '',
 
-        quote_type: 'Cotización Marítima FCL',
+        quote_type: '',
         valid_until: '',
 
         contact_name: '',
@@ -260,16 +255,18 @@ commercial_value: Number(formData.commercial_value),
 
         incoterm: '',
         tipo_transporte: '',
-        transit_time: '',
-        service_frequency: '',
 
         origen: '',
         destino: '',
         puerto_origen: '',
         puerto_destino: '',
         pickup_address: '',
+        delivery_address: '',
 
         container_type: '',
+        container_qty: '',
+        package_type: '',
+        package_details: '',
         peso_kg: '',
         gross_weight: '',
         volumen_cbm: '',
@@ -286,12 +283,34 @@ commercial_value: Number(formData.commercial_value),
         observaciones: '',
       })
 
-      await fetchLocations()
+      await fetchCatalogs()
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
+  }
+
+  const originCountry = countries.find(
+    (country) => country.name === formData.origen
+  )
+
+  const destinationCountry = countries.find(
+    (country) => country.name === formData.destino
+  )
+
+  const originPorts = originCountry
+    ? ports.filter((port) => port.country_id === originCountry.id)
+    : ports
+
+  const destinationPorts = destinationCountry
+    ? ports.filter((port) => port.country_id === destinationCountry.id)
+    : ports
+
+  const quoteTypeOptions: Record<string, string[]> = {
+    Aéreo: ['Courier', 'Consolidado'],
+    Marítima: ['LCL', 'FCL'],
+    Terrestre: ['LTL', 'FTL'],
   }
 
   return (
@@ -302,6 +321,48 @@ commercial_value: Number(formData.commercial_value),
         </h1>
 
         <div className="bg-white rounded-xl shadow p-8 space-y-8">
+          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold mb-4">
+              Tipo de Cotización
+            </h2>
+
+            <div className="grid grid-cols-2 gap-4">
+              <select
+                className="border rounded-xl px-3 py-2"
+                value={formData.tipo_transporte}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    tipo_transporte: e.target.value,
+                    quote_type: '',
+                  })
+                }
+              >
+                <option value="">Seleccionar transporte</option>
+                <option value="Aéreo">Aéreo</option>
+                <option value="Marítima">Marítima</option>
+                <option value="Terrestre">Terrestre</option>
+              </select>
+
+              <select
+                className="border rounded-xl px-3 py-2"
+                value={formData.quote_type}
+                onChange={(e) =>
+                  setFormData({ ...formData, quote_type: e.target.value })
+                }
+                disabled={!formData.tipo_transporte}
+              >
+                <option value="">Seleccionar tipo</option>
+
+                {(quoteTypeOptions[formData.tipo_transporte] || []).map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <section>
             <h2 className="text-xl font-semibold mb-4">
               Información General
@@ -318,33 +379,12 @@ commercial_value: Number(formData.commercial_value),
 
                 {clientes.map((cliente) => (
                   <option key={cliente.id} value={cliente.id}>
-                    {cliente.codigo_cliente} — {cliente.nombre}
+                    {cliente.codigo_cliente} Ã¢â‚¬â€ {cliente.nombre}
                   </option>
                 ))}
               </select>
 
-              <select
-                name="quote_type"
-                value={formData.quote_type}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              >
-                <option value="Cotización Marítima FCL">
-                  Cotización Marítima FCL
-                </option>
-                <option value="Cotización Marítima LCL">
-                  Cotización Marítima LCL
-                </option>
-                <option value="Cotización Aérea">
-                  Cotización Aérea
-                </option>
-                <option value="Cotización Terrestre FTL">
-                  Cotización Terrestre FTL
-                </option>
-                <option value="Cotización Terrestre LTL">
-                  Cotización Terrestre LTL
-                </option>
-              </select>
+              
 
               <input
                 type="date"
@@ -370,17 +410,7 @@ commercial_value: Number(formData.commercial_value),
                 <option value="DDP">DDP</option>
               </select>
 
-              <select
-                name="tipo_transporte"
-                value={formData.tipo_transporte}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              >
-                <option value="">Transporte</option>
-                <option value="Maritimo">Marítimo</option>
-                <option value="Aereo">Aéreo</option>
-                <option value="Terrestre">Terrestre</option>
-              </select>
+              
             </div>
           </section>
 
@@ -416,7 +446,7 @@ commercial_value: Number(formData.commercial_value),
 
               <input
                 name="contact_country"
-                placeholder="País"
+                placeholder="Paí­s"
                 value={formData.contact_country}
                 disabled
                 className="border p-3 rounded bg-gray-100"
@@ -435,30 +465,30 @@ commercial_value: Number(formData.commercial_value),
 
           <section>
             <h2 className="text-xl font-semibold mb-4">
-              Ruta
+              Información del Embarque
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
               <input
-                list="locations"
+                list="countries"
                 name="origen"
-                placeholder="País de origen"
+                placeholder="Paí­s de origen"
                 value={formData.origen}
                 onChange={handleChange}
                 className="border p-3 rounded"
               />
 
               <input
-                list="locations"
+                list="countries"
                 name="destino"
-                placeholder="País de destino"
+                placeholder="Paí­s de destino"
                 value={formData.destino}
                 onChange={handleChange}
                 className="border p-3 rounded"
               />
 
               <input
-                list="locations"
+                list="originPorts"
                 name="puerto_origen"
                 placeholder="Puerto origen"
                 value={formData.puerto_origen}
@@ -467,7 +497,7 @@ commercial_value: Number(formData.commercial_value),
               />
 
               <input
-                list="locations"
+                list="destinationPorts"
                 name="puerto_destino"
                 placeholder="Puerto destino"
                 value={formData.puerto_destino}
@@ -491,38 +521,41 @@ commercial_value: Number(formData.commercial_value),
   className="border p-3 rounded"
 />
 
-<input
-  name="transit_time"
-  placeholder="Tiempo de tránsito"
-  value={formData.transit_time || ''}
-  onChange={handleChange}
-  className="border p-3 rounded"
-/>
+              <textarea
+                className="border rounded-xl px-3 py-2 col-span-2"
+                placeholder="Dirección de recolección EXW"
+                value={formData.pickup_address}
+                onChange={(e) =>
+                  setFormData({ ...formData, pickup_address: e.target.value })
+                }
+              />
 
-<input
-  name="service_frequency"
-  placeholder="Frecuencia / Servicio"
-  value={formData.service_frequency || ''}
-  onChange={handleChange}
-  className="border p-3 rounded"
-/>
-
-              {formData.incoterm === 'EXW' && (
-                <textarea
-                  name="pickup_address"
-                  placeholder="Dirección de recolección EXW"
-                  value={formData.pickup_address || ''}
-                  onChange={handleChange}
-                  className="border p-3 rounded col-span-2 h-24"
-                />
-              )}
-
-              <datalist id="locations">
-                {locations.map((location) => (
+              <textarea
+                className="border rounded-xl px-3 py-2 col-span-2"
+                placeholder="Dirección de entrega"
+                value={formData.delivery_address}
+                onChange={(e) =>
+                  setFormData({ ...formData, delivery_address: e.target.value })
+                }
+              />
+              <datalist id="countries">
+                {countries.map((country) => (
                   <option
-                    key={location.id}
-                    value={location.name}
+                    key={country.id}
+                    value={country.name}
                   />
+                ))}
+              </datalist>
+
+              <datalist id="originPorts">
+                {originPorts.map((port) => (
+                  <option key={port.id} value={port.name} />
+                ))}
+              </datalist>
+
+              <datalist id="destinationPorts">
+                {destinationPorts.map((port) => (
+                  <option key={port.id} value={port.name} />
                 ))}
               </datalist>
             </div>
@@ -557,6 +590,35 @@ commercial_value: Number(formData.commercial_value),
   <option value="Camion 8 tons">Camion 8 tons</option>
   <option value="Contenedor 48' FTL">Contenedor 48' FTL</option>
 </select>
+
+              <input
+                className="border rounded-xl px-3 py-2"
+                placeholder="Cantidad de contenedores / unidades"
+                value={formData.container_qty}
+                onChange={(e) =>
+                  setFormData({ ...formData, container_qty: e.target.value })
+                }
+              />
+
+              <select
+                className="border rounded-xl px-3 py-2"
+                value={formData.package_type}
+                onChange={(e) =>
+                  setFormData({ ...formData, package_type: e.target.value })
+                }
+              >
+                <option value="">Tipo de empaque</option>
+                <option value="Cajas">Cajas</option>
+                <option value="Pallets">Pallets</option>
+                <option value="Envases">Envases</option>
+                <option value="Tubos">Tubos</option>
+                <option value="Cajas metálicas">Cajas metálicas</option>
+                <option value="Cilindros">Cilindros</option>
+                <option value="Rollos">Rollos</option>
+                <option value="Sacos">Sacos</option>
+                <option value="Granel">Granel</option>
+                <option value="Otro">Otro</option>
+              </select>
 
               <input
                 name="peso_kg"
@@ -596,6 +658,15 @@ commercial_value: Number(formData.commercial_value),
                 value={formData.commodity}
                 onChange={handleChange}
                 className="border p-3 rounded"
+              />
+
+              <textarea
+                className="border rounded-xl px-3 py-2 col-span-3"
+                placeholder="Detalles del empaque / dimensiones / observaciones de carga"
+                value={formData.package_details}
+                onChange={(e) =>
+                  setFormData({ ...formData, package_details: e.target.value })
+                }
               />
             </div>
           </section>
@@ -639,13 +710,25 @@ commercial_value: Number(formData.commercial_value),
             />
           </section>
 
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="bg-black text-white px-6 py-3 rounded-xl"
-          >
-            {loading ? 'Guardando...' : 'Crear Cotización'}
-          </button>
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => handleSubmit('Borrador')}
+              disabled={loading}
+              className="rounded-xl border px-6 py-3 font-semibold hover:bg-slate-50"
+            >
+              Guardar Cotización
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSubmit('Pendiente de Fijar Precios')}
+              disabled={loading}
+              className="rounded-xl bg-slate-950 text-white px-6 py-3 font-semibold hover:bg-slate-800"
+            >
+              Enviar a Pricing
+            </button>
+          </div>
         </div>
       </div>
     </AppLayout>

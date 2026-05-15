@@ -14,6 +14,8 @@ export default function EditQuotationPage() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [countries, setCountries] = useState<any[]>([])
+  const [ports, setPorts] = useState<any[]>([])
 
   const [formData, setFormData] = useState({
     quote_type: '',
@@ -32,6 +34,8 @@ export default function EditQuotationPage() {
 
     preferred_carrier: '',
     target_rate: '',
+    target_sale: '',
+    target_gp: '',
 
     container_type: '',
     peso_kg: '',
@@ -47,10 +51,29 @@ export default function EditQuotationPage() {
   })
 
   useEffect(() => {
+    fetchCatalogs()
+
     if (params.id) {
       fetchQuotation(params.id as string)
     }
   }, [params.id])
+
+  const fetchCatalogs = async () => {
+    const { data: countriesData } = await supabase
+      .from('countries')
+      .select('*')
+      .eq('active', true)
+      .order('name', { ascending: true })
+
+    const { data: portsData } = await supabase
+      .from('ports')
+      .select('*, countries(name)')
+      .eq('active', true)
+      .order('name', { ascending: true })
+
+    setCountries(countriesData || [])
+    setPorts(portsData || [])
+  }
 
   const fetchQuotation = async (id: string) => {
     const { data, error } = await supabase
@@ -81,6 +104,8 @@ export default function EditQuotationPage() {
 
       preferred_carrier: data.preferred_carrier || '',
       target_rate: data.target_rate?.toString() || '',
+      target_sale: data.target_sale?.toString() || '',
+      target_gp: data.target_gp?.toString() || '',
 
       container_type: data.container_type || '',
       peso_kg: data.peso_kg?.toString() || '',
@@ -136,6 +161,8 @@ export default function EditQuotationPage() {
 
         preferred_carrier: formData.preferred_carrier,
         target_rate: Number(formData.target_rate || 0),
+        target_sale: Number(formData.target_sale || 0),
+        target_gp: Number(formData.target_gp || 0),
 
         container_type: formData.container_type,
         peso_kg: Number(formData.peso_kg || 0),
@@ -165,6 +192,22 @@ export default function EditQuotationPage() {
   if (loading) {
     return <div className="p-8">Cargando cotización...</div>
   }
+
+  const originCountry = countries.find(
+    (country) => country.name === formData.origen
+  )
+
+  const destinationCountry = countries.find(
+    (country) => country.name === formData.destino
+  )
+
+  const originPorts = originCountry
+    ? ports.filter((port) => port.country_id === originCountry.id)
+    : ports
+
+  const destinationPorts = destinationCountry
+    ? ports.filter((port) => port.country_id === destinationCountry.id)
+    : ports
 
   return (
     <AppLayout role={profile?.rol || 'Ventas'}>
@@ -253,10 +296,10 @@ export default function EditQuotationPage() {
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
             <div className="grid grid-cols-2 gap-4">
-              <input name="origen" placeholder="Origen" value={formData.origen || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input name="destino" placeholder="Destino" value={formData.destino || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input name="puerto_origen" placeholder="Puerto origen" value={formData.puerto_origen || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input name="puerto_destino" placeholder="Puerto destino" value={formData.puerto_destino || ''} onChange={handleChange} className="border p-3 rounded" />
+              <input list="countries" name="origen" placeholder="Origen" value={formData.origen || ''} onChange={handleChange} className="border p-3 rounded" />
+              <input list="countries" name="destino" placeholder="Destino" value={formData.destino || ''} onChange={handleChange} className="border p-3 rounded" />
+              <input list="originPorts" name="puerto_origen" placeholder="Puerto origen" value={formData.puerto_origen || ''} onChange={handleChange} className="border p-3 rounded" />
+              <input list="destinationPorts" name="puerto_destino" placeholder="Puerto destino" value={formData.puerto_destino || ''} onChange={handleChange} className="border p-3 rounded" />
 
               <input
                 name="preferred_carrier"
@@ -272,6 +315,24 @@ export default function EditQuotationPage() {
                 value={formData.target_rate || ''}
                 onChange={handleChange}
                 className="border p-3 rounded"
+              />
+
+              <input
+                className="border rounded-xl px-3 py-2"
+                placeholder="Target Venta USD"
+                value={formData.target_sale}
+                onChange={(e) =>
+                  setFormData({ ...formData, target_sale: e.target.value })
+                }
+              />
+
+              <input
+                className="border rounded-xl px-3 py-2"
+                placeholder="Target GP %"
+                value={formData.target_gp}
+                onChange={(e) =>
+                  setFormData({ ...formData, target_gp: e.target.value })
+                }
               />
 
               {formData.incoterm === 'EXW' && (
@@ -356,6 +417,24 @@ export default function EditQuotationPage() {
               className="border p-3 rounded w-full h-32"
             />
           </section>
+
+          <datalist id="countries">
+            {countries.map((country) => (
+              <option key={country.id} value={country.name} />
+            ))}
+          </datalist>
+
+          <datalist id="originPorts">
+            {originPorts.map((port) => (
+              <option key={port.id} value={port.name} />
+            ))}
+          </datalist>
+
+          <datalist id="destinationPorts">
+            {destinationPorts.map((port) => (
+              <option key={port.id} value={port.name} />
+            ))}
+          </datalist>
 
           <div className="flex justify-end gap-4">
             <button

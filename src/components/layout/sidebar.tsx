@@ -10,6 +10,7 @@ import {
   Scale,
   DollarSign,
   Building2,
+  Database,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -46,11 +47,6 @@ export default function Sidebar({ role }: SidebarProps) {
 
   const costItems = [
     {
-      label: 'Agentes',
-      href: '/agents',
-      icon: Building2,
-    },
-    {
       label: 'Comparativo',
       href: '/pricing-comparison',
       icon: Scale,
@@ -60,8 +56,17 @@ export default function Sidebar({ role }: SidebarProps) {
       href: '/cost-validation',
       icon: DollarSign,
     },
+    {
+      label: 'Agentes',
+      href: '/agents',
+      icon: Building2,
+    },
+    {
+      label: 'Catálogos',
+      href: '/catalogs',
+      icon: Database,
+    },
   ]
-
   const renderItem = (item: any) => {
     const Icon = item.icon
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
