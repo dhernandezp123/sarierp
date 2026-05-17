@@ -16,12 +16,21 @@ export default function EditQuotationPage() {
   const [saving, setSaving] = useState(false)
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
+  const [packageTypes, setPackageTypes] = useState<any[]>([])
+  const [containerTypes, setContainerTypes] = useState<any[]>([])
+  const [containerLines, setContainerLines] = useState<any[]>([])
+  const [editingContainerLineId, setEditingContainerLineId] = useState<string | null>(null)
+  const [containerLineForm, setContainerLineForm] = useState({
+    container_type_id: '',
+    container_type_name: '',
+    quantity: '1',
+    notes: '',
+  })
 
   const [formData, setFormData] = useState({
+    status: '',
     quote_type: '',
     valid_until: '',
-    transit_time: '',
-    service_frequency: '',
 
     incoterm: '',
     tipo_transporte: '',
@@ -33,11 +42,10 @@ export default function EditQuotationPage() {
     pickup_address: '',
 
     preferred_carrier: '',
-    target_rate: '',
-    target_sale: '',
-    target_gp: '',
 
     container_type: '',
+    package_type: '',
+    package_details: '',
     peso_kg: '',
     gross_weight: '',
     volumen_cbm: '',
@@ -55,6 +63,7 @@ export default function EditQuotationPage() {
 
     if (params.id) {
       fetchQuotation(params.id as string)
+      fetchContainerLines(params.id as string)
     }
   }, [params.id])
 
@@ -71,8 +80,28 @@ export default function EditQuotationPage() {
       .eq('active', true)
       .order('name', { ascending: true })
 
+    const { data: packageTypesData } = await supabase
+      .from('package_types')
+      .select('*')
+      .eq('active', true)
+      .order('name', { ascending: true })
+
+    const { data: containerTypesData, error: containerTypesError } =
+      await supabase
+        .from('container_types')
+        .select('*')
+        .eq('active', true)
+        .order('name', { ascending: true })
+
+    if (containerTypesError) {
+      alert(containerTypesError.message)
+      return
+    }
+
     setCountries(countriesData || [])
     setPorts(portsData || [])
+    setPackageTypes(packageTypesData || [])
+    setContainerTypes(containerTypesData || [])
   }
 
   const fetchQuotation = async (id: string) => {
@@ -88,10 +117,9 @@ export default function EditQuotationPage() {
     }
 
     setFormData({
+      status: data.status || '',
       quote_type: data.quote_type || '',
       valid_until: data.valid_until || '',
-      transit_time: data.transit_time || '',
-      service_frequency: data.service_frequency || '',
 
       incoterm: data.incoterm || '',
       tipo_transporte: data.tipo_transporte || '',
@@ -103,15 +131,14 @@ export default function EditQuotationPage() {
       pickup_address: data.pickup_address || '',
 
       preferred_carrier: data.preferred_carrier || '',
-      target_rate: data.target_rate?.toString() || '',
-      target_sale: data.target_sale?.toString() || '',
-      target_gp: data.target_gp?.toString() || '',
 
       container_type: data.container_type || '',
-      peso_kg: data.peso_kg?.toString() || '',
-      gross_weight: data.gross_weight?.toString() || '',
-      volumen_cbm: data.volumen_cbm?.toString() || '',
-      cantidad_bultos: data.cantidad_bultos?.toString() || '',
+      package_type: data.package_type || '',
+      package_details: data.package_details || '',
+      peso_kg: data.peso_kg && Number(data.peso_kg) !== 0 ? data.peso_kg.toString() : '',
+      gross_weight: data.gross_weight && Number(data.gross_weight) !== 0 ? data.gross_weight.toString() : '',
+      volumen_cbm: data.volumen_cbm && Number(data.volumen_cbm) !== 0 ? data.volumen_cbm.toString() : '',
+      cantidad_bultos: data.cantidad_bultos && Number(data.cantidad_bultos) !== 0 ? data.cantidad_bultos.toString() : '',
       commodity: data.commodity || '',
 
       requires_insurance: data.requires_insurance || false,
@@ -121,6 +148,21 @@ export default function EditQuotationPage() {
     })
 
     setLoading(false)
+  }
+
+  const fetchContainerLines = async (quotationId: string) => {
+    const { data, error } = await supabase
+      .from('quotation_containers')
+      .select('*')
+      .eq('quotation_id', quotationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setContainerLines(data || [])
   }
 
   const handleChange = (
@@ -137,8 +179,141 @@ export default function EditQuotationPage() {
     })
   }
 
+  const saveContainerLine = async () => {
+    if (!params.id) return
+
+    if (!containerLineForm.container_type_name) {
+      alert('Debes seleccionar un tipo de contenedor / unidad')
+      return
+    }
+
+    const payload = {
+      quotation_id: params.id as string,
+      container_type_id: containerLineForm.container_type_id || null,
+      container_type_name: containerLineForm.container_type_name,
+      quantity: Number(containerLineForm.quantity || 1),
+      notes: containerLineForm.notes,
+    }
+
+    const { error } = editingContainerLineId
+      ? await supabase
+          .from('quotation_containers')
+          .update(payload)
+          .eq('id', editingContainerLineId)
+      : await supabase
+          .from('quotation_containers')
+          .insert(payload)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setEditingContainerLineId(null)
+
+    setContainerLineForm({
+      container_type_id: '',
+      container_type_name: '',
+      quantity: '1',
+      notes: '',
+    })
+
+    await fetchContainerLines(params.id as string)
+  }
+
+  const editContainerLine = (line: any) => {
+    setContainerLineForm({
+      container_type_id: line.container_type_id || '',
+      container_type_name: line.container_type_name || '',
+      quantity: String(line.quantity || 1),
+      notes: line.notes || '',
+    })
+
+    setEditingContainerLineId(line.id)
+  }
+
+  const deleteContainerLine = async (lineId: string) => {
+    if (!params.id) return
+
+    const { error } = await supabase
+      .from('quotation_containers')
+      .delete()
+      .eq('id', lineId)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    await fetchContainerLines(params.id as string)
+  }
+
+  const sendToPricing = async () => {
+    if (!params.id) return
+
+    if (!formData.commodity.trim()) {
+      alert('Debes ingresar Commodity/Descripción de la carga')
+      return
+    }
+
+    if (!formData.tipo_transporte) {
+      alert('Debes seleccionar el tipo de transporte')
+      return
+    }
+
+    if (!formData.quote_type) {
+      alert('Debes seleccionar el tipo de cotización')
+      return
+    }
+
+    if (requiresContainerLines && containerLines.length === 0) {
+      alert('Debes agregar al menos un contenedor/unidad')
+      return
+    }
+
+    const { error } = await supabase
+      .from('quotations')
+      .update({ status: 'Pendiente de Fijar Precios' })
+      .eq('id', params.id as string)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    await supabase.from('quotation_status_history').insert([
+      {
+        quotation_id: params.id as string,
+        old_status: formData.status || 'Borrador',
+        new_status: 'Pendiente de Fijar Precios',
+        changed_by: profile?.id,
+      },
+    ])
+
+    setFormData({
+      ...formData,
+      status: 'Pendiente de Fijar Precios',
+    })
+
+    alert('Cotización enviada a Pricing correctamente')
+    router.push(`/quotations/${params.id}`)
+  }
+
   const handleSave = async () => {
     if (!params.id) return
+
+    if (!formData.commodity.trim()) {
+      alert('Debes ingresar Commodity/Descripción de la carga')
+      return
+    }
+
+    const requiresContainerLines =
+      formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
+
+    if (requiresContainerLines && containerLines.length === 0) {
+      alert('Debes agregar al menos un contenedor/unidad')
+      return
+    }
 
     setSaving(true)
 
@@ -147,8 +322,6 @@ export default function EditQuotationPage() {
       .update({
         quote_type: formData.quote_type,
         valid_until: formData.valid_until || null,
-        transit_time: formData.transit_time,
-        service_frequency: formData.service_frequency,
 
         incoterm: formData.incoterm,
         tipo_transporte: formData.tipo_transporte,
@@ -160,11 +333,10 @@ export default function EditQuotationPage() {
         pickup_address: formData.pickup_address,
 
         preferred_carrier: formData.preferred_carrier,
-        target_rate: Number(formData.target_rate || 0),
-        target_sale: Number(formData.target_sale || 0),
-        target_gp: Number(formData.target_gp || 0),
 
         container_type: formData.container_type,
+        package_type: formData.package_type,
+        package_details: formData.package_details,
         peso_kg: Number(formData.peso_kg || 0),
         gross_weight: Number(formData.gross_weight || 0),
         volumen_cbm: Number(formData.volumen_cbm || 0),
@@ -185,7 +357,19 @@ export default function EditQuotationPage() {
       return
     }
 
-    alert('Cotización actualizada correctamente')
+    const shouldSendToPricing =
+      formData.status === 'Borrador'
+        ? window.confirm(
+            'Cambios guardados correctamente. ¿Deseas enviar esta cotización a Pricing?'
+          )
+        : false
+
+    if (shouldSendToPricing) {
+      await sendToPricing()
+      return
+    }
+
+    alert('Cambios guardados correctamente')
     router.push(`/quotations/${params.id}`)
   }
 
@@ -209,6 +393,21 @@ export default function EditQuotationPage() {
     ? ports.filter((port) => port.country_id === destinationCountry.id)
     : ports
 
+  const quoteTypeOptions: Record<string, string[]> = {
+    Aéreo: ['Courier', 'Consolidado'],
+    Marítima: ['LCL', 'FCL'],
+    Terrestre: ['LTL', 'FTL'],
+  }
+
+  const requiresContainerLines =
+    formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
+
+  const requiresLooseCargo =
+    formData.quote_type === 'LCL' ||
+    formData.quote_type === 'LTL' ||
+    formData.quote_type === 'Consolidado' ||
+    formData.quote_type === 'Courier'
+
   return (
     <AppLayout role={profile?.rol || 'Ventas'}>
       <div className="max-w-6xl space-y-6">
@@ -225,17 +424,37 @@ export default function EditQuotationPage() {
 
             <div className="grid grid-cols-3 gap-4">
               <select
+                name="tipo_transporte"
+                value={formData.tipo_transporte || ''}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    tipo_transporte: e.target.value,
+                    quote_type: '',
+                  })
+                }
+                className="border p-3 rounded"
+              >
+                <option value="">Transporte</option>
+                <option value="Aéreo">Aéreo</option>
+                <option value="Marítima">Marítima</option>
+                <option value="Terrestre">Terrestre</option>
+              </select>
+
+              <select
                 name="quote_type"
                 value={formData.quote_type || ''}
                 onChange={handleChange}
+                disabled={!formData.tipo_transporte}
                 className="border p-3 rounded"
               >
                 <option value="">Tipo de cotización</option>
-                <option value="Cotización Marítima FCL">Cotización Marítima FCL</option>
-                <option value="Cotización Marítima LCL">Cotización Marítima LCL</option>
-                <option value="Cotización Aérea">Cotización Aérea</option>
-                <option value="Cotización Terrestre FTL">Cotización Terrestre FTL</option>
-                <option value="Cotización Terrestre LTL">Cotización Terrestre LTL</option>
+
+                {(quoteTypeOptions[formData.tipo_transporte] || []).map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
               </select>
 
               <input
@@ -262,33 +481,6 @@ export default function EditQuotationPage() {
                 <option value="DDP">DDP</option>
               </select>
 
-              <select
-                name="tipo_transporte"
-                value={formData.tipo_transporte || ''}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              >
-                <option value="">Transporte</option>
-                <option value="Maritimo">Marítimo</option>
-                <option value="Aereo">Aéreo</option>
-                <option value="Terrestre">Terrestre</option>
-              </select>
-
-              <input
-                name="transit_time"
-                placeholder="Tiempo de tránsito"
-                value={formData.transit_time || ''}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
-              <input
-                name="service_frequency"
-                placeholder="Frecuencia / Servicio"
-                value={formData.service_frequency || ''}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
             </div>
           </section>
 
@@ -309,32 +501,6 @@ export default function EditQuotationPage() {
                 className="border p-3 rounded"
               />
 
-              <input
-                name="target_rate"
-                placeholder="Target $"
-                value={formData.target_rate || ''}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
-              <input
-                className="border rounded-xl px-3 py-2"
-                placeholder="Target Venta USD"
-                value={formData.target_sale}
-                onChange={(e) =>
-                  setFormData({ ...formData, target_sale: e.target.value })
-                }
-              />
-
-              <input
-                className="border rounded-xl px-3 py-2"
-                placeholder="Target GP %"
-                value={formData.target_gp}
-                onChange={(e) =>
-                  setFormData({ ...formData, target_gp: e.target.value })
-                }
-              />
-
               {formData.incoterm === 'EXW' && (
                 <textarea
                   name="pickup_address"
@@ -350,36 +516,148 @@ export default function EditQuotationPage() {
           <section>
             <h2 className="text-xl font-bold mb-4">Carga</h2>
 
-            <div className="grid grid-cols-3 gap-4">
-              <select
-                name="container_type"
-                value={formData.container_type || ''}
+            <div className="space-y-4">
+              <input
+                name="commodity"
+                placeholder="Commodity/Descripción de la carga *"
+                value={formData.commodity || ''}
                 onChange={handleChange}
-                className="border p-3 rounded"
-              >
-                <option value="">Tipo de contenedor / unidad</option>
-                <option value="Contenedor 20FR">Contenedor 20FR</option>
-                <option value="Contenedor 20DR">Contenedor 20DR</option>
-                <option value="Contenedor 20OT">Contenedor 20OT</option>
-                <option value="Contenedor 40DR">Contenedor 40DR</option>
-                <option value="Contenedor 40HC">Contenedor 40HC</option>
-                <option value="Contenedor 40FR">Contenedor 40FR</option>
-                <option value="Contenedor 45-102DR">Contenedor 45-102DR</option>
-                <option value="Contenedor 40HR">Contenedor 40HR</option>
-                <option value="Contenedor 40OT">Contenedor 40OT</option>
-                <option value="Contenedor 40NOR">Contenedor 40NOR</option>
-                <option value="Contenedor 20OT OH">Contenedor 20OT OH</option>
-                <option value="Contenedor 53'">Contenedor 53'</option>
-                <option value="Contenedor 20GP">Contenedor 20GP</option>
-                <option value="Camion 8 tons">Camion 8 tons</option>
-                <option value="Contenedor 48' FTL">Contenedor 48' FTL</option>
-              </select>
+                className="border p-3 rounded md:col-span-3 w-full"
+              />
 
-              <input name="peso_kg" placeholder="Peso KG" value={formData.peso_kg || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input name="gross_weight" placeholder="Peso bruto" value={formData.gross_weight || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input name="volumen_cbm" placeholder="CBM" value={formData.volumen_cbm || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input name="cantidad_bultos" placeholder="Bultos" value={formData.cantidad_bultos || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input name="commodity" placeholder="Mercancía" value={formData.commodity || ''} onChange={handleChange} className="border p-3 rounded" />
+              {requiresLooseCargo && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <select
+                    name="package_type"
+                    value={formData.package_type || ''}
+                    onChange={handleChange}
+                    className="border p-3 rounded"
+                  >
+                    <option value="">Tipo de empaque</option>
+
+                    {packageTypes.map((pkg) => (
+                      <option key={pkg.id} value={pkg.name}>
+                        {pkg.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input name="peso_kg" placeholder="Peso KG" value={formData.peso_kg || ''} onChange={handleChange} className="border p-3 rounded" />
+                  <input name="gross_weight" placeholder="Peso bruto" value={formData.gross_weight || ''} onChange={handleChange} className="border p-3 rounded" />
+                  <input name="volumen_cbm" placeholder="CBM" value={formData.volumen_cbm || ''} onChange={handleChange} className="border p-3 rounded" />
+                  <input name="cantidad_bultos" placeholder="Bultos" value={formData.cantidad_bultos || ''} onChange={handleChange} className="border p-3 rounded" />
+                  <textarea
+                    name="package_details"
+                    placeholder="Detalles del empaque / dimensiones / observaciones de carga"
+                    value={formData.package_details || ''}
+                    onChange={handleChange}
+                    className="border rounded-xl px-3 py-2 md:col-span-3"
+                  />
+                </div>
+              )}
+
+              {requiresContainerLines && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <select
+                      value={containerLineForm.container_type_id}
+                      onChange={(e) => {
+                        const selectedContainer = containerTypes.find(
+                          (container) => container.id === e.target.value
+                        )
+
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          container_type_id: e.target.value,
+                          container_type_name: selectedContainer?.name || '',
+                        })
+                      }}
+                      className="border p-3 rounded"
+                    >
+                      <option value="">Tipo de contenedor / unidad</option>
+
+                      {containerTypes.map((container) => (
+                        <option key={container.id} value={container.id}>
+                          {container.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Cantidad"
+                      value={containerLineForm.quantity}
+                      onChange={(e) =>
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          quantity: e.target.value,
+                        })
+                      }
+                      className="border p-3 rounded"
+                    />
+
+                    <input
+                      placeholder="Notas"
+                      value={containerLineForm.notes}
+                      onChange={(e) =>
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          notes: e.target.value,
+                        })
+                      }
+                      className="border p-3 rounded"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={saveContainerLine}
+                      className="bg-zinc-950 text-white px-4 py-3 rounded"
+                    >
+                      {editingContainerLineId ? 'Actualizar' : 'Agregar'}
+                    </button>
+                  </div>
+
+                  {containerLines.length > 0 && (
+                    <div className="rounded border divide-y">
+                      {containerLines.map((line) => (
+                        <div
+                          key={line.id}
+                          className="flex items-center justify-between gap-4 p-3"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {line.container_type_name}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Cantidad: {line.quantity}
+                              {line.notes ? ` · ${line.notes}` : ''}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() => editContainerLine(line)}
+                              className="text-blue-600 font-semibold"
+                            >
+                              Modificar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => deleteContainerLine(line.id)}
+                              className="text-red-700 font-semibold"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 
@@ -443,6 +721,16 @@ export default function EditQuotationPage() {
             >
               Cancelar
             </button>
+
+            {formData.status === 'Borrador' && (
+              <button
+                onClick={sendToPricing}
+                disabled={saving}
+                className="bg-blue-700 text-white px-6 py-3 rounded-xl"
+              >
+                Enviar a Pricing
+              </button>
+            )}
 
             <button
               onClick={handleSave}

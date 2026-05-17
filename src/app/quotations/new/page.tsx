@@ -13,8 +13,19 @@ export default function NewQuotationPage() {
   const [clientes, setClientes] = useState<any[]>([])
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
+  const [packageTypes, setPackageTypes] = useState<any[]>([])
+  const [containerTypes, setContainerTypes] = useState<any[]>([])
+  const [containerLines, setContainerLines] = useState<any[]>([])
+  const [containerLineForm, setContainerLineForm] = useState({
+    container_type_id: '',
+    container_type_name: '',
+    quantity: '1',
+    notes: '',
+  })
+  const [editingContainerLineIndex, setEditingContainerLineIndex] =
+    useState<number | null>(null)
 
-  const [formData, setFormData] = useState({
+  const initialFormData = {
     cliente_id: '',
 
     quote_type: '',
@@ -57,7 +68,9 @@ export default function NewQuotationPage() {
     insurance_cost: '0',
 
     observaciones: '',
-  })
+  }
+
+  const [formData, setFormData] = useState(initialFormData)
 
   useEffect(() => {
     fetchClientes()
@@ -101,8 +114,34 @@ export default function NewQuotationPage() {
       return
     }
 
+    const { data: packageTypesData, error: packageTypesError } =
+      await supabase
+        .from('package_types')
+        .select('*')
+        .eq('active', true)
+        .order('name', { ascending: true })
+
+    if (packageTypesError) {
+      alert(packageTypesError.message)
+      return
+    }
+
+    const { data: containerTypesData, error: containerTypesError } =
+      await supabase
+        .from('container_types')
+        .select('*')
+        .eq('active', true)
+        .order('name', { ascending: true })
+
+    if (containerTypesError) {
+      alert(containerTypesError.message)
+      return
+    }
+
     setCountries(countriesData || [])
     setPorts(portsData || [])
+    setPackageTypes(packageTypesData || [])
+    setContainerTypes(containerTypesData || [])
   }
 
   const calculateInsurance = (data: any) => {
@@ -172,116 +211,198 @@ export default function NewQuotationPage() {
     setFormData(updatedData)
   }
 
+  const addContainerLine = () => {
+    if (!containerLineForm.container_type_id) {
+      alert('Debes seleccionar un tipo de contenedor / unidad')
+      return
+    }
+
+    const selectedContainer = containerTypes.find(
+      (container) => container.id === containerLineForm.container_type_id
+    )
+
+    const nextLine = {
+      ...containerLineForm,
+      container_type_name:
+        containerLineForm.container_type_name ||
+        selectedContainer?.name ||
+        '',
+      quantity: Number(containerLineForm.quantity || 1),
+    }
+
+    if (editingContainerLineIndex !== null) {
+      const updatedLines = [...containerLines]
+      updatedLines[editingContainerLineIndex] = nextLine
+
+      setContainerLines(updatedLines)
+      setEditingContainerLineIndex(null)
+    } else {
+      setContainerLines([
+        ...containerLines,
+        nextLine,
+      ])
+    }
+
+    setContainerLineForm({
+      container_type_id: '',
+      container_type_name: '',
+      quantity: '1',
+      notes: '',
+    })
+  }
+
+  const removeContainerLine = (index: number) => {
+    setContainerLines(
+      containerLines.filter((_, lineIndex) => lineIndex !== index)
+    )
+
+    if (editingContainerLineIndex === index) {
+      setEditingContainerLineIndex(null)
+      setContainerLineForm({
+        container_type_id: '',
+        container_type_name: '',
+        quantity: '1',
+        notes: '',
+      })
+    }
+  }
+
+  const editContainerLine = (index: number) => {
+    const line = containerLines[index]
+
+    setContainerLineForm({
+      container_type_id: line.container_type_id || '',
+      container_type_name: line.container_type_name || '',
+      quantity: String(line.quantity || 1),
+      notes: line.notes || '',
+    })
+
+    setEditingContainerLineIndex(index)
+  }
+
   const handleSubmit = async (status: string) => {
     if (!formData.cliente_id) {
       alert('Debes seleccionar un cliente')
       return
     }
 
+    if (status === 'Pendiente de Fijar Precios') {
+      if (!formData.tipo_transporte) {
+        alert('Debes seleccionar el tipo de transporte')
+        return
+      }
+
+      if (!formData.quote_type) {
+        alert('Debes seleccionar el tipo de cotización')
+        return
+      }
+    }
+
+    if (!formData.commodity.trim()) {
+      alert('Debes ingresar Commodity/Descripción de la carga')
+      return
+    }
+
+    const requiresContainerLines =
+      formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
+
+    if (requiresContainerLines && containerLines.length === 0) {
+      alert('Debes agregar al menos un contenedor/unidad')
+      return
+    }
+
     try {
       setLoading(true)
 
-      const { error } = await supabase.from('quotations').insert([
-        {
-          cliente_id: formData.cliente_id,
+      const { data: quotationData, error } = await supabase
+        .from('quotations')
+        .insert([
+          {
+            cliente_id: formData.cliente_id,
 
-          quote_type: formData.quote_type,
-          valid_until: formData.valid_until || null,
+            quote_type: formData.quote_type,
+            valid_until: formData.valid_until || null,
 
-          contact_name: formData.contact_name,
-          contact_email: formData.contact_email,
-          contact_phone: formData.contact_phone,
+            contact_name: formData.contact_name,
+            contact_email: formData.contact_email,
+            contact_phone: formData.contact_phone,
 
-          preferred_carrier: formData.preferred_carrier,
-          target_rate: Number(formData.target_rate),
-          commercial_value: Number(formData.commercial_value),
+            preferred_carrier: formData.preferred_carrier,
+            target_rate: Number(formData.target_rate),
+            commercial_value: Number(formData.commercial_value),
 
-          incoterm: formData.incoterm,
-          tipo_transporte: formData.tipo_transporte,
+            incoterm: formData.incoterm,
+            tipo_transporte: formData.tipo_transporte,
 
-          origen: formData.origen,
-          destino: formData.destino,
-          puerto_origen: formData.puerto_origen,
-          puerto_destino: formData.puerto_destino,
-          pickup_address: formData.pickup_address,
-          delivery_address: formData.delivery_address,
+            origen: formData.origen,
+            destino: formData.destino,
+            puerto_origen: formData.puerto_origen,
+            puerto_destino: formData.puerto_destino,
+            pickup_address: formData.pickup_address,
+            delivery_address: formData.delivery_address,
 
-          container_type: formData.container_type,
-          container_qty: Number(formData.container_qty || 0),
-          package_type: formData.package_type,
-          package_details: formData.package_details,
-          peso_kg: Number(formData.peso_kg),
-          gross_weight: Number(formData.gross_weight),
-          volumen_cbm: Number(formData.volumen_cbm),
-          cantidad_bultos: Number(formData.cantidad_bultos),
-          commodity: formData.commodity,
+            container_type: formData.container_type,
+            container_qty: Number(formData.container_qty || 0),
+            package_type: formData.package_type,
+            package_details: formData.package_details,
+            peso_kg: Number(formData.peso_kg),
+            gross_weight: Number(formData.gross_weight),
+            volumen_cbm: Number(formData.volumen_cbm),
+            cantidad_bultos: Number(formData.cantidad_bultos),
+            commodity: formData.commodity,
 
-          requires_insurance: formData.requires_insurance,
-          fob_value: Number(formData.fob_value),
-          freight_value: Number(formData.freight_value),
-          insurance_markup_percentage: Number(
-            formData.insurance_markup_percentage
-          ),
-          insurance_rate: Number(formData.insurance_rate),
-          insurance_cost: Number(formData.insurance_cost),
+            requires_insurance: formData.requires_insurance,
+            fob_value: Number(formData.fob_value),
+            freight_value: Number(formData.freight_value),
+            insurance_markup_percentage: Number(
+              formData.insurance_markup_percentage
+            ),
+            insurance_rate: Number(formData.insurance_rate),
+            insurance_cost: Number(formData.insurance_cost),
 
-          observaciones: formData.observaciones,
-          status,
-          created_by: profile?.id,
-        },
-      ])
+            observaciones: formData.observaciones,
+            status,
+            created_by: profile?.id,
+          },
+        ])
+        .select()
+        .single()
 
       if (error) {
         alert(error.message)
         return
       }
 
+      if (containerLines.length > 0) {
+        const { error: containerLinesError } = await supabase
+          .from('quotation_containers')
+          .insert(
+            containerLines.map((line) => ({
+              quotation_id: quotationData.id,
+              container_type_id: line.container_type_id,
+              container_type_name: line.container_type_name,
+              quantity: Number(line.quantity || 1),
+              notes: line.notes,
+            }))
+          )
+
+        if (containerLinesError) {
+          alert(containerLinesError.message)
+          return
+        }
+      }
+
       alert('Cotización creada correctamente')
 
-      setFormData({
-        cliente_id: '',
-
-        quote_type: '',
-        valid_until: '',
-
-        contact_name: '',
-        contact_email: '',
-        contact_phone: '',
-        contact_state: '',
-        contact_country: '',
-        preferred_carrier: '',
-        target_rate: '',
-        commercial_value: '',
-
-        incoterm: '',
-        tipo_transporte: '',
-
-        origen: '',
-        destino: '',
-        puerto_origen: '',
-        puerto_destino: '',
-        pickup_address: '',
-        delivery_address: '',
-
-        container_type: '',
-        container_qty: '',
-        package_type: '',
-        package_details: '',
-        peso_kg: '',
-        gross_weight: '',
-        volumen_cbm: '',
-        cantidad_bultos: '',
-        commodity: '',
-
-        requires_insurance: false,
-        fob_value: '',
-        freight_value: '',
-        insurance_markup_percentage: '10',
-        insurance_rate: '1.0',
-        insurance_cost: '0',
-
-        observaciones: '',
+      setFormData(initialFormData)
+      setContainerLines([])
+      setContainerLineForm({
+        container_type_id: '',
+        container_type_name: '',
+        quantity: '1',
+        notes: '',
       })
+      setEditingContainerLineIndex(null)
 
       await fetchCatalogs()
     } catch (err) {
@@ -313,6 +434,15 @@ export default function NewQuotationPage() {
     Terrestre: ['LTL', 'FTL'],
   }
 
+  const requiresContainerLines =
+    formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
+
+  const requiresLooseCargo =
+    formData.quote_type === 'LCL' ||
+    formData.quote_type === 'LTL' ||
+    formData.quote_type === 'Consolidado' ||
+    formData.quote_type === 'Courier'
+
   return (
     <AppLayout role={profile?.rol || 'Ventas'}>
       <div className="max-w-6xl">
@@ -326,7 +456,7 @@ export default function NewQuotationPage() {
               Tipo de Cotización
             </h2>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <select
                 className="border rounded-xl px-3 py-2"
                 value={formData.tipo_transporte}
@@ -368,7 +498,7 @@ export default function NewQuotationPage() {
               Información General
             </h2>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <select
                 name="cliente_id"
                 value={formData.cliente_id}
@@ -379,7 +509,7 @@ export default function NewQuotationPage() {
 
                 {clientes.map((cliente) => (
                   <option key={cliente.id} value={cliente.id}>
-                    {cliente.codigo_cliente} Ã¢â‚¬â€ {cliente.nombre}
+                    {cliente.codigo_cliente} - {cliente.nombre}
                   </option>
                 ))}
               </select>
@@ -419,7 +549,7 @@ export default function NewQuotationPage() {
               Contacto del Cliente
             </h2>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <input
                 name="contact_name"
                 placeholder="Contacto"
@@ -446,7 +576,7 @@ export default function NewQuotationPage() {
 
               <input
                 name="contact_country"
-                placeholder="Paí­s"
+                placeholder="País"
                 value={formData.contact_country}
                 disabled
                 className="border p-3 rounded bg-gray-100"
@@ -468,11 +598,11 @@ export default function NewQuotationPage() {
               Información del Embarque
             </h2>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input
                 list="countries"
                 name="origen"
-                placeholder="Paí­s de origen"
+                placeholder="País de origen"
                 value={formData.origen}
                 onChange={handleChange}
                 className="border p-3 rounded"
@@ -481,7 +611,7 @@ export default function NewQuotationPage() {
               <input
                 list="countries"
                 name="destino"
-                placeholder="Paí­s de destino"
+                placeholder="País de destino"
                 value={formData.destino}
                 onChange={handleChange}
                 className="border p-3 rounded"
@@ -513,13 +643,13 @@ export default function NewQuotationPage() {
                 className="border p-3 rounded"
               />
 
-<input
-  name="target_rate"
-  placeholder="Target $"
-  value={formData.target_rate || ''}
-  onChange={handleChange}
-  className="border p-3 rounded"
-/>
+              <input
+                name="target_rate"
+                placeholder="Target $"
+                value={formData.target_rate || ''}
+                onChange={handleChange}
+                className="border p-3 rounded"
+              />
 
               <textarea
                 className="border rounded-xl px-3 py-2 col-span-2"
@@ -566,108 +696,178 @@ export default function NewQuotationPage() {
               Información de Carga
             </h2>
 
-            <div className="grid grid-cols-3 gap-4">
-              <select
-  name="container_type"
-  value={formData.container_type}
-  onChange={handleChange}
-  className="border p-3 rounded"
->
-  <option value="">Tipo de contenedor / unidad</option>
-  <option value="Contenedor 20FR">Contenedor 20FR</option>
-  <option value="Contenedor 20DR">Contenedor 20DR</option>
-  <option value="Contenedor 20OT">Contenedor 20OT</option>
-  <option value="Contenedor 40DR">Contenedor 40DR</option>
-  <option value="Contenedor 40HC">Contenedor 40HC</option>
-  <option value="Contenedor 40FR">Contenedor 40FR</option>
-  <option value="Contenedor 45-102DR">Contenedor 45-102DR</option>
-  <option value="Contenedor 40HR">Contenedor 40HR</option>
-  <option value="Contenedor 40OT">Contenedor 40OT</option>
-  <option value="Contenedor 40NOR">Contenedor 40NOR</option>
-  <option value="Contenedor 20OT OH">Contenedor 20OT OH</option>
-  <option value="Contenedor 53'">Contenedor 53'</option>
-  <option value="Contenedor 20GP">Contenedor 20GP</option>
-  <option value="Camion 8 tons">Camion 8 tons</option>
-  <option value="Contenedor 48' FTL">Contenedor 48' FTL</option>
-</select>
-
-              <input
-                className="border rounded-xl px-3 py-2"
-                placeholder="Cantidad de contenedores / unidades"
-                value={formData.container_qty}
-                onChange={(e) =>
-                  setFormData({ ...formData, container_qty: e.target.value })
-                }
-              />
-
-              <select
-                className="border rounded-xl px-3 py-2"
-                value={formData.package_type}
-                onChange={(e) =>
-                  setFormData({ ...formData, package_type: e.target.value })
-                }
-              >
-                <option value="">Tipo de empaque</option>
-                <option value="Cajas">Cajas</option>
-                <option value="Pallets">Pallets</option>
-                <option value="Envases">Envases</option>
-                <option value="Tubos">Tubos</option>
-                <option value="Cajas metálicas">Cajas metálicas</option>
-                <option value="Cilindros">Cilindros</option>
-                <option value="Rollos">Rollos</option>
-                <option value="Sacos">Sacos</option>
-                <option value="Granel">Granel</option>
-                <option value="Otro">Otro</option>
-              </select>
-
-              <input
-                name="peso_kg"
-                placeholder="Peso KG"
-                value={formData.peso_kg}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
-              <input
-                name="gross_weight"
-                placeholder="Peso bruto"
-                value={formData.gross_weight}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
-              <input
-                name="volumen_cbm"
-                placeholder="CBM"
-                value={formData.volumen_cbm}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
-              <input
-                name="cantidad_bultos"
-                placeholder="Bultos"
-                value={formData.cantidad_bultos}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
+            <div className="space-y-4">
               <input
                 name="commodity"
-                placeholder="Mercancía"
+                placeholder="Commodity/Descripción de la carga *"
                 value={formData.commodity}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className="border p-3 rounded md:col-span-3 w-full"
               />
 
-              <textarea
-                className="border rounded-xl px-3 py-2 col-span-3"
-                placeholder="Detalles del empaque / dimensiones / observaciones de carga"
-                value={formData.package_details}
-                onChange={(e) =>
-                  setFormData({ ...formData, package_details: e.target.value })
-                }
-              />
+              {requiresLooseCargo && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <select
+                    className="border rounded-xl px-3 py-2"
+                    value={formData.package_type}
+                    onChange={(e) =>
+                      setFormData({ ...formData, package_type: e.target.value })
+                    }
+                  >
+                    <option value="">Tipo de empaque</option>
+
+                    {packageTypes.map((pkg) => (
+                      <option key={pkg.id} value={pkg.name}>
+                        {pkg.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    name="peso_kg"
+                    placeholder="Peso KG"
+                    value={formData.peso_kg}
+                    onChange={handleChange}
+                    className="border p-3 rounded"
+                  />
+
+                  <input
+                    name="gross_weight"
+                    placeholder="Peso bruto"
+                    value={formData.gross_weight}
+                    onChange={handleChange}
+                    className="border p-3 rounded"
+                  />
+
+                  <input
+                    name="volumen_cbm"
+                    placeholder="CBM"
+                    value={formData.volumen_cbm}
+                    onChange={handleChange}
+                    className="border p-3 rounded"
+                  />
+
+                  <input
+                    name="cantidad_bultos"
+                    placeholder="Bultos"
+                    value={formData.cantidad_bultos}
+                    onChange={handleChange}
+                    className="border p-3 rounded"
+                  />
+
+                  <textarea
+                    className="border rounded-xl px-3 py-2 md:col-span-3"
+                    placeholder="Detalles del empaque / dimensiones / observaciones de carga"
+                    value={formData.package_details}
+                    onChange={(e) =>
+                      setFormData({ ...formData, package_details: e.target.value })
+                    }
+                  />
+                </div>
+              )}
+
+              {requiresContainerLines && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <select
+                      value={containerLineForm.container_type_id}
+                      onChange={(e) => {
+                        const selectedContainer = containerTypes.find(
+                          (container) => container.id === e.target.value
+                        )
+
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          container_type_id: e.target.value,
+                          container_type_name: selectedContainer?.name || '',
+                        })
+                      }}
+                      className="border p-3 rounded"
+                    >
+                      <option value="">Tipo de contenedor / unidad</option>
+
+                      {containerTypes.map((container) => (
+                        <option key={container.id} value={container.id}>
+                          {container.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Cantidad"
+                      value={containerLineForm.quantity}
+                      onChange={(e) =>
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          quantity: e.target.value,
+                        })
+                      }
+                      className="border p-3 rounded"
+                    />
+
+                    <input
+                      placeholder="Notas"
+                      value={containerLineForm.notes}
+                      onChange={(e) =>
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          notes: e.target.value,
+                        })
+                      }
+                      className="border p-3 rounded"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={addContainerLine}
+                      className="bg-zinc-950 text-white px-4 py-3 rounded"
+                    >
+                      {editingContainerLineIndex !== null ? 'Actualizar' : 'Agregar'}
+                    </button>
+                  </div>
+
+                  {containerLines.length > 0 && (
+                    <div className="rounded border divide-y">
+                      {containerLines.map((line, index) => (
+                        <div
+                          key={`${line.container_type_id}-${index}`}
+                          className="flex items-center justify-between gap-4 p-3"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {line.container_type_name}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Cantidad: {line.quantity}
+                              {line.notes ? ` · ${line.notes}` : ''}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() => editContainerLine(index)}
+                              className="text-blue-600 font-semibold"
+                            >
+                              Modificar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => removeContainerLine(index)}
+                              className="text-red-700 font-semibold"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 

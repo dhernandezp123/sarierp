@@ -38,6 +38,7 @@ export default function QuotationDetailPage() {
 
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
+  const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [validations, setValidations] = useState<any[]>([])
   const [statusHistory, setStatusHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -92,8 +93,15 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', id)
       .order('created_at', { ascending: true })
 
+    const { data: quotationContainersData } = await supabase
+      .from('quotation_containers')
+      .select('*')
+      .eq('quotation_id', id)
+      .order('created_at', { ascending: true })
+
     setQuotation(quoteData)
     setPricingItems(pricingItemsData || [])
+    setQuotationContainers(quotationContainersData || [])
     const { data: selectedPricing } = await supabase
       .from('agent_quotes')
       .select('*')
@@ -114,6 +122,7 @@ export default function QuotationDetailPage() {
         quotation={quotation}
         selectedAgent={selectedAgent}
         pricingItems={pricingItems}
+        quotationContainers={quotationContainers}
       />
     ).toBlob()
 
@@ -185,6 +194,7 @@ const gpPercent =
                 quotation={quotation}
                 selectedAgent={selectedAgent}
                 pricingItems={pricingItems}
+                quotationContainers={quotationContainers}
               />
             }
             fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}

@@ -154,6 +154,9 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: 'bold',
   },
+  valueStack: {
+    flex: 1,
+  },
   table: {
     border: '1px solid #e5e7eb',
     borderRadius: 4,
@@ -325,10 +328,12 @@ export default function QuotationPDF({
   quotation,
   selectedAgent,
   pricingItems = [],
+  quotationContainers = [],
 }: {
   quotation: any
   selectedAgent: any
   pricingItems?: any[]
+  quotationContainers?: any[]
 }) {
   const freightItems = filterItems(pricingItems, 'Flete')
   const originItems = pricingItems.filter((item) =>
@@ -494,7 +499,19 @@ export default function QuotationPDF({
 
                 <View style={styles.row}>
                   <Text style={styles.label}>Contenedor:</Text>
-                  <Text style={styles.value}>{quotation.container_type || 'N/A'}</Text>
+                  <View style={styles.valueStack}>
+                    {quotationContainers && quotationContainers.length > 0 ? (
+                      quotationContainers.map((container, index) => (
+                        <Text key={index} style={styles.value}>
+                          • {container.quantity} x {container.container_type_name}
+                        </Text>
+                      ))
+                    ) : (
+                      <Text style={styles.value}>
+                        {quotation.container_qty} x {quotation.container_type}
+                      </Text>
+                    )}
+                  </View>
                 </View>
 
                 <View style={styles.row}>

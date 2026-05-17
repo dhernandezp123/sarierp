@@ -24,6 +24,7 @@ export default function PricingComparisonPage() {
   const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
+  const [quotationContainers, setQuotationContainers] = useState<any[]>([])
 
   const [agentForm, setAgentForm] = useState({
     agent_id: '',
@@ -125,10 +126,26 @@ export default function PricingComparisonPage() {
     setPricingItems(data || [])
   }
 
+  const fetchQuotationContainers = async (quotationId: string) => {
+    const { data, error } = await supabase
+      .from('quotation_containers')
+      .select('*')
+      .eq('quotation_id', quotationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setQuotationContainers(data || [])
+  }
+
   const handleSelectQuote = async (quote: any) => {
     setSelectedQuote(quote)
     await fetchAgentQuotes(quote.id)
     await fetchPricingItems(quote.id)
+    await fetchQuotationContainers(quote.id)
   }
 
   const handleAgentChange = (
@@ -148,6 +165,14 @@ export default function PricingComparisonPage() {
       [e.target.name]: e.target.value,
     })
   }
+
+  const getTotalContainersQty = (fallbackQty?: string | number) =>
+    quotationContainers.length > 0
+      ? quotationContainers.reduce(
+          (sum, container) => sum + Number(container.quantity || 0),
+          0
+        )
+      : Number(fallbackQty || agentForm.containers_qty || 1)
 
   const handleEditAgentQuote = (quote: any) => {
     setEditingAgentQuoteId(quote.id)
@@ -174,12 +199,13 @@ export default function PricingComparisonPage() {
       return
     }
 
+    const totalContainersQty = getTotalContainersQty()
+
     const suggestedSale =
       Number(agentForm.ocean_freight || 0) +
       Number(agentForm.exw_cost || 0) +
       Number(agentForm.mbl_fee || 0) +
-      Number(agentForm.profit_per_container || 0) *
-        Number(agentForm.containers_qty || 1)
+      Number(agentForm.profit_per_container || 0) * totalContainersQty
 
     const agentQuotePayload = {
       agent_id: agentForm.agent_id || null,
@@ -296,7 +322,7 @@ export default function PricingComparisonPage() {
 
     const currency = selectedAgentQuote.moneda || 'USD'
     const supplier = selectedAgentQuote.agente_nombre || ''
-    const containersQty = Number(selectedAgentQuote.containers_qty || 1)
+    const containersQty = getTotalContainersQty(selectedAgentQuote.containers_qty)
     const oceanFreight = Number(
       selectedAgentQuote.ocean_freight || selectedAgentQuote.costo || 0
     )
@@ -637,14 +663,13 @@ export default function PricingComparisonPage() {
   const gpPercentage =
     totalSale > 0 ? (profit / totalSale) * 100 : 0
 
-  const targetSale = Number(selectedQuote?.target_sale || 0)
-  const targetGp = Number(selectedQuote?.target_gp || 0)
+  const targetRate = Number(selectedQuote?.target_rate || 0)
 
-  const targetSaleDifference =
-    targetSale > 0 ? totalSale - targetSale : 0
+  const targetRateDifference =
+    targetRate > 0 ? totalSale - targetRate : 0
 
-  const targetGpDifference =
-    targetGp > 0 ? gpPercentage - targetGp : 0
+  const targetRateDifferencePercentage =
+    targetRate > 0 ? (targetRateDifference / targetRate) * 100 : 0
 
 const profitabilityStatus =
   gpPercentage >= 15
@@ -660,12 +685,19 @@ const profitabilityColor =
     ? 'bg-orange-500 text-white'
     : 'bg-red-600 text-white'
 
+  const totalContainersQty =
+    quotationContainers.length > 0
+      ? quotationContainers.reduce(
+          (sum, container) => sum + Number(container.quantity || 0),
+          0
+        )
+      : Number(agentForm.containers_qty || 1)
+
   const agentTotalCost =
     Number(agentForm.ocean_freight || 0) +
     Number(agentForm.exw_cost || 0) +
     Number(agentForm.mbl_fee || 0) +
-    Number(agentForm.profit_per_container || 0) *
-      Number(agentForm.containers_qty || 1)
+    Number(agentForm.profit_per_container || 0) * totalContainersQty
 
   const suggestedSales = [8, 10, 15, 20, 25].map((margin) => ({
     margin,
@@ -804,7 +836,17 @@ const profitabilityColor =
                     <div>
                       <p className="text-sm text-gray-500">Contenedor</p>
                       <p className="font-bold">
-                        {selectedQuote.container_type || 'N/A'}
+                        {quotationContainers.length > 0
+                          ? quotationContainers
+                              .map(
+                                (container) =>
+                                  `${container.quantity} x ${container.container_type_name}`
+                              )
+                              .join(', ')
+                          : selectedQuote.container_type || 'N/A'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Total unidades: {totalContainersQty}
                       </p>
                     </div>
                   </CardContent>
@@ -902,16 +944,10 @@ const profitabilityColor =
                       </p>
 
                       <p className="text-2xl font-bold">
-                        {targetSale > 0
-                          ? `USD ${formatCurrency(targetSale)}`
+                        {targetRate > 0
+                          ? `USD ${formatCurrency(targetRate)}`
                           : 'N/A'}
                       </p>
-
-                      {targetGp > 0 && (
-                        <p className="text-sm text-slate-500 mt-1">
-                          GP objetivo: {targetGp.toFixed(2)}%
-                        </p>
-                      )}
                     </div>
 
                     <div className="rounded-xl border p-4">
@@ -919,40 +955,23 @@ const profitabilityColor =
                         Comparación Target
                       </p>
 
-                      {targetSale > 0 ? (
+                      {targetRate > 0 ? (
                         <div>
                           <p
                             className={`text-2xl font-bold ${
-                              targetSaleDifference <= 0
+                              targetRateDifference <= 0
                                 ? 'text-green-700'
                                 : 'text-red-700'
                             }`}
                           >
-                            {targetSaleDifference <= 0 ? '-' : '+'} USD{' '}
-                            {formatCurrency(Math.abs(targetSaleDifference))}
+                            {targetRateDifference <= 0 ? '-' : '+'} USD{' '}
+                            {formatCurrency(Math.abs(targetRateDifference))}
                           </p>
 
                           <p className="text-sm text-slate-500 mt-1">
-                            {targetSaleDifference <= 0
-                              ? 'Dentro o por debajo del target'
-                              : 'Arriba del target del cliente'}
-                          </p>
-                        </div>
-                      ) : targetGp > 0 ? (
-                        <div>
-                          <p
-                            className={`text-2xl font-bold ${
-                              targetGpDifference >= 0
-                                ? 'text-green-700'
-                                : 'text-red-700'
-                            }`}
-                          >
-                            {targetGpDifference >= 0 ? '+' : ''}
-                            {targetGpDifference.toFixed(2)}%
-                          </p>
-
-                          <p className="text-sm text-slate-500 mt-1">
-                            Comparado contra GP objetivo
+                            {targetRateDifference <= 0
+                              ? `${Math.abs(targetRateDifferencePercentage).toFixed(2)}% por debajo o dentro del target`
+                              : `${targetRateDifferencePercentage.toFixed(2)}% arriba del target`}
                           </p>
                         </div>
                       ) : (
