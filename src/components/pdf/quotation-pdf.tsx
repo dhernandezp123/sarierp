@@ -157,6 +157,24 @@ const styles = StyleSheet.create({
   valueStack: {
     flex: 1,
   },
+  fullRow: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  blockLabel: {
+    fontSize: 8,
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  blockValue: {
+    fontSize: 8,
+    fontWeight: 'bold',
+    lineHeight: 1.35,
+  },
+  containerList: {
+    marginTop: 2,
+    paddingLeft: 4,
+  },
   table: {
     border: '1px solid #e5e7eb',
     borderRadius: 4,
@@ -246,6 +264,25 @@ function formatMoney(value: any) {
   const number = Number(value || 0)
 
   return `USD ${number.toFixed(2)}`
+}
+
+function getQuoteTitle(quoteType?: string) {
+  switch (quoteType) {
+    case 'FCL':
+      return 'Cotización FCL'
+    case 'LCL':
+      return 'Cotización LCL'
+    case 'FTL':
+      return 'Cotización FTL'
+    case 'LTL':
+      return 'Cotización LTL'
+    case 'Courier':
+      return 'Cotización Courier'
+    case 'Consolidado':
+      return 'Cotización Aérea Consolidada'
+    default:
+      return 'Cotización Logística'
+  }
 }
 
 function filterItems(pricingItems: any[], type: string) {
@@ -374,6 +411,10 @@ export default function QuotationPDF({
     ? `${quotation.profiles.nombre} ${quotation.profiles.apellido}`
     : quotation.salesperson || quotation.created_by || 'N/A'
 
+  const isLooseCargo = ['LCL', 'LTL', 'Consolidado', 'Courier'].includes(
+    quotation.quote_type || ''
+  )
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -396,7 +437,7 @@ export default function QuotationPDF({
 
           <View style={styles.headerRight}>
             <Text style={styles.badge}>
-              {quotation.quote_type || 'Cotización Logística'}
+              {getQuoteTitle(quotation.quote_type)}
             </Text>
 
             <View style={styles.headerQuoteBox}>
@@ -485,80 +526,91 @@ export default function QuotationPDF({
               DETALLES DEL EMBARQUE
             </Text>
 
-            <View style={styles.shipmentGrid}>
-              <View style={styles.shipmentColumn}>
-                <View style={styles.row}>
-                  <Text style={styles.label}>Origen:</Text>
-                  <Text style={styles.value}>{quotation.origen || 'N/A'}</Text>
-                </View>
+            <View>
+              <View style={styles.shipmentGrid}>
+                <View style={styles.shipmentColumn}>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Origen:</Text>
+                    <Text style={styles.value}>{quotation.origen || 'N/A'}</Text>
+                  </View>
 
-                <View style={styles.row}>
-                  <Text style={styles.label}>Destino:</Text>
-                  <Text style={styles.value}>{quotation.destino || 'N/A'}</Text>
-                </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Destino:</Text>
+                    <Text style={styles.value}>{quotation.destino || 'N/A'}</Text>
+                  </View>
 
-                <View style={styles.row}>
-                  <Text style={styles.label}>Contenedor:</Text>
-                  <View style={styles.valueStack}>
-                    {quotationContainers && quotationContainers.length > 0 ? (
-                      quotationContainers.map((container, index) => (
-                        <Text key={index} style={styles.value}>
-                          • {container.quantity} x {container.container_type_name}
-                        </Text>
-                      ))
-                    ) : (
-                      <Text style={styles.value}>
-                        {quotation.container_qty} x {quotation.container_type}
-                      </Text>
-                    )}
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Incoterm:</Text>
+                    <Text style={styles.value}>{quotation.incoterm || 'N/A'}</Text>
+                  </View>
+
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Carrier:</Text>
+                    <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
                   </View>
                 </View>
 
-                <View style={styles.row}>
-                  <Text style={styles.label}>Peso:</Text>
-                  <Text style={styles.value}>{quotation.peso_kg || 'N/A'} KG</Text>
+                <View style={styles.shipmentColumn}>
+                  {isLooseCargo && (
+                    <>
+                      <View style={styles.row}>
+                        <Text style={styles.label}>Peso:</Text>
+                        <Text style={styles.value}>
+                          {quotation.peso_kg || 'N/A'} KG
+                        </Text>
+                      </View>
+
+                      <View style={styles.row}>
+                        <Text style={styles.label}>Volumen:</Text>
+                        <Text style={styles.value}>
+                          {quotation.volumen_cbm || 'N/A'} CBM
+                        </Text>
+                      </View>
+                    </>
+                  )}
+
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Tránsito:</Text>
+                    <Text style={styles.value}>{quotation.transit_time || 'N/A'}</Text>
+                  </View>
+
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Transbordo:</Text>
+                    <Text style={styles.value}>{quotation.transshipment || 'Directo'}</Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.shipmentColumn}>
-                <View style={styles.row}>
-                  <Text style={styles.label}>Volumen:</Text>
-                  <Text style={styles.value}>{quotation.volumen_cbm || 'N/A'} CBM</Text>
-                </View>
+              <View style={styles.fullRow}>
+                <Text style={styles.blockLabel}>Contenedores / Unidades:</Text>
 
-                <View style={styles.row}>
-                  <Text style={styles.label}>Incoterm:</Text>
-                  <Text style={styles.value}>{quotation.incoterm || 'N/A'}</Text>
+                <View style={styles.containerList}>
+                  {quotationContainers && quotationContainers.length > 0 ? (
+                    quotationContainers.map((container, index) => (
+                      <Text key={index} style={styles.blockValue}>
+                        • {container.quantity} x {container.container_type_name}
+                      </Text>
+                    ))
+                  ) : (
+                    <Text style={styles.blockValue}>
+                      {quotation.container_qty} x {quotation.container_type}
+                    </Text>
+                  )}
                 </View>
+              </View>
 
-                <View style={styles.row}>
-                  <Text style={styles.label}>Tránsito:</Text>
-                  <Text style={styles.value}>{quotation.transit_time || 'N/A'}</Text>
-                </View>
+              <View style={styles.fullRow}>
+                <Text style={styles.blockLabel}>Commodity / Descripción de la carga:</Text>
+                <Text style={styles.blockValue}>{quotation.commodity || 'N/A'}</Text>
+              </View>
 
-                <View style={styles.row}>
-                  <Text style={styles.label}>Carrier:</Text>
-                  <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
-                </View>
-
-                <View style={styles.row}>
-                  <Text style={styles.label}>Commodity:</Text>
-                  <Text style={styles.value}>{quotation.commodity || 'N/A'}</Text>
-                </View>
-
-                <View style={styles.row}>
-                  <Text style={styles.label}>Transbordo:</Text>
-                  <Text style={styles.value}>{quotation.transshipment || 'Directo'}</Text>
-                </View>
-
-                <View style={styles.row}>
-                  <Text style={styles.label}>Valor FOB:</Text>
-                  <Text style={styles.value}>
-                    {quotation.commercial_value
-                      ? `USD ${formatCurrency(Number(quotation.commercial_value))}`
-                      : 'N/A'}
-                  </Text>
-                </View>
+              <View style={styles.fullRow}>
+                <Text style={styles.blockLabel}>Valor FOB:</Text>
+                <Text style={styles.blockValue}>
+                  {quotation.commercial_value
+                    ? `USD ${formatCurrency(Number(quotation.commercial_value))}`
+                    : 'N/A'}
+                </Text>
               </View>
             </View>
           </View>

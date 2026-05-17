@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 import { supabase } from '../../../lib/supabase/client'
@@ -32,6 +32,7 @@ import { Badge } from '../../../components/ui/badge'
 export default function QuotationDetailPage() {
   const { profile } = useUser()
   const params = useParams()
+  const router = useRouter()
 
   const [quotation, setQuotation] = useState<any>(null)
   const [selectedAgent, setSelectedAgent] = useState<any>(null)
@@ -41,11 +42,13 @@ export default function QuotationDetailPage() {
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [validations, setValidations] = useState<any[]>([])
   const [statusHistory, setStatusHistory] = useState<any[]>([])
+  const [changeLogs, setChangeLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (params.id) {
       fetchData(params.id as string)
+      fetchChangeLogs()
     }
   }, [params.id])
 
@@ -114,6 +117,27 @@ export default function QuotationDetailPage() {
     setValidations(validationData || [])
     setStatusHistory(statusHistoryData || [])
     setLoading(false)
+  }
+
+  const fetchChangeLogs = async () => {
+    const { data, error } = await supabase
+      .from('quotation_change_logs')
+      .select(`
+        *,
+        profiles (
+          nombre,
+          apellido
+        )
+      `)
+      .eq('quotation_id', params.id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setChangeLogs(data || [])
   }
 
   const handlePrintQuotation = async () => {
@@ -210,6 +234,13 @@ const gpPercent =
             className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center"
           >
             🖨️ Imprimir Cotización
+          </button>
+
+          <button
+            onClick={() => router.push(`/pricing-comparison?quoteId=${quotation.id}`)}
+            className="rounded-xl bg-black text-white px-6 py-3 font-semibold"
+          >
+            Trabajar Pricing
           </button>
 
           <Link
@@ -434,6 +465,52 @@ const gpPercent =
 
               <CardContent>
                 <p>{quotation.observaciones || 'Sin observaciones'}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="col-span-2">
+              <CardHeader>
+                <CardTitle>Historial de Cambios</CardTitle>
+              </CardHeader>
+
+              <CardContent>
+                {changeLogs.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    No hay cambios registrados.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {changeLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="border rounded-xl p-3"
+                      >
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <p className="font-semibold text-sm">
+                              {log.change_type}
+                            </p>
+
+                            <p className="text-sm text-gray-600 mt-1">
+                              {log.reason}
+                            </p>
+
+                            <p className="text-xs text-gray-400 mt-2">
+                              Por:{' '}
+                              {log.profiles
+                                ? `${log.profiles.nombre} ${log.profiles.apellido}`
+                                : 'Usuario'}
+                            </p>
+                          </div>
+
+                          <p className="text-xs text-gray-400 whitespace-nowrap">
+                            {new Date(log.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

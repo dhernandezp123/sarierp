@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Pencil } from 'lucide-react'
 
 import { supabase } from '../../lib/supabase/client'
@@ -15,11 +16,14 @@ import {
   CardTitle,
 } from '../../components/ui/card'
 
-export default function PricingComparisonPage() {
+function PricingComparisonContent() {
   const { profile } = useUser()
+  const searchParams = useSearchParams()
+  const quoteId = searchParams.get('quoteId')
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
+  const [quoteSearch, setQuoteSearch] = useState('')
 
   const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
@@ -40,6 +44,7 @@ export default function PricingComparisonPage() {
     transshipment: '',
     moneda: 'USD',
     transit_time: '',
+    valid_until: '',
   })
 
   const [pricingForm, setPricingForm] = useState({
@@ -63,7 +68,7 @@ export default function PricingComparisonPage() {
   useEffect(() => {
     fetchQuotations()
     fetchAgents()
-  }, [])
+  }, [quoteId])
 
   const fetchQuotations = async () => {
     const { data, error } = await supabase
@@ -83,6 +88,13 @@ export default function PricingComparisonPage() {
     }
 
     setQuotations(data || [])
+
+    if (quoteId) {
+      const quote = data?.find((q) => q.id === quoteId)
+      if (quote) {
+        await handleSelectQuote(quote)
+      }
+    }
   }
 
   const fetchAgents = async () => {
@@ -200,6 +212,7 @@ export default function PricingComparisonPage() {
       transshipment: quote.transshipment || '',
       moneda: quote.moneda || 'USD',
       transit_time: quote.transit_time || '',
+      valid_until: quote.valid_until || '',
     })
 
     const { data: containerRatesData, error: containerRatesError } =
@@ -222,6 +235,12 @@ export default function PricingComparisonPage() {
       alert('Selecciona una cotización primero')
       return
     }
+
+    const reason = await requestChangeReason(
+      editingAgentQuoteId ? 'Actualizar tarifa de agente' : 'Agregar tarifa de agente'
+    )
+
+    if (reason === null) return
 
     const totalContainersQty = getTotalContainersQty()
     const totalOceanFreight = getTotalOceanFreight()
@@ -246,6 +265,7 @@ export default function PricingComparisonPage() {
       transshipment: agentForm.transshipment,
       moneda: agentForm.moneda,
       transit_time: agentForm.transit_time,
+      valid_until: agentForm.valid_until || null,
       suggested_sale: suggestedSale,
     }
 
@@ -321,6 +341,7 @@ export default function PricingComparisonPage() {
       transshipment: '',
       moneda: 'USD',
       transit_time: '',
+      valid_until: '',
     })
 
     setContainerRateLines([])
@@ -350,6 +371,10 @@ export default function PricingComparisonPage() {
       selectedAgentQuote = data
     }
 
+    const reason = await requestChangeReason('Regenerar pricing')
+
+    if (reason === null) return
+
     const shouldReplacePricing = window.confirm(
       '¿Deseas reemplazar el pricing actual con la tarifa seleccionada?\n\nEsto eliminará las líneas actuales de pricing y generará nuevas automáticamente.'
     )
@@ -375,6 +400,34 @@ export default function PricingComparisonPage() {
       alert(error.message)
       return
     }
+
+    const updatedQuoteFields = {
+      valid_until:
+        selectedAgentQuote.valid_until || selectedQuote.valid_until || null,
+      preferred_carrier:
+        selectedAgentQuote.carrier || selectedQuote.preferred_carrier || null,
+      transit_time:
+        selectedAgentQuote.transit_time || selectedQuote.transit_time || null,
+      transshipment:
+        selectedAgentQuote.transshipment || selectedQuote.transshipment || null,
+    }
+
+    const { error: quotationUpdateError } = await supabase
+      .from('quotations')
+      .update(updatedQuoteFields)
+      .eq('id', selectedQuote.id)
+
+    if (quotationUpdateError) {
+      alert(quotationUpdateError.message)
+      return
+    }
+
+    setSelectedQuote({
+      ...selectedQuote,
+      ...updatedQuoteFields,
+    })
+
+    await fetchQuotations()
 
     const currency = selectedAgentQuote.moneda || 'USD'
     const supplier = selectedAgentQuote.agente_nombre || ''
@@ -505,6 +558,10 @@ export default function PricingComparisonPage() {
       return
     }
 
+    const reason = await requestChangeReason('Agregar cargo adicional')
+
+    if (reason === null) return
+
     const { error } = await supabase.from('pricing_items').insert([
       {
         quotation_id: selectedQuote.id,
@@ -547,6 +604,10 @@ export default function PricingComparisonPage() {
   }
 
   const deletePricingItem = async (itemId: string) => {
+    const reason = await requestChangeReason('Eliminar línea de cotización')
+
+    if (reason === null) return
+
     const { error } = await supabase
       .from('pricing_items')
       .delete()
@@ -583,6 +644,10 @@ export default function PricingComparisonPage() {
   const updatePricingItem = async (item: any) => {
     if (!selectedQuote) return
     if (!editingPricingItemForm) return
+
+    const reason = await requestChangeReason('Modificar línea de cotización')
+
+    if (reason === null) return
 
     const quantity = Number(editingPricingItemForm.quantity || 1)
     const saleAmount = Number(editingPricingItemForm.sale_amount || 0)
@@ -840,6 +905,54 @@ const profitabilityColor =
     }
   }
 
+  const filteredQuotations = quotations.filter((quote) => {
+    const search = quoteSearch.toLowerCase().trim()
+
+    return (
+      !search ||
+      quote.quotation_number?.toLowerCase().includes(search) ||
+      quote.clientes?.nombre?.toLowerCase().includes(search) ||
+      quote.origen?.toLowerCase().includes(search) ||
+      quote.destino?.toLowerCase().includes(search)
+    )
+  })
+
+  const requiresChangeReason = [
+    'Enviada al Cliente',
+    'Ganada',
+  ].includes(selectedQuote?.status || '')
+
+  const requestChangeReason = async (changeType: string) => {
+    if (!selectedQuote) return null
+
+    if (!requiresChangeReason) return ''
+
+    const reason = window.prompt(
+      'Esta cotización ya fue enviada/aprobada. Ingresa el motivo del cambio:'
+    )
+
+    if (!reason || !reason.trim()) {
+      alert('Debes ingresar un motivo para realizar este cambio.')
+      return null
+    }
+
+    const { error } = await supabase.from('quotation_change_logs').insert([
+      {
+        quotation_id: selectedQuote.id,
+        change_type: changeType,
+        reason: reason.trim(),
+        changed_by: profile?.id,
+      },
+    ])
+
+    if (error) {
+      alert(error.message)
+      return null
+    }
+
+    return reason.trim()
+  }
+
   return (
     <AppLayout role={profile?.rol || 'Ventas'}>
       <div className="space-y-6">
@@ -853,50 +966,41 @@ const profitabilityColor =
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
-          <Card className="col-span-1">
+        <div className="space-y-6">
+          <Card>
             <CardHeader>
-              <CardTitle>Cotizaciones</CardTitle>
+              <CardTitle>Seleccionar cotización</CardTitle>
             </CardHeader>
 
-            <CardContent className="space-y-3">
-              {quotations.map((quote) => (
-                <button
-                  key={quote.id}
-                  onClick={() => handleSelectQuote(quote)}
-                  className={`w-full text-left border rounded-xl p-4 hover:bg-gray-50 transition ${
-                    selectedQuote?.id === quote.id
-                      ? 'border-zinc-950 bg-gray-50'
-                      : ''
-                  }`}
-                >
-                  <p className="font-bold">
-                    {quote.quotation_number || 'Sin número'}
-                  </p>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                value={quoteSearch}
+                onChange={(e) => setQuoteSearch(e.target.value)}
+                placeholder="Buscar por cotización, cliente, origen o destino..."
+                className="border rounded-xl px-3 py-2"
+              />
 
-                  <p className="text-sm text-gray-500">
-                    {quote.clientes
-                      ? quote.clientes.nombre
-                      : 'Sin cliente'}
-                  </p>
+              <select
+                value={selectedQuote?.id || ''}
+                onChange={(e) => {
+                  const quote = quotations.find((q) => q.id === e.target.value)
+                  if (quote) handleSelectQuote(quote)
+                }}
+                className="border rounded-xl px-3 py-2"
+              >
+                <option value="">Seleccionar cotización</option>
 
-                  <p className="text-sm text-gray-500">
-                    {quote.origen} → {quote.destino}
-                  </p>
-
-                  <span
-                    className={`mt-2 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(
-                      quote.status || ''
-                    )}`}
-                  >
-                    {quote.status || 'Sin estado'}
-                  </span>
-                </button>
-              ))}
+                {filteredQuotations.map((quote) => (
+                  <option key={quote.id} value={quote.id}>
+                    {quote.quotation_number || 'Sin número'} —{' '}
+                    {quote.clientes?.nombre || 'Sin cliente'} — {quote.origen}{' '}
+                    → {quote.destino}
+                  </option>
+                ))}
+              </select>
             </CardContent>
           </Card>
 
-          <div className="col-span-2 space-y-6">
             {!selectedQuote ? (
               <Card>
                 <CardContent className="p-8 text-gray-500">
@@ -951,61 +1055,41 @@ const profitabilityColor =
                   </CardContent>
                 </Card>
 
-                <div className="grid grid-cols-4 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm text-gray-500">
-                        Costo Total
-                      </CardTitle>
-                    </CardHeader>
+                <Card className="sticky top-4 z-10 bg-white shadow-md">
+                  <CardHeader>
+                    <CardTitle>Resumen Comercial</CardTitle>
+                  </CardHeader>
 
-                    <CardContent>
-                      <p className="text-3xl font-bold">
+                  <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">Costo Base Sari</p>
+                      <p className="text-xl font-bold">
                         USD {formatCurrency(totalCost)}
                       </p>
-                    </CardContent>
-                  </Card>
+                    </div>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm text-gray-500">
-                        Venta Total
-                      </CardTitle>
-                    </CardHeader>
-
-                    <CardContent>
-                      <p className="text-3xl font-bold">
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">Venta Cliente</p>
+                      <p className="text-xl font-bold">
                         USD {formatCurrency(totalSale)}
                       </p>
-                    </CardContent>
-                  </Card>
+                    </div>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm text-gray-500">
-                        Profit
-                      </CardTitle>
-                    </CardHeader>
-
-                    <CardContent>
-                      <p className={`text-3xl font-bold ${
-                        profit >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">Profit</p>
+                      <p
+                        className={`text-xl font-bold ${
+                          profit >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}
+                      >
                         USD {formatCurrency(profit)}
                       </p>
-                    </CardContent>
-                  </Card>
+                    </div>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm text-gray-500">
-                        GP %
-                      </CardTitle>
-                    </CardHeader>
-
-                    <CardContent>
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">GP %</p>
                       <p
-                        className={`text-3xl font-bold ${
+                        className={`text-xl font-bold ${
                           gpPercentage >= 15
                             ? 'text-green-600'
                             : gpPercentage >= 8
@@ -1015,34 +1099,11 @@ const profitabilityColor =
                       >
                         {gpPercentage.toFixed(2)}%
                       </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>
-                      Análisis Comercial
-                    </CardTitle>
-                  </CardHeader>
-
-                  <CardContent className="grid grid-cols-3 gap-4">
-                    <div className="rounded-xl border p-4">
-                      <p className="text-sm text-gray-500">
-                        Rentabilidad
-                      </p>
-
-                      <Badge className={`mt-2 ${profitabilityColor}`}>
-                        {profitabilityStatus}
-                      </Badge>
                     </div>
 
                     <div className="rounded-xl border p-4">
-                      <p className="text-sm text-gray-500">
-                        Target Cliente
-                      </p>
-
-                      <p className="text-2xl font-bold">
+                      <p className="text-xs text-gray-500">Target Cliente</p>
+                      <p className="text-xl font-bold">
                         {targetRate > 0
                           ? `USD ${formatCurrency(targetRate)}`
                           : 'N/A'}
@@ -1050,14 +1111,12 @@ const profitabilityColor =
                     </div>
 
                     <div className="rounded-xl border p-4">
-                      <p className="text-sm text-gray-500">
-                        Comparación Target
-                      </p>
+                      <p className="text-xs text-gray-500">Vs Target</p>
 
                       {targetRate > 0 ? (
-                        <div>
+                        <>
                           <p
-                            className={`text-2xl font-bold ${
+                            className={`text-xl font-bold ${
                               targetRateDifference <= 0
                                 ? 'text-green-700'
                                 : 'text-red-700'
@@ -1067,14 +1126,14 @@ const profitabilityColor =
                             {formatCurrency(Math.abs(targetRateDifference))}
                           </p>
 
-                          <p className="text-sm text-slate-500 mt-1">
+                          <p className="text-xs text-gray-500 mt-1">
                             {targetRateDifference <= 0
-                              ? `${Math.abs(targetRateDifferencePercentage).toFixed(2)}% por debajo o dentro del target`
-                              : `${targetRateDifferencePercentage.toFixed(2)}% arriba del target`}
+                              ? `${Math.abs(targetRateDifferencePercentage).toFixed(2)}% abajo`
+                              : `${targetRateDifferencePercentage.toFixed(2)}% arriba`}
                           </p>
-                        </div>
+                        </>
                       ) : (
-                        <p className="text-2xl font-bold">N/A</p>
+                        <p className="text-xl font-bold">N/A</p>
                       )}
                     </div>
                   </CardContent>
@@ -1082,41 +1141,49 @@ const profitabilityColor =
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Agregar Tarifa de Agente</CardTitle>
+                    <CardTitle>Construcción de Tarifa</CardTitle>
                   </CardHeader>
 
-                  <CardContent className="grid grid-cols-4 gap-4">
-                    <select
-                      value={agentForm.agent_id}
-                      onChange={(e) => {
-                        const agentId = e.target.value
-                        const selectedAgent = agents.find((a) => a.id === agentId)
+                  <CardContent className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1">
+                        Agente
+                      </label>
 
-                        setAgentForm({
-                          ...agentForm,
-                          agent_id: agentId,
-                          agente_nombre: selectedAgent?.name || '',
-                          profit_per_container: String(
-                            selectedAgent?.profit_per_container || 0
-                          ),
-                          mbl_fee: String(selectedAgent?.mbl_fee || 0),
-                          moneda: selectedAgent?.currency || 'USD',
-                        })
-                      }}
-                      className="border rounded-xl px-3 py-2"
-                    >
-                      <option value="">Seleccionar agente/proveedor</option>
+                      <select
+                        value={agentForm.agent_id}
+                        onChange={(e) => {
+                          const agentId = e.target.value
+                          const selectedAgent = agents.find((a) => a.id === agentId)
 
-                      {agents.map((agent) => (
-                        <option key={agent.id} value={agent.id}>
-                          {agent.name} — {agent.type}
-                        </option>
-                      ))}
-                    </select>
+                          setAgentForm({
+                            ...agentForm,
+                            agent_id: agentId,
+                            agente_nombre: selectedAgent?.name || '',
+                            profit_per_container: String(
+                              selectedAgent?.profit_per_container || 0
+                            ),
+                            mbl_fee: String(selectedAgent?.mbl_fee || 0),
+                            moneda: selectedAgent?.currency || 'USD',
+                          })
+                        }}
+                        className="border rounded-xl px-3 py-2 w-full"
+                      >
+                        <option value="">Seleccionar agente/proveedor</option>
+
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name} — {agent.type}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
                     {quotationContainers.length > 0 && (
-                      <div className="col-span-4 rounded-xl border p-4 space-y-3">
-                        <p className="font-semibold">Tarifas por contenedor</p>
+                      <div className="col-span-2 md:col-span-3 xl:col-span-6 rounded-xl border p-4 space-y-3">
+                        <p className="font-semibold">
+                          Costos del proveedor por contenedor
+                        </p>
 
                         {quotationContainers.map((container) => {
                           const currentLine = containerRateLines.find(
@@ -1139,7 +1206,7 @@ const profitabilityColor =
 
                               <input
                                 type="number"
-                                placeholder="Ocean Freight unitario"
+                                placeholder="Costo unitario proveedor"
                                 value={currentLine?.ocean_freight || ''}
                                 onChange={(e) => {
                                   const value = e.target.value
@@ -1169,7 +1236,7 @@ const profitabilityColor =
                                     ]
                                   })
                                 }}
-                                className="border p-3 rounded col-span-2"
+                                className="border rounded-xl px-3 py-2 w-full"
                               />
 
                               <p className="font-bold">
@@ -1186,73 +1253,122 @@ const profitabilityColor =
                     )}
 
                     {quotationContainers.length === 0 && (
-                      <input
-                        name="ocean_freight"
-                        placeholder="Ocean Freight"
-                        value={agentForm.ocean_freight}
-                        onChange={handleAgentChange}
-                        className="border p-3 rounded"
-                      />
+                      <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1">
+                          Costo proveedor
+                        </label>
+
+                        <input
+                          name="ocean_freight"
+                          placeholder="Ocean Freight"
+                          value={agentForm.ocean_freight}
+                          onChange={handleAgentChange}
+                          className="border rounded-xl px-3 py-2 w-full"
+                        />
+                      </div>
                     )}
 
-                    <select
-                      name="moneda"
-                      value={agentForm.moneda}
-                      onChange={handleAgentChange}
-                      className="border p-3 rounded"
-                    >
-                      <option value="USD">USD</option>
-                      <option value="HNL">HNL</option>
-                    </select>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1">
+                        Moneda
+                      </label>
 
-                    <input
-                      name="transit_time"
-                      placeholder="Tránsito"
-                      value={agentForm.transit_time}
-                      onChange={handleAgentChange}
-                      className="border p-3 rounded"
-                    />
+                      <select
+                        name="moneda"
+                        value={agentForm.moneda}
+                        onChange={handleAgentChange}
+                        className="border rounded-xl px-3 py-2 w-full"
+                      >
+                        <option value="USD">USD</option>
+                        <option value="HNL">HNL</option>
+                      </select>
+                    </div>
 
-                    <input
-                      className="border rounded-xl px-3 py-2"
-                      placeholder="Carrier / Naviera"
-                      value={agentForm.carrier}
-                      onChange={(e) =>
-                        setAgentForm({ ...agentForm, carrier: e.target.value })
-                      }
-                    />
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1">
+                        Tránsito
+                      </label>
 
-                    <select
-                      className="border rounded-xl px-3 py-2"
-                      value={agentForm.transshipment}
-                      onChange={(e) =>
-                        setAgentForm({ ...agentForm, transshipment: e.target.value })
-                      }
-                    >
-                      <option value="">Transbordo</option>
-                      <option value="Directo">Directo</option>
-                      <option value="Sí">Sí</option>
-                      <option value="Via Panamá">Via Panamá</option>
-                      <option value="Via Cartagena">Via Cartagena</option>
-                      <option value="Via Kingston">Via Kingston</option>
-                      <option value="Via Miami">Via Miami</option>
-                    </select>
+                      <input
+                        name="transit_time"
+                        placeholder="Tránsito"
+                        value={agentForm.transit_time}
+                        onChange={handleAgentChange}
+                        className="border rounded-xl px-3 py-2 w-full"
+                      />
+                    </div>
 
-                    <input
-                      className="border rounded-xl px-3 py-2"
-                      placeholder="Días libres destino"
-                      value={agentForm.free_days_destination}
-                      onChange={(e) =>
-                        setAgentForm({
-                          ...agentForm,
-                          free_days_destination: e.target.value,
-                        })
-                      }
-                    />
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1">
+                        Carrier
+                      </label>
 
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 col-span-4">
+                      <input
+                        className="border rounded-xl px-3 py-2 w-full"
+                        placeholder="Carrier / Naviera"
+                        value={agentForm.carrier}
+                        onChange={(e) =>
+                          setAgentForm({ ...agentForm, carrier: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1">
+                        Transbordo
+                      </label>
+
+                      <select
+                        className="border rounded-xl px-3 py-2 w-full"
+                        value={agentForm.transshipment}
+                        onChange={(e) =>
+                          setAgentForm({ ...agentForm, transshipment: e.target.value })
+                        }
+                      >
+                        <option value="">Transbordo</option>
+                        <option value="Directo">Directo</option>
+                        <option value="Sí">Sí</option>
+                        <option value="Via Panamá">Via Panamá</option>
+                        <option value="Via Cartagena">Via Cartagena</option>
+                        <option value="Via Kingston">Via Kingston</option>
+                        <option value="Via Miami">Via Miami</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1">
+                        Días libres
+                      </label>
+
+                      <input
+                        className="border rounded-xl px-3 py-2 w-full"
+                        placeholder="Días libres destino"
+                        value={agentForm.free_days_destination}
+                        onChange={(e) =>
+                          setAgentForm({
+                            ...agentForm,
+                            free_days_destination: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1">
+                        Vigencia tarifa
+                      </label>
+                      <input
+                        type="date"
+                        name="valid_until"
+                        value={agentForm.valid_until}
+                        onChange={handleAgentChange}
+                        className="border rounded-xl px-3 py-2 w-full"
+                      />
+                    </div>
+
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 col-span-2 md:col-span-3 xl:col-span-6">
                       <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
-                        Costo Total Sari
+                        Costo base Sari
                       </p>
 
                       <p className="mt-2 text-3xl font-bold text-emerald-700">
@@ -1287,7 +1403,7 @@ const profitabilityColor =
 
                     <button
                       onClick={saveAgentQuote}
-                      className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-4"
+                      className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-2 md:col-span-3 xl:col-span-6"
                     >
                       {editingAgentQuoteId ? 'Actualizar Tarifa' : 'Guardar Tarifa'}
                     </button>
@@ -1400,7 +1516,7 @@ const profitabilityColor =
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Pricing Engine</CardTitle>
+                    <CardTitle>Detalle de Venta al Cliente</CardTitle>
                   </CardHeader>
 
                   <CardContent className="space-y-4">
@@ -1504,7 +1620,7 @@ const profitabilityColor =
                         onClick={savePricingItem}
                         className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-4"
                       >
-                        Agregar Línea
+                        Agregar Cargo Adicional
                       </button>
                     </div>
 
@@ -1518,21 +1634,28 @@ const profitabilityColor =
                       </p>
                     </div>
 
+                    <h3 className="text-lg font-semibold">
+                      Líneas de Cotización
+                    </h3>
+
                     {pricingItems.length === 0 ? (
                       <p className="text-gray-500">
-                        No hay líneas de pricing.
+                        No hay líneas de cotización.
                       </p>
                     ) : (
                       <table className="w-full text-left">
                         <thead className="bg-zinc-950 text-white">
                           <tr>
-                            <th className="p-3">Descripción</th>
-                            <th className="p-3">Proveedor</th>
-                            <th className="p-3">QTY</th>
-                            <th className="p-3">Valor</th>
-                            <th className="p-3">ISV</th>
-                            <th className="p-3">Total</th>
-                            <th className="p-3">Acción</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Descripción</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Proveedor</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">QTY</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Costo Unit.</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Costo Total</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Venta Unit.</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">ISV</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Venta Total</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Margen</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Acción</th>
                           </tr>
                         </thead>
 
@@ -1543,10 +1666,40 @@ const profitabilityColor =
                             const tax = item.taxable ? subtotal * 0.15 : 0
                             const total = subtotal + tax
                             const currency = item.currency || 'USD'
+                            const costSubtotal =
+                              qty * Number(item.cost_amount || 0)
+                            const saleSubtotal =
+                              qty * Number(item.sale_amount || 0)
+                            const editingCost =
+                              Number(editingPricingItemForm?.cost_amount || 0)
+                            const editingSale =
+                              Number(editingPricingItemForm?.sale_amount || 0)
+                            const editingQty =
+                              Number(editingPricingItemForm?.quantity || 0)
+                            const displayCostSubtotal =
+                              editingPricingItemId === item.id
+                                ? editingCost * editingQty
+                                : costSubtotal
+                            const displaySaleSubtotal =
+                              editingPricingItemId === item.id
+                                ? editingSale * editingQty
+                                : saleSubtotal
+                            const displayMargin =
+                              displaySaleSubtotal - displayCostSubtotal
+                            const margin = displayMargin
 
                             return (
-                              <tr key={item.id} className="border-b">
-                                <td className="px-4 py-3">
+                              <tr
+                                key={item.id}
+                                className={`border-b ${
+                                  margin < 0
+                                    ? 'bg-red-50'
+                                    : margin === 0
+                                    ? 'bg-yellow-50'
+                                    : ''
+                                }`}
+                              >
+                                <td className="p-2 text-sm">
                                   {editingPricingItemId === item.id ? (
                                     <input
                                       value={editingPricingItemForm?.description || ''}
@@ -1556,18 +1709,18 @@ const profitabilityColor =
                                           description: e.target.value,
                                         })
                                       }
-                                      className="border rounded px-2 py-1 w-full"
+                                      className="border rounded px-2 py-1 text-sm w-full"
                                     />
                                   ) : (
                                     item.description
                                   )}
                                 </td>
 
-                                <td className="p-3">
+                                <td className="p-2 text-sm">
                                   {item.supplier || 'N/A'}
                                 </td>
 
-                                <td className="px-4 py-3">
+                                <td className="p-2 text-sm">
                                   {editingPricingItemId === item.id ? (
                                     <input
                                       type="number"
@@ -1578,14 +1731,36 @@ const profitabilityColor =
                                           quantity: e.target.value,
                                         })
                                       }
-                                      className="border rounded px-2 py-1 w-20"
+                                      className="border rounded px-2 py-1 text-sm w-20"
                                     />
                                   ) : (
                                     item.quantity
                                   )}
                                 </td>
 
-                                <td className="px-4 py-3">
+                                <td className="p-2 text-sm">
+                                  {editingPricingItemId === item.id ? (
+                                    <input
+                                      type="number"
+                                      value={editingPricingItemForm?.cost_amount || ''}
+                                      onChange={(e) =>
+                                        setEditingPricingItemForm({
+                                          ...editingPricingItemForm,
+                                          cost_amount: e.target.value,
+                                        })
+                                      }
+                                      className="border rounded px-2 py-1 text-sm w-full"
+                                    />
+                                  ) : (
+                                    `USD ${formatCurrency(item.cost_amount || 0)}`
+                                  )}
+                                </td>
+
+                                <td className="p-2 text-sm">
+                                  USD {formatCurrency(displayCostSubtotal)}
+                                </td>
+
+                                <td className="p-2 text-sm">
                                   {editingPricingItemId === item.id ? (
                                     <input
                                       type="number"
@@ -1596,28 +1771,39 @@ const profitabilityColor =
                                           sale_amount: e.target.value,
                                         })
                                       }
-                                      className="border rounded px-2 py-1 w-full"
+                                      className="border rounded px-2 py-1 text-sm w-full"
                                     />
                                   ) : (
                                     `USD ${formatCurrency(item.sale_amount)}`
                                   )}
                                 </td>
 
-                                <td className="p-3">
+                                <td className="p-2 text-sm">
                                   {currency} {tax.toFixed(2)}
                                 </td>
 
-                                <td className="px-4 py-3 font-bold">
+                                <td className="p-2 text-sm font-bold">
                                   {editingPricingItemId === item.id
-                                    ? `USD ${formatCurrency(
-                                        Number(editingPricingItemForm?.sale_amount || 0) *
-                                          Number(editingPricingItemForm?.quantity || 0)
-                                      )}`
+                                    ? `USD ${formatCurrency(displaySaleSubtotal)}`
                                     : `USD ${formatCurrency(item.total_amount)}`
                                   }
                                 </td>
 
-                                <td className="p-3">
+                                <td className="p-2 text-sm font-semibold">
+                                  <span
+                                    className={`font-semibold ${
+                                      margin > 0
+                                        ? 'text-green-600'
+                                        : margin < 0
+                                        ? 'text-red-600'
+                                        : 'text-yellow-600'
+                                    }`}
+                                  >
+                                    USD {formatCurrency(margin)}
+                                  </span>
+                                </td>
+
+                                <td className="p-2 text-sm">
                                   {editingPricingItemId === item.id ? (
                                     <div className="flex gap-2">
                                       <button
@@ -1679,9 +1865,16 @@ const profitabilityColor =
 </div>
               </>
             )}
-          </div>
         </div>
       </div>
     </AppLayout>
+  )
+}
+
+export default function PricingComparisonPage() {
+  return (
+    <Suspense fallback={<p className="p-8">Cargando pricing...</p>}>
+      <PricingComparisonContent />
+    </Suspense>
   )
 }
