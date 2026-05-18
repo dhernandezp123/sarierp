@@ -48,6 +48,7 @@ export default function QuotationDetailPage() {
   useEffect(() => {
     if (params.id) {
       fetchData(params.id as string)
+      fetchStatusHistory()
       fetchChangeLogs()
     }
   }, [params.id])
@@ -78,18 +79,6 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', id)
       .order('created_at', { ascending: false })
 
-    const { data: statusHistoryData } = await supabase
-      .from('quotation_status_history')
-      .select(`
-        *,
-        profiles:changed_by (
-          nombre,
-          apellido
-        )
-      `)
-      .eq('quotation_id', id)
-      .order('created_at', { ascending: false })
-
     const { data: pricingItemsData } = await supabase
       .from('pricing_items')
       .select('*')
@@ -115,8 +104,28 @@ export default function QuotationDetailPage() {
     setSelectedAgent(selectedPricing)
     setAgentQuotes(agentData || [])
     setValidations(validationData || [])
-    setStatusHistory(statusHistoryData || [])
     setLoading(false)
+  }
+
+  const fetchStatusHistory = async () => {
+    const { data, error } = await supabase
+      .from('quotation_status_history')
+      .select(`
+        *,
+        profiles (
+          nombre,
+          apellido
+        )
+      `)
+      .eq('quotation_id', params.id)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setStatusHistory(data || [])
   }
 
   const fetchChangeLogs = async () => {
@@ -195,6 +204,31 @@ const gpPercent =
   pricingTotals.subtotal > 0
     ? (pricingTotals.profit / pricingTotals.subtotal) * 100
     : 0
+
+const isLooseCargo = ['LCL', 'LTL', 'Consolidado', 'Courier'].includes(
+  quotation?.quote_type || ''
+)
+
+const clientTaxId =
+  quotation?.clientes?.rtn ||
+  quotation?.clientes?.nit ||
+  quotation?.clientes?.ruc ||
+  'N/A'
+
+const paymentTerms =
+  quotation?.clientes?.condicion_pago ||
+  quotation?.clientes?.payment_terms ||
+  'Contado'
+
+const originPort =
+  quotation?.origin_port ||
+  quotation?.puerto_origen ||
+  'N/A'
+
+const destinationPort =
+  quotation?.destination_port ||
+  quotation?.puerto_destino ||
+  'N/A'
 
   return (
   <AppLayout role={profile?.rol || 'Ventas'}>
@@ -305,6 +339,20 @@ const gpPercent =
             </Card>
           </div>
 
+          {changeLogs.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 mb-6">
+              <p className="font-semibold">
+                Esta cotización tiene {changeLogs.length} cambio
+                {changeLogs.length === 1 ? '' : 's'} registrado
+                {changeLogs.length === 1 ? '' : 's'} después de ser enviada/aprobada.
+              </p>
+
+              <p className="text-sm mt-1">
+                Revisa el Historial de Cambios para validar los motivos.
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -356,7 +404,17 @@ const gpPercent =
                 <div>
                   <p className="text-xs text-slate-500">Condición</p>
                   <p className="font-semibold text-slate-900">
-                    {quotation.clientes?.condicion_pago || 'N/A'}
+                    {paymentTerms}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    RTN / NIT
+                  </p>
+
+                  <p className="font-medium">
+                    {clientTaxId}
                   </p>
                 </div>
               </CardContent>
@@ -408,47 +466,66 @@ const gpPercent =
                 <div>
                   <p className="text-xs text-slate-500">Puerto Origen</p>
                   <p className="font-semibold text-slate-900">
-                    {quotation.puerto_origen || 'N/A'}
+                    {originPort}
                   </p>
                 </div>
 
                 <div>
                   <p className="text-xs text-slate-500">Puerto Destino</p>
                   <p className="font-semibold text-slate-900">
-                    {quotation.puerto_destino || 'N/A'}
+                    {destinationPort}
                   </p>
                 </div>
 
-                <div>
-                  <p className="text-xs text-slate-500">Contenedor</p>
-                  <p className="font-semibold text-slate-900">
-                    {quotation.container_type || 'N/A'}
+                <div className="md:col-span-2">
+                  <p className="text-sm text-muted-foreground">
+                    Contenedores / Unidades
                   </p>
+
+                  {quotationContainers.length > 0 ? (
+                    <div className="font-medium space-y-1">
+                      {quotationContainers.map((container) => (
+                        <p key={container.id}>
+                          • {container.quantity} x {container.container_type || container.container_type_name}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="font-medium">
+                      {quotation.container_type || 'N/A'}
+                    </p>
+                  )}
                 </div>
 
-                <div>
-                  <p className="text-xs text-slate-500">Peso</p>
-                  <p className="font-semibold text-slate-900">
-                    {quotation.peso_kg || 'N/A'} KG
-                  </p>
-                </div>
+                {isLooseCargo && (
+                  <>
+                    <div>
+                      <p className="text-xs text-slate-500">Peso</p>
+                      <p className="font-semibold text-slate-900">
+                        {quotation.peso_kg || 'N/A'} KG
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-slate-500">CBM</p>
+                      <p className="font-semibold text-slate-900">
+                        {quotation.volumen_cbm || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-slate-500">Bultos</p>
+                      <p className="font-semibold text-slate-900">
+                        {quotation.cantidad_bultos || 'N/A'}
+                      </p>
+                    </div>
+                  </>
+                )}
 
                 <div>
-                  <p className="text-xs text-slate-500">CBM</p>
-                  <p className="font-semibold text-slate-900">
-                    {quotation.volumen_cbm || 'N/A'}
+                  <p className="text-xs text-slate-500">
+                    Commodity / Descripción de la carga
                   </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-500">Bultos</p>
-                  <p className="font-semibold text-slate-900">
-                    {quotation.cantidad_bultos || 'N/A'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-500">Mercancía</p>
                   <p className="font-semibold text-slate-900">
                     {quotation.commodity || 'N/A'}
                   </p>
@@ -488,7 +565,9 @@ const gpPercent =
                         <div className="flex justify-between items-start gap-4">
                           <div>
                             <p className="font-semibold text-sm">
-                              {log.change_type}
+                              <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                                {log.change_type}
+                              </span>
                             </p>
 
                             <p className="text-sm text-gray-600 mt-1">
@@ -609,51 +688,51 @@ const gpPercent =
         <TabsContent value="historial">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-slate-900">
-                Historial de Estados
-              </CardTitle>
+              <CardTitle>Historial de Estados</CardTitle>
             </CardHeader>
 
             <CardContent>
               {statusHistory.length === 0 ? (
-                <p className="text-gray-500">
+                <p className="text-sm text-gray-500">
                   No hay cambios de estado registrados.
                 </p>
               ) : (
-                <table className="w-full text-left">
-                  <thead className="bg-zinc-950 text-white">
-                    <tr>
-                      <th className="p-3">Estado Anterior</th>
-                      <th className="p-3">Nuevo Estado</th>
-                      <th className="p-3">Usuario</th>
-                      <th className="p-3">Fecha</th>
-                    </tr>
-                  </thead>
+                <div className="space-y-3">
+                  {statusHistory.map((log, index) => (
+                    <div key={log.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="h-3 w-3 rounded-full bg-slate-700 mt-1" />
 
-                  <tbody>
-                    {statusHistory.map((item) => (
-                      <tr key={item.id} className="border-b">
-                        <td className="p-3">
-                          {item.old_status || 'Sin estado'}
-                        </td>
+                        {index !== statusHistory.length - 1 && (
+                          <div className="w-px flex-1 bg-slate-300 min-h-[40px]" />
+                        )}
+                      </div>
 
-                        <td className="p-3">
-                          {item.new_status}
-                        </td>
+                      <div className="flex-1 border rounded-xl p-3">
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <p className="text-sm font-semibold">
+                              {log.old_status || 'Sin estado'}
+                              <span className="mx-2 text-slate-400">→</span>
+                              {log.new_status}
+                            </p>
 
-                        <td className="p-3">
-                          {item.profiles
-                            ? `${item.profiles.nombre} ${item.profiles.apellido}`
-                            : 'Usuario no registrado'}
-                        </td>
+                            <p className="text-xs text-gray-500 mt-2">
+                              Por:{' '}
+                              {log.profiles
+                                ? `${log.profiles.nombre} ${log.profiles.apellido}`
+                                : 'Usuario'}
+                            </p>
+                          </div>
 
-                        <td className="p-3">
-                          {new Date(item.created_at).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <p className="text-xs text-gray-400 whitespace-nowrap">
+                            {new Date(log.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

@@ -474,6 +474,7 @@ export default function QuotationPDF({
                 Vendedor: <Text style={styles.boldValue}>{sellerName}</Text>
               </Text>
             </View>
+
           </View>
         </View>
         <View style={styles.headerDivider} />
@@ -519,6 +520,25 @@ export default function QuotationPDF({
                 {quotation.clientes?.pais || 'N/A'}
               </Text>
             </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.label}>RTN / NIT:</Text>
+              <Text style={styles.value}>
+                {quotation.clientes?.rtn ||
+                  quotation.clientes?.nit ||
+                  quotation.clientes?.ruc ||
+                  'N/A'}
+              </Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <Text style={styles.label}>Condición:</Text>
+              <Text style={styles.value}>
+                {quotation.clientes?.condicion_pago ||
+                  quotation.clientes?.payment_terms ||
+                  'Contado'}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.infoBox}>
@@ -548,6 +568,30 @@ export default function QuotationPDF({
                     <Text style={styles.label}>Carrier:</Text>
                     <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
                   </View>
+
+
+                  <View style={styles.fullRow}>
+                    <Text style={styles.blockLabel}>Contenedores / Unidades:</Text>
+
+                    <View style={styles.containerList}>
+                      {quotationContainers && quotationContainers.length > 0 ? (
+                        quotationContainers.map((container, index) => (
+                          <Text key={index} style={styles.blockValue}>
+                            • {container.quantity} x {container.container_type_name}
+                          </Text>
+                        ))
+                      ) : (
+                        <Text style={styles.blockValue}>
+                          {quotation.container_qty} x {quotation.container_type}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={styles.fullRow}>
+                    <Text style={styles.blockLabel}>Commodity / Descripción de la carga:</Text>
+                    <Text style={styles.blockValue}>{quotation.commodity || 'N/A'}</Text>
+                  </View>
                 </View>
 
                 <View style={styles.shipmentColumn}>
@@ -570,6 +614,20 @@ export default function QuotationPDF({
                   )}
 
                   <View style={styles.row}>
+                    <Text style={styles.label}>Puerto origen:</Text>
+                    <Text style={styles.value}>
+                      {quotation.origin_port || quotation.puerto_origen || 'N/A'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Puerto destino:</Text>
+                    <Text style={styles.value}>
+                      {quotation.destination_port || quotation.puerto_destino || 'N/A'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.row}>
                     <Text style={styles.label}>Tránsito:</Text>
                     <Text style={styles.value}>{quotation.transit_time || 'N/A'}</Text>
                   </View>
@@ -578,40 +636,18 @@ export default function QuotationPDF({
                     <Text style={styles.label}>Transbordo:</Text>
                     <Text style={styles.value}>{quotation.transshipment || 'Directo'}</Text>
                   </View>
-                </View>
-              </View>
 
-              <View style={styles.fullRow}>
-                <Text style={styles.blockLabel}>Contenedores / Unidades:</Text>
-
-                <View style={styles.containerList}>
-                  {quotationContainers && quotationContainers.length > 0 ? (
-                    quotationContainers.map((container, index) => (
-                      <Text key={index} style={styles.blockValue}>
-                        • {container.quantity} x {container.container_type_name}
-                      </Text>
-                    ))
-                  ) : (
-                    <Text style={styles.blockValue}>
-                      {quotation.container_qty} x {quotation.container_type}
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Valor FOB:</Text>
+                    <Text style={styles.value}>
+                      {quotation.commercial_value
+                        ? `USD ${formatCurrency(Number(quotation.commercial_value))}`
+                        : 'N/A'}
                     </Text>
-                  )}
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.fullRow}>
-                <Text style={styles.blockLabel}>Commodity / Descripción de la carga:</Text>
-                <Text style={styles.blockValue}>{quotation.commodity || 'N/A'}</Text>
-              </View>
-
-              <View style={styles.fullRow}>
-                <Text style={styles.blockLabel}>Valor FOB:</Text>
-                <Text style={styles.blockValue}>
-                  {quotation.commercial_value
-                    ? `USD ${formatCurrency(Number(quotation.commercial_value))}`
-                    : 'N/A'}
-                </Text>
-              </View>
             </View>
           </View>
         </View>

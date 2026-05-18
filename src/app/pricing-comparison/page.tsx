@@ -716,40 +716,12 @@ function PricingComparisonContent() {
   }
 
   const markAsSentToClient = async () => {
-    const approvePricing = async () => {
-  if (!selectedQuote) return
+    if (!selectedQuote) return
 
-  const { error } = await supabase
-    .from('quotations')
-    .update({
-      total_cost: totalCost,
-      total_sale: totalSale,
-      profit_amount: profit,
-      gp_percentage: gpPercentage,
-      pricing_approved: true,
-      pricing_approved_by: profile?.id,
-      pricing_approved_at: new Date().toISOString(),
-    })
-    .eq('id', selectedQuote.id)
-
-  if (error) {
-    alert(error.message)
-    return
-  }
-
-  alert('Pricing aprobado correctamente')
-
-  await fetchQuotations()
-
-  setSelectedQuote({
-    ...selectedQuote,
-    total_cost: totalCost,
-    total_sale: totalSale,
-    profit_amount: profit,
-    gp_percentage: gpPercentage,
-    pricing_approved: true,
-  })
-}
+    if (!selectedQuote.pricing_approved) {
+      alert('Primero debes aprobar pricing antes de marcarla como Enviada al Cliente.')
+      return
+    }
 
     const { error } = await supabase
       .from('quotations')
@@ -794,6 +766,7 @@ function PricingComparisonContent() {
 
   const totalProfit = totalSale - totalCost
   const profit = totalProfit
+  const isPricingApproved = Boolean(selectedQuote?.pricing_approved)
 
   const formatCurrency = (value: number) =>
     value.toLocaleString('en-US', {
@@ -1858,7 +1831,17 @@ const profitabilityColor =
 
   <button
     onClick={markAsSentToClient}
-    className="bg-green-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-green-700 transition"
+    disabled={!isPricingApproved}
+    title={
+      isPricingApproved
+        ? 'Marcar como Enviada al Cliente'
+        : 'Primero debes aprobar pricing'
+    }
+    className={`px-8 py-4 rounded-xl font-bold transition ${
+      isPricingApproved
+        ? 'bg-green-600 text-white hover:bg-green-700'
+        : 'cursor-not-allowed bg-gray-300 text-gray-500'
+    }`}
   >
     Marcar como Enviada al Cliente
   </button>
