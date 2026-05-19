@@ -80,6 +80,17 @@ export default function NuevoClientePage() {
 
     setCreating(true)
 
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      alert('No se pudo validar el usuario autenticado.')
+      setCreating(false)
+      return
+    }
+
     const { data, error } = await supabase
       .from('clientes')
       .insert([
@@ -102,7 +113,7 @@ export default function NuevoClientePage() {
               ? Number(formData.dias_credito)
               : 0,
           tipo_cliente: formData.tipo_cliente,
-          vendedor_asignado: formData.vendedor_asignado || null,
+          vendedor_asignado: user.id,
           origen_frecuente: formData.origen_frecuente,
           asegura_carga: formData.asegura_carga,
           notas_tarifas: formData.notas_tarifas,
