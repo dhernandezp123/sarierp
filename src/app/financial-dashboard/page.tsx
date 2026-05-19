@@ -17,8 +17,24 @@ import AppLayout from '../../components/layout/app-layout'
 import { useUser } from '../../hooks/useUser'
 
 export default function FinancialDashboardPage() {
-  const { profile } = useUser()
+  const { profile, loading: userLoading } = useUser()
   const router = useRouter()
+  const role = profile?.rol || ''
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isPricing = role === 'Pricing'
+  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+
+  const canEditPricing =
+    isAdmin || isPricing
+  const canEditCostValidation =
+    isAdmin || isFinance
+  const canEditFinance =
+    isAdmin || isFinance
+  const canEditQuotes =
+    isAdmin || isSales
+  const canViewFinancialDashboard =
+    isAdmin || isFinance
 
   const [loading, setLoading] = useState(true)
 
@@ -36,8 +52,29 @@ export default function FinancialDashboardPage() {
   const [topNegativeVariances, setTopNegativeVariances] = useState<any[]>([])
 
   useEffect(() => {
+    if (userLoading) return
+
+    if (!canViewFinancialDashboard) {
+      setLoading(false)
+      return
+    }
+
     fetchDashboard()
-  }, [])
+  }, [userLoading, canViewFinancialDashboard])
+
+  const AccessDenied = () => (
+    <AppLayout role={profile?.rol || 'Ventas'}>
+      <div className="rounded-2xl border bg-white p-8">
+        <h1 className="text-2xl font-bold">
+          Acceso restringido
+        </h1>
+
+        <p className="text-gray-500 mt-2">
+          No tienes permiso para ver este módulo.
+        </p>
+      </div>
+    </AppLayout>
+  )
 
   const fetchDashboard = async () => {
     const { data: quotations, error } = await supabase
@@ -239,12 +276,16 @@ export default function FinancialDashboardPage() {
     return `USD ${formatCurrency(Number(value || 0))}`
   }
 
-  if (loading) {
+  if (userLoading || loading) {
     return (
       <div className="p-8">
         Cargando dashboard financiero...
       </div>
     )
+  }
+
+  if (!canViewFinancialDashboard) {
+    return <AccessDenied />
   }
 
   return (

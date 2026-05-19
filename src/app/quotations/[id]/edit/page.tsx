@@ -8,9 +8,23 @@ import AppLayout from '../../../../components/layout/app-layout'
 import { useUser } from '../../../../hooks/useUser'
 
 export default function EditQuotationPage() {
-  const { profile } = useUser()
+  const { profile, loading: userLoading } = useUser()
   const params = useParams()
   const router = useRouter()
+  const role = profile?.rol || ''
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isPricing = role === 'Pricing'
+  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+
+  const canEditPricing =
+    isAdmin || isPricing
+  const canEditCostValidation =
+    isAdmin || isFinance
+  const canEditFinance =
+    isAdmin || isFinance
+  const canEditQuotes =
+    isAdmin || isSales
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -59,13 +73,34 @@ export default function EditQuotationPage() {
   })
 
   useEffect(() => {
+    if (userLoading) return
+
+    if (!canEditQuotes) {
+      setLoading(false)
+      return
+    }
+
     fetchCatalogs()
 
     if (params.id) {
       fetchQuotation(params.id as string)
       fetchContainerLines(params.id as string)
     }
-  }, [params.id])
+  }, [params.id, userLoading, canEditQuotes])
+
+  const AccessDenied = () => (
+    <AppLayout role={profile?.rol || 'Ventas'}>
+      <div className="rounded-2xl border bg-white p-8">
+        <h1 className="text-2xl font-bold">
+          Acceso restringido
+        </h1>
+
+        <p className="text-gray-500 mt-2">
+          No tienes permiso para ver este módulo.
+        </p>
+      </div>
+    </AppLayout>
+  )
 
   const fetchCatalogs = async () => {
     const { data: countriesData } = await supabase
@@ -373,8 +408,12 @@ export default function EditQuotationPage() {
     router.push(`/quotations/${params.id}`)
   }
 
-  if (loading) {
+  if (userLoading || loading) {
     return <div className="p-8">Cargando cotización...</div>
+  }
+
+  if (!canEditQuotes) {
+    return <AccessDenied />
   }
 
   const originCountry = countries.find(
@@ -419,6 +458,13 @@ export default function EditQuotationPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border p-8 space-y-8">
+          {!canEditQuotes && (
+            <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Modo lectura: tu rol no tiene permisos para editar cotizaciones.
+            </p>
+          )}
+
+          <fieldset disabled={!canEditQuotes} className="contents">
           <section>
             <h2 className="text-xl font-bold mb-4">Información General</h2>
 
@@ -713,6 +759,7 @@ export default function EditQuotationPage() {
               <option key={port.id} value={port.name} />
             ))}
           </datalist>
+          </fieldset>
 
           <div className="flex justify-end gap-4">
             <button
@@ -722,7 +769,7 @@ export default function EditQuotationPage() {
               Cancelar
             </button>
 
-            {formData.status === 'Borrador' && (
+            {canEditQuotes && formData.status === 'Borrador' && (
               <button
                 onClick={sendToPricing}
                 disabled={saving}
@@ -732,13 +779,15 @@ export default function EditQuotationPage() {
               </button>
             )}
 
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-zinc-950 text-white px-6 py-3 rounded-xl"
-            >
-              {saving ? 'Guardando...' : 'Guardar Cambios'}
-            </button>
+            {canEditQuotes && (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-zinc-950 text-white px-6 py-3 rounded-xl"
+              >
+                {saving ? 'Guardando...' : 'Guardar Cambios'}
+              </button>
+            )}
           </div>
         </div>
       </div>

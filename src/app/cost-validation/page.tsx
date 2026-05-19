@@ -8,15 +8,52 @@ import AppLayout from '../../components/layout/app-layout'
 import { useUser } from '../../hooks/useUser'
 
 export default function CostValidationPage() {
-  const { profile } = useUser()
+  const { profile, loading: userLoading } = useUser()
   const router = useRouter()
+  const role = profile?.rol || ''
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isPricing = role === 'Pricing'
+  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+
+  const canEditPricing =
+    isAdmin || isPricing
+  const canEditCostValidation =
+    isAdmin || isFinance
+  const canEditFinance =
+    isAdmin || isFinance
+  const canEditQuotes =
+    isAdmin || isSales
+  const canViewCostValidation =
+    isAdmin || isFinance
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (userLoading) return
+
+    if (!canViewCostValidation) {
+      setLoading(false)
+      return
+    }
+
     fetchQuotations()
-  }, [])
+  }, [userLoading, canViewCostValidation])
+
+  const AccessDenied = () => (
+    <AppLayout role={profile?.rol || 'Ventas'}>
+      <div className="rounded-2xl border bg-white p-8">
+        <h1 className="text-2xl font-bold">
+          Acceso restringido
+        </h1>
+
+        <p className="text-gray-500 mt-2">
+          No tienes permiso para ver este módulo.
+        </p>
+      </div>
+    </AppLayout>
+  )
 
   const fetchQuotations = async () => {
     const { data, error } = await supabase
@@ -53,8 +90,12 @@ export default function CostValidationPage() {
     }
   }
 
-  if (loading) {
+  if (userLoading || loading) {
     return <div className="p-8">Cargando validaciones...</div>
+  }
+
+  if (!canViewCostValidation) {
+    return <AccessDenied />
   }
 
   return (

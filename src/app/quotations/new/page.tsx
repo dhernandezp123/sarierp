@@ -7,7 +7,23 @@ import AppLayout from '../../../components/layout/app-layout'
 import { useUser } from '../../../hooks/useUser'
 
 export default function NewQuotationPage() {
-  const { profile } = useUser()
+  const { profile, loading: userLoading } = useUser()
+  const role = profile?.rol || ''
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isPricing = role === 'Pricing'
+  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+
+  const canEditPricing =
+    isAdmin || isPricing
+  const canEditCostValidation =
+    isAdmin || isFinance
+  const canEditFinance =
+    isAdmin || isFinance
+  const canEditQuotes =
+    isAdmin || isSales
+  const canCreateQuotes =
+    isAdmin || isSales
 
   const [loading, setLoading] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
@@ -73,9 +89,25 @@ export default function NewQuotationPage() {
   const [formData, setFormData] = useState(initialFormData)
 
   useEffect(() => {
+    if (userLoading || !canCreateQuotes) return
+
     fetchClientes()
     fetchCatalogs()
-  }, [])
+  }, [userLoading, canCreateQuotes])
+
+  const AccessDenied = () => (
+    <AppLayout role={profile?.rol || 'Ventas'}>
+      <div className="rounded-2xl border bg-white p-8">
+        <h1 className="text-2xl font-bold">
+          Acceso restringido
+        </h1>
+
+        <p className="text-gray-500 mt-2">
+          No tienes permiso para ver este módulo.
+        </p>
+      </div>
+    </AppLayout>
+  )
 
   const fetchClientes = async () => {
     const { data, error } = await supabase
@@ -327,6 +359,16 @@ export default function NewQuotationPage() {
     try {
       setLoading(true)
 
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        alert('No se pudo validar el usuario autenticado.')
+        return
+      }
+
       const { data: quotationData, error } = await supabase
         .from('quotations')
         .insert([
@@ -375,7 +417,8 @@ export default function NewQuotationPage() {
 
             observaciones: formData.observaciones,
             status,
-            created_by: profile?.id,
+            created_by: user.id,
+            assigned_to: user.id,
           },
         ])
         .select()
@@ -456,6 +499,14 @@ export default function NewQuotationPage() {
     formData.quote_type === 'Consolidado' ||
     formData.quote_type === 'Courier'
 
+  if (userLoading) {
+    return <div className="p-8">Cargando cotizaciÃ³n...</div>
+  }
+
+  if (!canCreateQuotes) {
+    return <AccessDenied />
+  }
+
   return (
     <AppLayout role={profile?.rol || 'Ventas'}>
       <div className="max-w-6xl">
@@ -464,6 +515,13 @@ export default function NewQuotationPage() {
         </h1>
 
         <div className="bg-white rounded-xl shadow p-8 space-y-8">
+          {!canEditQuotes && (
+            <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Modo lectura: tu rol no tiene permisos para crear cotizaciones.
+            </p>
+          )}
+
+          <fieldset disabled={!canEditQuotes} className="contents">
           <div className="rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold mb-4">
               Tipo de Cotización
@@ -922,8 +980,11 @@ export default function NewQuotationPage() {
               className="border p-3 rounded w-full h-32"
             />
           </section>
+          </fieldset>
 
           <div className="flex justify-end gap-3">
+            {canEditQuotes && (
+              <>
             <button
               type="button"
               onClick={() => handleSubmit('Borrador')}
@@ -941,6 +1002,8 @@ export default function NewQuotationPage() {
             >
               Enviar a Pricing
             </button>
+              </>
+            )}
           </div>
         </div>
       </div>

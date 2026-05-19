@@ -18,10 +18,31 @@ interface SidebarProps {
   role: string
 }
 
-export default function Sidebar({ role }: SidebarProps) {
+export default function Sidebar({ role: profileRole }: SidebarProps) {
   const pathname = usePathname()
 
-  const canViewCosts = ['Admin', 'Pricing', 'Contabilidad'].includes(role)
+  const role = profileRole || ''
+
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isPricing = role === 'Pricing'
+  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+  const isOperations = role === 'Operaciones'
+
+  const canViewCommercial =
+    isAdmin || isSales || isPricing || isFinance || isOperations
+
+  const canViewPricing =
+    isAdmin || isSales || isPricing || isFinance || isOperations
+
+  const canViewFinance =
+    isAdmin || isSales || isPricing || isFinance || isOperations
+
+  const canViewFinancialDashboard =
+    isAdmin || isFinance
+
+  const canViewCostValidation =
+    isAdmin || isFinance
 
   const navItems = [
     {
@@ -65,17 +86,17 @@ export default function Sidebar({ role }: SidebarProps) {
   ]
 
   const financialItems = [
-    {
+    canViewFinancialDashboard && {
       label: 'Dashboard Financiero',
       href: '/financial-dashboard',
       icon: BarChart3,
     },
-    {
+    canViewCostValidation && {
       label: 'Validación de Costos',
       href: '/cost-validation',
       icon: DollarSign,
     },
-  ]
+  ].filter(Boolean)
 
   const renderItem = (item: any) => {
     const Icon = item.icon
@@ -113,27 +134,37 @@ export default function Sidebar({ role }: SidebarProps) {
         </p>
       </div>
 
-      <nav className="space-y-1">
-        {navItems.map(renderItem)}
-      </nav>
+      {canViewCommercial && (
+        <nav className="space-y-1">
+          {navItems.map(renderItem)}
+        </nav>
+      )}
 
-      {canViewCosts && (
+      {(canViewPricing || canViewFinance) && (
         <div className="mt-8">
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            Pricing
-          </p>
+          {canViewPricing && (
+            <>
+              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                Pricing
+              </p>
 
-          <nav className="space-y-1">
-            {costItems.map(renderItem)}
-          </nav>
+              <nav className="space-y-1">
+                {costItems.map(renderItem)}
+              </nav>
+            </>
+          )}
 
-          <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            Finanzas
-          </p>
+          {canViewFinance && financialItems.length > 0 && (
+            <>
+              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                Finanzas
+              </p>
 
-          <nav className="space-y-1">
-            {financialItems.map(renderItem)}
-          </nav>
+              <nav className="space-y-1">
+                {financialItems.map(renderItem)}
+              </nav>
+            </>
+          )}
         </div>
       )}
 

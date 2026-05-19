@@ -8,9 +8,25 @@ import AppLayout from '../../../components/layout/app-layout'
 import { useUser } from '../../../hooks/useUser'
 
 export default function CostValidationDetailPage() {
-  const { profile } = useUser()
+  const { profile, loading: userLoading } = useUser()
   const params = useParams()
   const router = useRouter()
+  const role = profile?.rol || ''
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isPricing = role === 'Pricing'
+  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+
+  const canEditPricing =
+    isAdmin || isPricing
+  const canEditCostValidation =
+    isAdmin || isFinance
+  const canEditFinance =
+    isAdmin || isFinance
+  const canEditQuotes =
+    isAdmin || isSales
+  const canViewCostValidation =
+    isAdmin || isFinance
 
   const [quotation, setQuotation] = useState<any>(null)
   const [pricingItems, setPricingItems] = useState<any[]>([])
@@ -31,11 +47,32 @@ export default function CostValidationDetailPage() {
   })
 
   useEffect(() => {
+    if (userLoading) return
+
+    if (!canViewCostValidation) {
+      setLoading(false)
+      return
+    }
+
     if (params.id) {
       fetchData()
       fetchTaxRates()
     }
-  }, [params.id])
+  }, [params.id, userLoading, canViewCostValidation])
+
+  const AccessDenied = () => (
+    <AppLayout role={profile?.rol || 'Ventas'}>
+      <div className="rounded-2xl border bg-white p-8">
+        <h1 className="text-2xl font-bold">
+          Acceso restringido
+        </h1>
+
+        <p className="text-gray-500 mt-2">
+          No tienes permiso para ver este módulo.
+        </p>
+      </div>
+    </AppLayout>
+  )
 
   const fetchData = async () => {
     const quotationId = params.id as string
@@ -322,8 +359,12 @@ export default function CostValidationDetailPage() {
     await fetchData()
   }
 
-  if (loading) {
+  if (userLoading || loading) {
     return <div className="p-8">Cargando validación...</div>
+  }
+
+  if (!canViewCostValidation) {
+    return <AccessDenied />
   }
 
   return (
@@ -354,13 +395,15 @@ export default function CostValidationDetailPage() {
               {financialStatus.label}
             </div>
 
-            <button
-              type="button"
-              onClick={markAsFinanciallyValidated}
-              className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
-            >
-              Marcar como Validado
-            </button>
+            {canEditCostValidation && (
+              <button
+                type="button"
+                onClick={markAsFinanciallyValidated}
+                className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
+              >
+                Marcar como Validado
+              </button>
+            )}
           </div>
         </div>
 
@@ -470,6 +513,7 @@ export default function CostValidationDetailPage() {
                 placeholder="Proveedor"
                 value={invoiceForm.supplier}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2"
               />
 
@@ -478,6 +522,7 @@ export default function CostValidationDetailPage() {
                 placeholder="No. factura"
                 value={invoiceForm.invoice_number}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2"
               />
 
@@ -486,6 +531,7 @@ export default function CostValidationDetailPage() {
                 placeholder="Descripción del cargo"
                 value={invoiceForm.description}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2 md:col-span-2"
               />
 
@@ -495,6 +541,7 @@ export default function CostValidationDetailPage() {
                 placeholder="Cantidad"
                 value={invoiceForm.quantity}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2"
               />
 
@@ -504,6 +551,7 @@ export default function CostValidationDetailPage() {
                 placeholder="Costo unitario"
                 value={invoiceForm.unit_cost}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2"
               />
 
@@ -511,6 +559,7 @@ export default function CostValidationDetailPage() {
                 name="currency"
                 value={invoiceForm.currency}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2"
               >
                 <option value="USD">USD</option>
@@ -521,6 +570,7 @@ export default function CostValidationDetailPage() {
                 name="tax_rate_id"
                 value={invoiceForm.tax_rate_id}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2"
               >
                 <option value="">
@@ -539,6 +589,7 @@ export default function CostValidationDetailPage() {
                 type="date"
                 value={invoiceForm.invoice_date}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2"
               />
 
@@ -548,6 +599,7 @@ export default function CostValidationDetailPage() {
                   name="is_taxable"
                   checked={invoiceForm.is_taxable}
                   onChange={handleInvoiceChange}
+                  disabled={!canEditCostValidation}
                 />
 
                 Gravable ISV 15%
@@ -558,16 +610,19 @@ export default function CostValidationDetailPage() {
                 placeholder="Notas"
                 value={invoiceForm.notes}
                 onChange={handleInvoiceChange}
+                disabled={!canEditCostValidation}
                 className="border rounded-xl px-3 py-2 md:col-span-2"
               />
 
-              <button
-                type="button"
-                onClick={saveInvoiceItem}
-                className="rounded-xl bg-black px-5 py-3 text-white font-semibold md:col-span-2"
-              >
-                Agregar Costo Real
-              </button>
+              {canEditCostValidation && (
+                <button
+                  type="button"
+                  onClick={saveInvoiceItem}
+                  className="rounded-xl bg-black px-5 py-3 text-white font-semibold md:col-span-2"
+                >
+                  Agregar Costo Real
+                </button>
+              )}
             </div>
 
             {invoiceItems.length === 0 ? (
@@ -619,13 +674,15 @@ export default function CostValidationDetailPage() {
                           USD {formatCurrency(totalWithTax)}
                         </td>
                         <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => deleteInvoiceItem(item.id)}
-                            className="rounded-lg border border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
-                          >
-                            Eliminar
-                          </button>
+                          {canEditCostValidation && (
+                            <button
+                              type="button"
+                              onClick={() => deleteInvoiceItem(item.id)}
+                              className="rounded-lg border border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
+                            >
+                              Eliminar
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )

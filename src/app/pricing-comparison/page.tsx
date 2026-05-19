@@ -21,6 +21,20 @@ function PricingComparisonContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const quoteId = searchParams.get('quoteId')
+  const role = profile?.rol || ''
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isPricing = role === 'Pricing'
+  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+
+  const canEditPricing =
+    isAdmin || isPricing
+  const canEditCostValidation =
+    isAdmin || isFinance
+  const canEditFinance =
+    isAdmin || isFinance
+  const canEditQuotes =
+    isAdmin || isSales
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
@@ -1128,6 +1142,7 @@ const profitabilityColor =
 
                       <select
                         value={agentForm.agent_id}
+                        disabled={!canEditPricing}
                         onChange={(e) => {
                           const agentId = e.target.value
                           const selectedAgent = agents.find((a) => a.id === agentId)
@@ -1184,6 +1199,7 @@ const profitabilityColor =
                                 type="number"
                                 placeholder="Costo unitario proveedor"
                                 value={currentLine?.ocean_freight || ''}
+                                disabled={!canEditPricing}
                                 onChange={(e) => {
                                   const value = e.target.value
 
@@ -1239,6 +1255,7 @@ const profitabilityColor =
                           placeholder="Ocean Freight"
                           value={agentForm.ocean_freight}
                           onChange={handleAgentChange}
+                          disabled={!canEditPricing}
                           className="border rounded-xl px-3 py-2 w-full"
                         />
                       </div>
@@ -1253,6 +1270,7 @@ const profitabilityColor =
                         name="moneda"
                         value={agentForm.moneda}
                         onChange={handleAgentChange}
+                        disabled={!canEditPricing}
                         className="border rounded-xl px-3 py-2 w-full"
                       >
                         <option value="USD">USD</option>
@@ -1270,6 +1288,7 @@ const profitabilityColor =
                         placeholder="Tránsito"
                         value={agentForm.transit_time}
                         onChange={handleAgentChange}
+                        disabled={!canEditPricing}
                         className="border rounded-xl px-3 py-2 w-full"
                       />
                     </div>
@@ -1283,6 +1302,7 @@ const profitabilityColor =
                         className="border rounded-xl px-3 py-2 w-full"
                         placeholder="Carrier / Naviera"
                         value={agentForm.carrier}
+                        disabled={!canEditPricing}
                         onChange={(e) =>
                           setAgentForm({ ...agentForm, carrier: e.target.value })
                         }
@@ -1297,6 +1317,7 @@ const profitabilityColor =
                       <select
                         className="border rounded-xl px-3 py-2 w-full"
                         value={agentForm.transshipment}
+                        disabled={!canEditPricing}
                         onChange={(e) =>
                           setAgentForm({ ...agentForm, transshipment: e.target.value })
                         }
@@ -1320,6 +1341,7 @@ const profitabilityColor =
                         className="border rounded-xl px-3 py-2 w-full"
                         placeholder="Días libres destino"
                         value={agentForm.free_days_destination}
+                        disabled={!canEditPricing}
                         onChange={(e) =>
                           setAgentForm({
                             ...agentForm,
@@ -1338,6 +1360,7 @@ const profitabilityColor =
                         name="valid_until"
                         value={agentForm.valid_until}
                         onChange={handleAgentChange}
+                        disabled={!canEditPricing}
                         className="border rounded-xl px-3 py-2 w-full"
                       />
                     </div>
@@ -1377,12 +1400,14 @@ const profitabilityColor =
                       </div>
                     </div>
 
-                    <button
-                      onClick={saveAgentQuote}
-                      className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-2 md:col-span-3 xl:col-span-6"
-                    >
-                      {editingAgentQuoteId ? 'Actualizar Tarifa' : 'Guardar Tarifa'}
-                    </button>
+                    {canEditPricing && (
+                      <button
+                        onClick={saveAgentQuote}
+                        className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-2 md:col-span-3 xl:col-span-6"
+                      >
+                        {editingAgentQuoteId ? 'Actualizar Tarifa' : 'Guardar Tarifa'}
+                      </button>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -1459,26 +1484,28 @@ const profitabilityColor =
                                   <td className="p-3">{quote.transit_time || 'N/A'}</td>
                                   <td className="p-3">{quote.free_days_destination || 0}</td>
                                   <td className="p-3">
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={() => handleEditAgentQuote(quote)}
-                                        className="p-2 rounded-lg border hover:bg-gray-100"
-                                      >
-                                        <Pencil size={16} />
-                                      </button>
+                                    {canEditPricing && (
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => handleEditAgentQuote(quote)}
+                                          className="p-2 rounded-lg border hover:bg-gray-100"
+                                        >
+                                          <Pencil size={16} />
+                                        </button>
 
-                                      <button
-                                        type="button"
-                                        onClick={() => selectAgentQuote(quote.id)}
-                                        className={
-                                          quote.is_selected
-                                            ? 'text-green-600 font-semibold'
-                                            : 'text-blue-600 font-semibold'
-                                        }
-                                      >
-                                        {quote.is_selected ? 'Regenerar Pricing' : 'Seleccionar'}
-                                      </button>
-                                    </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => selectAgentQuote(quote.id)}
+                                          className={
+                                            quote.is_selected
+                                              ? 'text-green-600 font-semibold'
+                                              : 'text-blue-600 font-semibold'
+                                          }
+                                        >
+                                          {quote.is_selected ? 'Regenerar Pricing' : 'Seleccionar'}
+                                        </button>
+                                      </div>
+                                    )}
                                   </td>
                                 </tr>
                               )
@@ -1501,6 +1528,7 @@ const profitabilityColor =
                         name="item_type"
                         value={pricingForm.item_type}
                         onChange={handlePricingChange}
+                        disabled={!canEditPricing}
                         className="border p-3 rounded"
                       >
                         <option value="Flete">Flete</option>
@@ -1519,6 +1547,7 @@ const profitabilityColor =
                         placeholder="Descripción"
                         value={pricingForm.description}
                         onChange={handlePricingChange}
+                        disabled={!canEditPricing}
                         className="border p-3 rounded"
                       />
 
@@ -1527,6 +1556,7 @@ const profitabilityColor =
                         placeholder="Costo"
                         value={pricingForm.cost_amount}
                         onChange={handlePricingChange}
+                        disabled={!canEditPricing}
                         className="border p-3 rounded"
                       />
 
@@ -1534,6 +1564,7 @@ const profitabilityColor =
                         type="number"
                         placeholder="QTY"
                         value={pricingForm.quantity}
+                        disabled={!canEditPricing}
                         onChange={(e) =>
                           setPricingForm({
                             ...pricingForm,
@@ -1547,6 +1578,7 @@ const profitabilityColor =
                         <input
                           type="checkbox"
                           checked={pricingForm.taxable}
+                          disabled={!canEditPricing}
                           onChange={(e) =>
                             setPricingForm({
                               ...pricingForm,
@@ -1563,6 +1595,7 @@ const profitabilityColor =
                         placeholder="Venta"
                         value={pricingForm.sale_amount}
                         onChange={handlePricingChange}
+                        disabled={!canEditPricing}
                         className="border p-3 rounded"
                       />
 
@@ -1570,6 +1603,7 @@ const profitabilityColor =
                         name="currency"
                         value={pricingForm.currency}
                         onChange={handlePricingChange}
+                        disabled={!canEditPricing}
                         className="border p-3 rounded"
                       >
                         <option value="USD">USD</option>
@@ -1581,6 +1615,7 @@ const profitabilityColor =
                         placeholder="Proveedor"
                         value={pricingForm.supplier}
                         onChange={handlePricingChange}
+                        disabled={!canEditPricing}
                         className="border p-3 rounded"
                       />
 
@@ -1589,15 +1624,18 @@ const profitabilityColor =
                         placeholder="Notas"
                         value={pricingForm.notes}
                         onChange={handlePricingChange}
+                        disabled={!canEditPricing}
                         className="border p-3 rounded col-span-2"
                       />
 
-                      <button
-                        onClick={savePricingItem}
-                        className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-4"
-                      >
-                        Agregar Cargo Adicional
-                      </button>
+                      {canEditPricing && (
+                        <button
+                          onClick={savePricingItem}
+                          className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-4"
+                        >
+                          Agregar Cargo Adicional
+                        </button>
+                      )}
                     </div>
 
                     <div className="bg-zinc-100 rounded-xl p-4 text-sm">
@@ -1676,7 +1714,7 @@ const profitabilityColor =
                                 }`}
                               >
                                 <td className="p-2 text-sm">
-                                  {editingPricingItemId === item.id ? (
+                                  {canEditPricing && editingPricingItemId === item.id ? (
                                     <input
                                       value={editingPricingItemForm?.description || ''}
                                       onChange={(e) =>
@@ -1697,7 +1735,7 @@ const profitabilityColor =
                                 </td>
 
                                 <td className="p-2 text-sm">
-                                  {editingPricingItemId === item.id ? (
+                                  {canEditPricing && editingPricingItemId === item.id ? (
                                     <input
                                       type="number"
                                       value={editingPricingItemForm?.quantity || ''}
@@ -1715,7 +1753,7 @@ const profitabilityColor =
                                 </td>
 
                                 <td className="p-2 text-sm">
-                                  {editingPricingItemId === item.id ? (
+                                  {canEditPricing && editingPricingItemId === item.id ? (
                                     <input
                                       type="number"
                                       value={editingPricingItemForm?.cost_amount || ''}
@@ -1737,7 +1775,7 @@ const profitabilityColor =
                                 </td>
 
                                 <td className="p-2 text-sm">
-                                  {editingPricingItemId === item.id ? (
+                                  {canEditPricing && editingPricingItemId === item.id ? (
                                     <input
                                       type="number"
                                       value={editingPricingItemForm?.sale_amount || ''}
@@ -1780,7 +1818,7 @@ const profitabilityColor =
                                 </td>
 
                                 <td className="p-2 text-sm">
-                                  {editingPricingItemId === item.id ? (
+                                  {canEditPricing && editingPricingItemId === item.id ? (
                                     <div className="flex gap-2">
                                       <button
                                         onClick={() => updatePricingItem(item)}
@@ -1796,7 +1834,7 @@ const profitabilityColor =
                                         Cancelar
                                       </button>
                                     </div>
-                                  ) : (
+                                  ) : canEditPricing ? (
                                     <div className="flex gap-3">
                                       <button
                                         onClick={() => startEditingPricingItem(item)}
@@ -1812,7 +1850,7 @@ const profitabilityColor =
                                         Eliminar
                                       </button>
                                     </div>
-                                  )}
+                                  ) : null}
                                 </td>
                               </tr>
                             )
@@ -1831,13 +1869,15 @@ const profitabilityColor =
                   <textarea
                     value={pricingNotesDraft}
                     onChange={(e) => setPricingNotesDraft(e.target.value)}
+                    disabled={!canEditPricing}
                     placeholder="Ej: Incluye transporte local, entrega en planta, cargos sujetos a disponibilidad, etc."
                     className="w-full rounded-xl border px-4 py-3 min-h-[120px]"
                   />
 
-                  <button
-                    type="button"
-                    onClick={async () => {
+                  {canEditPricing && (
+                    <button
+                      type="button"
+                      onClick={async () => {
                       const oldPricingNotes = selectedQuote?.pricing_notes || ''
                       const newPricingNotes = pricingNotesDraft || ''
 
@@ -1872,11 +1912,12 @@ const profitabilityColor =
 
                       alert('Observaciones actualizadas')
                       await fetchQuotations()
-                    }}
-                    className="mt-4 rounded-xl bg-black px-5 py-3 text-white font-semibold"
-                  >
-                    Guardar Observaciones
-                  </button>
+                      }}
+                      className="mt-4 rounded-xl bg-black px-5 py-3 text-white font-semibold"
+                    >
+                      Guardar Observaciones
+                    </button>
+                  )}
                 </div>
 
                 
@@ -1889,29 +1930,33 @@ const profitabilityColor =
     Ver Detalle
   </button>
 
-  <button
-    onClick={approvePricing}
-    className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-700 transition"
-  >
-    Aprobar Pricing
-  </button>
+  {canEditPricing && (
+    <button
+      onClick={approvePricing}
+      className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-700 transition"
+    >
+      Aprobar Pricing
+    </button>
+  )}
 
-  <button
-    onClick={markAsSentToClient}
-    disabled={!isPricingApproved}
-    title={
-      isPricingApproved
-        ? 'Marcar como Enviada al Cliente'
-        : 'Primero debes aprobar pricing'
-    }
-    className={`px-8 py-4 rounded-xl font-bold transition ${
-      isPricingApproved
-        ? 'bg-green-600 text-white hover:bg-green-700'
-        : 'cursor-not-allowed bg-gray-300 text-gray-500'
-    }`}
-  >
-    Marcar como Enviada al Cliente
-  </button>
+  {canEditQuotes && (
+    <button
+      onClick={markAsSentToClient}
+      disabled={!isPricingApproved}
+      title={
+        isPricingApproved
+          ? 'Marcar como Enviada al Cliente'
+          : 'Primero debes aprobar pricing'
+      }
+      className={`px-8 py-4 rounded-xl font-bold transition ${
+        isPricingApproved
+          ? 'bg-green-600 text-white hover:bg-green-700'
+          : 'cursor-not-allowed bg-gray-300 text-gray-500'
+      }`}
+    >
+      Marcar como Enviada al Cliente
+    </button>
+  )}
 </div>
               </>
             )}

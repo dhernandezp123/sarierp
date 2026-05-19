@@ -33,6 +33,20 @@ export default function QuotationDetailPage() {
   const { profile } = useUser()
   const params = useParams()
   const router = useRouter()
+  const role = profile?.rol || ''
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isPricing = role === 'Pricing'
+  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+
+  const canEditPricing =
+    isAdmin || isPricing
+  const canEditCostValidation =
+    isAdmin || isFinance
+  const canEditFinance =
+    isAdmin || isFinance
+  const canEditQuotes =
+    isAdmin || isSales
 
   const [quotation, setQuotation] = useState<any>(null)
   const [selectedAgent, setSelectedAgent] = useState<any>(null)
