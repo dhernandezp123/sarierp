@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Pencil } from 'lucide-react'
 
 import { supabase } from '../../lib/supabase/client'
@@ -18,12 +18,14 @@ import {
 
 function PricingComparisonContent() {
   const { profile } = useUser()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const quoteId = searchParams.get('quoteId')
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
   const [quoteSearch, setQuoteSearch] = useState('')
+  const [pricingNotesDraft, setPricingNotesDraft] = useState('')
 
   const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
@@ -154,6 +156,7 @@ function PricingComparisonContent() {
 
   const handleSelectQuote = async (quote: any) => {
     setSelectedQuote(quote)
+    setPricingNotesDraft(quote?.pricing_notes || '')
     await fetchAgentQuotes(quote.id)
     await fetchPricingItems(quote.id)
     await fetchQuotationContainers(quote.id)
@@ -1820,8 +1823,72 @@ const profitabilityColor =
                   </CardContent>
                 </Card>
 
+                <div className="rounded-2xl border bg-white p-6 mt-6">
+                  <h2 className="text-xl font-bold mb-4">
+                    Observaciones para el Cliente / PDF
+                  </h2>
+
+                  <textarea
+                    value={pricingNotesDraft}
+                    onChange={(e) => setPricingNotesDraft(e.target.value)}
+                    placeholder="Ej: Incluye transporte local, entrega en planta, cargos sujetos a disponibilidad, etc."
+                    className="w-full rounded-xl border px-4 py-3 min-h-[120px]"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const oldPricingNotes = selectedQuote?.pricing_notes || ''
+                      const newPricingNotes = pricingNotesDraft || ''
+
+                      if (oldPricingNotes === newPricingNotes) {
+                        alert('No hay cambios en las observaciones.')
+                        return
+                      }
+
+                      const { error } = await supabase
+                        .from('quotations')
+                        .update({
+                          pricing_notes: newPricingNotes,
+                        })
+                        .eq('id', selectedQuote.id)
+
+                      if (error) {
+                        alert(error.message)
+                        return
+                      }
+
+                      await supabase.from('quotation_change_logs').insert([
+                        {
+                          quotation_id: selectedQuote.id,
+                          change_type: 'pricing_notes_update',
+                          field_name: 'pricing_notes',
+                          old_value: oldPricingNotes,
+                          new_value: newPricingNotes,
+                          reason: 'Actualización de observaciones para cliente/PDF',
+                          changed_by: profile?.id,
+                        },
+                      ])
+
+                      alert('Observaciones actualizadas')
+                      await fetchQuotations()
+                    }}
+                    className="mt-4 rounded-xl bg-black px-5 py-3 text-white font-semibold"
+                  >
+                    Guardar Observaciones
+                  </button>
+                </div>
+
                 
 <div className="flex justify-end gap-4">
+  <button
+    type="button"
+    onClick={() => router.push(`/quotations/${selectedQuote.id}`)}
+    className="rounded-xl border px-5 py-3 font-semibold hover:bg-slate-900 hover:text-white"
+  >
+    Ver Detalle
+  </button>
+
   <button
     onClick={approvePricing}
     className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-700 transition"

@@ -106,36 +106,54 @@ export default function EditClientePage() {
 
   const handleSave = async () => {
     setSaving(true)
+    const id = params.id as string
 
-    const { error } = await supabase
+    console.log('FormData antes de guardar:', formData)
+    console.log('Telefono antes de guardar:', formData.telefono)
+    console.log('ID usado para actualizar:', id)
+
+    const payload = {
+      nombre: formData.nombre,
+      contacto: formData.contacto,
+      rtn: formData.rtn,
+      telefono: formData.telefono,
+      email_1: formData.email_1,
+      email_2: formData.email_2,
+      direccion: formData.direccion,
+      ciudad: formData.ciudad,
+      pais: formData.pais,
+      condicion_pago: formData.condicion_pago,
+      dias_credito: Number(formData.dias_credito || 0),
+      tipo_cliente: formData.tipo_cliente,
+      asegura_carga: formData.asegura_carga,
+      vendedor_asignado: formData.vendedor_asignado || null,
+      origen_frecuente: formData.origen_frecuente,
+      notas_tarifas: formData.notas_tarifas,
+    }
+
+    console.log('Payload update cliente:', payload)
+
+    const { data, error } = await supabase
       .from('clientes')
-      .update({
-        nombre: formData.nombre,
-        contacto: formData.contacto,
-        rtn: formData.rtn,
-        telefono: formData.telefono,
-        email_1: formData.email_1,
-        email_2: formData.email_2,
-        direccion: formData.direccion,
-        ciudad: formData.ciudad,
-        pais: formData.pais,
-        condicion_pago: formData.condicion_pago,
-        dias_credito: Number(formData.dias_credito || 0),
-        tipo_cliente: formData.tipo_cliente,
-        asegura_carga: formData.asegura_carga,
-        vendedor_asignado: formData.vendedor_asignado || null,
-        origen_frecuente: formData.origen_frecuente,
-        notas_tarifas: formData.notas_tarifas,
-      })
-      .eq('id', params.id as string)
+      .update(payload)
+      .eq('id', id)
+      .select('*')
 
-    setSaving(false)
+    console.log('Resultado update cliente:', data)
 
     if (error) {
       alert(error.message)
+      setSaving(false)
       return
     }
 
+    if (!data || data.length === 0) {
+      alert('No se actualizó ningún cliente. Revisa el ID usado.')
+      setSaving(false)
+      return
+    }
+
+    setSaving(false)
     alert('Cliente actualizado correctamente')
     router.push(`/clientes/${params.id}`)
   }
@@ -167,7 +185,15 @@ export default function EditClientePage() {
             <input name="nombre" placeholder="Nombre del cliente" value={formData.nombre} onChange={handleChange} className="border p-3 rounded" />
             <input name="contacto" placeholder="Persona de contacto" value={formData.contacto} onChange={handleChange} className="border p-3 rounded" />
             <input name="rtn" placeholder="RTN" value={formData.rtn} onChange={handleChange} className="border p-3 rounded" />
-            <input name="telefono" placeholder="Teléfono" value={formData.telefono} onChange={handleChange} className="border p-3 rounded" />
+            <input
+              name="telefono"
+              placeholder="Teléfono"
+              value={formData.telefono || ''}
+              onChange={(e) =>
+                setFormData({ ...formData, telefono: e.target.value })
+              }
+              className="border p-3 rounded"
+            />
             <input name="email_1" placeholder="Email principal" value={formData.email_1} onChange={handleChange} className="border p-3 rounded" />
             <input name="email_2" placeholder="Email secundario" value={formData.email_2} onChange={handleChange} className="border p-3 rounded" />
             <input name="ciudad" placeholder="Ciudad" value={formData.ciudad} onChange={handleChange} className="border p-3 rounded" />

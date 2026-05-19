@@ -80,13 +80,26 @@ export default function NewQuotationPage() {
   const fetchClientes = async () => {
     const { data, error } = await supabase
       .from('clientes')
-      .select('*')
+      .select(`
+        id,
+        codigo_cliente,
+        nombre,
+        contacto,
+        telefono,
+        email_1,
+        pais,
+        departamento_estado,
+        origen_frecuente,
+        seguro_porcentaje
+      `)
       .order('nombre', { ascending: true })
 
     if (error) {
       alert(error.message)
       return
     }
+
+    console.log('Clientes cargados en nueva cotización:', data)
 
     setClientes(data || [])
   }
@@ -190,13 +203,13 @@ export default function NewQuotationPage() {
     const clienteId = e.target.value
 
     const selectedCliente = clientes.find(
-      (cliente) => cliente.id === clienteId
+      (cliente) => String(cliente.id) === clienteId
     )
 
     const updatedData = {
       ...formData,
       cliente_id: clienteId,
-      contact_name: selectedCliente?.nombre || '',
+      contact_name: selectedCliente?.contacto || selectedCliente?.nombre || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
       contact_state: selectedCliente?.departamento_estado || '',

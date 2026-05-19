@@ -702,7 +702,7 @@ export default function QuotationPDF({
         <View style={styles.notes}>
           <Text style={styles.sectionTitle}>Observaciones</Text>
           <Text>
-            {quotation.observaciones || 'Sin observaciones'}
+            {quotation.pricing_notes || quotation.observaciones || 'Sin observaciones'}
           </Text>
         </View>
 

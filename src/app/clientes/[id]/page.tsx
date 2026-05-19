@@ -46,6 +46,9 @@ export default function ClienteProfilePage() {
       return
     }
 
+    console.log('Cliente cargado en perfil:', data)
+    console.log('Telefono cargado en perfil:', data?.telefono)
+
     setCliente(data)
     setLoading(false)
   }

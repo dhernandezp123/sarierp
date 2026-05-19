@@ -230,6 +230,37 @@ const destinationPort =
   quotation?.puerto_destino ||
   'N/A'
 
+const quotationTimeline = [
+  ...statusHistory.map((log) => ({
+    id: `status-${log.id}`,
+    type: 'Cambio de estado',
+    title: `${log.old_status || 'Sin estado'} → ${log.new_status}`,
+    description: 'Cambio de estado de la cotización.',
+    user: log.profiles
+      ? `${log.profiles.nombre} ${log.profiles.apellido}`
+      : 'Usuario',
+    date: log.created_at,
+  })),
+
+  ...changeLogs.map((log) => ({
+    id: `change-${log.id}`,
+    type: 'Cambio registrado',
+    title: log.change_type,
+    description:
+      log.reason ||
+      `${log.field_name || 'Campo'} actualizado`,
+    user: log.profiles
+      ? `${log.profiles.nombre} ${log.profiles.apellido}`
+      : 'Usuario',
+    date: log.created_at,
+  })),
+]
+  .filter((event) => event.date)
+  .sort(
+    (a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+  )
+
   return (
   <AppLayout role={profile?.rol || 'Ventas'}>
     <div className="space-y-6 !font-sans [&_*]:!font-sans">
@@ -541,50 +572,72 @@ const destinationPort =
               </CardHeader>
 
               <CardContent>
-                <p>{quotation.observaciones || 'Sin observaciones'}</p>
+                <p>
+                  {quotation?.pricing_notes ||
+                    quotation?.observaciones ||
+                    'Sin observaciones'}
+                </p>
               </CardContent>
             </Card>
 
             <Card className="col-span-2">
               <CardHeader>
-                <CardTitle>Historial de Cambios</CardTitle>
+                <CardTitle>Historial de la Cotización</CardTitle>
               </CardHeader>
 
               <CardContent>
-                {changeLogs.length === 0 ? (
+                {quotationTimeline.length === 0 ? (
                   <p className="text-sm text-gray-500">
-                    No hay cambios registrados.
+                    No hay movimientos registrados.
                   </p>
                 ) : (
-                  <div className="space-y-3">
-                    {changeLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className="border rounded-xl p-3"
-                      >
-                        <div className="flex justify-between items-start gap-4">
-                          <div>
-                            <p className="font-semibold text-sm">
-                              <span className="inline-flex rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                                {log.change_type}
+                  <div className="space-y-4">
+                    {quotationTimeline.map((event, index) => (
+                      <div key={event.id} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={`h-3 w-3 rounded-full mt-1 ${
+                              event.type === 'Cambio de estado'
+                                ? 'bg-blue-600'
+                                : 'bg-amber-500'
+                            }`}
+                          />
+
+                          {index !== quotationTimeline.length - 1 && (
+                            <div className="w-px flex-1 bg-slate-300 min-h-[40px]" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 rounded-xl border p-3">
+                          <div className="flex justify-between gap-4">
+                            <div>
+                              <span
+                                className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                                  event.type === 'Cambio de estado'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-amber-100 text-amber-700'
+                                }`}
+                              >
+                                {event.type}
                               </span>
-                            </p>
 
-                            <p className="text-sm text-gray-600 mt-1">
-                              {log.reason}
-                            </p>
+                              <p className="mt-2 text-sm font-semibold">
+                                {event.title}
+                              </p>
 
-                            <p className="text-xs text-gray-400 mt-2">
-                              Por:{' '}
-                              {log.profiles
-                                ? `${log.profiles.nombre} ${log.profiles.apellido}`
-                                : 'Usuario'}
+                              <p className="mt-1 text-sm text-gray-600">
+                                {event.description}
+                              </p>
+
+                              <p className="mt-2 text-xs text-gray-400">
+                                Por: {event.user}
+                              </p>
+                            </div>
+
+                            <p className="text-xs text-gray-400 whitespace-nowrap">
+                              {new Date(event.date).toLocaleString()}
                             </p>
                           </div>
-
-                          <p className="text-xs text-gray-400 whitespace-nowrap">
-                            {new Date(log.created_at).toLocaleString()}
-                          </p>
                         </div>
                       </div>
                     ))}
@@ -688,45 +741,60 @@ const destinationPort =
         <TabsContent value="historial">
           <Card>
             <CardHeader>
-              <CardTitle>Historial de Estados</CardTitle>
+              <CardTitle>Historial de la Cotización</CardTitle>
             </CardHeader>
 
             <CardContent>
-              {statusHistory.length === 0 ? (
+              {quotationTimeline.length === 0 ? (
                 <p className="text-sm text-gray-500">
-                  No hay cambios de estado registrados.
+                  No hay movimientos registrados.
                 </p>
               ) : (
-                <div className="space-y-3">
-                  {statusHistory.map((log, index) => (
-                    <div key={log.id} className="flex gap-3">
+                <div className="space-y-4">
+                  {quotationTimeline.map((event, index) => (
+                    <div key={event.id} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <div className="h-3 w-3 rounded-full bg-slate-700 mt-1" />
+                        <div
+                          className={`h-3 w-3 rounded-full mt-1 ${
+                            event.type === 'Cambio de estado'
+                              ? 'bg-blue-600'
+                              : 'bg-amber-500'
+                          }`}
+                        />
 
-                        {index !== statusHistory.length - 1 && (
+                        {index !== quotationTimeline.length - 1 && (
                           <div className="w-px flex-1 bg-slate-300 min-h-[40px]" />
                         )}
                       </div>
 
-                      <div className="flex-1 border rounded-xl p-3">
-                        <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1 rounded-xl border p-3">
+                        <div className="flex justify-between gap-4">
                           <div>
-                            <p className="text-sm font-semibold">
-                              {log.old_status || 'Sin estado'}
-                              <span className="mx-2 text-slate-400">→</span>
-                              {log.new_status}
+                            <span
+                              className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                                event.type === 'Cambio de estado'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}
+                            >
+                              {event.type}
+                            </span>
+
+                            <p className="mt-2 text-sm font-semibold">
+                              {event.title}
                             </p>
 
-                            <p className="text-xs text-gray-500 mt-2">
-                              Por:{' '}
-                              {log.profiles
-                                ? `${log.profiles.nombre} ${log.profiles.apellido}`
-                                : 'Usuario'}
+                            <p className="mt-1 text-sm text-gray-600">
+                              {event.description}
+                            </p>
+
+                            <p className="mt-2 text-xs text-gray-400">
+                              Por: {event.user}
                             </p>
                           </div>
 
                           <p className="text-xs text-gray-400 whitespace-nowrap">
-                            {new Date(log.created_at).toLocaleString()}
+                            {new Date(event.date).toLocaleString()}
                           </p>
                         </div>
                       </div>
