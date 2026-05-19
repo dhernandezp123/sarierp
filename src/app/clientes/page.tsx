@@ -24,7 +24,8 @@ export default function ClientesPage() {
       .from('clientes')
       .select(`
         *,
-        profiles:vendedor_asignado (
+        vendedor:profiles!clientes_vendedor_asignado_fkey (
+          id,
           nombre,
           apellido
         )
@@ -95,53 +96,77 @@ export default function ClientesPage() {
           ) : filteredClientes.length === 0 ? (
             <p className="text-gray-500">No hay clientes registrados.</p>
           ) : (
-            <div className="space-y-3">
-              {filteredClientes.map((cliente) => (
-                <div key={cliente.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between gap-4">
-                    <div>
-                      <p className="font-bold">
-                        {cliente.codigo_cliente} - {cliente.nombre}
-                      </p>
+            <div className="overflow-x-auto rounded-xl border">
+              <table className="w-full text-sm">
+                <thead className="bg-black text-white">
+                  <tr>
+                    <th className="p-3 text-left">Código</th>
+                    <th className="p-3 text-left">Cliente</th>
+                    <th className="p-3 text-left">RTN</th>
+                    <th className="p-3 text-left">Ciudad / País</th>
+                    <th className="p-3 text-left">Tipo</th>
+                    <th className="p-3 text-left">Condición</th>
+                    <th className="p-3 text-left">Vendedor</th>
+                    <th className="p-3 text-left">Creado</th>
+                    <th className="p-3 text-right">Acción</th>
+                  </tr>
+                </thead>
 
-                      <p className="text-sm text-gray-500">
-                        RTN/NIT: {cliente.nit || cliente.rtn || 'N/A'}
-                      </p>
+                <tbody>
+                  {filteredClientes.map((cliente) => (
+                    <tr key={cliente.id} className="border-b hover:bg-slate-50">
+                      <td className="p-3 font-semibold">
+                        {cliente.codigo_cliente || 'N/A'}
+                      </td>
 
-                      <p className="text-sm text-gray-500">
+                      <td className="p-3 font-semibold">
+                        {cliente.nombre || 'Sin nombre'}
+                      </td>
+
+                      <td className="p-3">
+                        {cliente.rtn || cliente.nit || 'N/A'}
+                      </td>
+
+                      <td className="p-3">
                         {cliente.ciudad || 'N/A'}, {cliente.pais || 'N/A'}
-                      </p>
+                      </td>
 
-                      <p className="text-sm text-gray-500">
-                        Vendedor: {cliente.profiles
-                          ? `${cliente.profiles.nombre} ${cliente.profiles.apellido}`
-                          : 'No asignado'}
-                      </p>
-                    </div>
+                      <td className="p-3">
+                        {cliente.tipo_cliente || 'N/A'}
+                      </td>
 
-                    <div className="text-right text-sm text-gray-500">
-                      <p>{cliente.tipo_persona || 'N/A'}</p>
-                      <p>{cliente.condicion_pago || 'N/A'}</p>
+                      <td className="p-3">
+                        {cliente.condicion_pago || 'Contado'}
+                        {cliente.condicion_pago === 'Crédito' && cliente.dias_credito
+                          ? ` / ${cliente.dias_credito} días`
+                          : ''}
+                      </td>
 
-                      {cliente.condicion_pago === 'Credito' && (
-                        <p>{cliente.dias_credito} días</p>
-                      )}
+                      <td className="p-3">
+                        {cliente.vendedor
+                          ? `${cliente.vendedor.nombre} ${cliente.vendedor.apellido}`
+                          : cliente.vendedor_nombre || 'No asignado'}
+                      </td>
 
-                      <p>
-                        Creado: {new Date(cliente.created_at).toLocaleDateString()}
-                      </p>
+                      <td className="p-3">
+                        {cliente.created_at
+                          ? new Date(cliente.created_at).toLocaleDateString()
+                          : 'N/A'}
+                      </td>
 
-                      <button
-                        type="button"
-                        onClick={() => router.push(`/clientes/${cliente.id}`)}
-                        className="rounded-xl border px-4 py-2 font-semibold"
-                      >
-                        Ver Perfil
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                      <td className="p-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/clientes/${cliente.id}`)}
+                          className="rounded-xl border px-3 py-2 font-semibold hover:bg-black hover:text-white"
+                        >
+                          Ver Perfil
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
