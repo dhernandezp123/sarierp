@@ -126,6 +126,84 @@ export default function CostValidationDetailPage() {
   const variancePercentage =
     quotedCost > 0 ? (costDifference / quotedCost) * 100 : 0
 
+  const formatCurrency = (value: number) =>
+    value.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+
+  const financialStatus =
+    realProfit < 0
+      ? {
+          label: 'Pérdida detectada',
+          className: 'bg-red-100 text-red-700 border-red-200',
+        }
+      : variancePercentage > 15
+      ? {
+          label: 'Variación alta',
+          className: 'bg-red-100 text-red-700 border-red-200',
+        }
+      : variancePercentage > 5
+      ? {
+          label: 'Variación moderada',
+          className: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+        }
+      : {
+          label: 'Dentro de margen',
+          className: 'bg-green-100 text-green-700 border-green-200',
+        }
+
+  const normalizeDescription = (value: string) =>
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, ' ')
+
+  const pricingByDescription = pricingItems.reduce((acc: any, item) => {
+    const key = normalizeDescription(item.description || 'Sin descripción')
+
+    const total =
+      Number(item.cost_amount || 0) * Number(item.quantity || 1)
+
+    acc[key] = {
+      description: item.description || 'Sin descripción',
+      quoted: (acc[key]?.quoted || 0) + total,
+      real: acc[key]?.real || 0,
+    }
+
+    return acc
+  }, {})
+
+  invoiceItems.forEach((item) => {
+    const key = normalizeDescription(item.description || 'Sin descripción')
+
+    const total =
+      Number(item.total_cost || 0) + Number(item.tax_amount || 0)
+
+    if (!pricingByDescription[key]) {
+      pricingByDescription[key] = {
+        description: item.description || 'Sin descripción',
+        quoted: 0,
+        real: 0,
+      }
+    }
+
+    pricingByDescription[key].real += total
+  })
+
+  const varianceRows = Object.values(pricingByDescription).map((row: any) => {
+    const variance = row.real - row.quoted
+
+    const variancePercentage =
+      row.quoted > 0 ? (variance / row.quoted) * 100 : 0
+
+    return {
+      ...row,
+      variance,
+      variancePercentage,
+    }
+  })
+
   const handleInvoiceChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -221,6 +299,29 @@ export default function CostValidationDetailPage() {
     await fetchData()
   }
 
+  const markAsFinanciallyValidated = async () => {
+    const confirmed = confirm(
+      '¿Marcar esta cotización como financieramente validada?'
+    )
+
+    if (!confirmed) return
+
+    const { error } = await supabase
+      .from('quotations')
+      .update({
+        financial_validation_status: 'Validado',
+      })
+      .eq('id', params.id as string)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    alert('Validación financiera completada')
+    await fetchData()
+  }
+
   if (loading) {
     return <div className="p-8">Cargando validación...</div>
   }
@@ -245,20 +346,36 @@ export default function CostValidationDetailPage() {
             {quotation?.quotation_number} —{' '}
             {quotation?.clientes?.nombre || 'Sin cliente'}
           </p>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div
+              className={`inline-flex rounded-full border px-4 py-2 text-sm font-semibold ${financialStatus.className}`}
+            >
+              {financialStatus.label}
+            </div>
+
+            <button
+              type="button"
+              onClick={markAsFinanciallyValidated}
+              className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
+            >
+              Marcar como Validado
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           <div className="rounded-2xl border bg-white p-5">
             <p className="text-sm text-gray-500">Costo Cotizado</p>
             <p className="text-2xl font-bold">
-              USD {quotedCost.toFixed(2)}
+              USD {formatCurrency(quotedCost)}
             </p>
           </div>
 
           <div className="rounded-2xl border bg-white p-5">
             <p className="text-sm text-gray-500">Costo Real</p>
             <p className="text-2xl font-bold">
-              USD {realCost.toFixed(2)}
+              USD {formatCurrency(realCost)}
             </p>
           </div>
 
@@ -269,7 +386,7 @@ export default function CostValidationDetailPage() {
                 costDifference > 0 ? 'text-red-600' : 'text-green-600'
               }`}
             >
-              USD {costDifference.toFixed(2)}
+              USD {formatCurrency(costDifference)}
             </p>
           </div>
 
@@ -287,7 +404,7 @@ export default function CostValidationDetailPage() {
           <div className="rounded-2xl border bg-white p-5">
             <p className="text-sm text-gray-500">Profit Esperado</p>
             <p className="text-2xl font-bold text-green-600">
-              USD {expectedProfit.toFixed(2)}
+              USD {formatCurrency(expectedProfit)}
             </p>
           </div>
 
@@ -298,7 +415,7 @@ export default function CostValidationDetailPage() {
                 realProfit >= 0 ? 'text-green-600' : 'text-red-600'
               }`}
             >
-              USD {realProfit.toFixed(2)}
+              USD {formatCurrency(realProfit)}
             </p>
           </div>
         </div>
@@ -310,7 +427,7 @@ export default function CostValidationDetailPage() {
             </h2>
 
             <table className="w-full text-sm">
-              <thead className="bg-black text-white">
+              <thead className="bg-slate-900 text-white">
                 <tr>
                   <th className="p-3 text-left">Concepto</th>
                   <th className="p-3 text-right">QTY</th>
@@ -330,10 +447,10 @@ export default function CostValidationDetailPage() {
                       <td className="p-3">{item.description}</td>
                       <td className="p-3 text-right">{qty}</td>
                       <td className="p-3 text-right">
-                        USD {cost.toFixed(2)}
+                        USD {formatCurrency(cost)}
                       </td>
                       <td className="p-3 text-right font-semibold">
-                        USD {total.toFixed(2)}
+                        USD {formatCurrency(total)}
                       </td>
                     </tr>
                   )
@@ -459,7 +576,7 @@ export default function CostValidationDetailPage() {
               </p>
             ) : (
               <table className="w-full text-sm">
-                <thead className="bg-black text-white">
+                <thead className="bg-slate-900 text-white">
                   <tr>
                     <th className="p-3 text-left">Factura</th>
                     <th className="p-3 text-left">Concepto</th>
@@ -488,10 +605,10 @@ export default function CostValidationDetailPage() {
                           {item.quantity}
                         </td>
                         <td className="p-3 text-right">
-                          USD {Number(item.unit_cost || 0).toFixed(2)}
+                          USD {formatCurrency(Number(item.unit_cost || 0))}
                         </td>
                         <td className="p-3 text-right font-semibold">
-                          USD {baseTotal.toFixed(2)}
+                          USD {formatCurrency(baseTotal)}
                         </td>
                         <td className="p-3 text-right">
                           {item.tax_percentage_snapshot
@@ -499,7 +616,7 @@ export default function CostValidationDetailPage() {
                             : '0.00%'}
                         </td>
                         <td className="p-3 text-right font-semibold">
-                          USD {totalWithTax.toFixed(2)}
+                          USD {formatCurrency(totalWithTax)}
                         </td>
                         <td className="p-3 text-right">
                           <button
@@ -517,6 +634,83 @@ export default function CostValidationDetailPage() {
               </table>
             )}
           </div>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-6">
+          <h2 className="text-xl font-bold mb-4">
+            Análisis de Variación
+          </h2>
+
+          {varianceRows.length === 0 ? (
+            <p className="text-gray-500">
+              No hay datos suficientes para analizar variaciones.
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-900 text-white">
+                  <tr>
+                    <th className="p-3 text-left">Concepto</th>
+                    <th className="p-3 text-right">Cotizado</th>
+                    <th className="p-3 text-right">Real</th>
+                    <th className="p-3 text-right">Variación</th>
+                    <th className="p-3 text-right">%</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {varianceRows.map((row: any, index: number) => (
+                    <tr
+                      key={index}
+                      className={`border-b ${
+                        row.variance > 0
+                          ? 'bg-red-50'
+                          : row.variance < 0
+                          ? 'bg-green-50'
+                          : ''
+                      }`}
+                    >
+                      <td className="p-3 font-medium">
+                        {row.description}
+                      </td>
+
+                      <td className="p-3 text-right">
+                        USD {formatCurrency(row.quoted)}
+                      </td>
+
+                      <td className="p-3 text-right">
+                        USD {formatCurrency(row.real)}
+                      </td>
+
+                      <td
+                        className={`p-3 text-right font-semibold ${
+                          row.variance > 0
+                            ? 'text-red-600'
+                            : row.variance < 0
+                            ? 'text-green-600'
+                            : 'text-slate-700'
+                        }`}
+                      >
+                        USD {formatCurrency(row.variance)}
+                      </td>
+
+                      <td
+                        className={`p-3 text-right font-semibold ${
+                          row.variance > 0
+                            ? 'text-red-600'
+                            : row.variance < 0
+                            ? 'text-green-600'
+                            : 'text-slate-700'
+                        }`}
+                      >
+                        {row.variancePercentage.toFixed(2)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </AppLayout>

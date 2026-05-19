@@ -40,6 +40,19 @@ export default function CostValidationPage() {
     setLoading(false)
   }
 
+  const getFinancialStatusBadge = (status: string) => {
+    switch (status) {
+      case 'Validado':
+        return 'bg-green-100 text-green-700'
+      case 'En revisión':
+        return 'bg-yellow-100 text-yellow-700'
+      case 'Pérdida confirmada':
+        return 'bg-red-100 text-red-700'
+      default:
+        return 'bg-slate-100 text-slate-700'
+    }
+  }
+
   if (loading) {
     return <div className="p-8">Cargando validaciones...</div>
   }
@@ -69,13 +82,14 @@ export default function CostValidationPage() {
           ) : (
             <div className="overflow-x-auto rounded-xl border">
               <table className="w-full text-sm">
-                <thead className="bg-black text-white">
+                <thead className="bg-slate-900 text-white">
                   <tr>
                     <th className="p-3 text-left">No.</th>
                     <th className="p-3 text-left">Cliente</th>
                     <th className="p-3 text-left">Tipo</th>
                     <th className="p-3 text-left">Ruta</th>
                     <th className="p-3 text-left">Fecha</th>
+                    <th className="p-3 text-left">Estado financiero</th>
                     <th className="p-3 text-right">Acción</th>
                   </tr>
                 </thead>
@@ -103,6 +117,16 @@ export default function CostValidationPage() {
                         {quote.created_at
                           ? new Date(quote.created_at).toLocaleDateString()
                           : 'N/A'}
+                      </td>
+
+                      <td className="p-3">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getFinancialStatusBadge(
+                            quote.financial_validation_status || 'Pendiente'
+                          )}`}
+                        >
+                          {quote.financial_validation_status || 'Pendiente'}
+                        </span>
                       </td>
 
                       <td className="p-3 text-right">

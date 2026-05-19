@@ -98,7 +98,7 @@ export default function ClientesPage() {
           ) : (
             <div className="overflow-x-auto rounded-xl border">
               <table className="w-full text-sm">
-                <thead className="bg-black text-white">
+                <thead className="bg-slate-900 text-white">
                   <tr>
                     <th className="p-3 text-left">Código</th>
                     <th className="p-3 text-left">Cliente</th>

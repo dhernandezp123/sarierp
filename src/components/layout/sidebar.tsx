@@ -9,6 +9,7 @@ import {
   History,
   Scale,
   DollarSign,
+  BarChart3,
   Building2,
   Database,
 } from 'lucide-react'
@@ -52,11 +53,6 @@ export default function Sidebar({ role }: SidebarProps) {
       icon: Scale,
     },
     {
-      label: 'Validación',
-      href: '/cost-validation',
-      icon: DollarSign,
-    },
-    {
       label: 'Agentes',
       href: '/agents',
       icon: Building2,
@@ -67,6 +63,20 @@ export default function Sidebar({ role }: SidebarProps) {
       icon: Database,
     },
   ]
+
+  const financialItems = [
+    {
+      label: 'Dashboard Financiero',
+      href: '/financial-dashboard',
+      icon: BarChart3,
+    },
+    {
+      label: 'Validación de Costos',
+      href: '/cost-validation',
+      icon: DollarSign,
+    },
+  ]
+
   const renderItem = (item: any) => {
     const Icon = item.icon
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -115,6 +125,14 @@ export default function Sidebar({ role }: SidebarProps) {
 
           <nav className="space-y-1">
             {costItems.map(renderItem)}
+          </nav>
+
+          <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Finanzas
+          </p>
+
+          <nav className="space-y-1">
+            {financialItems.map(renderItem)}
           </nav>
         </div>
       )}
