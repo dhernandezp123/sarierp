@@ -98,6 +98,14 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
     },
   ].filter(Boolean)
 
+  const adminItems = [
+    {
+      label: 'Usuarios',
+      href: '/admin/users',
+      icon: Users,
+    },
+  ]
+
   const renderItem = (item: any) => {
     const Icon = item.icon
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -165,6 +173,18 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
               </nav>
             </>
           )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="mt-8">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Administración
+          </p>
+
+          <nav className="space-y-1">
+            {adminItems.map(renderItem)}
+          </nav>
         </div>
       )}
 
