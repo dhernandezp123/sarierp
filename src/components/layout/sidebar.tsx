@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/src/lib/supabase/client'
 import {
   LayoutDashboard,
   Users,
@@ -15,19 +17,43 @@ import {
 } from 'lucide-react'
 
 interface SidebarProps {
-  role: string
+  role?: string
 }
 
 export default function Sidebar({ role: profileRole }: SidebarProps) {
   const pathname = usePathname()
+  const [currentRole, setCurrentRole] = useState<string | null>(profileRole ?? null)
 
-  const role = profileRole || ''
+  useEffect(() => {
+    if (profileRole) {
+      setCurrentRole(profileRole)
+      return
+    }
 
-  const isAdmin = role === 'Admin'
-  const isSales = role === 'Ventas'
-  const isPricing = role === 'Pricing'
-  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
-  const isOperations = role === 'Operaciones'
+    const fetchRole = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('rol')
+        .eq('id', user.id)
+        .single()
+
+      setCurrentRole(data?.rol ?? null)
+    }
+
+    fetchRole()
+  }, [profileRole])
+
+  const isAdmin = currentRole === 'Admin'
+  const isSales = currentRole === 'Ventas'
+  const isPricing = currentRole === 'Pricing'
+  const isFinance = currentRole === 'Finanzas' || currentRole === 'Contabilidad'
+  const isOperations = currentRole === 'Operaciones'
 
   const canViewCommercial =
     isAdmin || isSales || isPricing || isFinance || isOperations
@@ -192,7 +218,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <p className="text-xs text-zinc-500">Rol activo</p>
           <p className="mt-1 text-sm font-semibold text-white">
-            {role || 'Ventas'}
+            {currentRole || 'Ventas'}
           </p>
         </div>
       </div>
