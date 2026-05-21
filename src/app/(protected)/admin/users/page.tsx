@@ -185,7 +185,7 @@ export default function AdminUsersPage() {
   }
 
   if (loading) {
-    return <div className="text-sm text-slate-500">Cargando usuarios...</div>
+    return <div className="text-sm text-slate-500 dark:text-slate-400">Cargando usuarios...</div>
   }
 
   const filteredUsers = users.filter((user) => {
@@ -206,17 +206,17 @@ export default function AdminUsersPage() {
     <AdminGuard>
       <>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
           Administración de usuarios
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Gestión de accesos y permisos del ERP.
         </p>
 
         <div className="mt-4">
           <Link
             href="/dashboard"
-            className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+            className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             ← Regresar al dashboard
           </Link>
@@ -228,13 +228,13 @@ export default function AdminUsersPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre o correo..."
-          className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 md:max-w-sm"
+          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-400 md:max-w-sm"
         />
 
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-400"
         >
           <option value="Todos">Todos</option>
           <option value="Pendiente">Pendientes</option>
@@ -243,26 +243,26 @@ export default function AdminUsersPage() {
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50">
+          <thead className="bg-slate-50 dark:bg-slate-800/70">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Usuario</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Rol</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Estado</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Acceso</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">Acciones</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Usuario</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Rol</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Estado</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Acceso</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Acciones</th>
             </tr>
           </thead>
 
           <tbody>
             {filteredUsers.map((user) => (
-              <tr key={user.id} className="border-t border-slate-100">
+              <tr key={user.id} className="border-t border-slate-100 dark:border-slate-800">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-slate-900">
+                  <div className="font-medium text-slate-900 dark:text-white">
                     {user.nombre || 'Sin nombre'} {user.apellido || ''}
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
                     {user.email || 'Sin email'}
                   </div>
                 </td>
@@ -276,7 +276,7 @@ export default function AdminUsersPage() {
                       setChangeReason('')
                       setRoleDialogOpen(true)
                     }}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                   >
                     {roles.map((role) => (
                       <option key={role} value={role}>
@@ -343,7 +343,7 @@ export default function AdminUsersPage() {
 
             {filteredUsers.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                   No hay usuarios registrados.
                 </td>
               </tr>
@@ -369,25 +369,25 @@ export default function AdminUsersPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                 Usuario
               </label>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
                 {selectedUser?.nombre || 'Sin nombre'}{' '}
                 {selectedUser?.apellido || ''}
               </div>
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                 Nuevo rol
               </label>
 
               <select
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
               >
                 {roles.map((role) => (
                   <option key={role} value={role}>
@@ -398,7 +398,7 @@ export default function AdminUsersPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                 Motivo del cambio
               </label>
 
@@ -409,7 +409,7 @@ export default function AdminUsersPage() {
                 }
                 rows={4}
                 placeholder="Describe el motivo del cambio..."
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
               />
             </div>
 
