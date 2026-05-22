@@ -1522,39 +1522,28 @@ const profitabilityColor =
                   </CardContent>
                 </Card>
 
-                <div ref={agentQuotesSectionRef}>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Tarifas de Agentes</CardTitle>
-                  </CardHeader>
-
-                  <CardContent>
-                    {agentQuotes.length === 0 ? (
-                      <p className="text-gray-500">
-                        No hay tarifas de agentes registradas.
+                <div
+                  ref={agentQuotesSectionRef}
+                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
+                >
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                        Tarifas de Agentes
+                      </h2>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Compara opciones por costo, transito, carrier y rentabilidad.
                       </p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1100px] text-left text-sm">
-                          <thead className="bg-zinc-950 text-white">
-                            <tr>
-                              <th className="p-3">Agente</th>
-                              <th className="p-3">Carrier</th>
-                              <th className="p-3">Costo Base</th>
-                              <th className="p-3">EXW</th>
-                              <th className="p-3">MBL</th>
-                              <th className="p-3">Profit/Cont.</th>
-                              <th className="p-3">Costo Final Sari</th>
-                              <th className="p-3">Cont.</th>
-                              <th className="p-3">Venta Sugerida</th>
-                              <th className="p-3">Tránsito</th>
-                              <th className="p-3">Días Libres</th>
-                              <th className="p-3">Seleccionar</th>
-                            </tr>
-                          </thead>
+                    </div>
+                  </div>
 
-                          <tbody>
-                            {agentQuotes.map((quote) => {
+                  {agentQuotes.length === 0 ? (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      No hay tarifas de agentes registradas.
+                    </p>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {agentQuotes.map((quote) => {
                               const containersQty =
                                 quotationContainers.length > 0
                                   ? quotationContainers.reduce(
@@ -1570,81 +1559,194 @@ const profitabilityColor =
                                 Number(quote.mbl_fee || 0) +
                                 Number(quote.profit_per_container || 0) * containersQty
 
+                              const baseCost = Number(
+                                quote.ocean_freight || quote.costo || 0
+                              )
+                              const suggestedSale = Number(
+                                quote.sale_amount || quote.suggested_sale || 0
+                              )
+                              const calculatedProfit = suggestedSale - finalSariCost
+                              const profit = Number(
+                                quote.profit_amount ||
+                                  quote.profit ||
+                                  calculatedProfit
+                              )
+                              const isNew = highlightedAgentQuoteId === quote.id
+                              const isSelected = Boolean(quote.is_selected)
+
                               return (
-                                <tr
+                                <div
                                   key={quote.id}
                                   className={cn(
-                                    'border-b transition-colors duration-500',
-                                    highlightedAgentQuoteId === quote.id &&
-                                      'bg-emerald-50 ring-1 ring-inset ring-emerald-200'
+                                    'rounded-2xl border p-5 shadow-sm transition',
+                                    isSelected
+                                      ? 'border-green-400 bg-green-50 dark:border-green-700 dark:bg-green-950/30'
+                                      : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600',
+                                    isNew && 'ring-2 ring-green-400'
                                   )}
                                 >
-                                  <td className="p-3">
-                                    <div className="flex items-center gap-2">
-                                      <span>{quote.agente_nombre}</span>
-                                      {highlightedAgentQuoteId === quote.id && (
-                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                  <div className="mb-4 flex items-start justify-between gap-3">
+                                    <div>
+                                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                                        {quote.agente_nombre ||
+                                          quote.agent_name ||
+                                          quote.agent ||
+                                          'Agente'}
+                                      </h3>
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        {quote.carrier || 'Carrier N/A'} -{' '}
+                                        {quote.transit_time || quote.transit || 'N/A'} dias
+                                      </p>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                      {isNew && (
+                                        <span className="rounded-full bg-green-100 px-2 py-1 text-[11px] font-semibold text-green-700 dark:bg-green-900/40 dark:text-green-300">
                                           Nueva
                                         </span>
                                       )}
-                                    </div>
-                                  </td>
-                                  <td className="p-3">{quote.carrier || 'N/A'}</td>
-                                  <td className="p-3">
-                                    {quote.moneda} {Number(quote.ocean_freight || quote.costo || 0).toFixed(2)}
-                                  </td>
-                                  <td className="p-3">
-                                    {quote.moneda} {Number(quote.exw_cost || 0).toFixed(2)}
-                                  </td>
-                                  <td className="p-3">
-                                    {quote.moneda} {Number(quote.mbl_fee || 0).toFixed(2)}
-                                  </td>
-                                  <td className="p-3">
-                                    {quote.moneda} {Number(quote.profit_per_container || 0).toFixed(2)}
-                                  </td>
-                                  <td className="p-3">
-                                    USD {formatCurrency(finalSariCost)}
-                                  </td>
-                                  <td className="p-3">{quote.containers_qty || 1}</td>
-                                  <td className="p-3">
-                                    {quote.moneda} {Number(quote.suggested_sale || 0).toFixed(2)}
-                                  </td>
-                                  <td className="p-3">{quote.transit_time || 'N/A'}</td>
-                                  <td className="p-3">{quote.free_days_destination || 0}</td>
-                                  <td className="p-3">
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={() => handleEditAgentQuote(quote)}
-                                        className="p-2 rounded-lg border hover:bg-gray-100"
-                                      >
-                                        <Pencil size={16} />
-                                      </button>
 
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedRateForConfirm(quote)
-                                          setConfirmSelectRateOpen(true)
-                                        }}
-                                        className={
-                                          quote.is_selected
-                                            ? 'text-green-600 font-semibold'
-                                            : 'text-blue-600 font-semibold'
-                                        }
-                                      >
-                                        {quote.is_selected ? 'Regenerar Pricing' : 'Seleccionar'}
-                                      </button>
+                                      {isSelected && (
+                                        <span className="rounded-full bg-green-600 px-2 py-1 text-[11px] font-semibold text-white">
+                                          Activa
+                                        </span>
+                                      )}
                                     </div>
-                                  </td>
-                                </tr>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-[#0b1220]">
+                                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Costo base
+                                      </p>
+                                      <p className="font-semibold text-slate-900 dark:text-white">
+                                        {quote.moneda || 'USD'} {baseCost.toFixed(2)}
+                                      </p>
+                                    </div>
+
+                                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-[#0b1220]">
+                                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Costo final
+                                      </p>
+                                      <p className="font-semibold text-slate-900 dark:text-white">
+                                        USD {formatCurrency(finalSariCost)}
+                                      </p>
+                                    </div>
+
+                                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-[#0b1220]">
+                                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Venta sugerida
+                                      </p>
+                                      <p className="font-semibold text-blue-600 dark:text-blue-400">
+                                        {quote.moneda || 'USD'} {suggestedSale.toFixed(2)}
+                                      </p>
+                                    </div>
+
+                                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-[#0b1220]">
+                                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Profit
+                                      </p>
+                                      <p
+                                        className={cn(
+                                          'font-semibold',
+                                          profit >= 0
+                                            ? 'text-green-600 dark:text-green-400'
+                                            : 'text-red-600 dark:text-red-400'
+                                        )}
+                                      >
+                                        USD {formatCurrency(profit)}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                    <div>
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                        Carrier:
+                                      </span>{' '}
+                                      {quote.carrier || 'N/A'}
+                                    </div>
+
+                                    <div>
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                        Vigencia:
+                                      </span>{' '}
+                                      {quote.valid_until ||
+                                        quote.validity_date ||
+                                        'N/A'}
+                                    </div>
+
+                                    <div>
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                        EXW:
+                                      </span>{' '}
+                                      USD{' '}
+                                      {Number(
+                                        quote.exw_amount || quote.exw_cost || 0
+                                      ).toFixed(2)}
+                                    </div>
+
+                                    <div>
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                        MBL:
+                                      </span>{' '}
+                                      USD{' '}
+                                      {Number(
+                                        quote.mbl_amount || quote.mbl_cost || quote.mbl_fee || 0
+                                      ).toFixed(2)}
+                                    </div>
+
+                                    <div>
+                                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                                        Transbordo:
+                                      </span>{' '}
+                                      {quote.transshipment || quote.transbordo || 'N/A'}
+                                    </div>
+
+                                    <div>
+                                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                                        Dias libres:
+                                      </span>{' '}
+                                      {quote.free_days_destination ||
+                                        quote.free_days ||
+                                        quote.dias_libres ||
+                                        'N/A'}
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-5 flex items-center justify-between gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditAgentQuote(quote)}
+                                      className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                      Editar
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedRateForConfirm(quote)
+                                        setConfirmSelectRateOpen(true)
+                                      }}
+                                      className={cn(
+                                        'rounded-xl px-3 py-2 text-xs font-semibold transition',
+                                        isSelected
+                                          ? 'bg-green-600 text-white hover:bg-green-700'
+                                          : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200'
+                                      )}
+                                    >
+                                      {isSelected
+                                        ? 'Regenerar pricing'
+                                        : 'Seleccionar tarifa'}
+                                    </button>
+                                  </div>
+                                </div>
                               )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    </CardContent>
-                  </Card>
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <Card>
