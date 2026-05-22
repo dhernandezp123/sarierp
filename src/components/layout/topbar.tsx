@@ -43,7 +43,7 @@ export default function Topbar() {
       : profile?.email || 'Usuario'
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-6 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-6 backdrop-blur dark:border-slate-700/60 dark:bg-[#081120]/90">
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard"

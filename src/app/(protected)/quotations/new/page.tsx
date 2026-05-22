@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 
 import { supabase } from '../../../../lib/supabase/client'
-import AppLayout from '../../../../components/layout/app-layout'
 import { useUser } from '../../../../hooks/useUser'
 
 export default function NewQuotationPage() {
@@ -285,7 +284,7 @@ export default function NewQuotationPage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="max-w-6xl">
         <h1 className="text-4xl font-bold mb-8">
           Nueva Cotización
@@ -702,6 +701,6 @@ export default function NewQuotationPage() {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </>
   )
 }

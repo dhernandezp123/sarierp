@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
 import { supabase } from '../../../../../lib/supabase/client'
-import AppLayout from '../../../../../components/layout/app-layout'
 import { useUser } from '../../../../../hooks/useUser'
 
 export default function EditQuotationPage() {
@@ -89,7 +88,7 @@ export default function EditQuotationPage() {
   }, [params.id, userLoading, canEditQuotes])
 
   const AccessDenied = () => (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="rounded-2xl border bg-white p-8">
         <h1 className="text-2xl font-bold">
           Acceso restringido
@@ -99,7 +98,7 @@ export default function EditQuotationPage() {
           No tienes permiso para ver este módulo.
         </p>
       </div>
-    </AppLayout>
+    </>
   )
 
   const fetchCatalogs = async () => {
@@ -448,7 +447,7 @@ export default function EditQuotationPage() {
     formData.quote_type === 'Courier'
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="max-w-6xl space-y-6">
         <div>
           <h1 className="text-4xl font-bold">Editar Cotización</h1>
@@ -791,6 +790,6 @@ export default function EditQuotationPage() {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </>
   )
 }

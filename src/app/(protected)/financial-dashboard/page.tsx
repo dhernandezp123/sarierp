@@ -13,7 +13,6 @@ import {
 } from 'recharts'
 
 import { supabase } from '../../../lib/supabase/client'
-import AppLayout from '../../../components/layout/app-layout'
 import { useUser } from '../../../hooks/useUser'
 
 export default function FinancialDashboardPage() {
@@ -63,7 +62,7 @@ export default function FinancialDashboardPage() {
   }, [userLoading, canViewFinancialDashboard])
 
   const AccessDenied = () => (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="rounded-2xl border bg-white p-8">
         <h1 className="text-2xl font-bold">
           Acceso restringido
@@ -73,7 +72,7 @@ export default function FinancialDashboardPage() {
           No tienes permiso para ver este módulo.
         </p>
       </div>
-    </AppLayout>
+    </>
   )
 
   const fetchDashboard = async () => {
@@ -289,7 +288,7 @@ export default function FinancialDashboardPage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Admin'}>
+    <>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -484,6 +483,6 @@ export default function FinancialDashboardPage() {
           )}
         </div>
       </div>
-    </AppLayout>
+    </>
   )
 }

@@ -160,8 +160,8 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   }
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white text-slate-900 transition-colors dark:border-slate-800 dark:bg-slate-900 dark:text-white">
-      <div className="mb-8 border-b border-slate-200 px-4 pb-5 pt-5 dark:border-slate-800">
+    <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white text-slate-900 transition-colors dark:border-slate-700/60 dark:bg-[#0b1220] dark:text-white">
+      <div className="mb-8 border-b border-slate-200 px-4 pb-5 pt-5 dark:border-slate-700/60">
         <p className="text-xs uppercase tracking-[0.25em] text-red-500 font-bold">
           Sari Express
         </p>
@@ -221,8 +221,8 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         </div>
       )}
 
-      <div className="mt-10 border-t border-slate-200 px-4 pt-6 dark:border-slate-800">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/70">
+      <div className="mt-10 border-t border-slate-200 px-4 pt-6 dark:border-slate-700/60">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/60 dark:bg-[#0b1220]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Rol activo</p>
           <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
             {currentRole || 'Ventas'}

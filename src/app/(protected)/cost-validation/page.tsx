@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { supabase } from '../../../lib/supabase/client'
-import AppLayout from '../../../components/layout/app-layout'
 import { useUser } from '../../../hooks/useUser'
 
 export default function CostValidationPage() {
@@ -42,7 +41,7 @@ export default function CostValidationPage() {
   }, [userLoading, canViewCostValidation])
 
   const AccessDenied = () => (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="rounded-2xl border bg-white p-8">
         <h1 className="text-2xl font-bold">
           Acceso restringido
@@ -52,7 +51,7 @@ export default function CostValidationPage() {
           No tienes permiso para ver este módulo.
         </p>
       </div>
-    </AppLayout>
+    </>
   )
 
   const fetchQuotations = async () => {
@@ -99,7 +98,7 @@ export default function CostValidationPage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Contabilidad'}>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-4xl font-bold">
@@ -189,6 +188,6 @@ export default function CostValidationPage() {
           )}
         </div>
       </div>
-    </AppLayout>
+    </>
   )
 }

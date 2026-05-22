@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { supabase } from '../../../../lib/supabase/client'
-import AppLayout from '../../../../components/layout/app-layout'
 import { useUser } from '../../../../hooks/useUser'
 
 const initialFormData = {
@@ -151,7 +150,7 @@ export default function NuevoClientePage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -275,6 +274,6 @@ export default function NuevoClientePage() {
           </button>
         </form>
       </div>
-    </AppLayout>
+    </>
   )
 }

@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
 import { supabase } from '../../../../../lib/supabase/client'
-import AppLayout from '../../../../../components/layout/app-layout'
 import { useUser } from '../../../../../hooks/useUser'
 
 export default function EditClientePage() {
@@ -163,7 +162,7 @@ export default function EditClientePage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="max-w-5xl space-y-6">
         <button
           type="button"
@@ -298,6 +297,6 @@ export default function EditClientePage() {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </>
   )
 }

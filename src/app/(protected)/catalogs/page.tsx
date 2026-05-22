@@ -1,13 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import AppLayout from '../../../components/layout/app-layout'
 import { supabase } from '../../../lib/supabase/client'
-import { useUser } from '../../../hooks/useUser'
 
 export default function CatalogsPage() {
-  const { profile } = useUser()
-
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
 
@@ -74,7 +70,7 @@ export default function CatalogsPage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
@@ -191,6 +187,6 @@ export default function CatalogsPage() {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </>
   )
 }

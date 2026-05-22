@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation'
 import { Pencil } from 'lucide-react'
 
 import { supabase } from '../../../lib/supabase/client'
-import AppLayout from '../../../components/layout/app-layout'
 import { useUser } from '../../../hooks/useUser'
 
 import { Badge } from '../../../components/ui/badge'
@@ -954,7 +953,7 @@ const profitabilityColor =
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-4xl font-bold">
@@ -1867,7 +1866,7 @@ const profitabilityColor =
             )}
         </div>
       </div>
-    </AppLayout>
+    </>
   )
 }
 

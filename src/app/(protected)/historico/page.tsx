@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 import { supabase } from '../../../lib/supabase/client'
-import AppLayout from '../../../components/layout/app-layout'
 import { useUser } from '../../../hooks/useUser'
 
 import {
@@ -191,7 +190,7 @@ export default function HistoricoPage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
 
       <div className="space-y-6">
 
@@ -442,6 +441,6 @@ export default function HistoricoPage() {
 
       </div>
 
-    </AppLayout>
+    </>
   )
 }

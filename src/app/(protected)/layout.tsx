@@ -9,7 +9,7 @@ export default function ProtectedLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
+    <div className="flex min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
       <Sidebar />
 
       <div className="flex flex-1 flex-col">

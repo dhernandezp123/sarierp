@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { Trash2 } from 'lucide-react'
 import {
   PieChart,
   Pie,
@@ -19,10 +21,17 @@ import {
 } from 'recharts'
 
 import { supabase } from '../../../lib/supabase/client'
-import { useUser } from '../../../hooks/useUser'
+
+type UserTask = {
+  id: string
+  title: string
+  notes: string | null
+  status: 'Pendiente' | 'Completada'
+  priority: 'Baja' | 'Media' | 'Alta'
+  due_date: string | null
+}
 
 export default function DashboardPage() {
-  const { profile } = useUser()
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
@@ -30,9 +39,16 @@ export default function DashboardPage() {
   const [clientes, setClientes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
   const [invoiceItems, setInvoiceItems] = useState<any[]>([])
+  const [tasks, setTasks] = useState<UserTask[]>([])
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskPriority, setTaskPriority] =
+    useState<'Baja' | 'Media' | 'Alta'>('Media')
+  const [taskDueDate, setTaskDueDate] = useState('')
+  const [loadingTasks, setLoadingTasks] = useState(false)
 
   useEffect(() => {
     fetchDashboard()
+    loadTasks()
   }, [])
 
   const fetchDashboard = async () => {
@@ -87,6 +103,92 @@ export default function DashboardPage() {
     setPricingItems(pricingData)
     setInvoiceItems(invoiceData)
     setLoading(false)
+  }
+
+  const loadTasks = async () => {
+    const { data: userData } = await supabase.auth.getUser()
+
+    if (!userData.user) return
+
+    const { data } = await supabase
+      .from('user_tasks')
+      .select('*')
+      .eq('user_id', userData.user.id)
+      .order('status', { ascending: true })
+      .order('created_at', { ascending: false })
+
+    if (data) {
+      setTasks(data as UserTask[])
+    }
+  }
+
+  const createTask = async () => {
+    if (!taskTitle.trim()) return
+
+    setLoadingTasks(true)
+
+    const { data: userData } = await supabase.auth.getUser()
+
+    if (!userData.user) {
+      setLoadingTasks(false)
+      return
+    }
+
+    const { error } = await supabase
+      .from('user_tasks')
+      .insert({
+        user_id: userData.user.id,
+        title: taskTitle.trim(),
+        priority: taskPriority,
+        due_date: taskDueDate || null,
+      })
+
+    setLoadingTasks(false)
+
+    if (error) {
+      toast.error('No se pudo crear la tarea')
+      return
+    }
+
+    toast.success('Tarea creada')
+
+    setTaskTitle('')
+    setTaskPriority('Media')
+    setTaskDueDate('')
+
+    loadTasks()
+  }
+
+  const toggleTask = async (task: UserTask) => {
+    const nextStatus =
+      task.status === 'Pendiente'
+        ? 'Completada'
+        : 'Pendiente'
+
+    await supabase
+      .from('user_tasks')
+      .update({
+        status: nextStatus,
+      })
+      .eq('id', task.id)
+
+    loadTasks()
+  }
+
+  const deleteTask = async (taskId: string) => {
+    const { error } = await supabase
+      .from('user_tasks')
+      .delete()
+      .eq('id', taskId)
+
+    if (error) {
+      toast.error('No se pudo eliminar la tarea')
+      return
+    }
+
+    toast.success('Tarea eliminada')
+
+    loadTasks()
   }
 
   const now = new Date()
@@ -214,19 +316,19 @@ export default function DashboardPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Ganada':
-        return 'bg-green-100 text-green-700'
+        return 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
 
       case 'Pendiente de Fijar Precios':
-        return 'bg-yellow-100 text-yellow-700'
+        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300'
 
       case 'Enviada al Cliente':
-        return 'bg-blue-100 text-blue-700'
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
 
       case 'Solicitud':
-        return 'bg-slate-100 text-slate-700'
+        return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
 
       default:
-        return 'bg-gray-100 text-gray-700'
+        return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
     }
   }
 
@@ -244,11 +346,11 @@ export default function DashboardPage() {
     <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold">
+            <h1 className="text-4xl font-bold text-slate-900 dark:text-white">
               Dashboard
             </h1>
 
-            <p className="text-gray-500 mt-2">
+            <p className="mt-2 text-slate-500 dark:text-slate-400">
               Resumen ejecutivo comercial, pricing y financiero.
             </p>
           </div>
@@ -265,7 +367,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => router.push('/clientes/nuevo')}
-              className="rounded-xl border px-5 py-3 font-semibold hover:bg-black hover:text-white"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-white dark:hover:bg-slate-800"
             >
               Nuevo Cliente
             </button>
@@ -273,7 +375,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => router.push('/financial-dashboard')}
-              className="rounded-xl border px-5 py-3 font-semibold hover:bg-black hover:text-white"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-white dark:hover:bg-slate-800"
             >
               Finanzas
             </button>
@@ -281,17 +383,17 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Cotizaciones Mes
             </p>
-            <p className="text-3xl font-bold">
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">
               {quotesThisMonth.length}
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Ganadas
             </p>
             <p className="text-3xl font-bold text-green-600">
@@ -299,8 +401,8 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Pendientes Pricing
             </p>
             <p className="text-3xl font-bold text-yellow-600">
@@ -308,19 +410,19 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Clientes Nuevos Mes
             </p>
-            <p className="text-3xl font-bold">
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">
               {clientsThisMonth.length}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Profit Esperado
             </p>
             <p className="text-2xl font-bold text-green-600">
@@ -328,8 +430,8 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Profit Real
             </p>
             <p
@@ -339,13 +441,13 @@ export default function DashboardPage() {
             >
               USD {formatCurrency(realProfit)}
             </p>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               Solo operaciones con costos reales
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Pendientes Validar
             </p>
             <p className="text-2xl font-bold text-orange-600">
@@ -353,8 +455,8 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Enviadas al Cliente
             </p>
             <p className="text-2xl font-bold text-blue-600">
@@ -364,13 +466,13 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Cotizaciones por Estado
             </h2>
 
             {statusData.length === 0 ? (
-              <p className="text-gray-500">
+              <p className="text-slate-500 dark:text-slate-400">
                 No hay datos para mostrar.
               </p>
             ) : (
@@ -382,7 +484,7 @@ export default function DashboardPage() {
                       dataKey="value"
                       nameKey="name"
                       outerRadius={110}
-                      label
+                      label={{ fill: '#64748b' }}
                     >
                       {statusData.map((entry, index) => (
                         <Cell
@@ -393,26 +495,26 @@ export default function DashboardPage() {
                     </Pie>
 
                     <Tooltip />
-                    <Legend />
+                    <Legend wrapperStyle={{ color: '#64748b' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             )}
           </div>
 
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Profit Esperado vs Profit Real
             </h2>
 
             <div className="h-[360px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={profitComparisonData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
+                  <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
+                  <XAxis dataKey="name" tick={{ fill: '#64748b' }} />
+                  <YAxis tick={{ fill: '#64748b' }} />
                   <Tooltip formatter={currencyTooltipFormatter} />
-                  <Legend />
+                  <Legend wrapperStyle={{ color: '#64748b' }} />
 
                   <Bar dataKey="Esperado" fill="#16A34A" />
                   <Bar
@@ -427,31 +529,31 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </div>
 
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
               Valores en USD
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Cotizaciones por Mes
             </h2>
 
             {monthlyQuotesData.length === 0 ? (
-              <p className="text-gray-500">
+              <p className="text-slate-500 dark:text-slate-400">
                 No hay datos para mostrar.
               </p>
             ) : (
               <div className="h-[320px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={monthlyQuotesData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis allowDecimals={false} />
+                    <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
+                    <XAxis dataKey="month" tick={{ fill: '#64748b' }} />
+                    <YAxis allowDecimals={false} tick={{ fill: '#64748b' }} />
                     <Tooltip />
-                    <Legend />
+                    <Legend wrapperStyle={{ color: '#64748b' }} />
 
                     <Line
                       type="monotone"
@@ -471,15 +573,112 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Mis tareas
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Pendientes personales del usuario conectado.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 grid gap-3 md:grid-cols-[1fr_140px]">
+              <input
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
+                placeholder="Nueva tarea..."
+                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              />
+
+              <select
+                value={taskPriority}
+                onChange={(e) =>
+                  setTaskPriority(e.target.value as 'Baja' | 'Media' | 'Alta')
+                }
+                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              >
+                <option value="Baja">Baja</option>
+                <option value="Media">Media</option>
+                <option value="Alta">Alta</option>
+              </select>
+
+              <input
+                type="date"
+                value={taskDueDate}
+                onChange={(e) => setTaskDueDate(e.target.value)}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              />
+
+              <button
+                onClick={createTask}
+                disabled={loadingTasks || !taskTitle.trim()}
+                className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+              >
+                {loadingTasks ? 'Agregando...' : 'Agregar'}
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {tasks.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  No tienes tareas pendientes.
+                </p>
+              ) : (
+                tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"
+                  >
+                    <div>
+                      <p
+                        className={`text-sm font-medium ${
+                          task.status === 'Completada'
+                            ? 'text-slate-400 line-through'
+                            : 'text-slate-900 dark:text-white'
+                        }`}
+                      >
+                        {task.title}
+                      </p>
+
+                      <div className="mt-1 flex gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <span>{task.priority}</span>
+                        {task.due_date && <span>- Vence: {task.due_date}</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleTask(task)}
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        {task.status === 'Pendiente' ? 'Completar' : 'Reabrir'}
+                      </button>
+
+                      <button
+                        onClick={() => deleteTask(task.id)}
+                        className="rounded-lg border border-red-300 p-2 text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Últimas Cotizaciones
             </h2>
 
-            <div className="overflow-x-auto rounded-xl border">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700/60">
               <table className="w-full text-sm">
                 <thead className="bg-slate-900 text-white">
                   <tr>
@@ -490,9 +689,9 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
 
-                <tbody>
+                <tbody className="text-slate-900 dark:text-white">
                   {latestQuotes.map((quote) => (
-                    <tr key={quote.id} className="border-b hover:bg-slate-50">
+                    <tr key={quote.id} className="border-b border-slate-200 hover:bg-slate-50 dark:border-slate-700/60 dark:hover:bg-slate-800">
                       <td className="p-3 font-semibold">
                         {quote.quotation_number || 'Sin número'}
                       </td>
@@ -517,7 +716,7 @@ export default function DashboardPage() {
                           onClick={() =>
                             router.push(`/quotations/${quote.id}`)
                           }
-                          className="rounded-xl border px-3 py-2 font-semibold hover:bg-black hover:text-white"
+                          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-white dark:hover:bg-slate-800"
                         >
                           Ver
                         </button>
@@ -529,13 +728,13 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Pendientes de Pricing
             </h2>
 
             {pendingPricing.length === 0 ? (
-              <p className="text-gray-500">
+              <p className="text-slate-500 dark:text-slate-400">
                 No hay cotizaciones pendientes de pricing.
               </p>
             ) : (
@@ -543,13 +742,13 @@ export default function DashboardPage() {
                 {pendingPricing.slice(0, 6).map((quote) => (
                   <div
                     key={quote.id}
-                    className="flex items-center justify-between rounded-xl border p-3"
+                    className="flex items-center justify-between rounded-xl border border-slate-200 p-3 dark:border-slate-700/60"
                   >
                     <div>
-                      <p className="font-semibold">
+                      <p className="font-semibold text-slate-900 dark:text-white">
                         {quote.quotation_number || 'Sin número'}
                       </p>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         {quote.clientes?.nombre || 'Sin cliente'}
                       </p>
                     </div>
@@ -559,7 +758,7 @@ export default function DashboardPage() {
                       onClick={() =>
                         router.push(`/pricing-comparison?quoteId=${quote.id}`)
                       }
-                      className="rounded-xl border px-3 py-2 font-semibold hover:bg-black hover:text-white"
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-white dark:hover:bg-slate-800"
                     >
                       Trabajar
                     </button>

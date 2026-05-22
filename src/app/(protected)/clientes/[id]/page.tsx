@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
 import { supabase } from '../../../../lib/supabase/client'
-import AppLayout from '../../../../components/layout/app-layout'
 import { useUser } from '../../../../hooks/useUser'
 
 export default function ClienteProfilePage() {
@@ -144,7 +143,7 @@ export default function ClienteProfilePage() {
     )
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="space-y-6">
         <div className="flex flex-wrap gap-3">
           <button
@@ -502,6 +501,6 @@ export default function ClienteProfilePage() {
           </div>
         )}
       </div>
-    </AppLayout>
+    </>
   )
 }

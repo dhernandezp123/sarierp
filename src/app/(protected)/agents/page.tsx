@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabase/client'
-import AppLayout from '../../../components/layout/app-layout'
-import { useUser } from '../../../hooks/useUser'
 
 export default function AgentsPage() {
-  const { profile } = useUser()
   const [agents, setAgents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -73,7 +70,7 @@ export default function AgentsPage() {
   }
 
   return (
-    <AppLayout role={profile?.rol || 'Ventas'}>
+    <>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
@@ -237,6 +234,6 @@ export default function AgentsPage() {
           </div>
         </div>
       </div>
-    </AppLayout>
+    </>
   )
 }

@@ -1,11 +1,10 @@
-Ôªø'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 import { supabase } from '../../../../lib/supabase/client'
-import AppLayout from '../../../../components/layout/app-layout'
 import { useUser } from '../../../../hooks/useUser'
 import {
   PDFDownloadLink,
@@ -182,7 +181,7 @@ export default function QuotationDetailPage() {
   }
 
   if (!quotation) {
-    return <p className="p-8">Cotizaci√≥n no encontrada.</p>
+    return <p className="p-8">CotizaciÛn no encontrada.</p>
   }
 
   const formatCurrency = (value: number) =>
@@ -248,8 +247,8 @@ const quotationTimeline = [
   ...statusHistory.map((log) => ({
     id: `status-${log.id}`,
     type: 'Cambio de estado',
-    title: `${log.old_status || 'Sin estado'} ‚Üí ${log.new_status}`,
-    description: 'Cambio de estado de la cotizaci√≥n.',
+    title: `${log.old_status || 'Sin estado'} ? ${log.new_status}`,
+    description: 'Cambio de estado de la cotizaciÛn.',
     user: log.profiles
       ? `${log.profiles.nombre} ${log.profiles.apellido}`
       : 'Usuario',
@@ -276,17 +275,17 @@ const quotationTimeline = [
   )
 
   return (
-  <AppLayout role={profile?.rol || 'Ventas'}>
+  <>
     <div className="space-y-6 !font-sans [&_*]:!font-sans">
 
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 !font-sans">
-            {quotation.quotation_number || 'Sin n√∫mero'}
+            {quotation.quotation_number || 'Sin n˙mero'}
           </h1>
 
           <p className="text-gray-500 mt-2">
-            Detalle de Cotizaci√≥n
+            Detalle de CotizaciÛn
           </p>
         </div>
 
@@ -312,7 +311,7 @@ const quotationTimeline = [
             onClick={handlePrintQuotation}
             className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center"
           >
-            üñ®Ô∏è Imprimir Cotizaci√≥n
+            ??? Imprimir CotizaciÛn
           </button>
 
           <button
@@ -387,9 +386,9 @@ const quotationTimeline = [
           {changeLogs.length > 0 && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 mb-6">
               <p className="font-semibold">
-                Esta cotizaci√≥n tiene {changeLogs.length} cambio
+                Esta cotizaciÛn tiene {changeLogs.length} cambio
                 {changeLogs.length === 1 ? '' : 's'} registrado
-                {changeLogs.length === 1 ? '' : 's'} despu√©s de ser enviada/aprobada.
+                {changeLogs.length === 1 ? '' : 's'} despuÈs de ser enviada/aprobada.
               </p>
 
               <p className="text-sm mt-1">
@@ -402,7 +401,7 @@ const quotationTimeline = [
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-900">
-                  Informaci√≥n General
+                  InformaciÛn General
                 </CardTitle>
               </CardHeader>
 
@@ -418,13 +417,13 @@ const quotationTimeline = [
                   <p className="text-xs text-slate-500">Cliente</p>
                   <p className="font-semibold text-slate-900">
                     {quotation.clientes
-                      ? `${quotation.clientes.codigo_cliente} ‚Äî ${quotation.clientes.nombre}`
+                      ? `${quotation.clientes.codigo_cliente} ó ${quotation.clientes.nombre}`
                       : 'Sin cliente'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Tel√©fono</p>
+                  <p className="text-xs text-slate-500">TelÈfono</p>
                   <p className="font-semibold text-slate-900">
                     {quotation.clientes?.telefono || 'N/A'}
                   </p>
@@ -438,7 +437,7 @@ const quotationTimeline = [
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Ubicaci√≥n</p>
+                  <p className="text-xs text-slate-500">UbicaciÛn</p>
                   <p className="font-semibold text-slate-900">
                     {quotation.clientes
                       ? `${quotation.clientes.ciudad || 'N/A'}, ${quotation.clientes.pais || 'N/A'}`
@@ -447,7 +446,7 @@ const quotationTimeline = [
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Condici√≥n</p>
+                  <p className="text-xs text-slate-500">CondiciÛn</p>
                   <p className="font-semibold text-slate-900">
                     {paymentTerms}
                   </p>
@@ -531,7 +530,7 @@ const quotationTimeline = [
                     <div className="font-medium space-y-1">
                       {quotationContainers.map((container) => (
                         <p key={container.id}>
-                          ‚Ä¢ {container.quantity} x {container.container_type || container.container_type_name}
+                          ï {container.quantity} x {container.container_type || container.container_type_name}
                         </p>
                       ))}
                     </div>
@@ -569,7 +568,7 @@ const quotationTimeline = [
 
                 <div>
                   <p className="text-xs text-slate-500">
-                    Commodity / Descripci√≥n de la carga
+                    Commodity / DescripciÛn de la carga
                   </p>
                   <p className="font-semibold text-slate-900">
                     {quotation.commodity || 'N/A'}
@@ -596,7 +595,7 @@ const quotationTimeline = [
 
             <Card className="col-span-2">
               <CardHeader>
-                <CardTitle>Historial de la Cotizaci√≥n</CardTitle>
+                <CardTitle>Historial de la CotizaciÛn</CardTitle>
               </CardHeader>
 
               <CardContent>
@@ -682,7 +681,7 @@ const quotationTimeline = [
                       <th className="p-3">Agente</th>
                       <th className="p-3">Costo</th>
                       <th className="p-3">Moneda</th>
-                      <th className="p-3">Tr√°nsito</th>
+                      <th className="p-3">Tr·nsito</th>
                       <th className="p-3">Seleccionada</th>
                     </tr>
                   </thead>
@@ -696,7 +695,7 @@ const quotationTimeline = [
                         <td className="p-3">{agent.transit_time}</td>
                         <td className="p-3">
                           {agent.is_selected ? (
-                            <Badge className="bg-green-600 text-white">S√≠</Badge>
+                            <Badge className="bg-green-600 text-white">SÌ</Badge>
                           ) : (
                             <Badge variant="secondary">No</Badge>
                           )}
@@ -755,7 +754,7 @@ const quotationTimeline = [
         <TabsContent value="historial">
           <Card>
             <CardHeader>
-              <CardTitle>Historial de la Cotizaci√≥n</CardTitle>
+              <CardTitle>Historial de la CotizaciÛn</CardTitle>
             </CardHeader>
 
             <CardContent>
@@ -821,6 +820,6 @@ const quotationTimeline = [
         </TabsContent>
       </Tabs>
     </div>
-  </AppLayout>
+  </>
 )
 }
