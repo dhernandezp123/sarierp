@@ -1,13 +1,15 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Pencil } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
+import { cn } from '../../../lib/utils'
 
 import { Badge } from '../../../components/ui/badge'
 import {
@@ -16,6 +18,13 @@ import {
   CardHeader,
   CardTitle,
 } from '../../../components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/src/components/ui/dialog'
 
 function PricingComparisonContent() {
   const { profile } = useUser()
@@ -62,6 +71,17 @@ function PricingComparisonContent() {
 
   const [editingPricingItemId, setEditingPricingItemId] = useState<string | null>(null)
   const [editingAgentQuoteId, setEditingAgentQuoteId] = useState<string | null>(null)
+  const [highlightedAgentQuoteId, setHighlightedAgentQuoteId] = useState<string | null>(null)
+  const [selectedRateForConfirm, setSelectedRateForConfirm] = useState<any | null>(null)
+  const [confirmSelectRateOpen, setConfirmSelectRateOpen] = useState(false)
+  const [selectingRate, setSelectingRate] = useState(false)
+  const [postApprovalDialogOpen, setPostApprovalDialogOpen] = useState(false)
+  const [postApprovalReason, setPostApprovalReason] = useState('')
+  const [pendingPostApprovalAction, setPendingPostApprovalAction] = useState<null | (() => Promise<void>)>(null)
+  const [savingPostApproval, setSavingPostApproval] = useState(false)
+  const agentQuotesSectionRef = useRef<HTMLDivElement | null>(null)
+  const postApprovalReasonRef = useRef('')
+  const postApprovalResolveRef = useRef<((reason: string | null) => void) | null>(null)
 
   const [editingPricingItemForm, setEditingPricingItemForm] =
     useState<any>(null)
@@ -84,7 +104,7 @@ function PricingComparisonContent() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -116,7 +136,7 @@ function PricingComparisonContent() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -131,7 +151,7 @@ function PricingComparisonContent() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -146,7 +166,7 @@ function PricingComparisonContent() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -224,7 +244,7 @@ function PricingComparisonContent() {
         .order('created_at', { ascending: true })
 
     if (containerRatesError) {
-      alert(containerRatesError.message)
+      toast.error(containerRatesError.message)
       return
     }
 
@@ -233,7 +253,7 @@ function PricingComparisonContent() {
 
   const saveAgentQuote = async () => {
     if (!selectedQuote) {
-      alert('Selecciona una cotización primero')
+      toast.error('Selecciona una cotizacion primero')
       return
     }
 
@@ -288,7 +308,7 @@ function PricingComparisonContent() {
           .single()
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -313,7 +333,7 @@ function PricingComparisonContent() {
         .insert(ratePayload)
 
       if (ratesError) {
-        alert(ratesError.message)
+        toast.error(ratesError.message)
         return
       }
     }
@@ -323,10 +343,10 @@ function PricingComparisonContent() {
       .update({ status: 'Pendiente de Fijar Precios' })
       .eq('id', selectedQuote.id)
 
-    alert(
+    toast.success(
       editingAgentQuoteId
-        ? 'Tarifa de agente actualizada'
-        : 'Tarifa de agente agregada'
+        ? 'Tarifa del agente actualizada'
+        : 'Tarifa del agente guardada'
     )
 
     setAgentForm({
@@ -350,6 +370,18 @@ function PricingComparisonContent() {
 
     await fetchAgentQuotes(selectedQuote.id)
     await fetchQuotations()
+
+    setHighlightedAgentQuoteId(savedAgentQuote.id)
+    agentQuotesSectionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+
+    window.setTimeout(() => {
+      setHighlightedAgentQuoteId((current) =>
+        current === savedAgentQuote.id ? null : current
+      )
+    }, 1200)
   }
 
   const selectAgentQuote = async (agentQuoteId: string) => {
@@ -365,7 +397,7 @@ function PricingComparisonContent() {
         .single()
 
       if (agentQuoteError) {
-        alert(agentQuoteError.message)
+        toast.error(agentQuoteError.message)
         return
       }
 
@@ -376,16 +408,10 @@ function PricingComparisonContent() {
 
     if (reason === null) return
 
-    const shouldReplacePricing = window.confirm(
-      '¿Deseas reemplazar el pricing actual con la tarifa seleccionada?\n\nEsto eliminará las líneas actuales de pricing y generará nuevas automáticamente.'
-    )
-
-    if (shouldReplacePricing) {
-      await supabase
-        .from('pricing_items')
-        .delete()
-        .eq('quotation_id', selectedQuote.id)
-    }
+    await supabase
+      .from('pricing_items')
+      .delete()
+      .eq('quotation_id', selectedQuote.id)
 
     await supabase
       .from('agent_quotes')
@@ -398,7 +424,7 @@ function PricingComparisonContent() {
       .eq('id', agentQuoteId)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -419,7 +445,7 @@ function PricingComparisonContent() {
       .eq('id', selectedQuote.id)
 
     if (quotationUpdateError) {
-      alert(quotationUpdateError.message)
+      toast.error(quotationUpdateError.message)
       return
     }
 
@@ -455,7 +481,7 @@ function PricingComparisonContent() {
         .order('created_at', { ascending: true })
 
     if (containerRatesError) {
-      alert(containerRatesError.message)
+      toast.error(containerRatesError.message)
       return
     }
 
@@ -531,31 +557,43 @@ function PricingComparisonContent() {
       },
     ]
 
-    if (shouldReplacePricing) {
-      const { error: pricingError } = await supabase
-        .from('pricing_items')
-        .insert(pricingLines)
+    const { error: pricingError } = await supabase
+      .from('pricing_items')
+      .insert(pricingLines)
 
-      if (pricingError) {
-        alert(pricingError.message)
-        return
-      }
+    if (pricingError) {
+      toast.error(pricingError.message)
+      return
     }
 
-    alert('Tarifa seleccionada')
+    toast.success('Tarifa seleccionada')
 
     await fetchAgentQuotes(selectedQuote.id)
     await fetchPricingItems(selectedQuote.id)
   }
 
+  const confirmSelectRate = async () => {
+    if (!selectedRateForConfirm) return
+
+    setSelectingRate(true)
+
+    try {
+      await selectAgentQuote(selectedRateForConfirm.id)
+    } finally {
+      setSelectingRate(false)
+      setConfirmSelectRateOpen(false)
+      setSelectedRateForConfirm(null)
+    }
+  }
+
   const savePricingItem = async () => {
     if (!selectedQuote) {
-      alert('Selecciona una cotización primero')
+      toast.error('Selecciona una cotizacion primero')
       return
     }
 
     if (!pricingForm.description) {
-      alert('La descripción es obligatoria')
+      toast.error('La descripcion es obligatoria')
       return
     }
 
@@ -583,11 +621,11 @@ function PricingComparisonContent() {
     ])
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
-    alert('Línea de pricing agregada')
+    toast.success('Linea de pricing agregada')
 
     setPricingForm({
       item_type: 'Flete',
@@ -615,7 +653,7 @@ function PricingComparisonContent() {
       .eq('id', itemId)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -671,7 +709,7 @@ function PricingComparisonContent() {
       .eq('id', item.id)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -698,7 +736,7 @@ function PricingComparisonContent() {
       .eq('id', selectedQuote.id)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -723,7 +761,7 @@ function PricingComparisonContent() {
       })
     }
 
-    alert('Pricing aprobado correctamente')
+    toast.success('Pricing aprobado correctamente')
 
     await fetchQuotations()
 
@@ -755,11 +793,11 @@ function PricingComparisonContent() {
     .eq('id', selectedQuote.id)
 
   if (error) {
-    alert(error.message)
+    toast.error(error.message)
     return
   }
 
-  alert('Pricing aprobado correctamente')
+  toast.success('Pricing aprobado correctamente')
 
   await fetchQuotations()
 
@@ -779,7 +817,7 @@ function PricingComparisonContent() {
       .eq('id', selectedQuote.id)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -792,7 +830,7 @@ function PricingComparisonContent() {
       },
     ])
 
-    alert('Cotización marcada como Enviada al Cliente')
+    toast.success('Cotizacion marcada como Enviada al Cliente')
 
     await fetchQuotations()
 
@@ -970,30 +1008,85 @@ const profitabilityColor =
 
     if (!requiresChangeReason) return ''
 
-    const reason = window.prompt(
-      'Esta cotización ya fue enviada/aprobada. Ingresa el motivo del cambio:'
-    )
+    return new Promise<string | null>((resolve) => {
+      postApprovalResolveRef.current = resolve
+      postApprovalReasonRef.current = ''
+      setPostApprovalReason('')
+      setPendingPostApprovalAction(() => async () => {
+        const reason = postApprovalReasonRef.current.trim()
 
-    if (!reason || !reason.trim()) {
-      alert('Debes ingresar un motivo para realizar este cambio.')
-      return null
+        const { error } = await supabase.from('quotation_change_logs').insert([
+          {
+            quotation_id: selectedQuote.id,
+            change_type: changeType,
+            reason,
+            changed_by: profile?.id,
+          },
+        ])
+
+        if (error) {
+          throw error
+        }
+
+        await createActivityLog({
+          module: 'pricing',
+          action: 'post_approval_change',
+          entityType: 'quotation',
+          entityId: selectedQuote.id,
+          description: `Cambio posterior a aprobacion/envio: ${changeType}`,
+          metadata: {
+            reason,
+            changeType,
+          },
+        })
+      })
+      setPostApprovalDialogOpen(true)
+    })
+
+  }
+
+  const resetPostApprovalDialog = () => {
+    setPostApprovalDialogOpen(false)
+    setPostApprovalReason('')
+    postApprovalReasonRef.current = ''
+    setPendingPostApprovalAction(null)
+  }
+
+  const cancelPostApprovalChange = () => {
+    postApprovalResolveRef.current?.(null)
+    postApprovalResolveRef.current = null
+    resetPostApprovalDialog()
+  }
+
+  const confirmPostApprovalChange = async () => {
+    const reason = postApprovalReason.trim()
+
+    if (!reason) {
+      toast.error('Debes ingresar un motivo del cambio')
+      return
     }
 
-    const { error } = await supabase.from('quotation_change_logs').insert([
-      {
-        quotation_id: selectedQuote.id,
-        change_type: changeType,
-        reason: reason.trim(),
-        changed_by: profile?.id,
-      },
-    ])
+    if (!pendingPostApprovalAction) return
 
-    if (error) {
-      alert(error.message)
-      return null
+    postApprovalReasonRef.current = reason
+    setSavingPostApproval(true)
+
+    try {
+      await pendingPostApprovalAction()
+
+      toast.success('Cambio registrado correctamente')
+      postApprovalResolveRef.current?.(reason)
+      postApprovalResolveRef.current = null
+      resetPostApprovalDialog()
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'No se pudo registrar el cambio'
+      )
+      postApprovalResolveRef.current?.(null)
+      postApprovalResolveRef.current = null
+    } finally {
+      setSavingPostApproval(false)
     }
-
-    return reason.trim()
   }
 
   return (
@@ -1059,29 +1152,89 @@ const profitabilityColor =
                     </CardTitle>
                   </CardHeader>
 
-                  <CardContent className="grid grid-cols-4 gap-4">
+                  <CardContent className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-5">
                     <div>
-                      <p className="text-sm text-gray-500">Estado</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Estado</p>
                       <Badge>{selectedQuote.status}</Badge>
                     </div>
 
                     <div>
-                      <p className="text-sm text-gray-500">Target</p>
-                      <p className="font-bold">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Target</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
                         USD {selectedQuote.target_rate || 'N/A'}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-sm text-gray-500">Naviera preferida</p>
-                      <p className="font-bold">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Naviera preferida</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
                         {selectedQuote.preferred_carrier || 'N/A'}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-sm text-gray-500">Contenedor</p>
-                      <p className="font-bold">
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Incoterm
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.incoterm || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Origen
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.origen || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Puerto origen
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.puerto_origen || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Destino
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.destino || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Puerto destino
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.puerto_destino || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Commodity
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.mercancia || selectedQuote.commodity || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Contenedor</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
                         {quotationContainers.length > 0
                           ? quotationContainers
                               .map(
@@ -1091,7 +1244,7 @@ const profitabilityColor =
                               .join(', ')
                           : selectedQuote.container_type || 'N/A'}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-slate-500 mt-1 dark:text-slate-400">
                         Total unidades: {totalContainersQty}
                       </p>
                     </div>
@@ -1369,9 +1522,10 @@ const profitabilityColor =
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Tarifas de Agentes</CardTitle>
+                <div ref={agentQuotesSectionRef}>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Tarifas de Agentes</CardTitle>
                   </CardHeader>
 
                   <CardContent>
@@ -1417,8 +1571,24 @@ const profitabilityColor =
                                 Number(quote.profit_per_container || 0) * containersQty
 
                               return (
-                                <tr key={quote.id} className="border-b">
-                                  <td className="p-3">{quote.agente_nombre}</td>
+                                <tr
+                                  key={quote.id}
+                                  className={cn(
+                                    'border-b transition-colors duration-500',
+                                    highlightedAgentQuoteId === quote.id &&
+                                      'bg-emerald-50 ring-1 ring-inset ring-emerald-200'
+                                  )}
+                                >
+                                  <td className="p-3">
+                                    <div className="flex items-center gap-2">
+                                      <span>{quote.agente_nombre}</span>
+                                      {highlightedAgentQuoteId === quote.id && (
+                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                          Nueva
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td className="p-3">{quote.carrier || 'N/A'}</td>
                                   <td className="p-3">
                                     {quote.moneda} {Number(quote.ocean_freight || quote.costo || 0).toFixed(2)}
@@ -1452,7 +1622,10 @@ const profitabilityColor =
 
                                       <button
                                         type="button"
-                                        onClick={() => selectAgentQuote(quote.id)}
+                                        onClick={() => {
+                                          setSelectedRateForConfirm(quote)
+                                          setConfirmSelectRateOpen(true)
+                                        }}
                                         className={
                                           quote.is_selected
                                             ? 'text-green-600 font-semibold'
@@ -1470,8 +1643,9 @@ const profitabilityColor =
                         </table>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </div>
 
                 <Card>
                   <CardHeader>
@@ -1910,6 +2084,128 @@ const profitabilityColor =
             )}
         </div>
       </div>
+
+      <Dialog
+        open={confirmSelectRateOpen}
+        onOpenChange={(open) => {
+          setConfirmSelectRateOpen(open)
+
+          if (!open) {
+            setSelectedRateForConfirm(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Seleccionar tarifa de agente</DialogTitle>
+            <DialogDescription>
+              Esta accion reemplazara el pricing actual con la tarifa
+              seleccionada y generara nuevas lineas automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedRateForConfirm && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950">
+              <p className="font-semibold text-slate-900 dark:text-white">
+                {selectedRateForConfirm.agent_name ||
+                  selectedRateForConfirm.agente_nombre ||
+                  selectedRateForConfirm.agent ||
+                  'Agente'}
+              </p>
+              <p className="mt-1 text-slate-500 dark:text-slate-400">
+                Venta sugerida: USD{' '}
+                {Number(
+                  selectedRateForConfirm.suggested_sale ||
+                    selectedRateForConfirm.sale_amount ||
+                    0
+                ).toFixed(2)}
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmSelectRateOpen(false)
+                setSelectedRateForConfirm(null)
+              }}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              disabled={selectingRate}
+              onClick={confirmSelectRate}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+            >
+              {selectingRate ? 'Seleccionando...' : 'Si, seleccionar tarifa'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={postApprovalDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            cancelPostApprovalChange()
+            return
+          }
+
+          setPostApprovalDialogOpen(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Cotizacion ya enviada al cliente</DialogTitle>
+
+            <DialogDescription>
+              Esta cotizacion ya fue aprobada o enviada al cliente. Debes
+              registrar el motivo del cambio para mantener trazabilidad.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+              Toda modificacion posterior quedara registrada en el historial de
+              actividad.
+            </div>
+
+            <textarea
+              value={postApprovalReason}
+              onChange={(event) => {
+                setPostApprovalReason(event.target.value)
+                postApprovalReasonRef.current = event.target.value
+              }}
+              placeholder="Describe el motivo del cambio..."
+              rows={4}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={cancelPostApprovalChange}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              disabled={savingPostApproval}
+              onClick={confirmPostApprovalChange}
+              className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {savingPostApproval ? 'Registrando...' : 'Guardar cambio'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
