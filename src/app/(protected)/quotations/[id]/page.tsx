@@ -43,6 +43,19 @@ const statusOptions = [
   'No tenemos agente',
 ]
 
+type QuotationChangeLog = {
+  id: string
+  change_type: string
+  reason: string | null
+  created_at: string
+  changed_by: string | null
+  field_name?: string | null
+  user?: {
+    nombre: string | null
+    apellido: string | null
+  } | null
+}
+
 export default function QuotationDetailPage() {
   const { profile } = useUser()
   const params = useParams()
@@ -70,8 +83,7 @@ export default function QuotationDetailPage() {
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [validations, setValidations] = useState<any[]>([])
   const [statusHistory, setStatusHistory] = useState<any[]>([])
-  const [changeLogs, setChangeLogs] = useState<any[]>([])
-  const [activityLogs, setActivityLogs] = useState<any[]>([])
+  const [changeLogs, setChangeLogs] = useState<QuotationChangeLog[]>([])
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -79,8 +91,7 @@ export default function QuotationDetailPage() {
     if (params.id) {
       fetchData(params.id as string)
       fetchStatusHistory()
-      fetchChangeLogs()
-      fetchActivityLogs(params.id as string)
+      loadChangeLogs()
     }
   }, [params.id])
 
@@ -159,46 +170,29 @@ export default function QuotationDetailPage() {
     setStatusHistory(data || [])
   }
 
-  const fetchChangeLogs = async () => {
+  const loadChangeLogs = async () => {
+    const quotationId = params.id as string | undefined
+
+    if (!quotationId) return
+
     const { data, error } = await supabase
       .from('quotation_change_logs')
       .select(`
         *,
-        profiles (
+        user:profiles!quotation_change_logs_changed_by_fkey (
           nombre,
           apellido
         )
       `)
-      .eq('quotation_id', params.id)
+      .eq('quotation_id', quotationId)
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      console.error('Error cargando quotation_change_logs:', error)
       return
     }
 
-    setChangeLogs(data || [])
-  }
-
-  const fetchActivityLogs = async (quotationId: string) => {
-    const { data, error } = await supabase
-      .from('activity_logs')
-      .select(`
-        *,
-        user:profiles!activity_logs_user_id_fkey (
-          nombre,
-          apellido
-        )
-      `)
-      .eq('entity_id', quotationId)
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      console.error(error.message)
-      return
-    }
-
-    setActivityLogs(data || [])
+    setChangeLogs((data || []) as QuotationChangeLog[])
   }
 
   const handleStatusChange = async (newStatus: string) => {
@@ -245,7 +239,7 @@ export default function QuotationDetailPage() {
     })
 
     await fetchStatusHistory()
-    await fetchActivityLogs(quotation.id)
+    await loadChangeLogs()
   }
 
   const handlePrintQuotation = async () => {
@@ -329,83 +323,24 @@ const destinationPort =
   quotation?.puerto_destino ||
   'N/A'
 
-const quotationTimeline = [
-  ...statusHistory.map((log) => ({
-    id: `status-${log.id}`,
-    type: 'Cambio de estado',
-    title: `${log.old_status || 'Sin estado'} a ${log.new_status}`,
-    description: 'Cambio de estado de la cotización.',
-    user: log.profiles
-      ? `${log.profiles.nombre} ${log.profiles.apellido}`
-      : 'Usuario',
-    date: log.created_at,
+const combinedTimeline = [
+  ...(statusHistory || []).map((item) => ({
+    type: 'status' as const,
+    created_at: item.created_at,
+    data: item,
   })),
 
-  ...changeLogs.map((log) => ({
-    id: `change-${log.id}`,
-    type: 'Cambio registrado',
-    title: log.change_type,
-    description:
-      log.reason ||
-      `${log.field_name || 'Campo'} actualizado`,
-    user: log.profiles
-      ? `${log.profiles.nombre} ${log.profiles.apellido}`
-      : 'Usuario',
-    date: log.created_at,
+  ...(changeLogs || []).map((item) => ({
+    type: 'change' as const,
+    created_at: item.created_at,
+    data: item,
   })),
 ]
-  .filter((event) => event.date)
+  .filter((item) => item.created_at)
   .sort(
     (a, b) =>
-      new Date(b.date).getTime() - new Date(a.date).getTime()
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   )
-
-const getActivityTone = (activity: any) => {
-  const text = `${activity.action || ''} ${activity.description || ''}`.toLowerCase()
-
-  if (text.includes('perdida')) return 'bg-red-500'
-  if (text.includes('ganada')) return 'bg-green-500'
-  if (text.includes('costo') || text.includes('cost')) return 'bg-emerald-500'
-  if (text.includes('cliente')) return 'bg-blue-500'
-  if (text.includes('pricing')) return 'bg-amber-500'
-  if (text.includes('cread')) return 'bg-slate-500'
-
-  return 'bg-slate-400'
-}
-
-const getActivityLabel = (activity: any) => {
-  if (activity.description) return activity.description
-
-  const labels: Record<string, string> = {
-    create: 'Cotización creada',
-    created: 'Cotización creada',
-    send_to_pricing: 'Enviada a Pricing',
-    resend_to_pricing: 'Enviada nuevamente a Pricing',
-    pricing_approved: 'Pricing aprobado',
-    sent_to_client: 'Enviada al cliente',
-    won: 'Ganada',
-    lost: 'Perdida',
-  }
-
-  return labels[activity.action] || activity.action || 'Actividad registrada'
-}
-
-const getActivityUser = (activity: any) => {
-  if (activity.user) {
-    return `${activity.user.nombre || ''} ${activity.user.apellido || ''}`.trim()
-  }
-
-  return 'Sistema'
-}
-
-const formatActivityDate = (date?: string) => {
-  if (!date) return 'Sin fecha'
-
-  return new Date(date).toLocaleString('es-HN', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  })
-}
 
   return (
   <>
@@ -756,71 +691,6 @@ const formatActivityDate = (date?: string) => {
               </CardContent>
             </Card>
 
-            <Card className="col-span-2">
-              <CardHeader>
-                <CardTitle>Historial de la Cotización</CardTitle>
-              </CardHeader>
-
-              <CardContent>
-                {quotationTimeline.length === 0 ? (
-                  <p className="text-sm text-gray-500">
-                    No hay movimientos registrados.
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {quotationTimeline.map((event, index) => (
-                      <div key={event.id} className="flex gap-3">
-                        <div className="flex flex-col items-center">
-                          <div
-                            className={`h-3 w-3 rounded-full mt-1 ${
-                              event.type === 'Cambio de estado'
-                                ? 'bg-blue-600'
-                                : 'bg-amber-500'
-                            }`}
-                          />
-
-                          {index !== quotationTimeline.length - 1 && (
-                            <div className="w-px flex-1 bg-slate-300 min-h-[40px]" />
-                          )}
-                        </div>
-
-                        <div className="flex-1 rounded-xl border p-3">
-                          <div className="flex justify-between gap-4">
-                            <div>
-                              <span
-                                className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                                  event.type === 'Cambio de estado'
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-amber-100 text-amber-700'
-                                }`}
-                              >
-                                {event.type}
-                              </span>
-
-                              <p className="mt-2 text-sm font-semibold">
-                                {event.title}
-                              </p>
-
-                              <p className="mt-1 text-sm text-gray-600">
-                                {event.description}
-                              </p>
-
-                              <p className="mt-2 text-xs text-gray-400">
-                                Por: {event.user}
-                              </p>
-                            </div>
-
-                            <p className="text-xs text-gray-400 whitespace-nowrap">
-                              {new Date(event.date).toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
@@ -915,115 +785,108 @@ const formatActivityDate = (date?: string) => {
         </TabsContent>
 
         <TabsContent value="historial">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                Actividad
-              </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Secuencia operativa registrada para esta cotización.
-              </p>
-            </div>
-
-            {activityLogs.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No hay actividad registrada.
-              </p>
-            ) : (
-              <div className="relative space-y-5">
-                <div className="absolute left-[11px] top-0 h-full w-px bg-slate-200 dark:bg-slate-700" />
-
-                {activityLogs.map((activity) => (
-                  <div key={activity.id} className="relative flex gap-4">
-                    <div
-                      className={`relative z-10 h-6 w-6 shrink-0 rounded-full border-4 border-white dark:border-[#0b1220] ${getActivityTone(
-                        activity
-                      )}`}
-                    />
-
-                    <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                            {getActivityLabel(activity)}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            por {getActivityUser(activity)}
-                          </p>
-                        </div>
-
-                        <p className="text-xs font-medium text-slate-400 dark:text-slate-500">
-                          {formatActivityDate(activity.created_at)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           <Card>
             <CardHeader>
-              <CardTitle>Historial de la Cotización</CardTitle>
+              <CardTitle>Timeline de la Cotización</CardTitle>
             </CardHeader>
 
             <CardContent>
-              {quotationTimeline.length === 0 ? (
+              {combinedTimeline.length === 0 ? (
                 <p className="text-sm text-gray-500">
                   No hay movimientos registrados.
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {quotationTimeline.map((event, index) => (
-                    <div key={event.id} className="flex gap-3">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={`h-3 w-3 rounded-full mt-1 ${
-                            event.type === 'Cambio de estado'
-                              ? 'bg-blue-600'
-                              : 'bg-amber-500'
-                          }`}
-                        />
+                  {combinedTimeline.map((item, index) => {
+                    if (item.type === 'status') {
+                      const log = item.data
+                      const userName = log.profiles
+                        ? `${log.profiles.nombre || ''} ${log.profiles.apellido || ''}`.trim()
+                        : 'Usuario'
 
-                        {index !== quotationTimeline.length - 1 && (
-                          <div className="w-px flex-1 bg-slate-300 min-h-[40px]" />
-                        )}
-                      </div>
+                      return (
+                        <div key={`status-${log.id}`} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className="mt-1 h-3 w-3 rounded-full bg-blue-600" />
 
-                      <div className="flex-1 rounded-xl border p-3">
-                        <div className="flex justify-between gap-4">
-                          <div>
-                            <span
-                              className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                                event.type === 'Cambio de estado'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-amber-100 text-amber-700'
-                              }`}
-                            >
-                              {event.type}
-                            </span>
-
-                            <p className="mt-2 text-sm font-semibold">
-                              {event.title}
-                            </p>
-
-                            <p className="mt-1 text-sm text-gray-600">
-                              {event.description}
-                            </p>
-
-                            <p className="mt-2 text-xs text-gray-400">
-                              Por: {event.user}
-                            </p>
+                            {index !== combinedTimeline.length - 1 && (
+                              <div className="min-h-[40px] w-px flex-1 bg-slate-300" />
+                            )}
                           </div>
 
-                          <p className="text-xs text-gray-400 whitespace-nowrap">
-                            {new Date(event.date).toLocaleString()}
-                          </p>
+                          <div className="flex-1 rounded-xl border p-3">
+                            <div className="flex justify-between gap-4">
+                              <div>
+                                <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                                  Cambio de estado
+                                </span>
+
+                                <p className="mt-2 text-sm font-semibold">
+                                  {log.old_status || 'Sin estado'} a {log.new_status}
+                                </p>
+
+                                <p className="mt-1 text-sm text-gray-600">
+                                  Cambio de estado de la cotización.
+                                </p>
+
+                                <p className="mt-2 text-xs text-gray-400">
+                                  Por: {userName || 'Usuario'}
+                                </p>
+                              </div>
+
+                              <p className="whitespace-nowrap text-xs text-gray-400">
+                                {new Date(log.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    const log = item.data
+                    const userName =
+                      log.user?.nombre || log.user?.apellido
+                        ? `${log.user?.nombre || ''} ${log.user?.apellido || ''}`.trim()
+                        : 'Usuario no identificado'
+
+                    return (
+                      <div key={`change-${log.id}`} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <div className="mt-1 h-3 w-3 rounded-full bg-amber-500" />
+
+                          {index !== combinedTimeline.length - 1 && (
+                            <div className="min-h-[40px] w-px flex-1 bg-slate-300" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+                          <div className="flex justify-between gap-4">
+                            <div>
+                              <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                                Cambio registrado
+                              </span>
+
+                              <p className="mt-2 text-sm font-semibold">
+                                {log.change_type}
+                              </p>
+
+                              <p className="mt-1 text-sm text-gray-600 dark:text-slate-300">
+                                {log.reason || `${log.field_name || 'Campo'} actualizado`}
+                              </p>
+
+                              <p className="mt-2 text-xs text-gray-400">
+                                Por: {userName}
+                              </p>
+                            </div>
+
+                            <p className="whitespace-nowrap text-xs text-gray-400">
+                              {new Date(log.created_at).toLocaleString()}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
