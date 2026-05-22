@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { cn } from '../../../../lib/utils'
 
 const initialFormData = {
   nombre: '',
+  contacto: '',
   nit: '',
   telefono: '',
   direccion: '',
@@ -27,6 +30,12 @@ const initialFormData = {
   asegura_carga: false,
   notas_tarifas: '',
 }
+
+const fieldClass =
+  'w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400 dark:focus:ring-slate-400/20 dark:disabled:bg-slate-800 dark:disabled:text-slate-500'
+
+const buttonClass =
+  'bg-black text-white px-6 py-3 rounded-xl mt-6 disabled:bg-gray-400'
 
 export default function NuevoClientePage() {
   const { profile } = useUser()
@@ -48,7 +57,7 @@ export default function NuevoClientePage() {
       .in('rol', ['Ventas', 'Admin'])
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       setLoading(false)
       return
     }
@@ -73,7 +82,7 @@ export default function NuevoClientePage() {
 
   const createCliente = async () => {
     if (!formData.nombre) {
-      alert('El nombre del cliente es obligatorio')
+      toast.error('El nombre del cliente es obligatorio')
       return
     }
 
@@ -85,7 +94,7 @@ export default function NuevoClientePage() {
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      alert('No se pudo validar el usuario autenticado.')
+      toast.error('No se pudo validar el usuario autenticado.')
       setCreating(false)
       return
     }
@@ -95,6 +104,7 @@ export default function NuevoClientePage() {
       .insert([
         {
           nombre: formData.nombre,
+          contacto: formData.contacto,
           nit: formData.nit,
           telefono: formData.telefono,
           direccion: formData.direccion,
@@ -122,7 +132,7 @@ export default function NuevoClientePage() {
       .single()
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       setCreating(false)
       return
     }
@@ -138,10 +148,13 @@ export default function NuevoClientePage() {
         },
       ])
 
-    alert(`Cliente creado correctamente: ${data.codigo_cliente}`)
-    setFormData(initialFormData)
+    toast.success(`Cliente creado correctamente: ${data.codigo_cliente}`)
     setCreating(false)
-    router.push('/clientes')
+    setFormData(initialFormData)
+
+    setTimeout(() => {
+      router.push('/clientes')
+    }, 1200)
   }
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -169,27 +182,36 @@ export default function NuevoClientePage() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow p-6">
+        <form onSubmit={handleSubmit}>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <div className="grid grid-cols-3 gap-4">
-            <input name="nombre" placeholder="Nombre" value={formData.nombre} onChange={handleChange} className="border p-3 rounded" />
-            <input name="nit" placeholder="RTN / NIT" value={formData.nit} onChange={handleChange} className="border p-3 rounded" />
-            <input name="telefono" placeholder="Teléfono" value={formData.telefono} onChange={handleChange} className="border p-3 rounded" />
+            <input name="nombre" placeholder="Nombre" value={formData.nombre || ''} onChange={handleChange} className={fieldClass} />
+            <input
+              type="text"
+              name="contacto"
+              placeholder="Contacto"
+              value={formData.contacto || ''}
+              onChange={handleChange}
+              className={fieldClass}
+            />
+            <input name="nit" placeholder="RTN / NIT" value={formData.nit || ''} onChange={handleChange} className={fieldClass} />
+            <input name="telefono" placeholder="Teléfono" value={formData.telefono || ''} onChange={handleChange} className={fieldClass} />
 
-            <input name="direccion" placeholder="Dirección" value={formData.direccion} onChange={handleChange} className="border p-3 rounded" />
-            <input name="ciudad" placeholder="Ciudad" value={formData.ciudad} onChange={handleChange} className="border p-3 rounded" />
-            <input name="departamento_estado" placeholder="Departamento / Estado" value={formData.departamento_estado} onChange={handleChange} className="border p-3 rounded" />
-            <input name="pais" placeholder="País" value={formData.pais} onChange={handleChange} className="border p-3 rounded" />
+            <input name="direccion" placeholder="Dirección" value={formData.direccion || ''} onChange={handleChange} className={fieldClass} />
+            <input name="ciudad" placeholder="Ciudad" value={formData.ciudad || ''} onChange={handleChange} className={fieldClass} />
+            <input name="departamento_estado" placeholder="Departamento / Estado" value={formData.departamento_estado || ''} onChange={handleChange} className={fieldClass} />
+            <input name="pais" placeholder="País" value={formData.pais || ''} onChange={handleChange} className={fieldClass} />
 
-            <input name="email_1" placeholder="Email 1" value={formData.email_1} onChange={handleChange} className="border p-3 rounded" />
-            <input name="email_2" placeholder="Email 2" value={formData.email_2} onChange={handleChange} className="border p-3 rounded" />
-            <input name="email_3" placeholder="Email 3" value={formData.email_3} onChange={handleChange} className="border p-3 rounded" />
+            <input name="email_1" placeholder="Email 1" value={formData.email_1 || ''} onChange={handleChange} className={fieldClass} />
+            <input name="email_2" placeholder="Email 2" value={formData.email_2 || ''} onChange={handleChange} className={fieldClass} />
+            <input name="email_3" placeholder="Email 3" value={formData.email_3 || ''} onChange={handleChange} className={fieldClass} />
 
-            <select name="tipo_persona" value={formData.tipo_persona} onChange={handleChange} className="border p-3 rounded">
+            <select name="tipo_persona" value={formData.tipo_persona || ''} onChange={handleChange} className={fieldClass}>
               <option value="Natural">Natural</option>
               <option value="Corporativo">Corporativo</option>
             </select>
 
-            <select name="condicion_pago" value={formData.condicion_pago} onChange={handleChange} className="border p-3 rounded">
+            <select name="condicion_pago" value={formData.condicion_pago || ''} onChange={handleChange} className={fieldClass}>
               <option value="Contado">Contado</option>
               <option value="Crédito">Crédito</option>
             </select>
@@ -198,13 +220,13 @@ export default function NuevoClientePage() {
               <input
                 name="dias_credito"
                 placeholder="Días de crédito"
-                value={formData.dias_credito}
+                value={formData.dias_credito || ''}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
             )}
 
-            <select name="tipo_cliente" value={formData.tipo_cliente} onChange={handleChange} className="border p-3 rounded">
+            <select name="tipo_cliente" value={formData.tipo_cliente || ''} onChange={handleChange} className={fieldClass}>
               <option value="">Tipo de Cliente / Segmento</option>
               <option value="Retail">Retail</option>
               <option value="Industrial">Industrial</option>
@@ -219,9 +241,9 @@ export default function NuevoClientePage() {
 
             <select
               name="vendedor_asignado"
-              value={formData.vendedor_asignado}
+              value={formData.vendedor_asignado || ''}
               onChange={handleChange}
-              className="border p-3 rounded"
+              className={fieldClass}
               disabled={loading}
             >
               <option value="">Vendedor asignado</option>
@@ -232,14 +254,15 @@ export default function NuevoClientePage() {
               ))}
             </select>
 
-            <input name="origen_frecuente" placeholder="Origen frecuente" value={formData.origen_frecuente} onChange={handleChange} className="border p-3 rounded" />
+            <input name="origen_frecuente" placeholder="Origen frecuente" value={formData.origen_frecuente || ''} onChange={handleChange} className={fieldClass} />
 
-            <label className="flex items-center gap-2 border p-3 rounded">
+            <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
               <input
                 type="checkbox"
                 name="asegura_carga"
                 checked={formData.asegura_carga}
                 onChange={handleChange}
+                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500 dark:border-slate-700"
               />
               Asegura carga
             </label>
@@ -248,17 +271,17 @@ export default function NuevoClientePage() {
           <textarea
             name="observaciones"
             placeholder="Observaciones"
-            value={formData.observaciones}
+            value={formData.observaciones || ''}
             onChange={handleChange}
-            className="w-full border p-3 rounded h-28 mt-4"
+            className={`${fieldClass} mt-4 min-h-24 resize-y`}
           />
 
           <textarea
             name="notas_tarifas"
             placeholder="Notas o condiciones especiales de tarifas"
-            value={formData.notas_tarifas}
+            value={formData.notas_tarifas || ''}
             onChange={handleChange}
-            className="w-full border p-3 rounded h-28 mt-4"
+            className={`${fieldClass} mt-4 min-h-24 resize-y`}
           />
 
           <p className="text-sm text-gray-500 mt-4">
@@ -268,10 +291,14 @@ export default function NuevoClientePage() {
           <button
             type="submit"
             disabled={creating}
-            className="bg-black text-white px-6 py-3 rounded-xl mt-6 disabled:cursor-not-allowed disabled:bg-gray-400"
+            className={cn(
+              buttonClass,
+              creating && 'cursor-not-allowed opacity-60'
+            )}
           >
             {creating ? 'Creando...' : 'Crear Cliente'}
           </button>
+          </div>
         </form>
       </div>
     </>

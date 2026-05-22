@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ChevronDown, Printer } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { createActivityLog } from '@/src/lib/activity-logger'
 import {
   PDFDownloadLink,
   pdf,
@@ -27,6 +30,18 @@ import {
 } from '../../../../components/ui/card'
 
 import { Badge } from '../../../../components/ui/badge'
+
+const statusOptions = [
+  'Borrador',
+  'Pendiente de Fijar Precios',
+  'Enviada al Cliente',
+  'En Negociaci√≥n',
+  'Ganada',
+  'Perdida',
+  'Tarifa Alta',
+  'Enviada tarde',
+  'No tenemos agente',
+]
 
 export default function QuotationDetailPage() {
   const { profile } = useUser()
@@ -56,6 +71,8 @@ export default function QuotationDetailPage() {
   const [validations, setValidations] = useState<any[]>([])
   const [statusHistory, setStatusHistory] = useState<any[]>([])
   const [changeLogs, setChangeLogs] = useState<any[]>([])
+  const [activityLogs, setActivityLogs] = useState<any[]>([])
+  const [openStatusMenu, setOpenStatusMenu] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -63,6 +80,7 @@ export default function QuotationDetailPage() {
       fetchData(params.id as string)
       fetchStatusHistory()
       fetchChangeLogs()
+      fetchActivityLogs(params.id as string)
     }
   }, [params.id])
 
@@ -162,6 +180,74 @@ export default function QuotationDetailPage() {
     setChangeLogs(data || [])
   }
 
+  const fetchActivityLogs = async (quotationId: string) => {
+    const { data, error } = await supabase
+      .from('activity_logs')
+      .select(`
+        *,
+        user:profiles!activity_logs_user_id_fkey (
+          nombre,
+          apellido
+        )
+      `)
+      .eq('entity_id', quotationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error(error.message)
+      return
+    }
+
+    setActivityLogs(data || [])
+  }
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!quotation) return
+
+    const oldStatus = quotation.status || 'Sin estado'
+
+    const { error } = await supabase
+      .from('quotations')
+      .update({ status: newStatus })
+      .eq('id', quotation.id)
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    await supabase.from('quotation_status_history').insert([
+      {
+        quotation_id: quotation.id,
+        old_status: oldStatus,
+        new_status: newStatus,
+        changed_by: profile?.id,
+      },
+    ])
+
+    await createActivityLog({
+      module: 'quotations',
+      action: 'status_changed',
+      entityType: 'quotation',
+      entityId: quotation.id,
+      description: `Estado actualizado de ${oldStatus} a ${newStatus}`,
+      metadata: {
+        oldStatus,
+        newStatus,
+      },
+    })
+
+    toast.success('Estado actualizado')
+
+    setQuotation({
+      ...quotation,
+      status: newStatus,
+    })
+
+    await fetchStatusHistory()
+    await fetchActivityLogs(quotation.id)
+  }
+
   const handlePrintQuotation = async () => {
     const blob = await pdf(
       <QuotationPDF
@@ -181,7 +267,7 @@ export default function QuotationDetailPage() {
   }
 
   if (!quotation) {
-    return <p className="p-8">CotizaciÛn no encontrada.</p>
+    return <p className="p-8">Cotizaci√≥n no encontrada.</p>
   }
 
   const formatCurrency = (value: number) =>
@@ -247,8 +333,8 @@ const quotationTimeline = [
   ...statusHistory.map((log) => ({
     id: `status-${log.id}`,
     type: 'Cambio de estado',
-    title: `${log.old_status || 'Sin estado'} ? ${log.new_status}`,
-    description: 'Cambio de estado de la cotizaciÛn.',
+    title: `${log.old_status || 'Sin estado'} a ${log.new_status}`,
+    description: 'Cambio de estado de la cotizaci√≥n.',
     user: log.profiles
       ? `${log.profiles.nombre} ${log.profiles.apellido}`
       : 'Usuario',
@@ -274,6 +360,53 @@ const quotationTimeline = [
       new Date(b.date).getTime() - new Date(a.date).getTime()
   )
 
+const getActivityTone = (activity: any) => {
+  const text = `${activity.action || ''} ${activity.description || ''}`.toLowerCase()
+
+  if (text.includes('perdida')) return 'bg-red-500'
+  if (text.includes('ganada')) return 'bg-green-500'
+  if (text.includes('costo') || text.includes('cost')) return 'bg-emerald-500'
+  if (text.includes('cliente')) return 'bg-blue-500'
+  if (text.includes('pricing')) return 'bg-amber-500'
+  if (text.includes('cread')) return 'bg-slate-500'
+
+  return 'bg-slate-400'
+}
+
+const getActivityLabel = (activity: any) => {
+  if (activity.description) return activity.description
+
+  const labels: Record<string, string> = {
+    create: 'Cotizaci√≥n creada',
+    created: 'Cotizaci√≥n creada',
+    send_to_pricing: 'Enviada a Pricing',
+    resend_to_pricing: 'Enviada nuevamente a Pricing',
+    pricing_approved: 'Pricing aprobado',
+    sent_to_client: 'Enviada al cliente',
+    won: 'Ganada',
+    lost: 'Perdida',
+  }
+
+  return labels[activity.action] || activity.action || 'Actividad registrada'
+}
+
+const getActivityUser = (activity: any) => {
+  if (activity.user) {
+    return `${activity.user.nombre || ''} ${activity.user.apellido || ''}`.trim()
+  }
+
+  return 'Sistema'
+}
+
+const formatActivityDate = (date?: string) => {
+  if (!date) return 'Sin fecha'
+
+  return new Date(date).toLocaleString('es-HN', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  })
+}
+
   return (
   <>
     <div className="space-y-6 !font-sans [&_*]:!font-sans">
@@ -281,15 +414,44 @@ const quotationTimeline = [
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 !font-sans">
-            {quotation.quotation_number || 'Sin n˙mero'}
+            {quotation.quotation_number || 'Sin n√∫mero'}
           </h1>
 
           <p className="text-gray-500 mt-2">
-            Detalle de CotizaciÛn
+            Detalle de Cotizaci√≥n
           </p>
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenStatusMenu(!openStatusMenu)}
+              className="inline-flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <span>{quotation?.status || 'Sin estado'}</span>
+              <ChevronDown className="h-4 w-4" />
+            </button>
+
+            {openStatusMenu && (
+              <div className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
+                {statusOptions.map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={async () => {
+                      await handleStatusChange(status)
+                      setOpenStatusMenu(false)
+                    }}
+                    className="block w-full px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <PDFDownloadLink
             document={
               <QuotationPDF
@@ -309,9 +471,10 @@ const quotationTimeline = [
 
           <button
             onClick={handlePrintQuotation}
-            className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center"
+            className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center gap-2"
           >
-            ??? Imprimir CotizaciÛn
+            <Printer className="h-4 w-4" />
+            <span>Imprimir Cotizaci√≥n</span>
           </button>
 
           <button
@@ -386,9 +549,9 @@ const quotationTimeline = [
           {changeLogs.length > 0 && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 mb-6">
               <p className="font-semibold">
-                Esta cotizaciÛn tiene {changeLogs.length} cambio
+                Esta cotizaci√≥n tiene {changeLogs.length} cambio
                 {changeLogs.length === 1 ? '' : 's'} registrado
-                {changeLogs.length === 1 ? '' : 's'} despuÈs de ser enviada/aprobada.
+                {changeLogs.length === 1 ? '' : 's'} despu√©s de ser enviada/aprobada.
               </p>
 
               <p className="text-sm mt-1">
@@ -401,7 +564,7 @@ const quotationTimeline = [
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-900">
-                  InformaciÛn General
+                  Informaci√≥n General
                 </CardTitle>
               </CardHeader>
 
@@ -417,13 +580,13 @@ const quotationTimeline = [
                   <p className="text-xs text-slate-500">Cliente</p>
                   <p className="font-semibold text-slate-900">
                     {quotation.clientes
-                      ? `${quotation.clientes.codigo_cliente} ó ${quotation.clientes.nombre}`
+                      ? `${quotation.clientes.codigo_cliente} - ${quotation.clientes.nombre}`
                       : 'Sin cliente'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">TelÈfono</p>
+                  <p className="text-xs text-slate-500">Tel√©fono</p>
                   <p className="font-semibold text-slate-900">
                     {quotation.clientes?.telefono || 'N/A'}
                   </p>
@@ -437,7 +600,7 @@ const quotationTimeline = [
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">UbicaciÛn</p>
+                  <p className="text-xs text-slate-500">Ubicaci√≥n</p>
                   <p className="font-semibold text-slate-900">
                     {quotation.clientes
                       ? `${quotation.clientes.ciudad || 'N/A'}, ${quotation.clientes.pais || 'N/A'}`
@@ -446,7 +609,7 @@ const quotationTimeline = [
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">CondiciÛn</p>
+                  <p className="text-xs text-slate-500">Condici√≥n</p>
                   <p className="font-semibold text-slate-900">
                     {paymentTerms}
                   </p>
@@ -530,7 +693,7 @@ const quotationTimeline = [
                     <div className="font-medium space-y-1">
                       {quotationContainers.map((container) => (
                         <p key={container.id}>
-                          ï {container.quantity} x {container.container_type || container.container_type_name}
+                          - {container.quantity} x {container.container_type || container.container_type_name}
                         </p>
                       ))}
                     </div>
@@ -568,7 +731,7 @@ const quotationTimeline = [
 
                 <div>
                   <p className="text-xs text-slate-500">
-                    Commodity / DescripciÛn de la carga
+                    Commodity / Descripci√≥n de la carga
                   </p>
                   <p className="font-semibold text-slate-900">
                     {quotation.commodity || 'N/A'}
@@ -595,7 +758,7 @@ const quotationTimeline = [
 
             <Card className="col-span-2">
               <CardHeader>
-                <CardTitle>Historial de la CotizaciÛn</CardTitle>
+                <CardTitle>Historial de la Cotizaci√≥n</CardTitle>
               </CardHeader>
 
               <CardContent>
@@ -681,7 +844,7 @@ const quotationTimeline = [
                       <th className="p-3">Agente</th>
                       <th className="p-3">Costo</th>
                       <th className="p-3">Moneda</th>
-                      <th className="p-3">Tr·nsito</th>
+                      <th className="p-3">Tr√°nsito</th>
                       <th className="p-3">Seleccionada</th>
                     </tr>
                   </thead>
@@ -695,7 +858,7 @@ const quotationTimeline = [
                         <td className="p-3">{agent.transit_time}</td>
                         <td className="p-3">
                           {agent.is_selected ? (
-                            <Badge className="bg-green-600 text-white">SÌ</Badge>
+                            <Badge className="bg-green-600 text-white">S√≠</Badge>
                           ) : (
                             <Badge variant="secondary">No</Badge>
                           )}
@@ -752,9 +915,57 @@ const quotationTimeline = [
         </TabsContent>
 
         <TabsContent value="historial">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Actividad
+              </h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Secuencia operativa registrada para esta cotizaci√≥n.
+              </p>
+            </div>
+
+            {activityLogs.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No hay actividad registrada.
+              </p>
+            ) : (
+              <div className="relative space-y-5">
+                <div className="absolute left-[11px] top-0 h-full w-px bg-slate-200 dark:bg-slate-700" />
+
+                {activityLogs.map((activity) => (
+                  <div key={activity.id} className="relative flex gap-4">
+                    <div
+                      className={`relative z-10 h-6 w-6 shrink-0 rounded-full border-4 border-white dark:border-[#0b1220] ${getActivityTone(
+                        activity
+                      )}`}
+                    />
+
+                    <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/40">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                            {getActivityLabel(activity)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            por {getActivityUser(activity)}
+                          </p>
+                        </div>
+
+                        <p className="text-xs font-medium text-slate-400 dark:text-slate-500">
+                          {formatActivityDate(activity.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <Card>
             <CardHeader>
-              <CardTitle>Historial de la CotizaciÛn</CardTitle>
+              <CardTitle>Historial de la Cotizaci√≥n</CardTitle>
             </CardHeader>
 
             <CardContent>

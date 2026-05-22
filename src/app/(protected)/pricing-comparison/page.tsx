@@ -1035,9 +1035,9 @@ const profitabilityColor =
 
                 {filteredQuotations.map((quote) => (
                   <option key={quote.id} value={quote.id}>
-                    {quote.quotation_number || 'Sin número'} —{' '}
-                    {quote.clientes?.nombre || 'Sin cliente'} — {quote.origen}{' '}
-                    → {quote.destino}
+                    {quote.quotation_number || 'Sin número'} -{' '}
+                    {quote.clientes?.nombre || 'Sin cliente'} - {quote.origen}{' '}
+                    a {quote.destino}
                   </option>
                 ))}
               </select>
@@ -1055,7 +1055,7 @@ const profitabilityColor =
                 <Card>
                   <CardHeader>
                     <CardTitle>
-                      {selectedQuote.quotation_number} — {selectedQuote.origen} → {selectedQuote.destino}
+                      {selectedQuote.quotation_number} - {selectedQuote.origen} a {selectedQuote.destino}
                     </CardTitle>
                   </CardHeader>
 
@@ -1098,90 +1098,6 @@ const profitabilityColor =
                   </CardContent>
                 </Card>
 
-                <Card className="sticky top-4 z-10 bg-white shadow-md">
-                  <CardHeader>
-                    <CardTitle>Resumen Comercial</CardTitle>
-                  </CardHeader>
-
-                  <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Costo Base Sari</p>
-                      <p className="text-xl font-bold">
-                        USD {formatCurrency(totalCost)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Venta Cliente</p>
-                      <p className="text-xl font-bold">
-                        USD {formatCurrency(totalSale)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Profit</p>
-                      <p
-                        className={`text-xl font-bold ${
-                          profit >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}
-                      >
-                        USD {formatCurrency(profit)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">GP %</p>
-                      <p
-                        className={`text-xl font-bold ${
-                          gpPercentage >= 15
-                            ? 'text-green-600'
-                            : gpPercentage >= 8
-                            ? 'text-orange-500'
-                            : 'text-red-600'
-                        }`}
-                      >
-                        {gpPercentage.toFixed(2)}%
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Target Cliente</p>
-                      <p className="text-xl font-bold">
-                        {targetRate > 0
-                          ? `USD ${formatCurrency(targetRate)}`
-                          : 'N/A'}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Vs Target</p>
-
-                      {targetRate > 0 ? (
-                        <>
-                          <p
-                            className={`text-xl font-bold ${
-                              targetRateDifference <= 0
-                                ? 'text-green-700'
-                                : 'text-red-700'
-                            }`}
-                          >
-                            {targetRateDifference <= 0 ? '-' : '+'} USD{' '}
-                            {formatCurrency(Math.abs(targetRateDifference))}
-                          </p>
-
-                          <p className="text-xs text-gray-500 mt-1">
-                            {targetRateDifference <= 0
-                              ? `${Math.abs(targetRateDifferencePercentage).toFixed(2)}% abajo`
-                              : `${targetRateDifferencePercentage.toFixed(2)}% arriba`}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-xl font-bold">N/A</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
                 <Card>
                   <CardHeader>
                     <CardTitle>Construcción de Tarifa</CardTitle>
@@ -1216,7 +1132,7 @@ const profitabilityColor =
 
                         {agents.map((agent) => (
                           <option key={agent.id} value={agent.id}>
-                            {agent.name} — {agent.type}
+                            {agent.name} - {agent.type}
                           </option>
                         ))}
                       </select>
@@ -1906,6 +1822,90 @@ const profitabilityColor =
     Marcar como Enviada al Cliente
   </button>
 </div>
+
+                <Card className="bg-white shadow-md">
+                  <CardHeader>
+                    <CardTitle>Resumen Comercial</CardTitle>
+                  </CardHeader>
+
+                  <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">Costo Base Sari</p>
+                      <p className="text-xl font-bold">
+                        USD {formatCurrency(totalCost)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">Venta Cliente</p>
+                      <p className="text-xl font-bold">
+                        USD {formatCurrency(totalSale)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">Profit</p>
+                      <p
+                        className={`text-xl font-bold ${
+                          profit >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}
+                      >
+                        USD {formatCurrency(profit)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">GP %</p>
+                      <p
+                        className={`text-xl font-bold ${
+                          gpPercentage >= 15
+                            ? 'text-green-600'
+                            : gpPercentage >= 8
+                            ? 'text-orange-500'
+                            : 'text-red-600'
+                        }`}
+                      >
+                        {gpPercentage.toFixed(2)}%
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">Target Cliente</p>
+                      <p className="text-xl font-bold">
+                        {targetRate > 0
+                          ? `USD ${formatCurrency(targetRate)}`
+                          : 'N/A'}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border p-4">
+                      <p className="text-xs text-gray-500">Vs Target</p>
+
+                      {targetRate > 0 ? (
+                        <>
+                          <p
+                            className={`text-xl font-bold ${
+                              targetRateDifference <= 0
+                                ? 'text-green-700'
+                                : 'text-red-700'
+                            }`}
+                          >
+                            {targetRateDifference <= 0 ? '-' : '+'} USD{' '}
+                            {formatCurrency(Math.abs(targetRateDifference))}
+                          </p>
+
+                          <p className="text-xs text-gray-500 mt-1">
+                            {targetRateDifference <= 0
+                              ? `${Math.abs(targetRateDifferencePercentage).toFixed(2)}% abajo`
+                              : `${targetRateDifferencePercentage.toFixed(2)}% arriba`}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xl font-bold">N/A</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               </>
             )}
         </div>

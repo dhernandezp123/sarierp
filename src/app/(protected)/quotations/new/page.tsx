@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
@@ -84,7 +85,7 @@ export default function NewQuotationPage() {
       .order('nombre', { ascending: true })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -99,7 +100,7 @@ export default function NewQuotationPage() {
       .order('name', { ascending: true })
 
     if (countriesError) {
-      alert(countriesError.message)
+      toast.error(countriesError.message)
       return
     }
 
@@ -110,7 +111,7 @@ export default function NewQuotationPage() {
       .order('name', { ascending: true })
 
     if (portsError) {
-      alert(portsError.message)
+      toast.error(portsError.message)
       return
     }
 
@@ -187,18 +188,18 @@ export default function NewQuotationPage() {
 
   const handleSubmit = async (status: string) => {
     if (!formData.cliente_id) {
-      alert('Debes seleccionar un cliente')
+      toast.error('Debes seleccionar un cliente')
       return
     }
 
     if (status === 'Pendiente de Fijar Precios') {
       if (!formData.tipo_transporte) {
-        alert('Debes seleccionar el tipo de transporte')
+        toast.error('Debes seleccionar el tipo de transporte')
         return
       }
 
       if (!formData.quote_type) {
-        alert('Debes seleccionar el tipo de cotización')
+        toast.error('Debes seleccionar el tipo de cotización')
         return
       }
     }
@@ -257,11 +258,11 @@ export default function NewQuotationPage() {
       ]).select('id, quotation_number').single()
 
       if (error) {
-        alert(error.message)
+        toast.error(error.message)
         return
       }
 
-      alert('Cotización creada correctamente')
+      toast.success('Cotización creada correctamente')
 
       if (status === 'Pendiente de Fijar Precios') {
         const pricingUsers = await fetchPricingUsers()

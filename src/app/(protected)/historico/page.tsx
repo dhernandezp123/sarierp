@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { Eye } from 'lucide-react'
 
 import { supabase } from '../../../lib/supabase/client'
-import { useUser } from '../../../hooks/useUser'
+import { cn } from '../../../lib/utils'
 
 import {
   Table,
@@ -15,16 +16,12 @@ import {
   TableRow,
 } from '../../../components/ui/table'
 
-const statuses = [
-  'Borrador',
-  'Pendiente de Fijar Precios',
-  'Enviada al Cliente',
-  'En Negociación',
-  'Ganada',
-  'Perdida',
-  'Tarifa Alta',
-  'Enviada tarde',
-  'No tenemos agente',
+const statusFilterOptions = [
+  { label: 'Todos', value: 'Todos' },
+  { label: 'Ganadas', value: 'Ganada' },
+  { label: 'Pricing', value: 'Pendiente de Fijar Precios' },
+  { label: 'Cliente', value: 'Enviada al Cliente' },
+  { label: 'Perdidas', value: 'Perdida' },
 ]
 
 function getStatusColor(status: string) {
@@ -93,7 +90,7 @@ const getQuoteTypeColor = (quoteType?: string) => {
 }
 
 export default function HistoricoPage() {
-  const { profile } = useUser()
+  const router = useRouter()
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -155,40 +152,6 @@ export default function HistoricoPage() {
     return matchesStatus && matchesDateFrom && matchesDateTo && matchesSearch
   })
 
-  const updateStatus = async (
-    quoteId: string,
-    newStatus: string
-  ) => {
-    const currentQuote = quotations.find(
-      (quote) => quote.id === quoteId
-    )
-
-    const oldStatus = currentQuote?.status || null
-
-    const { error } = await supabase
-      .from('quotations')
-      .update({ status: newStatus })
-      .eq('id', quoteId)
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    await supabase
-      .from('quotation_status_history')
-      .insert([
-        {
-          quotation_id: quoteId,
-          old_status: oldStatus,
-          new_status: newStatus,
-          changed_by: profile?.id,
-        },
-      ])
-
-    await fetchQuotations()
-  }
-
   return (
     <>
 
@@ -206,22 +169,23 @@ export default function HistoricoPage() {
 
         <div className="bg-white rounded-2xl shadow-sm border overflow-x-auto">
           <div className="flex flex-wrap items-center gap-3 mb-4 p-4">
-            <label className="text-sm font-semibold text-gray-600">
-              Filtrar por estado:
-            </label>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="border rounded-xl px-3 py-2"
-            >
-              <option value="Todos">Todos</option>
-              {statuses.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
+            <div className="flex flex-wrap items-center gap-2">
+              {statusFilterOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setStatusFilter(option.value)}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+                    statusFilter === option.value
+                      ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-950'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800'
+                  )}
+                >
+                  {option.label}
+                </button>
               ))}
-            </select>
+            </div>
 
             <input
               value={searchTerm}
@@ -286,11 +250,11 @@ export default function HistoricoPage() {
 
             <Table>
 
-              <TableHeader>
+              <TableHeader className="sticky top-0 z-10 bg-black dark:bg-[#081120]">
 
-                <TableRow className="bg-zinc-950 hover:bg-zinc-950">
+                <TableRow className="bg-black hover:bg-black dark:bg-[#081120] dark:hover:bg-[#081120]">
 
-                  <TableHead className="text-white whitespace-nowrap">
+                  <TableHead className="w-[110px] text-white whitespace-nowrap">
                     Fecha
                   </TableHead>
 
@@ -310,23 +274,19 @@ export default function HistoricoPage() {
                     Destino
                   </TableHead>
 
-                  <TableHead className="text-white whitespace-nowrap">
+                  <TableHead className="w-[110px] text-white whitespace-nowrap">
                     Tipo
                   </TableHead>
 
-                  <TableHead className="text-white whitespace-nowrap">
+                  <TableHead className="w-[110px] text-white whitespace-nowrap">
                     Incoterm
                   </TableHead>
 
-                  <TableHead className="px-4 py-3 text-left text-white whitespace-nowrap">
+                  <TableHead className="w-[140px] px-4 py-3 text-left text-white whitespace-nowrap">
                     Estado
                   </TableHead>
 
-                  <TableHead className="px-4 py-3 text-left text-white whitespace-nowrap">
-                    Cambiar estado
-                  </TableHead>
-
-                  <TableHead className="text-white whitespace-nowrap">
+                  <TableHead className="w-[90px] text-white whitespace-nowrap">
                     Detalle
                   </TableHead>
 
@@ -336,11 +296,16 @@ export default function HistoricoPage() {
 
               <TableBody>
 
-                {filteredQuotations.map((quote) => (
+                {filteredQuotations.map((quote, index) => (
 
                   <TableRow
                     key={quote.id}
-                    className="hover:bg-gray-50"
+                    className={cn(
+                      index % 2 === 0
+                        ? 'bg-white dark:bg-[#0b1220]'
+                        : 'bg-slate-50/50 dark:bg-[#0f172a]',
+                      'transition-colors hover:bg-slate-100 dark:hover:bg-slate-800/50'
+                    )}
                   >
 
                     <TableCell className="whitespace-nowrap">
@@ -367,7 +332,7 @@ export default function HistoricoPage() {
 
                     <TableCell className="px-4 py-3">
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${getQuoteTypeColor(
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${getQuoteTypeColor(
                           quote.quote_type
                         )}`}
                       >
@@ -381,7 +346,7 @@ export default function HistoricoPage() {
 
                     <TableCell className="px-4 py-3">
                       <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusColor(
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${getStatusColor(
                           quote.status
                         )}`}
                       >
@@ -389,42 +354,14 @@ export default function HistoricoPage() {
                       </span>
                     </TableCell>
 
-                    <TableCell className="px-4 py-3">
-                      <select
-                        value={quote.status || ''}
-                        onChange={(e) =>
-                          updateStatus(
-                            quote.id,
-                            e.target.value
-                          )
-                        }
-                        className="border rounded-lg px-3 py-2"
-                      >
-                        <option value="">
-                          Sin estado
-                        </option>
-
-                        {statuses.map((status) => (
-
-                          <option
-                            key={status}
-                            value={status}
-                          >
-                            {status}
-                          </option>
-
-                        ))}
-
-                      </select>
-                    </TableCell>
-
                     <TableCell className="whitespace-nowrap">
-                      <Link
-                        href={`/quotations/${quote.id}`}
-                        className="inline-block bg-zinc-950 text-white px-4 py-2 rounded-lg hover:bg-zinc-800 transition"
+                      <button
+                        onClick={() => router.push(`/quotations/${quote.id}`)}
+                        title="Ver detalle"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
                       >
-                        Ver Detalle
-                      </Link>
+                        <Eye className="h-4 w-4" />
+                      </button>
                     </TableCell>
 
                   </TableRow>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
@@ -89,7 +90,7 @@ export default function CostValidationDetailPage() {
       .single()
 
     if (quotationError) {
-      alert(quotationError.message)
+      toast.error(quotationError.message)
       return
     }
 
@@ -100,7 +101,7 @@ export default function CostValidationDetailPage() {
       .order('created_at', { ascending: true })
 
     if (pricingError) {
-      alert(pricingError.message)
+      toast.error(pricingError.message)
       return
     }
 
@@ -111,7 +112,7 @@ export default function CostValidationDetailPage() {
       .order('created_at', { ascending: true })
 
     if (invoiceError) {
-      alert(invoiceError.message)
+      toast.error(invoiceError.message)
       return
     }
 
@@ -129,7 +130,7 @@ export default function CostValidationDetailPage() {
       .order('country', { ascending: true })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -256,7 +257,7 @@ export default function CostValidationDetailPage() {
 
   const saveInvoiceItem = async () => {
     if (!invoiceForm.description.trim()) {
-      alert('Debes ingresar una descripción del costo real.')
+      toast.error('Debes ingresar una descripción del costo real.')
       return
     }
 
@@ -295,7 +296,7 @@ export default function CostValidationDetailPage() {
     ])
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -328,7 +329,7 @@ export default function CostValidationDetailPage() {
       .eq('id', id)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -350,11 +351,11 @@ export default function CostValidationDetailPage() {
       .eq('id', params.id as string)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
-    alert('Validación financiera completada')
+    toast.success('Costos validados correctamente')
     await fetchData()
   }
 

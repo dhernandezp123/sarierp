@@ -2,11 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../../../lib/supabase/client'
 import { useUser } from '../../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/src/components/ui/dialog'
 
 export default function EditQuotationPage() {
   const { profile, loading: userLoading } = useUser()
@@ -29,6 +37,8 @@ export default function EditQuotationPage() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [sendPricingDialogOpen, setSendPricingDialogOpen] = useState(false)
+  const [savingAfterEdit, setSavingAfterEdit] = useState(false)
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
   const [packageTypes, setPackageTypes] = useState<any[]>([])
@@ -140,7 +150,7 @@ export default function EditQuotationPage() {
         .order('name', { ascending: true })
 
     if (containerTypesError) {
-      alert(containerTypesError.message)
+      toast.error(containerTypesError.message)
       return
     }
 
@@ -158,7 +168,7 @@ export default function EditQuotationPage() {
       .single()
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -204,7 +214,7 @@ export default function EditQuotationPage() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -229,7 +239,7 @@ export default function EditQuotationPage() {
     if (!params.id) return
 
     if (!containerLineForm.container_type_name) {
-      alert('Debes seleccionar un tipo de contenedor / unidad')
+      toast.error('Debes seleccionar un tipo de contenedor / unidad')
       return
     }
 
@@ -251,7 +261,7 @@ export default function EditQuotationPage() {
           .insert(payload)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -287,33 +297,33 @@ export default function EditQuotationPage() {
       .eq('id', lineId)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
     await fetchContainerLines(params.id as string)
   }
 
-  const sendToPricing = async () => {
+  const handleSendToPricing = async () => {
     if (!params.id) return
 
     if (!formData.commodity.trim()) {
-      alert('Debes ingresar Commodity/Descripción de la carga')
+      toast.error('Debes ingresar Commodity/Descripción de la carga')
       return
     }
 
     if (!formData.tipo_transporte) {
-      alert('Debes seleccionar el tipo de transporte')
+      toast.error('Debes seleccionar el tipo de transporte')
       return
     }
 
     if (!formData.quote_type) {
-      alert('Debes seleccionar el tipo de cotización')
+      toast.error('Debes seleccionar el tipo de cotización')
       return
     }
 
     if (requiresContainerLines && containerLines.length === 0) {
-      alert('Debes agregar al menos un contenedor/unidad')
+      toast.error('Debes agregar al menos un contenedor/unidad')
       return
     }
 
@@ -323,7 +333,7 @@ export default function EditQuotationPage() {
       .eq('id', params.id as string)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -363,7 +373,7 @@ export default function EditQuotationPage() {
       status: 'Pendiente de Fijar Precios',
     })
 
-    alert('Cotización enviada a Pricing correctamente')
+    toast.success('Cotización enviada a Pricing correctamente')
     router.push(`/quotations/${params.id}`)
   }
 
@@ -371,7 +381,7 @@ export default function EditQuotationPage() {
     if (!params.id) return
 
     if (!formData.commodity.trim()) {
-      alert('Debes ingresar Commodity/Descripción de la carga')
+      toast.error('Debes ingresar Commodity/Descripción de la carga')
       return
     }
 
@@ -379,7 +389,7 @@ export default function EditQuotationPage() {
       formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
 
     if (requiresContainerLines && containerLines.length === 0) {
-      alert('Debes agregar al menos un contenedor/unidad')
+      toast.error('Debes agregar al menos un contenedor/unidad')
       return
     }
 
@@ -421,23 +431,16 @@ export default function EditQuotationPage() {
     setSaving(false)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
-    const shouldSendToPricing =
-      formData.status === 'Borrador'
-        ? window.confirm(
-            'Cambios guardados correctamente. ¿Deseas enviar esta cotización a Pricing?'
-          )
-        : false
+    toast.success('Cambios guardados correctamente')
 
-    if (shouldSendToPricing) {
-      await sendToPricing()
+    if (formData.status === 'Borrador') {
+      setSendPricingDialogOpen(true)
       return
     }
-
-    alert('Cambios guardados correctamente')
     router.push(`/quotations/${params.id}`)
   }
 
@@ -804,7 +807,7 @@ export default function EditQuotationPage() {
 
             {canEditQuotes && formData.status === 'Borrador' && (
               <button
-                onClick={sendToPricing}
+                onClick={handleSendToPricing}
                 disabled={saving}
                 className="bg-blue-700 text-white px-6 py-3 rounded-xl"
               >
@@ -824,6 +827,45 @@ export default function EditQuotationPage() {
           </div>
         </div>
       </div>
+      <Dialog
+        open={sendPricingDialogOpen}
+        onOpenChange={setSendPricingDialogOpen}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar cotización a Pricing</DialogTitle>
+            <DialogDescription>
+              Los cambios fueron guardados correctamente. ¿Deseas enviar esta cotización al equipo de Pricing?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setSendPricingDialogOpen(false)}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              No, continuar editando
+            </button>
+
+            <button
+              type="button"
+              disabled={savingAfterEdit}
+              onClick={async () => {
+                setSavingAfterEdit(true)
+
+                await handleSendToPricing()
+
+                setSavingAfterEdit(false)
+                setSendPricingDialogOpen(false)
+              }}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+            >
+              {savingAfterEdit ? 'Enviando...' : 'Sí, enviar a Pricing'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

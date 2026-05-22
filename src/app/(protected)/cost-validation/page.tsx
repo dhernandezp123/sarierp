@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
@@ -68,7 +69,7 @@ export default function CostValidationPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
