@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 
 import { supabase } from '../../../../../lib/supabase/client'
 import { useUser } from '../../../../../hooks/useUser'
+import { createActivityLog } from '@/src/lib/activity-logger'
+import { createNotification } from '@/src/lib/notifications'
 
 export default function EditQuotationPage() {
   const { profile, loading: userLoading } = useUser()
@@ -86,6 +88,16 @@ export default function EditQuotationPage() {
       fetchContainerLines(params.id as string)
     }
   }, [params.id, userLoading, canEditQuotes])
+
+  const fetchPricingUsers = async () => {
+    const { data: pricingUsers } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('rol', 'Pricing')
+      .eq('is_active', true)
+
+    return pricingUsers || []
+  }
 
   const AccessDenied = () => (
     <>
@@ -324,6 +336,28 @@ export default function EditQuotationPage() {
       },
     ])
 
+    const quotationId = params.id as string
+    const pricingUsers = await fetchPricingUsers()
+
+    await Promise.all(
+      pricingUsers.map((pricingUser) =>
+        createNotification({
+          userId: pricingUser.id,
+          title: 'Nueva cotización para pricing',
+          message: 'Se recibió una nueva solicitud de cotización.',
+          type: 'info',
+        })
+      )
+    )
+
+    await createActivityLog({
+      module: 'quotations',
+      action: 'resend_to_pricing',
+      entityType: 'quotation',
+      entityId: quotationId,
+      description: 'Cotización actualizada y enviada nuevamente a Pricing',
+    })
+
     setFormData({
       ...formData,
       status: 'Pendiente de Fijar Precios',
@@ -432,8 +466,8 @@ export default function EditQuotationPage() {
     : ports
 
   const quoteTypeOptions: Record<string, string[]> = {
-    Aéreo: ['Courier', 'Consolidado'],
-    Marítima: ['LCL', 'FCL'],
+    'Aéreo': ['Courier', 'Consolidado'],
+    'Marítima': ['LCL', 'FCL'],
     Terrestre: ['LTL', 'FTL'],
   }
 
@@ -793,3 +827,4 @@ export default function EditQuotationPage() {
     </>
   )
 }
+

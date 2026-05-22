@@ -1,10 +1,12 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import AdminGuard from '@/src/components/auth/AdminGuard'
+import { createActivityLog } from '@/src/lib/activity-logger'
+import { createNotification } from '@/src/lib/notifications'
 import {
   Dialog,
   DialogContent,
@@ -80,6 +82,21 @@ export default function AdminUsersPage() {
       return
     }
 
+    await createActivityLog({
+      module: 'admin_users',
+      action: 'approve_user',
+      entityType: 'profile',
+      entityId: id,
+      description: 'Usuario aprobado por administraciÃ³n',
+    })
+
+    await createNotification({
+      userId: id,
+      title: 'Acceso aprobado',
+      message: 'Tu acceso al ERP fue aprobado por administración.',
+      type: 'success',
+    })
+
     toast.success('Usuario aprobado')
     fetchUsers()
   }
@@ -96,6 +113,14 @@ export default function AdminUsersPage() {
       toast.error(error.message)
       return
     }
+
+    await createActivityLog({
+      module: 'admin_users',
+      action: 'reject_user',
+      entityType: 'profile',
+      entityId: id,
+      description: 'Usuario rechazado por administraciÃ³n',
+    })
 
     toast.success('Usuario rechazado')
     fetchUsers()
@@ -114,6 +139,20 @@ export default function AdminUsersPage() {
       return
     }
 
+    await createActivityLog({
+      module: 'admin_users',
+      action: currentValue ? 'deactivate_user' : 'activate_user',
+      entityType: 'profile',
+      entityId: id,
+      description: currentValue
+        ? 'Usuario desactivado por administraciÃ³n'
+        : 'Usuario activado por administraciÃ³n',
+      metadata: {
+        previousValue: currentValue,
+        newValue: !currentValue,
+      },
+    })
+
     toast.success(currentValue ? 'Usuario desactivado' : 'Usuario activado')
     fetchUsers()
   }
@@ -126,7 +165,7 @@ export default function AdminUsersPage() {
     const targetUser = users.find((user) => user.id === id)
 
     if (!targetUser) {
-      toast.error('No se encontró el usuario.')
+      toast.error('No se encontrÃ³ el usuario.')
       return
     }
 
@@ -173,12 +212,32 @@ export default function AdminUsersPage() {
 
     if (logError) {
       toast.error(
-        'El rol se cambió, pero no se pudo guardar el log: ' +
+        'El rol se cambiÃ³, pero no se pudo guardar el log: ' +
           logError.message
       )
       fetchUsers()
       return
     }
+
+    await createActivityLog({
+      module: 'admin_users',
+      action: 'change_user_role',
+      entityType: 'profile',
+      entityId: id,
+      description: `Rol actualizado de ${oldRole} a ${newRole}`,
+      metadata: {
+        oldRole,
+        newRole,
+        reason,
+      },
+    })
+
+    await createNotification({
+      userId: id,
+      title: 'Rol actualizado',
+      message: `Tu nuevo rol es ${newRole}.`,
+      type: 'info',
+    })
 
     toast.success('Rol actualizado')
     fetchUsers()
@@ -207,10 +266,10 @@ export default function AdminUsersPage() {
       <>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Administración de usuarios
+          AdministraciÃ³n de usuarios
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Gestión de accesos y permisos del ERP.
+          GestiÃ³n de accesos y permisos del ERP.
         </p>
 
         <div className="mt-4">
@@ -218,7 +277,7 @@ export default function AdminUsersPage() {
             href="/dashboard"
             className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            ← Regresar al dashboard
+            â† Regresar al dashboard
           </Link>
         </div>
       </div>
@@ -363,7 +422,7 @@ export default function AdminUsersPage() {
             </DialogTitle>
 
             <DialogDescription>
-              Esta acción quedará registrada en auditoría.
+              Esta acciÃ³n quedarÃ¡ registrada en auditorÃ­a.
             </DialogDescription>
           </DialogHeader>
 
@@ -456,3 +515,5 @@ export default function AdminUsersPage() {
     </AdminGuard>
   )
 }
+
+

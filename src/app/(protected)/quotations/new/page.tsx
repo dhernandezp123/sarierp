@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { createActivityLog } from '@/src/lib/activity-logger'
+import { createNotification } from '@/src/lib/notifications'
 
 export default function NewQuotationPage() {
   const { profile } = useUser()
@@ -64,6 +66,16 @@ export default function NewQuotationPage() {
     fetchClientes()
     fetchCatalogs()
   }, [])
+
+  const fetchPricingUsers = async () => {
+    const { data: pricingUsers } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('rol', 'Pricing')
+      .eq('is_active', true)
+
+    return pricingUsers || []
+  }
 
   const fetchClientes = async () => {
     const { data, error } = await supabase
@@ -194,7 +206,7 @@ export default function NewQuotationPage() {
     try {
       setLoading(true)
 
-      const { error } = await supabase.from('quotations').insert([
+      const { data: quotation, error } = await supabase.from('quotations').insert([
         {
           cliente_id: formData.cliente_id,
 
@@ -242,7 +254,7 @@ export default function NewQuotationPage() {
           status,
           created_by: profile?.id,
         },
-      ])
+      ]).select('id, quotation_number').single()
 
       if (error) {
         alert(error.message)
@@ -250,6 +262,37 @@ export default function NewQuotationPage() {
       }
 
       alert('Cotización creada correctamente')
+
+      if (status === 'Pendiente de Fijar Precios') {
+        const pricingUsers = await fetchPricingUsers()
+
+        await Promise.all(
+          pricingUsers.map((pricingUser) =>
+            createNotification({
+              userId: pricingUser.id,
+              title: 'Nueva cotización para pricing',
+              message: 'Se recibió una nueva solicitud de cotización.',
+              type: 'info',
+            })
+          )
+        )
+
+        if (quotation) {
+          await createActivityLog({
+            module: 'quotations',
+            action: 'send_to_pricing',
+            entityType: 'quotation',
+            entityId: quotation.id,
+            description: `Cotización ${
+              quotation.quotation_number || quotation.id
+            } enviada a Pricing`,
+            metadata: {
+              status,
+              cliente_id: formData.cliente_id,
+            },
+          })
+        }
+      }
 
       setFormData(initialFormData)
 
@@ -278,8 +321,8 @@ export default function NewQuotationPage() {
     : ports
 
   const quoteTypeOptions: Record<string, string[]> = {
-    Aéreo: ['Courier', 'Consolidado'],
-    Marítima: ['LCL', 'FCL'],
+    'Aéreo': ['Courier', 'Consolidado'],
+    'Marítima': ['LCL', 'FCL'],
     Terrestre: ['LTL', 'FTL'],
   }
 
@@ -416,7 +459,7 @@ export default function NewQuotationPage() {
 
               <input
                 name="contact_country"
-                placeholder="Paí­s"
+                placeholder="País"
                 value={formData.contact_country}
                 disabled
                 className="border p-3 rounded bg-gray-100"
@@ -451,7 +494,7 @@ export default function NewQuotationPage() {
               <input
                 list="countries"
                 name="destino"
-                placeholder="Paí­s de destino"
+                placeholder="País de destino"
                 value={formData.destino}
                 onChange={handleChange}
                 className="border p-3 rounded"
@@ -704,3 +747,4 @@ export default function NewQuotationPage() {
     </>
   )
 }
+

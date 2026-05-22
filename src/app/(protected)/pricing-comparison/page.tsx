@@ -6,6 +6,8 @@ import { Pencil } from 'lucide-react'
 
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
+import { createActivityLog } from '@/src/lib/activity-logger'
+import { createNotification } from '@/src/lib/notifications'
 
 import { Badge } from '../../../components/ui/badge'
 import {
@@ -700,6 +702,27 @@ function PricingComparisonContent() {
       return
     }
 
+    await createActivityLog({
+      module: 'pricing',
+      action: 'pricing_approved',
+      entityType: 'quotation',
+      entityId: selectedQuote.id,
+      description: `Pricing aprobó la cotización ${
+        selectedQuote.quotation_number || selectedQuote.id
+      }`,
+    })
+
+    if (selectedQuote.created_by) {
+      await createNotification({
+        userId: selectedQuote.created_by,
+        title: 'Pricing aprobado',
+        message: `La cotización ${
+          selectedQuote.quotation_number || ''
+        } fue aprobada por Pricing.`,
+        type: 'success',
+      })
+    }
+
     alert('Pricing aprobado correctamente')
 
     await fetchQuotations()
@@ -772,6 +795,27 @@ function PricingComparisonContent() {
     alert('Cotización marcada como Enviada al Cliente')
 
     await fetchQuotations()
+
+    await createActivityLog({
+      module: 'pricing',
+      action: 'sent_to_client',
+      entityType: 'quotation',
+      entityId: selectedQuote.id,
+      description: `Cotización ${
+        selectedQuote.quotation_number || selectedQuote.id
+      } marcada como enviada al cliente`,
+    })
+
+    if (selectedQuote.created_by) {
+      await createNotification({
+        userId: selectedQuote.created_by,
+        title: 'Cotización enviada al cliente',
+        message: `La cotización ${
+          selectedQuote.quotation_number || ''
+        } fue marcada como enviada al cliente.`,
+        type: 'info',
+      })
+    }
 
     setSelectedQuote({
       ...selectedQuote,
@@ -887,7 +931,7 @@ const profitabilityColor =
       case 'Enviada al Cliente':
         return 'bg-indigo-600 text-white'
 
-      case 'En NegociaciÃ³n':
+      case 'En Negociación':
         return 'bg-yellow-500 text-black'
 
       case 'Tarifa Alta':
@@ -1877,3 +1921,4 @@ export default function PricingComparisonPage() {
     </Suspense>
   )
 }
+
