@@ -16,6 +16,7 @@ import {
   BarChart3,
   Building2,
   Database,
+  Route,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -125,6 +126,14 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
     },
   ]
 
+  const operationsItems = [
+    {
+      label: 'Routing / SI',
+      href: '/operations/routing',
+      icon: Route,
+    },
+  ]
+
   const adminItems = [
     {
       label: 'Usuarios',
@@ -139,6 +148,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   const visibleNavItems = filterVisibleItems(navItems)
   const visibleCostItems = filterVisibleItems(costItems)
   const visibleFinancialItems = filterVisibleItems(financialItems)
+  const visibleOperationsItems = filterVisibleItems(operationsItems)
   const visibleAdminItems = filterVisibleItems(adminItems)
 
   const renderItem = (item: any) => {
@@ -183,7 +193,9 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         </nav>
       )}
 
-      {(visibleCostItems.length > 0 || visibleFinancialItems.length > 0) && (
+      {(visibleCostItems.length > 0 ||
+        visibleFinancialItems.length > 0 ||
+        visibleOperationsItems.length > 0) && (
         <div className="mt-8 px-4">
           {visibleCostItems.length > 0 && (
             <>
@@ -205,6 +217,18 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
               <nav className="space-y-1">
                 {visibleFinancialItems.map(renderItem)}
+              </nav>
+            </>
+          )}
+
+          {visibleOperationsItems.length > 0 && (
+            <>
+              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Operaciones
+              </p>
+
+              <nav className="space-y-1">
+                {visibleOperationsItems.map(renderItem)}
               </nav>
             </>
           )}

@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
+import { createNotification } from '@/src/lib/notifications'
 import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
 import {
   PDFDownloadLink,
@@ -78,6 +79,7 @@ export default function QuotationDetailPage() {
   const [statusHistory, setStatusHistory] = useState<any[]>([])
   const [changeLogs, setChangeLogs] = useState<QuotationChangeLog[]>([])
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
+  const [creatingRouting, setCreatingRouting] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -255,6 +257,157 @@ export default function QuotationDetailPage() {
     window.open(url, '_blank')
   }
 
+  const createRoutingInstruction = async () => {
+    if (!quotation?.id || creatingRouting) return
+
+    setCreatingRouting(true)
+
+    const { data: existingSI, error: existingError } = await supabase
+      .from('shipping_instructions')
+      .select('id')
+      .eq('quotation_id', quotation.id)
+      .maybeSingle()
+
+    if (existingError) {
+      toast.error(existingError.message)
+      setCreatingRouting(false)
+      return
+    }
+
+    if (existingSI?.id) {
+      toast.warning('Esta cotización ya tiene Routing / Shipping Instructions.')
+      router.push(`/operations/routing/${existingSI.id}`)
+      setCreatingRouting(false)
+      return
+    }
+
+    const { data: selectedAgentQuote, error: agentError } = await supabase
+      .from('agent_quotes')
+      .select('*')
+      .eq('quotation_id', quotation.id)
+      .eq('is_selected', true)
+      .maybeSingle()
+
+    if (agentError) {
+      toast.error(agentError.message)
+      setCreatingRouting(false)
+      return
+    }
+
+    if (!selectedAgentQuote) {
+      toast.error('Selecciona una tarifa de agente antes de generar Routing.')
+      setCreatingRouting(false)
+      return
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      toast.error('No se pudo validar el usuario')
+      setCreatingRouting(false)
+      return
+    }
+
+    const containerQty =
+      quotationContainers.length > 0
+        ? quotationContainers.reduce(
+            (sum, container) => sum + Number(container.quantity || 0),
+            0
+          )
+        : Number(quotation.containers_qty || 1)
+
+    const containerType =
+      quotationContainers.length > 0
+        ? quotationContainers
+            .map(
+              (container) =>
+                `${container.quantity || 1} x ${
+                  container.container_type_name ||
+                  container.container_type ||
+                  'N/A'
+                }`
+            )
+            .join(', ')
+        : quotation.container_type || quotation.quote_type || null
+
+    const { data: shippingInstruction, error } = await supabase
+      .from('shipping_instructions')
+      .insert({
+        quotation_id: quotation.id,
+        client_id: quotation.cliente_id || quotation.client_id || null,
+        vendor_id: selectedAgentQuote.agent_id || null,
+        created_by: user.id,
+        agent_name:
+          selectedAgentQuote.agente_nombre ||
+          selectedAgentQuote.agent_name ||
+          selectedAgentQuote.agent ||
+          null,
+        agent_contact:
+          selectedAgentQuote.agent_contact ||
+          selectedAgentQuote.contact ||
+          null,
+        agent_email:
+          selectedAgentQuote.agent_email ||
+          selectedAgentQuote.email ||
+          null,
+        container_qty: containerQty,
+        container_type: containerType,
+        origin: quotation.origen || quotation.origin || null,
+        destination: quotation.destino || quotation.destination || null,
+      })
+      .select('*')
+      .single()
+
+    if (error) {
+      toast.error(error.message)
+      setCreatingRouting(false)
+      return
+    }
+
+    const routingCode =
+      shippingInstruction.routing_number ||
+      shippingInstruction.number ||
+      shippingInstruction.id
+
+    const { data: operationsUsers } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('rol', 'Operaciones')
+      .eq('is_active', true)
+
+    await Promise.all(
+      (operationsUsers || []).map((operationsUser) =>
+        createNotification({
+          userId: operationsUser.id,
+          title: `Nueva Shipping Instruction ${routingCode} pendiente de validación`,
+          message: `Cotización ${
+            quotation.quotation_number || quotation.id
+          } requiere validación operativa.`,
+          type: 'info',
+        })
+      )
+    )
+
+    await createActivityLog({
+      module: 'operations',
+      action: 'routing_created',
+      entityType: 'shipping_instruction',
+      entityId: shippingInstruction.id,
+      description: `Routing / Shipping Instructions creado para ${
+        quotation.quotation_number || quotation.id
+      }`,
+      metadata: {
+        quotationId: quotation.id,
+        routingCode,
+      },
+    })
+
+    toast.success('Routing / Shipping Instructions generado')
+    router.push(`/operations/routing/${shippingInstruction.id}`)
+  }
+
   if (loading) {
     return <p className="p-8">Cargando detalle...</p>
   }
@@ -421,6 +574,19 @@ const combinedTimeline = [
           >
             Trabajar Pricing
           </button>
+
+          {quotation.status === 'Ganada' && (
+            <button
+              type="button"
+              onClick={createRoutingInstruction}
+              disabled={creatingRouting}
+              className="rounded-xl bg-emerald-600 px-6 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {creatingRouting
+                ? 'Generando...'
+                : 'Generar Routing / Shipping Instructions'}
+            </button>
+          )}
 
           <Link
             href={`/quotations/${quotation.id}/edit`}
