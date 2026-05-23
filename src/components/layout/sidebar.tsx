@@ -87,6 +87,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       href: '/historico',
       icon: History,
     },
+    {
+      label: 'Activity Center',
+      href: '/historico/activity',
+      icon: History,
+    },
   ]
 
   const costItems = [
