@@ -1,5 +1,6 @@
 'use client'
 
+import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -31,6 +32,43 @@ type BookingRouting = {
   real_transit_days: number | null
   remaining_free_days: number | null
   operational_comments: string | null
+}
+
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+        {title}
+      </h2>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+        {label}
+      </label>
+      {children}
+    </div>
+  )
 }
 
 export default function RoutingBookingPage() {
@@ -165,145 +203,43 @@ export default function RoutingBookingPage() {
         </button>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-          Datos de Booking
-        </h2>
+      <div className="space-y-6">
+        <SectionCard title="Referencia Operativa">
+          <Field label="Reference Number">
+            <input
+              value={routing.reference_number || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, reference_number: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Booking Number
-            </label>
-
+          <Field label="Booking Number">
             <input
               value={routing.booking_number || ''}
               onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  booking_number: e.target.value,
-                })
+                setRouting({ ...routing, booking_number: e.target.value })
               }
               className={fieldClass}
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Carrier Booking
-            </label>
-
+          <Field label="Carrier Booking">
             <input
               value={routing.carrier_booking || ''}
               onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  carrier_booking: e.target.value,
-                })
+                setRouting({ ...routing, carrier_booking: e.target.value })
               }
               className={fieldClass}
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Master BL
-            </label>
-
-            <input
-              value={routing.master_bl || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  master_bl: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              House BL
-            </label>
-
-            <input
-              value={routing.house_bl || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  house_bl: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              ETD (Estimated Time Departure)
-            </label>
-
-            <input
-              type="date"
-              value={routing.etd || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  etd: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              ETA (Estimated Time Arrival)
-            </label>
-
-            <input
-              type="date"
-              value={routing.eta || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  eta: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Free Days
-            </label>
-
-            <input
-              value={routing.free_days || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  free_days: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Shipment Status
-            </label>
-
+          <Field label="Shipment Status">
             <select
               value={routing.shipment_status || 'Pendiente Validación'}
               onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  shipment_status: e.target.value,
-                })
+                setRouting({ ...routing, shipment_status: e.target.value })
               }
               className={fieldClass}
             >
@@ -313,232 +249,210 @@ export default function RoutingBookingPage() {
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
+        </SectionCard>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Reference Number
-            </label>
-
+        <SectionCard title="Documentación">
+          <Field label="Master BL">
             <input
-              value={routing.reference_number || ''}
+              value={routing.master_bl || ''}
               onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  reference_number: e.target.value,
-                })
+                setRouting({ ...routing, master_bl: e.target.value })
               }
               className={fieldClass}
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Vessel Name
-            </label>
-
+          <Field label="House BL">
             <input
-              value={routing.vessel_name || ''}
+              value={routing.house_bl || ''}
               onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  vessel_name: e.target.value,
-                })
+                setRouting({ ...routing, house_bl: e.target.value })
               }
               className={fieldClass}
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Voyage
-            </label>
-
-            <input
-              value={routing.voyage || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  voyage: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Tracking URL
-            </label>
-
-            <input
-              value={routing.tracking_url || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  tracking_url: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Original ETA
-            </label>
-
-            <input
-              type="date"
-              value={routing.original_eta || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  original_eta: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Actual ETD
-            </label>
-
-            <input
-              type="date"
-              value={routing.actual_etd || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  actual_etd: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Actual ETA
-            </label>
-
-            <input
-              type="date"
-              value={routing.actual_eta || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  actual_eta: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              EIR Date
-            </label>
-
+          <Field label="EIR Date">
             <input
               type="date"
               value={routing.eir_date || ''}
               onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  eir_date: e.target.value,
-                })
+                setRouting({ ...routing, eir_date: e.target.value })
               }
               className={fieldClass}
             />
-          </div>
+          </Field>
+        </SectionCard>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Estimated Transit Days
-            </label>
+        <SectionCard title="Navegación / Tránsito">
+          <Field label="Vessel Name">
+            <input
+              value={routing.vessel_name || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, vessel_name: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
 
+          <Field label="Voyage">
+            <input
+              value={routing.voyage || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, voyage: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Estimated Transit Days">
             <input
               type="number"
-              value={routing.estimated_transit_days || ''}
+              value={routing.estimated_transit_days ?? ''}
               onChange={(e) =>
                 setRouting({
                   ...routing,
-                  estimated_transit_days: e.target.value ? Number(e.target.value) : null,
+                  estimated_transit_days: e.target.value
+                    ? Number(e.target.value)
+                    : null,
                 })
               }
               className={fieldClass}
             />
-          </div>
+          </Field>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Real Transit Days
-            </label>
-
+          <Field label="Real Transit Days">
             <input
               type="number"
-              value={routing.real_transit_days || ''}
+              value={routing.real_transit_days ?? ''}
               onChange={(e) =>
                 setRouting({
                   ...routing,
-                  real_transit_days: e.target.value ? Number(e.target.value) : null,
+                  real_transit_days: e.target.value
+                    ? Number(e.target.value)
+                    : null,
                 })
               }
               className={fieldClass}
             />
-          </div>
+          </Field>
+        </SectionCard>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Remaining Free Days
-            </label>
+        <SectionCard title="Fechas Operativas">
+          <Field label="ETD">
+            <input
+              type="date"
+              value={routing.etd || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, etd: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
 
+          <Field label="ETA">
+            <input
+              type="date"
+              value={routing.eta || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, eta: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Original ETA">
+            <input
+              type="date"
+              value={routing.original_eta || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, original_eta: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Actual ETD">
+            <input
+              type="date"
+              value={routing.actual_etd || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, actual_etd: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Actual ETA">
+            <input
+              type="date"
+              value={routing.actual_eta || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, actual_eta: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+        </SectionCard>
+
+        <SectionCard title="Tracking y Control">
+          <Field label="Tracking URL">
+            <input
+              value={routing.tracking_url || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, tracking_url: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Remaining Free Days">
             <input
               type="number"
-              value={routing.remaining_free_days || ''}
+              value={routing.remaining_free_days ?? ''}
               onChange={(e) =>
                 setRouting({
                   ...routing,
-                  remaining_free_days: e.target.value ? Number(e.target.value) : null,
+                  remaining_free_days: e.target.value
+                    ? Number(e.target.value)
+                    : null,
                 })
               }
               className={fieldClass}
             />
-          </div>
+          </Field>
+        </SectionCard>
 
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Operational Comments
-            </label>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Comentarios Operativos
+          </h2>
 
-            <textarea
-              rows={6}
-              value={routing.operational_comments || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  operational_comments: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </div>
-        </div>
+          <textarea
+            rows={6}
+            value={routing.operational_comments || ''}
+            onChange={(e) =>
+              setRouting({
+                ...routing,
+                operational_comments: e.target.value,
+              })
+            }
+            className={`${fieldClass} mt-5 min-h-36`}
+          />
+        </section>
+      </div>
 
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={saveBooking}
-            disabled={saving}
-            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? 'Guardando...' : 'Guardar Booking'}
-          </button>
-        </div>
-      </section>
+      <div className="mt-6 flex justify-end">
+        <button
+          type="button"
+          onClick={saveBooking}
+          disabled={saving}
+          className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? 'Guardando...' : 'Guardar Booking'}
+        </button>
+      </div>
     </div>
   )
 }
