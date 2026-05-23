@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye } from 'lucide-react'
 
+import { useUser } from '@/src/hooks/useUser'
+import { operationStatuses } from '@/src/lib/operation-status'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   Table,
@@ -14,29 +16,44 @@ import {
   TableRow,
 } from '@/src/components/ui/table'
 
-type ShippingInstruction = {
+type RoutingItem = {
   id: string
-  routing_number: string | null
-  status: string | null
+  routing_number: string
+  shipment_status: string
   agent_name: string | null
+  created_at: string
+  operations_assigned_to: string | null
+
+  status: string | null
   origin: string | null
   destination: string | null
   container_qty: number | null
   container_type: string | null
-  created_at: string | null
+
   cliente?: {
     nombre: string | null
   } | null
+
   quotation?: {
     quotation_number: string | null
+  } | null
+
+  assigned_user?: {
+    nombre: string | null
+    apellido: string | null
   } | null
 }
 
 export default function RoutingInboxPage() {
   const router = useRouter()
-  const [items, setItems] = useState<ShippingInstruction[]>([])
+  const { profile } = useUser()
+
+  const [routingList, setRoutingList] = useState<RoutingItem[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('Todos')
+  const [assignmentFilter, setAssignmentFilter] = useState('Todos')
 
   const loadRouting = async () => {
     setLoading(true)
@@ -51,6 +68,10 @@ export default function RoutingInboxPage() {
         ),
         quotation:quotations (
           quotation_number
+        ),
+        assigned_user:profiles!shipping_instructions_operations_assigned_to_fkey (
+          nombre,
+          apellido
         )
       `)
       .order('created_at', { ascending: false })
@@ -61,13 +82,43 @@ export default function RoutingInboxPage() {
       return
     }
 
-    setItems((data || []) as ShippingInstruction[])
+    setRoutingList((data || []) as RoutingItem[])
     setLoading(false)
   }
 
   useEffect(() => {
     loadRouting()
   }, [])
+
+  const filteredRouting = routingList.filter((item) => {
+    const query = search.toLowerCase()
+
+    const matchesSearch =
+      item.routing_number?.toLowerCase().includes(query) ||
+      item.agent_name?.toLowerCase().includes(query) ||
+      item.cliente?.nombre?.toLowerCase().includes(query)
+
+    const matchesStatus =
+      statusFilter === 'Todos' ||
+      item.shipment_status === statusFilter
+
+    const matchesAssignment =
+      assignmentFilter === 'Todos' ||
+
+      (assignmentFilter === 'Sin asignar' &&
+        !item.operations_assigned_to) ||
+
+      (assignmentFilter === 'Mis asignados' &&
+        item.operations_assigned_to === profile?.id) ||
+
+      (assignmentFilter === 'Pendientes' &&
+        item.shipment_status === 'Pendiente Validación') ||
+
+      (assignmentFilter === 'Validados' &&
+        item.shipment_status === 'Validada')
+
+    return matchesSearch && matchesStatus && matchesAssignment
+  })
 
   return (
     <div className="space-y-6">
@@ -81,6 +132,41 @@ export default function RoutingInboxPage() {
         </p>
       </div>
 
+      <div className="mb-5 grid gap-3 lg:grid-cols-3">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar RT, cliente o agente..."
+          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+        />
+
+        <select
+          value={assignmentFilter}
+          onChange={(e) => setAssignmentFilter(e.target.value)}
+          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+        >
+          <option value="Todos">Todos</option>
+          <option value="Sin asignar">Sin asignar</option>
+          <option value="Mis asignados">Mis asignados</option>
+          <option value="Pendientes">Pendientes</option>
+          <option value="Validados">Validados</option>
+        </select>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+        >
+          <option value="Todos">Todos los estados</option>
+
+          {operationStatuses.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
         {loading ? (
           <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
@@ -90,7 +176,7 @@ export default function RoutingInboxPage() {
           <p className="p-6 text-sm text-red-500">
             {errorMessage}
           </p>
-        ) : items.length === 0 ? (
+        ) : filteredRouting.length === 0 ? (
           <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
             No hay Shipping Instructions generadas.
           </p>
@@ -104,13 +190,15 @@ export default function RoutingInboxPage() {
                 <TableHead className="text-white">Ruta</TableHead>
                 <TableHead className="text-white">Agente</TableHead>
                 <TableHead className="text-white">Contenedor</TableHead>
+                <TableHead className="text-white">Asignado a</TableHead>
+                <TableHead className="text-white">Estado operativo</TableHead>
                 <TableHead className="text-white">Estado</TableHead>
                 <TableHead className="text-white">Detalle</TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
-              {items.map((item) => (
+              {filteredRouting.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-semibold">
                     {item.routing_number || item.id}
@@ -134,6 +222,18 @@ export default function RoutingInboxPage() {
 
                   <TableCell>
                     {item.container_qty || 'N/A'} {item.container_type || ''}
+                  </TableCell>
+
+                  <TableCell>
+                    {item.assigned_user
+                      ? `${item.assigned_user.nombre || ''} ${item.assigned_user.apellido || ''}`.trim()
+                      : 'Sin asignar'}
+                  </TableCell>
+
+                  <TableCell>
+                    <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                      {item.shipment_status}
+                    </span>
                   </TableCell>
 
                   <TableCell>
