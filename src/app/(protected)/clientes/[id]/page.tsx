@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { createActivityLog } from '@/src/lib/activity-logger'
 
 export default function ClienteProfilePage() {
   const { profile } = useUser()
@@ -113,6 +116,46 @@ export default function ClienteProfilePage() {
     await fetchClientNotes()
   }
 
+  const archiveClient = async () => {
+    if (!cliente?.id) return
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      toast.error('No se pudo validar el usuario')
+      return
+    }
+
+    const { error } = await supabase
+      .from('clientes')
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_by: user.id,
+      })
+      .eq('id', cliente.id)
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    await createActivityLog({
+      module: 'clientes',
+      action: 'soft_delete',
+      entityType: 'cliente',
+      entityId: cliente.id,
+      description: `Cliente enviado a papelera: ${cliente.nombre}`,
+    })
+
+    toast.success('Cliente enviado a papelera')
+
+    setTimeout(() => {
+      router.push('/clientes')
+    }, 1000)
+  }
+
   if (loading) {
     return <div className="p-8">Cargando cliente...</div>
   }
@@ -162,6 +205,15 @@ export default function ClienteProfilePage() {
             className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
           >
             Editar Cliente
+          </button>
+
+          <button
+            type="button"
+            onClick={archiveClient}
+            className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+          >
+            <Trash2 className="h-4 w-4" />
+            Enviar a papelera
           </button>
         </div>
 

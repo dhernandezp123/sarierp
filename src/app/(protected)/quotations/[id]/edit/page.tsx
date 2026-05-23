@@ -8,6 +8,7 @@ import { supabase } from '../../../../../lib/supabase/client'
 import { useUser } from '../../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
+import { canTransition } from '@/src/lib/quotation-status'
 import {
   Dialog,
   DialogContent,
@@ -308,6 +309,14 @@ export default function EditQuotationPage() {
   const handleSendToPricing = async () => {
     if (!params.id) return
 
+    const oldStatus = formData.status || 'Borrador'
+    const nextStatus = 'Pendiente de Fijar Precios'
+
+    if (!canTransition(oldStatus, nextStatus)) {
+      toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
+      return
+    }
+
     if (!formData.commodity.trim()) {
       toast.error('Debes ingresar Commodity/Descripción de la carga')
       return
@@ -330,7 +339,7 @@ export default function EditQuotationPage() {
 
     const { error } = await supabase
       .from('quotations')
-      .update({ status: 'Pendiente de Fijar Precios' })
+      .update({ status: nextStatus })
       .eq('id', params.id as string)
 
     if (error) {
@@ -341,8 +350,8 @@ export default function EditQuotationPage() {
     await supabase.from('quotation_status_history').insert([
       {
         quotation_id: params.id as string,
-        old_status: formData.status || 'Borrador',
-        new_status: 'Pendiente de Fijar Precios',
+        old_status: oldStatus,
+        new_status: nextStatus,
         changed_by: profile?.id,
       },
     ])
@@ -371,7 +380,7 @@ export default function EditQuotationPage() {
 
     setFormData({
       ...formData,
-      status: 'Pendiente de Fijar Precios',
+      status: nextStatus,
     })
 
     toast.success('Cotización enviada a Pricing correctamente')

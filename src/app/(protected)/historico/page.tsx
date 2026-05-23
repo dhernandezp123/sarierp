@@ -6,6 +6,7 @@ import { Eye } from 'lucide-react'
 
 import { supabase } from '../../../lib/supabase/client'
 import { cn } from '../../../lib/utils'
+import { allowedTransitions } from '@/src/lib/quotation-status'
 
 import {
   Table,
@@ -18,10 +19,10 @@ import {
 
 const statusFilterOptions = [
   { label: 'Todos', value: 'Todos' },
-  { label: 'Ganadas', value: 'Ganada' },
-  { label: 'Pricing', value: 'Pendiente de Fijar Precios' },
-  { label: 'Cliente', value: 'Enviada al Cliente' },
-  { label: 'Perdidas', value: 'Perdida' },
+  ...Object.keys(allowedTransitions).map((status) => ({
+    label: status,
+    value: status,
+  })),
 ]
 
 function getStatusColor(status: string) {
@@ -31,6 +32,9 @@ function getStatusColor(status: string) {
 
     case 'Pendiente de Fijar Precios':
       return 'bg-gray-700 text-white'
+
+    case 'Pricing Aprobado':
+      return 'bg-blue-600 text-white'
 
     case 'Ganada':
       return 'bg-green-600 text-white'

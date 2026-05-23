@@ -9,6 +9,7 @@ import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
+import { canTransition } from '@/src/lib/quotation-status'
 import { cn } from '../../../lib/utils'
 import {
   cardClass,
@@ -265,6 +266,14 @@ function PricingComparisonContent() {
       return
     }
 
+    const oldStatus = selectedQuote.status || 'Borrador'
+    const nextStatus = 'Pendiente de Fijar Precios'
+
+    if (oldStatus !== nextStatus && !canTransition(oldStatus, nextStatus)) {
+      toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
+      return
+    }
+
     const reason = await requestChangeReason(
       editingAgentQuoteId ? 'Actualizar tarifa de agente' : 'Agregar tarifa de agente'
     )
@@ -346,10 +355,31 @@ function PricingComparisonContent() {
       }
     }
 
-    await supabase
-      .from('quotations')
-      .update({ status: 'Pendiente de Fijar Precios' })
-      .eq('id', selectedQuote.id)
+    if (oldStatus !== nextStatus) {
+      const { error: statusError } = await supabase
+        .from('quotations')
+        .update({ status: nextStatus })
+        .eq('id', selectedQuote.id)
+
+      if (statusError) {
+        toast.error(statusError.message)
+        return
+      }
+
+      await supabase.from('quotation_status_history').insert([
+        {
+          quotation_id: selectedQuote.id,
+          old_status: oldStatus,
+          new_status: nextStatus,
+          changed_by: profile?.id,
+        },
+      ])
+
+      setSelectedQuote({
+        ...selectedQuote,
+        status: nextStatus,
+      })
+    }
 
     toast.success(
       editingAgentQuoteId
@@ -730,9 +760,18 @@ function PricingComparisonContent() {
   const approvePricing = async () => {
     if (!selectedQuote) return
 
+    const oldStatus = selectedQuote.status || 'Borrador'
+    const nextStatus = 'Pricing Aprobado'
+
+    if (!canTransition(oldStatus, nextStatus)) {
+      toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
+      return
+    }
+
     const { error } = await supabase
       .from('quotations')
       .update({
+        status: nextStatus,
         total_cost: totalCost,
         total_sale: totalSale,
         profit_amount: profit,
@@ -747,6 +786,15 @@ function PricingComparisonContent() {
       toast.error(error.message)
       return
     }
+
+    await supabase.from('quotation_status_history').insert([
+      {
+        quotation_id: selectedQuote.id,
+        old_status: oldStatus,
+        new_status: nextStatus,
+        changed_by: profile?.id,
+      },
+    ])
 
     await createActivityLog({
       module: 'pricing',
@@ -775,6 +823,7 @@ function PricingComparisonContent() {
 
     setSelectedQuote({
       ...selectedQuote,
+      status: nextStatus,
       total_cost: totalCost,
       total_sale: totalSale,
       profit_amount: profit,
@@ -784,44 +833,19 @@ function PricingComparisonContent() {
   }
 
   const markAsSentToClient = async () => {
-    const approvePricing = async () => {
-  if (!selectedQuote) return
+    if (!selectedQuote) return
 
-  const { error } = await supabase
-    .from('quotations')
-    .update({
-      total_cost: totalCost,
-      total_sale: totalSale,
-      profit_amount: profit,
-      gp_percentage: gpPercentage,
-      pricing_approved: true,
-      pricing_approved_by: profile?.id,
-      pricing_approved_at: new Date().toISOString(),
-    })
-    .eq('id', selectedQuote.id)
+    const oldStatus = selectedQuote.status || 'Borrador'
+    const nextStatus = 'Enviada al Cliente'
 
-  if (error) {
-    toast.error(error.message)
-    return
-  }
-
-  toast.success('Pricing aprobado correctamente')
-
-  await fetchQuotations()
-
-  setSelectedQuote({
-    ...selectedQuote,
-    total_cost: totalCost,
-    total_sale: totalSale,
-    profit_amount: profit,
-    gp_percentage: gpPercentage,
-    pricing_approved: true,
-  })
-}
+    if (!canTransition(oldStatus, nextStatus)) {
+      toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
+      return
+    }
 
     const { error } = await supabase
       .from('quotations')
-      .update({ status: 'Enviada al Cliente' })
+      .update({ status: nextStatus })
       .eq('id', selectedQuote.id)
 
     if (error) {
@@ -832,8 +856,8 @@ function PricingComparisonContent() {
     await supabase.from('quotation_status_history').insert([
       {
         quotation_id: selectedQuote.id,
-        old_status: selectedQuote.status,
-        new_status: 'Enviada al Cliente',
+        old_status: oldStatus,
+        new_status: nextStatus,
         changed_by: profile?.id,
       },
     ])
@@ -865,7 +889,7 @@ function PricingComparisonContent() {
 
     setSelectedQuote({
       ...selectedQuote,
-      status: 'Enviada al Cliente',
+      status: nextStatus,
     })
   }
 

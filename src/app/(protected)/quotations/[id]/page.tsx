@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
+import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
 import {
   PDFDownloadLink,
   pdf,
@@ -32,15 +33,7 @@ import {
 import { Badge } from '../../../../components/ui/badge'
 
 const statusOptions = [
-  'Borrador',
-  'Pendiente de Fijar Precios',
-  'Enviada al Cliente',
-  'En Negociación',
-  'Ganada',
-  'Perdida',
-  'Tarifa Alta',
-  'Enviada tarde',
-  'No tenemos agente',
+  ...Object.keys(allowedTransitions),
 ]
 
 type QuotationChangeLog = {
@@ -199,7 +192,12 @@ export default function QuotationDetailPage() {
   const handleStatusChange = async (newStatus: string) => {
     if (!quotation) return
 
-    const oldStatus = quotation.status || 'Sin estado'
+    const oldStatus = quotation.status || 'Borrador'
+
+    if (!canTransition(oldStatus, newStatus)) {
+      toast.error(`Transicion no permitida: ${oldStatus} a ${newStatus}`)
+      return
+    }
 
     const { error } = await supabase
       .from('quotations')
@@ -371,7 +369,11 @@ const combinedTimeline = [
 
             {openStatusMenu && (
               <div className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
-                {statusOptions.map((status) => (
+                {statusOptions
+                  .filter((status) =>
+                    canTransition(quotation?.status || 'Borrador', status)
+                  )
+                  .map((status) => (
                   <button
                     key={status}
                     type="button"
