@@ -356,6 +356,10 @@ export default function QuotationDetailPage() {
         container_type: containerType,
         origin: quotation.origen || quotation.origin || null,
         destination: quotation.destino || quotation.destination || null,
+        freight_terms: 'Collect',
+        release_type: 'Express Release',
+        hbl_freight_visibility: 'No Freight Charges',
+        printed_at_destination: true,
       })
       .select('*')
       .single()

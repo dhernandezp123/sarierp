@@ -51,6 +51,11 @@ type ShippingInstruction = {
 
   free_days: string | null
 
+  freight_terms: string | null
+  release_type: string | null
+  hbl_freight_visibility: string | null
+  printed_at_destination: boolean | null
+
   shipper: string | null
   consignee: string | null
   notify_party: string | null
@@ -122,6 +127,11 @@ export default function RoutingDetailPage() {
         eta: routing.eta,
 
         free_days: routing.free_days,
+
+        freight_terms: routing.freight_terms,
+        release_type: routing.release_type,
+        hbl_freight_visibility: routing.hbl_freight_visibility,
+        printed_at_destination: routing.printed_at_destination,
 
         shipper: routing.shipper,
         consignee: routing.consignee,
@@ -492,6 +502,99 @@ export default function RoutingDetailPage() {
                 onChange={(e) => updateRouting('free_days', e.target.value)}
                 className={inputClassName}
               />
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Instrucciones BL
+          </h2>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                Freight Terms
+              </label>
+
+              <select
+                value={routing.freight_terms || ''}
+                onChange={(e) =>
+                  setRouting({
+                    ...routing,
+                    freight_terms: e.target.value,
+                  })
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              >
+                <option value="">Seleccionar</option>
+                <option value="Collect">Collect</option>
+                <option value="Prepaid">Prepaid</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                Release Type
+              </label>
+
+              <select
+                value={routing.release_type || ''}
+                onChange={(e) =>
+                  setRouting({
+                    ...routing,
+                    release_type: e.target.value,
+                  })
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              >
+                <option value="">Seleccionar</option>
+                <option value="Express Release">Express Release</option>
+                <option value="Original BL">Original BL</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                HBL Freight Visibility
+              </label>
+
+              <select
+                value={routing.hbl_freight_visibility || ''}
+                onChange={(e) =>
+                  setRouting({
+                    ...routing,
+                    hbl_freight_visibility: e.target.value,
+                  })
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              >
+                <option value="">Seleccionar</option>
+                <option value="No Freight Charges">
+                  No mostrar flete
+                </option>
+                <option value="Show Freight Charges">
+                  Mostrar flete
+                </option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-3 pt-6">
+              <input
+                type="checkbox"
+                checked={routing.printed_at_destination || false}
+                onChange={(e) =>
+                  setRouting({
+                    ...routing,
+                    printed_at_destination: e.target.checked,
+                  })
+                }
+                className="h-4 w-4 rounded border-slate-300"
+              />
+
+              <label className="text-sm text-slate-700 dark:text-slate-300">
+                Printed at destination
+              </label>
             </div>
           </div>
         </section>
