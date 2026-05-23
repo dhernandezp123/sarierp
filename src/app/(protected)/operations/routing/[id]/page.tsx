@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { pdf } from '@react-pdf/renderer'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import RoutingInstructionsPdf from '@/src/components/pdf/RoutingInstructionsPdf'
@@ -94,6 +94,7 @@ function Info({ label, value }: { label: string; value?: string | number | null 
 
 export default function RoutingDetailPage() {
   const params = useParams<{ id: string }>()
+  const router = useRouter()
   const id = params.id
   const { profile } = useUser()
 
@@ -488,93 +489,6 @@ export default function RoutingDetailPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Agente / Operación
-          </h2>
-
-          <div className="mt-4 space-y-3 text-sm">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Booking Number
-              </label>
-              <input
-                value={routing.booking_number || ''}
-                onChange={(e) => updateRouting('booking_number', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Carrier Booking
-              </label>
-              <input
-                value={routing.carrier_booking || ''}
-                onChange={(e) => updateRouting('carrier_booking', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Master BL
-              </label>
-              <input
-                value={routing.master_bl || ''}
-                onChange={(e) => updateRouting('master_bl', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                House BL
-              </label>
-              <input
-                value={routing.house_bl || ''}
-                onChange={(e) => updateRouting('house_bl', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                ETD
-              </label>
-              <input
-                type="date"
-                value={routing.etd || ''}
-                onChange={(e) => updateRouting('etd', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                ETA
-              </label>
-              <input
-                type="date"
-                value={routing.eta || ''}
-                onChange={(e) => updateRouting('eta', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Free Days
-              </label>
-              <input
-                value={routing.free_days || ''}
-                onChange={(e) => updateRouting('free_days', e.target.value)}
-                className={inputClassName}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Instrucciones BL
           </h2>
 
@@ -803,6 +717,16 @@ export default function RoutingDetailPage() {
         >
           Descargar Routing / SI
         </button>
+
+        {canAssignOperations && (
+          <button
+            type="button"
+            onClick={() => router.push(`/operations/routing/${routing.id}/booking`)}
+            className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+          >
+            Abrir Booking
+          </button>
+        )}
 
         <button
           onClick={saveRouting}
