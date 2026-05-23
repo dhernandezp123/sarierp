@@ -85,6 +85,7 @@ export default function FinancialDashboardPage() {
         )
       `)
       .eq('status', 'Ganada')
+      .is('deleted_at', null)
 
     if (error) {
       alert(error.message)

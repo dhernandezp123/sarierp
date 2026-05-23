@@ -10,6 +10,13 @@ import { useUser } from '../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { cn } from '../../../lib/utils'
+import {
+  cardClass,
+  fieldClass,
+  labelClass,
+  mutedCardClass,
+  valueClass,
+} from '../../../lib/ui'
 
 import { Badge } from '../../../components/ui/badge'
 import {
@@ -101,6 +108,7 @@ function PricingComparisonContent() {
           nombre
         )
       `)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -949,6 +957,50 @@ const profitabilityColor =
     sale: agentTotalCost * (1 + margin / 100),
   }))
 
+  const bestCost = Math.min(
+    ...agentQuotes
+      .map((q) => Number(q.final_cost || q.sari_cost || 0))
+      .filter((n) => n > 0)
+  )
+
+  const bestProfit = Math.max(
+    ...agentQuotes.map((q) => Number(q.profit_amount || q.profit || 0))
+  )
+
+  const fastestTransit = Math.min(
+    ...agentQuotes
+      .map((q) => Number(q.transit_time || q.transit || 0))
+      .filter((n) => n > 0)
+  )
+
+  const bestCostQuote = agentQuotes
+    .filter((q) => Number(q.final_cost || q.sari_cost || 0) > 0)
+    .sort(
+      (a, b) =>
+        Number(a.final_cost || a.sari_cost || 0) -
+        Number(b.final_cost || b.sari_cost || 0)
+    )[0]
+
+  const bestProfitQuote = agentQuotes
+    .map((q) => ({
+      ...q,
+      computedProfit:
+        Number(q.profit_amount || q.profit || 0) ||
+        Number(q.sale_amount || q.suggested_sale || 0) -
+          Number(q.final_cost || q.sari_cost || 0),
+    }))
+    .sort((a, b) => b.computedProfit - a.computedProfit)[0]
+
+  const fastestQuote = agentQuotes
+    .filter((q) => Number(q.transit_time || q.transit || 0) > 0)
+    .sort(
+      (a, b) =>
+        Number(a.transit_time || a.transit || 0) -
+        Number(b.transit_time || b.transit || 0)
+    )[0]
+
+  const activeQuote = agentQuotes.find((q) => q.is_selected)
+
   function getStatusBadgeClass(status: string) {
     switch (status) {
       case 'Ganada':
@@ -1256,9 +1308,15 @@ const profitabilityColor =
                     <CardTitle>Construcción de Tarifa</CardTitle>
                   </CardHeader>
 
-                  <CardContent className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                  <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                    <div className="col-span-full border-b border-slate-200 pb-2 dark:border-slate-800">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Datos comerciales
+                      </h3>
+                    </div>
+
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1">
+                      <label className={labelClass}>
                         Agente
                       </label>
 
@@ -1279,7 +1337,7 @@ const profitabilityColor =
                             moneda: selectedAgent?.currency || 'USD',
                           })
                         }}
-                        className="border rounded-xl px-3 py-2 w-full"
+                        className={cn(fieldClass, 'mt-1 w-full')}
                       >
                         <option value="">Seleccionar agente/proveedor</option>
 
@@ -1291,9 +1349,15 @@ const profitabilityColor =
                       </select>
                     </div>
 
+                    <div className="col-span-full border-b border-slate-200 pb-2 pt-2 dark:border-slate-800">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Costos
+                      </h3>
+                    </div>
+
                     {quotationContainers.length > 0 && (
-                      <div className="col-span-2 md:col-span-3 xl:col-span-6 rounded-xl border p-4 space-y-3">
-                        <p className="font-semibold">
+                      <div className="col-span-full space-y-3">
+                        <p className={labelClass}>
                           Costos del proveedor por contenedor
                         </p>
 
@@ -1305,13 +1369,16 @@ const profitabilityColor =
                           return (
                             <div
                               key={container.id}
-                              className="grid grid-cols-4 gap-3 items-center"
+                              className={cn(
+                                mutedCardClass,
+                                'grid items-center gap-3 p-3 md:grid-cols-[1fr_220px_140px]'
+                              )}
                             >
                               <div>
-                                <p className="font-semibold">
+                                <p className={valueClass}>
                                   {container.container_type_name}
                                 </p>
-                                <p className="text-sm text-gray-500">
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
                                   Cantidad: {container.quantity}
                                 </p>
                               </div>
@@ -1348,10 +1415,10 @@ const profitabilityColor =
                                     ]
                                   })
                                 }}
-                                className="border rounded-xl px-3 py-2 w-full"
+                                className={fieldClass}
                               />
 
-                              <p className="font-bold">
+                              <p className={cn(valueClass, 'text-right')}>
                                 USD{' '}
                                 {formatCurrency(
                                   Number(container.quantity || 0) *
@@ -1366,7 +1433,7 @@ const profitabilityColor =
 
                     {quotationContainers.length === 0 && (
                       <div>
-                        <label className="text-xs font-medium text-gray-500 mb-1">
+                        <label className={labelClass}>
                           Costo proveedor
                         </label>
 
@@ -1375,13 +1442,13 @@ const profitabilityColor =
                           placeholder="Ocean Freight"
                           value={agentForm.ocean_freight}
                           onChange={handleAgentChange}
-                          className="border rounded-xl px-3 py-2 w-full"
+                          className={cn(fieldClass, 'mt-1 w-full')}
                         />
                       </div>
                     )}
 
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1">
+                      <label className={labelClass}>
                         Moneda
                       </label>
 
@@ -1389,15 +1456,21 @@ const profitabilityColor =
                         name="moneda"
                         value={agentForm.moneda}
                         onChange={handleAgentChange}
-                        className="border rounded-xl px-3 py-2 w-full"
+                        className={cn(fieldClass, 'mt-1 w-full')}
                       >
                         <option value="USD">USD</option>
                         <option value="HNL">HNL</option>
                       </select>
                     </div>
 
+                    <div className="col-span-full border-b border-slate-200 pb-2 pt-2 dark:border-slate-800">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Tránsito
+                      </h3>
+                    </div>
+
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1">
+                      <label className={labelClass}>
                         Tránsito
                       </label>
 
@@ -1406,17 +1479,17 @@ const profitabilityColor =
                         placeholder="Tránsito"
                         value={agentForm.transit_time}
                         onChange={handleAgentChange}
-                        className="border rounded-xl px-3 py-2 w-full"
+                        className={cn(fieldClass, 'mt-1 w-full')}
                       />
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1">
+                      <label className={labelClass}>
                         Carrier
                       </label>
 
                       <input
-                        className="border rounded-xl px-3 py-2 w-full"
+                        className={cn(fieldClass, 'mt-1 w-full')}
                         placeholder="Carrier / Naviera"
                         value={agentForm.carrier}
                         onChange={(e) =>
@@ -1426,12 +1499,12 @@ const profitabilityColor =
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1">
+                      <label className={labelClass}>
                         Transbordo
                       </label>
 
                       <select
-                        className="border rounded-xl px-3 py-2 w-full"
+                        className={cn(fieldClass, 'mt-1 w-full')}
                         value={agentForm.transshipment}
                         onChange={(e) =>
                           setAgentForm({ ...agentForm, transshipment: e.target.value })
@@ -1448,12 +1521,12 @@ const profitabilityColor =
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1">
+                      <label className={labelClass}>
                         Días libres
                       </label>
 
                       <input
-                        className="border rounded-xl px-3 py-2 w-full"
+                        className={cn(fieldClass, 'mt-1 w-full')}
                         placeholder="Días libres destino"
                         value={agentForm.free_days_destination}
                         onChange={(e) =>
@@ -1466,7 +1539,7 @@ const profitabilityColor =
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1">
+                      <label className={labelClass}>
                         Vigencia tarifa
                       </label>
                       <input
@@ -1474,11 +1547,11 @@ const profitabilityColor =
                         name="valid_until"
                         value={agentForm.valid_until}
                         onChange={handleAgentChange}
-                        className="border rounded-xl px-3 py-2 w-full"
+                        className={cn(fieldClass, 'mt-1 w-full')}
                       />
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 col-span-2 md:col-span-3 xl:col-span-6">
+                    <div className="col-span-full rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-700/40 dark:bg-emerald-950/40">
                       <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
                         Costo base Sari
                       </p>
@@ -1491,11 +1564,14 @@ const profitabilityColor =
                         })}
                       </p>
 
-                      <div className="mt-5 grid grid-cols-5 gap-3">
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                         {suggestedSales.map((item) => (
                           <div
                             key={item.margin}
-                            className="rounded-xl bg-white border border-emerald-100 p-3"
+                            className={cn(
+                              mutedCardClass,
+                              'border border-emerald-100 p-3 dark:border-slate-800 dark:bg-slate-950/70'
+                            )}
                           >
                             <p className="text-xs text-gray-500">
                               +{item.margin}%
@@ -1515,7 +1591,7 @@ const profitabilityColor =
 
                     <button
                       onClick={saveAgentQuote}
-                      className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-2 md:col-span-3 xl:col-span-6"
+                      className="col-span-full rounded-xl bg-zinc-950 px-6 py-3 font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
                     >
                       {editingAgentQuoteId ? 'Actualizar Tarifa' : 'Guardar Tarifa'}
                     </button>
@@ -1524,7 +1600,7 @@ const profitabilityColor =
 
                 <div
                   ref={agentQuotesSectionRef}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
+                  className={cn(cardClass, 'p-6')}
                 >
                   <div className="mb-4 flex items-center justify-between">
                     <div>
@@ -1542,8 +1618,63 @@ const profitabilityColor =
                       No hay tarifas de agentes registradas.
                     </p>
                   ) : (
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      {agentQuotes.map((quote) => {
+                    <>
+                      {agentQuotes.length > 0 && (
+                        <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
+                            <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
+                              Mejor costo
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                              {bestCostQuote?.carrier || 'N/A'}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              USD {Number(bestCostQuote?.final_cost || bestCostQuote?.sari_cost || 0).toFixed(2)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+                            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                              Mayor profit
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                              {bestProfitQuote?.carrier || 'N/A'}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              USD {Number(bestProfitQuote?.computedProfit || 0).toFixed(2)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
+                            <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                              Más rápido
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                              {fastestQuote?.carrier || 'N/A'}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {Number(fastestQuote?.transit_time || fastestQuote?.transit || 0)} días
+                            </p>
+                          </div>
+
+                          <div className={cn(cardClass, 'bg-slate-50 p-4 dark:bg-slate-950')}>
+                            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                              Tarifa activa
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                              {activeQuote?.carrier || 'Sin seleccionar'}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {activeQuote
+                                ? `USD ${Number(activeQuote.final_cost || activeQuote.sari_cost || 0).toFixed(2)}`
+                                : 'Pendiente'}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {agentQuotes.map((quote) => {
                               const containersQty =
                                 quotationContainers.length > 0
                                   ? quotationContainers.reduce(
@@ -1571,6 +1702,13 @@ const profitabilityColor =
                                   quote.profit ||
                                   calculatedProfit
                               )
+                              const quoteFinalCost = Number(quote.final_cost || quote.sari_cost || 0)
+                              const quoteProfit = Number(quote.profit_amount || quote.profit || calculatedProfit || 0)
+                              const quoteTransit = Number(quote.transit_time || quote.transit || 0)
+
+                              const isBestCost = quoteFinalCost > 0 && quoteFinalCost === bestCost
+                              const isBestProfit = quoteProfit === bestProfit
+                              const isFastest = quoteTransit > 0 && quoteTransit === fastestTransit
                               const isNew = highlightedAgentQuoteId === quote.id
                               const isSelected = Boolean(quote.is_selected)
 
@@ -1578,10 +1716,10 @@ const profitabilityColor =
                                 <div
                                   key={quote.id}
                                   className={cn(
-                                    'rounded-2xl border p-5 shadow-sm transition',
+                                    'p-5 transition',
                                     isSelected
-                                      ? 'border-green-400 bg-green-50 dark:border-green-700 dark:bg-green-950/30'
-                                      : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600',
+                                      ? 'rounded-2xl border border-green-400 bg-green-50 shadow-sm dark:border-green-700 dark:bg-green-950/30'
+                                      : cn(cardClass, 'hover:border-slate-300 hover:shadow-md dark:bg-slate-950 dark:hover:border-slate-600'),
                                     isNew && 'ring-2 ring-green-400'
                                   )}
                                 >
@@ -1611,44 +1749,59 @@ const profitabilityColor =
                                           Activa
                                         </span>
                                       )}
+
+                                      {isBestCost && (
+                                        <span className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                          Mejor costo
+                                        </span>
+                                      )}
+
+                                      {isBestProfit && (
+                                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                          Mejor profit
+                                        </span>
+                                      )}
+
+                                      {isFastest && (
+                                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                          Más rápido
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
 
                                   <div className="grid grid-cols-2 gap-3 text-sm">
-                                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-[#0b1220]">
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        Costo base
-                                      </p>
-                                      <p className="font-semibold text-slate-900 dark:text-white">
+                                    <div className={cn(mutedCardClass, 'p-3')}>
+                                      <p className="text-base font-bold text-slate-900 dark:text-white">
                                         {quote.moneda || 'USD'} {baseCost.toFixed(2)}
                                       </p>
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        Costo base
+                                      </p>
                                     </div>
 
-                                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-[#0b1220]">
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        Costo final
-                                      </p>
-                                      <p className="font-semibold text-slate-900 dark:text-white">
+                                    <div className={cn(mutedCardClass, 'p-3')}>
+                                      <p className="text-base font-bold text-slate-900 dark:text-white">
                                         USD {formatCurrency(finalSariCost)}
                                       </p>
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        Costo final
+                                      </p>
                                     </div>
 
-                                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-[#0b1220]">
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        Venta sugerida
-                                      </p>
-                                      <p className="font-semibold text-blue-600 dark:text-blue-400">
+                                    <div className={cn(mutedCardClass, 'p-3')}>
+                                      <p className="text-base font-bold text-blue-600 dark:text-blue-400">
                                         {quote.moneda || 'USD'} {suggestedSale.toFixed(2)}
                                       </p>
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        Venta sugerida
+                                      </p>
                                     </div>
 
-                                    <div className="rounded-xl bg-slate-50 p-3 dark:bg-[#0b1220]">
-                                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        Profit
-                                      </p>
+                                    <div className={cn(mutedCardClass, 'p-3')}>
                                       <p
                                         className={cn(
-                                          'font-semibold',
+                                          'text-base font-bold',
                                           profit >= 0
                                             ? 'text-green-600 dark:text-green-400'
                                             : 'text-red-600 dark:text-red-400'
@@ -1656,10 +1809,14 @@ const profitabilityColor =
                                       >
                                         USD {formatCurrency(profit)}
                                       </p>
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        Profit
+                                      </p>
                                     </div>
                                   </div>
 
-                                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                  <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
+                                    <div className="grid grid-cols-2 gap-3 text-xs text-slate-500 dark:text-slate-400">
                                     <div>
                                       <span className="font-semibold text-slate-800 dark:text-slate-200">
                                         Carrier:
@@ -1712,6 +1869,7 @@ const profitabilityColor =
                                         quote.dias_libres ||
                                         'N/A'}
                                     </div>
+                                    </div>
                                   </div>
 
                                   <div className="mt-5 flex items-center justify-between gap-2">
@@ -1745,7 +1903,8 @@ const profitabilityColor =
                                 </div>
                               )
                       })}
-                    </div>
+                      </div>
+                    </>
                   )}
                 </div>
 
@@ -1859,12 +2018,16 @@ const profitabilityColor =
                       </button>
                     </div>
 
-                    <div className="bg-zinc-100 rounded-xl p-4 text-sm">
-                      <p>Subtotal: USD {subtotal.toFixed(2)}</p>
+                    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm">
+                      <p className="text-slate-400">
+                        Subtotal: USD {subtotal.toFixed(2)}
+                      </p>
 
-                      <p>ISV: USD {taxAmount.toFixed(2)}</p>
+                      <p className="text-slate-400">
+                        ISV: USD {taxAmount.toFixed(2)}
+                      </p>
 
-                      <p className="font-bold text-lg mt-2">
+                      <p className="mt-2 text-lg font-bold text-white">
                         Total: USD {totalAmount.toFixed(2)}
                       </p>
                     </div>
@@ -1928,10 +2091,10 @@ const profitabilityColor =
                                 key={item.id}
                                 className={`border-b ${
                                   margin < 0
-                                    ? 'bg-red-50'
+                                    ? 'bg-red-50 dark:bg-red-950/30'
                                     : margin === 0
-                                    ? 'bg-yellow-50'
-                                    : ''
+                                    ? 'bg-slate-50 dark:bg-slate-900/40'
+                                    : 'dark:bg-[#131c2e]'
                                 }`}
                               >
                                 <td className="p-2 text-sm">
@@ -2083,23 +2246,23 @@ const profitabilityColor =
                 </Card>
 
                 
-<div className="flex justify-end gap-4">
+<div className="flex flex-col justify-end gap-3 sm:flex-row">
   <button
     onClick={approvePricing}
-    className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-700 transition"
+    className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
   >
     Aprobar Pricing
   </button>
 
   <button
     onClick={markAsSentToClient}
-    className="bg-green-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-green-700 transition"
+    className="rounded-xl bg-green-600 px-8 py-3 text-sm font-bold text-white transition hover:bg-green-700"
   >
     Marcar como Enviada al Cliente
   </button>
 </div>
 
-                <Card className="bg-white shadow-md">
+                <Card className={cardClass}>
                   <CardHeader>
                     <CardTitle>Resumen Comercial</CardTitle>
                   </CardHeader>
@@ -2207,7 +2370,7 @@ const profitabilityColor =
           </DialogHeader>
 
           {selectedRateForConfirm && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950">
+            <div className={cn(mutedCardClass, 'border border-slate-200 p-4 text-sm dark:border-slate-700')}>
               <p className="font-semibold text-slate-900 dark:text-white">
                 {selectedRateForConfirm.agent_name ||
                   selectedRateForConfirm.agente_nombre ||

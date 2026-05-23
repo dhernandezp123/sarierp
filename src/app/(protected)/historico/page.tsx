@@ -109,6 +109,7 @@ export default function HistoricoPage() {
           nombre
         )
       `)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (error) {

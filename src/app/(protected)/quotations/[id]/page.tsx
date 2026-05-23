@@ -107,6 +107,7 @@ export default function QuotationDetailPage() {
         )
       `)
       .eq('id', id)
+      .is('deleted_at', null)
       .single()
 
     const { data: agentData } = await supabase

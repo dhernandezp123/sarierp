@@ -5,6 +5,11 @@ import { useEffect, useState } from 'react'
 import { Bell, Home, Moon, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/src/lib/supabase/client'
+import {
+  fetchCurrentUserNotifications,
+  markCurrentUserNotificationsAsRead,
+  type NotificationRecord,
+} from '@/src/lib/notifications'
 
 type Profile = {
   nombre: string | null
@@ -13,38 +18,15 @@ type Profile = {
   rol: string | null
 }
 
-type Notification = {
-  id: string
-  title: string
-  message: string | null
-  type: string
-  is_read: boolean
-  created_at: string
-}
-
 export default function Topbar() {
   const { theme, setTheme } = useTheme()
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   const fetchNotifications = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return
-
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(10)
-
-    if (data) {
-      setNotifications(data as Notification[])
-    }
+    const data = await fetchCurrentUserNotifications()
+    setNotifications(data)
   }
 
   useEffect(() => {
@@ -132,17 +114,7 @@ export default function Topbar() {
 
                 <button
                   onClick={async () => {
-                    const {
-                      data: { user },
-                    } = await supabase.auth.getUser()
-
-                    if (!user) return
-
-                    await supabase
-                      .from('notifications')
-                      .update({ is_read: true })
-                      .eq('user_id', user.id)
-
+                    await markCurrentUserNotificationsAsRead()
                     fetchNotifications()
                   }}
                   className="text-xs font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"

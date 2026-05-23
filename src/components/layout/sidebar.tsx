@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { canAccessPath } from '@/src/lib/permissions'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   LayoutDashboard,
@@ -65,18 +66,6 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   const canViewCommercial =
     isAdmin || isSales || isPricing || isFinance || isOperations
 
-  const canViewPricing =
-    isAdmin || isSales || isPricing || isFinance || isOperations
-
-  const canViewFinance =
-    isAdmin || isSales || isPricing || isFinance || isOperations
-
-  const canViewFinancialDashboard =
-    isAdmin || isFinance
-
-  const canViewCostValidation =
-    isAdmin || isFinance
-
   const navItems = [
     {
       label: 'Dashboard',
@@ -119,17 +108,17 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   ]
 
   const financialItems = [
-    canViewFinancialDashboard && {
+    {
       label: 'Dashboard Financiero',
       href: '/financial-dashboard',
       icon: BarChart3,
     },
-    canViewCostValidation && {
+    {
       label: 'Validación de Costos',
       href: '/cost-validation',
       icon: DollarSign,
     },
-  ].filter(Boolean)
+  ]
 
   const adminItems = [
     {
@@ -138,6 +127,14 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       icon: Users,
     },
   ]
+
+  const filterVisibleItems = (items: any[]) =>
+    items.filter((item) => canAccessPath(currentRole, item.href))
+
+  const visibleNavItems = filterVisibleItems(navItems)
+  const visibleCostItems = filterVisibleItems(costItems)
+  const visibleFinancialItems = filterVisibleItems(financialItems)
+  const visibleAdminItems = filterVisibleItems(adminItems)
 
   const renderItem = (item: any) => {
     const Icon = item.icon
@@ -175,48 +172,48 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         </p>
       </div>
 
-      {canViewCommercial && (
+      {canViewCommercial && visibleNavItems.length > 0 && (
         <nav className="space-y-1 px-4">
-          {navItems.map(renderItem)}
+          {visibleNavItems.map(renderItem)}
         </nav>
       )}
 
-      {(canViewPricing || canViewFinance) && (
+      {(visibleCostItems.length > 0 || visibleFinancialItems.length > 0) && (
         <div className="mt-8 px-4">
-          {canViewPricing && (
+          {visibleCostItems.length > 0 && (
             <>
               <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Pricing
               </p>
 
               <nav className="space-y-1">
-                {costItems.map(renderItem)}
+                {visibleCostItems.map(renderItem)}
               </nav>
             </>
           )}
 
-          {canViewFinance && financialItems.length > 0 && (
+          {visibleFinancialItems.length > 0 && (
             <>
               <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Finanzas
               </p>
 
               <nav className="space-y-1">
-                {financialItems.map(renderItem)}
+                {visibleFinancialItems.map(renderItem)}
               </nav>
             </>
           )}
         </div>
       )}
 
-      {isAdmin && (
+      {visibleAdminItems.length > 0 && (
         <div className="mt-8 px-4">
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Administración
           </p>
 
           <nav className="space-y-1">
-            {adminItems.map(renderItem)}
+            {visibleAdminItems.map(renderItem)}
           </nav>
         </div>
       )}

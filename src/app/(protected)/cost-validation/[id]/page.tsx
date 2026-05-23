@@ -87,6 +87,7 @@ export default function CostValidationDetailPage() {
         )
       `)
       .eq('id', quotationId)
+      .is('deleted_at', null)
       .single()
 
     if (quotationError) {

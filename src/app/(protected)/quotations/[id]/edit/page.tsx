@@ -165,6 +165,7 @@ export default function EditQuotationPage() {
       .from('quotations')
       .select('*')
       .eq('id', id)
+      .is('deleted_at', null)
       .single()
 
     if (error) {
