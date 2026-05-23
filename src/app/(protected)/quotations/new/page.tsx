@@ -82,6 +82,7 @@ export default function NewQuotationPage() {
     const { data, error } = await supabase
       .from('clientes')
       .select('*')
+      .is('deleted_at', null)
       .order('nombre', { ascending: true })
 
     if (error) {

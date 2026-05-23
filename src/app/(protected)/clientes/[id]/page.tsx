@@ -38,6 +38,7 @@ export default function ClienteProfilePage() {
         )
       `)
       .eq('id', params.id as string)
+      .is('deleted_at', null)
       .single()
 
     if (error) {

@@ -46,6 +46,7 @@ export default function EditClientePage() {
       .from('clientes')
       .select('*')
       .eq('id', params.id as string)
+      .is('deleted_at', null)
       .single()
 
     if (error) {

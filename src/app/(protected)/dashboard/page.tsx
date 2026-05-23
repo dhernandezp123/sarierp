@@ -71,6 +71,7 @@ export default function DashboardPage() {
     const { data: clientsData, error: clientsError } = await supabase
       .from('clientes')
       .select('*')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (clientsError) {

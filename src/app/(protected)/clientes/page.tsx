@@ -27,6 +27,7 @@ export default function ClientesPage() {
           apellido
         )
       `)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (error) {
