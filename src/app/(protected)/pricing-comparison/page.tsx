@@ -10,6 +10,7 @@ import { useUser } from '../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { canTransition } from '@/src/lib/quotation-status'
+import { validatePricingCompleteness } from '@/src/lib/pricing-validation'
 import { cn } from '../../../lib/utils'
 import {
   cardClass,
@@ -83,12 +84,22 @@ function PricingComparisonContent() {
   const [selectedRateForConfirm, setSelectedRateForConfirm] = useState<any | null>(null)
   const [confirmSelectRateOpen, setConfirmSelectRateOpen] = useState(false)
   const [selectingRate, setSelectingRate] = useState(false)
+  const [pricingValidationDialogOpen, setPricingValidationDialogOpen] =
+    useState(false)
+  const [pricingValidationErrors, setPricingValidationErrors] =
+    useState<string[]>([])
+  const [profitabilityDialogOpen, setProfitabilityDialogOpen] = useState(false)
+  const [profitabilityWarnings, setProfitabilityWarnings] = useState<string[]>([])
+  const [profitabilityReason, setProfitabilityReason] = useState('')
+  const [pendingApprovePricing, setPendingApprovePricing] =
+    useState<null | (() => Promise<void>)>(null)
   const [postApprovalDialogOpen, setPostApprovalDialogOpen] = useState(false)
   const [postApprovalReason, setPostApprovalReason] = useState('')
   const [pendingPostApprovalAction, setPendingPostApprovalAction] = useState<null | (() => Promise<void>)>(null)
   const [savingPostApproval, setSavingPostApproval] = useState(false)
   const agentQuotesSectionRef = useRef<HTMLDivElement | null>(null)
   const postApprovalReasonRef = useRef('')
+  const profitabilityReasonRef = useRef('')
   const postApprovalResolveRef = useRef<((reason: string | null) => void) | null>(null)
 
   const [editingPricingItemForm, setEditingPricingItemForm] =
@@ -757,7 +768,7 @@ function PricingComparisonContent() {
     await fetchPricingItems(selectedQuote.id)
   }
 
-  const approvePricing = async () => {
+  const executeApprovePricing = async (reason?: string) => {
     if (!selectedQuote) return
 
     const oldStatus = selectedQuote.status || 'Borrador'
@@ -804,6 +815,9 @@ function PricingComparisonContent() {
       description: `Pricing aprobó la cotización ${
         selectedQuote.quotation_number || selectedQuote.id
       }`,
+      metadata: {
+        reason: reason || null,
+      },
     })
 
     if (selectedQuote.created_by) {
@@ -830,6 +844,44 @@ function PricingComparisonContent() {
       gp_percentage: gpPercentage,
       pricing_approved: true,
     })
+  }
+
+  const approvePricing = async () => {
+    if (!selectedQuote) return
+
+    const oldStatus = selectedQuote.status || 'Borrador'
+    const nextStatus = 'Pricing Aprobado'
+
+    if (!canTransition(oldStatus, nextStatus)) {
+      toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
+      return
+    }
+
+    const selectedAgentQuote = agentQuotes.find((quote) => quote.is_selected)
+
+    const validation = validatePricingCompleteness({
+      selectedAgentQuote,
+      pricingItems,
+    })
+
+    if (!validation.isValid) {
+      setPricingValidationErrors(validation.errors)
+      setPricingValidationDialogOpen(true)
+      return
+    }
+
+    if (validation.requiresReason) {
+      setProfitabilityWarnings(validation.warnings)
+      setProfitabilityReason('')
+      profitabilityReasonRef.current = ''
+      setPendingApprovePricing(() => async () => {
+        await executeApprovePricing(profitabilityReasonRef.current)
+      })
+      setProfitabilityDialogOpen(true)
+      return
+    }
+
+    await executeApprovePricing()
   }
 
   const markAsSentToClient = async () => {
@@ -2431,6 +2483,113 @@ const profitabilityColor =
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
             >
               {selectingRate ? 'Seleccionando...' : 'Si, seleccionar tarifa'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pricingValidationDialogOpen}
+        onOpenChange={setPricingValidationDialogOpen}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>No se puede aprobar Pricing</DialogTitle>
+            <DialogDescription>
+              Hay información pendiente o inconsistente antes de aprobar esta cotización.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
+            <ul className="space-y-2">
+              {pricingValidationErrors.map((error) => (
+                <li
+                  key={error}
+                  className="flex gap-2 text-sm text-amber-900 dark:text-amber-100"
+                >
+                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-600 dark:bg-amber-300" />
+                  <span>{error}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setPricingValidationDialogOpen(false)}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+            >
+              Entendido
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={profitabilityDialogOpen}
+        onOpenChange={setProfitabilityDialogOpen}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Aprobación con margen sensible</DialogTitle>
+            <DialogDescription>
+              Esta cotización tiene condiciones comerciales que requieren justificación.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">
+            <ul className="space-y-2">
+              {profitabilityWarnings.map((warning) => (
+                <li
+                  key={warning}
+                  className="text-sm text-red-800 dark:text-red-100"
+                >
+                  • {warning}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <textarea
+            value={profitabilityReason}
+            onChange={(e) => {
+              setProfitabilityReason(e.target.value)
+              profitabilityReasonRef.current = e.target.value
+            }}
+            placeholder="Justifica por qué se aprueba esta cotización..."
+            rows={4}
+            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          />
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setProfitabilityDialogOpen(false)
+                setProfitabilityReason('')
+                profitabilityReasonRef.current = ''
+                setPendingApprovePricing(null)
+              }}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm dark:border-slate-700"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              disabled={!profitabilityReason.trim()}
+              onClick={async () => {
+                if (!pendingApprovePricing) return
+                await pendingApprovePricing()
+                setProfitabilityDialogOpen(false)
+                setProfitabilityReason('')
+                profitabilityReasonRef.current = ''
+                setPendingApprovePricing(null)
+              }}
+              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Aprobar con justificación
             </button>
           </div>
         </DialogContent>
