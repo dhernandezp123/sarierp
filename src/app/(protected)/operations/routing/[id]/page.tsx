@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { pdf } from '@react-pdf/renderer'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import RoutingInstructionsPdf from '@/src/components/pdf/RoutingInstructionsPdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
@@ -22,6 +24,8 @@ type ShippingInstruction = {
   shipment_status: string
   created_by: string | null
   operations_assigned_to: string | null
+  cliente?: any
+  quotation?: any
 
   supplier_name: string | null
   supplier_contact: string | null
@@ -35,6 +39,7 @@ type ShippingInstruction = {
   container_qty: number | null
   container_type: string | null
 
+  carrier: string | null
   agent_name: string | null
   agent_contact: string | null
   agent_email: string | null
@@ -58,10 +63,33 @@ type ShippingInstruction = {
 
   shipper: string | null
   consignee: string | null
+  consignee_tax_id: string | null
+  consignee_address: string | null
+  consignee_contact: string | null
+  consignee_email: string | null
+  consignee_phone: string | null
   notify_party: string | null
+  notify_party_tax_id: string | null
+  notify_party_address: string | null
+  notify_party_contact: string | null
+  notify_party_email: string | null
+  notify_party_phone: string | null
+
+  sales_observations: string | null
 
   validated_at: string | null
   validated_by: string | null
+}
+
+function Info({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
+      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+        {value || 'N/A'}
+      </p>
+    </div>
+  )
 }
 
 export default function RoutingDetailPage() {
@@ -76,12 +104,16 @@ export default function RoutingDetailPage() {
   const [assigning, setAssigning] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const canAssignRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
+  const canAssignOperations = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
 
   const loadRouting = async () => {
     const { data, error } = await supabase
       .from('shipping_instructions')
-      .select('*')
+      .select(`
+        *,
+        cliente:clientes (*),
+        quotation:quotations (*)
+      `)
       .eq('id', id)
       .single()
 
@@ -135,7 +167,20 @@ export default function RoutingDetailPage() {
 
         shipper: routing.shipper,
         consignee: routing.consignee,
+        consignee_tax_id: routing.consignee_tax_id,
+        consignee_address: routing.consignee_address,
+        consignee_contact: routing.consignee_contact,
+        consignee_email: routing.consignee_email,
+        consignee_phone: routing.consignee_phone,
+
         notify_party: routing.notify_party,
+        notify_party_tax_id: routing.notify_party_tax_id,
+        notify_party_address: routing.notify_party_address,
+        notify_party_contact: routing.notify_party_contact,
+        notify_party_email: routing.notify_party_email,
+        notify_party_phone: routing.notify_party_phone,
+
+        sales_observations: routing.sales_observations,
 
         special_instructions: routing.special_instructions,
       })
@@ -144,7 +189,8 @@ export default function RoutingDetailPage() {
     setSaving(false)
 
     if (error) {
-      toast.error('No se pudo guardar el routing')
+      console.error('Error saving routing:', error)
+      toast.error(error.message || 'No se pudo guardar el routing')
       return
     }
 
@@ -234,7 +280,7 @@ export default function RoutingDetailPage() {
   const assignOperationsUser = async (userId: string) => {
     if (!routing) return
 
-    if (!canAssignRouting) {
+    if (!canAssignOperations) {
       toast.error('No tienes permisos para asignar este routing')
       return
     }
@@ -308,56 +354,56 @@ export default function RoutingDetailPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Routing / Shipping Instructions {routing.routing_number}
-        </h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Validación operativa previa al embarque.
-        </p>
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Routing / Shipping Instructions {routing.routing_number}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Validación operativa previa al embarque.
+          </p>
+        </div>
+
+        {canAssignOperations && (
+          <select
+            value={routing.operations_assigned_to || ''}
+            onChange={(e) => assignOperationsUser(e.target.value)}
+            disabled={assigning}
+            className="min-w-[260px] rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          >
+            <option value="">Sin asignar</option>
+            {operationsUsers.map((user) => (
+              <option key={user.id} value={user.id}>
+                {`${user.nombre || ''} ${user.apellido || ''}`.trim() || user.email}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          Datos de Cotización
+        </h2>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
+          <Info label="No. Cotización" value={routing.quotation?.quotation_number} />
+          <Info label="Cliente" value={routing.cliente?.nombre} />
+          <Info label="Incoterm" value={routing.quotation?.incoterm} />
+          <Info label="Negociación" value={routing.freight_terms} />
+          <Info label="Carrier / Naviera" value={routing.carrier} />
+          <Info label="Agente" value={routing.agent_name} />
+          <Info label="Puerto Origen" value={routing.quotation?.puerto_origen} />
+          <Info label="Puerto Destino" value={routing.quotation?.puerto_destino} />
+          <Info
+            label="Contenedores"
+            value={`${routing.container_qty || 'N/A'} ${routing.container_type || ''}`}
+          />
+          <Info label="Días libres" value={routing.free_days} />
+        </div>
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-2">
-        {canAssignRouting && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-              Asignación Operativa
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Selecciona el operativo responsable de gestionar este routing.
-            </p>
-
-            <div className="mt-4">
-              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                Operativo asignado
-              </label>
-
-              <select
-                value={routing.operations_assigned_to || ''}
-                onChange={(e) => assignOperationsUser(e.target.value)}
-                disabled={assigning}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-              >
-                <option value="">Sin asignar</option>
-
-                {operationsUsers.map((user) => {
-                  const name =
-                    user.nombre || user.apellido
-                      ? `${user.nombre || ''} ${user.apellido || ''}`.trim()
-                      : user.email || 'Usuario operativo'
-
-                  return (
-                    <option key={user.id} value={user.id}>
-                      {name}
-                    </option>
-                  )
-                })}
-              </select>
-            </div>
-          </section>
-        )}
-
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Proveedor / Origen
@@ -423,6 +469,25 @@ export default function RoutingDetailPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Observaciones de Ventas
+          </h2>
+
+          <textarea
+            value={routing.sales_observations || ''}
+            onChange={(e) =>
+              setRouting({
+                ...routing,
+                sales_observations: e.target.value,
+              })
+            }
+            rows={10}
+            placeholder="Notas comerciales, instrucciones del cliente, información adicional del proveedor..."
+            className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          />
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Agente / Operación
           </h2>
 
@@ -476,6 +541,7 @@ export default function RoutingDetailPage() {
                 ETD
               </label>
               <input
+                type="date"
                 value={routing.etd || ''}
                 onChange={(e) => updateRouting('etd', e.target.value)}
                 className={inputClassName}
@@ -487,6 +553,7 @@ export default function RoutingDetailPage() {
                 ETA
               </label>
               <input
+                type="date"
                 value={routing.eta || ''}
                 onChange={(e) => updateRouting('eta', e.target.value)}
                 className={inputClassName}
@@ -627,6 +694,41 @@ export default function RoutingDetailPage() {
               />
             </div>
 
+            <input
+              value={routing.consignee_tax_id || ''}
+              onChange={(e) => setRouting({ ...routing, consignee_tax_id: e.target.value })}
+              placeholder="RTN / Tax ID Consignee"
+              className={inputClassName}
+            />
+
+            <input
+              value={routing.consignee_address || ''}
+              onChange={(e) => setRouting({ ...routing, consignee_address: e.target.value })}
+              placeholder="Dirección Consignee"
+              className={inputClassName}
+            />
+
+            <input
+              value={routing.consignee_contact || ''}
+              onChange={(e) => setRouting({ ...routing, consignee_contact: e.target.value })}
+              placeholder="Contacto Consignee"
+              className={inputClassName}
+            />
+
+            <input
+              value={routing.consignee_email || ''}
+              onChange={(e) => setRouting({ ...routing, consignee_email: e.target.value })}
+              placeholder="Email Consignee"
+              className={inputClassName}
+            />
+
+            <input
+              value={routing.consignee_phone || ''}
+              onChange={(e) => setRouting({ ...routing, consignee_phone: e.target.value })}
+              placeholder="Teléfono Consignee"
+              className={inputClassName}
+            />
+
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-500">
                 Notify Party
@@ -637,11 +739,71 @@ export default function RoutingDetailPage() {
                 className={inputClassName}
               />
             </div>
+
+            <input
+              value={routing.notify_party_tax_id || ''}
+              onChange={(e) => setRouting({ ...routing, notify_party_tax_id: e.target.value })}
+              placeholder="RTN / Tax ID Notify Party"
+              className={inputClassName}
+            />
+
+            <input
+              value={routing.notify_party_address || ''}
+              onChange={(e) => setRouting({ ...routing, notify_party_address: e.target.value })}
+              placeholder="Dirección Notify Party"
+              className={inputClassName}
+            />
+
+            <input
+              value={routing.notify_party_contact || ''}
+              onChange={(e) => setRouting({ ...routing, notify_party_contact: e.target.value })}
+              placeholder="Contacto Notify Party"
+              className={inputClassName}
+            />
+
+            <input
+              value={routing.notify_party_email || ''}
+              onChange={(e) => setRouting({ ...routing, notify_party_email: e.target.value })}
+              placeholder="Email Notify Party"
+              className={inputClassName}
+            />
+
+            <input
+              value={routing.notify_party_phone || ''}
+              onChange={(e) => setRouting({ ...routing, notify_party_phone: e.target.value })}
+              placeholder="Teléfono Notify Party"
+              className={inputClassName}
+            />
           </div>
         </section>
       </div>
 
       <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={async () => {
+            const blob = await pdf(
+              <RoutingInstructionsPdf
+                routing={routing}
+                quotation={routing.quotation}
+                cliente={routing.cliente}
+              />
+            ).toBlob()
+
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+
+            link.href = url
+            link.download = `${routing.routing_number}-routing-instructions.pdf`
+            link.click()
+
+            URL.revokeObjectURL(url)
+          }}
+          className="rounded-xl border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          Descargar Routing / SI
+        </button>
+
         <button
           onClick={saveRouting}
           disabled={saving}

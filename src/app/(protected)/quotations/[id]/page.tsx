@@ -337,11 +337,11 @@ export default function QuotationDetailPage() {
       .insert({
         quotation_id: quotation.id,
         client_id: quotation.cliente_id || quotation.client_id || null,
-        vendor_id: selectedAgentQuote.agent_id || null,
         created_by: user.id,
+        carrier: selectedAgentQuote.carrier || null,
         agent_name:
-          selectedAgentQuote.agente_nombre ||
           selectedAgentQuote.agent_name ||
+          selectedAgentQuote.agente_nombre ||
           selectedAgentQuote.agent ||
           null,
         agent_contact:
@@ -352,11 +352,12 @@ export default function QuotationDetailPage() {
           selectedAgentQuote.agent_email ||
           selectedAgentQuote.email ||
           null,
-        container_qty: containerQty,
-        container_type: containerType,
-        origin: quotation.origen || quotation.origin || null,
-        destination: quotation.destino || quotation.destination || null,
-        freight_terms: 'Collect',
+        container_qty: quotation.total_containers || containerQty || null,
+        container_type: quotation.container_type || containerType || null,
+        origin_address: quotation.origen || null,
+        destination_address: quotation.destino || null,
+        free_days: selectedAgentQuote.free_days || null,
+        freight_terms: selectedAgentQuote.freight_terms || 'Collect',
         release_type: 'Express Release',
         hbl_freight_visibility: 'No Freight Charges',
         printed_at_destination: true,
