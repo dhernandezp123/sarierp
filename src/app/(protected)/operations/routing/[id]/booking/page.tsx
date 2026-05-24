@@ -3,10 +3,18 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import {
+  CalendarClock,
+  CheckCircle2,
+  MapPin,
+  Ship,
+  Truck,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { operationStatuses } from '@/src/lib/operation-status'
+import { shipmentEventTypes } from '@/src/lib/shipment-events'
 import { fieldClass } from '@/src/lib/ui'
 
 type BookingRouting = {
@@ -32,6 +40,15 @@ type BookingRouting = {
   real_transit_days: number | null
   remaining_free_days: number | null
   operational_comments: string | null
+}
+
+type ShippingInstructionEvent = {
+  id: string
+  event_type: string
+  event_date: string
+  location: string | null
+  notes: string | null
+  created_at: string
 }
 
 function SectionCard({
@@ -71,14 +88,60 @@ function Field({
   )
 }
 
+function getEventStyle(eventType: string) {
+  if (eventType.includes('Booking')) {
+    return {
+      icon: CalendarClock,
+      dot: 'bg-blue-500',
+      badge:
+        'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    }
+  }
+
+  if (
+    eventType.includes('Zarpado') ||
+    eventType.includes('Transbordo') ||
+    eventType.includes('Arribo')
+  ) {
+    return {
+      icon: Ship,
+      dot: 'bg-indigo-500',
+      badge:
+        'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+    }
+  }
+
+  if (eventType.includes('Despacho') || eventType.includes('Entregado')) {
+    return {
+      icon: Truck,
+      dot: 'bg-emerald-500',
+      badge:
+        'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    }
+  }
+
+  return {
+    icon: CheckCircle2,
+    dot: 'bg-slate-500',
+    badge:
+      'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  }
+}
+
 export default function RoutingBookingPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const id = params.id
 
   const [routing, setRouting] = useState<BookingRouting | null>(null)
+  const [events, setEvents] = useState<ShippingInstructionEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [eventType, setEventType] = useState('Booking Solicitado')
+  const [eventDate, setEventDate] = useState('')
+  const [eventLocation, setEventLocation] = useState('')
+  const [eventNotes, setEventNotes] = useState('')
+  const [savingEvent, setSavingEvent] = useState(false)
 
   const loadRouting = async () => {
     setLoading(true)
@@ -121,8 +184,21 @@ export default function RoutingBookingPage() {
     setLoading(false)
   }
 
+  const loadEvents = async () => {
+    const { data, error } = await supabase
+      .from('shipping_instruction_events')
+      .select('*')
+      .eq('shipping_instruction_id', id)
+      .order('event_date', { ascending: false })
+
+    if (!error && data) {
+      setEvents(data)
+    }
+  }
+
   useEffect(() => {
     loadRouting()
+    loadEvents()
   }, [id])
 
   const saveBooking = async () => {
@@ -172,6 +248,62 @@ export default function RoutingBookingPage() {
     })
 
     toast.success('Booking actualizado')
+  }
+
+  const createEvent = async () => {
+    if (!routing) return
+
+    setSavingEvent(true)
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      toast.error('No se pudo validar el usuario')
+      setSavingEvent(false)
+      return
+    }
+
+    const { error } = await supabase
+      .from('shipping_instruction_events')
+      .insert({
+        shipping_instruction_id: routing.id,
+        event_type: eventType,
+        event_date: eventDate || new Date().toISOString(),
+        location: eventLocation || null,
+        notes: eventNotes || null,
+        created_by: user.id,
+      })
+
+    setSavingEvent(false)
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    await createActivityLog({
+      module: 'operations_booking',
+      action: 'shipment_event_created',
+      entityType: 'shipping_instruction',
+      entityId: routing.id,
+      description: `${eventType} registrado para ${routing.routing_number}`,
+      metadata: {
+        eventType,
+        eventDate,
+        location: eventLocation,
+      },
+    })
+
+    toast.success('Evento operativo registrado')
+
+    setEventType('Booking Solicitado')
+    setEventDate('')
+    setEventLocation('')
+    setEventNotes('')
+
+    loadEvents()
   }
 
   if (loading) {
@@ -441,6 +573,114 @@ export default function RoutingBookingPage() {
             className={`${fieldClass} mt-5 min-h-36`}
           />
         </section>
+
+        <SectionCard title="Timeline Operativo">
+          <Field label="Evento">
+            <select
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value)}
+              className={fieldClass}
+            >
+              {shipmentEventTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Fecha del evento">
+            <input
+              type="datetime-local"
+              value={eventDate}
+              onChange={(e) => setEventDate(e.target.value)}
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Ubicacion">
+            <input
+              value={eventLocation}
+              onChange={(e) => setEventLocation(e.target.value)}
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Notas">
+            <input
+              value={eventNotes}
+              onChange={(e) => setEventNotes(e.target.value)}
+              className={fieldClass}
+            />
+          </Field>
+
+          <div className="flex justify-end md:col-span-2">
+            <button
+              type="button"
+              onClick={createEvent}
+              disabled={savingEvent}
+              className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+            >
+              {savingEvent ? 'Registrando...' : 'Agregar Evento'}
+            </button>
+          </div>
+
+          <div className="mt-6 md:col-span-2">
+            {events.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                No hay eventos operativos registrados.
+              </p>
+            ) : (
+              <div className="relative space-y-5">
+                <div className="absolute left-4 top-0 h-full w-px bg-slate-200 dark:bg-slate-700" />
+
+                {events.map((event) => {
+                  const style = getEventStyle(event.event_type)
+                  const Icon = style.icon
+
+                  return (
+                    <div key={event.id} className="relative flex gap-4">
+                      <div
+                        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-white ${style.dot}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </div>
+
+                      <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${style.badge}`}
+                            >
+                              {event.event_type}
+                            </span>
+
+                            {event.location && (
+                              <p className="mt-2 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                                <MapPin className="h-4 w-4 text-slate-400" />
+                                {event.location}
+                              </p>
+                            )}
+                          </div>
+
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {new Date(event.event_date).toLocaleString()}
+                          </p>
+                        </div>
+
+                        {event.notes && (
+                          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                            {event.notes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </SectionCard>
       </div>
 
       <div className="mt-6 flex justify-end">
