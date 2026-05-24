@@ -128,6 +128,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
   const operationsItems = [
     {
+      label: 'Dashboard Operativo',
+      href: '/operations/dashboard',
+      icon: LayoutDashboard,
+    },
+    {
       label: 'Routing / SI',
       href: '/operations/routing',
       icon: Route,

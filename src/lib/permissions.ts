@@ -1,6 +1,7 @@
 const allRoles = ['Admin', 'Ventas', 'Pricing', 'Contabilidad', 'Finanzas', 'Operaciones']
 const financeRoles = ['Admin', 'Contabilidad', 'Finanzas']
 const operationsRoles = ['Admin', 'Ventas', 'Operaciones']
+const operationsDashboardRoles = ['Admin', 'Operaciones']
 
 const pathPermissions: Array<{
   paths: string[]
@@ -21,6 +22,10 @@ const pathPermissions: Array<{
   {
     paths: ['/financial-dashboard', '/cost-validation'],
     roles: financeRoles,
+  },
+  {
+    paths: ['/operations/dashboard'],
+    roles: operationsDashboardRoles,
   },
   {
     paths: ['/operations/routing'],
