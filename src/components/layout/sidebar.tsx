@@ -133,6 +133,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       icon: LayoutDashboard,
     },
     {
+      label: 'Bookings',
+      href: '/operations/bookings',
+      icon: FileText,
+    },
+    {
       label: 'Routing / SI',
       href: '/operations/routing',
       icon: Route,

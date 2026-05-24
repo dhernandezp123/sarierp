@@ -28,6 +28,10 @@ const pathPermissions: Array<{
     roles: operationsDashboardRoles,
   },
   {
+    paths: ['/operations/bookings'],
+    roles: operationsDashboardRoles,
+  },
+  {
     paths: ['/operations/routing'],
     roles: operationsRoles,
   },
