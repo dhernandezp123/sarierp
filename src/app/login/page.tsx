@@ -84,18 +84,18 @@ export default function LoginPage() {
       <div className="relative min-h-screen bg-gradient-to-r from-[#020617]/95 via-[#020617]/80 to-[#020617]/20">
         <div className="flex min-h-screen items-center px-10 py-20">
           <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
-            <div className="mb-10">
+            <div className="mb-10 text-center">
               <Image
                 src="/logo/sari-logo.png"
                 alt="Sari Express"
                 width={256}
                 height={140}
                 priority
-                className="mb-10 h-auto w-64 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]"
+                className="mx-auto mb-10 h-auto w-64 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]"
               />
 
               <p className="text-sm tracking-wide text-slate-400">
-                ERP logistico comercial y financiero
+                ERP Logístico-Comercial Versión 1.0
               </p>
             </div>
 
@@ -117,7 +117,7 @@ export default function LoginPage() {
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-white">
-                  Contrasena
+                  Contraseña
                 </label>
                 <input
                   type="password"
@@ -151,7 +151,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="absolute bottom-6 left-10 text-xs leading-relaxed text-slate-400">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-center text-xs leading-relaxed text-slate-400">
           <p>© 2026 Sari Express ERP</p>
           <p>Freight Management Platform by DHER Solutions</p>
         </div>
