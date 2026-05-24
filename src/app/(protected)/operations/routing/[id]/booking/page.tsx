@@ -40,6 +40,8 @@ type BookingRouting = {
   real_transit_days: number | null
   remaining_free_days: number | null
   operational_comments: string | null
+  supplier_contact: string | null
+  supplier_email: string | null
   freight_terms: string | null
   release_type: string | null
   hbl_freight_visibility: string | null
@@ -71,9 +73,11 @@ type ShippingInstructionEvent = {
 function SectionCard({
   title,
   children,
+  gridClassName = 'md:grid-cols-2',
 }: {
   title: string
   children: React.ReactNode
+  gridClassName?: string
 }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
@@ -81,7 +85,7 @@ function SectionCard({
         {title}
       </h2>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className={`mt-5 grid gap-4 ${gridClassName}`}>
         {children}
       </div>
     </section>
@@ -188,6 +192,8 @@ export default function RoutingBookingPage() {
         real_transit_days,
         remaining_free_days,
         operational_comments,
+        supplier_contact,
+        supplier_email,
         freight_terms,
         release_type,
         hbl_freight_visibility,
@@ -263,6 +269,8 @@ export default function RoutingBookingPage() {
         real_transit_days: routing.real_transit_days,
         remaining_free_days: routing.remaining_free_days,
         operational_comments: routing.operational_comments,
+        supplier_contact: routing.supplier_contact,
+        supplier_email: routing.supplier_email,
         freight_terms: routing.freight_terms,
         release_type: routing.release_type,
         hbl_freight_visibility: routing.hbl_freight_visibility,
@@ -387,6 +395,7 @@ export default function RoutingBookingPage() {
       </div>
 
       <div className="space-y-6">
+        <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Referencia Operativa">
           <Field label="Reference Number">
             <input
@@ -468,7 +477,12 @@ export default function RoutingBookingPage() {
           </Field>
         </SectionCard>
 
-        <SectionCard title="Documentación BL / Routing">
+        </div>
+
+        <SectionCard
+          title="Documentación BL / Routing"
+          gridClassName="md:grid-cols-2 lg:grid-cols-4"
+        >
           <Field label="Freight Terms">
             <select
               value={routing.freight_terms || ''}
@@ -536,7 +550,7 @@ export default function RoutingBookingPage() {
             </label>
           </div>
 
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 lg:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Shipper
             </p>
@@ -552,9 +566,27 @@ export default function RoutingBookingPage() {
             />
           </Field>
 
-          <div className="hidden md:block" />
+          <Field label="Shipper Contact">
+            <input
+              value={routing.supplier_contact || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, supplier_contact: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
 
-          <div className="md:col-span-2">
+          <Field label="Shipper Email">
+            <input
+              value={routing.supplier_email || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, supplier_email: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <div className="md:col-span-2 lg:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Consignee
             </p>
@@ -620,88 +652,28 @@ export default function RoutingBookingPage() {
             />
           </Field>
 
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 lg:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Notify Party
             </p>
           </div>
 
-          <Field label="Notify Party">
-            <input
-              value={routing.notify_party || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, notify_party: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+          <div className="md:col-span-2 lg:col-span-4">
+            <Field label="Notify Party">
+              <input
+                value={routing.notify_party || ''}
+                placeholder="Sari Express"
+                onChange={(e) =>
+                  setRouting({ ...routing, notify_party: e.target.value })
+                }
+                className={fieldClass}
+              />
+            </Field>
+          </div>
 
-          <Field label="Notify Party Tax ID">
-            <input
-              value={routing.notify_party_tax_id || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  notify_party_tax_id: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </Field>
-
-          <Field label="Notify Party Address">
-            <input
-              value={routing.notify_party_address || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  notify_party_address: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </Field>
-
-          <Field label="Notify Party Contact">
-            <input
-              value={routing.notify_party_contact || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  notify_party_contact: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </Field>
-
-          <Field label="Notify Party Email">
-            <input
-              value={routing.notify_party_email || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  notify_party_email: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </Field>
-
-          <Field label="Notify Party Phone">
-            <input
-              value={routing.notify_party_phone || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  notify_party_phone: e.target.value,
-                })
-              }
-              className={fieldClass}
-            />
-          </Field>
         </SectionCard>
 
+        <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Navegación / Tránsito">
           <Field label="Vessel Name">
             <input
@@ -813,6 +785,9 @@ export default function RoutingBookingPage() {
           </Field>
         </SectionCard>
 
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Tracking y Control">
           <Field label="Tracking URL">
             <input
@@ -858,6 +833,8 @@ export default function RoutingBookingPage() {
             className={`${fieldClass} mt-5 min-h-36`}
           />
         </section>
+
+        </div>
 
         <SectionCard title="Timeline Operativo">
           <Field label="Evento">
