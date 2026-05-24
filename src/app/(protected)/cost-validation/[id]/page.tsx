@@ -29,6 +29,7 @@ export default function CostValidationDetailPage() {
     isAdmin || isFinance
 
   const [quotation, setQuotation] = useState<any>(null)
+  const [shippingInstruction, setShippingInstruction] = useState<any>(null)
   const [pricingItems, setPricingItems] = useState<any[]>([])
   const [invoiceItems, setInvoiceItems] = useState<any[]>([])
   const [taxRates, setTaxRates] = useState<any[]>([])
@@ -95,6 +96,27 @@ export default function CostValidationDetailPage() {
       return
     }
 
+    const { data: shippingInstructionData, error: shippingInstructionError } =
+      await supabase
+        .from('shipping_instructions')
+        .select(`
+          id,
+          routing_number,
+          reference_number,
+          booking_number,
+          carrier,
+          shipment_status,
+          etd,
+          eta
+        `)
+        .eq('quotation_id', quotationId)
+        .maybeSingle()
+
+    if (shippingInstructionError) {
+      toast.error(shippingInstructionError.message)
+      return
+    }
+
     const { data: pricingData, error: pricingError } = await supabase
       .from('pricing_items')
       .select('*')
@@ -118,6 +140,7 @@ export default function CostValidationDetailPage() {
     }
 
     setQuotation(quotationData)
+    setShippingInstruction(shippingInstructionData)
     setPricingItems(pricingData || [])
     setInvoiceItems(invoiceData || [])
     setLoading(false)
@@ -406,6 +429,69 @@ export default function CostValidationDetailPage() {
               </button>
             )}
           </div>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-6">
+          <h2 className="mb-4 text-xl font-bold">
+            Información Operativa
+          </h2>
+
+          {shippingInstruction ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-gray-500">RT</p>
+                <p className="mt-1 font-semibold">
+                  {shippingInstruction.routing_number || 'N/A'}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-gray-500">Booking</p>
+                <p className="mt-1 font-semibold">
+                  {shippingInstruction.booking_number || 'Pendiente'}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-gray-500">Carrier</p>
+                <p className="mt-1 font-semibold">
+                  {shippingInstruction.carrier || 'N/A'}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-gray-500">Estado operativo</p>
+                <p className="mt-1 font-semibold">
+                  {shippingInstruction.shipment_status || 'N/A'}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-gray-500">Referencia</p>
+                <p className="mt-1 font-semibold">
+                  {shippingInstruction.reference_number || 'N/A'}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-gray-500">ETD</p>
+                <p className="mt-1 font-semibold">
+                  {shippingInstruction.etd || 'N/A'}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-gray-500">ETA</p>
+                <p className="mt-1 font-semibold">
+                  {shippingInstruction.eta || 'N/A'}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-500">
+              No hay operación asociada a esta cotización.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">

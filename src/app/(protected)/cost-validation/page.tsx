@@ -4,30 +4,37 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
-import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
+import { supabase } from '../../../lib/supabase/client'
+
+type ShipmentCostValidationItem = {
+  id: string
+  routing_number: string | null
+  booking_number: string | null
+  carrier: string | null
+  shipment_status: string | null
+  quotation:
+    | {
+        id: string
+        quotation_number: string | null
+        status: string | null
+        financial_validation_status: string | null
+        cliente?: {
+          nombre: string | null
+        } | null
+      }
+    | null
+}
 
 export default function CostValidationPage() {
   const { profile, loading: userLoading } = useUser()
   const router = useRouter()
   const role = profile?.rol || ''
   const isAdmin = role === 'Admin'
-  const isSales = role === 'Ventas'
-  const isPricing = role === 'Pricing'
   const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+  const canViewCostValidation = isAdmin || isFinance
 
-  const canEditPricing =
-    isAdmin || isPricing
-  const canEditCostValidation =
-    isAdmin || isFinance
-  const canEditFinance =
-    isAdmin || isFinance
-  const canEditQuotes =
-    isAdmin || isSales
-  const canViewCostValidation =
-    isAdmin || isFinance
-
-  const [quotations, setQuotations] = useState<any[]>([])
+  const [shipments, setShipments] = useState<ShipmentCostValidationItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -38,57 +45,71 @@ export default function CostValidationPage() {
       return
     }
 
-    fetchQuotations()
+    fetchShipments()
   }, [userLoading, canViewCostValidation])
 
   const AccessDenied = () => (
-    <>
-      <div className="rounded-2xl border bg-white p-8">
-        <h1 className="text-2xl font-bold">
-          Acceso restringido
-        </h1>
+    <div className="rounded-2xl border bg-white p-8">
+      <h1 className="text-2xl font-bold">Acceso restringido</h1>
 
-        <p className="text-gray-500 mt-2">
-          No tienes permiso para ver este módulo.
-        </p>
-      </div>
-    </>
+      <p className="mt-2 text-gray-500">
+        No tienes permiso para ver este modulo.
+      </p>
+    </div>
   )
 
-  const fetchQuotations = async () => {
+  const fetchShipments = async () => {
+    setLoading(true)
+
     const { data, error } = await supabase
-      .from('quotations')
+      .from('shipping_instructions')
       .select(`
-        *,
-        clientes (
-          nombre,
-          codigo_cliente
+        id,
+        routing_number,
+        booking_number,
+        carrier,
+        shipment_status,
+        quotation:quotations (
+          id,
+          quotation_number,
+          status,
+          financial_validation_status,
+          cliente:clientes (
+            nombre
+          )
         )
       `)
-      .eq('status', 'Ganada')
-      .is('deleted_at', null)
+      .eq('quotation.status', 'Ganada')
       .order('created_at', { ascending: false })
 
     if (error) {
       toast.error(error.message)
+      setLoading(false)
       return
     }
 
-    setQuotations(data || [])
-    setLoading(false)
-  }
+    const normalizedShipments = (data || [])
+      .map((shipment) => {
+        const quotation = Array.isArray(shipment.quotation)
+          ? shipment.quotation[0] ?? null
+          : shipment.quotation
 
-  const getFinancialStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Validado':
-        return 'bg-green-100 text-green-700'
-      case 'En revisión':
-        return 'bg-yellow-100 text-yellow-700'
-      case 'Pérdida confirmada':
-        return 'bg-red-100 text-red-700'
-      default:
-        return 'bg-slate-100 text-slate-700'
-    }
+        return {
+          ...shipment,
+          quotation: quotation
+            ? {
+                ...quotation,
+                cliente: Array.isArray(quotation.cliente)
+                  ? quotation.cliente[0] ?? null
+                  : quotation.cliente,
+              }
+            : null,
+        }
+      })
+      .filter((shipment) => shipment.quotation && shipment.routing_number)
+
+    setShipments(normalizedShipments)
+    setLoading(false)
   }
 
   if (userLoading || loading) {
@@ -100,74 +121,80 @@ export default function CostValidationPage() {
   }
 
   return (
-    <>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-4xl font-bold">
-            Validación de Costos
-          </h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-4xl font-bold">
+          Validación de Costos Operativos
+        </h1>
 
-          <p className="text-gray-500 mt-2">
-            Valida los costos reales de proveedor contra las cotizaciones ganadas.
+        <p className="mt-2 text-gray-500">
+          Compara costos cotizados contra facturas reales de proveedores por
+          operación.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border bg-white p-6">
+        <h2 className="mb-4 text-xl font-bold">
+          Operaciones con cotizacion ganada
+        </h2>
+
+        {shipments.length === 0 ? (
+          <p className="text-gray-500">
+            No hay operaciones con cotizacion ganada pendientes de validar.
           </p>
-        </div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900 text-white">
+                <tr>
+                  <th className="p-3 text-left">RT</th>
+                  <th className="p-3 text-left">Booking</th>
+                  <th className="p-3 text-left">Cotización</th>
+                  <th className="p-3 text-left">Cliente</th>
+                  <th className="p-3 text-left">Carrier</th>
+                  <th className="p-3 text-left">Estado operativo</th>
+                  <th className="p-3 text-left">Estado financiero</th>
+                  <th className="p-3 text-right">Acción</th>
+                </tr>
+              </thead>
 
-        <div className="rounded-2xl border bg-white p-6">
-          <h2 className="text-xl font-bold mb-4">
-            Cotizaciones Ganadas
-          </h2>
+              <tbody>
+                {shipments.map((shipment) => {
+                  const quotation = shipment.quotation
 
-          {quotations.length === 0 ? (
-            <p className="text-gray-500">
-              No hay cotizaciones ganadas pendientes de validar.
-            </p>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-900 text-white">
-                  <tr>
-                    <th className="p-3 text-left">No.</th>
-                    <th className="p-3 text-left">Cliente</th>
-                    <th className="p-3 text-left">Tipo</th>
-                    <th className="p-3 text-left">Ruta</th>
-                    <th className="p-3 text-left">Fecha</th>
-                    <th className="p-3 text-left">Estado financiero</th>
-                    <th className="p-3 text-right">Acción</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {quotations.map((quote) => (
-                    <tr key={quote.id} className="border-b hover:bg-slate-50">
+                  return (
+                    <tr
+                      key={shipment.id}
+                      className="border-b hover:bg-slate-50"
+                    >
                       <td className="p-3 font-semibold">
-                        {quote.quotation_number || 'Sin número'}
+                        {shipment.routing_number || 'N/A'}
                       </td>
 
                       <td className="p-3">
-                        {quote.clientes?.nombre || 'Sin cliente'}
+                        {shipment.booking_number || 'Pendiente'}
                       </td>
 
                       <td className="p-3">
-                        {quote.quote_type || 'N/A'}
+                        {quotation?.quotation_number || 'Sin número'}
                       </td>
 
                       <td className="p-3">
-                        {quote.origen || 'N/A'} → {quote.destino || 'N/A'}
+                        {quotation?.cliente?.nombre || 'Sin cliente'}
                       </td>
 
                       <td className="p-3">
-                        {quote.created_at
-                          ? new Date(quote.created_at).toLocaleDateString()
-                          : 'N/A'}
+                        {shipment.carrier || 'N/A'}
                       </td>
 
                       <td className="p-3">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getFinancialStatusBadge(
-                            quote.financial_validation_status || 'Pendiente'
-                          )}`}
-                        >
-                          {quote.financial_validation_status || 'Pendiente'}
+                        {shipment.shipment_status || 'N/A'}
+                      </td>
+
+                      <td className="p-3">
+                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                          {quotation?.financial_validation_status ||
+                            'Pendiente'}
                         </span>
                       </td>
 
@@ -175,21 +202,23 @@ export default function CostValidationPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            router.push(`/cost-validation/${quote.id}`)
+                            quotation?.id &&
+                            router.push(`/cost-validation/${quotation.id}`)
                           }
-                          className="rounded-xl border px-4 py-2 font-semibold hover:bg-black hover:text-white"
+                          disabled={!quotation?.id}
+                          className="rounded-xl border px-4 py-2 font-semibold hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Validar Costos
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   )
 }
