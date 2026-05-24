@@ -40,6 +40,23 @@ type BookingRouting = {
   real_transit_days: number | null
   remaining_free_days: number | null
   operational_comments: string | null
+  freight_terms: string | null
+  release_type: string | null
+  hbl_freight_visibility: string | null
+  printed_at_destination: boolean | null
+  shipper: string | null
+  consignee: string | null
+  consignee_tax_id: string | null
+  consignee_address: string | null
+  consignee_contact: string | null
+  consignee_email: string | null
+  consignee_phone: string | null
+  notify_party: string | null
+  notify_party_tax_id: string | null
+  notify_party_address: string | null
+  notify_party_contact: string | null
+  notify_party_email: string | null
+  notify_party_phone: string | null
 }
 
 type ShippingInstructionEvent = {
@@ -170,7 +187,24 @@ export default function RoutingBookingPage() {
         estimated_transit_days,
         real_transit_days,
         remaining_free_days,
-        operational_comments
+        operational_comments,
+        freight_terms,
+        release_type,
+        hbl_freight_visibility,
+        printed_at_destination,
+        shipper,
+        consignee,
+        consignee_tax_id,
+        consignee_address,
+        consignee_contact,
+        consignee_email,
+        consignee_phone,
+        notify_party,
+        notify_party_tax_id,
+        notify_party_address,
+        notify_party_contact,
+        notify_party_email,
+        notify_party_phone
       `)
       .eq('id', id)
       .single()
@@ -229,6 +263,23 @@ export default function RoutingBookingPage() {
         real_transit_days: routing.real_transit_days,
         remaining_free_days: routing.remaining_free_days,
         operational_comments: routing.operational_comments,
+        freight_terms: routing.freight_terms,
+        release_type: routing.release_type,
+        hbl_freight_visibility: routing.hbl_freight_visibility,
+        printed_at_destination: routing.printed_at_destination,
+        shipper: routing.shipper,
+        consignee: routing.consignee,
+        consignee_tax_id: routing.consignee_tax_id,
+        consignee_address: routing.consignee_address,
+        consignee_contact: routing.consignee_contact,
+        consignee_email: routing.consignee_email,
+        consignee_phone: routing.consignee_phone,
+        notify_party: routing.notify_party,
+        notify_party_tax_id: routing.notify_party_tax_id,
+        notify_party_address: routing.notify_party_address,
+        notify_party_contact: routing.notify_party_contact,
+        notify_party_email: routing.notify_party_email,
+        notify_party_phone: routing.notify_party_phone,
       })
       .eq('id', routing.id)
 
@@ -411,6 +462,240 @@ export default function RoutingBookingPage() {
               value={routing.eir_date || ''}
               onChange={(e) =>
                 setRouting({ ...routing, eir_date: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+        </SectionCard>
+
+        <SectionCard title="Documentación BL / Routing">
+          <Field label="Freight Terms">
+            <select
+              value={routing.freight_terms || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, freight_terms: e.target.value })
+              }
+              className={fieldClass}
+            >
+              <option value="">Seleccionar</option>
+              <option value="Collect">Collect</option>
+              <option value="Prepaid">Prepaid</option>
+            </select>
+          </Field>
+
+          <Field label="Release Type">
+            <select
+              value={routing.release_type || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, release_type: e.target.value })
+              }
+              className={fieldClass}
+            >
+              <option value="">Seleccionar</option>
+              <option value="Express Release">Express Release</option>
+              <option value="Original BL">Original BL</option>
+            </select>
+          </Field>
+
+          <Field label="HBL Freight Visibility">
+            <select
+              value={routing.hbl_freight_visibility || ''}
+              onChange={(e) =>
+                setRouting({
+                  ...routing,
+                  hbl_freight_visibility: e.target.value,
+                })
+              }
+              className={fieldClass}
+            >
+              <option value="">Seleccionar</option>
+              <option value="No Freight Charges">No mostrar flete</option>
+              <option value="Show Freight Charges">Mostrar flete</option>
+            </select>
+          </Field>
+
+          <div className="flex items-center gap-3 pt-6">
+            <input
+              id="printed-at-destination"
+              type="checkbox"
+              checked={routing.printed_at_destination || false}
+              onChange={(e) =>
+                setRouting({
+                  ...routing,
+                  printed_at_destination: e.target.checked,
+                })
+              }
+              className="h-4 w-4 rounded border-slate-300"
+            />
+
+            <label
+              htmlFor="printed-at-destination"
+              className="text-sm text-slate-700 dark:text-slate-300"
+            >
+              Printed at Destination
+            </label>
+          </div>
+
+          <div className="md:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Shipper
+            </p>
+          </div>
+
+          <Field label="Shipper">
+            <input
+              value={routing.shipper || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, shipper: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <div className="hidden md:block" />
+
+          <div className="md:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Consignee
+            </p>
+          </div>
+
+          <Field label="Consignee">
+            <input
+              value={routing.consignee || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, consignee: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Consignee Tax ID">
+            <input
+              value={routing.consignee_tax_id || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, consignee_tax_id: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Consignee Address">
+            <input
+              value={routing.consignee_address || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, consignee_address: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Consignee Contact">
+            <input
+              value={routing.consignee_contact || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, consignee_contact: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Consignee Email">
+            <input
+              value={routing.consignee_email || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, consignee_email: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Consignee Phone">
+            <input
+              value={routing.consignee_phone || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, consignee_phone: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <div className="md:col-span-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Notify Party
+            </p>
+          </div>
+
+          <Field label="Notify Party">
+            <input
+              value={routing.notify_party || ''}
+              onChange={(e) =>
+                setRouting({ ...routing, notify_party: e.target.value })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Notify Party Tax ID">
+            <input
+              value={routing.notify_party_tax_id || ''}
+              onChange={(e) =>
+                setRouting({
+                  ...routing,
+                  notify_party_tax_id: e.target.value,
+                })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Notify Party Address">
+            <input
+              value={routing.notify_party_address || ''}
+              onChange={(e) =>
+                setRouting({
+                  ...routing,
+                  notify_party_address: e.target.value,
+                })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Notify Party Contact">
+            <input
+              value={routing.notify_party_contact || ''}
+              onChange={(e) =>
+                setRouting({
+                  ...routing,
+                  notify_party_contact: e.target.value,
+                })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Notify Party Email">
+            <input
+              value={routing.notify_party_email || ''}
+              onChange={(e) =>
+                setRouting({
+                  ...routing,
+                  notify_party_email: e.target.value,
+                })
+              }
+              className={fieldClass}
+            />
+          </Field>
+
+          <Field label="Notify Party Phone">
+            <input
+              value={routing.notify_party_phone || ''}
+              onChange={(e) =>
+                setRouting({
+                  ...routing,
+                  notify_party_phone: e.target.value,
+                })
               }
               className={fieldClass}
             />

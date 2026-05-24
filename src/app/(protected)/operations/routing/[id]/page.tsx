@@ -1,11 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { pdf } from '@react-pdf/renderer'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
-import RoutingInstructionsPdf from '@/src/components/pdf/RoutingInstructionsPdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
@@ -217,10 +215,7 @@ export default function RoutingDetailPage() {
       routing.supplier_name,
       routing.supplier_contact,
       routing.supplier_email,
-      routing.agent_name,
-      routing.agent_email,
-      routing.container_qty,
-      routing.container_type,
+      routing.supplier_address,
     ]
 
     const hasMissingFields = requiredFields.some(
@@ -407,7 +402,7 @@ export default function RoutingDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Proveedor / Origen
+            Proveedor / Shipper Contact
           </h2>
 
           <div className="mt-4 space-y-3 text-sm">
@@ -470,7 +465,7 @@ export default function RoutingDetailPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Observaciones de Ventas
+            Comentarios / Remarks
           </h2>
 
           <textarea
@@ -487,7 +482,7 @@ export default function RoutingDetailPage() {
           />
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <section className="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Instrucciones BL
           </h2>
@@ -580,7 +575,7 @@ export default function RoutingDetailPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220] lg:col-span-2">
+        <section className="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220] lg:col-span-2">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Routing
           </h2>
@@ -695,38 +690,11 @@ export default function RoutingDetailPage() {
       <div className="mt-6 flex justify-end gap-3">
         <button
           type="button"
-          onClick={async () => {
-            const blob = await pdf(
-              <RoutingInstructionsPdf
-                routing={routing}
-                quotation={routing.quotation}
-                cliente={routing.cliente}
-              />
-            ).toBlob()
-
-            const url = URL.createObjectURL(blob)
-            const link = document.createElement('a')
-
-            link.href = url
-            link.download = `${routing.routing_number}-routing-instructions.pdf`
-            link.click()
-
-            URL.revokeObjectURL(url)
-          }}
-          className="rounded-xl border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          onClick={() => router.push(`/operations/routing/${routing.id}/booking`)}
+          className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
         >
-          Descargar Routing / SI
+          Abrir Booking
         </button>
-
-        {canAssignOperations && (
-          <button
-            type="button"
-            onClick={() => router.push(`/operations/routing/${routing.id}/booking`)}
-            className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-          >
-            Abrir Booking
-          </button>
-        )}
 
         <button
           onClick={saveRouting}
