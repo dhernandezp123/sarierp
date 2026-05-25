@@ -50,6 +50,19 @@ type QuotationChangeLog = {
   } | null
 }
 
+type CargoLine = {
+  id: string
+  quantity: number
+  package_type: string
+  length: number | null
+  width: number | null
+  height: number | null
+  dimension_unit: string
+  weight_lbs: number | null
+  ft3: number | null
+  cbm: number | null
+}
+
 export default function QuotationDetailPage() {
   const { profile } = useUser()
   const params = useParams()
@@ -75,6 +88,7 @@ export default function QuotationDetailPage() {
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
+  const [cargoLines, setCargoLines] = useState<CargoLine[]>([])
   const [validations, setValidations] = useState<any[]>([])
   const [statusHistory, setStatusHistory] = useState<any[]>([])
   const [changeLogs, setChangeLogs] = useState<QuotationChangeLog[]>([])
@@ -129,9 +143,18 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', id)
       .order('created_at', { ascending: true })
 
+    const { data: cargoData, error: cargoError } = await supabase
+      .from('quotation_cargo_lines')
+      .select('*')
+      .eq('quotation_id', id)
+      .order('created_at', { ascending: true })
+
     setQuotation(quoteData)
     setPricingItems(pricingItemsData || [])
     setQuotationContainers(quotationContainersData || [])
+    if (!cargoError && cargoData) {
+      setCargoLines(cargoData)
+    }
     const { data: selectedPricing } = await supabase
       .from('agent_quotes')
       .select('*')
@@ -876,6 +899,48 @@ const combinedTimeline = [
                 </div>
               </CardContent>
             </Card>
+
+            {cargoLines.length > 0 && (
+              <section className="col-span-2 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Detalle de carga
+                </h2>
+
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th className="py-2">Cantidad</th>
+                        <th>Tipo</th>
+                        <th>Dimensiones</th>
+                        <th>Peso lbs</th>
+                        <th>FT3</th>
+                        <th>CBM</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {cargoLines.map((line) => (
+                        <tr
+                          key={line.id}
+                          className="border-t border-slate-100 dark:border-slate-800"
+                        >
+                          <td className="py-2">{line.quantity}</td>
+                          <td>{line.package_type}</td>
+                          <td>
+                            {line.length} x {line.width} x {line.height}{' '}
+                            {line.dimension_unit}
+                          </td>
+                          <td>{Number(line.weight_lbs || 0).toFixed(2)}</td>
+                          <td>{Number(line.ft3 || 0).toFixed(2)}</td>
+                          <td>{Number(line.cbm || 0).toFixed(3)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             <Card className="col-span-2">
               <CardHeader>

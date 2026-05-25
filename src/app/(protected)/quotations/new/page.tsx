@@ -53,6 +53,13 @@ type CargoDimensionLine = {
   weight: string
 }
 
+type DestinationCharge = {
+  id: string
+  description: string
+  amount: string
+  taxable: boolean
+}
+
 export default function NewQuotationPage() {
   const { profile } = useUser()
 
@@ -67,6 +74,9 @@ export default function NewQuotationPage() {
     'none'
   )
   const [manualPickupAmount, setManualPickupAmount] = useState(0)
+  const [destinationCharges, setDestinationCharges] = useState<
+    DestinationCharge[]
+  >([])
   const [cargoLines, setCargoLines] = useState<CargoDimensionLine[]>([
     {
       id: crypto.randomUUID(),
@@ -361,6 +371,25 @@ export default function NewQuotationPage() {
       }
     }
 
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    if (formData.valid_until) {
+      const validUntilDate = new Date(formData.valid_until)
+      validUntilDate.setHours(0, 0, 0, 0)
+
+      if (validUntilDate < today) {
+        toast.error('La fecha de validez no puede ser anterior a hoy')
+        return
+      }
+    }
+
+    const validUntil =
+      formData.valid_until ||
+      new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0]
+
     try {
       setLoading(true)
 
@@ -371,7 +400,7 @@ export default function NewQuotationPage() {
           trade_direction: formData.trade_direction,
           service_product: formData.service_product || null,
           quote_type: formData.quote_type,
-          valid_until: formData.valid_until || null,
+          valid_until: validUntil,
 
           contact_name: formData.contact_name,
           contact_email: formData.contact_email,
@@ -432,6 +461,41 @@ export default function NewQuotationPage() {
         if (pricingItemsError) {
           toast.error(
             'La cotización se creó, pero no se pudieron aplicar las tarifas'
+          )
+          return
+        }
+      }
+
+      const cargoRows = cargoLines
+        .filter((line) => {
+          return (
+            Number(line.quantity || 0) > 0 &&
+            Number(line.length || 0) > 0 &&
+            Number(line.width || 0) > 0 &&
+            Number(line.height || 0) > 0
+          )
+        })
+        .map((line) => ({
+          quotation_id: quotation.id,
+          quantity: Number(line.quantity || 1),
+          package_type: line.packageType,
+          length: Number(line.length || 0),
+          width: Number(line.width || 0),
+          height: Number(line.height || 0),
+          dimension_unit: line.dimensionUnit,
+          weight_lbs: Number(line.weight || 0),
+          ft3: calculateLineFt3(line),
+          cbm: calculateLineCbm(line),
+        }))
+
+      if (cargoRows.length > 0) {
+        const { error: cargoLinesError } = await supabase
+          .from('quotation_cargo_lines')
+          .insert(cargoRows)
+
+        if (cargoLinesError) {
+          toast.error(
+            'La cotización se creó, pero no se pudo guardar el detalle de carga'
           )
           return
         }
@@ -626,6 +690,32 @@ export default function NewQuotationPage() {
   const buildMiamiPricingItems = (quotationId: string) => {
     if (!usesClientRates(formData.service_product)) return []
 
+    const destinationItems = destinationCharges
+      .filter((charge) => Number(charge.amount || 0) > 0)
+      .map((charge) => {
+        const amount = Number(charge.amount || 0)
+        const taxAmount = charge.taxable ? amount * 0.15 : 0
+
+        return {
+          quotation_id: quotationId,
+          description: charge.description || 'Cargo en destino',
+          item_type: 'Otros Cargos',
+          quantity: 1,
+          cost_amount: 0,
+          sale_amount: amount,
+          currency: 'USD',
+          taxable: charge.taxable,
+          tax_rate: charge.taxable ? 15 : 0,
+          tax_amount: taxAmount,
+          total_amount: amount + taxAmount,
+          supplier: 'Sari Express',
+          created_by: profile?.id || null,
+          notes: charge.taxable
+            ? 'Cargo en destino gravable con ISV 15%.'
+            : 'Cargo adicional en destino.',
+        }
+      })
+
     if (formData.service_product === 'miami_lcl') {
       const items = [
         {
@@ -730,11 +820,11 @@ export default function NewQuotationPage() {
         })
       })
 
-      return items
+      return [...items, ...destinationItems]
     }
 
     if (formData.service_product === 'miami_air') {
-      return [
+      const items = [
         {
           quotation_id: quotationId,
           description: 'Flete Miami Aéreo Consolidado',
@@ -752,6 +842,8 @@ export default function NewQuotationPage() {
           created_by: profile?.id,
         },
       ]
+
+      return [...items, ...destinationItems]
     }
 
     return []
@@ -776,6 +868,51 @@ export default function NewQuotationPage() {
         </h1>
 
         <div className="bg-white rounded-xl shadow p-8 space-y-8">
+          <section>
+            <h2 className="text-xl font-semibold mb-4">
+              Información General
+            </h2>
+
+            <div className="grid grid-cols-2 gap-4">
+              <select
+                name="cliente_id"
+                value={formData.cliente_id}
+                onChange={handleClienteChange}
+                className="border p-3 rounded"
+              >
+                <option value="">Seleccionar cliente</option>
+
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>
+                    {cliente.codigo_cliente} - {cliente.nombre}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                value={new Date().toLocaleDateString('es-HN')}
+                disabled
+                className="border p-3 rounded bg-gray-100"
+              />
+
+              <select
+                name="incoterm"
+                value={formData.incoterm}
+                onChange={handleChange}
+                className="border p-3 rounded"
+              >
+                <option value="">Seleccionar Incoterm</option>
+                <option value="EXW">EXW</option>
+                <option value="FCA">FCA</option>
+                <option value="FOB">FOB</option>
+                <option value="CFR">CFR</option>
+                <option value="CIF">CIF</option>
+                <option value="DAP">DAP</option>
+                <option value="DDP">DDP</option>
+              </select>
+            </div>
+          </section>
+
           <div className="rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold mb-4">
               Producto Comercial
@@ -962,10 +1099,22 @@ export default function NewQuotationPage() {
                   </div>
 
                   <div className="mt-4 space-y-3">
-                    {cargoLines.map((line) => (
+                    {cargoLines.map((line) => {
+                      const isLineComplete =
+                        Number(line.quantity || 0) > 0 &&
+                        Number(line.length || 0) > 0 &&
+                        Number(line.width || 0) > 0 &&
+                        Number(line.height || 0) > 0 &&
+                        Number(line.weight || 0) > 0
+
+                      return (
                       <div
                         key={line.id}
-                        className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-8 dark:border-slate-700"
+                        className={`grid gap-3 rounded-xl border p-3 md:grid-cols-8 ${
+                          isLineComplete
+                            ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                            : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40'
+                        }`}
                       >
                         <input
                           type="number"
@@ -1104,7 +1253,8 @@ export default function NewQuotationPage() {
                           Quitar
                         </button>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -1394,6 +1544,118 @@ export default function NewQuotationPage() {
                 </div>
               </div>
             )}
+
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                        Cargos adicionales en destino
+                      </h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Agrega cargos como aduanas, entrega local u otros servicios.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDestinationCharges((prev) => [
+                          ...prev,
+                          {
+                            id: crypto.randomUUID(),
+                            description: '',
+                            amount: '',
+                            taxable: false,
+                          },
+                        ])
+                      }
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                    >
+                      Agregar cargo
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {destinationCharges.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        No hay cargos adicionales en destino.
+                      </p>
+                    ) : (
+                      destinationCharges.map((charge) => (
+                        <div
+                          key={charge.id}
+                          className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr_160px_140px_100px]"
+                        >
+                          <input
+                            value={charge.description}
+                            onChange={(e) =>
+                              setDestinationCharges((prev) =>
+                                prev.map((item) =>
+                                  item.id === charge.id
+                                    ? {
+                                        ...item,
+                                        description: e.target.value,
+                                      }
+                                    : item
+                                )
+                              )
+                            }
+                            placeholder="Descripción"
+                            className={fieldClass}
+                          />
+
+                          <input
+                            type="number"
+                            value={charge.amount}
+                            onChange={(e) =>
+                              setDestinationCharges((prev) =>
+                                prev.map((item) =>
+                                  item.id === charge.id
+                                    ? { ...item, amount: e.target.value }
+                                    : item
+                                )
+                              )
+                            }
+                            placeholder="Monto USD"
+                            className={fieldClass}
+                          />
+
+                          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                            <input
+                              type="checkbox"
+                              checked={charge.taxable}
+                              onChange={(e) =>
+                                setDestinationCharges((prev) =>
+                                  prev.map((item) =>
+                                    item.id === charge.id
+                                      ? {
+                                          ...item,
+                                          taxable: e.target.checked,
+                                        }
+                                      : item
+                                  )
+                                )
+                              }
+                            />
+                            ISV 15%
+                          </label>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDestinationCharges((prev) =>
+                                prev.filter((item) => item.id !== charge.id)
+                              )
+                            }
+                            className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1442,6 +1704,7 @@ export default function NewQuotationPage() {
           </div>
           )}
 
+          {false && (
           <section>
             <h2 className="text-xl font-semibold mb-4">
               Información General
@@ -1490,6 +1753,7 @@ export default function NewQuotationPage() {
               
             </div>
           </section>
+          )}
 
           <section>
             <h2 className="text-xl font-semibold mb-4">
