@@ -1,16 +1,52 @@
 export const tradeDirections = [
-  { value: 'import', label: 'Importación' },
-  { value: 'export', label: 'Exportación' },
-]
+  {
+    value: 'import',
+    label: 'Importación',
+  },
+  {
+    value: 'export',
+    label: 'Exportación',
+  },
+] as const
 
 export const serviceProducts = [
-  { value: 'miami_lcl', label: 'Miami LCL' },
-  { value: 'miami_air', label: 'Miami Aéreo' },
-  { value: 'other_origin_fcl', label: 'Otro origen FCL' },
-  { value: 'other_origin_lcl', label: 'Otro origen LCL' },
-  { value: 'usa_ltl_ftl', label: 'USA LTL / FTL' },
-  { value: 'courier', label: 'Courier' },
-]
+  {
+    value: 'miami_lcl',
+    label: 'Miami Consolidado Marítimo LCL',
+    appliesClientRates: true,
+  },
+  {
+    value: 'miami_air',
+    label: 'Miami Consolidado Aéreo',
+    appliesClientRates: true,
+  },
+  {
+    value: 'other_origin_fcl',
+    label: 'FCL Otros Orígenes',
+    appliesClientRates: false,
+  },
+  {
+    value: 'other_origin_lcl',
+    label: 'LCL Otros Orígenes',
+    appliesClientRates: false,
+  },
+  {
+    value: 'usa_ltl_ftl',
+    label: 'LTL / FTL USA',
+    appliesClientRates: false,
+  },
+  {
+    value: 'courier',
+    label: 'Courier',
+    appliesClientRates: false,
+  },
+] as const
 
-export const usesClientRates = (serviceProduct: string) =>
-  ['miami_lcl', 'miami_air'].includes(serviceProduct)
+export type TradeDirection = (typeof tradeDirections)[number]['value']
+export type ServiceProduct = (typeof serviceProducts)[number]['value']
+
+export function usesClientRates(product?: string | null) {
+  return serviceProducts.some(
+    (item) => item.value === product && item.appliesClientRates
+  )
+}

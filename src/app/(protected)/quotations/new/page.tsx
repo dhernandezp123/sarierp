@@ -12,6 +12,7 @@ import {
   tradeDirections,
   usesClientRates,
 } from '@/src/lib/quotation-products'
+import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 
 type ClientRate = {
   id?: string
@@ -28,6 +29,19 @@ type ClientRate = {
   notes: string | null
 }
 
+type SurchargeRule = {
+  code: string
+  label: string
+  service_product: string
+  calculation_type: string
+  rate_per_lbs: number | string | null
+  rate_per_ft3: number | string | null
+  fixed_amount: number | string | null
+  minimum_amount: number | string | null
+  currency: string | null
+  is_active: boolean
+}
+
 export default function NewQuotationPage() {
   const { profile } = useUser()
 
@@ -36,6 +50,9 @@ export default function NewQuotationPage() {
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
+  const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
+  const [showClientRates, setShowClientRates] = useState(false)
+  const [applyPickup, setApplyPickup] = useState(false)
   const [miamiCalc, setMiamiCalc] = useState({
     ft3: '',
     lbs: '',
@@ -98,6 +115,8 @@ export default function NewQuotationPage() {
   }, [])
 
   useEffect(() => {
+    loadSurchargeRules(formData.service_product)
+
     if (
       !formData.cliente_id ||
       !usesClientRates(formData.service_product)
@@ -176,6 +195,27 @@ export default function NewQuotationPage() {
     }
 
     setClientRates((data || []) as ClientRate[])
+  }
+
+  const loadSurchargeRules = async (serviceProduct: string) => {
+    if (!serviceProduct) {
+      setSurchargeRules([])
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('surcharge_rules')
+      .select('*')
+      .eq('service_product', serviceProduct)
+      .eq('is_active', true)
+
+    if (error) {
+      console.error('Error cargando surcharges:', error)
+      setSurchargeRules([])
+      return
+    }
+
+    setSurchargeRules((data || []) as SurchargeRule[])
   }
 
   const calculateInsurance = (data: any) => {
@@ -261,7 +301,11 @@ export default function NewQuotationPage() {
       return
     }
 
-    if (status === 'Pendiente de Fijar Precios') {
+    const initialStatus = usesClientRates(formData.service_product)
+      ? 'Pricing Aprobado'
+      : 'Pendiente de Fijar Precios'
+
+    if (initialStatus === 'Pendiente de Fijar Precios') {
       if (!formData.tipo_transporte) {
         toast.error('Debes seleccionar el tipo de transporte')
         return
@@ -323,7 +367,7 @@ export default function NewQuotationPage() {
           insurance_cost: Number(formData.insurance_cost),
 
           observaciones: formData.observaciones,
-          status,
+          status: initialStatus,
           created_by: profile?.id,
         },
       ]).select('id, quotation_number').single()
@@ -350,7 +394,7 @@ export default function NewQuotationPage() {
 
       toast.success('Cotización creada correctamente')
 
-      if (status === 'Pendiente de Fijar Precios') {
+      if (initialStatus === 'Pendiente de Fijar Precios') {
         const pricingUsers = await fetchPricingUsers()
 
         await Promise.all(
@@ -374,7 +418,7 @@ export default function NewQuotationPage() {
               quotation.quotation_number || quotation.id
             } enviada a Pricing`,
             metadata: {
-              status,
+              status: initialStatus,
               cliente_id: formData.cliente_id,
             },
           })
@@ -423,19 +467,56 @@ export default function NewQuotationPage() {
 
   const miamiLclFt3Rate = getClientRateAmount('lcl_maritimo_sps_ft3')
   const miamiLclLbsRate = getClientRateAmount('lcl_maritimo_sps_lbs')
+  const miamiLclSmallMinimum = getClientRateAmount(
+    'small_maritimo_min_lcl_1000_lbs_45_ft3'
+  )
+  const miamiLclLargeMinimum = getClientRateAmount(
+    'minimo_maritimo_2mil_lbs_90_ft3'
+  )
   const miamiAirKgRate = getClientRateAmount('consolidado_aereo_kg')
 
-  const lclByFt3 = Number(miamiCalc.ft3 || 0) * miamiLclFt3Rate
-  const lclByLbs = Number(miamiCalc.lbs || 0) * miamiLclLbsRate
-  const lclEstimated = Math.max(lclByFt3, lclByLbs)
+  const miamiLclResult = calculateMiamiLcl({
+    ft3: Number(miamiCalc.ft3 || 0),
+    lbs: Number(miamiCalc.lbs || 0),
+    rateFt3: miamiLclFt3Rate,
+    rateLbs: miamiLclLbsRate,
+    minimumSmall: miamiLclSmallMinimum,
+    minimumLarge: miamiLclLargeMinimum,
+  })
+
+  const lclByFt3 = miamiLclResult.byFt3
+  const lclByLbs = miamiLclResult.byLbs
+  const lclEstimated = miamiLclResult.finalAmount
 
   const airEstimated = Number(miamiCalc.kg || 0) * miamiAirKgRate
+
+  const pickupRate =
+    getClientRateAmount('recolectas_internas') ||
+    getClientRateAmount('delivery_miami')
+
+  const bunkerRule = surchargeRules.find(
+    (rule) => rule.code === 'bunker_emergency_surcharge'
+  )
+
+  const bunkerAmount =
+    bunkerRule && formData.service_product === 'miami_lcl'
+      ? Math.max(
+          Number(miamiCalc.lbs || 0) * Number(bunkerRule.rate_per_lbs || 0),
+          Number(miamiCalc.ft3 || 0) * Number(bunkerRule.rate_per_ft3 || 0),
+          Number(bunkerRule.minimum_amount || 0)
+        )
+      : 0
+
+  const pickupAmount =
+    formData.incoterm === 'EXW' && applyPickup ? pickupRate : 0
+
+  const miamiLclTotal = lclEstimated + bunkerAmount + pickupAmount
 
   const buildMiamiPricingItems = (quotationId: string) => {
     if (!usesClientRates(formData.service_product)) return []
 
     if (formData.service_product === 'miami_lcl') {
-      return [
+      const items = [
         {
           quotation_id: quotationId,
           description: 'Flete Miami LCL',
@@ -451,10 +532,60 @@ export default function NewQuotationPage() {
           supplier: 'Sari Express',
           notes: `Cálculo automático: FT3 USD ${lclByFt3.toFixed(
             2
-          )} vs LBS USD ${lclByLbs.toFixed(2)}. Se toma el mayor.`,
+          )} vs LBS USD ${lclByLbs.toFixed(
+            2
+          )}. Mínimo aplicado: ${miamiLclResult.minimumLabel} USD ${miamiLclResult.minimumApplied.toFixed(
+            2
+          )}.`,
           created_by: profile?.id,
         },
       ]
+
+      if (bunkerRule && bunkerAmount > 0) {
+        items.push({
+          quotation_id: quotationId,
+          description: bunkerRule.label,
+          item_type: 'Otros Cargos',
+          quantity: 1,
+          cost_amount: 0,
+          sale_amount: bunkerAmount,
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: bunkerAmount,
+          currency: bunkerRule.currency || 'USD',
+          taxable: false,
+          supplier: 'Sari Express',
+          notes: `CÃ¡lculo automÃ¡tico: MAX(lbs x ${Number(
+            bunkerRule.rate_per_lbs || 0
+          ).toFixed(2)}, ft3 x ${Number(
+            bunkerRule.rate_per_ft3 || 0
+          ).toFixed(2)}, mÃ­nimo USD ${Number(
+            bunkerRule.minimum_amount || 0
+          ).toFixed(2)}).`,
+          created_by: profile?.id,
+        })
+      }
+
+      if (pickupAmount > 0) {
+        items.push({
+          quotation_id: quotationId,
+          description: 'Pickup / Recolecta Interna',
+          item_type: 'Otros Cargos',
+          quantity: 1,
+          cost_amount: 0,
+          sale_amount: pickupAmount,
+          currency: 'USD',
+          taxable: false,
+          supplier: 'Sari Express',
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: pickupAmount,
+          created_by: profile?.id || null,
+          notes: 'Aplicado automáticamente por Incoterm EXW.',
+        })
+      }
+
+      return items
     }
 
     if (formData.service_product === 'miami_air') {
@@ -526,35 +657,43 @@ export default function NewQuotationPage() {
               </select>
             </div>
 
-            {usesClientRates(formData.service_product) && (
-              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
-                {!formData.cliente_id ? (
-                  <p>Selecciona un cliente para cargar sus tarifas.</p>
-                ) : clientRates.length === 0 ? (
-                  <p>Este cliente no tiene tarifas activas registradas.</p>
-                ) : (
-                  <>
-                    <p className="font-semibold">
+            {usesClientRates(formData.service_product) && clientRates.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-blue-900 dark:text-blue-100">
                       Tarifas activas del cliente
                     </p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      {clientRates.length} tarifas disponibles para esta cotización.
+                    </p>
+                  </div>
 
-                    <div className="mt-3 grid gap-2 md:grid-cols-2">
-                      {clientRates.map((rate) => (
-                        <div
-                          key={rate.id || rate.rate_code}
-                          className="rounded-lg border border-blue-100 bg-white px-3 py-2"
-                        >
-                          <p className="font-medium text-slate-900">
-                            {rate.rate_label}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {rate.currency} {Number(rate.amount).toFixed(2)}
-                            {rate.unit ? ` / ${rate.unit}` : ''}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </>
+                  <button
+                    type="button"
+                    onClick={() => setShowClientRates(!showClientRates)}
+                    className="rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
+                  >
+                    {showClientRates ? 'Ocultar tarifas' : 'Ver tarifas'}
+                  </button>
+                </div>
+
+                {showClientRates && (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {clientRates.map((rate) => (
+                      <div
+                        key={rate.rate_code}
+                        className="rounded-xl border border-blue-100 bg-white p-3 dark:border-blue-900/40 dark:bg-slate-950/70"
+                      >
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                          {rate.rate_label}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          USD {Number(rate.amount || 0).toFixed(2)} / {rate.unit || 'flat'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -566,7 +705,7 @@ export default function NewQuotationPage() {
                 </h3>
 
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Calcula el flete tomando el mayor entre FT3 y libras.
+                  Calcula el flete tomando el mayor entre FT3, libras y el mínimo aplicable.
                 </p>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -597,7 +736,23 @@ export default function NewQuotationPage() {
                   />
                 </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {formData.incoterm === 'EXW' && (
+                  <label className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/70">
+                    <input
+                      type="checkbox"
+                      checked={applyPickup}
+                      onChange={(e) => setApplyPickup(e.target.checked)}
+                    />
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Aplicar Pickup / Recolecta Interna
+                    </span>
+                    <span className="ml-auto font-semibold text-slate-900 dark:text-white">
+                      USD {pickupRate.toFixed(2)}
+                    </span>
+                  </label>
+                )}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-5">
                   <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Por FT3
@@ -609,19 +764,39 @@ export default function NewQuotationPage() {
 
                   <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Por Libras
+                      Por LBS
                     </p>
                     <p className="mt-1 font-semibold text-slate-900 dark:text-white">
                       USD {lclByLbs.toFixed(2)}
                     </p>
                   </div>
 
+                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Mínimo aplicado
+                    </p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+                      USD {miamiLclResult.minimumApplied.toFixed(2)}
+                    </p>
+                  </div>
+
+                  {bunkerRule && (
+                    <div className="rounded-xl bg-amber-50 p-4 dark:bg-amber-950/30">
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        {bunkerRule.label}
+                      </p>
+                      <p className="mt-1 font-semibold text-amber-900 dark:text-amber-100">
+                        USD {bunkerAmount.toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+
                   <div className="rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
                     <p className="text-xs text-blue-700 dark:text-blue-300">
-                      Flete estimado
+                      Total estimado
                     </p>
                     <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-100">
-                      USD {lclEstimated.toFixed(2)}
+                      USD {miamiLclTotal.toFixed(2)}
                     </p>
                   </div>
                 </div>
