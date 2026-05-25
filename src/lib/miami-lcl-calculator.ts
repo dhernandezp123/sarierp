@@ -8,6 +8,8 @@ type CalculateMiamiLclInput = {
   bunker?: number
 }
 
+type MiamiLclBasis = 'minimum_small' | 'minimum_large' | 'weight' | 'volume'
+
 export const calculateMiamiLcl = ({
   ft3,
   lbs,
@@ -17,32 +19,47 @@ export const calculateMiamiLcl = ({
   minimumLarge,
   bunker = 0,
 }: CalculateMiamiLclInput) => {
-  const byFt3 = ft3 * rateFt3
-  const byLbs = lbs * rateLbs
-  const baseAmount = Math.max(byFt3, byLbs)
+  const ft3Amount = ft3 * rateFt3
+  const lbsAmount = lbs * rateLbs
 
-  let minimumApplied = 0
-  let minimumLabel = 'N/A'
+  let minimumAmount = 0
+  let minimumType: MiamiLclBasis = 'minimum_large'
 
   if (ft3 > 0 || lbs > 0) {
     if (ft3 <= 45 && lbs <= 1000) {
-      minimumApplied = minimumSmall
-      minimumLabel = 'Small LCL'
+      minimumAmount = minimumSmall
+      minimumType = 'minimum_small'
     } else if (ft3 <= 90 && lbs <= 2000) {
-      minimumApplied = minimumLarge
-      minimumLabel = 'Mínimo LCL'
+      minimumAmount = minimumLarge
+      minimumType = 'minimum_large'
     }
   }
 
-  const finalAmount = Math.max(baseAmount, minimumApplied) + bunker
+  const candidates: Array<{ basis: MiamiLclBasis; amount: number }> = [
+    { basis: 'volume', amount: ft3Amount },
+    { basis: 'weight', amount: lbsAmount },
+    { basis: minimumType, amount: minimumAmount },
+  ]
+
+  const winner = candidates.reduce((max, item) =>
+    item.amount > max.amount ? item : max
+  )
+
+  const isMinimum =
+    winner.basis === 'minimum_small' || winner.basis === 'minimum_large'
+  const oceanFreight = winner.amount + bunker
 
   return {
-    byFt3,
-    byLbs,
-    baseAmount,
-    minimumApplied,
-    minimumLabel,
+    ft3Amount,
+    lbsAmount,
+    minimumApplied: minimumAmount,
+    oceanFreight,
+    basis: winner.basis,
+    isMinimum,
     bunker,
-    finalAmount,
+    byFt3: ft3Amount,
+    byLbs: lbsAmount,
+    baseAmount: Math.max(ft3Amount, lbsAmount),
+    finalAmount: oceanFreight,
   }
 }

@@ -53,6 +53,12 @@ export default function NewQuotationPage() {
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
   const [showClientRates, setShowClientRates] = useState(false)
   const [applyPickup, setApplyPickup] = useState(false)
+  const [miamiOptions, setMiamiOptions] = useState({
+    applyStandardCharges: true,
+    isImo: false,
+    isHazmat: false,
+    includeImoCertificate: false,
+  })
   const [miamiCalc, setMiamiCalc] = useState({
     ft3: '',
     lbs: '',
@@ -465,6 +471,9 @@ export default function NewQuotationPage() {
     return Number(rate?.amount || 0)
   }
 
+  const getClientRate = (code: string) =>
+    clientRates.find((item) => item.rate_code === code)
+
   const miamiLclFt3Rate = getClientRateAmount('lcl_maritimo_sps_ft3')
   const miamiLclLbsRate = getClientRateAmount('lcl_maritimo_sps_lbs')
   const miamiLclSmallMinimum = getClientRateAmount(
@@ -484,9 +493,15 @@ export default function NewQuotationPage() {
     minimumLarge: miamiLclLargeMinimum,
   })
 
-  const lclByFt3 = miamiLclResult.byFt3
-  const lclByLbs = miamiLclResult.byLbs
-  const lclEstimated = miamiLclResult.finalAmount
+  const lclByFt3 = miamiLclResult.ft3Amount
+  const lclByLbs = miamiLclResult.lbsAmount
+  const lclEstimated = miamiLclResult.oceanFreight
+
+  const shouldApplyStandardCharges =
+    formData.service_product === 'miami_lcl' && !miamiLclResult.isMinimum
+
+  const applyStandardCharges =
+    shouldApplyStandardCharges && miamiOptions.applyStandardCharges
 
   const airEstimated = Number(miamiCalc.kg || 0) * miamiAirKgRate
 
@@ -534,7 +549,7 @@ export default function NewQuotationPage() {
             2
           )} vs LBS USD ${lclByLbs.toFixed(
             2
-          )}. Mínimo aplicado: ${miamiLclResult.minimumLabel} USD ${miamiLclResult.minimumApplied.toFixed(
+          )}. Mínimo aplicado USD ${miamiLclResult.minimumApplied.toFixed(
             2
           )}.`,
           created_by: profile?.id,
@@ -584,6 +599,40 @@ export default function NewQuotationPage() {
           notes: 'Aplicado automáticamente por Incoterm EXW.',
         })
       }
+
+      const standardChargeCodes = applyStandardCharges
+        ? ['bl', 'sed', 'documentos_manejo']
+        : []
+
+      const conditionalChargeCodes = [
+        miamiOptions.isHazmat ? 'hazmat_imo_charge_line' : null,
+        miamiOptions.isImo ? 'declaracion_imo' : null,
+        miamiOptions.includeImoCertificate ? 'certificado_imo' : null,
+      ].filter(Boolean) as string[]
+
+      ;[...standardChargeCodes, ...conditionalChargeCodes].forEach((code) => {
+        const rate = getClientRate(code)
+        const amount = Number(rate?.amount || 0)
+
+        if (!rate || amount <= 0) return
+
+        items.push({
+          quotation_id: quotationId,
+          description: rate.rate_label,
+          item_type: 'Otros Cargos',
+          quantity: 1,
+          cost_amount: 0,
+          sale_amount: amount,
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: amount,
+          currency: rate.currency || 'USD',
+          taxable: false,
+          supplier: 'Sari Express',
+          notes: 'Cargo aplicado automáticamente según configuración Miami LCL.',
+          created_by: profile?.id,
+        })
+      })
 
       return items
     }
@@ -751,6 +800,78 @@ export default function NewQuotationPage() {
                     </span>
                   </label>
                 )}
+
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/70">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={
+                        shouldApplyStandardCharges &&
+                        miamiOptions.applyStandardCharges
+                      }
+                      disabled={!shouldApplyStandardCharges}
+                      onChange={(e) =>
+                        setMiamiOptions({
+                          ...miamiOptions,
+                          applyStandardCharges: e.target.checked,
+                        })
+                      }
+                    />
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Aplicar cargos estándar: BL, SED, Documentos / Manejo
+                    </span>
+                  </label>
+
+                  {miamiLclResult.isMinimum && (
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      No aplican cargos estándar cuando el flete se calcula por mínimo.
+                    </p>
+                  )}
+
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={miamiOptions.isHazmat}
+                        onChange={(e) =>
+                          setMiamiOptions({
+                            ...miamiOptions,
+                            isHazmat: e.target.checked,
+                          })
+                        }
+                      />
+                      Hazmat IMO Charge Line
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={miamiOptions.isImo}
+                        onChange={(e) =>
+                          setMiamiOptions({
+                            ...miamiOptions,
+                            isImo: e.target.checked,
+                          })
+                        }
+                      />
+                      Declaración IMO
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={miamiOptions.includeImoCertificate}
+                        onChange={(e) =>
+                          setMiamiOptions({
+                            ...miamiOptions,
+                            includeImoCertificate: e.target.checked,
+                          })
+                        }
+                      />
+                      Certificado IMO
+                    </label>
+                  </div>
+                </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-5">
                   <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">

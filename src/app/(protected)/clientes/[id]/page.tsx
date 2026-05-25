@@ -31,6 +31,7 @@ const clientRateCatalog = [
   { code: 'embalaje_madera', label: 'Embalaje Madera', category: 'Otros Cargos', unit: 'flat' },
   { code: 'hazmat_imo_charge_line', label: 'Hazmat IMO Charge Line', category: 'Otros Cargos', unit: 'flat' },
   { code: 'declaracion_imo', label: 'Declaración IMO', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'certificado_imo', label: 'Certificado IMO', category: 'Otros Cargos', unit: 'flat' },
   { code: 'bonded_fcl_proveedor', label: 'Bonded FCL Proveedor', category: 'Otros Cargos', unit: 'flat' },
   { code: 'bonded_documentacion_7512', label: 'Bonded Documentación 7512', category: 'Otros Cargos', unit: 'flat' },
 ]
