@@ -297,6 +297,18 @@ export default function NewQuotationPage() {
       return
     }
 
+    if (!formData.service_product) {
+      toast.error('Debes seleccionar el producto / servicio')
+      return
+    }
+
+    if (!formData.trade_direction) {
+      toast.error('Debes seleccionar la dirección comercial')
+      return
+    }
+
+    const submitIsMiamiFlow = usesClientRates(formData.service_product)
+
     if (formData.service_product === 'miami_lcl' && lclEstimated <= 0) {
       toast.error('Ingresa FT3 o libras para calcular la tarifa Miami LCL')
       return
@@ -307,7 +319,7 @@ export default function NewQuotationPage() {
       return
     }
 
-    const initialStatus = usesClientRates(formData.service_product)
+    const initialStatus = submitIsMiamiFlow
       ? 'Pricing Aprobado'
       : 'Pendiente de Fijar Precios'
 
@@ -502,6 +514,8 @@ export default function NewQuotationPage() {
 
   const applyStandardCharges =
     shouldApplyStandardCharges && miamiOptions.applyStandardCharges
+
+  const isMiamiFlow = usesClientRates(formData.service_product)
 
   const airEstimated = Number(miamiCalc.kg || 0) * miamiAirKgRate
 
@@ -706,7 +720,13 @@ export default function NewQuotationPage() {
               </select>
             </div>
 
-            {usesClientRates(formData.service_product) && clientRates.length > 0 && (
+            {isMiamiFlow && (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">
+                Este producto usa tarifas automáticas del cliente y no requiere comparación manual de agentes.
+              </div>
+            )}
+
+            {isMiamiFlow && clientRates.length > 0 && (
               <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -746,6 +766,17 @@ export default function NewQuotationPage() {
                 )}
               </div>
             )}
+
+            {isMiamiFlow && (
+              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/60 p-5 dark:border-blue-900/50 dark:bg-blue-950/20">
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Flujo rápido Miami Consolidado
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Usa las tarifas activas del cliente para calcular y generar la cotización automáticamente.
+                  </p>
+                </div>
 
             {formData.service_product === 'miami_lcl' && (
               <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
@@ -959,8 +990,11 @@ export default function NewQuotationPage() {
                 </div>
               </div>
             )}
+              </div>
+            )}
           </div>
 
+          {!isMiamiFlow && (
           <div className="rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold mb-4">
               Tipo de Cotización
@@ -1002,6 +1036,7 @@ export default function NewQuotationPage() {
               </select>
             </div>
           </div>
+          )}
 
           <section>
             <h2 className="text-xl font-semibold mb-4">
@@ -1103,6 +1138,8 @@ export default function NewQuotationPage() {
             </div>
           </section>
 
+          {!isMiamiFlow && (
+          <>
           <section>
             <h2 className="text-xl font-semibold mb-4">
               Información del Embarque
@@ -1311,6 +1348,9 @@ export default function NewQuotationPage() {
             </div>
           </section>
 
+          </>
+          )}
+
           <section>
   <h2 className="text-xl font-semibold mb-4">
     Seguro de Carga
@@ -1337,6 +1377,7 @@ export default function NewQuotationPage() {
   )}
 </section>
 
+          {!isMiamiFlow && (
           <section>
             <h2 className="text-xl font-semibold mb-4">
               Observaciones para Pricing
@@ -1349,6 +1390,7 @@ export default function NewQuotationPage() {
               className="border p-3 rounded w-full h-32"
             />
           </section>
+          )}
 
           <div className="flex justify-end gap-3">
             <button
@@ -1366,7 +1408,7 @@ export default function NewQuotationPage() {
               disabled={loading}
               className="rounded-xl bg-slate-950 text-white px-6 py-3 font-semibold hover:bg-slate-800"
             >
-              Enviar a Pricing
+              {isMiamiFlow ? 'Crear cotización aprobada' : 'Enviar a Pricing'}
             </button>
           </div>
         </div>
