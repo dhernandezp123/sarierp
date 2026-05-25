@@ -35,25 +35,44 @@ const clientRateCatalog = [
   { code: 'bonded_documentacion_7512', label: 'Bonded Documentación 7512', category: 'Otros Cargos', unit: 'flat' },
 ]
 
+type ClientRate = {
+  id?: string
+  cliente_id: string
+  rate_code: string
+  rate_label: string
+  category: string
+  unit: string | null
+  currency: string
+  amount: number
+  is_active: boolean
+  valid_from: string | null
+  valid_to: string | null
+  notes: string | null
+}
+
 export default function ClienteProfilePage() {
   const { profile } = useUser()
   const params = useParams()
   const router = useRouter()
+  const id = params.id as string
 
   const [cliente, setCliente] = useState<any>(null)
   const [quotations, setQuotations] = useState<any[]>([])
   const [clientNotes, setClientNotes] = useState<any[]>([])
+  const [clientRates, setClientRates] = useState<Record<string, ClientRate>>({})
+  const [savingRates, setSavingRates] = useState(false)
   const [newNote, setNewNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('resumen')
 
   useEffect(() => {
-    if (params.id) {
+    if (id) {
       fetchCliente()
       fetchQuotations()
       fetchClientNotes()
+      loadClientRates()
     }
-  }, [params.id])
+  }, [id])
 
   const fetchCliente = async () => {
     const { data, error } = await supabase
@@ -66,7 +85,7 @@ export default function ClienteProfilePage() {
           apellido
         )
       `)
-      .eq('id', params.id as string)
+      .eq('id', id)
       .is('deleted_at', null)
       .single()
 
@@ -86,7 +105,7 @@ export default function ClienteProfilePage() {
     const { data, error } = await supabase
       .from('quotations')
       .select('*')
-      .eq('cliente_id', params.id as string)
+      .eq('cliente_id', id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
@@ -108,7 +127,7 @@ export default function ClienteProfilePage() {
           apellido
         )
       `)
-      .eq('cliente_id', params.id as string)
+      .eq('cliente_id', id)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -127,7 +146,7 @@ export default function ClienteProfilePage() {
 
     const { error } = await supabase.from('client_notes').insert([
       {
-        cliente_id: params.id as string,
+        cliente_id: id,
         note: newNote.trim(),
         created_by: profile?.id,
       },
@@ -140,6 +159,90 @@ export default function ClienteProfilePage() {
 
     setNewNote('')
     await fetchClientNotes()
+  }
+
+  const loadClientRates = async () => {
+    if (!id) return
+
+    const { data, error } = await supabase
+      .from('client_rates')
+      .select('*')
+      .eq('cliente_id', id)
+      .eq('is_active', true)
+
+    if (error) {
+      toast.error('No se pudieron cargar las tarifas')
+      return
+    }
+
+    const mapped = Object.fromEntries(
+      (data || []).map((rate) => [rate.rate_code, rate])
+    ) as Record<string, ClientRate>
+
+    setClientRates(mapped)
+  }
+
+  const updateClientRateAmount = (code: string, amount: string) => {
+    const catalogItem = clientRateCatalog.find((item) => item.code === code)
+    if (!catalogItem) return
+
+    setClientRates((prev) => ({
+      ...prev,
+      [code]: {
+        ...(prev[code] || {}),
+        cliente_id: id,
+        rate_code: catalogItem.code,
+        rate_label: catalogItem.label,
+        category: catalogItem.category,
+        unit: catalogItem.unit,
+        currency: 'USD',
+        amount: amount === '' ? 0 : Number(amount),
+        is_active: true,
+        valid_from: null,
+        valid_to: null,
+        notes: null,
+      },
+    }))
+  }
+
+  const saveClientRates = async () => {
+    if (!id) return
+
+    setSavingRates(true)
+
+    const rows = clientRateCatalog.map((item) => {
+      const existing = clientRates[item.code]
+
+      return {
+        cliente_id: id,
+        rate_code: item.code,
+        rate_label: item.label,
+        category: item.category,
+        unit: item.unit,
+        currency: existing?.currency || 'USD',
+        amount: existing?.amount || 0,
+        is_active: true,
+        valid_from: existing?.valid_from || null,
+        valid_to: existing?.valid_to || null,
+        notes: existing?.notes || null,
+      }
+    })
+
+    const { error } = await supabase
+      .from('client_rates')
+      .upsert(rows, {
+        onConflict: 'cliente_id,rate_code',
+      })
+
+    setSavingRates(false)
+
+    if (error) {
+      toast.error('No se pudieron guardar las tarifas')
+      return
+    }
+
+    toast.success('Tarifas del cliente guardadas')
+    loadClientRates()
   }
 
   const archiveClient = async () => {
@@ -509,11 +612,29 @@ export default function ClienteProfilePage() {
                           <p className="mt-1 text-xs text-slate-500">
                             Unidad: {rate.unit}
                           </p>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={clientRates[rate.code]?.amount ?? ''}
+                            onChange={(e) =>
+                              updateClientRateAmount(rate.code, e.target.value)
+                            }
+                            className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                          />
                         </div>
                       ))}
                   </div>
                 </div>
               ))}
+
+              <button
+                type="button"
+                onClick={saveClientRates}
+                disabled={savingRates}
+                className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingRates ? 'Guardando...' : 'Guardar Tarifas'}
+              </button>
             </div>
           </div>
         )}

@@ -7,6 +7,26 @@ import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
+import {
+  serviceProducts,
+  tradeDirections,
+  usesClientRates,
+} from '@/src/lib/quotation-products'
+
+type ClientRate = {
+  id?: string
+  cliente_id: string
+  rate_code: string
+  rate_label: string
+  category: string
+  unit: string | null
+  currency: string
+  amount: number
+  is_active: boolean
+  valid_from: string | null
+  valid_to: string | null
+  notes: string | null
+}
 
 export default function NewQuotationPage() {
   const { profile } = useUser()
@@ -15,10 +35,19 @@ export default function NewQuotationPage() {
   const [clientes, setClientes] = useState<any[]>([])
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
+  const [clientRates, setClientRates] = useState<ClientRate[]>([])
+  const [miamiCalc, setMiamiCalc] = useState({
+    ft3: '',
+    lbs: '',
+    cbm: '',
+    kg: '',
+  })
 
   const initialFormData = {
     cliente_id: '',
 
+    trade_direction: 'import',
+    service_product: '',
     quote_type: '',
     valid_until: '',
 
@@ -67,6 +96,18 @@ export default function NewQuotationPage() {
     fetchClientes()
     fetchCatalogs()
   }, [])
+
+  useEffect(() => {
+    if (
+      !formData.cliente_id ||
+      !usesClientRates(formData.service_product)
+    ) {
+      setClientRates([])
+      return
+    }
+
+    loadClientRates(formData.cliente_id)
+  }, [formData.cliente_id, formData.service_product])
 
   const fetchPricingUsers = async () => {
     const { data: pricingUsers } = await supabase
@@ -118,6 +159,23 @@ export default function NewQuotationPage() {
 
     setCountries(countriesData || [])
     setPorts(portsData || [])
+  }
+
+  const loadClientRates = async (clienteId: string) => {
+    const { data, error } = await supabase
+      .from('client_rates')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .eq('is_active', true)
+      .order('category', { ascending: true })
+      .order('rate_label', { ascending: true })
+
+    if (error) {
+      toast.error('No se pudieron cargar las tarifas del cliente')
+      return
+    }
+
+    setClientRates((data || []) as ClientRate[])
   }
 
   const calculateInsurance = (data: any) => {
@@ -212,6 +270,8 @@ export default function NewQuotationPage() {
         {
           cliente_id: formData.cliente_id,
 
+          trade_direction: formData.trade_direction,
+          service_product: formData.service_product || null,
           quote_type: formData.quote_type,
           valid_until: formData.valid_until || null,
 
@@ -328,6 +388,24 @@ export default function NewQuotationPage() {
     Terrestre: ['LTL', 'FTL'],
   }
 
+  const fieldClass =
+    'border rounded-xl px-3 py-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+
+  const getClientRateAmount = (code: string) => {
+    const rate = clientRates.find((item) => item.rate_code === code)
+    return Number(rate?.amount || 0)
+  }
+
+  const miamiLclFt3Rate = getClientRateAmount('lcl_maritimo_sps_ft3')
+  const miamiLclLbsRate = getClientRateAmount('lcl_maritimo_sps_lbs')
+  const miamiAirKgRate = getClientRateAmount('consolidado_aereo_kg')
+
+  const lclByFt3 = Number(miamiCalc.ft3 || 0) * miamiLclFt3Rate
+  const lclByLbs = Number(miamiCalc.lbs || 0) * miamiLclLbsRate
+  const lclEstimated = Math.max(lclByFt3, lclByLbs)
+
+  const airEstimated = Number(miamiCalc.kg || 0) * miamiAirKgRate
+
   return (
     <>
       <div className="max-w-6xl">
@@ -336,6 +414,182 @@ export default function NewQuotationPage() {
         </h1>
 
         <div className="bg-white rounded-xl shadow p-8 space-y-8">
+          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold mb-4">
+              Producto Comercial
+            </h2>
+
+            <div className="grid grid-cols-2 gap-4">
+              <select
+                name="trade_direction"
+                value={formData.trade_direction}
+                onChange={handleChange}
+                className="border rounded-xl px-3 py-2"
+              >
+                <option value="">Dirección Comercial</option>
+
+                {tradeDirections.map((direction) => (
+                  <option key={direction.value} value={direction.value}>
+                    {direction.label}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                name="service_product"
+                value={formData.service_product}
+                onChange={handleChange}
+                className="border rounded-xl px-3 py-2"
+              >
+                <option value="">Producto / Servicio</option>
+
+                {serviceProducts.map((product) => (
+                  <option key={product.value} value={product.value}>
+                    {product.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {usesClientRates(formData.service_product) && (
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950">
+                {!formData.cliente_id ? (
+                  <p>Selecciona un cliente para cargar sus tarifas.</p>
+                ) : clientRates.length === 0 ? (
+                  <p>Este cliente no tiene tarifas activas registradas.</p>
+                ) : (
+                  <>
+                    <p className="font-semibold">
+                      Tarifas activas del cliente
+                    </p>
+
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      {clientRates.map((rate) => (
+                        <div
+                          key={rate.id || rate.rate_code}
+                          className="rounded-lg border border-blue-100 bg-white px-3 py-2"
+                        >
+                          <p className="font-medium text-slate-900">
+                            {rate.rate_label}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {rate.currency} {Number(rate.amount).toFixed(2)}
+                            {rate.unit ? ` / ${rate.unit}` : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {formData.service_product === 'miami_lcl' && (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                  Calculadora Miami LCL
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Calcula el flete tomando el mayor entre FT3 y libras.
+                </p>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <input
+                    type="number"
+                    value={miamiCalc.ft3}
+                    onChange={(e) =>
+                      setMiamiCalc({
+                        ...miamiCalc,
+                        ft3: e.target.value,
+                      })
+                    }
+                    placeholder="FT3"
+                    className={fieldClass}
+                  />
+
+                  <input
+                    type="number"
+                    value={miamiCalc.lbs}
+                    onChange={(e) =>
+                      setMiamiCalc({
+                        ...miamiCalc,
+                        lbs: e.target.value,
+                      })
+                    }
+                    placeholder="Libras"
+                    className={fieldClass}
+                  />
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Por FT3
+                    </p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+                      USD {lclByFt3.toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Por Libras
+                    </p>
+                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+                      USD {lclByLbs.toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
+                    <p className="text-xs text-blue-700 dark:text-blue-300">
+                      Flete estimado
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-100">
+                      USD {lclEstimated.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {formData.service_product === 'miami_air' && (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                  Calculadora Miami Aéreo
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Calcula el flete aéreo usando la tarifa por KG.
+                </p>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <input
+                    type="number"
+                    value={miamiCalc.kg}
+                    onChange={(e) =>
+                      setMiamiCalc({
+                        ...miamiCalc,
+                        kg: e.target.value,
+                      })
+                    }
+                    placeholder="Kilogramos"
+                    className={fieldClass}
+                  />
+                </div>
+
+                <div className="mt-4 rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    Flete estimado
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-100">
+                    USD {airEstimated.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold mb-4">
               Tipo de Cotización
