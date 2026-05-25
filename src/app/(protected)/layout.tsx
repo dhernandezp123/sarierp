@@ -25,7 +25,7 @@ export default function ProtectedLayout({
   }, [pathname, profile, router])
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
+    <div className="flex min-h-screen bg-[#F5F7FA] text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
       <Sidebar role={profile?.rol} />
 
       <div className="flex flex-1 flex-col">
@@ -35,7 +35,7 @@ export default function ProtectedLayout({
           {children}
         </main>
 
-        <footer className="border-t border-slate-200 bg-white px-6 py-3 text-center text-xs text-slate-500">
+        <footer className="border-t border-slate-200 bg-[#F5F7FA] px-6 py-3 text-center text-xs text-slate-500">
           Sistema desarrollado por{' '}
           <span className="font-semibold text-slate-700">DHER Solutions</span>{' '}
           para{' '}

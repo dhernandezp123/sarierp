@@ -171,8 +171,8 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         href={item.href}
         className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
           isActive
-            ? 'bg-slate-100 text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white'
-            : 'text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
+            ? 'bg-white/10 text-white shadow-sm'
+            : 'text-slate-300 hover:bg-white/5 hover:text-white'
         }`}
       >
         <Icon size={18} />
@@ -182,8 +182,8 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   }
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white text-slate-900 transition-colors dark:border-slate-700/60 dark:bg-[#0b1220] dark:text-white">
-      <div className="mb-8 border-b border-slate-200 px-4 pb-5 pt-5 dark:border-slate-700/60">
+    <aside className="flex h-screen w-64 flex-col border-r border-white/5 bg-[#0B1120] text-white">
+      <div className="mb-8 border-b border-white/5 px-4 pb-5 pt-5">
         <p className="text-xs uppercase tracking-[0.25em] text-red-500 font-bold">
           Sari Express
         </p>
@@ -192,16 +192,17 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
           Forwarders ERP
         </h2>
 
-        <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        <p className="mt-2 text-xs leading-relaxed text-slate-400">
           Freight Management Platform
         </p>
       </div>
 
-      {canViewCommercial && visibleNavItems.length > 0 && (
-        <nav className="space-y-1 px-4">
-          {visibleNavItems.map(renderItem)}
-        </nav>
-      )}
+      <div className="flex-1 overflow-y-auto pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {canViewCommercial && visibleNavItems.length > 0 && (
+          <nav className="space-y-1 px-4">
+            {visibleNavItems.map(renderItem)}
+          </nav>
+        )}
 
       {(visibleCostItems.length > 0 ||
         visibleFinancialItems.length > 0 ||
@@ -209,7 +210,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         <div className="mt-8 px-4">
           {visibleCostItems.length > 0 && (
             <>
-              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Pricing
               </p>
 
@@ -221,7 +222,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
           {visibleFinancialItems.length > 0 && (
             <>
-              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Finanzas
               </p>
 
@@ -233,7 +234,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
           {visibleOperationsItems.length > 0 && (
             <>
-              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Operaciones
               </p>
 
@@ -247,7 +248,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
       {visibleAdminItems.length > 0 && (
         <div className="mt-8 px-4">
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
             Administración
           </p>
 
@@ -257,17 +258,19 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         </div>
       )}
 
-      <div className="mt-10 border-t border-slate-200 px-4 pt-6 dark:border-slate-700/60">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700/60 dark:bg-[#0b1220]">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Rol activo</p>
-          <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+      </div>
+
+      <div className="border-t border-white/5 p-4">
+        <div className="rounded-xl border border-white/5 bg-white/5 p-3">
+          <p className="text-xs text-slate-400">Rol activo</p>
+          <p className="mt-1 text-sm font-semibold text-white">
             {currentRole || 'Ventas'}
           </p>
         </div>
 
         <button
           onClick={handleLogout}
-          className="mt-4 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          className="mt-4 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
         >
           <LogOut className="h-4 w-4" />
           Cerrar sesión

@@ -9,6 +9,32 @@ import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 
+const clientRateCatalog = [
+  { code: 'small_maritimo_min_lcl_1000_lbs_45_ft3', label: 'Small Mínimo LCL 1000 lbs / 45 ft3', category: 'Small Marítimo', unit: 'flat' },
+  { code: 'minimo_maritimo_2mil_lbs_90_ft3', label: 'Mínimo LCL 2 mil lbs / 90 ft3', category: 'Mínimo Marítimo', unit: 'flat' },
+  { code: 'lcl_maritimo_sps_ft3', label: 'LCL Marítimo SPS - FT3', category: 'LCL Marítimo', unit: 'FT3' },
+  { code: 'lcl_maritimo_sps_lbs', label: 'LCL Marítimo SPS - LBS', category: 'LCL Marítimo', unit: 'LBS' },
+  { code: 'consolidado_aereo_kg', label: 'Consolidado Aéreo - KG', category: 'Consolidado Aéreo', unit: 'KG' },
+  { code: 'delivery_miami', label: 'DELIVERY / Miami', category: 'Consolidado Aéreo', unit: 'flat' },
+  { code: 'documentos_manejo', label: 'Documentos / Manejo', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'desconsolidar', label: 'Desconsolidar', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'bl', label: 'BL', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'guia', label: 'Guía', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'sed', label: 'SED', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'recolectas_internas', label: 'Recolectas Internas', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'fumigacion', label: 'Fumigación', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'pallet_embalaje', label: 'Pallet Embalaje', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'segregacion', label: 'Segregación', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'in_and_out', label: 'In and Out', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'equipo_especial', label: 'Equipo Especial', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'oversize', label: 'Oversize', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'embalaje_madera', label: 'Embalaje Madera', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'hazmat_imo_charge_line', label: 'Hazmat IMO Charge Line', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'declaracion_imo', label: 'Declaración IMO', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'bonded_fcl_proveedor', label: 'Bonded FCL Proveedor', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'bonded_documentacion_7512', label: 'Bonded Documentación 7512', category: 'Otros Cargos', unit: 'flat' },
+]
+
 export default function ClienteProfilePage() {
   const { profile } = useUser()
   const params = useParams()
@@ -231,6 +257,7 @@ export default function ClienteProfilePage() {
           {[
             'resumen',
             'cotizaciones',
+            'tarifas',
             'notas',
             'historial',
           ].map((tab) => (
@@ -450,6 +477,44 @@ export default function ClienteProfilePage() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'tarifas' && (
+          <div className="rounded-2xl border bg-white p-6">
+            <h2 className="mb-4 text-xl font-bold">
+              Tarifas del Cliente
+            </h2>
+
+            <div className="space-y-6">
+              {Array.from(
+                new Set(clientRateCatalog.map((rate) => rate.category))
+              ).map((category) => (
+                <div key={category}>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
+                    {category}
+                  </h3>
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {clientRateCatalog
+                      .filter((rate) => rate.category === category)
+                      .map((rate) => (
+                        <div
+                          key={rate.code}
+                          className="rounded-xl border border-slate-200 p-4"
+                        >
+                          <p className="text-sm font-semibold text-slate-900">
+                            {rate.label}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Unidad: {rate.unit}
+                          </p>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
