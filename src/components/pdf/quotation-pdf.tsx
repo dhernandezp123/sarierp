@@ -285,6 +285,18 @@ function getQuoteTitle(quoteType?: string) {
   }
 }
 
+function getQuoteTitleByProduct(quotation: any) {
+  if (quotation.service_product === 'miami_lcl') {
+    return 'Cotización Miami Consolidado LCL'
+  }
+
+  if (quotation.service_product === 'miami_air') {
+    return 'Cotización Miami Consolidado Aéreo'
+  }
+
+  return `Cotización ${quotation.tipo_transporte || 'Logística'}`
+}
+
 function filterItems(pricingItems: any[], type: string) {
   return pricingItems.filter((item) => item.item_type === type)
 }
@@ -372,7 +384,20 @@ export default function QuotationPDF({
   pricingItems?: any[]
   quotationContainers?: any[]
 }) {
+  const quoteTitle = getQuoteTitleByProduct(quotation)
   const freightItems = filterItems(pricingItems, 'Flete')
+  const knownGroupedTypes = [
+    'Flete',
+    'Origen',
+    'Documentación',
+    'Aduana',
+    'Destino',
+    'Inland',
+    'Seguro',
+    'Profit',
+    'Otro',
+    'Otros Cargos',
+  ]
   const originItems = pricingItems.filter((item) =>
     ['Origen', 'Documentación', 'Aduana'].includes(item.item_type)
   )
@@ -382,11 +407,17 @@ export default function QuotationPDF({
   const additionalItems = pricingItems.filter((item) =>
     ['Seguro', 'Profit', 'Otro'].includes(item.item_type)
   )
+  const otherChargeItems = pricingItems.filter(
+    (item) =>
+      item.item_type === 'Otros Cargos' ||
+      !knownGroupedTypes.includes(item.item_type)
+  )
 
   const freightTotal = getGroupTotal(freightItems)
   const originTotal = getGroupTotal(originItems)
   const destinationTotal = getGroupTotal(destinationItems)
   const additionalTotal = getGroupTotal(additionalItems)
+  const otherChargeTotal = getGroupTotal(otherChargeItems)
 
   const subtotalGeneral = pricingItems.reduce((sum, item) => {
     const qty = Number(item.quantity || 1)
@@ -405,7 +436,11 @@ export default function QuotationPDF({
 
   const finalTotal =
     Number(quotation.total_sale || 0) ||
-    freightTotal + originTotal + destinationTotal + additionalTotal
+    freightTotal +
+      originTotal +
+      destinationTotal +
+      additionalTotal +
+      otherChargeTotal
 
   const sellerName = quotation.profiles
     ? `${quotation.profiles.nombre} ${quotation.profiles.apellido}`
@@ -437,7 +472,7 @@ export default function QuotationPDF({
 
           <View style={styles.headerRight}>
             <Text style={styles.badge}>
-              {getQuoteTitle(quotation.quote_type)}
+              {quoteTitle}
             </Text>
 
             <View style={styles.headerQuoteBox}>
@@ -655,6 +690,11 @@ export default function QuotationPDF({
         <ChargesTable
           title="Flete"
           items={freightItems}
+        />
+
+        <ChargesTable
+          title="Otros Cargos"
+          items={otherChargeItems}
         />
 
         <ChargesTable

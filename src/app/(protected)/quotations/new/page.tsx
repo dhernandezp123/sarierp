@@ -42,6 +42,17 @@ type SurchargeRule = {
   is_active: boolean
 }
 
+type CargoDimensionLine = {
+  id: string
+  quantity: string
+  packageType: 'Caja' | 'Pallet' | 'Pieza'
+  length: string
+  width: string
+  height: string
+  dimensionUnit: 'in' | 'cm'
+  weight: string
+}
+
 export default function NewQuotationPage() {
   const { profile } = useUser()
 
@@ -52,7 +63,22 @@ export default function NewQuotationPage() {
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
   const [showClientRates, setShowClientRates] = useState(false)
-  const [applyPickup, setApplyPickup] = useState(false)
+  const [pickupMode, setPickupMode] = useState<'none' | 'standard' | 'manual'>(
+    'none'
+  )
+  const [manualPickupAmount, setManualPickupAmount] = useState(0)
+  const [cargoLines, setCargoLines] = useState<CargoDimensionLine[]>([
+    {
+      id: crypto.randomUUID(),
+      quantity: '1',
+      packageType: 'Caja',
+      length: '',
+      width: '',
+      height: '',
+      dimensionUnit: 'in',
+      weight: '',
+    },
+  ])
   const [miamiOptions, setMiamiOptions] = useState({
     applyStandardCharges: true,
     isImo: false,
@@ -387,6 +413,7 @@ export default function NewQuotationPage() {
           observaciones: formData.observaciones,
           status: initialStatus,
           created_by: profile?.id,
+          created_at: new Date().toISOString(),
         },
       ]).select('id, quotation_number').single()
 
@@ -478,6 +505,53 @@ export default function NewQuotationPage() {
   const fieldClass =
     'border rounded-xl px-3 py-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
 
+  const calculateLineFt3 = (line: CargoDimensionLine) => {
+    const quantity = Number(line.quantity || 0)
+    const length = Number(line.length || 0)
+    const width = Number(line.width || 0)
+    const height = Number(line.height || 0)
+
+    if (!quantity || !length || !width || !height) return 0
+
+    if (line.dimensionUnit === 'cm') {
+      const cbmPerUnit = (length * width * height) / 1_000_000
+      return cbmPerUnit * 35.3147 * quantity
+    }
+
+    return ((length * width * height) / 1728) * quantity
+  }
+
+  const calculateLineCbm = (line: CargoDimensionLine) => {
+    const quantity = Number(line.quantity || 0)
+    const length = Number(line.length || 0)
+    const width = Number(line.width || 0)
+    const height = Number(line.height || 0)
+
+    if (!quantity || !length || !width || !height) return 0
+
+    if (line.dimensionUnit === 'cm') {
+      return ((length * width * height) / 1_000_000) * quantity
+    }
+
+    const ft3 = ((length * width * height) / 1728) * quantity
+    return ft3 / 35.3147
+  }
+
+  const totalCargoFt3 = cargoLines.reduce(
+    (sum, line) => sum + calculateLineFt3(line),
+    0
+  )
+
+  const totalCargoCbm = cargoLines.reduce(
+    (sum, line) => sum + calculateLineCbm(line),
+    0
+  )
+
+  const totalCargoWeight = cargoLines.reduce(
+    (sum, line) => sum + Number(line.weight || 0) * Number(line.quantity || 0),
+    0
+  )
+
   const getClientRateAmount = (code: string) => {
     const rate = clientRates.find((item) => item.rate_code === code)
     return Number(rate?.amount || 0)
@@ -516,6 +590,8 @@ export default function NewQuotationPage() {
     shouldApplyStandardCharges && miamiOptions.applyStandardCharges
 
   const isMiamiFlow = usesClientRates(formData.service_product)
+  const canUseMiamiCalculator =
+    isMiamiFlow && !!formData.cliente_id && clientRates.length > 0
 
   const airEstimated = Number(miamiCalc.kg || 0) * miamiAirKgRate
 
@@ -537,7 +613,13 @@ export default function NewQuotationPage() {
       : 0
 
   const pickupAmount =
-    formData.incoterm === 'EXW' && applyPickup ? pickupRate : 0
+    formData.incoterm === 'EXW'
+      ? pickupMode === 'standard'
+        ? pickupRate
+        : pickupMode === 'manual'
+          ? manualPickupAmount
+          : 0
+      : 0
 
   const miamiLclTotal = lclEstimated + bunkerAmount + pickupAmount
 
@@ -675,6 +757,17 @@ export default function NewQuotationPage() {
     return []
   }
 
+  useEffect(() => {
+    if (!isMiamiFlow) return
+
+    setMiamiCalc((prev) => ({
+      ...prev,
+      ft3: totalCargoFt3 ? totalCargoFt3.toFixed(2) : '',
+      cbm: totalCargoCbm ? totalCargoCbm.toFixed(3) : '',
+      lbs: totalCargoWeight ? totalCargoWeight.toFixed(2) : prev.lbs,
+    }))
+  }, [isMiamiFlow, totalCargoFt3, totalCargoCbm, totalCargoWeight])
+
   return (
     <>
       <div className="max-w-6xl">
@@ -767,8 +860,277 @@ export default function NewQuotationPage() {
               </div>
             )}
 
-            {isMiamiFlow && (
+            {isMiamiFlow && !formData.cliente_id && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Selecciona primero un cliente para cargar sus tarifas Miami.
+              </div>
+            )}
+
+            {canUseMiamiCalculator && (
               <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/60 p-5 dark:border-blue-900/50 dark:bg-blue-950/20">
+                <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                    Datos del embarque Miami
+                  </h3>
+
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <input
+                      list="originPorts"
+                      name="puerto_origen"
+                      placeholder="Puerto origen"
+                      value={formData.puerto_origen}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    />
+
+                    <input
+                      list="destinationPorts"
+                      name="puerto_destino"
+                      placeholder="Puerto destino"
+                      value={formData.puerto_destino}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    />
+
+                    <input
+                      list="countries"
+                      name="destino"
+                      placeholder="Destino final"
+                      value={formData.destino}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    />
+
+                    <input
+                      type="date"
+                      name="valid_until"
+                      value={formData.valid_until || ''}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    />
+
+                    <input
+                      name="commodity"
+                      placeholder="Commodity / descripción"
+                      value={formData.commodity}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    />
+
+                    <textarea
+                      name="observaciones"
+                      placeholder="Observaciones"
+                      value={formData.observaciones}
+                      onChange={handleChange}
+                      className={`${fieldClass} min-h-24 md:col-span-2`}
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                        Detalle de carga
+                      </h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Ingresa cajas, pallets o piezas para calcular volumen y peso.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCargoLines((prev) => [
+                          ...prev,
+                          {
+                            id: crypto.randomUUID(),
+                            quantity: '1',
+                            packageType: 'Caja',
+                            length: '',
+                            width: '',
+                            height: '',
+                            dimensionUnit: 'in',
+                            weight: '',
+                          },
+                        ])
+                      }
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950"
+                    >
+                      Agregar línea
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {cargoLines.map((line) => (
+                      <div
+                        key={line.id}
+                        className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-8 dark:border-slate-700"
+                      >
+                        <input
+                          type="number"
+                          value={line.quantity}
+                          onChange={(e) =>
+                            setCargoLines((prev) =>
+                              prev.map((item) =>
+                                item.id === line.id
+                                  ? { ...item, quantity: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Cantidad"
+                          className={fieldClass}
+                        />
+
+                        <select
+                          value={line.packageType}
+                          onChange={(e) =>
+                            setCargoLines((prev) =>
+                              prev.map((item) =>
+                                item.id === line.id
+                                  ? {
+                                      ...item,
+                                      packageType:
+                                        e.target
+                                          .value as CargoDimensionLine['packageType'],
+                                    }
+                                  : item
+                              )
+                            )
+                          }
+                          className={fieldClass}
+                        >
+                          <option>Caja</option>
+                          <option>Pallet</option>
+                          <option>Pieza</option>
+                        </select>
+
+                        <input
+                          type="number"
+                          value={line.length}
+                          onChange={(e) =>
+                            setCargoLines((prev) =>
+                              prev.map((item) =>
+                                item.id === line.id
+                                  ? { ...item, length: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Largo"
+                          className={fieldClass}
+                        />
+
+                        <input
+                          type="number"
+                          value={line.width}
+                          onChange={(e) =>
+                            setCargoLines((prev) =>
+                              prev.map((item) =>
+                                item.id === line.id
+                                  ? { ...item, width: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Ancho"
+                          className={fieldClass}
+                        />
+
+                        <input
+                          type="number"
+                          value={line.height}
+                          onChange={(e) =>
+                            setCargoLines((prev) =>
+                              prev.map((item) =>
+                                item.id === line.id
+                                  ? { ...item, height: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Alto"
+                          className={fieldClass}
+                        />
+
+                        <select
+                          value={line.dimensionUnit}
+                          onChange={(e) =>
+                            setCargoLines((prev) =>
+                              prev.map((item) =>
+                                item.id === line.id
+                                  ? {
+                                      ...item,
+                                      dimensionUnit:
+                                        e.target
+                                          .value as CargoDimensionLine['dimensionUnit'],
+                                    }
+                                  : item
+                              )
+                            )
+                          }
+                          className={fieldClass}
+                        >
+                          <option value="in">Pulgadas</option>
+                          <option value="cm">Centímetros</option>
+                        </select>
+
+                        <input
+                          type="number"
+                          value={line.weight}
+                          onChange={(e) =>
+                            setCargoLines((prev) =>
+                              prev.map((item) =>
+                                item.id === line.id
+                                  ? { ...item, weight: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Peso unitario lbs"
+                          className={fieldClass}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCargoLines((prev) =>
+                              prev.filter((item) => item.id !== line.id)
+                            )
+                          }
+                          className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/30"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                      <p className="text-xs text-slate-500">FT3 total</p>
+                      <p className="font-bold text-slate-900 dark:text-white">
+                        {totalCargoFt3.toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                      <p className="text-xs text-slate-500">CBM total</p>
+                      <p className="font-bold text-slate-900 dark:text-white">
+                        {totalCargoCbm.toFixed(3)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                      <p className="text-xs text-slate-500">Peso total lbs</p>
+                      <p className="font-bold text-slate-900 dark:text-white">
+                        {totalCargoWeight.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                     Flujo rápido Miami Consolidado
@@ -817,19 +1179,61 @@ export default function NewQuotationPage() {
                 </div>
 
                 {formData.incoterm === 'EXW' && (
-                  <label className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/70">
-                    <input
-                      type="checkbox"
-                      checked={applyPickup}
-                      onChange={(e) => setApplyPickup(e.target.checked)}
-                    />
-                    <span className="font-medium text-slate-700 dark:text-slate-200">
-                      Aplicar Pickup / Recolecta Interna
-                    </span>
-                    <span className="ml-auto font-semibold text-slate-900 dark:text-white">
-                      USD {pickupRate.toFixed(2)}
-                    </span>
-                  </label>
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/70">
+                    <p className="font-semibold text-slate-700 dark:text-slate-200">
+                      Tipo de Pickup
+                    </p>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="pickup_mode"
+                          checked={pickupMode === 'standard'}
+                          onChange={() => setPickupMode('standard')}
+                        />
+                        <span>Pickup Miami estándar</span>
+                      </label>
+
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="pickup_mode"
+                          checked={pickupMode === 'manual'}
+                          onChange={() => setPickupMode('manual')}
+                        />
+                        <span>Pickup manual</span>
+                      </label>
+
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="pickup_mode"
+                          checked={pickupMode === 'none'}
+                          onChange={() => setPickupMode('none')}
+                        />
+                        <span>Sin pickup</span>
+                      </label>
+                    </div>
+
+                    {pickupMode === 'standard' && (
+                      <p className="mt-3 font-semibold text-slate-900 dark:text-white">
+                        USD {pickupRate.toFixed(2)}
+                      </p>
+                    )}
+
+                    {pickupMode === 'manual' && (
+                      <input
+                        type="number"
+                        value={manualPickupAmount}
+                        onChange={(e) =>
+                          setManualPickupAmount(Number(e.target.value || 0))
+                        }
+                        placeholder="Monto pickup manual USD"
+                        className={`${fieldClass} mt-3 w-full`}
+                      />
+                    )}
+                  </div>
                 )}
 
                 <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/70">
@@ -1062,11 +1466,9 @@ export default function NewQuotationPage() {
               
 
               <input
-                type="date"
-                name="valid_until"
-                value={formData.valid_until || ''}
-                onChange={handleChange}
-                className="border p-3 rounded"
+                value={new Date().toLocaleDateString('es-HN')}
+                disabled
+                className="border p-3 rounded bg-gray-100"
               />
 
               <select

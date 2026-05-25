@@ -480,6 +480,20 @@ const destinationPort =
   quotation?.puerto_destino ||
   'N/A'
 
+const serviceProductLabel =
+  quotation?.service_product === 'miami_lcl'
+    ? 'Miami Consolidado Marítimo LCL'
+    : quotation?.service_product === 'miami_air'
+      ? 'Miami Consolidado Aéreo'
+      : quotation?.service_product || 'N/A'
+
+const tradeDirectionLabel =
+  quotation?.trade_direction === 'import'
+    ? 'Importación'
+    : quotation?.trade_direction === 'export'
+      ? 'Exportación'
+      : 'N/A'
+
 const combinedTimeline = [
   ...(statusHistory || []).map((item) => ({
     type: 'status' as const,
@@ -744,6 +758,20 @@ const combinedTimeline = [
               </CardHeader>
 
               <CardContent className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500">Producto / Servicio</p>
+                  <p className="font-semibold text-slate-900">
+                    {serviceProductLabel}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Dirección Comercial</p>
+                  <p className="font-semibold text-slate-900">
+                    {tradeDirectionLabel}
+                  </p>
+                </div>
+
                 <div>
                   <p className="text-xs text-slate-500">Tipo</p>
                   <p className="font-semibold text-slate-900">
