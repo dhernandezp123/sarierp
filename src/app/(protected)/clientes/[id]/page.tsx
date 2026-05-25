@@ -237,7 +237,8 @@ export default function ClienteProfilePage() {
     setSavingRates(false)
 
     if (error) {
-      toast.error('No se pudieron guardar las tarifas')
+      console.error('Error saving client rates:', error)
+      toast.error(error.message || 'No se pudieron guardar las tarifas')
       return
     }
 

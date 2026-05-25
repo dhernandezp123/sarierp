@@ -251,6 +251,16 @@ export default function NewQuotationPage() {
       return
     }
 
+    if (formData.service_product === 'miami_lcl' && lclEstimated <= 0) {
+      toast.error('Ingresa FT3 o libras para calcular la tarifa Miami LCL')
+      return
+    }
+
+    if (formData.service_product === 'miami_air' && airEstimated <= 0) {
+      toast.error('Ingresa KG para calcular la tarifa Miami Aéreo')
+      return
+    }
+
     if (status === 'Pendiente de Fijar Precios') {
       if (!formData.tipo_transporte) {
         toast.error('Debes seleccionar el tipo de transporte')
@@ -321,6 +331,21 @@ export default function NewQuotationPage() {
       if (error) {
         toast.error(error.message)
         return
+      }
+
+      const autoItems = buildMiamiPricingItems(quotation.id)
+
+      if (autoItems.length > 0) {
+        const { error: pricingItemsError } = await supabase
+          .from('pricing_items')
+          .insert(autoItems)
+
+        if (pricingItemsError) {
+          toast.error(
+            'La cotización se creó, pero no se pudieron aplicar las tarifas'
+          )
+          return
+        }
       }
 
       toast.success('Cotización creada correctamente')
@@ -405,6 +430,56 @@ export default function NewQuotationPage() {
   const lclEstimated = Math.max(lclByFt3, lclByLbs)
 
   const airEstimated = Number(miamiCalc.kg || 0) * miamiAirKgRate
+
+  const buildMiamiPricingItems = (quotationId: string) => {
+    if (!usesClientRates(formData.service_product)) return []
+
+    if (formData.service_product === 'miami_lcl') {
+      return [
+        {
+          quotation_id: quotationId,
+          description: 'Flete Miami LCL',
+          item_type: 'Flete',
+          quantity: 1,
+          cost_amount: 0,
+          sale_amount: lclEstimated,
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: lclEstimated,
+          currency: 'USD',
+          taxable: false,
+          supplier: 'Sari Express',
+          notes: `Cálculo automático: FT3 USD ${lclByFt3.toFixed(
+            2
+          )} vs LBS USD ${lclByLbs.toFixed(2)}. Se toma el mayor.`,
+          created_by: profile?.id,
+        },
+      ]
+    }
+
+    if (formData.service_product === 'miami_air') {
+      return [
+        {
+          quotation_id: quotationId,
+          description: 'Flete Miami Aéreo Consolidado',
+          item_type: 'Flete',
+          quantity: 1,
+          cost_amount: 0,
+          sale_amount: airEstimated,
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: airEstimated,
+          currency: 'USD',
+          taxable: false,
+          supplier: 'Sari Express',
+          notes: 'Cálculo automático: KG x tarifa cliente.',
+          created_by: profile?.id,
+        },
+      ]
+    }
+
+    return []
+  }
 
   return (
     <>
