@@ -273,6 +273,7 @@ export default function QuotationDetailPage() {
         selectedAgent={selectedAgent}
         pricingItems={pricingItems}
         quotationContainers={quotationContainers}
+        cargoLines={cargoLines}
       />
     ).toBlob()
 
@@ -592,6 +593,7 @@ const combinedTimeline = [
                 selectedAgent={selectedAgent}
                 pricingItems={pricingItems}
                 quotationContainers={quotationContainers}
+                cargoLines={cargoLines}
               />
             }
             fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}

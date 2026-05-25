@@ -209,6 +209,9 @@ const styles = StyleSheet.create({
     width: '18.6%',
     textAlign: 'right',
   },
+  cargoTableCell: {
+    width: '16.66%',
+  },
   summaryBox: {
     width: 250,
     marginLeft: 'auto',
@@ -378,11 +381,23 @@ export default function QuotationPDF({
   selectedAgent,
   pricingItems = [],
   quotationContainers = [],
+  cargoLines = [],
 }: {
   quotation: any
   selectedAgent: any
   pricingItems?: any[]
   quotationContainers?: any[]
+  cargoLines?: Array<{
+    quantity: number
+    package_type: string
+    length: number | null
+    width: number | null
+    height: number | null
+    dimension_unit: string
+    weight_lbs: number | null
+    ft3: number | null
+    cbm: number | null
+  }>
 }) {
   const quoteTitle = getQuoteTitleByProduct(quotation)
   const freightItems = filterItems(pricingItems, 'Flete')
@@ -686,6 +701,47 @@ export default function QuotationPDF({
             </View>
           </View>
         </View>
+
+        {cargoLines.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>DETALLE DE CARGA</Text>
+
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={styles.cargoTableCell}>Cant.</Text>
+                <Text style={styles.cargoTableCell}>Tipo</Text>
+                <Text style={styles.cargoTableCell}>Dimensiones</Text>
+                <Text style={styles.cargoTableCell}>Peso lbs</Text>
+                <Text style={styles.cargoTableCell}>FT3</Text>
+                <Text style={styles.cargoTableCell}>CBM</Text>
+              </View>
+
+              {cargoLines.map((line, index) => (
+                <View key={index} style={styles.tableRow}>
+                  <Text style={styles.cargoTableCell}>
+                    {String(line.quantity)}
+                  </Text>
+                  <Text style={styles.cargoTableCell}>
+                    {line.package_type}
+                  </Text>
+                  <Text style={styles.cargoTableCell}>
+                    {line.length ?? 'N/A'} x {line.width ?? 'N/A'} x{' '}
+                    {line.height ?? 'N/A'} {line.dimension_unit}
+                  </Text>
+                  <Text style={styles.cargoTableCell}>
+                    {Number(line.weight_lbs || 0).toFixed(2)}
+                  </Text>
+                  <Text style={styles.cargoTableCell}>
+                    {Number(line.ft3 || 0).toFixed(2)}
+                  </Text>
+                  <Text style={styles.cargoTableCell}>
+                    {Number(line.cbm || 0).toFixed(3)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         <ChargesTable
           title="Flete"
