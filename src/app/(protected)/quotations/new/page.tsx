@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { pdf } from '@react-pdf/renderer'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import {
@@ -847,6 +849,111 @@ export default function NewQuotationPage() {
     }
 
     return []
+  }
+
+  const buildMiamiPreviewItems = () => {
+    return buildMiamiPricingItems('preview-quotation-id').map((item) => ({
+      ...item,
+      quotation_id: 'preview',
+      id: crypto.randomUUID(),
+    }))
+  }
+
+  const buildPreviewCargoLines = () => {
+    return cargoLines
+      .filter((line) => {
+        return (
+          Number(line.quantity || 0) > 0 &&
+          Number(line.length || 0) > 0 &&
+          Number(line.width || 0) > 0 &&
+          Number(line.height || 0) > 0
+        )
+      })
+      .map((line) => ({
+        quantity: Number(line.quantity || 1),
+        package_type: line.packageType,
+        length: Number(line.length || 0),
+        width: Number(line.width || 0),
+        height: Number(line.height || 0),
+        dimension_unit: line.dimensionUnit,
+        weight_lbs: Number(line.weight || 0),
+        ft3: calculateLineFt3(line),
+        cbm: calculateLineCbm(line),
+      }))
+  }
+
+  const buildDraftQuotation = () => {
+    const selectedCliente = clientes.find(
+      (cliente) => cliente.id === formData.cliente_id
+    )
+
+    const validUntil =
+      formData.valid_until ||
+      new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0]
+
+    return {
+      ...formData,
+      id: 'preview',
+      quotation_number: 'PREVIEW',
+      clientes: selectedCliente || null,
+      profiles: profile
+        ? {
+            nombre: profile.nombre,
+            apellido: profile.apellido,
+          }
+        : null,
+      status: 'Pricing Aprobado',
+      valid_until: validUntil,
+      created_at: new Date().toISOString(),
+      tipo_transporte:
+        formData.tipo_transporte ||
+        (formData.service_product === 'miami_air' ? 'Aéreo' : 'Marítima'),
+      quote_type:
+        formData.quote_type ||
+        (formData.service_product === 'miami_air' ? 'Consolidado' : 'LCL'),
+      origen: formData.origen || 'Miami, FL',
+      destino: formData.destino || formData.contact_country || 'Honduras',
+      puerto_origen: formData.puerto_origen || 'Miami',
+      puerto_destino: formData.puerto_destino || 'San Pedro Sula',
+      peso_kg: Number(miamiCalc.kg || 0),
+      gross_weight: Number(formData.gross_weight || 0),
+      volumen_cbm: Number(miamiCalc.cbm || formData.volumen_cbm || 0),
+      cantidad_bultos: cargoLines.reduce(
+        (sum, line) => sum + Number(line.quantity || 0),
+        0
+      ),
+      commercial_value: Number(formData.commercial_value || 0),
+      observaciones: formData.observaciones,
+    }
+  }
+
+  const handlePreviewMiamiPdf = async () => {
+    if (!canUseMiamiCalculator) return
+
+    if (formData.service_product === 'miami_lcl' && lclEstimated <= 0) {
+      toast.error('Ingresa FT3 o libras para previsualizar el PDF')
+      return
+    }
+
+    if (formData.service_product === 'miami_air' && airEstimated <= 0) {
+      toast.error('Ingresa KG para previsualizar el PDF')
+      return
+    }
+
+    const blob = await pdf(
+      <QuotationPDF
+        quotation={buildDraftQuotation()}
+        selectedAgent={null}
+        pricingItems={buildMiamiPreviewItems()}
+        quotationContainers={[]}
+        cargoLines={buildPreviewCargoLines()}
+      />
+    ).toBlob()
+
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank')
   }
 
   useEffect(() => {
@@ -2059,6 +2166,17 @@ export default function NewQuotationPage() {
           )}
 
           <div className="flex justify-end gap-3">
+            {isMiamiFlow && (
+              <button
+                type="button"
+                onClick={handlePreviewMiamiPdf}
+                disabled={!canUseMiamiCalculator}
+                className="rounded-xl border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previsualizar PDF
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => handleSubmit('Borrador')}
