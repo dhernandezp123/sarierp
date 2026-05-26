@@ -1,6 +1,7 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '../../../lib/supabase/client'
 
 export default function AgentsPage() {
@@ -209,6 +210,7 @@ export default function AgentsPage() {
                       <th className="p-3 text-right">Profit/Cont.</th>
                       <th className="p-3 text-right">MBL</th>
                       <th className="p-3 text-left">Moneda</th>
+                      <th className="p-3 text-left">Acción</th>
                     </tr>
                   </thead>
 
@@ -225,6 +227,14 @@ export default function AgentsPage() {
                           {Number(agent.mbl_fee || 0).toFixed(2)}
                         </td>
                         <td className="p-3">{agent.currency || 'USD'}</td>
+                        <td className="p-3">
+                          <Link
+                         href={`/agents/${agent.id}`}
+                         className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            Ver
+                          </Link>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -237,3 +247,5 @@ export default function AgentsPage() {
     </>
   )
 }
+
+
