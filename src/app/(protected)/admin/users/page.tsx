@@ -87,7 +87,7 @@ export default function AdminUsersPage() {
       action: 'approve_user',
       entityType: 'profile',
       entityId: id,
-      description: 'Usuario aprobado por administraciÃ³n',
+      description: 'Usuario aprobado por administración',
     })
 
     await createNotification({
@@ -119,7 +119,7 @@ export default function AdminUsersPage() {
       action: 'reject_user',
       entityType: 'profile',
       entityId: id,
-      description: 'Usuario rechazado por administraciÃ³n',
+      description: 'Usuario rechazado por administración',
     })
 
     toast.success('Usuario rechazado')
@@ -145,8 +145,8 @@ export default function AdminUsersPage() {
       entityType: 'profile',
       entityId: id,
       description: currentValue
-        ? 'Usuario desactivado por administraciÃ³n'
-        : 'Usuario activado por administraciÃ³n',
+        ? 'Usuario desactivado por administración'
+        : 'Usuario activado por administración',
       metadata: {
         previousValue: currentValue,
         newValue: !currentValue,
@@ -165,7 +165,7 @@ export default function AdminUsersPage() {
     const targetUser = users.find((user) => user.id === id)
 
     if (!targetUser) {
-      toast.error('No se encontrÃ³ el usuario.')
+      toast.error('No se encontró el usuario.')
       return
     }
 
@@ -212,7 +212,7 @@ export default function AdminUsersPage() {
 
     if (logError) {
       toast.error(
-        'El rol se cambiÃ³, pero no se pudo guardar el log: ' +
+        'El rol se cambió, pero no se pudo guardar el log: ' +
           logError.message
       )
       fetchUsers()
@@ -266,10 +266,10 @@ export default function AdminUsersPage() {
       <>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          AdministraciÃ³n de usuarios
+          Administración de usuarios
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          GestiÃ³n de accesos y permisos del ERP.
+          Gestión de accesos y permisos del ERP.
         </p>
 
         <div className="mt-4">
@@ -277,7 +277,7 @@ export default function AdminUsersPage() {
             href="/dashboard"
             className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            â† Regresar al dashboard
+            ← Regresar al dashboard
           </Link>
         </div>
       </div>
@@ -422,7 +422,7 @@ export default function AdminUsersPage() {
             </DialogTitle>
 
             <DialogDescription>
-              Esta acciÃ³n quedarÃ¡ registrada en auditorÃ­a.
+              Esta acción quedará registrada en auditoría.
             </DialogDescription>
           </DialogHeader>
 
@@ -515,5 +515,6 @@ export default function AdminUsersPage() {
     </AdminGuard>
   )
 }
+
 
 

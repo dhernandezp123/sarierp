@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -790,11 +790,11 @@ export default function NewQuotationPage() {
           currency: bunkerRule.currency || 'USD',
           taxable: false,
           supplier: 'Sari Express',
-          notes: `CÃ¡lculo automÃ¡tico: MAX(lbs x ${Number(
+          notes: `Cálculo automático: MAX(lbs x ${Number(
             bunkerRule.rate_per_lbs || 0
           ).toFixed(2)}, ft3 x ${Number(
             bunkerRule.rate_per_ft3 || 0
-          ).toFixed(2)}, mÃ­nimo USD ${Number(
+          ).toFixed(2)}, mínimo USD ${Number(
             bunkerRule.minimum_amount || 0
           ).toFixed(2)}).`,
           created_by: profile?.id,
@@ -1166,11 +1166,11 @@ export default function NewQuotationPage() {
                 </div>
 
                 {showClientRates && (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="mt-4 grid gap-4 lg:grid-cols-3">
                     {clientRates.map((rate) => (
                       <div
                         key={rate.rate_code}
-                        className="rounded-xl border border-blue-100 bg-white p-3 dark:border-blue-900/40 dark:bg-slate-950/70"
+                        className="space-y-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-blue-900/40 dark:bg-slate-950/70"
                       >
                         <p className="text-sm font-semibold text-slate-900 dark:text-white">
                           {rate.rate_label}
@@ -1279,7 +1279,7 @@ export default function NewQuotationPage() {
                   </div>
                 </div>
 
-                <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -1307,218 +1307,315 @@ export default function NewQuotationPage() {
                           },
                         ])
                       }
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950"
+                      className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
                     >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14" />
+                      </svg>
                       Agregar línea
                     </button>
                   </div>
 
-                  <div className="space-y-5">
-                    {cargoLines.map((line) => {
-                      const isLineComplete =
-                        Number(line.quantity || 0) > 0 &&
-                        Number(line.length || 0) > 0 &&
-                        Number(line.width || 0) > 0 &&
-                        Number(line.height || 0) > 0 &&
-                        Number(line.weight || 0) > 0
-                      const lineTotalLbs =
-                        Number(line.weight || 0) * Number(line.quantity || 0)
+                  {cargoLines.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                      Sin líneas de carga. Haz clic en "Agregar línea" para comenzar.
+                    </div>
+                  )}
 
-                      return (
-                      <div
-                        key={line.id}
-                        className={`grid gap-5 rounded-xl border p-3 md:grid-cols-11 ${
-                          isLineComplete
-                            ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20'
-                            : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40'
-                        }`}
-                      >
-                        <input
-                          type="number"
-                          value={line.quantity}
-                          onChange={(e) =>
-                            setCargoLines((prev) =>
-                              prev.map((item) =>
-                                item.id === line.id
-                                  ? { ...item, quantity: e.target.value }
-                                  : item
-                              )
-                            )
-                          }
-                          placeholder="Cantidad"
-                          className={fieldClass}
-                        />
+                  {cargoLines.length > 0 && (
+                    <div className="space-y-3">
+                      {cargoLines.map((line, idx) => {
+                        const isLineComplete =
+                          Number(line.quantity || 0) > 0 &&
+                          Number(line.length || 0) > 0 &&
+                          Number(line.width || 0) > 0 &&
+                          Number(line.height || 0) > 0 &&
+                          Number(line.weight || 0) > 0
 
-                        <select
-                          value={line.packageType}
-                          onChange={(e) =>
-                            setCargoLines((prev) =>
-                              prev.map((item) =>
-                                item.id === line.id
-                                  ? {
-                                      ...item,
-                                      packageType:
-                                        e.target
-                                          .value as CargoDimensionLine['packageType'],
+                        const lineFt3 = calculateLineFt3(line)
+                        const lineCbm = calculateLineCbm(line)
+                        const lineTotalLbs =
+                          Number(line.weight || 0) * Number(line.quantity || 0)
+
+                        return (
+                          <div
+                            key={line.id}
+                            className={`overflow-hidden rounded-2xl border transition-colors ${
+                              isLineComplete
+                                ? 'border-emerald-200 dark:border-emerald-900/50'
+                                : 'border-slate-200 dark:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
+                              <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+                                #{idx + 1}
+                              </span>
+
+                              <select
+                                value={line.packageType}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? {
+                                            ...item,
+                                            packageType:
+                                              e.target.value as CargoDimensionLine['packageType'],
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className="flex-1 border-none bg-transparent text-sm font-medium text-slate-700 focus:outline-none focus:ring-0 dark:text-slate-200"
+                              >
+                                <option>Caja</option>
+                                <option>Pallet</option>
+                                <option>Pieza</option>
+                              </select>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setCargoLines((prev) =>
+                                    prev.filter((item) => item.id !== line.id)
+                                  )
+                                }
+                                className="ml-auto flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                                </svg>
+                                Quitar
+                              </button>
+                            </div>
+
+                            <div
+                              className={`space-y-3 p-4 ${
+                                isLineComplete
+                                  ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
+                                  : 'bg-white dark:bg-slate-950/40'
+                              }`}
+                            >
+                              <div className="grid grid-cols-[80px_1fr_1fr_1fr] gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Cant.
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={line.quantity}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, quantity: e.target.value }
+                                            : item
+                                        )
+                                      )
                                     }
-                                  : item
-                              )
-                            )
-                          }
-                          className={fieldClass}
-                        >
-                          <option>Caja</option>
-                          <option>Pallet</option>
-                          <option>Pieza</option>
-                        </select>
+                                    placeholder="1"
+                                    min="1"
+                                    className={`${fieldClass} h-10`}
+                                  />
+                                </div>
 
-                        <input
-                          type="number"
-                          value={line.length}
-                          onChange={(e) =>
-                            setCargoLines((prev) =>
-                              prev.map((item) =>
-                                item.id === line.id
-                                  ? { ...item, length: e.target.value }
-                                  : item
-                              )
-                            )
-                          }
-                          placeholder="Largo"
-                          className={fieldClass}
-                        />
-
-                        <input
-                          type="number"
-                          value={line.width}
-                          onChange={(e) =>
-                            setCargoLines((prev) =>
-                              prev.map((item) =>
-                                item.id === line.id
-                                  ? { ...item, width: e.target.value }
-                                  : item
-                              )
-                            )
-                          }
-                          placeholder="Ancho"
-                          className={fieldClass}
-                        />
-
-                        <input
-                          type="number"
-                          value={line.height}
-                          onChange={(e) =>
-                            setCargoLines((prev) =>
-                              prev.map((item) =>
-                                item.id === line.id
-                                  ? { ...item, height: e.target.value }
-                                  : item
-                              )
-                            )
-                          }
-                          placeholder="Alto"
-                          className={fieldClass}
-                        />
-
-                        <select
-                          value={line.dimensionUnit}
-                          onChange={(e) =>
-                            setCargoLines((prev) =>
-                              prev.map((item) =>
-                                item.id === line.id
-                                  ? {
-                                      ...item,
-                                      dimensionUnit:
-                                        e.target
-                                          .value as CargoDimensionLine['dimensionUnit'],
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Largo
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={line.length}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, length: e.target.value }
+                                            : item
+                                        )
+                                      )
                                     }
-                                  : item
-                              )
-                            )
-                          }
-                          className={fieldClass}
-                        >
-                          <option value="in">Pulgadas</option>
-                          <option value="cm">Centímetros</option>
-                        </select>
+                                    placeholder="0"
+                                    className={`${fieldClass} h-10`}
+                                  />
+                                </div>
 
-                        <input
-                          type="number"
-                          value={line.weight}
-                          onChange={(e) =>
-                            setCargoLines((prev) =>
-                              prev.map((item) =>
-                                item.id === line.id
-                                  ? { ...item, weight: e.target.value }
-                                  : item
-                              )
-                            )
-                          }
-                          placeholder="Peso unitario lbs"
-                          className={fieldClass}
-                        />
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Ancho
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={line.width}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, width: e.target.value }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    placeholder="0"
+                                    className={`${fieldClass} h-10`}
+                                  />
+                                </div>
 
-                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
-                          <p className="text-[11px] text-slate-500">Total lbs</p>
-                          <p className="font-semibold text-slate-900 dark:text-white">
-                            {formatNumber(lineTotalLbs, 2)}
-                          </p>
-                        </div>
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Alto
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={line.height}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, height: e.target.value }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    placeholder="0"
+                                    className={`${fieldClass} h-10`}
+                                  />
+                                </div>
+                              </div>
 
-                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
-                          <p className="text-[11px] text-slate-500">FT3</p>
-                          <p className="font-semibold text-slate-900 dark:text-white">
-                            {formatNumber(calculateLineFt3(line), 2)}
-                          </p>
-                        </div>
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Unidad
+                                  </label>
+                                  <select
+                                    value={line.dimensionUnit}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? {
+                                                ...item,
+                                                dimensionUnit:
+                                                  e.target.value as CargoDimensionLine['dimensionUnit'],
+                                              }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    className={`${fieldClass} h-10 text-sm`}
+                                  >
+                                    <option value="in">Pulgadas (in)</option>
+                                    <option value="cm">Centímetros (cm)</option>
+                                  </select>
+                                </div>
 
-                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
-                          <p className="text-[11px] text-slate-500">CBM</p>
-                          <p className="font-semibold text-slate-900 dark:text-white">
-                            {formatNumber(calculateLineCbm(line), 3)}
-                          </p>
-                        </div>
+                                <div className="space-y-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Peso unit. (lbs)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={line.weight}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, weight: e.target.value }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    placeholder="0"
+                                    className={`${fieldClass} h-10`}
+                                  />
+                                </div>
+                              </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCargoLines((prev) =>
-                              prev.filter((item) => item.id !== line.id)
-                            )
-                          }
-                          className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/30"
-                        >
-                          Quitar
-                        </button>
+                              <div className="grid grid-cols-3 gap-2">
+                                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
+                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Total lbs
+                                  </p>
+                                  <p
+                                    className={`mt-0.5 text-sm font-semibold transition-colors ${
+                                      lineTotalLbs > 0
+                                        ? 'text-emerald-700 dark:text-emerald-400'
+                                        : 'text-slate-900 dark:text-white'
+                                    }`}
+                                  >
+                                    {formatNumber(lineTotalLbs, 0)}
+                                  </p>
+                                </div>
+
+                                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
+                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    FT³
+                                  </p>
+                                  <p
+                                    className={`mt-0.5 text-sm font-semibold transition-colors ${
+                                      lineFt3 > 0
+                                        ? 'text-emerald-700 dark:text-emerald-400'
+                                        : 'text-slate-900 dark:text-white'
+                                    }`}
+                                  >
+                                    {formatNumber(lineFt3, 2)}
+                                  </p>
+                                </div>
+
+                                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
+                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    CBM
+                                  </p>
+                                  <p
+                                    className={`mt-0.5 text-sm font-semibold transition-colors ${
+                                      lineCbm > 0
+                                        ? 'text-emerald-700 dark:text-emerald-400'
+                                        : 'text-slate-900 dark:text-white'
+                                    }`}
+                                  >
+                                    {formatNumber(lineCbm, 3)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {cargoLines.length > 0 && (
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                          FT³ total
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
+                          {formatNumber(totalCargoFt3, 2)}
+                        </p>
                       </div>
-                      )
-                    })}
-                  </div>
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                      <p className="text-xs text-slate-500">FT3 total</p>
-                      <p className="font-bold text-slate-900 dark:text-white">
-                        {formatNumber(totalCargoFt3, 2)}
-                      </p>
-                    </div>
+                      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                          CBM total
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
+                          {formatNumber(totalCargoCbm, 3)}
+                        </p>
+                      </div>
 
-                    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                      <p className="text-xs text-slate-500">CBM total</p>
-                      <p className="font-bold text-slate-900 dark:text-white">
-                        {formatNumber(totalCargoCbm, 3)}
-                      </p>
+                      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                          Peso total lbs
+                        </p>
+                        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
+                          {formatNumber(totalCargoWeight, 0)}
+                        </p>
+                      </div>
                     </div>
-
-                    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                      <p className="text-xs text-slate-500">Peso total lbs</p>
-                      <p className="font-bold text-slate-900 dark:text-white">
-                        {formatNumber(totalCargoWeight, 0)}
-                      </p>
-                    </div>
-                  </div>
+                  )}
                 </div>
-
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                     Flujo rápido Miami Consolidado
@@ -2293,4 +2390,6 @@ export default function NewQuotationPage() {
     </>
   )
 }
+
+
 
