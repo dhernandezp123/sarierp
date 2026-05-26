@@ -331,8 +331,8 @@ function getQuoteTitleByProduct(quotation: any) {
   return `Cotización ${quotation.tipo_transporte || 'Logística'}`
 }
 
-function filterItems(pricingItems: any[], type: string) {
-  return pricingItems.filter((item) => item.item_type === type)
+function filterItems(pricingItems: any[], types: string[]) {
+  return pricingItems.filter((item) => types.includes(item.item_type))
 }
 
 function getItemTotals(item: any) {
@@ -431,8 +431,12 @@ export default function QuotationPDF({
   }>
 }) {
   const quoteTitle = getQuoteTitleByProduct(quotation)
-  const freightItems = filterItems(pricingItems, 'Flete')
+  const freightItems = filterItems(pricingItems, ['freight', 'Flete'])
   const knownGroupedTypes = [
+    'freight',
+    'origin_charge',
+    'destination_charge',
+    'other_charge',
     'Flete',
     'Origen',
     'Documentación',
@@ -458,12 +462,24 @@ export default function QuotationPDF({
       item.item_type === 'Otros Cargos' ||
       !knownGroupedTypes.includes(item.item_type)
   )
+  const originCharges = [
+    ...originItems,
+    ...pricingItems.filter((item) => item.item_type === 'origin_charge'),
+  ]
+  const destinationCharges = [
+    ...destinationItems,
+    ...pricingItems.filter((item) => item.item_type === 'destination_charge'),
+  ]
+  const otherCharges = [
+    ...additionalItems,
+    ...otherChargeItems,
+    ...pricingItems.filter((item) => item.item_type === 'other_charge'),
+  ]
 
   const freightTotal = getGroupTotal(freightItems)
-  const originTotal = getGroupTotal(originItems)
-  const destinationTotal = getGroupTotal(destinationItems)
-  const additionalTotal = getGroupTotal(additionalItems)
-  const otherChargeTotal = getGroupTotal(otherChargeItems)
+  const originTotal = getGroupTotal(originCharges)
+  const destinationTotal = getGroupTotal(destinationCharges)
+  const otherChargeTotal = getGroupTotal(otherCharges)
 
   const subtotalGeneral = pricingItems.reduce((sum, item) => {
     const qty = Number(item.quantity || 1)
@@ -485,7 +501,6 @@ export default function QuotationPDF({
     freightTotal +
       originTotal +
       destinationTotal +
-      additionalTotal +
       otherChargeTotal
 
   const sellerName = quotation.profiles
@@ -808,23 +823,18 @@ export default function QuotationPDF({
         />
 
         <ChargesTable
-          title="Otros Cargos"
-          items={otherChargeItems}
-        />
-
-        <ChargesTable
           title="Gastos de Origen"
-          items={originItems}
+          items={originCharges}
         />
 
         <ChargesTable
           title="Gastos en Destino"
-          items={destinationItems}
+          items={destinationCharges}
         />
 
         <ChargesTable
-          title="Servicios Adicionales"
-          items={additionalItems}
+          title="Otros Cargos"
+          items={otherCharges}
         />
 
         {pricingItems.length === 0 && (

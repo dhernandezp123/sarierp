@@ -720,11 +720,20 @@ export default function NewQuotationPage() {
       .map((charge) => {
         const amount = Number(charge.amount || 0)
         const taxAmount = charge.taxable ? amount * 0.15 : 0
+        const description = charge.description || 'Cargo en destino'
+        const normalizedDescription = description.toLowerCase()
+        const itemType =
+          normalizedDescription.includes('aduana') ||
+          normalizedDescription.includes('entrega') ||
+          normalizedDescription.includes('delivery') ||
+          normalizedDescription.includes('destino')
+            ? 'destination_charge'
+            : 'other_charge'
 
         return {
           quotation_id: quotationId,
-          description: charge.description || 'Cargo en destino',
-          item_type: 'Otros Cargos',
+          description,
+          item_type: itemType,
           quantity: 1,
           cost_amount: 0,
           sale_amount: amount,
@@ -746,7 +755,7 @@ export default function NewQuotationPage() {
         {
           quotation_id: quotationId,
           description: 'Flete Miami LCL',
-          item_type: 'Flete',
+          item_type: 'freight',
           quantity: 1,
           cost_amount: 0,
           sale_amount: lclEstimated,
@@ -771,7 +780,7 @@ export default function NewQuotationPage() {
         items.push({
           quotation_id: quotationId,
           description: bunkerRule.label,
-          item_type: 'Otros Cargos',
+          item_type: 'freight',
           quantity: 1,
           cost_amount: 0,
           sale_amount: bunkerAmount,
@@ -796,7 +805,7 @@ export default function NewQuotationPage() {
         items.push({
           quotation_id: quotationId,
           description: 'Pickup / Recolecta Interna',
-          item_type: 'Otros Cargos',
+          item_type: 'origin_charge',
           quantity: 1,
           cost_amount: 0,
           sale_amount: pickupAmount,
@@ -830,7 +839,7 @@ export default function NewQuotationPage() {
         items.push({
           quotation_id: quotationId,
           description: rate.rate_label,
-          item_type: 'Otros Cargos',
+          item_type: 'origin_charge',
           quantity: 1,
           cost_amount: 0,
           sale_amount: amount,
@@ -853,7 +862,7 @@ export default function NewQuotationPage() {
         {
           quotation_id: quotationId,
           description: 'Flete Miami Aéreo Consolidado',
-          item_type: 'Flete',
+          item_type: 'freight',
           quantity: 1,
           cost_amount: 0,
           sale_amount: airEstimated,
