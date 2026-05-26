@@ -27,6 +27,9 @@ export default function AgentDetailPage() {
 
   const [agent, setAgent] = useState<Agent | null>(null)
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [formData, setFormData] = useState<Agent | null>(null)
 
   useEffect(() => {
     const loadAgent = async () => {
@@ -40,6 +43,7 @@ export default function AgentDetailPage() {
         console.error('Error loading agent:', error)
       } else {
         setAgent(data)
+        setFormData(data)
       }
 
       setLoading(false)
@@ -47,6 +51,40 @@ export default function AgentDetailPage() {
 
     if (id) loadAgent()
   }, [id])
+
+  const saveAgent = async () => {
+    if (!formData) return
+
+    setSaving(true)
+
+    const { error } = await supabase
+      .from('agents')
+      .update({
+        name: formData.name,
+        type: formData.type,
+        country: formData.country,
+        city: formData.city,
+        contact_name: formData.contact_name,
+        email: formData.email,
+        phone: formData.phone,
+        profit_per_container: formData.profit_per_container,
+        mbl_fee: formData.mbl_fee,
+        currency: formData.currency,
+        notes: formData.notes,
+      })
+      .eq('id', formData.id)
+
+    setSaving(false)
+
+    if (error) {
+      alert('No se pudo guardar el agente')
+      console.error(error)
+      return
+    }
+
+    setAgent(formData)
+    setEditing(false)
+  }
 
   if (loading) {
     return <p className="p-6 text-sm text-slate-500">Cargando agente...</p>
@@ -68,13 +106,34 @@ export default function AgentDetailPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => router.push('/agents')}
-          className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50"
-        >
-          Volver
-        </button>
+        <div className="flex gap-2">
+          {!editing ? (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Editar
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={saveAgent}
+              disabled={saving}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => router.push('/agents')}
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+          >
+            Volver
+          </button>
+        </div>
       </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -83,41 +142,139 @@ export default function AgentDetailPage() {
         </h2>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <Info label="Tipo" value={agent.type} />
-          <Info label="País" value={agent.country} />
-          <Info label="Ciudad" value={agent.city} />
-          <Info label="Contacto" value={agent.contact_name} />
-          <Info label="Email" value={agent.email} />
-          <Info label="Teléfono" value={agent.phone} />
-          <Info label="Profit / Cont." value={agent.profit_per_container} />
-          <Info label="MBL Fee" value={agent.mbl_fee} />
-          <Info label="Moneda" value={agent.currency} />
+          <EditableInfo
+            label="Tipo"
+            value={formData?.type || agent.type}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) => (prev ? { ...prev, type: value } : prev))
+            }
+          />
+          <EditableInfo
+            label="País"
+            value={formData?.country || agent.country}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) => (prev ? { ...prev, country: value } : prev))
+            }
+          />
+          <EditableInfo
+            label="Ciudad"
+            value={formData?.city || agent.city}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) => (prev ? { ...prev, city: value } : prev))
+            }
+          />
+          <EditableInfo
+            label="Contacto"
+            value={formData?.contact_name || agent.contact_name}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) =>
+                prev ? { ...prev, contact_name: value } : prev
+              )
+            }
+          />
+          <EditableInfo
+            label="Email"
+            value={formData?.email || agent.email}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) => (prev ? { ...prev, email: value } : prev))
+            }
+          />
+          <EditableInfo
+            label="Teléfono"
+            value={formData?.phone || agent.phone}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) => (prev ? { ...prev, phone: value } : prev))
+            }
+          />
+          <EditableInfo
+            label="Profit / Cont."
+            value={formData?.profit_per_container ?? agent.profit_per_container}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) =>
+                prev
+                  ? { ...prev, profit_per_container: Number(value || 0) }
+                  : prev
+              )
+            }
+          />
+          <EditableInfo
+            label="MBL Fee"
+            value={formData?.mbl_fee ?? agent.mbl_fee}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) =>
+                prev ? { ...prev, mbl_fee: Number(value || 0) } : prev
+              )
+            }
+          />
+          <EditableInfo
+            label="Moneda"
+            value={formData?.currency || agent.currency}
+            editing={editing}
+            onChange={(value) =>
+              setFormData((prev) =>
+                prev ? { ...prev, currency: value } : prev
+              )
+            }
+          />
         </div>
 
         <div className="mt-6">
           <p className="text-xs text-slate-500">Notas</p>
-          <p className="mt-1 text-sm font-medium text-slate-900">
-            {agent.notes || 'Sin notas'}
-          </p>
+          {editing ? (
+            <textarea
+              value={formData?.notes || ''}
+              onChange={(e) =>
+                setFormData((prev) =>
+                  prev ? { ...prev, notes: e.target.value } : prev
+                )
+              }
+              className="mt-2 min-h-24 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          ) : (
+            <p className="mt-1 text-sm font-medium text-slate-900">
+              {agent.notes || 'Sin notas'}
+            </p>
+          )}
         </div>
       </section>
     </div>
   )
 }
 
-function Info({
+function EditableInfo({
   label,
   value,
+  editing,
+  onChange,
 }: {
   label: string
   value: string | number | null
+  editing: boolean
+  onChange: (value: string) => void
 }) {
   return (
     <div className="rounded-xl bg-slate-50 p-4">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-semibold text-slate-900">
-        {value || 'N/A'}
-      </p>
+
+      {editing ? (
+        <input
+          value={value || ''}
+          onChange={(e) => onChange(e.target.value)}
+          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        />
+      ) : (
+        <p className="mt-1 font-semibold text-slate-900">
+          {value || 'N/A'}
+        </p>
+      )}
     </div>
   )
 }
