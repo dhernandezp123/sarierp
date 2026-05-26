@@ -16,6 +16,12 @@ import {
 } from '@/src/lib/quotation-products'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 
+const formatNumber = (value: number, decimals = 2) =>
+  Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+
 type ClientRate = {
   id?: string
   cliente_id: string
@@ -64,6 +70,10 @@ type DestinationCharge = {
 
 export default function NewQuotationPage() {
   const { profile } = useUser()
+  const defaultValidUntil = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split('T')[0]
+  const todayString = new Date().toISOString().split('T')[0]
 
   const [loading, setLoading] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
@@ -110,7 +120,7 @@ export default function NewQuotationPage() {
     trade_direction: 'import',
     service_product: '',
     quote_type: '',
-    valid_until: '',
+    valid_until: defaultValidUntil,
 
     contact_name: '',
     contact_email: '',
@@ -118,6 +128,7 @@ export default function NewQuotationPage() {
     contact_state: '',
     contact_country: '',
     preferred_carrier: '',
+    transit_time: '',
     target_rate: '',
     commercial_value: '',
 
@@ -409,6 +420,7 @@ export default function NewQuotationPage() {
           contact_phone: formData.contact_phone,
 
           preferred_carrier: formData.preferred_carrier,
+          transit_time: formData.transit_time || null,
           target_rate: Number(formData.target_rate),
           commercial_value: Number(formData.commercial_value),
 
@@ -426,9 +438,19 @@ export default function NewQuotationPage() {
           container_qty: Number(formData.container_qty || 0),
           package_type: formData.package_type,
           package_details: formData.package_details,
-          peso_kg: Number(formData.peso_kg),
+          peso_kg: submitIsMiamiFlow
+            ? totalCargoKg > 0
+              ? totalCargoKg
+              : null
+            : Number(formData.peso_kg),
+          peso_lbs: totalCargoWeight > 0 ? totalCargoWeight : null,
           gross_weight: Number(formData.gross_weight),
-          volumen_cbm: Number(formData.volumen_cbm),
+          volumen_cbm: submitIsMiamiFlow
+            ? totalCargoCbm > 0
+              ? totalCargoCbm
+              : null
+            : Number(formData.volumen_cbm),
+          volumen_ft3: totalCargoFt3 > 0 ? totalCargoFt3 : null,
           cantidad_bultos: Number(formData.cantidad_bultos),
           commodity: formData.commodity,
 
@@ -569,7 +591,7 @@ export default function NewQuotationPage() {
   }
 
   const fieldClass =
-    'border rounded-xl px-3 py-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+    'h-12 border rounded-xl px-3 py-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
 
   const calculateLineFt3 = (line: CargoDimensionLine) => {
     const quantity = Number(line.quantity || 0)
@@ -617,6 +639,7 @@ export default function NewQuotationPage() {
     (sum, line) => sum + Number(line.weight || 0) * Number(line.quantity || 0),
     0
   )
+  const totalCargoKg = totalCargoWeight / 2.20462
 
   const getClientRateAmount = (code: string) => {
     const rate = clientRates.find((item) => item.rate_code === code)
@@ -917,9 +940,10 @@ export default function NewQuotationPage() {
       destino: formData.destino || formData.contact_country || 'Honduras',
       puerto_origen: formData.puerto_origen || 'Miami',
       puerto_destino: formData.puerto_destino || 'San Pedro Sula',
-      peso_kg: Number(miamiCalc.kg || 0),
+      transit_time: formData.transit_time || 'N/A',
+      peso_kg: totalCargoKg > 0 ? totalCargoKg : null,
       gross_weight: Number(formData.gross_weight || 0),
-      volumen_cbm: Number(miamiCalc.cbm || formData.volumen_cbm || 0),
+      volumen_cbm: totalCargoCbm > 0 ? totalCargoCbm : null,
       cantidad_bultos: cargoLines.reduce(
         (sum, line) => sum + Number(line.quantity || 0),
         0
@@ -1020,6 +1044,54 @@ export default function NewQuotationPage() {
             </div>
           </section>
 
+          <section>
+            <h2 className="text-xl font-semibold mb-4">
+              Contacto del Cliente
+            </h2>
+
+            <div className="grid grid-cols-4 gap-4">
+              <input
+                name="contact_name"
+                placeholder="Contacto"
+                value={formData.contact_name}
+                onChange={handleChange}
+                className="border p-3 rounded"
+              />
+
+              <input
+                name="contact_email"
+                placeholder="Email"
+                value={formData.contact_email}
+                onChange={handleChange}
+                className="border p-3 rounded"
+              />
+
+              <input
+                name="contact_phone"
+                placeholder="Teléfono"
+                value={formData.contact_phone}
+                onChange={handleChange}
+                className="border p-3 rounded"
+              />
+
+              <input
+                name="contact_country"
+                placeholder="País"
+                value={formData.contact_country}
+                disabled
+                className="border p-3 rounded bg-gray-100"
+              />
+
+              <input
+                name="contact_state"
+                placeholder="Departamento / Estado"
+                value={formData.contact_state || ''}
+                disabled
+                className="border p-3 rounded bg-gray-100"
+              />
+            </div>
+          </section>
+
           <div className="rounded-2xl border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold mb-4">
               Producto Comercial
@@ -1064,7 +1136,7 @@ export default function NewQuotationPage() {
             )}
 
             {isMiamiFlow && clientRates.length > 0 && (
-              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
+              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-900/50 dark:bg-blue-950/30">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-blue-900 dark:text-blue-100">
@@ -1111,13 +1183,13 @@ export default function NewQuotationPage() {
             )}
 
             {canUseMiamiCalculator && (
-              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/60 p-5 dark:border-blue-900/50 dark:bg-blue-950/20">
-                <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <div className="mt-4 space-y-5 rounded-2xl border border-blue-200 bg-blue-50/60 p-6 dark:border-blue-900/50 dark:bg-blue-950/20">
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
                   <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                     Datos del embarque Miami
                   </h3>
 
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div className="mt-5 grid gap-5 md:grid-cols-2">
                     <input
                       list="originPorts"
                       name="puerto_origen"
@@ -1146,12 +1218,39 @@ export default function NewQuotationPage() {
                     />
 
                     <input
-                      type="date"
-                      name="valid_until"
-                      value={formData.valid_until || ''}
-                      onChange={handleChange}
+                      value={formData.transit_time}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          transit_time: e.target.value,
+                        })
+                      }
+                      placeholder="Tránsito estimado, ej. 8-12 días"
                       className={fieldClass}
                     />
+
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Válida hasta
+                      </label>
+
+                      <input
+                        type="date"
+                        value={formData.valid_until}
+                        min={todayString}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            valid_until: e.target.value,
+                          })
+                        }
+                        className={fieldClass}
+                      />
+
+                      <p className="text-xs text-slate-500">
+                        La cotización será válida hasta esta fecha.
+                      </p>
+                    </div>
 
                     <input
                       name="commodity"
@@ -1171,7 +1270,7 @@ export default function NewQuotationPage() {
                   </div>
                 </div>
 
-                <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -1205,7 +1304,7 @@ export default function NewQuotationPage() {
                     </button>
                   </div>
 
-                  <div className="mt-4 space-y-3">
+                  <div className="space-y-5">
                     {cargoLines.map((line) => {
                       const isLineComplete =
                         Number(line.quantity || 0) > 0 &&
@@ -1213,11 +1312,13 @@ export default function NewQuotationPage() {
                         Number(line.width || 0) > 0 &&
                         Number(line.height || 0) > 0 &&
                         Number(line.weight || 0) > 0
+                      const lineTotalLbs =
+                        Number(line.weight || 0) * Number(line.quantity || 0)
 
                       return (
                       <div
                         key={line.id}
-                        className={`grid gap-3 rounded-xl border p-3 md:grid-cols-8 ${
+                        className={`grid gap-5 rounded-xl border p-3 md:grid-cols-11 ${
                           isLineComplete
                             ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20'
                             : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40'
@@ -1348,6 +1449,27 @@ export default function NewQuotationPage() {
                           className={fieldClass}
                         />
 
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
+                          <p className="text-[11px] text-slate-500">Total lbs</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">
+                            {formatNumber(lineTotalLbs, 2)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
+                          <p className="text-[11px] text-slate-500">FT3</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">
+                            {formatNumber(calculateLineFt3(line), 2)}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
+                          <p className="text-[11px] text-slate-500">CBM</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">
+                            {formatNumber(calculateLineCbm(line), 3)}
+                          </p>
+                        </div>
+
                         <button
                           type="button"
                           onClick={() =>
@@ -1368,21 +1490,21 @@ export default function NewQuotationPage() {
                     <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
                       <p className="text-xs text-slate-500">FT3 total</p>
                       <p className="font-bold text-slate-900 dark:text-white">
-                        {totalCargoFt3.toFixed(2)}
+                        {formatNumber(totalCargoFt3, 2)}
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
                       <p className="text-xs text-slate-500">CBM total</p>
                       <p className="font-bold text-slate-900 dark:text-white">
-                        {totalCargoCbm.toFixed(3)}
+                        {formatNumber(totalCargoCbm, 3)}
                       </p>
                     </div>
 
                     <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
                       <p className="text-xs text-slate-500">Peso total lbs</p>
                       <p className="font-bold text-slate-900 dark:text-white">
-                        {totalCargoWeight.toFixed(2)}
+                        {formatNumber(totalCargoWeight, 0)}
                       </p>
                     </div>
                   </div>
@@ -1398,7 +1520,7 @@ export default function NewQuotationPage() {
                 </div>
 
             {formData.service_product === 'miami_lcl' && (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <div className="mt-4 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
                 <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                   Calculadora Miami LCL
                 </h3>
@@ -1407,7 +1529,7 @@ export default function NewQuotationPage() {
                   Calcula el flete tomando el mayor entre FT3, libras y el mínimo aplicable.
                 </p>
 
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="grid gap-5 md:grid-cols-2">
                   <input
                     type="number"
                     value={miamiCalc.ft3}
@@ -1617,7 +1739,7 @@ export default function NewQuotationPage() {
             )}
 
             {formData.service_product === 'miami_air' && (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <div className="mt-4 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
                 <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                   Calculadora Miami Aéreo
                 </h3>
@@ -1626,7 +1748,7 @@ export default function NewQuotationPage() {
                   Calcula el flete aéreo usando la tarifa por KG.
                 </p>
 
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="grid gap-5 md:grid-cols-2">
                   <input
                     type="number"
                     value={miamiCalc.kg}
@@ -1652,7 +1774,7 @@ export default function NewQuotationPage() {
               </div>
             )}
 
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <div className="mt-4 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -1682,16 +1804,25 @@ export default function NewQuotationPage() {
                     </button>
                   </div>
 
-                  <div className="mt-4 space-y-3">
+                  <div className="space-y-5">
                     {destinationCharges.length === 0 ? (
                       <p className="text-sm text-slate-500">
                         No hay cargos adicionales en destino.
                       </p>
                     ) : (
-                      destinationCharges.map((charge) => (
+                      destinationCharges.map((charge) => {
+                        const isChargeComplete =
+                          charge.description.trim().length > 0 &&
+                          Number(charge.amount || 0) > 0
+
+                        return (
                         <div
                           key={charge.id}
-                          className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-[1fr_160px_140px_100px]"
+                          className={`grid gap-3 rounded-xl border p-3 md:grid-cols-[1fr_160px_140px_100px] ${
+                            isChargeComplete
+                              ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20'
+                              : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40'
+                          }`}
                         >
                           <input
                             value={charge.description}
@@ -1759,7 +1890,8 @@ export default function NewQuotationPage() {
                             Quitar
                           </button>
                         </div>
-                      ))
+                        )
+                      })
                     )}
                   </div>
                 </div>
@@ -1862,54 +1994,6 @@ export default function NewQuotationPage() {
           </section>
           )}
 
-          <section>
-            <h2 className="text-xl font-semibold mb-4">
-              Contacto del Cliente
-            </h2>
-
-            <div className="grid grid-cols-4 gap-4">
-              <input
-                name="contact_name"
-                placeholder="Contacto"
-                value={formData.contact_name}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
-              <input
-                name="contact_email"
-                placeholder="Email"
-                value={formData.contact_email}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
-              <input
-                name="contact_phone"
-                placeholder="Teléfono"
-                value={formData.contact_phone}
-                onChange={handleChange}
-                className="border p-3 rounded"
-              />
-
-              <input
-                name="contact_country"
-                placeholder="País"
-                value={formData.contact_country}
-                disabled
-                className="border p-3 rounded bg-gray-100"
-              />
-
-              <input
-                name="contact_state"
-                placeholder="Departamento / Estado"
-                value={formData.contact_state || ''}
-                disabled
-                className="border p-3 rounded bg-gray-100"
-                />
-                
-            </div>
-          </section>
 
           {!isMiamiFlow && (
           <>

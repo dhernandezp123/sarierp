@@ -14,6 +14,12 @@ function formatCurrency(value: number) {
   })
 }
 
+const formatNumber = (value: number, decimals = 2) =>
+  Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+
 const styles = StyleSheet.create({
   page: {
     padding: 24,
@@ -211,6 +217,31 @@ const styles = StyleSheet.create({
   },
   cargoTableCell: {
     width: '16.66%',
+  },
+  cargoQtyCell: {
+    width: '8%',
+  },
+  cargoTypeCell: {
+    width: '13%',
+  },
+  cargoDimensionsCell: {
+    width: '25%',
+  },
+  cargoNumberCell: {
+    width: '13.5%',
+    textAlign: 'right',
+  },
+  cargoSummary: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 7,
+    fontSize: 7,
+    fontWeight: 'bold',
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#CBD5E1',
   },
   summaryBox: {
     width: 250,
@@ -464,6 +495,19 @@ export default function QuotationPDF({
   const isLooseCargo = ['LCL', 'LTL', 'Consolidado', 'Courier'].includes(
     quotation.quote_type || ''
   )
+  const totalCargoLbs = cargoLines.reduce(
+    (sum, line) =>
+      sum + Number(line.weight_lbs || 0) * Number(line.quantity || 0),
+    0
+  )
+  const totalCargoFt3 = cargoLines.reduce(
+    (sum, line) => sum + Number(line.ft3 || 0),
+    0
+  )
+  const totalCargoCbm = cargoLines.reduce(
+    (sum, line) => sum + Number(line.cbm || 0),
+    0
+  )
 
   return (
     <Document>
@@ -650,14 +694,14 @@ export default function QuotationPDF({
                       <View style={styles.row}>
                         <Text style={styles.label}>Peso:</Text>
                         <Text style={styles.value}>
-                          {quotation.peso_kg || 'N/A'} KG
+                          {formatNumber(Number(quotation.peso_kg || 0), 2)} KG
                         </Text>
                       </View>
 
                       <View style={styles.row}>
                         <Text style={styles.label}>Volumen:</Text>
                         <Text style={styles.value}>
-                          {quotation.volumen_cbm || 'N/A'} CBM
+                          {formatNumber(Number(quotation.volumen_cbm || 0), 3)} CBM
                         </Text>
                       </View>
                     </>
@@ -708,37 +752,52 @@ export default function QuotationPDF({
 
             <View style={styles.table}>
               <View style={styles.tableHeader}>
-                <Text style={styles.cargoTableCell}>Cant.</Text>
-                <Text style={styles.cargoTableCell}>Tipo</Text>
-                <Text style={styles.cargoTableCell}>Dimensiones</Text>
-                <Text style={styles.cargoTableCell}>Peso lbs</Text>
-                <Text style={styles.cargoTableCell}>FT3</Text>
-                <Text style={styles.cargoTableCell}>CBM</Text>
+                <Text style={styles.cargoQtyCell}>Cant.</Text>
+                <Text style={styles.cargoTypeCell}>Tipo</Text>
+                <Text style={styles.cargoDimensionsCell}>Dimensiones</Text>
+                <Text style={styles.cargoNumberCell}>Peso unit.</Text>
+                <Text style={styles.cargoNumberCell}>Total lbs</Text>
+                <Text style={styles.cargoNumberCell}>FT3</Text>
+                <Text style={styles.cargoNumberCell}>CBM</Text>
               </View>
 
-              {cargoLines.map((line, index) => (
-                <View key={index} style={styles.tableRow}>
-                  <Text style={styles.cargoTableCell}>
-                    {String(line.quantity)}
-                  </Text>
-                  <Text style={styles.cargoTableCell}>
-                    {line.package_type}
-                  </Text>
-                  <Text style={styles.cargoTableCell}>
-                    {line.length ?? 'N/A'} x {line.width ?? 'N/A'} x{' '}
-                    {line.height ?? 'N/A'} {line.dimension_unit}
-                  </Text>
-                  <Text style={styles.cargoTableCell}>
-                    {Number(line.weight_lbs || 0).toFixed(2)}
-                  </Text>
-                  <Text style={styles.cargoTableCell}>
-                    {Number(line.ft3 || 0).toFixed(2)}
-                  </Text>
-                  <Text style={styles.cargoTableCell}>
-                    {Number(line.cbm || 0).toFixed(3)}
-                  </Text>
-                </View>
-              ))}
+              {cargoLines.map((line, index) => {
+                const lineTotalLbs =
+                  Number(line.weight_lbs || 0) * Number(line.quantity || 0)
+
+                return (
+                  <View key={index} style={styles.tableRow}>
+                    <Text style={styles.cargoQtyCell}>
+                      {String(line.quantity)}
+                    </Text>
+                    <Text style={styles.cargoTypeCell}>
+                      {line.package_type}
+                    </Text>
+                    <Text style={styles.cargoDimensionsCell}>
+                      {line.length ?? 'N/A'} x {line.width ?? 'N/A'} x{' '}
+                      {line.height ?? 'N/A'} {line.dimension_unit}
+                    </Text>
+                    <Text style={styles.cargoNumberCell}>
+                      {formatNumber(Number(line.weight_lbs || 0), 2)}
+                    </Text>
+                    <Text style={styles.cargoNumberCell}>
+                      {formatNumber(lineTotalLbs, 2)}
+                    </Text>
+                    <Text style={styles.cargoNumberCell}>
+                      {formatNumber(Number(line.ft3 || 0), 2)}
+                    </Text>
+                    <Text style={styles.cargoNumberCell}>
+                      {formatNumber(Number(line.cbm || 0), 3)}
+                    </Text>
+                  </View>
+                )
+              })}
+
+              <View style={styles.cargoSummary}>
+                <Text>Total lbs: {formatNumber(totalCargoLbs, 0)}</Text>
+                <Text>Total FT3: {formatNumber(totalCargoFt3, 2)}</Text>
+                <Text>Total CBM: {formatNumber(totalCargoCbm, 3)}</Text>
+              </View>
             </View>
           </View>
         )}

@@ -451,6 +451,12 @@ export default function QuotationDetailPage() {
     maximumFractionDigits: 2,
   })
 
+  const formatNumber = (value: number, decimals = 2) =>
+  Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+
 const pricingTotals = pricingItems.reduce(
   (acc, item) => {
     const qty = Number(item.quantity || 1)
@@ -915,29 +921,37 @@ const combinedTimeline = [
                         <th className="py-2">Cantidad</th>
                         <th>Tipo</th>
                         <th>Dimensiones</th>
-                        <th>Peso lbs</th>
+                        <th>Peso unit.</th>
+                        <th>Total lbs</th>
                         <th>FT3</th>
                         <th>CBM</th>
                       </tr>
                     </thead>
 
                     <tbody>
-                      {cargoLines.map((line) => (
-                        <tr
-                          key={line.id}
-                          className="border-t border-slate-100 dark:border-slate-800"
-                        >
-                          <td className="py-2">{line.quantity}</td>
-                          <td>{line.package_type}</td>
-                          <td>
-                            {line.length} x {line.width} x {line.height}{' '}
-                            {line.dimension_unit}
-                          </td>
-                          <td>{Number(line.weight_lbs || 0).toFixed(2)}</td>
-                          <td>{Number(line.ft3 || 0).toFixed(2)}</td>
-                          <td>{Number(line.cbm || 0).toFixed(3)}</td>
-                        </tr>
-                      ))}
+                      {cargoLines.map((line) => {
+                        const lineTotalLbs =
+                          Number(line.weight_lbs || 0) *
+                          Number(line.quantity || 0)
+
+                        return (
+                          <tr
+                            key={line.id}
+                            className="border-t border-slate-100 dark:border-slate-800"
+                          >
+                            <td className="py-2">{line.quantity}</td>
+                            <td>{line.package_type}</td>
+                            <td>
+                              {line.length} x {line.width} x {line.height}{' '}
+                              {line.dimension_unit}
+                            </td>
+                            <td>{formatNumber(Number(line.weight_lbs || 0), 2)}</td>
+                            <td>{formatNumber(lineTotalLbs, 2)}</td>
+                            <td>{formatNumber(Number(line.ft3 || 0), 2)}</td>
+                            <td>{formatNumber(Number(line.cbm || 0), 3)}</td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
