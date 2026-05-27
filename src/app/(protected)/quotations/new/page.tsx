@@ -1279,344 +1279,362 @@ export default function NewQuotationPage() {
                   </div>
                 </div>
 
-                <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                        Detalle de carga
-                      </h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Ingresa cajas, pallets o piezas para calcular volumen y peso.
-                      </p>
-                    </div>
+                {/* ============================================================
+    DETALLE DE CARGA — Sección rediseñada
+    Reemplaza el bloque completo de "Detalle de carga" en:
+    src/app/(protected)/quotations/new/page.tsx
+    ============================================================ */}
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCargoLines((prev) => [
-                          ...prev,
-                          {
-                            id: crypto.randomUUID(),
-                            quantity: '1',
-                            packageType: 'Caja',
-                            length: '',
-                            width: '',
-                            height: '',
-                            dimensionUnit: 'in',
-                            weight: '',
-                          },
-                        ])
-                      }
-                      className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M12 5v14M5 12h14" />
-                      </svg>
-                      Agregar línea
-                    </button>
-                  </div>
+<div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
 
-                  {cargoLines.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                      Sin líneas de carga. Haz clic en "Agregar línea" para comenzar.
-                    </div>
-                  )}
+  {/* Header */}
+  <div className="flex items-center justify-between">
+    <div>
+      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+        Detalle de carga
+      </h3>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        Ingresa cajas, pallets o piezas para calcular volumen y peso.
+      </p>
+    </div>
 
-                  {cargoLines.length > 0 && (
-                    <div className="space-y-3">
-                      {cargoLines.map((line, idx) => {
-                        const isLineComplete =
-                          Number(line.quantity || 0) > 0 &&
-                          Number(line.length || 0) > 0 &&
-                          Number(line.width || 0) > 0 &&
-                          Number(line.height || 0) > 0 &&
-                          Number(line.weight || 0) > 0
+    <button
+      type="button"
+      onClick={() =>
+        setCargoLines((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            quantity: '1',
+            packageType: 'Caja',
+            length: '',
+            width: '',
+            height: '',
+            dimensionUnit: 'in',
+            weight: '',
+          },
+        ])
+      }
+      className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+      Agregar línea
+    </button>
+  </div>
 
-                        const lineFt3 = calculateLineFt3(line)
-                        const lineCbm = calculateLineCbm(line)
-                        const lineTotalLbs =
-                          Number(line.weight || 0) * Number(line.quantity || 0)
+  {/* Empty state */}
+  {cargoLines.length === 0 && (
+    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
+      Sin líneas de carga. Haz clic en "Agregar línea" para comenzar.
+    </div>
+  )}
 
-                        return (
-                          <div
-                            key={line.id}
-                            className={`overflow-hidden rounded-2xl border transition-colors ${
-                              isLineComplete
-                                ? 'border-emerald-200 dark:border-emerald-900/50'
-                                : 'border-slate-200 dark:border-slate-700'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
-                              <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
-                                #{idx + 1}
-                              </span>
+  {/* Lines */}
+  {cargoLines.length > 0 && (
+    <div className="space-y-3">
+      {cargoLines.map((line, idx) => {
+        const isLineComplete =
+          Number(line.quantity || 0) > 0 &&
+          Number(line.length || 0) > 0 &&
+          Number(line.width || 0) > 0 &&
+          Number(line.height || 0) > 0 &&
+          Number(line.weight || 0) > 0
 
-                              <select
-                                value={line.packageType}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? {
-                                            ...item,
-                                            packageType:
-                                              e.target.value as CargoDimensionLine['packageType'],
-                                          }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className="flex-1 border-none bg-transparent text-sm font-medium text-slate-700 focus:outline-none focus:ring-0 dark:text-slate-200"
-                              >
-                                <option>Caja</option>
-                                <option>Pallet</option>
-                                <option>Pieza</option>
-                              </select>
+        const lineFt3 = calculateLineFt3(line)
+        const lineCbm = calculateLineCbm(line)
+        const lineTotalLbs =
+          Number(line.weight || 0) * Number(line.quantity || 0)
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setCargoLines((prev) =>
-                                    prev.filter((item) => item.id !== line.id)
-                                  )
-                                }
-                                className="ml-auto flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                                </svg>
-                                Quitar
-                              </button>
-                            </div>
+        return (
+          <div
+            key={line.id}
+            className={`overflow-hidden rounded-2xl border transition-colors ${
+              isLineComplete
+                ? 'border-emerald-200 dark:border-emerald-900/50'
+                : 'border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            {/* Line header — badge + tipo + quitar */}
+            <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
+              <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+                #{idx + 1}
+              </span>
 
-                            <div
-                              className={`space-y-3 p-4 ${
-                                isLineComplete
-                                  ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
-                                  : 'bg-white dark:bg-slate-950/40'
-                              }`}
-                            >
-                              <div className="grid grid-cols-[80px_1fr_1fr_1fr] gap-3">
-                                <div className="space-y-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Cant.
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={line.quantity}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, quantity: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    placeholder="1"
-                                    min="1"
-                                    className={`${fieldClass} h-10`}
-                                  />
-                                </div>
+              <select
+                value={line.packageType}
+                onChange={(e) =>
+                  setCargoLines((prev) =>
+                    prev.map((item) =>
+                      item.id === line.id
+                        ? {
+                            ...item,
+                            packageType:
+                              e.target.value as CargoDimensionLine['packageType'],
+                          }
+                        : item
+                    )
+                  )
+                }
+                className="flex-1 border-none bg-transparent text-sm font-medium text-slate-700 focus:outline-none focus:ring-0 dark:text-slate-200"
+              >
+                <option>Caja</option>
+                <option>Pallet</option>
+                <option>Pieza</option>
+              </select>
 
-                                <div className="space-y-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Largo
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={line.length}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, length: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    placeholder="0"
-                                    className={`${fieldClass} h-10`}
-                                  />
-                                </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setCargoLines((prev) =>
+                    prev.filter((item) => item.id !== line.id)
+                  )
+                }
+                className="ml-auto flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                </svg>
+                Quitar
+              </button>
+            </div>
 
-                                <div className="space-y-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Ancho
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={line.width}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, width: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    placeholder="0"
-                                    className={`${fieldClass} h-10`}
-                                  />
-                                </div>
-
-                                <div className="space-y-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Alto
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={line.height}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, height: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    placeholder="0"
-                                    className={`${fieldClass} h-10`}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2.5">
-                                <div className="space-y-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Unidad
-                                  </label>
-                                  <select
-                                    value={line.dimensionUnit}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? {
-                                                ...item,
-                                                dimensionUnit:
-                                                  e.target.value as CargoDimensionLine['dimensionUnit'],
-                                              }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    className={`${fieldClass} h-10 text-sm`}
-                                  >
-                                    <option value="in">Pulgadas (in)</option>
-                                    <option value="cm">Centímetros (cm)</option>
-                                  </select>
-                                </div>
-
-                                <div className="space-y-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Peso unit. (lbs)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={line.weight}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, weight: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    placeholder="0"
-                                    className={`${fieldClass} h-10`}
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-3 gap-2">
-                                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
-                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Total lbs
-                                  </p>
-                                  <p
-                                    className={`mt-0.5 text-sm font-semibold transition-colors ${
-                                      lineTotalLbs > 0
-                                        ? 'text-emerald-700 dark:text-emerald-400'
-                                        : 'text-slate-900 dark:text-white'
-                                    }`}
-                                  >
-                                    {formatNumber(lineTotalLbs, 0)}
-                                  </p>
-                                </div>
-
-                                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
-                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    FT³
-                                  </p>
-                                  <p
-                                    className={`mt-0.5 text-sm font-semibold transition-colors ${
-                                      lineFt3 > 0
-                                        ? 'text-emerald-700 dark:text-emerald-400'
-                                        : 'text-slate-900 dark:text-white'
-                                    }`}
-                                  >
-                                    {formatNumber(lineFt3, 2)}
-                                  </p>
-                                </div>
-
-                                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
-                                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    CBM
-                                  </p>
-                                  <p
-                                    className={`mt-0.5 text-sm font-semibold transition-colors ${
-                                      lineCbm > 0
-                                        ? 'text-emerald-700 dark:text-emerald-400'
-                                        : 'text-slate-900 dark:text-white'
-                                    }`}
-                                  >
-                                    {formatNumber(lineCbm, 3)}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
+            {/* Line body */}
+            <div
+              className={`space-y-3 p-4 ${
+                isLineComplete
+                  ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
+                  : 'bg-white dark:bg-slate-950/40'
+              }`}
+            >
+              {/* Fila 1: Cantidad / Unidad / Peso */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Cant.
+                  </label>
+                  <input
+                    type="number"
+                    value={line.quantity}
+                    onChange={(e) =>
+                      setCargoLines((prev) =>
+                        prev.map((item) =>
+                          item.id === line.id
+                            ? { ...item, quantity: e.target.value }
+                            : item
                         )
-                      })}
-                    </div>
-                  )}
-
-                  {cargoLines.length > 0 && (
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                          FT³ total
-                        </p>
-                        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-                          {formatNumber(totalCargoFt3, 2)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                          CBM total
-                        </p>
-                        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-                          {formatNumber(totalCargoCbm, 3)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                          Peso total lbs
-                        </p>
-                        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-                          {formatNumber(totalCargoWeight, 0)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                      )
+                    }
+                    placeholder="1"
+                    min="1"
+                    className={`${fieldClass} h-10 w-full`}
+                  />
                 </div>
-                <div className="mb-4">
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Unidad
+                  </label>
+                  <select
+                    value={line.dimensionUnit}
+                    onChange={(e) =>
+                      setCargoLines((prev) =>
+                        prev.map((item) =>
+                          item.id === line.id
+                            ? {
+                                ...item,
+                                dimensionUnit:
+                                  e.target.value as CargoDimensionLine['dimensionUnit'],
+                              }
+                            : item
+                        )
+                      )
+                    }
+                    className={`${fieldClass} h-10 w-full text-sm`}
+                  >
+                    <option value="in">Pulgadas (in)</option>
+                    <option value="cm">Centímetros (cm)</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Peso unit. lbs
+                  </label>
+                  <input
+                    type="number"
+                    value={line.weight}
+                    onChange={(e) =>
+                      setCargoLines((prev) =>
+                        prev.map((item) =>
+                          item.id === line.id
+                            ? { ...item, weight: e.target.value }
+                            : item
+                        )
+                      )
+                    }
+                    placeholder="0"
+                    className={`${fieldClass} h-10 w-full`}
+                  />
+                </div>
+              </div>
+
+              {/* Fila 2: Largo / Ancho / Alto */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Largo
+                  </label>
+                  <input
+                    type="number"
+                    value={line.length}
+                    onChange={(e) =>
+                      setCargoLines((prev) =>
+                        prev.map((item) =>
+                          item.id === line.id
+                            ? { ...item, length: e.target.value }
+                            : item
+                        )
+                      )
+                    }
+                    placeholder="0"
+                    className={`${fieldClass} h-10`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Ancho
+                  </label>
+                  <input
+                    type="number"
+                    value={line.width}
+                    onChange={(e) =>
+                      setCargoLines((prev) =>
+                        prev.map((item) =>
+                          item.id === line.id
+                            ? { ...item, width: e.target.value }
+                            : item
+                        )
+                      )
+                    }
+                    placeholder="0"
+                    className={`${fieldClass} h-10`}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Alto
+                  </label>
+                  <input
+                    type="number"
+                    value={line.height}
+                    onChange={(e) =>
+                      setCargoLines((prev) =>
+                        prev.map((item) =>
+                          item.id === line.id
+                            ? { ...item, height: e.target.value }
+                            : item
+                        )
+                      )
+                    }
+                    placeholder="0"
+                    className={`${fieldClass} h-10`}
+                  />
+                </div>
+              </div>
+
+              {/* Resultados por línea */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Total lbs
+                  </p>
+                  <p
+                    className={`mt-0.5 text-sm font-semibold transition-colors ${
+                      lineTotalLbs > 0
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-slate-900 dark:text-white'
+                    }`}
+                  >
+                    {formatNumber(lineTotalLbs, 0)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    FT³
+                  </p>
+                  <p
+                    className={`mt-0.5 text-sm font-semibold transition-colors ${
+                      lineFt3 > 0
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-slate-900 dark:text-white'
+                    }`}
+                  >
+                    {formatNumber(lineFt3, 2)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    CBM
+                  </p>
+                  <p
+                    className={`mt-0.5 text-sm font-semibold transition-colors ${
+                      lineCbm > 0
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-slate-900 dark:text-white'
+                    }`}
+                  >
+                    {formatNumber(lineCbm, 3)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )}
+
+  {/* Totales globales — solo visibles cuando hay líneas */}
+  {cargoLines.length > 0 && (
+    <div className="grid gap-3 md:grid-cols-3">
+      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          FT³ total
+        </p>
+        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
+          {formatNumber(totalCargoFt3, 2)}
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          CBM total
+        </p>
+        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
+          {formatNumber(totalCargoCbm, 3)}
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+          Peso total lbs
+        </p>
+        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
+          {formatNumber(totalCargoWeight, 0)}
+        </p>
+      </div>
+    </div>
+  )}
+
+</div>
+                
+                                <div className="mb-4">
                   <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                     Flujo rápido Miami Consolidado
                   </h2>

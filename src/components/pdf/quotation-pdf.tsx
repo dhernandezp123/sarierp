@@ -507,9 +507,15 @@ export default function QuotationPDF({
     ? `${quotation.profiles.nombre} ${quotation.profiles.apellido}`
     : quotation.salesperson || quotation.created_by || 'N/A'
 
+  const isMiamiLcl = quotation.service_product === 'miami_lcl'
+  const isMiamiAir = quotation.service_product === 'miami_air'
+  const isLcl =
+    quotation.quote_type === 'LCL' ||
+    quotation.service_product === 'other_origin_lcl' ||
+    isMiamiLcl
   const isLooseCargo = ['LCL', 'LTL', 'Consolidado', 'Courier'].includes(
     quotation.quote_type || ''
-  )
+  ) || isMiamiLcl || isMiamiAir
   const totalCargoLbs = cargoLines.reduce(
     (sum, line) =>
       sum + Number(line.weight_lbs || 0) * Number(line.quantity || 0),
@@ -679,6 +685,7 @@ export default function QuotationPDF({
                   </View>
 
 
+                  {!isLcl && (
                   <View style={styles.fullRow}>
                     <Text style={styles.blockLabel}>Contenedores / Unidades:</Text>
 
@@ -696,6 +703,7 @@ export default function QuotationPDF({
                       )}
                     </View>
                   </View>
+                  )}
 
                   <View style={styles.fullRow}>
                     <Text style={styles.blockLabel}>Commodity / Descripción de la carga:</Text>
@@ -709,14 +717,30 @@ export default function QuotationPDF({
                       <View style={styles.row}>
                         <Text style={styles.label}>Peso:</Text>
                         <Text style={styles.value}>
-                          {formatNumber(Number(quotation.peso_kg || 0), 2)} KG
+                          {isMiamiLcl
+                            ? `${formatNumber(
+                                Number(quotation.peso_lbs || totalCargoLbs),
+                                0
+                              )} LBS`
+                            : `${formatNumber(
+                                Number(quotation.peso_kg || 0),
+                                2
+                              )} KG`}
                         </Text>
                       </View>
 
                       <View style={styles.row}>
                         <Text style={styles.label}>Volumen:</Text>
                         <Text style={styles.value}>
-                          {formatNumber(Number(quotation.volumen_cbm || 0), 3)} CBM
+                          {isMiamiLcl
+                            ? `${formatNumber(
+                                Number(quotation.volumen_ft3 || totalCargoFt3),
+                                2
+                              )} FT3`
+                            : `${formatNumber(
+                                Number(quotation.volumen_cbm || 0),
+                                3
+                              )} CBM`}
                         </Text>
                       </View>
                     </>

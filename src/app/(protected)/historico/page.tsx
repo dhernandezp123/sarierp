@@ -104,17 +104,19 @@ export default function HistoricoPage() {
   const [searchTerm, setSearchTerm] = useState('')
 
   const fetchQuotations = async () => {
-    const { data, error } = await supabase
+    // Temporal: Ventas tambien ve todo.
+    // Mas adelante aplicamos filtro por vendedor.
+    let query = supabase
       .from('quotations')
       .select(`
         *,
-        clientes (
-          codigo_cliente,
-          nombre
-        )
+        cliente:clientes(*),
+        created_by_profile:profiles!quotations_created_by_fkey(*)
       `)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
+
+    const { data, error } = await query
 
     if (error) {
       alert(error.message)
@@ -149,7 +151,7 @@ export default function HistoricoPage() {
     const matchesSearch =
       !search ||
       quote.quotation_number?.toLowerCase().includes(search) ||
-      quote.clientes?.nombre?.toLowerCase().includes(search) ||
+      quote.cliente?.nombre?.toLowerCase().includes(search) ||
       quote.origen?.toLowerCase().includes(search) ||
       quote.destino?.toLowerCase().includes(search) ||
       quote.quote_type?.toLowerCase().includes(search)
@@ -324,7 +326,7 @@ export default function HistoricoPage() {
                     </TableCell>
 
                     <TableCell className="min-w-[220px]">
-                      {quote.clientes?.nombre || 'Sin cliente'}
+                      {quote.cliente?.nombre || 'Sin cliente'}
                     </TableCell>
 
                     <TableCell className="whitespace-nowrap">

@@ -1,4 +1,5 @@
 const allRoles = ['Admin', 'Ventas', 'Pricing', 'Contabilidad', 'Finanzas', 'Operaciones']
+const nonSalesRoles = ['Admin', 'Pricing', 'Contabilidad', 'Finanzas', 'Operaciones']
 const financeRoles = ['Admin', 'Contabilidad', 'Finanzas']
 const operationsRoles = ['Admin', 'Ventas', 'Operaciones']
 const operationsDashboardRoles = ['Admin', 'Operaciones']
@@ -12,12 +13,16 @@ const pathPermissions: Array<{
     roles: allRoles,
   },
   {
-    paths: ['/clientes', '/quotations', '/historico'],
+    paths: ['/clientes', '/quotations', '/quotations/new', '/historico'],
     roles: allRoles,
   },
   {
-    paths: ['/pricing-comparison', '/agents', '/catalogs'],
-    roles: allRoles,
+    paths: ['/historico/activity'],
+    roles: nonSalesRoles,
+  },
+  {
+    paths: ['/pricing-comparison', '/agents', '/catalogs', '/catalogos'],
+    roles: nonSalesRoles,
   },
   {
     paths: ['/financial-dashboard', '/cost-validation'],
@@ -45,12 +50,13 @@ export function canAccessPath(role: string | null | undefined, pathname: string)
   if (!role) return false
 
   const normalizedPathname = pathname === '/' ? '/dashboard' : pathname
-  const permission = pathPermissions.find(({ paths }) =>
-    paths.some(
-      (path) =>
+  const permission = pathPermissions
+    .flatMap(({ paths, roles }) => paths.map((path) => ({ path, roles })))
+    .filter(
+      ({ path }) =>
         normalizedPathname === path || normalizedPathname.startsWith(`${path}/`)
     )
-  )
+    .sort((a, b) => b.path.length - a.path.length)[0]
 
   if (!permission) return true
 

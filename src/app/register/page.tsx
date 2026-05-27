@@ -32,9 +32,20 @@ export default function RegisterPage() {
 
     setLoading(true)
 
+    const normalizedNombre = nombre.trim()
+    const normalizedApellido = apellido.trim()
+    const normalizedEmail = email.trim().toLowerCase()
+
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
+      options: {
+        data: {
+          nombre: normalizedNombre,
+          apellido: normalizedApellido,
+          email: normalizedEmail,
+        },
+      },
     })
 
     if (error || !data.user) {
@@ -43,33 +54,20 @@ export default function RegisterPage() {
       return
     }
 
-    const { data: existingProfile } = await supabase
+    const { error: profileError } = await supabase
       .from('profiles')
-      .select('id')
-      .eq('id', data.user.id)
-      .maybeSingle()
-
-    if (existingProfile) {
-      await supabase.auth.signOut()
-      setLoading(false)
-      alert('Solicitud enviada. Un administrador debe aprobar tu acceso.')
-      router.push('/login')
-      return
-    }
-
-    const { error: profileError } = await supabase.from('profiles').insert([
-      {
+      .upsert({
         id: data.user.id,
-        nombre: nombre.trim(),
-        apellido: apellido.trim(),
-        email: email.trim().toLowerCase(),
+        nombre: normalizedNombre,
+        apellido: normalizedApellido,
+        email: normalizedEmail,
         rol: 'Ventas',
         status: 'Pendiente',
-      },
-    ])
+        is_active: true,
+      })
 
     if (profileError) {
-      console.error('PROFILE INSERT ERROR:', profileError)
+      console.error('PROFILE UPSERT ERROR:', profileError)
       setLoading(false)
       alert(`No se pudo crear el perfil: ${profileError.message}`)
       return
