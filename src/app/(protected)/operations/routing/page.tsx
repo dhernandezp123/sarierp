@@ -8,6 +8,12 @@ import { useUser } from '@/src/hooks/useUser'
 import { operationStatuses } from '@/src/lib/operation-status'
 import { supabase } from '@/src/lib/supabase/client'
 import {
+  fieldClass,
+  cardClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '@/src/lib/ui-classes'
+import {
   Table,
   TableBody,
   TableCell,
@@ -137,13 +143,13 @@ export default function RoutingInboxPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar RT, cliente o agente..."
-          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          className={fieldClass}
         />
 
         <select
           value={assignmentFilter}
           onChange={(e) => setAssignmentFilter(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          className={fieldClass}
         >
           <option value="Todos">Todos</option>
           <option value="Sin asignar">Sin asignar</option>
@@ -155,7 +161,7 @@ export default function RoutingInboxPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          className={fieldClass}
         >
           <option value="Todos">Todos los estados</option>
 
@@ -167,7 +173,7 @@ export default function RoutingInboxPage() {
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+      <div className={`${cardClass} overflow-x-auto p-0`}>
         {loading ? (
           <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
             Cargando instrucciones...
@@ -247,7 +253,7 @@ export default function RoutingInboxPage() {
                       type="button"
                       onClick={() => router.push(`/operations/routing/${item.id}`)}
                       title="Ver detalle"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                      className={`${secondaryButtonClass} inline-flex h-9 w-9 items-center justify-center p-0`}
                     >
                       <Eye className="h-4 w-4" />
                     </button>

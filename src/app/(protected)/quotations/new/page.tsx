@@ -591,7 +591,10 @@ export default function NewQuotationPage() {
   }
 
   const fieldClass =
-    'h-12 border rounded-xl px-3 py-2 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+    'h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500'
+
+  const cardClass =
+    'rounded-2xl border border-slate-200 bg-white p-6 shadow-sm'
 
   const calculateLineFt3 = (line: CargoDimensionLine) => {
     const quantity = Number(line.quantity || 0)
@@ -1007,8 +1010,8 @@ export default function NewQuotationPage() {
           Nueva Cotización
         </h1>
 
-        <div className="bg-white rounded-xl shadow p-8 space-y-8">
-          <section>
+        <div className="space-y-8">
+          <section className={cardClass}>
             <h2 className="text-xl font-semibold mb-4">
               Información General
             </h2>
@@ -1018,7 +1021,7 @@ export default function NewQuotationPage() {
                 name="cliente_id"
                 value={formData.cliente_id}
                 onChange={handleClienteChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               >
                 <option value="">Seleccionar cliente</option>
 
@@ -1032,14 +1035,14 @@ export default function NewQuotationPage() {
               <input
                 value={new Date().toLocaleDateString('es-HN')}
                 disabled
-                className="border p-3 rounded bg-gray-100"
+                className={fieldClass}
               />
 
               <select
                 name="incoterm"
                 value={formData.incoterm}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               >
                 <option value="">Seleccionar Incoterm</option>
                 <option value="EXW">EXW</option>
@@ -1053,7 +1056,7 @@ export default function NewQuotationPage() {
             </div>
           </section>
 
-          <section>
+          <section className={cardClass}>
             <h2 className="text-xl font-semibold mb-4">
               Contacto del Cliente
             </h2>
@@ -1064,7 +1067,7 @@ export default function NewQuotationPage() {
                 placeholder="Contacto"
                 value={formData.contact_name}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -1072,7 +1075,7 @@ export default function NewQuotationPage() {
                 placeholder="Email"
                 value={formData.contact_email}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -1080,7 +1083,7 @@ export default function NewQuotationPage() {
                 placeholder="Teléfono"
                 value={formData.contact_phone}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -1088,7 +1091,7 @@ export default function NewQuotationPage() {
                 placeholder="País"
                 value={formData.contact_country}
                 disabled
-                className="border p-3 rounded bg-gray-100"
+                className={fieldClass}
               />
 
               <input
@@ -1096,12 +1099,12 @@ export default function NewQuotationPage() {
                 placeholder="Departamento / Estado"
                 value={formData.contact_state || ''}
                 disabled
-                className="border p-3 rounded bg-gray-100"
+                className={fieldClass}
               />
             </div>
           </section>
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className={cardClass}>
             <h2 className="text-lg font-semibold mb-4">
               Producto Comercial
             </h2>
@@ -1111,7 +1114,7 @@ export default function NewQuotationPage() {
                 name="trade_direction"
                 value={formData.trade_direction}
                 onChange={handleChange}
-                className="border rounded-xl px-3 py-2"
+                className={fieldClass}
               >
                 <option value="">Dirección Comercial</option>
 
@@ -1126,7 +1129,7 @@ export default function NewQuotationPage() {
                 name="service_product"
                 value={formData.service_product}
                 onChange={handleChange}
-                className="border rounded-xl px-3 py-2"
+                className={fieldClass}
               >
                 <option value="">Producto / Servicio</option>
 
@@ -1193,7 +1196,7 @@ export default function NewQuotationPage() {
 
             {canUseMiamiCalculator && (
               <div className="mt-4 space-y-5 rounded-2xl border border-blue-200 bg-blue-50/60 p-6 dark:border-blue-900/50 dark:bg-blue-950/20">
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <div className={cardClass}>
                   <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                     Datos del embarque Miami
                   </h3>
@@ -1285,7 +1288,7 @@ export default function NewQuotationPage() {
     src/app/(protected)/quotations/new/page.tsx
     ============================================================ */}
 
-<div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+<div className={`space-y-4 ${cardClass}`}>
 
   {/* Header */}
   <div className="flex items-center justify-between">
@@ -1644,7 +1647,7 @@ export default function NewQuotationPage() {
                 </div>
 
             {formData.service_product === 'miami_lcl' && (
-              <div className="mt-4 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <div className={`mt-4 space-y-5 ${cardClass}`}>
                 <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                   Calculadora Miami LCL
                 </h3>
@@ -1863,7 +1866,7 @@ export default function NewQuotationPage() {
             )}
 
             {formData.service_product === 'miami_air' && (
-              <div className="mt-4 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <div className={`mt-4 space-y-5 ${cardClass}`}>
                 <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                   Calculadora Miami Aéreo
                 </h3>
@@ -1898,7 +1901,7 @@ export default function NewQuotationPage() {
               </div>
             )}
 
-                <div className="mt-4 space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <div className={`mt-4 space-y-5 ${cardClass}`}>
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -2024,14 +2027,14 @@ export default function NewQuotationPage() {
           </div>
 
           {!isMiamiFlow && (
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className={cardClass}>
             <h2 className="text-lg font-semibold mb-4">
               Tipo de Cotización
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
               <select
-                className="border rounded-xl px-3 py-2"
+                className={fieldClass}
                 value={formData.tipo_transporte}
                 onChange={(e) =>
                   setFormData({
@@ -2048,7 +2051,7 @@ export default function NewQuotationPage() {
               </select>
 
               <select
-                className="border rounded-xl px-3 py-2"
+                className={fieldClass}
                 value={formData.quote_type}
                 onChange={(e) =>
                   setFormData({ ...formData, quote_type: e.target.value })
@@ -2078,7 +2081,7 @@ export default function NewQuotationPage() {
                 name="cliente_id"
                 value={formData.cliente_id}
                 onChange={handleClienteChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               >
                 <option value="">Seleccionar cliente</option>
 
@@ -2094,14 +2097,14 @@ export default function NewQuotationPage() {
               <input
                 value={new Date().toLocaleDateString('es-HN')}
                 disabled
-                className="border p-3 rounded bg-gray-100"
+                className={fieldClass}
               />
 
               <select
                 name="incoterm"
                 value={formData.incoterm}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               >
                 <option value="">Seleccionar Incoterm</option>
                 <option value="EXW">EXW</option>
@@ -2121,7 +2124,7 @@ export default function NewQuotationPage() {
 
           {!isMiamiFlow && (
           <>
-          <section>
+          <section className={cardClass}>
             <h2 className="text-xl font-semibold mb-4">
               Información del Embarque
             </h2>
@@ -2133,7 +2136,7 @@ export default function NewQuotationPage() {
                 placeholder="País de origen"
                 value={formData.origen}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -2142,7 +2145,7 @@ export default function NewQuotationPage() {
                 placeholder="País de destino"
                 value={formData.destino}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -2151,7 +2154,7 @@ export default function NewQuotationPage() {
                 placeholder="Puerto origen"
                 value={formData.puerto_origen}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -2160,7 +2163,7 @@ export default function NewQuotationPage() {
                 placeholder="Puerto destino"
                 value={formData.puerto_destino}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -2168,7 +2171,7 @@ export default function NewQuotationPage() {
                 placeholder="Carrier de preferencia"
                 value={formData.preferred_carrier || ''}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
 <input
@@ -2176,11 +2179,11 @@ export default function NewQuotationPage() {
   placeholder="Target $"
   value={formData.target_rate || ''}
   onChange={handleChange}
-  className="border p-3 rounded"
+  className={fieldClass}
 />
 
               <textarea
-                className="border rounded-xl px-3 py-2 col-span-2"
+                className={`${fieldClass} min-h-24 col-span-2`}
                 placeholder="Dirección de recolección EXW"
                 value={formData.pickup_address}
                 onChange={(e) =>
@@ -2189,7 +2192,7 @@ export default function NewQuotationPage() {
               />
 
               <textarea
-                className="border rounded-xl px-3 py-2 col-span-2"
+                className={`${fieldClass} min-h-24 col-span-2`}
                 placeholder="Dirección de entrega"
                 value={formData.delivery_address}
                 onChange={(e) =>
@@ -2219,7 +2222,7 @@ export default function NewQuotationPage() {
             </div>
           </section>
 
-          <section>
+          <section className={cardClass}>
             <h2 className="text-xl font-semibold mb-4">
               Información de Carga
             </h2>
@@ -2229,7 +2232,7 @@ export default function NewQuotationPage() {
   name="container_type"
   value={formData.container_type}
   onChange={handleChange}
-  className="border p-3 rounded"
+  className={fieldClass}
 >
   <option value="">Tipo de contenedor / unidad</option>
   <option value="Contenedor 20FR">Contenedor 20FR</option>
@@ -2250,7 +2253,7 @@ export default function NewQuotationPage() {
 </select>
 
               <input
-                className="border rounded-xl px-3 py-2"
+                className={fieldClass}
                 placeholder="Cantidad de contenedores / unidades"
                 value={formData.container_qty}
                 onChange={(e) =>
@@ -2259,7 +2262,7 @@ export default function NewQuotationPage() {
               />
 
               <select
-                className="border rounded-xl px-3 py-2"
+                className={fieldClass}
                 value={formData.package_type}
                 onChange={(e) =>
                   setFormData({ ...formData, package_type: e.target.value })
@@ -2283,7 +2286,7 @@ export default function NewQuotationPage() {
                 placeholder="Peso KG"
                 value={formData.peso_kg}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -2291,7 +2294,7 @@ export default function NewQuotationPage() {
                 placeholder="Peso bruto"
                 value={formData.gross_weight}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -2299,7 +2302,7 @@ export default function NewQuotationPage() {
                 placeholder="CBM"
                 value={formData.volumen_cbm}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -2307,7 +2310,7 @@ export default function NewQuotationPage() {
                 placeholder="Bultos"
                 value={formData.cantidad_bultos}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <input
@@ -2315,11 +2318,11 @@ export default function NewQuotationPage() {
                 placeholder="Mercancía"
                 value={formData.commodity}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <textarea
-                className="border rounded-xl px-3 py-2 col-span-3"
+                className={`${fieldClass} min-h-24 col-span-3`}
                 placeholder="Detalles del empaque / dimensiones / observaciones de carga"
                 value={formData.package_details}
                 onChange={(e) =>
@@ -2332,7 +2335,7 @@ export default function NewQuotationPage() {
           </>
           )}
 
-          <section>
+          <section className={cardClass}>
   <h2 className="text-xl font-semibold mb-4">
     Seguro de Carga
   </h2>
@@ -2353,13 +2356,13 @@ export default function NewQuotationPage() {
       placeholder="Valor comercial / Valor FOB"
       value={formData.commercial_value}
       onChange={handleChange}
-      className="border p-3 rounded w-full"
+      className={fieldClass}
     />
   )}
 </section>
 
           {!isMiamiFlow && (
-          <section>
+          <section className={cardClass}>
             <h2 className="text-xl font-semibold mb-4">
               Observaciones para Pricing
             </h2>
@@ -2368,7 +2371,7 @@ export default function NewQuotationPage() {
               name="observaciones"
               value={formData.observaciones}
               onChange={handleChange}
-              className="border p-3 rounded w-full h-32"
+              className={`${fieldClass} min-h-32`}
             />
           </section>
           )}

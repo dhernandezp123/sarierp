@@ -15,7 +15,12 @@ import { supabase } from '@/src/lib/supabase/client'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { operationStatuses } from '@/src/lib/operation-status'
 import { shipmentEventTypes } from '@/src/lib/shipment-events'
-import { fieldClass } from '@/src/lib/ui'
+import {
+  fieldClass,
+  cardClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '@/src/lib/ui-classes'
 
 type BookingRouting = {
   id: string
@@ -80,7 +85,7 @@ function SectionCard({
   gridClassName?: string
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+    <section className={cardClass}>
       <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
         {title}
       </h2>
@@ -388,7 +393,7 @@ export default function RoutingBookingPage() {
         <button
           type="button"
           onClick={() => router.push(`/operations/routing/${routing.id}`)}
-          className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          className={secondaryButtonClass}
         >
           Volver al Routing
         </button>
@@ -816,7 +821,7 @@ export default function RoutingBookingPage() {
           </Field>
         </SectionCard>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <section className={cardClass}>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Comentarios Operativos
           </h2>
@@ -881,7 +886,7 @@ export default function RoutingBookingPage() {
               type="button"
               onClick={createEvent}
               disabled={savingEvent}
-              className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+              className={primaryButtonClass}
             >
               {savingEvent ? 'Registrando...' : 'Agregar Evento'}
             </button>

@@ -21,6 +21,12 @@ import {
 } from 'recharts'
 
 import { supabase } from '../../../lib/supabase/client'
+import {
+  fieldClass,
+  cardClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '@/src/lib/ui-classes'
 
 type UserTask = {
   id: string
@@ -361,7 +367,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => router.push('/quotations/new')}
-              className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
+              className={primaryButtonClass}
             >
               Nueva Cotización
             </button>
@@ -369,7 +375,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => router.push('/clientes/nuevo')}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-white dark:hover:bg-slate-800"
+              className={secondaryButtonClass}
             >
               Nuevo Cliente
             </button>
@@ -377,7 +383,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => router.push('/financial-dashboard')}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-white dark:hover:bg-slate-800"
+              className={secondaryButtonClass}
             >
               Finanzas
             </button>
@@ -385,7 +391,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Cotizaciones Mes
             </p>
@@ -394,7 +400,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Ganadas
             </p>
@@ -403,7 +409,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Pendientes Pricing
             </p>
@@ -412,7 +418,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Clientes Nuevos Mes
             </p>
@@ -423,7 +429,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Profit Esperado
             </p>
@@ -432,7 +438,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Profit Real
             </p>
@@ -448,7 +454,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Pendientes Validar
             </p>
@@ -457,7 +463,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Enviadas al Cliente
             </p>
@@ -468,7 +474,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Cotizaciones por Estado
             </h2>
@@ -504,7 +510,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Profit Esperado vs Profit Real
             </h2>
@@ -538,7 +544,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Cotizaciones por Mes
             </h2>
@@ -575,7 +581,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -592,7 +598,7 @@ export default function DashboardPage() {
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
                 placeholder="Nueva tarea..."
-                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                className={fieldClass}
               />
 
               <select
@@ -600,7 +606,7 @@ export default function DashboardPage() {
                 onChange={(e) =>
                   setTaskPriority(e.target.value as 'Baja' | 'Media' | 'Alta')
                 }
-                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                className={fieldClass}
               >
                 <option value="Baja">Baja</option>
                 <option value="Media">Media</option>
@@ -611,13 +617,13 @@ export default function DashboardPage() {
                 type="date"
                 value={taskDueDate}
                 onChange={(e) => setTaskDueDate(e.target.value)}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                className={fieldClass}
               />
 
               <button
                 onClick={createTask}
                 disabled={loadingTasks || !taskTitle.trim()}
-                className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+                className={primaryButtonClass}
               >
                 {loadingTasks ? 'Agregando...' : 'Agregar'}
               </button>
@@ -654,7 +660,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => toggleTask(task)}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        className={`${secondaryButtonClass} rounded-lg px-3 py-2 text-xs`}
                       >
                         {task.status === 'Pendiente' ? 'Completar' : 'Reabrir'}
                       </button>
@@ -675,7 +681,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Últimas Cotizaciones
             </h2>
@@ -718,7 +724,7 @@ export default function DashboardPage() {
                           onClick={() =>
                             router.push(`/quotations/${quote.id}`)
                           }
-                          className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-white dark:hover:bg-slate-800"
+                          className={secondaryButtonClass}
                         >
                           Ver
                         </button>
@@ -730,7 +736,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className={cardClass}>
             <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Pendientes de Pricing
             </h2>
@@ -760,7 +766,7 @@ export default function DashboardPage() {
                       onClick={() =>
                         router.push(`/pricing-comparison?quoteId=${quote.id}`)
                       }
-                      className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-white dark:hover:bg-slate-800"
+                      className={secondaryButtonClass}
                     >
                       Trabajar
                     </button>
