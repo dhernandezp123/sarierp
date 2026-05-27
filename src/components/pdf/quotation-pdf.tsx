@@ -20,6 +20,16 @@ const formatNumber = (value: number, decimals = 2) =>
     maximumFractionDigits: decimals,
   })
 
+const formatDateOnly = (date?: string | null) => {
+  if (!date) return 'N/A'
+
+  const [year, month, day] = date.split('T')[0].split('-')
+
+  if (!year || !month || !day) return date
+
+  return `${day}/${month}/${year}`
+}
+
 const styles = StyleSheet.create({
   page: {
     padding: 24,
@@ -570,18 +580,14 @@ export default function QuotationPDF({
               <Text style={styles.headerQuoteText}>
                 Fecha:{' '}
                 <Text style={styles.boldValue}>
-                  {quotation.created_at
-                    ? new Date(quotation.created_at).toLocaleDateString()
-                    : 'N/A'}
+                  {formatDateOnly(quotation.created_at)}
                 </Text>
               </Text>
 
               <Text style={styles.headerQuoteText}>
                 Válida hasta:{' '}
                 <Text style={styles.boldValue}>
-                  {quotation.valid_until
-                    ? new Date(quotation.valid_until).toLocaleDateString()
-                    : 'N/A'}
+                  {formatDateOnly(quotation.valid_until)}
                 </Text>
               </Text>
 
