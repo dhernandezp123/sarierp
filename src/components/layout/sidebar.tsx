@@ -23,10 +23,19 @@ interface SidebarProps {
   role?: string
 }
 
+type ProfileSummary = {
+  nombre: string | null
+  apellido: string | null
+  email: string | null
+  rol: string | null
+  avatar_url: string | null
+}
+
 export default function Sidebar({ role: profileRole }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [currentRole, setCurrentRole] = useState<string | null>(profileRole ?? null)
+  const [profile, setProfile] = useState<ProfileSummary | null>(null)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -36,7 +45,6 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   useEffect(() => {
     if (profileRole) {
       setCurrentRole(profileRole)
-      return
     }
 
     const fetchRole = async () => {
@@ -48,11 +56,12 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
       const { data } = await supabase
         .from('profiles')
-        .select('rol')
+        .select('nombre, apellido, email, rol, avatar_url')
         .eq('id', user.id)
         .single()
 
-      setCurrentRole(data?.rol ?? null)
+      setProfile(data)
+      setCurrentRole(data?.rol ?? profileRole ?? null)
     }
 
     fetchRole()
@@ -160,6 +169,9 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   const visibleFinancialItems = filterVisibleItems(financialItems)
   const visibleOperationsItems = filterVisibleItems(operationsItems)
   const visibleAdminItems = filterVisibleItems(adminItems)
+  const displayName = profile?.nombre
+    ? `${profile.nombre} ${profile.apellido || ''}`.trim()
+    : 'Usuario'
 
   const renderItem = (item: any) => {
     const Icon = item.icon
@@ -261,12 +273,31 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       </div>
 
       <div className="border-t border-white/5 p-4">
-        <div className="rounded-xl border border-white/5 bg-white/5 p-3">
-          <p className="text-xs text-slate-400">Rol activo</p>
-          <p className="mt-1 text-sm font-semibold text-white">
-            {currentRole || 'Ventas'}
-          </p>
-        </div>
+        <Link
+          href="/profile"
+          className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/5 p-3 transition hover:bg-white/10"
+        >
+          {profile?.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt={displayName}
+              className="h-9 w-9 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
+              {displayName.slice(0, 1).toUpperCase()}
+            </div>
+          )}
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">
+              {displayName}
+            </p>
+            <p className="text-xs text-slate-400">
+              {currentRole || 'Ventas'}
+            </p>
+          </div>
+        </Link>
 
         <button
           onClick={handleLogout}

@@ -16,6 +16,7 @@ type Profile = {
   apellido: string | null
   email: string | null
   rol: string | null
+  avatar_url: string | null
 }
 
 export default function Topbar() {
@@ -39,7 +40,7 @@ export default function Topbar() {
 
       const { data } = await supabase
         .from('profiles')
-        .select('nombre, apellido, email, rol')
+        .select('nombre, apellido, email, rol, avatar_url')
         .eq('id', user.id)
         .single()
 
@@ -50,10 +51,9 @@ export default function Topbar() {
     fetchNotifications()
   }, [])
 
-  const displayName =
-    profile?.nombre || profile?.apellido
-      ? `${profile?.nombre || ''} ${profile?.apellido || ''}`.trim()
-      : profile?.email || 'Usuario'
+  const displayName = profile?.nombre
+    ? `${profile.nombre} ${profile.apellido || ''}`.trim()
+    : 'Usuario'
   const unreadCount = notifications.filter((n) => !n.is_read).length
 
   return (
@@ -155,14 +155,31 @@ export default function Topbar() {
           )}
         </div>
 
-        <div className="text-right">
-          <p className="text-sm font-medium text-slate-900 dark:text-white">
-            {displayName}
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {profile?.rol || 'Sin rol'}
-          </p>
-        </div>
+        <Link
+          href="/profile"
+          className="flex items-center gap-3 rounded-xl px-2 py-1 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+          {profile?.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt={displayName}
+              className="h-9 w-9 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700"
+            />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">
+              {displayName.slice(0, 1).toUpperCase()}
+            </div>
+          )}
+
+          <div className="text-right">
+            <p className="text-sm font-medium text-slate-900 dark:text-white">
+              {displayName}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {profile?.rol || 'Sin rol'}
+            </p>
+          </div>
+        </Link>
       </div>
     </header>
   )
