@@ -513,9 +513,20 @@ export default function QuotationPDF({
       destinationTotal +
       otherChargeTotal
 
-  const sellerName = quotation.profiles
-    ? `${quotation.profiles.nombre} ${quotation.profiles.apellido}`
-    : quotation.salesperson || quotation.created_by || 'N/A'
+  const formatPersonName = (person?: any) => {
+    const name = [person?.nombre, person?.apellido]
+      .filter(Boolean)
+      .join(' ')
+      .trim()
+
+    return name || null
+  }
+
+  const customer = quotation.cliente || quotation.clientes
+  const vendedorNombre =
+    formatPersonName(customer?.vendedor) ||
+    formatPersonName(quotation.created_by_profile) ||
+    'N/A'
 
   const isMiamiLcl = quotation.service_product === 'miami_lcl'
   const isMiamiAir = quotation.service_product === 'miami_air'
@@ -592,7 +603,7 @@ export default function QuotationPDF({
               </Text>
 
               <Text style={styles.headerQuoteText}>
-                Vendedor: <Text style={styles.boldValue}>{sellerName}</Text>
+                Vendedor: <Text style={styles.boldValue}>{vendedorNombre}</Text>
               </Text>
             </View>
 
@@ -610,44 +621,44 @@ export default function QuotationPDF({
             <View style={styles.infoRow}>
               <Text style={styles.label}>Empresa:</Text>
               <Text style={styles.value}>
-                {quotation.clientes?.nombre || 'N/A'}
+                {customer?.nombre || 'N/A'}
               </Text>
             </View>
 
             <View style={styles.infoRow}>
               <Text style={styles.label}>Contacto:</Text>
               <Text style={styles.value}>
-                {quotation.contact_name || quotation.clientes?.nombre || 'N/A'}
+                {customer?.contacto || quotation.contact_name || 'N/A'}
               </Text>
             </View>
 
             <View style={styles.infoRow}>
               <Text style={styles.label}>Email:</Text>
               <Text style={styles.value}>
-                {quotation.contact_email || quotation.clientes?.email_1 || 'N/A'}
+                {quotation.contact_email || customer?.email_1 || 'N/A'}
               </Text>
             </View>
 
             <View style={styles.infoRow}>
               <Text style={styles.label}>Teléfono:</Text>
               <Text style={styles.value}>
-                {quotation.contact_phone || quotation.clientes?.telefono || 'N/A'}
+                {quotation.contact_phone || customer?.telefono || 'N/A'}
               </Text>
             </View>
 
             <View style={styles.infoRow}>
               <Text style={styles.label}>País:</Text>
               <Text style={styles.value}>
-                {quotation.clientes?.pais || 'N/A'}
+                {customer?.pais || 'N/A'}
               </Text>
             </View>
 
             <View style={styles.infoRow}>
               <Text style={styles.label}>RTN / NIT:</Text>
               <Text style={styles.value}>
-                {quotation.clientes?.rtn ||
-                  quotation.clientes?.nit ||
-                  quotation.clientes?.ruc ||
+                {customer?.rtn ||
+                  customer?.nit ||
+                  customer?.ruc ||
                   'N/A'}
               </Text>
             </View>
@@ -655,8 +666,8 @@ export default function QuotationPDF({
             <View style={styles.infoRow}>
               <Text style={styles.label}>Condición:</Text>
               <Text style={styles.value}>
-                {quotation.clientes?.condicion_pago ||
-                  quotation.clientes?.payment_terms ||
+                {customer?.condicion_pago ||
+                  customer?.payment_terms ||
                   'Contado'}
               </Text>
             </View>

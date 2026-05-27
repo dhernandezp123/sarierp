@@ -109,8 +109,15 @@ export default function QuotationDetailPage() {
       .from('quotations')
       .select(`
         *,
-        clientes (*),
-        profiles:created_by (
+        cliente:clientes (
+          *,
+          vendedor:profiles!clientes_vendedor_asignado_fkey (
+            id,
+            nombre,
+            apellido
+          )
+        ),
+        created_by_profile:profiles!quotations_created_by_fkey (
           nombre,
           apellido
         )
@@ -149,7 +156,14 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', id)
       .order('created_at', { ascending: true })
 
-    setQuotation(quoteData)
+    setQuotation(
+      quoteData
+        ? {
+            ...quoteData,
+            clientes: quoteData.cliente,
+          }
+        : null
+    )
     setPricingItems(pricingItemsData || [])
     setQuotationContainers(quotationContainersData || [])
     if (!cargoError && cargoData) {

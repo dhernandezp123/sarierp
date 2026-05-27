@@ -57,7 +57,7 @@ type CargoDimensionLine = {
   length: string
   width: string
   height: string
-  dimensionUnit: 'in' | 'cm'
+  dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
   weight: string
 }
 
@@ -103,6 +103,7 @@ export default function NewQuotationPage() {
   ])
   const [miamiOptions, setMiamiOptions] = useState({
     applyStandardCharges: true,
+    taxStandardDestinationCharges: false,
     isImo: false,
     isHazmat: false,
     includeImoCertificate: false,
@@ -196,7 +197,14 @@ export default function NewQuotationPage() {
   const fetchClientes = async () => {
     const { data, error } = await supabase
       .from('clientes')
-      .select('*')
+      .select(`
+        *,
+        vendedor:profiles!clientes_vendedor_asignado_fkey (
+          id,
+          nombre,
+          apellido
+        )
+      `)
       .is('deleted_at', null)
       .order('nombre', { ascending: true })
 
@@ -596,36 +604,41 @@ export default function NewQuotationPage() {
   const cardClass =
     'rounded-2xl border border-slate-200 bg-white p-6 shadow-sm'
 
-  const calculateLineFt3 = (line: CargoDimensionLine) => {
-    const quantity = Number(line.quantity || 0)
+  const getCbmPerUnit = (line: CargoDimensionLine) => {
     const length = Number(line.length || 0)
     const width = Number(line.width || 0)
     const height = Number(line.height || 0)
 
-    if (!quantity || !length || !width || !height) return 0
+    if (!length || !width || !height) return 0
 
-    if (line.dimensionUnit === 'cm') {
-      const cbmPerUnit = (length * width * height) / 1_000_000
-      return cbmPerUnit * 35.3147 * quantity
+    if (line.dimensionUnit === 'in') {
+      return (length * width * height) / 61023.7441
     }
 
-    return ((length * width * height) / 1728) * quantity
+    if (line.dimensionUnit === 'cm') {
+      return (length * width * height) / 1_000_000
+    }
+
+    if (line.dimensionUnit === 'mm') {
+      return (length * width * height) / 1_000_000_000
+    }
+
+    if (line.dimensionUnit === 'm') {
+      return length * width * height
+    }
+
+    return 0
   }
 
   const calculateLineCbm = (line: CargoDimensionLine) => {
     const quantity = Number(line.quantity || 0)
-    const length = Number(line.length || 0)
-    const width = Number(line.width || 0)
-    const height = Number(line.height || 0)
+    if (!quantity) return 0
 
-    if (!quantity || !length || !width || !height) return 0
+    return getCbmPerUnit(line) * quantity
+  }
 
-    if (line.dimensionUnit === 'cm') {
-      return ((length * width * height) / 1_000_000) * quantity
-    }
-
-    const ft3 = ((length * width * height) / 1728) * quantity
-    return ft3 / 35.3147
+  const calculateLineFt3 = (line: CargoDimensionLine) => {
+    return calculateLineCbm(line) * 35.3147
   }
 
   const totalCargoFt3 = cargoLines.reduce(
@@ -824,7 +837,7 @@ export default function NewQuotationPage() {
       }
 
       const standardChargeCodes = applyStandardCharges
-        ? ['bl', 'sed', 'documentos_manejo']
+        ? ['bl', 'sed', 'documentos_manejo', 'desconsolidar']
         : []
 
       const conditionalChargeCodes = [
@@ -839,20 +852,32 @@ export default function NewQuotationPage() {
 
         if (!rate || amount <= 0) return
 
+        const isStandardDestinationCharge =
+          code === 'documentos_manejo' || code === 'desconsolidar'
+        const isTaxable =
+          isStandardDestinationCharge &&
+          miamiOptions.taxStandardDestinationCharges
+        const taxAmount = isTaxable ? amount * 0.15 : 0
+
         items.push({
           quotation_id: quotationId,
           description: rate.rate_label,
-          item_type: 'origin_charge',
+          item_type:
+            isStandardDestinationCharge
+              ? 'destination_charge'
+              : 'origin_charge',
           quantity: 1,
           cost_amount: 0,
           sale_amount: amount,
-          tax_rate: 0,
-          tax_amount: 0,
-          total_amount: amount,
+          tax_rate: isTaxable ? 15 : 0,
+          tax_amount: taxAmount,
+          total_amount: amount + taxAmount,
           currency: rate.currency || 'USD',
-          taxable: false,
+          taxable: isTaxable,
           supplier: 'Sari Express',
-          notes: 'Cargo aplicado automáticamente según configuración Miami LCL.',
+          notes: isTaxable
+            ? 'Cargo estándar en destino gravable con ISV 15%.'
+            : 'Cargo aplicado automáticamente según configuración Miami LCL.',
           created_by: profile?.id,
         })
       })
@@ -932,8 +957,9 @@ export default function NewQuotationPage() {
       ...formData,
       id: 'preview',
       quotation_number: 'PREVIEW',
+      cliente: selectedCliente || null,
       clientes: selectedCliente || null,
-      profiles: profile
+      created_by_profile: profile
         ? {
             nombre: profile.nombre,
             apellido: profile.apellido,
@@ -1458,6 +1484,8 @@ export default function NewQuotationPage() {
                   >
                     <option value="in">Pulgadas (in)</option>
                     <option value="cm">Centímetros (cm)</option>
+                    <option value="mm">Milímetros (mm)</option>
+                    <option value="m">Metros (m)</option>
                   </select>
                 </div>
 
@@ -1743,25 +1771,48 @@ export default function NewQuotationPage() {
                 )}
 
                 <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/70">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={
-                        shouldApplyStandardCharges &&
-                        miamiOptions.applyStandardCharges
-                      }
-                      disabled={!shouldApplyStandardCharges}
-                      onChange={(e) =>
-                        setMiamiOptions({
-                          ...miamiOptions,
-                          applyStandardCharges: e.target.checked,
-                        })
-                      }
-                    />
-                    <span className="font-medium text-slate-700 dark:text-slate-200">
-                      Aplicar cargos estándar: BL, SED, Documentos / Manejo
-                    </span>
-                  </label>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={
+                          shouldApplyStandardCharges &&
+                          miamiOptions.applyStandardCharges
+                        }
+                        disabled={!shouldApplyStandardCharges}
+                        onChange={(e) =>
+                          setMiamiOptions({
+                            ...miamiOptions,
+                            applyStandardCharges: e.target.checked,
+                          })
+                        }
+                      />
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        Aplicar cargos estándar: BL, SED, Documentos / Manejo,
+                        Desconsolidación
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={
+                          applyStandardCharges &&
+                          miamiOptions.taxStandardDestinationCharges
+                        }
+                        disabled={!applyStandardCharges}
+                        onChange={(e) =>
+                          setMiamiOptions({
+                            ...miamiOptions,
+                            taxStandardDestinationCharges: e.target.checked,
+                          })
+                        }
+                      />
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        ISV 15% en Documentos / Manejo y Desconsolidación
+                      </span>
+                    </label>
+                  </div>
 
                   {miamiLclResult.isMinimum && (
                     <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
