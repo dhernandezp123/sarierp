@@ -9,6 +9,7 @@ import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
+import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import { canTransition } from '@/src/lib/quotation-status'
 import { validatePricingCompleteness } from '@/src/lib/pricing-validation'
 import { cn } from '../../../lib/utils'
@@ -19,6 +20,10 @@ import {
   mutedCardClass,
   valueClass,
 } from '../../../lib/ui'
+import {
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '@/src/lib/ui-classes'
 
 import { Badge } from '../../../components/ui/badge'
 import {
@@ -35,6 +40,35 @@ import {
   DialogTitle,
 } from '@/src/components/ui/dialog'
 
+type CargoLine = {
+  id: string
+  quotation_id?: string
+  quantity: number | string | null
+  package_type: string | null
+  length: number | string | null
+  width: number | string | null
+  height: number | string | null
+  dimension_unit: string | null
+  weight_lbs: number | string | null
+  ft3?: number | string | null
+  cbm?: number | string | null
+  created_at?: string | null
+}
+
+type ClientRate = {
+  rate_code: string
+  amount: number
+}
+
+type SurchargeRule = {
+  code: string
+  label: string
+  rate_per_lbs: number | string | null
+  rate_per_ft3: number | string | null
+  minimum_amount: number | string | null
+  currency: string | null
+}
+
 function PricingComparisonContent() {
   const { profile } = useUser()
   const searchParams = useSearchParams()
@@ -49,6 +83,10 @@ function PricingComparisonContent() {
   const [pricingItems, setPricingItems] = useState<any[]>([])
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [containerRateLines, setContainerRateLines] = useState<any[]>([])
+  const [cargoLines, setCargoLines] = useState<CargoLine[]>([])
+  const [savingCargo, setSavingCargo] = useState(false)
+  const [clientRates, setClientRates] = useState<ClientRate[]>([])
+  const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
 
   const [agentForm, setAgentForm] = useState({
     agent_id: '',
@@ -97,6 +135,16 @@ function PricingComparisonContent() {
   const [postApprovalReason, setPostApprovalReason] = useState('')
   const [pendingPostApprovalAction, setPendingPostApprovalAction] = useState<null | (() => Promise<void>)>(null)
   const [savingPostApproval, setSavingPostApproval] = useState(false)
+  const [showAddChargeModal, setShowAddChargeModal] = useState(false)
+  const [savingMiamiCharge, setSavingMiamiCharge] = useState(false)
+  const [miamiChargeForm, setMiamiChargeForm] = useState({
+    description: '',
+    category: 'freight',
+    sale_amount: '',
+    taxable: false,
+    supplier: 'Sari Express',
+    notes: '',
+  })
   const agentQuotesSectionRef = useRef<HTMLDivElement | null>(null)
   const postApprovalReasonRef = useRef('')
   const profitabilityReasonRef = useRef('')
@@ -193,11 +241,64 @@ function PricingComparisonContent() {
     setQuotationContainers(data || [])
   }
 
+  const loadCargoLines = async (quotationId?: string) => {
+    const targetQuotationId = quotationId || selectedQuote?.id
+
+    if (!targetQuotationId) return
+
+    const { data, error } = await supabase
+      .from('quotation_cargo_lines')
+      .select('*')
+      .eq('quotation_id', targetQuotationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      toast.error(error.message)
+      setCargoLines([])
+      return
+    }
+
+    if (!error && data) {
+      setCargoLines(data as CargoLine[])
+    }
+  }
+
+  const loadMiamiRates = async (quote = selectedQuote) => {
+    if (!quote?.cliente_id) {
+      setClientRates([])
+      setSurchargeRules([])
+      return
+    }
+
+    const { data: ratesData } = await supabase
+      .from('client_rates')
+      .select('rate_code, amount')
+      .eq('cliente_id', quote.cliente_id)
+      .eq('is_active', true)
+
+    const { data: surchargeData } = await supabase
+      .from('surcharge_rules')
+      .select('code, label, rate_per_lbs, rate_per_ft3, minimum_amount, currency')
+      .eq('service_product', quote.service_product)
+      .eq('is_active', true)
+
+    setClientRates((ratesData || []) as ClientRate[])
+    setSurchargeRules((surchargeData || []) as SurchargeRule[])
+  }
+
+  useEffect(() => {
+    if (!selectedQuote?.id) return
+
+    loadMiamiRates()
+  }, [selectedQuote?.id, selectedQuote?.cliente_id, selectedQuote?.service_product])
+
   const handleSelectQuote = async (quote: any) => {
     setSelectedQuote(quote)
     await fetchAgentQuotes(quote.id)
     await fetchPricingItems(quote.id)
     await fetchQuotationContainers(quote.id)
+    await loadCargoLines(quote.id)
+    await loadMiamiRates(quote)
   }
 
   const handleAgentChange = (
@@ -216,6 +317,53 @@ function PricingComparisonContent() {
       ...pricingForm,
       [e.target.name]: e.target.value,
     })
+  }
+
+  const updateCargoLine = (
+    lineId: string,
+    field: keyof CargoLine,
+    value: string
+  ) => {
+    setCargoLines((prev) =>
+      prev.map((line) =>
+        line.id === lineId ? { ...line, [field]: value } : line
+      )
+    )
+  }
+
+  const calculateCargoLineCbm = (line: CargoLine) => {
+    const quantity = Number(line.quantity || 0)
+    const length = Number(line.length || 0)
+    const width = Number(line.width || 0)
+    const height = Number(line.height || 0)
+
+    if (!quantity || !length || !width || !height) return 0
+
+    if (line.dimension_unit === 'in') {
+      return ((length * width * height) / 61023.7441) * quantity
+    }
+
+    if (line.dimension_unit === 'cm') {
+      return ((length * width * height) / 1_000_000) * quantity
+    }
+
+    if (line.dimension_unit === 'mm') {
+      return ((length * width * height) / 1_000_000_000) * quantity
+    }
+
+    if (line.dimension_unit === 'm') {
+      return length * width * height * quantity
+    }
+
+    return 0
+  }
+
+  const calculateCargoLineFt3 = (line: CargoLine) =>
+    calculateCargoLineCbm(line) * 35.3147
+
+  const getRateAmount = (code: string) => {
+    const rate = clientRates.find((item) => item.rate_code === code)
+    return Number(rate?.amount || 0)
   }
 
   const getTotalContainersQty = (fallbackQty?: string | number) =>
@@ -691,6 +839,224 @@ function PricingComparisonContent() {
     await fetchPricingItems(selectedQuote.id)
   }
 
+  const resetMiamiChargeForm = () => {
+    setMiamiChargeForm({
+      description: '',
+      category: 'freight',
+      sale_amount: '',
+      taxable: false,
+      supplier: 'Sari Express',
+      notes: '',
+    })
+  }
+
+  const saveMiamiCharge = async () => {
+    if (!selectedQuote) {
+      toast.error('Selecciona una cotizacion primero')
+      return
+    }
+
+    if (!miamiChargeForm.description.trim()) {
+      toast.error('La descripcion es obligatoria')
+      return
+    }
+
+    const saleAmount = Number(miamiChargeForm.sale_amount || 0)
+
+    if (saleAmount <= 0) {
+      toast.error('La venta debe ser mayor a cero')
+      return
+    }
+
+    const reason = await requestChangeReason('Agregar cargo operativo Miami')
+
+    if (reason === null) return
+
+    const taxAmount = miamiChargeForm.taxable ? saleAmount * 0.15 : 0
+    const totalAmount = saleAmount + taxAmount
+
+    try {
+      setSavingMiamiCharge(true)
+
+      const { error } = await supabase.from('pricing_items').insert([
+        {
+          quotation_id: selectedQuote.id,
+          item_type: miamiChargeForm.category,
+          description: miamiChargeForm.description.trim(),
+          cost_amount: 0,
+          sale_amount: saleAmount,
+          quantity: 1,
+          taxable: miamiChargeForm.taxable,
+          tax_rate: 15,
+          tax_amount: taxAmount,
+          total_amount: totalAmount,
+          currency: 'USD',
+          supplier: miamiChargeForm.supplier.trim() || 'Sari Express',
+          notes: miamiChargeForm.notes.trim(),
+          created_by: profile?.id,
+        },
+      ])
+
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      toast.success('Cargo operativo agregado')
+      resetMiamiChargeForm()
+      setShowAddChargeModal(false)
+
+      await fetchPricingItems(selectedQuote.id)
+    } finally {
+      setSavingMiamiCharge(false)
+    }
+  }
+
+  const saveCargoLines = async () => {
+    if (!selectedQuote?.id) return
+
+    setSavingCargo(true)
+
+    const { error: deleteError } = await supabase
+      .from('quotation_cargo_lines')
+      .delete()
+      .eq('quotation_id', selectedQuote.id)
+
+    if (deleteError) {
+      setSavingCargo(false)
+      toast.error('No se pudo limpiar el detalle de carga anterior')
+      return
+    }
+
+    const rows = cargoLines
+      .filter((line) => Number(line.quantity || 0) > 0)
+      .map((line) => ({
+        quotation_id: selectedQuote.id,
+        quantity: Number(line.quantity || 0),
+        package_type: line.package_type || 'Caja',
+        length: Number(line.length || 0),
+        width: Number(line.width || 0),
+        height: Number(line.height || 0),
+        dimension_unit: line.dimension_unit || 'in',
+        weight_lbs: Number(line.weight_lbs || 0),
+        ft3: calculateCargoLineFt3(line),
+        cbm: calculateCargoLineCbm(line),
+      }))
+
+    if (rows.length > 0) {
+      const { error: insertError } = await supabase
+        .from('quotation_cargo_lines')
+        .insert(rows)
+
+      if (insertError) {
+        setSavingCargo(false)
+        toast.error('No se pudo guardar el nuevo detalle de carga')
+        return
+      }
+    }
+
+    const { error: quoteError } = await supabase
+      .from('quotations')
+      .update({
+        peso_lbs: totalCargoLbs || null,
+        peso_kg: totalCargoKg || null,
+        volumen_ft3: totalCargoFt3 || null,
+        volumen_cbm: totalCargoCbm || null,
+      })
+      .eq('id', selectedQuote.id)
+
+    setSavingCargo(false)
+
+    if (quoteError) {
+      toast.error('La carga se guardó, pero no se actualizaron los totales')
+      return
+    }
+
+    setSelectedQuote({
+      ...selectedQuote,
+      peso_lbs: totalCargoLbs || null,
+      peso_kg: totalCargoKg || null,
+      volumen_ft3: totalCargoFt3 || null,
+      volumen_cbm: totalCargoCbm || null,
+    })
+
+    toast.success('Detalle de carga actualizado')
+    await loadCargoLines()
+  }
+
+  const recalculateMiamiLclPricing = async () => {
+    if (!selectedQuote?.id) return
+
+    if (selectedQuote.service_product !== 'miami_lcl') {
+      toast.error('El recálculo automático está disponible para Miami LCL')
+      return
+    }
+
+    const result = calculateMiamiLcl({
+      ft3: totalCargoFt3,
+      lbs: totalCargoLbs,
+      rateFt3: getRateAmount('lcl_maritimo_sps_ft3'),
+      rateLbs: getRateAmount('lcl_maritimo_sps_lbs'),
+      minimumSmall: getRateAmount('small_maritimo_min_lcl_1000_lbs_45_ft3'),
+      minimumLarge: getRateAmount('minimo_maritimo_2mil_lbs_90_ft3'),
+    })
+
+    const bunkerRule = surchargeRules.find(
+      (rule) => rule.code === 'bunker_emergency_surcharge'
+    )
+
+    const bunkerAmount = bunkerRule
+      ? Math.max(
+          totalCargoLbs * Number(bunkerRule.rate_per_lbs || 0),
+          totalCargoFt3 * Number(bunkerRule.rate_per_ft3 || 0),
+          Number(bunkerRule.minimum_amount || 0)
+        )
+      : 0
+
+    const { error: freightError } = await supabase
+      .from('pricing_items')
+      .update({
+        sale_amount: result.oceanFreight,
+        tax_amount: 0,
+        total_amount: result.oceanFreight,
+        notes: `Recalculado: FT3 ${totalCargoFt3.toFixed(
+          2
+        )} / LBS ${totalCargoLbs.toFixed(0)}.`,
+      })
+      .eq('quotation_id', selectedQuote.id)
+      .eq('description', 'Flete Miami LCL')
+
+    if (freightError) {
+      toast.error('No se pudo recalcular el flete Miami LCL')
+      return
+    }
+
+    if (bunkerRule) {
+      const { error: bunkerError } = await supabase
+        .from('pricing_items')
+        .update({
+          sale_amount: bunkerAmount,
+          tax_amount: 0,
+          total_amount: bunkerAmount,
+          notes: `Recalculado: MAX(lbs x ${Number(
+            bunkerRule.rate_per_lbs || 0
+          )}, ft3 x ${Number(
+            bunkerRule.rate_per_ft3 || 0
+          )}, mínimo ${Number(bunkerRule.minimum_amount || 0)}).`,
+        })
+        .eq('quotation_id', selectedQuote.id)
+        .eq('description', bunkerRule.label)
+
+      if (bunkerError) {
+        toast.error('No se pudo recalcular el Bunker')
+        return
+      }
+    }
+
+    toast.success('Flete y Bunker recalculados')
+    await fetchPricingItems(selectedQuote.id)
+  }
+
   const deletePricingItem = async (itemId: string) => {
     const reason = await requestChangeReason('Eliminar línea de cotización')
 
@@ -978,8 +1344,30 @@ function PricingComparisonContent() {
 
   const totalAmount = subtotal + taxAmount
 
+  const totalCargoLbs = cargoLines.reduce(
+    (sum, line) =>
+      sum + Number(line.weight_lbs || 0) * Number(line.quantity || 0),
+    0
+  )
+
+  const totalCargoCbm = cargoLines.reduce(
+    (sum, line) => sum + calculateCargoLineCbm(line),
+    0
+  )
+
+  const totalCargoFt3 = cargoLines.reduce(
+    (sum, line) => sum + calculateCargoLineFt3(line),
+    0
+  )
+
+  const totalCargoKg = totalCargoLbs / 2.20462
+
   const gpPercentage =
     totalSale > 0 ? (totalProfit / totalSale) * 100 : 0
+
+  const isMiamiFlow =
+    selectedQuote?.service_product === 'miami_lcl' ||
+    selectedQuote?.service_product === 'miami_air'
 
   const targetRate = Number(selectedQuote?.target_rate || 0)
 
@@ -1219,7 +1607,7 @@ const profitabilityColor =
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-6" data-miami-flow={isMiamiFlow}>
         <div>
           <h1 className="text-4xl font-bold">
             Comparativo de Tarifas / Pricing
@@ -1379,7 +1767,9 @@ const profitabilityColor =
                   </CardContent>
                 </Card>
 
-                <Card>
+                {!isMiamiFlow && (
+                  <>
+                    <Card>
                   <CardHeader>
                     <CardTitle>Construcción de Tarifa</CardTitle>
                   </CardHeader>
@@ -1982,14 +2372,20 @@ const profitabilityColor =
                       </div>
                     </>
                   )}
-                </div>
+                    </div>
+                  </>
+                )}
 
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Detalle de Venta al Cliente</CardTitle>
-                  </CardHeader>
+                  {!isMiamiFlow && (
+                    <CardHeader>
+                      <CardTitle>Detalle de Venta al Cliente</CardTitle>
+                    </CardHeader>
+                  )}
 
                   <CardContent className="space-y-4">
+                    {!isMiamiFlow && (
+                      <>
                     <div className="grid grid-cols-4 gap-4">
                       <select
                         name="item_type"
@@ -2107,10 +2503,214 @@ const profitabilityColor =
                         Total: USD {totalAmount.toFixed(2)}
                       </p>
                     </div>
+                      </>
+                    )}
 
-                    <h3 className="text-lg font-semibold">
+                    {isMiamiFlow && (
+                      <section className={cn(cardClass, 'p-5')}>
+                        <h2 className="text-lg font-semibold text-slate-950 dark:text-white">
+                          Gestión operativa Miami
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                          Esta cotización usa tarifas propias de Sari Express. No requiere comparativo de agentes.
+                        </p>
+
+                        <div className="mt-4 grid gap-4 md:grid-cols-4">
+                          <div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Producto</p>
+                            <p className="font-semibold text-slate-950 dark:text-white">
+                              {selectedQuote.service_product === 'miami_lcl'
+                                ? 'Miami Consolidado LCL'
+                                : 'Miami Consolidado Aéreo'}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Incoterm</p>
+                            <p className="font-semibold text-slate-950 dark:text-white">
+                              {selectedQuote.incoterm || 'N/A'}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Origen</p>
+                            <p className="font-semibold text-slate-950 dark:text-white">
+                              {selectedQuote.origen || 'N/A'}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Destino</p>
+                            <p className="font-semibold text-slate-950 dark:text-white">
+                              {selectedQuote.destino || 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+                      </section>
+                    )}
+
+                    {isMiamiFlow && (
+                      <section className={cn(cardClass, 'p-5')}>
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <h3 className="text-lg font-semibold text-slate-950 dark:text-white">
+                              Editar carga / Recalcular Miami
+                            </h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              Ajusta piezas, dimensiones y peso para recalcular volumen y libras.
+                            </p>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={saveCargoLines}
+                              disabled={savingCargo}
+                              className={primaryButtonClass}
+                            >
+                              {savingCargo ? 'Guardando...' : 'Guardar carga'}
+                            </button>
+
+                            <button
+                              type="button"
+                              className={secondaryButtonClass}
+                              disabled={
+                                savingCargo ||
+                                selectedQuote.service_product !== 'miami_lcl'
+                              }
+                              onClick={recalculateMiamiLclPricing}
+                            >
+                              Recalcular tarifas
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-5 space-y-4">
+                          {cargoLines.length === 0 ? (
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              No hay líneas de carga registradas.
+                            </p>
+                          ) : (
+                            cargoLines.map((line, index) => (
+                              <div
+                                key={line.id}
+                                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40"
+                              >
+                                <div className="mb-3 flex items-center justify-between">
+                                  <p className="font-semibold text-slate-900 dark:text-white">
+                                    Línea #{index + 1}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCargoLines((prev) =>
+                                        prev.filter((item) => item.id !== line.id)
+                                      )
+                                    }
+                                    className="text-sm font-semibold text-red-600 hover:text-red-700"
+                                  >
+                                    Quitar
+                                  </button>
+                                </div>
+
+                                <div className="grid gap-3 md:grid-cols-3">
+                                  <input
+                                    className={fieldClass}
+                                    type="number"
+                                    value={line.quantity ?? ''}
+                                    onChange={(e) =>
+                                      updateCargoLine(line.id, 'quantity', e.target.value)
+                                    }
+                                    placeholder="Cantidad"
+                                  />
+                                  <input
+                                    className={fieldClass}
+                                    value={line.package_type ?? ''}
+                                    onChange={(e) =>
+                                      updateCargoLine(line.id, 'package_type', e.target.value)
+                                    }
+                                    placeholder="Tipo de paquete"
+                                  />
+                                  <input
+                                    className={fieldClass}
+                                    type="number"
+                                    value={line.weight_lbs ?? ''}
+                                    onChange={(e) =>
+                                      updateCargoLine(line.id, 'weight_lbs', e.target.value)
+                                    }
+                                    placeholder="Peso lbs"
+                                  />
+                                </div>
+
+                                <div className="mt-3 grid gap-3 md:grid-cols-4">
+                                  <input
+                                    className={fieldClass}
+                                    type="number"
+                                    value={line.length ?? ''}
+                                    onChange={(e) =>
+                                      updateCargoLine(line.id, 'length', e.target.value)
+                                    }
+                                    placeholder="Largo"
+                                  />
+                                  <input
+                                    className={fieldClass}
+                                    type="number"
+                                    value={line.width ?? ''}
+                                    onChange={(e) =>
+                                      updateCargoLine(line.id, 'width', e.target.value)
+                                    }
+                                    placeholder="Ancho"
+                                  />
+                                  <input
+                                    className={fieldClass}
+                                    type="number"
+                                    value={line.height ?? ''}
+                                    onChange={(e) =>
+                                      updateCargoLine(line.id, 'height', e.target.value)
+                                    }
+                                    placeholder="Alto"
+                                  />
+                                  <input
+                                    className={fieldClass}
+                                    value={line.dimension_unit ?? ''}
+                                    onChange={(e) =>
+                                      updateCargoLine(line.id, 'dimension_unit', e.target.value)
+                                    }
+                                    placeholder="Unidad"
+                                  />
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </section>
+                    )}
+
+                    {isMiamiFlow ? (
+                      <div className="mb-4 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold text-slate-950 dark:text-white">
+                            Líneas de Cotización
+                          </h3>
+
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Administra cargos operativos y ajustes comerciales.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          className={primaryButtonClass}
+                          onClick={() => setShowAddChargeModal(true)}
+                        >
+                          + Agregar cargo
+                        </button>
+                      </div>
+                    ) : (
+                      <h3 className="text-lg font-semibold">
                       Líneas de Cotización
-                    </h3>
+                      </h3>
+                    )}
 
                     {pricingItems.length === 0 ? (
                       <p className="text-gray-500">
@@ -2425,6 +3025,143 @@ const profitabilityColor =
             )}
         </div>
       </div>
+
+      <Dialog
+        open={showAddChargeModal}
+        onOpenChange={(open) => {
+          setShowAddChargeModal(open)
+
+          if (!open) {
+            resetMiamiChargeForm()
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Agregar cargo</DialogTitle>
+            <DialogDescription>
+              Registra un cargo operativo o ajuste comercial para esta cotización Miami.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className={labelClass}>Descripción</label>
+              <input
+                value={miamiChargeForm.description}
+                onChange={(e) =>
+                  setMiamiChargeForm({
+                    ...miamiChargeForm,
+                    description: e.target.value,
+                  })
+                }
+                className={cn(fieldClass, 'mt-1')}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Categoría</label>
+              <select
+                value={miamiChargeForm.category}
+                onChange={(e) =>
+                  setMiamiChargeForm({
+                    ...miamiChargeForm,
+                    category: e.target.value,
+                  })
+                }
+                className={cn(fieldClass, 'mt-1')}
+              >
+                <option value="freight">Flete</option>
+                <option value="origin_charge">Gasto origen</option>
+                <option value="destination_charge">Gasto destino</option>
+                <option value="other_charge">Otro</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClass}>Venta USD</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={miamiChargeForm.sale_amount}
+                onChange={(e) =>
+                  setMiamiChargeForm({
+                    ...miamiChargeForm,
+                    sale_amount: e.target.value,
+                  })
+                }
+                className={cn(fieldClass, 'mt-1')}
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={miamiChargeForm.taxable}
+                onChange={(e) =>
+                  setMiamiChargeForm({
+                    ...miamiChargeForm,
+                    taxable: e.target.checked,
+                  })
+                }
+              />
+              Gravable ISV 15%
+            </label>
+
+            <div>
+              <label className={labelClass}>Proveedor</label>
+              <input
+                value={miamiChargeForm.supplier}
+                onChange={(e) =>
+                  setMiamiChargeForm({
+                    ...miamiChargeForm,
+                    supplier: e.target.value,
+                  })
+                }
+                className={cn(fieldClass, 'mt-1')}
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Notas</label>
+              <textarea
+                value={miamiChargeForm.notes}
+                onChange={(e) =>
+                  setMiamiChargeForm({
+                    ...miamiChargeForm,
+                    notes: e.target.value,
+                  })
+                }
+                rows={3}
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-[#111827] dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddChargeModal(false)
+                resetMiamiChargeForm()
+              }}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              disabled={savingMiamiCharge}
+              onClick={saveMiamiCharge}
+              className={primaryButtonClass}
+            >
+              {savingMiamiCharge ? 'Guardando...' : 'Guardar cargo'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={confirmSelectRateOpen}

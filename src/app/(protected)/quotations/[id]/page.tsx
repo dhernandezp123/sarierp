@@ -636,7 +636,7 @@ const combinedTimeline = [
             onClick={() => router.push(`/pricing-comparison?quoteId=${quotation.id}`)}
             className="rounded-xl bg-black text-white px-6 py-3 font-semibold"
           >
-            Trabajar Pricing
+            Gestionar Cotización
           </button>
 
           {quotation.status === 'Ganada' && (
