@@ -911,6 +911,20 @@ function PricingComparisonContent() {
       }
 
       toast.success('Cargo operativo agregado')
+      await createActivityLog({
+        module: 'quotations',
+        action: 'pricing_item_added',
+        entityType: 'quotation',
+        entityId: selectedQuote.id,
+        description: `Se agregó un cargo a la cotización ${selectedQuote.quotation_number}`,
+        metadata: {
+          description: miamiChargeForm.description,
+          itemType: miamiChargeForm.category,
+          amount: Number(miamiChargeForm.sale_amount || 0),
+          taxable: miamiChargeForm.taxable,
+        },
+      })
+
       resetMiamiChargeForm()
       setShowAddChargeModal(false)
 
@@ -991,6 +1005,21 @@ function PricingComparisonContent() {
     })
 
     toast.success('Detalle de carga actualizado')
+    await createActivityLog({
+      module: 'quotations',
+      action: 'cargo_updated',
+      entityType: 'quotation',
+      entityId: selectedQuote.id,
+      description: `Se actualizó el detalle de carga de la cotización ${selectedQuote.quotation_number}`,
+      metadata: {
+        totalCargoLbs,
+        totalCargoKg,
+        totalCargoFt3,
+        totalCargoCbm,
+        lines: cargoLines.length,
+      },
+    })
+
     await loadCargoLines()
   }
 
@@ -1066,6 +1095,20 @@ function PricingComparisonContent() {
     }
 
     toast.success('Flete y Bunker recalculados')
+    await createActivityLog({
+      module: 'quotations',
+      action: 'miami_lcl_recalculated',
+      entityType: 'quotation',
+      entityId: selectedQuote.id,
+      description: `Se recalculó flete y bunker de la cotización ${selectedQuote.quotation_number}`,
+      metadata: {
+        totalCargoLbs,
+        totalCargoFt3,
+        oceanFreight: result.oceanFreight,
+        bunkerAmount,
+      },
+    })
+
     await fetchPricingItems(selectedQuote.id)
   }
 

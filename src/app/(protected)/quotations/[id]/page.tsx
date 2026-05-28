@@ -50,6 +50,17 @@ type QuotationChangeLog = {
   } | null
 }
 
+type ActivityLog = {
+  id: string
+  action: string
+  description: string | null
+  created_at: string
+  created_by_profile?: {
+    nombre: string | null
+    apellido: string | null
+  } | null
+}
+
 type CargoLine = {
   id: string
   quantity: number
@@ -92,6 +103,7 @@ export default function QuotationDetailPage() {
   const [validations, setValidations] = useState<any[]>([])
   const [statusHistory, setStatusHistory] = useState<any[]>([])
   const [changeLogs, setChangeLogs] = useState<QuotationChangeLog[]>([])
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
   const [creatingRouting, setCreatingRouting] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -156,6 +168,22 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', id)
       .order('created_at', { ascending: true })
 
+    const { data: logsData } = await supabase
+      .from('activity_logs')
+      .select(`
+        id,
+        action,
+        description,
+        created_at,
+        created_by_profile:profiles!activity_logs_user_id_fkey (
+          nombre,
+          apellido
+        )
+      `)
+      .eq('entity_type', 'quotation')
+      .eq('entity_id', id)
+      .order('created_at', { ascending: false })
+
     setQuotation(
       quoteData
         ? {
@@ -166,6 +194,14 @@ export default function QuotationDetailPage() {
     )
     setPricingItems(pricingItemsData || [])
     setQuotationContainers(quotationContainersData || [])
+    setActivityLogs(
+      (logsData || []).map((log) => ({
+        ...log,
+        created_by_profile: Array.isArray(log.created_by_profile)
+          ? log.created_by_profile[0] || null
+          : log.created_by_profile,
+      }))
+    )
     if (!cargoError && cargoData) {
       setCargoLines(cargoData)
     }
@@ -989,6 +1025,40 @@ const combinedTimeline = [
             </Card>
 
           </div>
+
+          {activityLogs.length > 0 && (
+            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-950">
+                Activity Timeline
+              </h2>
+
+              <div className="mt-5 space-y-4">
+                {activityLogs.map((log) => {
+                  const userName = log.created_by_profile?.nombre
+                    ? `${log.created_by_profile.nombre} ${
+                        log.created_by_profile.apellido || ''
+                      }`.trim()
+                    : 'Sistema'
+
+                  return (
+                    <div key={log.id} className="flex gap-4">
+                      <div className="mt-1 h-2.5 w-2.5 rounded-full bg-slate-900" />
+
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {log.description || log.action}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {userName} · {new Date(log.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
         </TabsContent>
 
         <TabsContent value="tarifas">
