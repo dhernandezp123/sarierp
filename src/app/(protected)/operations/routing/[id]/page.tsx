@@ -7,6 +7,7 @@ import { useUser } from '@/src/hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
+import { primaryButtonClass } from '@/src/lib/ui-classes'
 
 type OperationsUser = {
   id: string
@@ -22,6 +23,7 @@ type ShippingInstruction = {
   routing_number: string
   status: string
   shipment_status: string
+  operational_status: string | null
   created_by: string | null
   operations_assigned_to: string | null
   cliente?: any
@@ -236,6 +238,7 @@ export default function RoutingDetailPage() {
       .from('shipping_instructions')
       .update({
         shipment_status: SI_READY_FOR_BOOKING,
+        operational_status: SI_READY_FOR_BOOKING,
         validated_at: validatedAt,
         validated_by: user.id,
       })
@@ -268,6 +271,7 @@ export default function RoutingDetailPage() {
     setRouting({
       ...routing,
       shipment_status: SI_READY_FOR_BOOKING,
+      operational_status: SI_READY_FOR_BOOKING,
       validated_at: validatedAt,
       validated_by: user.id,
     })
@@ -329,6 +333,31 @@ export default function RoutingDetailPage() {
     toast.success('Operativo asignado')
   }
 
+  const handleOpenBooking = async () => {
+    if (!routing) return
+
+    const hasBooking =
+      !!routing.booking_number ||
+      routing.operational_status === 'En Booking'
+
+    if (!hasBooking) {
+      const { error } = await supabase
+        .from('shipping_instructions')
+        .update({
+          operational_status: 'En Booking',
+          shipment_status: 'Booking Solicitado',
+        })
+        .eq('id', routing.id)
+
+      if (error) {
+        toast.error('No se pudo crear el booking')
+        return
+      }
+    }
+
+    router.push(`/operations/routing/${routing.id}/booking`)
+  }
+
   useEffect(() => {
     loadRouting()
     loadOperationsUsers()
@@ -351,6 +380,13 @@ export default function RoutingDetailPage() {
       [field]: value,
     })
   }
+
+  const canCreateBooking =
+    routing.operational_status === SI_READY_FOR_BOOKING
+
+  const hasBooking =
+    !!routing.booking_number ||
+    routing.operational_status === 'En Booking'
 
   return (
     <div>
@@ -692,13 +728,15 @@ export default function RoutingDetailPage() {
       </div>
 
       <div className="mt-6 flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => router.push(`/operations/routing/${routing.id}/booking`)}
-          className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-        >
-          Abrir Booking
-        </button>
+        {canCreateBooking || hasBooking ? (
+          <button
+            type="button"
+            onClick={handleOpenBooking}
+            className={primaryButtonClass}
+          >
+            {hasBooking ? 'Abrir Booking' : 'Crear Booking'}
+          </button>
+        ) : null}
 
         <button
           onClick={saveRouting}
