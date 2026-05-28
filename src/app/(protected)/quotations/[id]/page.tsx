@@ -62,6 +62,14 @@ type ActivityLog = {
   } | null
 }
 
+type QuotationDetail = any & {
+  duplicated_from: string | null
+  duplicated_from_quote?: {
+    id: string
+    quotation_number: string | null
+  } | null
+}
+
 type CargoLine = {
   id: string
   quantity: number
@@ -94,7 +102,7 @@ export default function QuotationDetailPage() {
   const canEditQuotes =
     isAdmin || isSales
 
-  const [quotation, setQuotation] = useState<any>(null)
+  const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any>(null)
 
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
@@ -134,6 +142,10 @@ export default function QuotationDetailPage() {
         created_by_profile:profiles!quotations_created_by_fkey (
           nombre,
           apellido
+        ),
+        duplicated_from_quote:quotations!quotations_duplicated_from_fkey (
+          id,
+          quotation_number
         )
       `)
       .eq('id', id)
@@ -191,6 +203,11 @@ export default function QuotationDetailPage() {
         ? {
             ...quoteData,
             clientes: quoteData.cliente,
+            duplicated_from_quote: Array.isArray(
+              quoteData.duplicated_from_quote
+            )
+              ? quoteData.duplicated_from_quote[0] || null
+              : quoteData.duplicated_from_quote,
           }
         : null
     )
@@ -358,6 +375,7 @@ export default function QuotationDetailPage() {
         .insert({
           ...quoteCopy,
           quotation_number: null,
+          duplicated_from: quotation.id,
           status: isMiami ? 'Pricing Aprobado' : 'Pendiente de Fijar Precios',
           created_at: new Date().toISOString(),
         })
@@ -806,6 +824,15 @@ const combinedTimeline = [
           </Link>
         </div>
       </div>
+
+      {quotation.duplicated_from && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+          Esta cotización fue duplicada desde{' '}
+          <span className="font-semibold">
+            {quotation.duplicated_from_quote?.quotation_number || 'otra cotización'}
+          </span>.
+        </div>
+      )}
 
       <Tabs defaultValue="resumen" className="space-y-6">
   <TabsList className="bg-white border rounded-xl p-1">
