@@ -11,6 +11,7 @@ import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
+import { secondaryButtonClass } from '@/src/lib/ui-classes'
 import {
   PDFDownloadLink,
   pdf,
@@ -106,6 +107,7 @@ export default function QuotationDetailPage() {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
   const [creatingRouting, setCreatingRouting] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -329,6 +331,105 @@ export default function QuotationDetailPage() {
 
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
+  }
+
+  const duplicateQuotation = async () => {
+    if (!quotation || duplicating) return
+
+    setDuplicating(true)
+
+    try {
+      const isMiami =
+        quotation.service_product === 'miami_lcl' ||
+        quotation.service_product === 'miami_air'
+
+      const {
+        id: _oldId,
+        created_at,
+        quotation_number,
+        cliente,
+        clientes,
+        created_by_profile,
+        ...quoteCopy
+      } = quotation as any
+
+      const { data: newQuote, error: quoteError } = await supabase
+        .from('quotations')
+        .insert({
+          ...quoteCopy,
+          quotation_number: null,
+          status: isMiami ? 'Pricing Aprobado' : 'Pendiente de Fijar Precios',
+          created_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+
+      if (quoteError || !newQuote) {
+        toast.error('No se pudo duplicar la cotización')
+        return
+      }
+
+      const copiedItems = pricingItems.map((item) => {
+        const { id, created_at, ...copy } = item as any
+
+        return {
+          ...copy,
+          quotation_id: newQuote.id,
+        }
+      })
+
+      if (copiedItems.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('pricing_items')
+          .insert(copiedItems)
+
+        if (itemsError) {
+          toast.error('La cotización se creó, pero no se pudieron copiar las líneas')
+          return
+        }
+      }
+
+      const copiedCargoLines = cargoLines.map((line) => {
+        const { id, created_at, ...copy } = line as any
+
+        return {
+          ...copy,
+          quotation_id: newQuote.id,
+        }
+      })
+
+      if (copiedCargoLines.length > 0) {
+        const { error: cargoError } = await supabase
+          .from('quotation_cargo_lines')
+          .insert(copiedCargoLines)
+
+        if (cargoError) {
+          toast.error('La cotización se creó, pero no se pudo copiar la carga')
+          return
+        }
+      }
+
+      await createActivityLog({
+        module: 'quotations',
+        action: 'quotation_duplicated',
+        entityType: 'quotation',
+        entityId: newQuote.id,
+        description: `Cotización duplicada desde ${
+          quotation.quotation_number || quotation.id
+        }`,
+        metadata: {
+          sourceQuotationId: quotation.id,
+          sourceQuotationNumber: quotation.quotation_number || null,
+          pricingItems: copiedItems.length,
+          cargoLines: copiedCargoLines.length,
+        },
+      })
+
+      toast.success('Cotización duplicada')
+      router.push(`/quotations/${newQuote.id}`)
+    } finally {
+      setDuplicating(false)
+    }
   }
 
   const createRoutingInstruction = async () => {
@@ -673,6 +774,15 @@ const combinedTimeline = [
             className="rounded-xl bg-black text-white px-6 py-3 font-semibold"
           >
             Gestionar Cotización
+          </button>
+
+          <button
+            type="button"
+            onClick={duplicateQuotation}
+            disabled={duplicating}
+            className={secondaryButtonClass}
+          >
+            {duplicating ? 'Duplicando...' : 'Duplicar Cotización'}
           </button>
 
           {quotation.status === 'Ganada' && (

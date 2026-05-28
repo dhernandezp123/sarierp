@@ -1112,6 +1112,61 @@ function PricingComparisonContent() {
     await fetchPricingItems(selectedQuote.id)
   }
 
+  const recalculateMiamiAirPricing = async () => {
+    if (!selectedQuote?.id) return
+
+    if (!ensureQuoteIsEditable()) return
+
+    const airRate = getRateAmount('consolidado_aereo_kg')
+    const airFreight = totalCargoKg * airRate
+
+    const { error } = await supabase
+      .from('pricing_items')
+      .update({
+        sale_amount: airFreight,
+        tax_amount: 0,
+        total_amount: airFreight,
+        notes: `Recalculado: KG ${totalCargoKg.toFixed(
+          2
+        )} x tarifa USD ${airRate.toFixed(2)}.`,
+      })
+      .eq('quotation_id', selectedQuote.id)
+      .eq('description', 'Flete Miami Aéreo Consolidado')
+
+    if (error) {
+      toast.error('No se pudo recalcular el flete Miami Aéreo')
+      return
+    }
+
+    await createActivityLog({
+      module: 'quotations',
+      action: 'miami_air_recalculated',
+      entityType: 'quotation',
+      entityId: selectedQuote.id,
+      description: `Se recalculó flete Miami Aéreo de la cotización ${selectedQuote.quotation_number}`,
+      metadata: {
+        totalCargoKg,
+        airRate,
+        airFreight,
+      },
+    })
+
+    toast.success('Flete Miami Aéreo recalculado')
+    await fetchPricingItems(selectedQuote.id)
+  }
+
+  const recalculateMiamiPricing = async () => {
+    if (!selectedQuote?.id) return
+
+    if (selectedQuote.service_product === 'miami_lcl') {
+      await recalculateMiamiLclPricing()
+    }
+
+    if (selectedQuote.service_product === 'miami_air') {
+      await recalculateMiamiAirPricing()
+    }
+  }
+
   const deletePricingItem = async (itemId: string) => {
     if (!ensureQuoteIsEditable()) return
 
@@ -2664,9 +2719,11 @@ const profitabilityColor =
                               disabled={
                                 isLockedQuote ||
                                 savingCargo ||
-                                selectedQuote.service_product !== 'miami_lcl'
+                                !['miami_lcl', 'miami_air'].includes(
+                                  selectedQuote.service_product
+                                )
                               }
-                              onClick={recalculateMiamiLclPricing}
+                              onClick={recalculateMiamiPricing}
                             >
                               Recalcular tarifas
                             </button>
