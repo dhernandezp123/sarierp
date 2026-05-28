@@ -425,6 +425,8 @@ function PricingComparisonContent() {
       return
     }
 
+    if (!ensureQuoteIsEditable()) return
+
     const oldStatus = selectedQuote.status || 'Borrador'
     const nextStatus = 'Pendiente de Fijar Precios'
 
@@ -583,6 +585,8 @@ function PricingComparisonContent() {
 
   const selectAgentQuote = async (agentQuoteId: string) => {
     if (!selectedQuote) return
+
+    if (!ensureQuoteIsEditable()) return
 
     let selectedAgentQuote = agentQuotes.find((quote) => quote.id === agentQuoteId)
 
@@ -789,6 +793,8 @@ function PricingComparisonContent() {
       return
     }
 
+    if (!ensureQuoteIsEditable()) return
+
     if (!pricingForm.description) {
       toast.error('La descripcion es obligatoria')
       return
@@ -856,6 +862,8 @@ function PricingComparisonContent() {
       return
     }
 
+    if (!ensureQuoteIsEditable()) return
+
     if (!miamiChargeForm.description.trim()) {
       toast.error('La descripcion es obligatoria')
       return
@@ -914,6 +922,8 @@ function PricingComparisonContent() {
 
   const saveCargoLines = async () => {
     if (!selectedQuote?.id) return
+
+    if (!ensureQuoteIsEditable()) return
 
     setSavingCargo(true)
 
@@ -987,6 +997,8 @@ function PricingComparisonContent() {
   const recalculateMiamiLclPricing = async () => {
     if (!selectedQuote?.id) return
 
+    if (!ensureQuoteIsEditable()) return
+
     if (selectedQuote.service_product !== 'miami_lcl') {
       toast.error('El recálculo automático está disponible para Miami LCL')
       return
@@ -1058,6 +1070,8 @@ function PricingComparisonContent() {
   }
 
   const deletePricingItem = async (itemId: string) => {
+    if (!ensureQuoteIsEditable()) return
+
     const reason = await requestChangeReason('Eliminar línea de cotización')
 
     if (reason === null) return
@@ -1078,6 +1092,8 @@ function PricingComparisonContent() {
   }
 
   const startEditingPricingItem = (item: any) => {
+    if (!ensureQuoteIsEditable()) return
+
     setEditingPricingItemId(item.id)
 
     setEditingPricingItemForm({
@@ -1098,6 +1114,7 @@ function PricingComparisonContent() {
   const updatePricingItem = async (item: any) => {
     if (!selectedQuote) return
     if (!editingPricingItemForm) return
+    if (!ensureQuoteIsEditable()) return
 
     const reason = await requestChangeReason('Modificar línea de cotización')
 
@@ -1214,6 +1231,8 @@ function PricingComparisonContent() {
 
   const approvePricing = async () => {
     if (!selectedQuote) return
+
+    if (!ensureQuoteIsEditable()) return
 
     const oldStatus = selectedQuote.status || 'Borrador'
     const nextStatus = 'Pricing Aprobado'
@@ -1519,6 +1538,21 @@ const profitabilityColor =
     'Ganada',
   ].includes(selectedQuote?.status || '')
 
+  const isLockedQuote =
+    selectedQuote?.status === 'Enviada al Cliente' ||
+    selectedQuote?.status === 'Ganada' ||
+    selectedQuote?.status === 'Perdida'
+
+  const lockedQuoteMessage =
+    'Esta cotización ya fue enviada, ganada o perdida. La edición está bloqueada para proteger el historial comercial.'
+
+  const ensureQuoteIsEditable = () => {
+    if (!isLockedQuote) return true
+
+    toast.error(lockedQuoteMessage)
+    return false
+  }
+
   const requestChangeReason = async (changeType: string) => {
     if (!selectedQuote) return null
 
@@ -1661,6 +1695,12 @@ const profitabilityColor =
               </Card>
             ) : (
               <>
+                {isLockedQuote && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
+                    Esta cotización ya fue enviada, ganada o perdida. La edición está bloqueada para proteger el historial comercial.
+                  </div>
+                )}
+
                 <Card>
                   <CardHeader>
                     <CardTitle>
@@ -2057,6 +2097,7 @@ const profitabilityColor =
 
                     <button
                       onClick={saveAgentQuote}
+                      disabled={isLockedQuote}
                       className="col-span-full rounded-xl bg-zinc-950 px-6 py-3 font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
                     >
                       {editingAgentQuoteId ? 'Actualizar Tarifa' : 'Guardar Tarifa'}
@@ -2342,6 +2383,7 @@ const profitabilityColor =
                                     <button
                                       type="button"
                                       onClick={() => handleEditAgentQuote(quote)}
+                                      disabled={isLockedQuote}
                                       className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                                     >
                                       <Pencil className="h-3.5 w-3.5" />
@@ -2350,6 +2392,7 @@ const profitabilityColor =
 
                                     <button
                                       type="button"
+                                      disabled={isLockedQuote}
                                       onClick={() => {
                                         setSelectedRateForConfirm(quote)
                                         setConfirmSelectRateOpen(true)
@@ -2484,6 +2527,7 @@ const profitabilityColor =
 
                       <button
                         onClick={savePricingItem}
+                        disabled={isLockedQuote}
                         className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-4"
                       >
                         Agregar Cargo Adicional
@@ -2565,7 +2609,7 @@ const profitabilityColor =
                             <button
                               type="button"
                               onClick={saveCargoLines}
-                              disabled={savingCargo}
+                              disabled={isLockedQuote || savingCargo}
                               className={primaryButtonClass}
                             >
                               {savingCargo ? 'Guardando...' : 'Guardar carga'}
@@ -2575,6 +2619,7 @@ const profitabilityColor =
                               type="button"
                               className={secondaryButtonClass}
                               disabled={
+                                isLockedQuote ||
                                 savingCargo ||
                                 selectedQuote.service_product !== 'miami_lcl'
                               }
@@ -2701,6 +2746,7 @@ const profitabilityColor =
                         <button
                           type="button"
                           className={primaryButtonClass}
+                          disabled={isLockedQuote}
                           onClick={() => setShowAddChargeModal(true)}
                         >
                           + Agregar cargo
@@ -2882,6 +2928,7 @@ const profitabilityColor =
                                     <div className="flex gap-2">
                                       <button
                                         onClick={() => updatePricingItem(item)}
+                                        disabled={isLockedQuote}
                                         className="text-green-600 font-medium"
                                       >
                                         Guardar
@@ -2898,6 +2945,7 @@ const profitabilityColor =
                                     <div className="flex gap-3">
                                       <button
                                         onClick={() => startEditingPricingItem(item)}
+                                        disabled={isLockedQuote}
                                         className="text-blue-600 font-medium"
                                       >
                                         Modificar
@@ -2905,6 +2953,7 @@ const profitabilityColor =
 
                                       <button
                                         onClick={() => deletePricingItem(item.id)}
+                                        disabled={isLockedQuote}
                                         className="text-red-600 font-medium"
                                       >
                                         Eliminar
@@ -2925,6 +2974,7 @@ const profitabilityColor =
 <div className="flex flex-col justify-end gap-3 sm:flex-row">
   <button
     onClick={approvePricing}
+    disabled={isLockedQuote}
     className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
   >
     Aprobar Pricing
@@ -3153,7 +3203,7 @@ const profitabilityColor =
 
             <button
               type="button"
-              disabled={savingMiamiCharge}
+              disabled={isLockedQuote || savingMiamiCharge}
               onClick={saveMiamiCharge}
               className={primaryButtonClass}
             >
@@ -3215,7 +3265,7 @@ const profitabilityColor =
 
             <button
               type="button"
-              disabled={selectingRate}
+              disabled={isLockedQuote || selectingRate}
               onClick={confirmSelectRate}
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
             >
