@@ -468,7 +468,7 @@ export default function QuotationDetailPage() {
     }
 
     if (existingSI?.id) {
-      toast.warning('Esta cotización ya tiene Routing / Shipping Instructions.')
+      toast.warning('Esta cotización ya tiene Shipping Instructions.')
       router.push(`/operations/routing/${existingSI.id}`)
       setCreatingRouting(false)
       return
@@ -488,7 +488,7 @@ export default function QuotationDetailPage() {
     }
 
     if (!selectedAgentQuote) {
-      toast.error('Selecciona una tarifa de agente antes de generar Routing.')
+      toast.error('Selecciona una tarifa de agente antes de generar Shipping Instructions.')
       setCreatingRouting(false)
       return
     }
@@ -554,6 +554,7 @@ export default function QuotationDetailPage() {
         release_type: 'Express Release',
         hbl_freight_visibility: 'No Freight Charges',
         printed_at_destination: true,
+        shipment_status: 'Pendiente de Validación',
       })
       .select('*')
       .single()
@@ -590,10 +591,10 @@ export default function QuotationDetailPage() {
 
     await createActivityLog({
       module: 'operations',
-      action: 'routing_created',
+      action: 'shipping_instruction_created',
       entityType: 'shipping_instruction',
       entityId: shippingInstruction.id,
-      description: `Routing / Shipping Instructions creado para ${
+      description: `Shipping Instructions creadas para ${
         quotation.quotation_number || quotation.id
       }`,
       metadata: {
@@ -602,7 +603,7 @@ export default function QuotationDetailPage() {
       },
     })
 
-    toast.success('Routing / Shipping Instructions generado')
+    toast.success('Shipping Instructions generadas')
     router.push(`/operations/routing/${shippingInstruction.id}`)
   }
 
@@ -812,7 +813,7 @@ const combinedTimeline = [
             >
               {creatingRouting
                 ? 'Generando...'
-                : 'Generar Routing / Shipping Instructions'}
+                : 'Generar Shipping Instructions'}
             </button>
           )}
 

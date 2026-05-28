@@ -147,7 +147,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       icon: FileText,
     },
     {
-      label: 'Routing / SI',
+      label: 'Shipping Instructions',
       href: '/operations/routing',
       icon: Route,
     },

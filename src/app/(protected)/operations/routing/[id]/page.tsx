@@ -15,6 +15,8 @@ type OperationsUser = {
   email: string | null
 }
 
+const SI_READY_FOR_BOOKING = 'Listo para Booking'
+
 type ShippingInstruction = {
   id: string
   routing_number: string
@@ -189,11 +191,11 @@ export default function RoutingDetailPage() {
 
     if (error) {
       console.error('Error saving routing:', error)
-      toast.error(error.message || 'No se pudo guardar el routing')
+      toast.error(error.message || 'No se pudieron guardar las Shipping Instructions')
       return
     }
 
-    toast.success('Routing actualizado')
+    toast.success('Shipping Instructions actualizadas')
   }
 
   const validateRouting = async () => {
@@ -233,7 +235,7 @@ export default function RoutingDetailPage() {
     const { error } = await supabase
       .from('shipping_instructions')
       .update({
-        shipment_status: 'Validada',
+        shipment_status: SI_READY_FOR_BOOKING,
         validated_at: validatedAt,
         validated_by: user.id,
       })
@@ -242,42 +244,42 @@ export default function RoutingDetailPage() {
     setValidating(false)
 
     if (error) {
-      toast.error('No se pudo validar el routing')
+      toast.error('No se pudo validar la Shipping Instruction')
       return
     }
 
     await createActivityLog({
       module: 'operations_routing',
-      action: 'routing_validated',
+      action: 'shipping_instruction_validated',
       entityType: 'shipping_instruction',
       entityId: routing.id,
-      description: `Routing ${routing.routing_number} validado`,
+      description: `Shipping Instructions ${routing.routing_number} validadas`,
     })
 
     if (routing.created_by) {
       await createNotification({
         userId: routing.created_by,
-        title: 'Routing Validado',
-        message: `Operaciones validó el routing ${routing.routing_number}`,
+        title: 'Shipping Instructions validadas',
+        message: `Operaciones validó la Shipping Instruction ${routing.routing_number}`,
         type: 'success',
       })
     }
 
     setRouting({
       ...routing,
-      shipment_status: 'Validada',
+      shipment_status: SI_READY_FOR_BOOKING,
       validated_at: validatedAt,
       validated_by: user.id,
     })
 
-    toast.success('Routing validado correctamente')
+    toast.success('Shipping Instructions listas para booking')
   }
 
   const assignOperationsUser = async (userId: string) => {
     if (!routing) return
 
     if (!canAssignOperations) {
-      toast.error('No tienes permisos para asignar este routing')
+      toast.error('No tienes permisos para asignar esta Shipping Instruction')
       return
     }
 
@@ -287,6 +289,7 @@ export default function RoutingDetailPage() {
       .from('shipping_instructions')
       .update({
         operations_assigned_to: userId || null,
+        shipment_status: userId ? 'Asignado' : 'Pendiente de Validación',
       })
       .eq('id', routing.id)
 
@@ -299,10 +302,10 @@ export default function RoutingDetailPage() {
 
     await createActivityLog({
       module: 'operations_routing',
-      action: 'routing_assigned',
+      action: 'shipping_instruction_assigned',
       entityType: 'shipping_instruction',
       entityId: routing.id,
-      description: `Routing ${routing.routing_number} asignado a operaciones`,
+      description: `Shipping Instructions ${routing.routing_number} asignadas a operaciones`,
       metadata: {
         assigned_to: userId,
       },
@@ -311,8 +314,8 @@ export default function RoutingDetailPage() {
     if (userId) {
       await createNotification({
         userId,
-        title: 'Routing asignado',
-        message: `Se te asignó el routing ${routing.routing_number}`,
+        title: 'Shipping Instructions asignadas',
+        message: `Se te asignó la Shipping Instruction ${routing.routing_number}`,
         type: 'info',
       })
     }
@@ -320,6 +323,7 @@ export default function RoutingDetailPage() {
     setRouting({
       ...routing,
       operations_assigned_to: userId || null,
+      shipment_status: userId ? 'Asignado' : 'Pendiente de Validación',
     })
 
     toast.success('Operativo asignado')
@@ -331,11 +335,11 @@ export default function RoutingDetailPage() {
   }, [id])
 
   if (loading) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando Routing...</p>
+    return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando Shipping Instructions...</p>
   }
 
   if (!routing) {
-    return <p className="text-sm text-red-500">Routing no encontrado.</p>
+    return <p className="text-sm text-red-500">Shipping Instructions no encontradas.</p>
   }
 
   const inputClassName =
@@ -353,10 +357,10 @@ export default function RoutingDetailPage() {
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Routing / Shipping Instructions {routing.routing_number}
+            Shipping Instructions {routing.routing_number}
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Validación operativa previa al embarque.
+            Validación operativa previa al booking.
           </p>
         </div>
 
@@ -577,7 +581,7 @@ export default function RoutingDetailPage() {
 
         <section className="hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220] lg:col-span-2">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Routing
+            Shipping Instructions
           </h2>
 
           <div className="mt-4 grid gap-3 text-sm lg:grid-cols-3">
@@ -701,21 +705,24 @@ export default function RoutingDetailPage() {
           disabled={saving}
           className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
-          {saving ? 'Guardando...' : 'Guardar Routing'}
+          {saving ? 'Guardando...' : 'Guardar Shipping Instructions'}
         </button>
 
         <button
           onClick={validateRouting}
           disabled={
-            validating || routing.shipment_status === 'Validada'
+            validating ||
+            routing.shipment_status === SI_READY_FOR_BOOKING ||
+            routing.shipment_status === 'Validada'
           }
           className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {routing.shipment_status === 'Validada'
-            ? 'Routing Validado'
+          {routing.shipment_status === SI_READY_FOR_BOOKING ||
+          routing.shipment_status === 'Validada'
+            ? 'Listo para Booking'
             : validating
               ? 'Validando...'
-              : 'Validar Routing'}
+              : 'Validar Shipping Instructions'}
         </button>
       </div>
     </div>

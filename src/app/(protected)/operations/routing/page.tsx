@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Eye } from 'lucide-react'
 
 import { useUser } from '@/src/hooks/useUser'
-import { operationStatuses } from '@/src/lib/operation-status'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   fieldClass,
@@ -21,6 +20,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/src/components/ui/table'
+
+const shippingInstructionStatuses = [
+  'Pendiente de Validación',
+  'Asignado',
+  'Listo para Booking',
+  'En Booking',
+] as const
 
 type RoutingItem = {
   id: string
@@ -48,6 +54,13 @@ type RoutingItem = {
     nombre: string | null
     apellido: string | null
   } | null
+}
+
+function getShippingInstructionStatus(status?: string | null) {
+  if (status === 'Pendiente Validación') return 'Pendiente de Validación'
+  if (status === 'Validada') return 'Listo para Booking'
+
+  return status || 'Pendiente de Validación'
 }
 
 export default function RoutingInboxPage() {
@@ -104,9 +117,11 @@ export default function RoutingInboxPage() {
       item.agent_name?.toLowerCase().includes(query) ||
       item.cliente?.nombre?.toLowerCase().includes(query)
 
+    const siStatus = getShippingInstructionStatus(item.shipment_status)
+
     const matchesStatus =
       statusFilter === 'Todos' ||
-      item.shipment_status === statusFilter
+      siStatus === statusFilter
 
     const matchesAssignment =
       assignmentFilter === 'Todos' ||
@@ -118,10 +133,11 @@ export default function RoutingInboxPage() {
         item.operations_assigned_to === profile?.id) ||
 
       (assignmentFilter === 'Pendientes' &&
-        item.shipment_status === 'Pendiente Validación') ||
+        siStatus === 'Pendiente de Validación') ||
 
-      (assignmentFilter === 'Validados' &&
-        item.shipment_status === 'Validada')
+
+      (assignmentFilter === 'Listos para Booking' &&
+        siStatus === 'Listo para Booking')
 
     return matchesSearch && matchesStatus && matchesAssignment
   })
@@ -130,11 +146,11 @@ export default function RoutingInboxPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-4xl font-bold text-slate-900 dark:text-white">
-          Routing / Shipping Instructions
+          Shipping Instructions
         </h1>
 
         <p className="mt-2 text-gray-500 dark:text-slate-400">
-          Bandeja operativa de instrucciones generadas
+          Gestiona las instrucciones operativas enviadas por ventas antes de crear el booking.
         </p>
       </div>
 
@@ -155,7 +171,7 @@ export default function RoutingInboxPage() {
           <option value="Sin asignar">Sin asignar</option>
           <option value="Mis asignados">Mis asignados</option>
           <option value="Pendientes">Pendientes</option>
-          <option value="Validados">Validados</option>
+          <option value="Listos para Booking">Listos para Booking</option>
         </select>
 
         <select
@@ -165,7 +181,7 @@ export default function RoutingInboxPage() {
         >
           <option value="Todos">Todos los estados</option>
 
-          {operationStatuses.map((status) => (
+          {shippingInstructionStatuses.map((status) => (
             <option key={status} value={status}>
               {status}
             </option>
@@ -190,7 +206,7 @@ export default function RoutingInboxPage() {
           <Table>
             <TableHeader className="bg-black dark:bg-[#081120]">
               <TableRow className="bg-black hover:bg-black dark:bg-[#081120] dark:hover:bg-[#081120]">
-                <TableHead className="text-white">Routing</TableHead>
+                <TableHead className="text-white">SI</TableHead>
                 <TableHead className="text-white">Cotización</TableHead>
                 <TableHead className="text-white">Cliente</TableHead>
                 <TableHead className="text-white">Ruta</TableHead>
@@ -238,7 +254,7 @@ export default function RoutingInboxPage() {
 
                   <TableCell>
                     <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                      {item.shipment_status}
+                      {getShippingInstructionStatus(item.shipment_status)}
                     </span>
                   </TableCell>
 
@@ -252,7 +268,7 @@ export default function RoutingInboxPage() {
                     <button
                       type="button"
                       onClick={() => router.push(`/operations/routing/${item.id}`)}
-                      title="Ver detalle"
+                      title="Abrir SI"
                       className={`${secondaryButtonClass} inline-flex h-9 w-9 items-center justify-center p-0`}
                     >
                       <Eye className="h-4 w-4" />
