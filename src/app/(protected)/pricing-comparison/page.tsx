@@ -11,7 +11,10 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import { canTransition } from '@/src/lib/quotation-status'
-import { validatePricingCompleteness } from '@/src/lib/pricing-validation'
+import {
+  calculateGrossProfitPercent,
+  validatePricingCompleteness,
+} from '@/src/lib/pricing-validation'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { cn } from '../../../lib/utils'
@@ -1370,9 +1373,20 @@ function PricingComparisonContent() {
     }
 
     const selectedAgentQuote = agentQuotes.find((quote) => quote.is_selected)
+    const validationAgentQuote = selectedAgentQuote
+      ? {
+          ...selectedAgentQuote,
+          agent_name: getAgentQuoteProviderName(selectedAgentQuote),
+          final_cost: getAgentQuoteFinalCost(selectedAgentQuote),
+          suggested_sale:
+            selectedAgentQuote.suggested_sale ||
+            selectedAgentQuote.sale_amount ||
+            getAgentQuoteFinalCost(selectedAgentQuote),
+        }
+      : null
 
     const validation = validatePricingCompleteness({
-      selectedAgentQuote,
+      selectedAgentQuote: validationAgentQuote,
       pricingItems,
     })
 
@@ -1508,8 +1522,10 @@ function PricingComparisonContent() {
 
   const totalCargoKg = totalCargoLbs / 2.20462
 
-  const gpPercentage =
-    totalSale > 0 ? (totalProfit / totalSale) * 100 : 0
+  const gpPercentage = calculateGrossProfitPercent({
+    saleTotal: totalSale,
+    costTotal: totalCost,
+  })
 
   const isMiamiFlow =
     selectedQuote?.service_product === 'miami_lcl' ||
@@ -3326,8 +3342,7 @@ const profitabilityColor =
           <DialogHeader>
             <DialogTitle>Seleccionar tarifa de agente</DialogTitle>
             <DialogDescription>
-              Esta accion reemplazara el pricing actual con la tarifa
-              seleccionada y generara nuevas lineas automaticamente.
+              Esta acción marcará esta tarifa como la opción seleccionada para pricing.
             </DialogDescription>
           </DialogHeader>
 
@@ -3340,12 +3355,8 @@ const profitabilityColor =
                   'Agente'}
               </p>
               <p className="mt-1 text-slate-500 dark:text-slate-400">
-                Venta sugerida: USD{' '}
-                {Number(
-                  selectedRateForConfirm.suggested_sale ||
-                    selectedRateForConfirm.sale_amount ||
-                    0
-                ).toFixed(2)}
+                Costo final: {selectedRateForConfirm.moneda || 'USD'}{' '}
+                {formatCurrency(getAgentQuoteFinalCost(selectedRateForConfirm))}
               </p>
             </div>
           )}
