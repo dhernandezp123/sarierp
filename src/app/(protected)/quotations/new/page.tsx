@@ -9,6 +9,7 @@ import { useUser } from '../../../../hooks/useUser'
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
+import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import {
   serviceProducts,
   tradeDirections,
@@ -1043,20 +1044,17 @@ export default function NewQuotationPage() {
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
-              <select
-                name="cliente_id"
+              <ClienteCombobox
+                clientes={clientes}
                 value={formData.cliente_id}
-                onChange={handleClienteChange}
+                onChange={(id) => {
+                  handleClienteChange({
+                    target: { name: 'cliente_id', value: id },
+                  } as React.ChangeEvent<HTMLSelectElement>)
+                }}
+                placeholder="Seleccionar cliente"
                 className={fieldClass}
-              >
-                <option value="">Seleccionar cliente</option>
-
-                {clientes.map((cliente) => (
-                  <option key={cliente.id} value={cliente.id}>
-                    {cliente.codigo_cliente} - {cliente.nombre}
-                  </option>
-                ))}
-              </select>
+              />
 
               <input
                 value={new Date().toLocaleDateString('es-HN')}

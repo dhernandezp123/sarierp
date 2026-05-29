@@ -38,6 +38,23 @@ const statusOptions = [
   ...Object.keys(allowedTransitions),
 ]
 
+const getServiceProductLabel = (value?: string | null) => {
+  switch (value) {
+    case 'miami_lcl':
+      return 'Miami Consolidado LCL'
+    case 'miami_air':
+      return 'Miami Consolidado Aéreo'
+    case 'other_origin_fcl':
+      return 'Marítimo FCL'
+    case 'other_origin_lcl':
+      return 'Marítimo LCL'
+    case 'courier':
+      return 'Courier'
+    default:
+      return value || 'N/A'
+  }
+}
+
 type QuotationChangeLog = {
   id: string
   change_type: string
@@ -127,7 +144,7 @@ export default function QuotationDetailPage() {
   }, [params.id])
 
   const fetchData = async (id: string) => {
-    const { data: quoteData } = await supabase
+    const { data: quoteData, error: quoteError } = await supabase
       .from('quotations')
       .select(`
         *,
@@ -142,15 +159,32 @@ export default function QuotationDetailPage() {
         created_by_profile:profiles!quotations_created_by_fkey (
           nombre,
           apellido
-        ),
-        duplicated_from_quote:quotations!quotations_duplicated_from_fkey (
-          id,
-          quotation_number
         )
       `)
       .eq('id', id)
       .is('deleted_at', null)
       .single()
+
+    if (quoteError) {
+      console.error('Quotation detail error:', quoteError)
+      toast.error('Error cargando cotización', {
+        description: quoteError.message,
+      })
+      setLoading(false)
+      return
+    }
+
+    let duplicatedFromQuote = null
+
+    if (quoteData?.duplicated_from) {
+      const { data } = await supabase
+        .from('quotations')
+        .select('id, quotation_number')
+        .eq('id', quoteData.duplicated_from)
+        .single()
+
+      duplicatedFromQuote = data
+    }
 
     const { data: agentData } = await supabase
       .from('agent_quotes')
@@ -203,11 +237,7 @@ export default function QuotationDetailPage() {
         ? {
             ...quoteData,
             clientes: quoteData.cliente,
-            duplicated_from_quote: Array.isArray(
-              quoteData.duplicated_from_quote
-            )
-              ? quoteData.duplicated_from_quote[0] || null
-              : quoteData.duplicated_from_quote,
+            duplicated_from_quote: duplicatedFromQuote,
           }
         : null
     )
@@ -650,6 +680,8 @@ const pricingTotals = pricingItems.reduce(
   { subtotal: 0, tax: 0, total: 0, cost: 0, profit: 0 }
 )
 
+const hasPricingItems = pricingItems.length > 0
+
 const gpPercent =
   pricingTotals.subtotal > 0
     ? (pricingTotals.profit / pricingTotals.subtotal) * 100
@@ -680,12 +712,7 @@ const destinationPort =
   quotation?.puerto_destino ||
   'N/A'
 
-const serviceProductLabel =
-  quotation?.service_product === 'miami_lcl'
-    ? 'Miami Consolidado Marítimo LCL'
-    : quotation?.service_product === 'miami_air'
-      ? 'Miami Consolidado Aéreo'
-      : quotation?.service_product || 'N/A'
+const serviceProductLabel = getServiceProductLabel(quotation.service_product)
 
 const tradeDirectionLabel =
   quotation?.trade_direction === 'import'
@@ -849,7 +876,9 @@ const combinedTimeline = [
               <CardContent className="p-5">
                 <p className="text-sm text-gray-500">Venta Total</p>
                 <p className="text-2xl font-bold text-red-700 !font-sans">
-                  USD {formatCurrency(pricingTotals.total)}
+                  {hasPricingItems
+                    ? `USD ${formatCurrency(pricingTotals.total)}`
+                    : 'N/A'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
                   Incluye ISV
@@ -861,7 +890,9 @@ const combinedTimeline = [
               <CardContent className="p-5">
                 <p className="text-sm text-gray-500">Costo Total</p>
                 <p className="text-2xl font-bold !font-sans">
-                  USD {formatCurrency(pricingTotals.cost)}
+                  {hasPricingItems
+                    ? `USD ${formatCurrency(pricingTotals.cost)}`
+                    : 'N/A'}
                 </p>
               </CardContent>
             </Card>
@@ -870,7 +901,9 @@ const combinedTimeline = [
               <CardContent className="p-5">
                 <p className="text-sm text-gray-500">Profit</p>
                 <p className="text-2xl font-bold text-green-700 !font-sans">
-                  USD {formatCurrency(pricingTotals.profit)}
+                  {hasPricingItems
+                    ? `USD ${formatCurrency(pricingTotals.profit)}`
+                    : 'N/A'}
                 </p>
               </CardContent>
             </Card>
@@ -879,7 +912,7 @@ const combinedTimeline = [
               <CardContent className="p-5">
                 <p className="text-sm text-gray-500">GP%</p>
                 <p className="text-2xl font-bold !font-sans">
-                  {gpPercent.toFixed(2)}%
+                  {hasPricingItems ? `${gpPercent.toFixed(2)}%` : 'N/A'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
                   Sobre venta sin ISV

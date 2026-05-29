@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Pencil } from 'lucide-react'
+import { Pencil, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
@@ -12,6 +12,8 @@ import { createNotification } from '@/src/lib/notifications'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import { canTransition } from '@/src/lib/quotation-status'
 import { validatePricingCompleteness } from '@/src/lib/pricing-validation'
+import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
+import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { cn } from '../../../lib/utils'
 import {
   cardClass,
@@ -69,6 +71,8 @@ type SurchargeRule = {
   currency: string | null
 }
 
+type AgentQuote = any
+
 function PricingComparisonContent() {
   const { profile } = useUser()
   const searchParams = useSearchParams()
@@ -76,10 +80,9 @@ function PricingComparisonContent() {
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
-  const [quoteSearch, setQuoteSearch] = useState('')
 
   const [agents, setAgents] = useState<any[]>([])
-  const [agentQuotes, setAgentQuotes] = useState<any[]>([])
+  const [agentQuotes, setAgentQuotes] = useState<AgentQuote[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [containerRateLines, setContainerRateLines] = useState<any[]>([])
@@ -122,6 +125,7 @@ function PricingComparisonContent() {
   const [selectedRateForConfirm, setSelectedRateForConfirm] = useState<any | null>(null)
   const [confirmSelectRateOpen, setConfirmSelectRateOpen] = useState(false)
   const [selectingRate, setSelectingRate] = useState(false)
+  const [deleteAgentQuoteId, setDeleteAgentQuoteId] = useState<string | null>(null)
   const [pricingValidationDialogOpen, setPricingValidationDialogOpen] =
     useState(false)
   const [pricingValidationErrors, setPricingValidationErrors] =
@@ -771,6 +775,31 @@ function PricingComparisonContent() {
 
     await fetchAgentQuotes(selectedQuote.id)
     await fetchPricingItems(selectedQuote.id)
+  }
+
+  const handleDeleteAgentQuote = async (agentQuoteId: string) => {
+    if (!selectedQuote || isLockedQuote) return
+
+    const agentQuote = agentQuotes.find((quote) => quote.id === agentQuoteId)
+
+    if (agentQuote && isSelectedQuote(agentQuote)) {
+      toast.error('No puedes eliminar la tarifa seleccionada')
+      return
+    }
+
+    const { error } = await supabase
+      .from('agent_quotes')
+      .delete()
+      .eq('id', agentQuoteId)
+
+    if (error) {
+      toast.error('No se pudo eliminar la tarifa')
+      return
+    }
+
+    toast.success('Tarifa eliminada')
+    setDeleteAgentQuoteId(null)
+    await fetchAgentQuotes(selectedQuote.id)
   }
 
   const confirmSelectRate = async () => {
@@ -1538,39 +1567,61 @@ const profitabilityColor =
     sale: agentTotalCost * (1 + margin / 100),
   }))
 
-  const bestCost = Math.min(
-    ...agentQuotes
-      .map((q) => Number(q.final_cost || q.sari_cost || 0))
-      .filter((n) => n > 0)
-  )
+  const getAgentQuoteContainersQty = (quote: AgentQuote) =>
+    quotationContainers.length > 0
+      ? quotationContainers.reduce(
+          (sum, container) => sum + Number(container.quantity || 0),
+          0
+        )
+      : Number(quote.containers_qty || 1)
 
-  const bestProfit = Math.max(
-    ...agentQuotes.map((q) => Number(q.profit_amount || q.profit || 0))
-  )
+  const getAgentQuoteBaseCost = (quote: AgentQuote) =>
+    Number(quote.ocean_freight || quote.base_cost || quote.costo || 0)
+
+  const getAgentQuoteFinalCost = (quote: AgentQuote) => {
+    const storedCost = Number(
+      quote.final_cost || quote.sari_cost || quote.total_cost || 0
+    )
+
+    if (storedCost > 0) return storedCost
+
+    const containersQty = getAgentQuoteContainersQty(quote)
+
+    return (
+      Number(quote.ocean_freight || 0) +
+      Number(quote.exw_cost || 0) +
+      Number(quote.mbl_fee || 0) +
+      Number(quote.profit_per_container || 0) * containersQty
+    )
+  }
+
+  const getAgentQuoteProviderName = (quote?: AgentQuote | null) =>
+    quote?.agent?.name ||
+    quote?.provider_name ||
+    quote?.agente_nombre ||
+    quote?.agent_name ||
+    quote?.agent ||
+    'N/A'
+
+  const validAgentQuotes = agentQuotes.filter((quote) => {
+    const finalCost = getAgentQuoteFinalCost(quote)
+    return finalCost > 0
+  })
+
+  const bestCostQuote = validAgentQuotes.length
+    ? validAgentQuotes.reduce((best, current) => {
+        const bestCost = getAgentQuoteFinalCost(best)
+        const currentCost = getAgentQuoteFinalCost(current)
+
+        return currentCost < bestCost ? current : best
+      })
+    : null
 
   const fastestTransit = Math.min(
     ...agentQuotes
       .map((q) => Number(q.transit_time || q.transit || 0))
       .filter((n) => n > 0)
   )
-
-  const bestCostQuote = agentQuotes
-    .filter((q) => Number(q.final_cost || q.sari_cost || 0) > 0)
-    .sort(
-      (a, b) =>
-        Number(a.final_cost || a.sari_cost || 0) -
-        Number(b.final_cost || b.sari_cost || 0)
-    )[0]
-
-  const bestProfitQuote = agentQuotes
-    .map((q) => ({
-      ...q,
-      computedProfit:
-        Number(q.profit_amount || q.profit || 0) ||
-        Number(q.sale_amount || q.suggested_sale || 0) -
-          Number(q.final_cost || q.sari_cost || 0),
-    }))
-    .sort((a, b) => b.computedProfit - a.computedProfit)[0]
 
   const fastestQuote = agentQuotes
     .filter((q) => Number(q.transit_time || q.transit || 0) > 0)
@@ -1580,7 +1631,36 @@ const profitabilityColor =
         Number(b.transit_time || b.transit || 0)
     )[0]
 
-  const activeQuote = agentQuotes.find((q) => q.is_selected)
+  const selectedAgentQuote = agentQuotes.find((q) => q.is_selected)
+  const activeQuote = selectedAgentQuote
+  const agentQuotePendingDelete = deleteAgentQuoteId
+    ? agentQuotes.find((quote) => quote.id === deleteAgentQuoteId)
+    : null
+
+  const isBestCostQuote = (quote: AgentQuote) =>
+    bestCostQuote?.id === quote.id
+
+  const isFastestQuote = (quote: AgentQuote) =>
+    fastestQuote?.id === quote.id
+
+  const isSelectedQuote = (quote: AgentQuote) =>
+    selectedAgentQuote?.id === quote.id || quote.is_selected
+
+  const getAgentQuoteCardClass = (quote: AgentQuote) => {
+    if (isSelectedQuote(quote)) {
+      return 'border-blue-400 bg-blue-50 ring-2 ring-blue-200'
+    }
+
+    if (isBestCostQuote(quote)) {
+      return 'border-emerald-300 bg-emerald-50'
+    }
+
+    if (isFastestQuote(quote)) {
+      return 'border-amber-300 bg-amber-50'
+    }
+
+    return 'border-slate-200 bg-white'
+  }
 
   function getStatusBadgeClass(status: string) {
     switch (status) {
@@ -1618,18 +1698,6 @@ const profitabilityColor =
         return 'bg-gray-200 text-gray-700'
     }
   }
-
-  const filteredQuotations = quotations.filter((quote) => {
-    const search = quoteSearch.toLowerCase().trim()
-
-    return (
-      !search ||
-      quote.quotation_number?.toLowerCase().includes(search) ||
-      quote.clientes?.nombre?.toLowerCase().includes(search) ||
-      quote.origen?.toLowerCase().includes(search) ||
-      quote.destino?.toLowerCase().includes(search)
-    )
-  })
 
   const requiresChangeReason = [
     'Enviada al Cliente',
@@ -1756,32 +1824,17 @@ const profitabilityColor =
               <CardTitle>Seleccionar cotización</CardTitle>
             </CardHeader>
 
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                value={quoteSearch}
-                onChange={(e) => setQuoteSearch(e.target.value)}
-                placeholder="Buscar por cotización, cliente, origen o destino..."
-                className="border rounded-xl px-3 py-2"
-              />
-
-              <select
+            <CardContent>
+              <CotizacionCombobox
+                quotations={quotations}
                 value={selectedQuote?.id || ''}
-                onChange={(e) => {
-                  const quote = quotations.find((q) => q.id === e.target.value)
+                onChange={(id) => {
+                  const quote = quotations.find((q) => q.id === id)
                   if (quote) handleSelectQuote(quote)
                 }}
-                className="border rounded-xl px-3 py-2"
-              >
-                <option value="">Seleccionar cotización</option>
-
-                {filteredQuotations.map((quote) => (
-                  <option key={quote.id} value={quote.id}>
-                    {quote.quotation_number || 'Sin número'} -{' '}
-                    {quote.clientes?.nombre || 'Sin cliente'} - {quote.origen}{' '}
-                    a {quote.destino}
-                  </option>
-                ))}
-              </select>
+                placeholder="Buscar por cotizacion, cliente, origen o destino..."
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
             </CardContent>
           </Card>
 
@@ -1924,11 +1977,13 @@ const profitabilityColor =
                         Agente
                       </label>
 
-                      <select
+                      <AgenteCombobox
+                        agents={agents}
                         value={agentForm.agent_id}
-                        onChange={(e) => {
-                          const agentId = e.target.value
-                          const selectedAgent = agents.find((a) => a.id === agentId)
+                        onChange={(agentId) => {
+                          const selectedAgent = agents.find(
+                            (agent) => agent.id === agentId
+                          )
 
                           setAgentForm({
                             ...agentForm,
@@ -1941,16 +1996,9 @@ const profitabilityColor =
                             moneda: selectedAgent?.currency || 'USD',
                           })
                         }}
+                        placeholder="Seleccionar agente/proveedor"
                         className={cn(fieldClass, 'mt-1 w-full')}
-                      >
-                        <option value="">Seleccionar agente/proveedor</option>
-
-                        {agents.map((agent) => (
-                          <option key={agent.id} value={agent.id}>
-                            {agent.name} - {agent.type}
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </div>
 
                     <div className="col-span-full border-b border-slate-200 pb-2 pt-2 dark:border-slate-800">
@@ -2225,28 +2273,16 @@ const profitabilityColor =
                   ) : (
                     <>
                       {agentQuotes.length > 0 && (
-                        <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="mb-5 grid gap-3 md:grid-cols-3">
                           <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900/50 dark:bg-blue-950/30">
                             <p className="text-xs font-medium text-blue-700 dark:text-blue-300">
                               Mejor costo
                             </p>
                             <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                              {bestCostQuote?.carrier || 'N/A'}
+                              {getAgentQuoteProviderName(bestCostQuote)}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              USD {Number(bestCostQuote?.final_cost || bestCostQuote?.sari_cost || 0).toFixed(2)}
-                            </p>
-                          </div>
-
-                          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30">
-                            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                              Mayor profit
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                              {bestProfitQuote?.carrier || 'N/A'}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              USD {Number(bestProfitQuote?.computedProfit || 0).toFixed(2)}
+                              USD {formatCurrency(bestCostQuote ? getAgentQuoteFinalCost(bestCostQuote) : 0)}
                             </p>
                           </div>
 
@@ -2255,7 +2291,7 @@ const profitabilityColor =
                               Más rápido
                             </p>
                             <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                              {fastestQuote?.carrier || 'N/A'}
+                              {getAgentQuoteProviderName(fastestQuote)}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
                               {Number(fastestQuote?.transit_time || fastestQuote?.transit || 0)} días
@@ -2264,69 +2300,50 @@ const profitabilityColor =
 
                           <div className={cn(cardClass, 'bg-slate-50 p-4 dark:bg-slate-950')}>
                             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                              Tarifa activa
+                              Tarifa seleccionada
                             </p>
                             <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                              {activeQuote?.carrier || 'Sin seleccionar'}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
                               {activeQuote
-                                ? `USD ${Number(activeQuote.final_cost || activeQuote.sari_cost || 0).toFixed(2)}`
-                                : 'Pendiente'}
+                                ? getAgentQuoteProviderName(activeQuote)
+                                : 'Sin seleccionar'}
                             </p>
+                            {activeQuote ? (
+                              <>
+                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                  {activeQuote.carrier || 'Carrier N/A'} •{' '}
+                                  {activeQuote.transit_time ||
+                                    activeQuote.transit ||
+                                    'N/A'}{' '}
+                                  días
+                                </p>
+                                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                                  USD {formatCurrency(getAgentQuoteFinalCost(activeQuote))}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Pendiente
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}
 
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         {agentQuotes.map((quote) => {
-                              const containersQty =
-                                quotationContainers.length > 0
-                                  ? quotationContainers.reduce(
-                                      (sum, container) =>
-                                        sum + Number(container.quantity || 0),
-                                      0
-                                    )
-                                  : Number(quote.containers_qty || 1)
-
-                              const finalSariCost =
-                                Number(quote.ocean_freight || 0) +
-                                Number(quote.exw_cost || 0) +
-                                Number(quote.mbl_fee || 0) +
-                                Number(quote.profit_per_container || 0) * containersQty
-
-                              const baseCost = Number(
-                                quote.ocean_freight || quote.costo || 0
-                              )
-                              const suggestedSale = Number(
-                                quote.sale_amount || quote.suggested_sale || 0
-                              )
-                              const calculatedProfit = suggestedSale - finalSariCost
-                              const profit = Number(
-                                quote.profit_amount ||
-                                  quote.profit ||
-                                  calculatedProfit
-                              )
-                              const quoteFinalCost = Number(quote.final_cost || quote.sari_cost || 0)
-                              const quoteProfit = Number(quote.profit_amount || quote.profit || calculatedProfit || 0)
-                              const quoteTransit = Number(quote.transit_time || quote.transit || 0)
-
-                              const isBestCost = quoteFinalCost > 0 && quoteFinalCost === bestCost
-                              const isBestProfit = quoteProfit === bestProfit
-                              const isFastest = quoteTransit > 0 && quoteTransit === fastestTransit
+                              const finalSariCost = getAgentQuoteFinalCost(quote)
+                              const baseCost = getAgentQuoteBaseCost(quote)
+                              const isBestCost = isBestCostQuote(quote)
+                              const isFastest = isFastestQuote(quote)
                               const isNew = highlightedAgentQuoteId === quote.id
-                              const isSelected = Boolean(quote.is_selected)
+                              const isSelected = isSelectedQuote(quote)
 
                               return (
                                 <div
                                   key={quote.id}
-                                  className={cn(
-                                    'p-5 transition',
-                                    isSelected
-                                      ? 'rounded-2xl border border-green-400 bg-green-50 shadow-sm dark:border-green-700 dark:bg-green-950/30'
-                                      : cn(cardClass, 'hover:border-slate-300 hover:shadow-md dark:bg-slate-950 dark:hover:border-slate-600'),
-                                    isNew && 'ring-2 ring-green-400'
-                                  )}
+                                  className={`rounded-2xl border p-6 shadow-sm transition ${getAgentQuoteCardClass(
+                                    quote
+                                  )} ${isNew && !isSelected ? 'ring-2 ring-green-400' : ''}`}
                                 >
                                   <div className="mb-4 flex items-start justify-between gap-3">
                                     <div>
@@ -2342,7 +2359,7 @@ const profitabilityColor =
                                       </p>
                                     </div>
 
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap justify-end gap-2">
                                       {isNew && (
                                         <span className="rounded-full bg-green-100 px-2 py-1 text-[11px] font-semibold text-green-700 dark:bg-green-900/40 dark:text-green-300">
                                           Nueva
@@ -2350,35 +2367,42 @@ const profitabilityColor =
                                       )}
 
                                       {isSelected && (
-                                        <span className="rounded-full bg-green-600 px-2 py-1 text-[11px] font-semibold text-white">
-                                          Activa
+                                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                                          ✓ Seleccionada
                                         </span>
                                       )}
 
                                       {isBestCost && (
-                                        <span className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                                           Mejor costo
                                         </span>
                                       )}
 
-                                      {isBestProfit && (
-                                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                          Mejor profit
-                                        </span>
-                                      )}
-
                                       {isFastest && (
-                                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                                        <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
                                           Más rápido
                                         </span>
                                       )}
+
+                                      <button
+                                        type="button"
+                                        onClick={(event) => {
+                                          event.stopPropagation()
+                                          setDeleteAgentQuoteId(quote.id)
+                                        }}
+                                        disabled={isLockedQuote || isSelected}
+                                        className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                                        title="Eliminar tarifa"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
                                     </div>
                                   </div>
 
                                   <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div className={cn(mutedCardClass, 'p-3')}>
                                       <p className="text-base font-bold text-slate-900 dark:text-white">
-                                        {quote.moneda || 'USD'} {baseCost.toFixed(2)}
+                                        {quote.moneda || 'USD'} {formatCurrency(baseCost)}
                                       </p>
                                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                                         Costo base
@@ -2394,30 +2418,6 @@ const profitabilityColor =
                                       </p>
                                     </div>
 
-                                    <div className={cn(mutedCardClass, 'p-3')}>
-                                      <p className="text-base font-bold text-blue-600 dark:text-blue-400">
-                                        {quote.moneda || 'USD'} {suggestedSale.toFixed(2)}
-                                      </p>
-                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                        Venta sugerida
-                                      </p>
-                                    </div>
-
-                                    <div className={cn(mutedCardClass, 'p-3')}>
-                                      <p
-                                        className={cn(
-                                          'text-base font-bold',
-                                          profit >= 0
-                                            ? 'text-green-600 dark:text-green-400'
-                                            : 'text-red-600 dark:text-red-400'
-                                        )}
-                                      >
-                                        USD {formatCurrency(profit)}
-                                      </p>
-                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                        Profit
-                                      </p>
-                                    </div>
                                   </div>
 
                                   <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
@@ -2481,7 +2481,7 @@ const profitabilityColor =
                                     <button
                                       type="button"
                                       onClick={() => handleEditAgentQuote(quote)}
-                                      disabled={isLockedQuote}
+                                      disabled={isLockedQuote || isSelected}
                                       className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                                     >
                                       <Pencil className="h-3.5 w-3.5" />
@@ -2490,20 +2490,19 @@ const profitabilityColor =
 
                                     <button
                                       type="button"
-                                      disabled={isLockedQuote}
+                                      disabled={isLockedQuote || isSelected}
                                       onClick={() => {
                                         setSelectedRateForConfirm(quote)
                                         setConfirmSelectRateOpen(true)
                                       }}
-                                      className={cn(
-                                        'rounded-xl px-3 py-2 text-xs font-semibold transition',
+                                      className={
                                         isSelected
-                                          ? 'bg-green-600 text-white hover:bg-green-700'
-                                          : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200'
-                                      )}
+                                          ? 'rounded-xl bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700'
+                                          : primaryButtonClass
+                                      }
                                     >
                                       {isSelected
-                                        ? 'Regenerar pricing'
+                                        ? 'Tarifa seleccionada'
                                         : 'Seleccionar tarifa'}
                                     </button>
                                   </div>
@@ -3541,6 +3540,54 @@ const profitabilityColor =
           </div>
         </DialogContent>
       </Dialog>
+
+      {deleteAgentQuoteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-950">
+              Eliminar tarifa de agente
+            </h3>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Se eliminará permanentemente la cotización recibida del proveedor.
+            </p>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Proveedor:
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-950">
+                {agentQuotePendingDelete?.agente_nombre ||
+                  agentQuotePendingDelete?.agent_name ||
+                  agentQuotePendingDelete?.agent ||
+                  'Proveedor sin nombre'}
+              </p>
+            </div>
+
+            <p className="mt-4 text-sm text-slate-500">
+              Esta acción no se puede deshacer.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                onClick={() => setDeleteAgentQuoteId(null)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                className="rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700"
+                onClick={() => handleDeleteAgentQuote(deleteAgentQuoteId)}
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
