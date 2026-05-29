@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 import { supabase } from '@/src/lib/supabase/client'
 
@@ -77,13 +78,14 @@ export default function AgentDetailPage() {
     setSaving(false)
 
     if (error) {
-      alert('No se pudo guardar el agente')
+      toast.error('No se pudo guardar el agente')
       console.error(error)
       return
     }
 
     setAgent(formData)
     setEditing(false)
+    toast.success('Agente actualizado')
   }
 
   if (loading) {

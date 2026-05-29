@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Eye } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
 import { cn } from '../../../lib/utils'
@@ -168,7 +169,7 @@ export default function HistoricoPage() {
     const { data, error } = await query
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       setLoading(false)
       return
     }

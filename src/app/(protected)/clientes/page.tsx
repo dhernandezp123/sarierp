@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
 
@@ -59,7 +60,7 @@ export default function ClientesPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       setLoading(false)
       return
     }

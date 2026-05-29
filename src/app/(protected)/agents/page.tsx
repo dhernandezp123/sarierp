@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase/client'
 
 export default function AgentsPage() {
@@ -38,7 +39,7 @@ export default function AgentsPage() {
 
   const handleCreateAgent = async () => {
     if (!form.name.trim()) {
-      alert('El nombre del agente/proveedor es obligatorio')
+      toast.info('El nombre del agente/proveedor es obligatorio')
       return
     }
 
@@ -49,7 +50,7 @@ export default function AgentsPage() {
     })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 

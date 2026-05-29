@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase/client'
 
 export default function CatalogsPage() {
@@ -36,21 +37,34 @@ export default function CatalogsPage() {
   }
 
   const createCountry = async () => {
-    if (!countryName.trim()) return alert('Nombre de país requerido')
+    if (!countryName.trim()) {
+      toast.info('Nombre de país requerido')
+      return
+    }
 
     const { error } = await supabase.from('countries').insert({
       name: countryName.trim(),
     })
 
-    if (error) return alert(error.message)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
 
     setCountryName('')
     fetchCatalogs()
   }
 
   const createPort = async () => {
-    if (!portForm.name.trim()) return alert('Nombre de puerto requerido')
-    if (!portForm.country_id) return alert('Selecciona un país')
+    if (!portForm.name.trim()) {
+      toast.info('Nombre de puerto requerido')
+      return
+    }
+
+    if (!portForm.country_id) {
+      toast.info('Selecciona un país')
+      return
+    }
 
     const { error } = await supabase.from('ports').insert({
       name: portForm.name.trim(),
@@ -58,7 +72,10 @@ export default function CatalogsPage() {
       type: portForm.type,
     })
 
-    if (error) return alert(error.message)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
 
     setPortForm({
       name: '',

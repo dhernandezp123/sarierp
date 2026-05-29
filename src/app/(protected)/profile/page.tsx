@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
 
@@ -90,7 +91,9 @@ export default function ProfilePage() {
 
     if (uploadError) {
       setUploading(false)
-      alert(`No se pudo subir la imagen: ${uploadError.message}`)
+      toast.error('No se pudo subir la imagen', {
+        description: uploadError.message,
+      })
       return
     }
 
@@ -104,7 +107,9 @@ export default function ProfilePage() {
     setUploading(false)
 
     if (profileError) {
-      alert(`No se pudo actualizar el perfil: ${profileError.message}`)
+      toast.error('No se pudo actualizar el perfil', {
+        description: profileError.message,
+      })
       return
     }
 
@@ -129,28 +134,30 @@ export default function ProfilePage() {
     setSavingProfile(false)
 
     if (error) {
-      alert(`No se pudo actualizar el perfil: ${error.message}`)
+      toast.error('No se pudo actualizar el perfil', {
+        description: error.message,
+      })
       return
     }
 
-    alert('Perfil actualizado.')
+    toast.success('Perfil actualizado.')
   }
 
   const handlePasswordUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      alert('Completa todos los campos de contrasena.')
+      toast.info('Completa todos los campos de contrasena.')
       return
     }
 
     if (newPassword !== confirmPassword) {
-      alert('La nueva contrasena y la confirmacion no coinciden.')
+      toast.error('La nueva contrasena y la confirmacion no coinciden.')
       return
     }
 
     if (newPassword.length < 8) {
-      alert('La nueva contrasena debe tener al menos 8 caracteres.')
+      toast.info('La nueva contrasena debe tener al menos 8 caracteres.')
       return
     }
 
@@ -160,7 +167,7 @@ export default function ProfilePage() {
 
     if (userError || !userData.user?.email) {
       setSavingPassword(false)
-      alert(userError?.message || 'No se pudo validar el usuario actual.')
+      toast.error(userError?.message || 'No se pudo validar el usuario actual.')
       return
     }
 
@@ -171,7 +178,7 @@ export default function ProfilePage() {
 
     if (signInError) {
       setSavingPassword(false)
-      alert('La contrasena actual no es correcta.')
+      toast.error('La contrasena actual no es correcta.')
       return
     }
 
@@ -182,14 +189,16 @@ export default function ProfilePage() {
     setSavingPassword(false)
 
     if (error) {
-      alert(`No se pudo actualizar la contrasena: ${error.message}`)
+      toast.error('No se pudo actualizar la contrasena', {
+        description: error.message,
+      })
       return
     }
 
     setCurrentPassword('')
     setNewPassword('')
     setConfirmPassword('')
-    alert('Contrasena actualizada.')
+    toast.success('Contrasena actualizada.')
   }
 
   if (loading) {

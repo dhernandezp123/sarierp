@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import {
   BarChart,
   Bar,
@@ -88,7 +89,7 @@ export default function FinancialDashboardPage() {
       .is('deleted_at', null)
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 
 export default function LoginPage() {
@@ -28,7 +29,7 @@ export default function LoginPage() {
       })
 
       if (error) {
-        alert(error.message)
+        toast.error(error.message)
         return
       }
 
@@ -36,7 +37,7 @@ export default function LoginPage() {
 
       if (!user) {
         await supabase.auth.signOut()
-        alert('Perfil de usuario no encontrado.')
+        toast.error('Perfil de usuario no encontrado.')
         return
       }
 
@@ -48,19 +49,19 @@ export default function LoginPage() {
 
       if (!profile) {
         await supabase.auth.signOut()
-        alert('Perfil de usuario no encontrado.')
+        toast.error('Perfil de usuario no encontrado.')
         return
       }
 
       if (profile.status !== 'Aprobado') {
         await supabase.auth.signOut()
-        alert('Tu usuario esta pendiente de aprobacion por un administrador.')
+        toast.info('Tu usuario esta pendiente de aprobacion por un administrador.')
         return
       }
 
       if (!profile.is_active) {
         await supabase.auth.signOut()
-        alert('Tu acceso al sistema ha sido desactivado.')
+        toast.error('Tu acceso al sistema ha sido desactivado.')
         return
       }
 

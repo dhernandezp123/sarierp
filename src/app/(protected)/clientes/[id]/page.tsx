@@ -91,7 +91,7 @@ export default function ClienteProfilePage() {
       .single()
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -111,7 +111,7 @@ export default function ClienteProfilePage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -132,7 +132,7 @@ export default function ClienteProfilePage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 
@@ -141,7 +141,7 @@ export default function ClienteProfilePage() {
 
   const saveClientNote = async () => {
     if (!newNote.trim()) {
-      alert('Escribe una nota antes de guardar')
+      toast.info('Escribe una nota antes de guardar')
       return
     }
 
@@ -154,7 +154,7 @@ export default function ClienteProfilePage() {
     ])
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 

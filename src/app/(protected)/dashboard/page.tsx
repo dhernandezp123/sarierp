@@ -70,7 +70,7 @@ export default function DashboardPage() {
       .order('created_at', { ascending: false })
 
     if (quotesError) {
-      alert(quotesError.message)
+      toast.error(quotesError.message)
       return
     }
 
@@ -81,7 +81,7 @@ export default function DashboardPage() {
       .order('created_at', { ascending: false })
 
     if (clientsError) {
-      alert(clientsError.message)
+      toast.error(clientsError.message)
       return
     }
 

@@ -251,7 +251,7 @@ export default function QuotationDetailPage() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      alert(error.message)
+      toast.error(error.message)
       return
     }
 

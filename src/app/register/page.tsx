@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 
 export default function RegisterPage() {
@@ -21,12 +22,12 @@ export default function RegisterPage() {
     e.preventDefault()
 
     if (!nombre.trim() || !apellido.trim() || !email.trim() || !password) {
-      alert('Completa todos los campos.')
+      toast.info('Completa todos los campos.')
       return
     }
 
     if (password !== confirmPassword) {
-      alert('Las contraseñas no coinciden.')
+      toast.error('Las contraseñas no coinciden.')
       return
     }
 
@@ -50,7 +51,7 @@ export default function RegisterPage() {
 
     if (error || !data.user) {
       setLoading(false)
-      alert(error?.message || 'No se pudo crear la solicitud.')
+      toast.error(error?.message || 'No se pudo crear la solicitud.')
       return
     }
 
@@ -69,15 +70,22 @@ export default function RegisterPage() {
     if (profileError) {
       console.error('PROFILE UPSERT ERROR:', profileError)
       setLoading(false)
-      alert(`No se pudo crear el perfil: ${profileError.message}`)
+      toast.error('No se pudo crear el perfil', {
+        description: profileError.message,
+      })
       return
     }
 
     await supabase.auth.signOut()
 
     setLoading(false)
-    alert('Solicitud enviada. Un administrador debe aprobar tu acceso.')
-    router.push('/login')
+    toast.success('Solicitud enviada', {
+      description: 'Un administrador debe aprobar tu acceso.',
+    })
+
+    setTimeout(() => {
+      router.push('/login')
+    }, 1200)
   }
 
   return (
