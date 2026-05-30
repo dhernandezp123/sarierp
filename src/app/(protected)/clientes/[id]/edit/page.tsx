@@ -5,6 +5,11 @@ import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../../../lib/supabase/client'
+import {
+  CONDICIONES_PAGO,
+  TIPOS_CLIENTE,
+  TIPOS_EMPRESA,
+} from '../../../../../lib/constants/clientes'
 
 const fieldClass =
   'w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400 dark:focus:ring-slate-400/20 dark:disabled:bg-slate-800 dark:disabled:text-slate-500'
@@ -105,14 +110,20 @@ export default function EditClientePage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value, type } = e.target
-
-    setFormData({
+    const nextFormData = {
       ...formData,
       [name]:
         type === 'checkbox'
           ? (e.target as HTMLInputElement).checked
           : value,
-    })
+    }
+
+    if (name === 'condicion_pago') {
+      const diasCredito = value.match(/\d+/)?.[0] ?? ''
+      nextFormData.dias_credito = diasCredito
+    }
+
+    setFormData(nextFormData)
   }
 
   const handleSave = async () => {
@@ -139,7 +150,7 @@ export default function EditClientePage() {
       tipo_persona: formData.tipo_persona,
       condicion_pago: formData.condicion_pago,
       dias_credito:
-        formData.condicion_pago === 'Crédito'
+        formData.condicion_pago.startsWith('Crédito')
           ? Number(formData.dias_credito || 0)
           : 0,
       tipo_cliente: formData.tipo_cliente,
@@ -290,8 +301,11 @@ export default function EditClientePage() {
               onChange={handleChange}
               className={fieldClass}
             >
-              <option value="Natural">Natural</option>
-              <option value="Corporativo">Corporativo</option>
+              {TIPOS_EMPRESA.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {tipo}
+                </option>
+              ))}
             </select>
 
             <select
@@ -300,11 +314,14 @@ export default function EditClientePage() {
               onChange={handleChange}
               className={fieldClass}
             >
-              <option value="Contado">Contado</option>
-              <option value="Crédito">Crédito</option>
+              {CONDICIONES_PAGO.map((condicion) => (
+                <option key={condicion} value={condicion}>
+                  {condicion}
+                </option>
+              ))}
             </select>
 
-            {formData.condicion_pago === 'Crédito' && (
+            {formData.condicion_pago.startsWith('Crédito') && (
               <input
                 name="dias_credito"
                 placeholder="Días de crédito"
@@ -321,15 +338,11 @@ export default function EditClientePage() {
               className={fieldClass}
             >
               <option value="">Tipo de Cliente / Segmento</option>
-              <option value="Retail">Retail</option>
-              <option value="Industrial">Industrial</option>
-              <option value="Agroindustria">Agroindustria</option>
-              <option value="Textil">Textil</option>
-              <option value="Automotriz">Automotriz</option>
-              <option value="Farmacéutico">Farmacéutico</option>
-              <option value="Tecnología">Tecnología</option>
-              <option value="Forwarder">Forwarder</option>
-              <option value="Otro">Otro</option>
+              {TIPOS_CLIENTE.map((tipo) => (
+                <option key={tipo} value={tipo}>
+                  {tipo}
+                </option>
+              ))}
             </select>
 
             <select

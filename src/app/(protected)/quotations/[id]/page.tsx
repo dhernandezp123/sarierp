@@ -104,20 +104,10 @@ export default function QuotationDetailPage() {
   const { profile } = useUser()
   const params = useParams()
   const router = useRouter()
-  const role = profile?.rol || ''
-  const isAdmin = role === 'Admin'
-  const isSales = role === 'Ventas'
-  const isPricing = role === 'Pricing'
-  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
-
-  const canEditPricing =
-    isAdmin || isPricing
-  const canEditCostValidation =
-    isAdmin || isFinance
-  const canEditFinance =
-    isAdmin || isFinance
-  const canEditQuotes =
-    isAdmin || isSales
+  const userRole = profile?.rol
+  const canManagePricing = ['Admin', 'Pricing'].includes(userRole || '')
+  const canGenerateSI = ['Admin', 'Ventas'].includes(userRole || '')
+  const canEditQuotation = ['Admin', 'Ventas'].includes(userRole || '')
 
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any>(null)
@@ -756,38 +746,40 @@ const combinedTimeline = [
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOpenStatusMenu(!openStatusMenu)}
-              className="inline-flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <span>{quotation?.status || 'Sin estado'}</span>
-              <ChevronDown className="h-4 w-4" />
-            </button>
+          {canEditQuotation && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpenStatusMenu(!openStatusMenu)}
+                className="inline-flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <span>{quotation?.status || 'Sin estado'}</span>
+                <ChevronDown className="h-4 w-4" />
+              </button>
 
-            {openStatusMenu && (
-              <div className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
-                {statusOptions
-                  .filter((status) =>
-                    canTransition(quotation?.status || 'Borrador', status)
-                  )
-                  .map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={async () => {
-                      await handleStatusChange(status)
-                      setOpenStatusMenu(false)
-                    }}
-                    className="block w-full px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+              {openStatusMenu && (
+                <div className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
+                  {statusOptions
+                    .filter((status) =>
+                      canTransition(quotation?.status || 'Borrador', status)
+                    )
+                    .map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={async () => {
+                        await handleStatusChange(status)
+                        setOpenStatusMenu(false)
+                      }}
+                      className="block w-full px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <PDFDownloadLink
             document={
@@ -815,23 +807,27 @@ const combinedTimeline = [
             <span>Imprimir Cotización</span>
           </button>
 
-          <button
-            onClick={() => router.push(`/pricing-comparison?quoteId=${quotation.id}`)}
-            className="rounded-xl bg-black text-white px-6 py-3 font-semibold"
-          >
-            Gestionar Cotización
-          </button>
+          {canManagePricing && (
+            <Link
+              href={`/pricing-comparison?quotation=${quotation.id}`}
+              className="rounded-xl bg-black text-white px-6 py-3 font-semibold"
+            >
+              Gestionar Cotización
+            </Link>
+          )}
 
-          <button
-            type="button"
-            onClick={duplicateQuotation}
-            disabled={duplicating}
-            className={secondaryButtonClass}
-          >
-            {duplicating ? 'Duplicando...' : 'Duplicar Cotización'}
-          </button>
+          {canEditQuotation && (
+            <button
+              type="button"
+              onClick={duplicateQuotation}
+              disabled={duplicating}
+              className={secondaryButtonClass}
+            >
+              {duplicating ? 'Duplicando...' : 'Duplicar Cotización'}
+            </button>
+          )}
 
-          {quotation.status === 'Ganada' && (
+          {canGenerateSI && quotation.status === 'Ganada' && (
             <button
               type="button"
               onClick={createRoutingInstruction}
@@ -844,12 +840,14 @@ const combinedTimeline = [
             </button>
           )}
 
-          <Link
-            href={`/quotations/${quotation.id}/edit`}
-            className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center"
-          >
-            Editar Qt.
-          </Link>
+          {canEditQuotation && (
+            <Link
+              href={`/quotations/${quotation.id}/edit`}
+              className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center"
+            >
+              Editar Qt.
+            </Link>
+          )}
         </div>
       </div>
 
