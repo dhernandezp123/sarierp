@@ -85,6 +85,7 @@ function PricingComparisonContent() {
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
+  const [clientNotes, setClientNotes] = useState('')
 
   const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<AgentQuote[]>([])
@@ -303,6 +304,7 @@ function PricingComparisonContent() {
 
   const handleSelectQuote = async (quote: any) => {
     setSelectedQuote(quote)
+    setClientNotes(quote.client_notes || '')
     await fetchAgentQuotes(quote.id)
     await fetchPricingItems(quote.id)
     await fetchQuotationContainers(quote.id)
@@ -1362,6 +1364,29 @@ function PricingComparisonContent() {
       gp_percentage: gpPercentage,
       pricing_approved: true,
     })
+  }
+
+  const saveClientNotes = async () => {
+    if (!selectedQuote?.id) return
+
+    const { error } = await supabase
+      .from('quotations')
+      .update({
+        client_notes: clientNotes,
+      })
+      .eq('id', selectedQuote.id)
+
+    if (error) {
+      toast.error('No se pudieron guardar las observaciones')
+      return
+    }
+
+    setSelectedQuote({
+      ...selectedQuote,
+      client_notes: clientNotes,
+    })
+
+    toast.success('Observaciones guardadas')
   }
 
   const approvePricing = async () => {
@@ -3107,24 +3132,50 @@ const profitabilityColor =
                   </CardContent>
                 </Card>
 
-                
-<div className="flex flex-col justify-end gap-3 sm:flex-row">
-  <button
-    onClick={approvePricing}
-    disabled={isPricingActionDisabled}
-    className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
-  >
-    Aprobar Pricing
-  </button>
+                <div className={cn(cardClass, 'p-6')}>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                    Observaciones para Cliente (PDF)
+                  </h3>
 
-  <button
-    onClick={markAsSentToClient}
-    disabled={isPricingActionDisabled}
-    className="rounded-xl bg-green-600 px-8 py-3 text-sm font-bold text-white transition hover:bg-green-700"
-  >
-    Marcar como Enviada al Cliente
-  </button>
-</div>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Estas observaciones aparecerán en la cotización enviada al cliente.
+                  </p>
+
+                  <textarea
+                    value={clientNotes}
+                    onChange={(e) => setClientNotes(e.target.value)}
+                    className={`${fieldClass} mt-4 min-h-[140px] w-full py-3`}
+                    placeholder="Ej: Tarifas sujetas a espacio con naviera..."
+                  />
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      className={primaryButtonClass}
+                      onClick={saveClientNotes}
+                    >
+                      Guardar observaciones
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col justify-end gap-3 sm:flex-row">
+                  <button
+                    onClick={approvePricing}
+                    disabled={isPricingActionDisabled}
+                    className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
+                  >
+                    Aprobar Pricing
+                  </button>
+
+                  <button
+                    onClick={markAsSentToClient}
+                    disabled={isPricingActionDisabled}
+                    className="rounded-xl bg-green-600 px-8 py-3 text-sm font-bold text-white transition hover:bg-green-700"
+                  >
+                    Marcar como Enviada al Cliente
+                  </button>
+                </div>
 
                 <Card className={cardClass}>
                   <CardHeader>

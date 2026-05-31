@@ -69,6 +69,13 @@ type DestinationCharge = {
   taxable: boolean
 }
 
+type ContainerLine = {
+  container_type_id: string
+  container_type_name: string
+  quantity: number
+  notes: string | null
+}
+
 export default function NewQuotationPage() {
   const { profile } = useUser()
   const defaultValidUntil = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
@@ -80,6 +87,7 @@ export default function NewQuotationPage() {
   const [clientes, setClientes] = useState<any[]>([])
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
+  const [containerTypes, setContainerTypes] = useState<any[]>([])
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
   const [showClientRates, setShowClientRates] = useState(false)
@@ -102,6 +110,15 @@ export default function NewQuotationPage() {
       weight: '',
     },
   ])
+  const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
+  const [editingContainerLineIndex, setEditingContainerLineIndex] =
+    useState<number | null>(null)
+  const [containerLineForm, setContainerLineForm] = useState({
+    container_type_id: '',
+    container_type_name: '',
+    quantity: '1',
+    notes: '',
+  })
   const [miamiOptions, setMiamiOptions] = useState({
     applyStandardCharges: true,
     taxStandardDestinationCharges: false,
@@ -162,6 +179,7 @@ export default function NewQuotationPage() {
     insurance_cost: '0',
 
     observaciones: '',
+    pricing_notes: '',
   }
 
   const [formData, setFormData] = useState(initialFormData)
@@ -240,8 +258,21 @@ export default function NewQuotationPage() {
       return
     }
 
+    const { data: containerTypesData, error: containerTypesError } =
+      await supabase
+        .from('container_types')
+        .select('*')
+        .eq('active', true)
+        .order('name', { ascending: true })
+
+    if (containerTypesError) {
+      toast.error(containerTypesError.message)
+      return
+    }
+
     setCountries(countriesData || [])
     setPorts(portsData || [])
+    setContainerTypes(containerTypesData || [])
   }
 
   const loadClientRates = async (clienteId: string) => {
@@ -349,6 +380,77 @@ export default function NewQuotationPage() {
     setFormData(updatedData)
   }
 
+  const resetContainerLineForm = () => {
+    setContainerLineForm({
+      container_type_id: '',
+      container_type_name: '',
+      quantity: '1',
+      notes: '',
+    })
+  }
+
+  const handleAddContainerLine = () => {
+    if (!containerLineForm.container_type_id) {
+      toast.error('Selecciona un tipo de contenedor')
+      return
+    }
+
+    const selectedType = containerTypes.find(
+      (type) => type.id === containerLineForm.container_type_id
+    )
+
+    const line = {
+      container_type_id: containerLineForm.container_type_id,
+      container_type_name:
+        selectedType?.name || containerLineForm.container_type_name,
+      quantity: Number(containerLineForm.quantity || 1),
+      notes: containerLineForm.notes || null,
+    }
+
+    if (editingContainerLineIndex !== null) {
+      setContainerLines((prev) =>
+        prev.map((item, index) =>
+          index === editingContainerLineIndex ? line : item
+        )
+      )
+      setEditingContainerLineIndex(null)
+    } else {
+      setContainerLines((prev) => [...prev, line])
+    }
+
+    resetContainerLineForm()
+  }
+
+  const handleEditContainerLine = (index: number) => {
+    const line = containerLines[index]
+    if (!line) return
+
+    setContainerLineForm({
+      container_type_id: line.container_type_id,
+      container_type_name: line.container_type_name,
+      quantity: String(line.quantity || 1),
+      notes: line.notes || '',
+    })
+    setEditingContainerLineIndex(index)
+  }
+
+  const handleRemoveContainerLine = (index: number) => {
+    setContainerLines((prev) =>
+      prev.filter((_, itemIndex) => itemIndex !== index)
+    )
+
+    if (editingContainerLineIndex === index) {
+      setEditingContainerLineIndex(null)
+      resetContainerLineForm()
+    }
+  }
+
+  const clearContainerLines = () => {
+    setContainerLines([])
+    setEditingContainerLineIndex(null)
+    resetContainerLineForm()
+  }
+
   const handleSubmit = async (status: string) => {
     if (!formData.cliente_id) {
       toast.error('Debes seleccionar un cliente')
@@ -389,6 +491,11 @@ export default function NewQuotationPage() {
 
       if (!formData.quote_type) {
         toast.error('Debes seleccionar el tipo de cotización')
+        return
+      }
+
+      if (requiresContainerLines && containerLines.length === 0) {
+        toast.error('Agrega al menos una línea de contenedor/unidad')
         return
       }
     }
@@ -472,7 +579,8 @@ export default function NewQuotationPage() {
           insurance_rate: Number(formData.insurance_rate),
           insurance_cost: Number(formData.insurance_cost),
 
-          observaciones: formData.observaciones,
+          pricing_notes: formData.pricing_notes || null,
+          client_notes: null,
           status: initialStatus,
           created_by: profile?.id,
           created_at: new Date().toISOString(),
@@ -482,6 +590,27 @@ export default function NewQuotationPage() {
       if (error) {
         toast.error(error.message)
         return
+      }
+
+      if (containerLines.length > 0) {
+        const rows = containerLines.map((line) => ({
+          quotation_id: quotation.id,
+          container_type_id: line.container_type_id,
+          container_type_name: line.container_type_name,
+          quantity: line.quantity,
+          notes: line.notes,
+        }))
+
+        const { error: containerError } = await supabase
+          .from('quotation_containers')
+          .insert(rows)
+
+        if (containerError) {
+          toast.error(
+            'La cotización se creó, pero no se guardaron los contenedores'
+          )
+          return
+        }
       }
 
       const autoItems = buildMiamiPricingItems(quotation.id)
@@ -568,6 +697,9 @@ export default function NewQuotationPage() {
       }
 
       setFormData(initialFormData)
+      setContainerLines([])
+      setEditingContainerLineIndex(null)
+      resetContainerLineForm()
 
       await fetchCatalogs()
     } catch (err) {
@@ -598,6 +730,9 @@ export default function NewQuotationPage() {
     'Marítima': ['LCL', 'FCL'],
     Terrestre: ['LTL', 'FTL'],
   }
+
+  const requiresContainerLines =
+    formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
 
   const fieldClass =
     'h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500'
@@ -988,7 +1123,7 @@ export default function NewQuotationPage() {
         0
       ),
       commercial_value: Number(formData.commercial_value || 0),
-      observaciones: formData.observaciones,
+      pricing_notes: formData.pricing_notes,
     }
   }
 
@@ -2085,13 +2220,14 @@ export default function NewQuotationPage() {
               <select
                 className={fieldClass}
                 value={formData.tipo_transporte}
-                onChange={(e) =>
+                onChange={(e) => {
                   setFormData({
                     ...formData,
                     tipo_transporte: e.target.value,
                     quote_type: '',
                   })
-                }
+                  clearContainerLines()
+                }}
               >
                 <option value="">Seleccionar transporte</option>
                 <option value="Aéreo">Aéreo</option>
@@ -2102,9 +2238,13 @@ export default function NewQuotationPage() {
               <select
                 className={fieldClass}
                 value={formData.quote_type}
-                onChange={(e) =>
+                onChange={(e) => {
                   setFormData({ ...formData, quote_type: e.target.value })
-                }
+
+                  if (e.target.value !== 'FCL' && e.target.value !== 'FTL') {
+                    clearContainerLines()
+                  }
+                }}
                 disabled={!formData.tipo_transporte}
               >
                 <option value="">Seleccionar tipo</option>
@@ -2277,38 +2417,152 @@ export default function NewQuotationPage() {
             </h2>
 
             <div className="grid grid-cols-3 gap-4">
-              <select
-  name="container_type"
-  value={formData.container_type}
-  onChange={handleChange}
-  className={fieldClass}
->
-  <option value="">Tipo de contenedor / unidad</option>
-  <option value="Contenedor 20FR">Contenedor 20FR</option>
-  <option value="Contenedor 20DR">Contenedor 20DR</option>
-  <option value="Contenedor 20OT">Contenedor 20OT</option>
-  <option value="Contenedor 40DR">Contenedor 40DR</option>
-  <option value="Contenedor 40HC">Contenedor 40HC</option>
-  <option value="Contenedor 40FR">Contenedor 40FR</option>
-  <option value="Contenedor 45-102DR">Contenedor 45-102DR</option>
-  <option value="Contenedor 40HR">Contenedor 40HR</option>
-  <option value="Contenedor 40OT">Contenedor 40OT</option>
-  <option value="Contenedor 40NOR">Contenedor 40NOR</option>
-  <option value="Contenedor 20OT OH">Contenedor 20OT OH</option>
-  <option value="Contenedor 53'">Contenedor 53'</option>
-  <option value="Contenedor 20GP">Contenedor 20GP</option>
-  <option value="Camion 8 tons">Camion 8 tons</option>
-  <option value="Contenedor 48' FTL">Contenedor 48' FTL</option>
-</select>
+              {requiresContainerLines ? (
+                <div className="col-span-3 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <select
+                      value={containerLineForm.container_type_id}
+                      onChange={(e) => {
+                        const selectedType = containerTypes.find(
+                          (type) => type.id === e.target.value
+                        )
 
-              <input
-                className={fieldClass}
-                placeholder="Cantidad de contenedores / unidades"
-                value={formData.container_qty}
-                onChange={(e) =>
-                  setFormData({ ...formData, container_qty: e.target.value })
-                }
-              />
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          container_type_id: e.target.value,
+                          container_type_name: selectedType?.name || '',
+                        })
+                      }}
+                      className={fieldClass}
+                    >
+                      <option value="">Tipo de contenedor / unidad</option>
+
+                      {containerTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Cantidad"
+                      value={containerLineForm.quantity}
+                      onChange={(e) =>
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          quantity: e.target.value,
+                        })
+                      }
+                      className={fieldClass}
+                    />
+
+                    <input
+                      placeholder="Notas"
+                      value={containerLineForm.notes}
+                      onChange={(e) =>
+                        setContainerLineForm({
+                          ...containerLineForm,
+                          notes: e.target.value,
+                        })
+                      }
+                      className={fieldClass}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={handleAddContainerLine}
+                      className="h-12 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800"
+                    >
+                      {editingContainerLineIndex !== null
+                        ? 'Actualizar'
+                        : 'Agregar'}
+                    </button>
+                  </div>
+
+                  {containerLines.length > 0 && (
+                    <div className="divide-y rounded-xl border border-slate-200 bg-white">
+                      {containerLines.map((line, index) => (
+                        <div
+                          key={`${line.container_type_id}-${index}`}
+                          className="flex items-center justify-between gap-4 p-3"
+                        >
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {line.container_type_name}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                              Cantidad: {line.quantity}
+                              {line.notes ? ` · ${line.notes}` : ''}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() => handleEditContainerLine(index)}
+                              className="text-sm font-semibold text-blue-600"
+                            >
+                              Modificar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveContainerLine(index)}
+                              className="text-sm font-semibold text-red-700"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <select
+                    name="container_type"
+                    value={formData.container_type}
+                    onChange={handleChange}
+                    className={fieldClass}
+                  >
+                    <option value="">Tipo de contenedor / unidad</option>
+                    <option value="Contenedor 20FR">Contenedor 20FR</option>
+                    <option value="Contenedor 20DR">Contenedor 20DR</option>
+                    <option value="Contenedor 20OT">Contenedor 20OT</option>
+                    <option value="Contenedor 40DR">Contenedor 40DR</option>
+                    <option value="Contenedor 40HC">Contenedor 40HC</option>
+                    <option value="Contenedor 40FR">Contenedor 40FR</option>
+                    <option value="Contenedor 45-102DR">
+                      Contenedor 45-102DR
+                    </option>
+                    <option value="Contenedor 40HR">Contenedor 40HR</option>
+                    <option value="Contenedor 40OT">Contenedor 40OT</option>
+                    <option value="Contenedor 40NOR">Contenedor 40NOR</option>
+                    <option value="Contenedor 20OT OH">Contenedor 20OT OH</option>
+                    <option value="Contenedor 53'">Contenedor 53'</option>
+                    <option value="Contenedor 20GP">Contenedor 20GP</option>
+                    <option value="Camion 8 tons">Camion 8 tons</option>
+                    <option value="Contenedor 48' FTL">
+                      Contenedor 48' FTL
+                    </option>
+                  </select>
+
+                  <input
+                    className={fieldClass}
+                    placeholder="Cantidad de contenedores / unidades"
+                    value={formData.container_qty}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        container_qty: e.target.value,
+                      })
+                    }
+                  />
+                </>
+              )}
 
               <select
                 className={fieldClass}
@@ -2417,8 +2671,8 @@ export default function NewQuotationPage() {
             </h2>
 
             <textarea
-              name="observaciones"
-              value={formData.observaciones}
+              name="pricing_notes"
+              value={formData.pricing_notes}
               onChange={handleChange}
               className={`${fieldClass} min-h-32`}
             />

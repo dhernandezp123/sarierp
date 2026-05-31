@@ -345,14 +345,46 @@ function filterItems(pricingItems: any[], types: string[]) {
   return pricingItems.filter((item) => types.includes(item.item_type))
 }
 
-function getItemTotals(item: any) {
-  const qty = Number(item.quantity || 1)
-  const sale = Number(item.sale_amount || 0)
-  const subtotal = qty * sale
-  const tax = item.taxable ? subtotal * 0.15 : 0
-  const total = subtotal + tax
+const getPdfChargeValues = (item: any) => {
+  const qty = Number(item.quantity || item.qty || 1)
+  const safeQty = qty > 0 ? qty : 1
 
-  return { qty, sale, subtotal, tax, total }
+  const saleAmount = Number(item.sale_amount || 0)
+  const tax = Number(item.tax_amount || 0)
+  const storedTotal = Number(item.total_amount || 0)
+
+  const expectedFromUnit = saleAmount * safeQty + tax
+  const expectedFromLineSubtotal = saleAmount + tax
+
+  const almostEqual = (a: number, b: number) => Math.abs(a - b) < 0.02
+
+  const unitValue =
+    storedTotal > 0 && almostEqual(storedTotal, expectedFromUnit)
+      ? saleAmount
+      : storedTotal > 0 && almostEqual(storedTotal, expectedFromLineSubtotal)
+        ? saleAmount / safeQty
+        : storedTotal > 0
+          ? saleAmount / safeQty
+          : saleAmount
+
+  const total =
+    storedTotal > 0
+      ? storedTotal
+      : unitValue * safeQty + tax
+
+  return {
+    qty: safeQty,
+    unitValue,
+    tax,
+    total,
+  }
+}
+
+function getItemTotals(item: any) {
+  const values = getPdfChargeValues(item)
+  const subtotal = Number(item.sale_amount || 0)
+
+  return { ...values, subtotal }
 }
 
 function getGroupTotal(items: any[]) {
@@ -360,6 +392,26 @@ function getGroupTotal(items: any[]) {
     const { total } = getItemTotals(item)
     return sum + total
   }, 0)
+}
+
+const getChargesSummary = (items: any[]) => {
+  return items.reduce(
+    (acc, item) => {
+      const values = getPdfChargeValues(item)
+      const lineSubtotal = values.total - values.tax
+
+      return {
+        subtotal: acc.subtotal + lineSubtotal,
+        tax: acc.tax + values.tax,
+        total: acc.total + values.total,
+      }
+    },
+    {
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+    }
+  )
 }
 
 function ChargesTable({
@@ -379,13 +431,13 @@ function ChargesTable({
         <View style={styles.tableHeader}>
           <Text style={styles.colConcept}>Concepto</Text>
           <Text style={styles.colSmall}>QTY</Text>
-          <Text style={styles.colAmount}>Valor</Text>
+          <Text style={styles.colAmount}>Valor Unit.</Text>
           <Text style={styles.colAmount}>ISV</Text>
           <Text style={styles.colAmount}>Total</Text>
         </View>
 
         {items.map((item) => {
-          const { qty, subtotal, tax, total } = getItemTotals(item)
+          const values = getPdfChargeValues(item)
           const currency = item.currency || 'USD'
 
           return (
@@ -395,19 +447,19 @@ function ChargesTable({
               </Text>
 
               <Text style={styles.colSmall}>
-                {qty}
+                {values.qty}
               </Text>
 
               <Text style={styles.colAmount}>
-                {currency} {formatCurrency(subtotal)}
+                {currency} {formatCurrency(values.unitValue)}
               </Text>
 
               <Text style={styles.colAmount}>
-                {currency} {formatCurrency(tax)}
+                {currency} {formatCurrency(values.tax)}
               </Text>
 
               <Text style={styles.colAmount}>
-                {currency} {formatCurrency(total)}
+                {currency} {formatCurrency(values.total)}
               </Text>
             </View>
           )
@@ -491,20 +543,28 @@ export default function QuotationPDF({
   const destinationTotal = getGroupTotal(destinationCharges)
   const otherChargeTotal = getGroupTotal(otherCharges)
 
-  const subtotalGeneral = pricingItems.reduce((sum, item) => {
-    const qty = Number(item.quantity || 1)
-    const sale = Number(item.sale_amount || 0)
-    return sum + qty * sale
-  }, 0)
+  const freightSummary = getChargesSummary(freightItems)
+  const originSummary = getChargesSummary(originCharges)
+  const destinationSummary = getChargesSummary(destinationCharges)
+  const otherChargeSummary = getChargesSummary(otherCharges)
 
-  const taxGeneral = pricingItems.reduce((sum, item) => {
-    const qty = Number(item.quantity || 1)
-    const sale = Number(item.sale_amount || 0)
-    const subtotal = qty * sale
-    return sum + (item.taxable ? subtotal * 0.15 : 0)
-  }, 0)
+  const subtotalGeneral =
+    freightSummary.subtotal +
+    originSummary.subtotal +
+    destinationSummary.subtotal +
+    otherChargeSummary.subtotal
 
-  const totalGeneral = subtotalGeneral + taxGeneral
+  const taxGeneral =
+    freightSummary.tax +
+    originSummary.tax +
+    destinationSummary.tax +
+    otherChargeSummary.tax
+
+  const totalGeneral =
+    freightSummary.total +
+    originSummary.total +
+    destinationSummary.total +
+    otherChargeSummary.total
 
   const finalTotal =
     Number(quotation.total_sale || 0) ||
@@ -908,7 +968,7 @@ export default function QuotationPDF({
         <View style={styles.notes}>
           <Text style={styles.sectionTitle}>Observaciones</Text>
           <Text>
-            {quotation.pricing_notes || quotation.observaciones || 'Sin observaciones'}
+            {quotation.client_notes || 'Sin observaciones'}
           </Text>
         </View>
 
