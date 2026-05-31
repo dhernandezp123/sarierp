@@ -248,7 +248,7 @@ export default function QuotationDetailPage() {
       .from('agent_quotes')
       .select('*')
       .eq('quotation_id', id)
-      .eq('selected', true)
+      .eq('is_selected', true)
       .single()
 
     setSelectedAgent(selectedPricing)

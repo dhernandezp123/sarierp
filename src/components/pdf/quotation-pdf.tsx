@@ -583,6 +583,7 @@ export default function QuotationPDF({
   }
 
   const customer = quotation.cliente || quotation.clientes
+  const activeAgentQuote = selectedAgent
   const vendedorNombre =
     formatPersonName(customer?.vendedor) ||
     formatPersonName(quotation.created_by_profile) ||
@@ -758,7 +759,18 @@ export default function QuotationPDF({
 
                   <View style={styles.row}>
                     <Text style={styles.label}>Carrier:</Text>
-                    <Text style={styles.value}>{quotation.preferred_carrier || 'N/A'}</Text>
+                    <Text style={styles.value}>
+                      {activeAgentQuote?.carrier ||
+                        quotation.preferred_carrier ||
+                        'N/A'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.row}>
+                    <Text style={styles.label}>ETD:</Text>
+                    <Text style={styles.value}>
+                      {formatDateOnly(activeAgentQuote?.etd || quotation.etd)}
+                    </Text>
                   </View>
 
 
@@ -839,12 +851,20 @@ export default function QuotationPDF({
 
                   <View style={styles.row}>
                     <Text style={styles.label}>Tránsito:</Text>
-                    <Text style={styles.value}>{quotation.transit_time || 'N/A'}</Text>
+                    <Text style={styles.value}>
+                      {activeAgentQuote?.transit_time ||
+                        quotation.transit_time ||
+                        'N/A'}
+                    </Text>
                   </View>
 
                   <View style={styles.row}>
                     <Text style={styles.label}>Transbordo:</Text>
-                    <Text style={styles.value}>{quotation.transshipment || 'Directo'}</Text>
+                    <Text style={styles.value}>
+                      {activeAgentQuote?.transshipment ||
+                        quotation.transshipment ||
+                        'Directo'}
+                    </Text>
                   </View>
 
                   <View style={styles.row}>

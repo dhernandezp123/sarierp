@@ -111,6 +111,7 @@ function PricingComparisonContent() {
     moneda: 'USD',
     transit_time: '',
     valid_until: '',
+    etd: '',
   })
 
   const [pricingForm, setPricingForm] = useState({
@@ -415,6 +416,7 @@ function PricingComparisonContent() {
       moneda: quote.moneda || 'USD',
       transit_time: quote.transit_time || '',
       valid_until: quote.valid_until || '',
+      etd: quote.etd || '',
     })
 
     const { data: containerRatesData, error: containerRatesError } =
@@ -478,6 +480,7 @@ function PricingComparisonContent() {
       moneda: agentForm.moneda,
       transit_time: agentForm.transit_time,
       valid_until: agentForm.valid_until || null,
+      etd: agentForm.etd || null,
       suggested_sale: suggestedSale,
     }
 
@@ -575,6 +578,7 @@ function PricingComparisonContent() {
       moneda: 'USD',
       transit_time: '',
       valid_until: '',
+      etd: '',
     })
 
     setContainerRateLines([])
@@ -2185,20 +2189,6 @@ const profitabilityColor =
 
                     <div>
                       <label className={labelClass}>
-                        Tránsito
-                      </label>
-
-                      <input
-                        name="transit_time"
-                        placeholder="Tránsito"
-                        value={agentForm.transit_time}
-                        onChange={handleAgentChange}
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                      />
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>
                         Carrier
                       </label>
 
@@ -2209,6 +2199,20 @@ const profitabilityColor =
                         onChange={(e) =>
                           setAgentForm({ ...agentForm, carrier: e.target.value })
                         }
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>
+                        Tránsito
+                      </label>
+
+                      <input
+                        name="transit_time"
+                        placeholder="Tránsito"
+                        value={agentForm.transit_time}
+                        onChange={handleAgentChange}
+                        className={cn(fieldClass, 'mt-1 w-full')}
                       />
                     </div>
 
@@ -2260,6 +2264,20 @@ const profitabilityColor =
                         type="date"
                         name="valid_until"
                         value={agentForm.valid_until}
+                        onChange={handleAgentChange}
+                        className={cn(fieldClass, 'mt-1 w-full')}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>
+                        ETD
+                      </label>
+
+                      <input
+                        type="date"
+                        name="etd"
+                        value={agentForm.etd}
                         onChange={handleAgentChange}
                         className={cn(fieldClass, 'mt-1 w-full')}
                       />
