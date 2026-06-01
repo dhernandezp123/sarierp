@@ -498,6 +498,11 @@ export default function NewQuotationPage() {
         toast.error('Agrega al menos una línea de contenedor/unidad')
         return
       }
+
+      if (requiresCargoLines && cargoLines.length === 0) {
+        toast.error('Agrega al menos una línea de carga')
+        return
+      }
     }
 
     const today = new Date()
@@ -554,20 +559,36 @@ export default function NewQuotationPage() {
           container_qty: Number(formData.container_qty || 0),
           package_type: formData.package_type,
           package_details: formData.package_details,
-          peso_kg: submitIsMiamiFlow
+          peso_kg: submitIsMiamiFlow || requiresCargoLines
             ? totalCargoKg > 0
               ? totalCargoKg
               : null
             : Number(formData.peso_kg),
-          peso_lbs: totalCargoWeight > 0 ? totalCargoWeight : null,
+          peso_lbs:
+            submitIsMiamiFlow || requiresCargoLines
+              ? totalCargoWeight > 0
+                ? totalCargoWeight
+                : null
+              : null,
           gross_weight: Number(formData.gross_weight),
-          volumen_cbm: submitIsMiamiFlow
+          volumen_cbm: submitIsMiamiFlow || requiresCargoLines
             ? totalCargoCbm > 0
               ? totalCargoCbm
               : null
             : Number(formData.volumen_cbm),
-          volumen_ft3: totalCargoFt3 > 0 ? totalCargoFt3 : null,
-          cantidad_bultos: Number(formData.cantidad_bultos),
+          volumen_ft3:
+            submitIsMiamiFlow || requiresCargoLines
+              ? totalCargoFt3 > 0
+                ? totalCargoFt3
+                : null
+              : null,
+          cantidad_bultos:
+            submitIsMiamiFlow || requiresCargoLines
+              ? cargoLines.reduce(
+                  (sum, line) => sum + Number(line.quantity || 0),
+                  0
+                )
+              : Number(formData.cantidad_bultos),
           commodity: formData.commodity,
 
           requires_insurance: formData.requires_insurance,
@@ -592,7 +613,7 @@ export default function NewQuotationPage() {
         return
       }
 
-      if (containerLines.length > 0) {
+      if (requiresContainerLines && containerLines.length > 0) {
         const rows = containerLines.map((line) => ({
           quotation_id: quotation.id,
           container_type_id: line.container_type_id,
@@ -628,7 +649,7 @@ export default function NewQuotationPage() {
         }
       }
 
-      const cargoRows = cargoLines
+      const cargoRows = (submitIsMiamiFlow || requiresCargoLines ? cargoLines : [])
         .filter((line) => {
           return (
             Number(line.quantity || 0) > 0 &&
@@ -733,6 +754,12 @@ export default function NewQuotationPage() {
 
   const requiresContainerLines =
     formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
+
+  const requiresCargoLines =
+    formData.quote_type === 'LCL' ||
+    formData.quote_type === 'LTL' ||
+    formData.quote_type === 'Consolidado' ||
+    formData.quote_type === 'Courier'
 
   const fieldClass =
     'h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500'
@@ -2520,7 +2547,7 @@ export default function NewQuotationPage() {
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : !requiresCargoLines ? (
                 <>
                   <select
                     name="container_type"
@@ -2562,8 +2589,258 @@ export default function NewQuotationPage() {
                     }
                   />
                 </>
+              ) : null}
+
+              {requiresCargoLines && (
+                <div className="col-span-3 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">
+                        Detalle de carga
+                      </h3>
+                      <p className="text-sm text-slate-500">
+                        Ingresa paquetes, peso y dimensiones para calcular totales informativos.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCargoLines((prev) => [
+                          ...prev,
+                          {
+                            id: crypto.randomUUID(),
+                            quantity: '1',
+                            packageType: 'Caja',
+                            length: '',
+                            width: '',
+                            height: '',
+                            dimensionUnit: 'in',
+                            weight: '',
+                          },
+                        ])
+                      }
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Agregar línea
+                    </button>
+                  </div>
+
+                  {cargoLines.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
+                      Sin líneas de carga.
+                    </div>
+                  )}
+
+                  {cargoLines.length > 0 && (
+                    <div className="space-y-3">
+                      {cargoLines.map((line, idx) => {
+                        const lineFt3 = calculateLineFt3(line)
+                        const lineCbm = calculateLineCbm(line)
+                        const lineTotalLbs =
+                          Number(line.weight || 0) * Number(line.quantity || 0)
+
+                        return (
+                          <div
+                            key={line.id}
+                            className="rounded-2xl border border-slate-200 bg-white p-4"
+                          >
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <span className="text-sm font-semibold text-slate-600">
+                                Línea #{idx + 1}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setCargoLines((prev) =>
+                                    prev.filter((item) => item.id !== line.id)
+                                  )
+                                }
+                                className="text-sm font-semibold text-red-700"
+                              >
+                                Quitar
+                              </button>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-4">
+                              <select
+                                value={line.packageType}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? {
+                                            ...item,
+                                            packageType:
+                                              e.target.value as CargoDimensionLine['packageType'],
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              >
+                                <option>Caja</option>
+                                <option>Pallet</option>
+                                <option>Pieza</option>
+                              </select>
+
+                              <input
+                                type="number"
+                                min="1"
+                                placeholder="Cantidad"
+                                value={line.quantity}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, quantity: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <select
+                                value={line.dimensionUnit}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? {
+                                            ...item,
+                                            dimensionUnit:
+                                              e.target.value as CargoDimensionLine['dimensionUnit'],
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              >
+                                <option value="in">Pulgadas (in)</option>
+                                <option value="cm">Centímetros (cm)</option>
+                                <option value="mm">Milímetros (mm)</option>
+                                <option value="m">Metros (m)</option>
+                              </select>
+
+                              <input
+                                type="number"
+                                placeholder="Peso unitario lbs"
+                                value={line.weight}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, weight: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <input
+                                type="number"
+                                placeholder="Largo"
+                                value={line.length}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, length: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <input
+                                type="number"
+                                placeholder="Ancho"
+                                value={line.width}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, width: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <input
+                                type="number"
+                                placeholder="Alto"
+                                value={line.height}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, height: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                                LBS {formatNumber(lineTotalLbs, 0)} · FT3{' '}
+                                {formatNumber(lineFt3, 2)} · CBM{' '}
+                                {formatNumber(lineCbm, 3)}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        Peso KG
+                      </p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {formatNumber(totalCargoKg, 2)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        Peso LBS
+                      </p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {formatNumber(totalCargoWeight, 0)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        FT3
+                      </p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {formatNumber(totalCargoFt3, 2)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        CBM
+                      </p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {formatNumber(totalCargoCbm, 3)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
 
+              {!requiresCargoLines && (
+              <>
               <select
                 className={fieldClass}
                 value={formData.package_type}
@@ -2615,6 +2892,8 @@ export default function NewQuotationPage() {
                 onChange={handleChange}
                 className={fieldClass}
               />
+              </>
+              )}
 
               <input
                 name="commodity"
