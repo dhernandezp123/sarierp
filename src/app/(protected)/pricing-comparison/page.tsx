@@ -17,6 +17,8 @@ import {
 } from '@/src/lib/pricing-validation'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
+import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
+import { CarrierCombobox } from '@/src/components/ui/CarrierCombobox'
 import { cn } from '../../../lib/utils'
 import {
   cardClass,
@@ -75,6 +77,16 @@ type SurchargeRule = {
 }
 
 type AgentQuote = any
+
+const formatDisplayDate = (date?: string | null) => {
+  if (!date) return 'N/A'
+
+  return new Intl.DateTimeFormat('es-HN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(date))
+}
 
 function PricingComparisonContent() {
   const { profile } = useUser()
@@ -1697,6 +1709,13 @@ const profitabilityColor =
   const isSelectedQuote = (quote: AgentQuote) =>
     selectedAgentQuote?.id === quote.id || quote.is_selected
 
+  const getCarrierFilterType = () => {
+    if (selectedQuote?.tipo_transporte === 'Marítima') return 'ocean'
+    if (selectedQuote?.tipo_transporte === 'Aéreo') return 'air'
+    if (selectedQuote?.tipo_transporte === 'Terrestre') return 'ground'
+    return undefined
+  }
+
   const getAgentQuoteCardClass = (quote: AgentQuote) => {
     if (isSelectedQuote(quote)) {
       return 'border-blue-400 bg-blue-50 ring-2 ring-blue-200'
@@ -2165,6 +2184,23 @@ const profitabilityColor =
                       </div>
                     )}
 
+                    {['EXW', 'FCA'].includes(selectedQuote?.incoterm || '') && (
+                      <div>
+                        <label className={labelClass}>
+                          Costo EXW / Recolección en origen
+                        </label>
+
+                        <input
+                          type="number"
+                          name="exw_cost"
+                          value={agentForm.exw_cost}
+                          onChange={handleAgentChange}
+                          className={cn(fieldClass, 'mt-1 w-full')}
+                          placeholder="0.00"
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className={labelClass}>
                         Moneda
@@ -2192,13 +2228,14 @@ const profitabilityColor =
                         Carrier
                       </label>
 
-                      <input
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                        placeholder="Carrier / Naviera"
+                      <CarrierCombobox
                         value={agentForm.carrier}
-                        onChange={(e) =>
-                          setAgentForm({ ...agentForm, carrier: e.target.value })
+                        onChange={(code) =>
+                          setAgentForm({ ...agentForm, carrier: code })
                         }
+                        filterType={getCarrierFilterType()}
+                        className="mt-1"
+                        disabled={isPricingActionDisabled}
                       />
                     </div>
 
@@ -2396,6 +2433,9 @@ const profitabilityColor =
                                     'N/A'}{' '}
                                   días
                                 </p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                  ETD: {formatDisplayDate(activeQuote.etd)}
+                                </p>
                                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
                                   USD {formatCurrency(getAgentQuoteFinalCost(activeQuote))}
                                 </p>
@@ -2433,9 +2473,11 @@ const profitabilityColor =
                                           quote.agent ||
                                           'Agente'}
                                       </h3>
-                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                        {quote.carrier || 'Carrier N/A'} -{' '}
-                                        {quote.transit_time || quote.transit || 'N/A'} dias
+                                      <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                        <CarrierBadge code={quote.carrier} size="sm" />
+                                        <span>
+                                          {quote.transit_time || quote.transit || 'N/A'} dias
+                                        </span>
                                       </p>
                                     </div>
 
@@ -2506,16 +2548,23 @@ const profitabilityColor =
                                       <span className="font-semibold text-slate-800 dark:text-slate-200">
                                         Carrier:
                                       </span>{' '}
-                                      {quote.carrier || 'N/A'}
+                                      <CarrierBadge code={quote.carrier} size="sm" showName />
                                     </div>
 
                                     <div>
                                       <span className="font-semibold text-slate-800 dark:text-slate-200">
                                         Vigencia:
                                       </span>{' '}
-                                      {quote.valid_until ||
-                                        quote.validity_date ||
-                                        'N/A'}
+                                      {formatDisplayDate(
+                                        quote.valid_until || quote.validity_date
+                                      )}
+                                    </div>
+
+                                    <div>
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                        ETD:
+                                      </span>{' '}
+                                      {formatDisplayDate(quote.etd)}
                                     </div>
 
                                     <div>

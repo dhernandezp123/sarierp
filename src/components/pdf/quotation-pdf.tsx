@@ -584,6 +584,11 @@ export default function QuotationPDF({
 
   const customer = quotation.cliente || quotation.clientes
   const activeAgentQuote = selectedAgent
+  const freeDays =
+    activeAgentQuote?.free_days_destination ||
+    activeAgentQuote?.free_days ||
+    activeAgentQuote?.dias_libres
+  const freeDaysLabel = freeDays ? `${freeDays} días` : 'N/A'
   const vendedorNombre =
     formatPersonName(customer?.vendedor) ||
     formatPersonName(quotation.created_by_profile) ||
@@ -850,12 +855,17 @@ export default function QuotationPDF({
                   </View>
 
                   <View style={styles.row}>
-                    <Text style={styles.label}>Tránsito:</Text>
+                    <Text style={styles.label}>Días Tránsito:</Text>
                     <Text style={styles.value}>
                       {activeAgentQuote?.transit_time ||
                         quotation.transit_time ||
                         'N/A'}
                     </Text>
+                  </View>
+
+                  <View style={styles.row}>
+                    <Text style={styles.label}>Días libres:</Text>
+                    <Text style={styles.value}>{freeDaysLabel}</Text>
                   </View>
 
                   <View style={styles.row}>
