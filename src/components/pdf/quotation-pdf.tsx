@@ -36,6 +36,15 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#0F172A',
   },
+  pageFooter: {
+    position: 'absolute',
+    bottom: 10,
+    left: 24,
+    right: 24,
+    textAlign: 'center',
+    fontSize: 7,
+    color: '#64748B',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1061,7 +1070,18 @@ export default function QuotationPDF({
           </Text>
         </View>
 
-        <View style={styles.terms} break>
+        <Text
+          style={styles.pageFooter}
+          render={({ pageNumber, totalPages }) =>
+            `Sari Express S. de R.L. de C.V. | Página ${pageNumber} de ${totalPages}`
+          }
+          fixed
+        />
+
+      </Page>
+
+      <Page size="A4" style={styles.page}>
+        <View style={styles.terms}>
           <Text style={styles.sectionTitle}>TÉRMINOS Y CONDICIONES GENERALES</Text>
           {quotationTerms.map((term, index) => (
             <Text
@@ -1076,6 +1096,14 @@ export default function QuotationPDF({
             </Text>
           ))}
         </View>
+
+        <Text
+          style={styles.pageFooter}
+          render={({ pageNumber, totalPages }) =>
+            `Sari Express S. de R.L. de C.V. | Página ${pageNumber} de ${totalPages}`
+          }
+          fixed
+        />
       </Page>
     </Document>
   )
