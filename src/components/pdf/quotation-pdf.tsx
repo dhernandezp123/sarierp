@@ -302,7 +302,46 @@ const styles = StyleSheet.create({
   borderTopWidth: 1,
   borderTopColor: '#E5E7EB',
 },
+  termParagraph: {
+    marginBottom: 6,
+    textAlign: 'justify',
+  },
+  termHeading: {
+    marginTop: 4,
+    marginBottom: 5,
+    fontWeight: 'bold',
+    color: '#0F172A',
+  },
 })
+
+const quotationTerms = [
+  { type: 'paragraph', text: 'Las tarifas cotizadas están sujetas a disponibilidad de espacio, equipo, itinerarios y confirmación final por parte de la naviera, aerolínea, transportista o proveedor involucrado. Esta cotización no incluye cargos, impuestos, tasas, almacenajes, demoras, detenciones, inspecciones, multas, gastos extraordinarios o cualquier otro concepto no expresamente indicado en la presente propuesta.' },
+  { type: 'paragraph', text: 'Los tiempos de tránsito son estimados y se proporcionan únicamente como referencia. Estos pueden variar debido a factores operativos, condiciones climáticas, congestión portuaria o aeroportuaria, cambios de itinerario, transbordos, restricciones gubernamentales, huelgas, eventos de fuerza mayor u otras circunstancias fuera del control de Sari Express.' },
+  { type: 'paragraph', text: 'El cliente es responsable de proporcionar información completa, exacta y veraz sobre la mercancía, incluyendo peso, dimensiones, volumen, cantidad de bultos, clasificación, valor comercial, naturaleza de la carga y cualquier requisito especial de manejo o transporte. Cualquier diferencia detectada posteriormente podrá generar ajustes tarifarios, recotizaciones o cargos adicionales.' },
+  { type: 'heading', text: 'CONDICIONES ESPECÍFICAS' },
+  { type: 'paragraph', text: 'Las tarifas presentadas han sido calculadas con base en la información suministrada por el cliente al momento de la solicitud. Cualquier modificación en las características de la carga, origen, destino, Incoterm, cantidades, pesos, dimensiones o requerimientos especiales podrá generar ajustes en la presente cotización.' },
+  { type: 'paragraph', text: 'La disponibilidad de equipos, espacios, itinerarios, días libres, tiempos de tránsito y fechas estimadas de salida o llegada estarán sujetas a confirmación final por parte de los proveedores de transporte involucrados.' },
+  { type: 'heading', text: 'CONSIDERACIONES ADICIONALES' },
+  { type: 'paragraph', text: 'Los cargos por almacenaje, demurrage, detention, ocupación de equipo, abandono, movimientos extraordinarios, inspecciones, servicios especiales, verificaciones documentales, revisiones físicas o cualquier gasto generado por causas atribuibles al consignatario, importador, exportador o propietario de la carga no están incluidos en esta cotización y serán facturados adicionalmente cuando correspondan.' },
+  { type: 'paragraph', text: 'Los costos derivados de inspecciones realizadas por autoridades aduaneras, sanitarias, fitosanitarias, portuarias, aeroportuarias o cualquier entidad regulatoria en origen, tránsito o destino serán responsabilidad del cliente cuando dichos costos no se encuentren expresamente incluidos en la presente propuesta.' },
+  { type: 'heading', text: 'CLÁUSULAS ESPECIALES' },
+  { type: 'paragraph', text: 'Salvo indicación expresa en esta cotización, el seguro de carga no está incluido. Sari Express recomienda asegurar toda mercancía transportada nacional o internacionalmente.' },
+  { type: 'paragraph', text: 'En caso de que el cliente decida no contratar seguro de carga, acepta asumir los riesgos asociados a pérdida, robo, daño parcial o total, mojadura, contaminación, avería, incendio, eventos climáticos, avería gruesa, actos de terceros u otras contingencias inherentes al transporte y manejo de mercancías.' },
+  { type: 'paragraph', text: 'En caso de contar con una póliza propia de seguro de carga, será responsabilidad del cliente verificar que dicha cobertura sea suficiente para cubrir los riesgos asociados al transporte contratado.' },
+  { type: 'heading', text: 'FACTURACIÓN Y PAGOS' },
+  { type: 'paragraph', text: 'La presente cotización es válida únicamente durante el período indicado. La aceptación posterior a la fecha de vencimiento requerirá una nueva validación de tarifas, recargos y disponibilidad.' },
+  { type: 'paragraph', text: 'El pago deberá realizarse conforme a las condiciones de crédito o pago previamente acordadas entre las partes. La prestación del servicio podrá quedar condicionada a la recepción de pagos, anticipos, garantías o documentación requerida por Sari Express.' },
+  { type: 'paragraph', text: 'Cualquier gasto adicional generado durante la ejecución del servicio que no se encuentre contemplado en la presente cotización podrá ser facturado posteriormente al cliente, previa justificación y respaldo correspondiente.' },
+  { type: 'heading', text: 'ACEPTACIÓN DE TÉRMINOS Y CONDICIONES' },
+  { type: 'paragraph', text: 'La aceptación de esta cotización, ya sea de forma escrita, electrónica, mediante orden de servicio, confirmación por correo electrónico o instrucción de embarque, constituirá aceptación expresa de los presentes términos y condiciones.' },
+  { type: 'paragraph', text: 'Al aceptar esta propuesta, el cliente declara haber leído, comprendido y aceptado íntegramente las condiciones aquí descritas.' },
+  { type: 'heading', text: 'EXONERACIÓN DE RESPONSABILIDAD' },
+  { type: 'paragraph', text: 'Sari Express no será responsable por retrasos, pérdidas económicas indirectas, lucro cesante, interrupciones comerciales, incumplimientos de terceros, cambios regulatorios, cierres de puertos, congestión logística, cancelaciones de itinerarios, eventos climáticos, conflictos laborales, actos gubernamentales o cualquier otra situación fuera de su control razonable.' },
+  { type: 'paragraph', text: 'Asimismo, Sari Express no será responsable por daños derivados de información incorrecta, incompleta o tardía proporcionada por el cliente o por terceros relacionados con la operación.' },
+  { type: 'heading', text: 'ACTUALIZACIONES Y CAMBIOS' },
+  { type: 'paragraph', text: 'Las tarifas, condiciones operativas y requisitos documentales podrán ser modificados por navieras, aerolíneas, autoridades gubernamentales, terminales, proveedores de transporte o cualquier tercero involucrado en la cadena logística.' },
+  { type: 'paragraph', text: 'Sari Express se reserva el derecho de actualizar o modificar las condiciones comerciales de futuras cotizaciones cuando las circunstancias operativas, regulatorias o de mercado así lo requieran, sin que ello afecte los servicios previamente confirmados bajo aceptación expresa.' },
+]
 
 function formatMoney(value: any) {
   const number = Number(value || 0)
@@ -1022,11 +1061,20 @@ export default function QuotationPDF({
           </Text>
         </View>
 
-        <View style={styles.terms} wrap={false}>
-          <Text style={styles.sectionTitle}>Términos y Condiciones</Text>
-          <Text>
-            {'Tarifa sujeta a disponibilidad de espacio, equipo y confirmación final del carrier. No incluye cargos no especificados, impuestos, almacenajes, demoras, inspecciones, multas o gastos extraordinarios. Los tiempos de tránsito son estimados y pueden variar por condiciones operativas. Sari Express no asume responsabilidad alguna por demoras, detenciones o inspecciones de carga efectuadas por autoridades competentes en origen o destino. El cliente es responsable de proporcionar información precisa y completa sobre la carga, así como de cumplir con regulaciones aduaneras y de transporte aplicables. Esta cotización es válida por el período indicado. El pago debe realizarse según los términos acordados para garantizar la reserva del servicio. Al aceptar esta cotización, el cliente acepta estas condiciones y comprende que tales demoras no constituyen incumplimiento contractual. En caso de contar con seguro de carga con su propia aseguradora, sugerimos verificar la cobertura de posibles demoras o contingencias logísticas. En todo momento, haremos lo posible por mitigar cualquier impacto y mantenerlo informado.'}
-          </Text>
+        <View style={styles.terms} break>
+          <Text style={styles.sectionTitle}>TÉRMINOS Y CONDICIONES GENERALES</Text>
+          {quotationTerms.map((term, index) => (
+            <Text
+              key={index}
+              style={
+                term.type === 'heading'
+                  ? styles.termHeading
+                  : styles.termParagraph
+              }
+            >
+              {term.text}
+            </Text>
+          ))}
         </View>
       </Page>
     </Document>

@@ -114,6 +114,14 @@ export const CARRIERS: Carrier[] = [
     text: "#FFFFFF",
     useTailwind: false,
   },
+  {
+    code: "SVL",
+    name: "ServiPort Marine",
+    type: "ocean",
+    bg: "#FFB500",     // Dorado UPS
+    text: "#FFFFFF",
+    useTailwind: false,
+  },
 
   // ─── Air ──────────────────────────────────────────────────────────────────
 

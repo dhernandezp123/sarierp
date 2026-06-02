@@ -1,4 +1,9 @@
 type PricingValidationInput = {
+  selectedQuote?: {
+    quote_type?: string | null
+    tipo_transporte?: string | null
+    service_product?: string | null
+  } | null
   selectedAgentQuote?: {
     id?: string
     agent_name?: string | null
@@ -23,6 +28,35 @@ type PricingValidationInput = {
   }>
 }
 
+const normalizeText = (value?: string | null) =>
+  (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+export function requiresCarrier(
+  quote?: PricingValidationInput['selectedQuote']
+) {
+  if (!quote) return true
+
+  const quoteType = normalizeText(quote.quote_type)
+  const serviceProduct = quote.service_product || ''
+
+  if (serviceProduct === 'miami_lcl' || serviceProduct === 'miami_air') {
+    return false
+  }
+
+  if (quoteType === 'fcl') {
+    return true
+  }
+
+  if (quoteType === 'lcl') {
+    return false
+  }
+
+  return false
+}
+
 export function calculateGrossProfitPercent({
   saleTotal,
   costTotal,
@@ -36,6 +70,7 @@ export function calculateGrossProfitPercent({
 }
 
 export function validatePricingCompleteness({
+  selectedQuote,
   selectedAgentQuote,
   pricingItems = [],
 }: PricingValidationInput) {
@@ -56,7 +91,7 @@ export function validatePricingCompleteness({
     errors.push('La tarifa seleccionada no tiene agente.')
   }
 
-  if (!selectedAgentQuote?.carrier) {
+  if (requiresCarrier(selectedQuote) && !selectedAgentQuote?.carrier) {
     errors.push('La tarifa seleccionada no tiene carrier/naviera.')
   }
 

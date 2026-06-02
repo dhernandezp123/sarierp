@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Pencil, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -10,6 +10,7 @@ import { useUser } from '../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
+import { serviceProducts } from '@/src/lib/quotation-products'
 import { canTransition } from '@/src/lib/quotation-status'
 import {
   calculateGrossProfitPercent,
@@ -64,7 +65,46 @@ type CargoLine = {
 
 type ClientRate = {
   rate_code: string
+  rate_label: string
+  category: string
+  unit: string | null
+  currency: string | null
   amount: number
+  notes: string | null
+  is_active?: boolean | null
+}
+
+const optionalClientRateCodes = [
+  'fumigacion',
+  'pallet_embalaje',
+  'segregacion',
+  'in_and_out',
+  'equipo_especial',
+  'oversize',
+  'embalaje_madera',
+  'hazmat_imo_charge_line',
+  'declaracion_imo',
+  'certificado_imo',
+  'bonded_fcl_proveedor',
+  'bonded_documentacion_7512',
+] as const
+
+const optionalClientRateConfig: Record<
+  (typeof optionalClientRateCodes)[number],
+  { itemType: string; taxable: boolean }
+> = {
+  fumigacion: { itemType: 'origin_charge', taxable: false },
+  pallet_embalaje: { itemType: 'origin_charge', taxable: false },
+  segregacion: { itemType: 'origin_charge', taxable: false },
+  in_and_out: { itemType: 'origin_charge', taxable: false },
+  equipo_especial: { itemType: 'origin_charge', taxable: false },
+  oversize: { itemType: 'origin_charge', taxable: false },
+  embalaje_madera: { itemType: 'origin_charge', taxable: false },
+  hazmat_imo_charge_line: { itemType: 'origin_charge', taxable: false },
+  declaracion_imo: { itemType: 'origin_charge', taxable: false },
+  certificado_imo: { itemType: 'origin_charge', taxable: false },
+  bonded_fcl_proveedor: { itemType: 'origin_charge', taxable: false },
+  bonded_documentacion_7512: { itemType: 'origin_charge', taxable: false },
 }
 
 type SurchargeRule = {
@@ -90,6 +130,7 @@ const formatDisplayDate = (date?: string | null) => {
 
 function PricingComparisonContent() {
   const { profile } = useUser()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const quoteId = searchParams.get('quotation') || searchParams.get('quoteId')
   const userRole = profile?.rol
@@ -295,7 +336,7 @@ function PricingComparisonContent() {
 
     const { data: ratesData } = await supabase
       .from('client_rates')
-      .select('rate_code, amount')
+      .select('rate_code, rate_label, category, unit, currency, amount, notes, is_active')
       .eq('cliente_id', quote.cliente_id)
       .eq('is_active', true)
 
@@ -1432,6 +1473,7 @@ function PricingComparisonContent() {
       : null
 
     const validation = validatePricingCompleteness({
+      selectedQuote,
       selectedAgentQuote: validationAgentQuote,
       pricingItems,
     })
@@ -1709,6 +1751,35 @@ const profitabilityColor =
   const isSelectedQuote = (quote: AgentQuote) =>
     selectedAgentQuote?.id === quote.id || quote.is_selected
 
+  const normalizeText = (value?: string | null) =>
+    (value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+
+  const getServiceProductLabel = (serviceProduct?: string | null) => {
+    return (
+      serviceProducts.find((item) => item.value === serviceProduct)?.label ||
+      serviceProduct ||
+      'N/A'
+    )
+  }
+
+  const shouldShowCarrierInput = (quote?: any) => {
+    if (!quote) return false
+
+    const quoteType = normalizeText(quote.quote_type)
+    if (quote.service_product === 'miami_lcl' || quote.service_product === 'miami_air') {
+      return false
+    }
+
+    if (quoteType === 'fcl') return true
+
+    return false
+  }
+
+  const showCarrierInput = shouldShowCarrierInput(selectedQuote)
+
   const getCarrierFilterType = () => {
     if (selectedQuote?.tipo_transporte === 'Marítima') return 'ocean'
     if (selectedQuote?.tipo_transporte === 'Aéreo') return 'air'
@@ -1780,6 +1851,16 @@ const profitabilityColor =
     selectedQuote?.status === 'Perdida'
   const isPricingActionDisabled = !canManagePricing || isLockedQuote
 
+  const optionalClientRates = clientRates.filter((rate) => {
+    return (
+      optionalClientRateCodes.includes(
+        rate.rate_code as (typeof optionalClientRateCodes)[number]
+      ) &&
+      Number(rate.amount || 0) > 0 &&
+      rate.is_active !== false
+    )
+  })
+
   const lockedQuoteMessage =
     'Esta cotización ya fue enviada, ganada o perdida. La edición está bloqueada para proteger el historial comercial.'
 
@@ -1796,6 +1877,63 @@ const profitabilityColor =
 
     toast.error(lockedQuoteMessage)
     return false
+  }
+
+  const addOptionalClientRate = async (rate: ClientRate) => {
+    if (!selectedQuote) {
+      toast.error('Selecciona una cotizacion primero')
+      return
+    }
+
+    if (!ensureQuoteIsEditable()) return
+
+    if (pricingItems.some((item) => item.description === rate.rate_label)) {
+      toast.error('Este cargo ya fue agregado')
+      return
+    }
+
+    const config =
+      optionalClientRateConfig[
+        rate.rate_code as (typeof optionalClientRateCodes)[number]
+      ]
+
+    if (!config) {
+      toast.error('Este cargo no esta configurado como opcional')
+      return
+    }
+
+    const saleAmount = Number(rate.amount || 0)
+    const taxAmount = config.taxable ? saleAmount * 0.15 : 0
+    const totalAmount = saleAmount + taxAmount
+
+    const { error } = await supabase.from('pricing_items').insert([
+      {
+        quotation_id: selectedQuote.id,
+        item_type: config.itemType,
+        description: rate.rate_label,
+        cost_amount: 0,
+        sale_amount: saleAmount,
+        quantity: 1,
+        taxable: config.taxable,
+        tax_rate: config.taxable ? 15 : 0,
+        tax_amount: taxAmount,
+        total_amount: totalAmount,
+        currency: rate.currency || 'USD',
+        supplier: 'Sari Express',
+        notes:
+          rate.notes ||
+          'Cargo opcional agregado desde tarifas del cliente',
+        created_by: profile?.id,
+      },
+    ])
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    toast.success('Cargo opcional agregado')
+    await fetchPricingItems(selectedQuote.id)
   }
 
   const requestChangeReason = async (changeType: string) => {
@@ -1904,16 +2042,28 @@ const profitabilityColor =
             </CardHeader>
 
             <CardContent>
-              <CotizacionCombobox
-                quotations={quotations}
-                value={selectedQuote?.id || ''}
-                onChange={(id) => {
-                  const quote = quotations.find((q) => q.id === id)
-                  if (quote) handleSelectQuote(quote)
-                }}
-                placeholder="Buscar por cotizacion, cliente, origen o destino..."
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                <CotizacionCombobox
+                  quotations={quotations}
+                  value={selectedQuote?.id || ''}
+                  onChange={(id) => {
+                    const quote = quotations.find((q) => q.id === id)
+                    if (quote) handleSelectQuote(quote)
+                  }}
+                  placeholder="Buscar por cotizacion, cliente, origen o destino..."
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+
+                {selectedQuote?.id && (
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/quotations/${selectedQuote.id}`)}
+                    className={secondaryButtonClass}
+                  >
+                    Ver detalle de cotización
+                  </button>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -1954,6 +2104,27 @@ const profitabilityColor =
                       <p className="text-sm text-slate-500 dark:text-slate-400">Target</p>
                       <p className="font-semibold text-slate-900 dark:text-white">
                         USD {selectedQuote.target_rate || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Tipo de cotización</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.quote_type || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Transporte</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.tipo_transporte || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">Producto / Servicio</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {getServiceProductLabel(selectedQuote.service_product)}
                       </p>
                     </div>
 
@@ -2223,21 +2394,23 @@ const profitabilityColor =
                       </h3>
                     </div>
 
-                    <div>
-                      <label className={labelClass}>
-                        Carrier
-                      </label>
+                    {showCarrierInput && (
+                      <div>
+                        <label className={labelClass}>
+                          Carrier
+                        </label>
 
-                      <CarrierCombobox
-                        value={agentForm.carrier}
-                        onChange={(code) =>
-                          setAgentForm({ ...agentForm, carrier: code })
-                        }
-                        filterType={getCarrierFilterType()}
-                        className="mt-1"
-                        disabled={isPricingActionDisabled}
-                      />
-                    </div>
+                        <CarrierCombobox
+                          value={agentForm.carrier}
+                          onChange={(code) =>
+                            setAgentForm({ ...agentForm, carrier: code })
+                          }
+                          filterType={getCarrierFilterType()}
+                          className="mt-1"
+                          disabled={isPricingActionDisabled}
+                        />
+                      </div>
+                    )}
 
                     <div>
                       <label className={labelClass}>
@@ -2427,7 +2600,9 @@ const profitabilityColor =
                             {activeQuote ? (
                               <>
                                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                  {activeQuote.carrier || 'Carrier N/A'} •{' '}
+                                  {showCarrierInput && activeQuote.carrier
+                                    ? `${activeQuote.carrier} · `
+                                    : ''}
                                   {activeQuote.transit_time ||
                                     activeQuote.transit ||
                                     'N/A'}{' '}
@@ -2474,7 +2649,9 @@ const profitabilityColor =
                                           'Agente'}
                                       </h3>
                                       <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                                        <CarrierBadge code={quote.carrier} size="sm" />
+                                        {showCarrierInput && quote.carrier && (
+                                          <CarrierBadge code={quote.carrier} size="sm" />
+                                        )}
                                         <span>
                                           {quote.transit_time || quote.transit || 'N/A'} dias
                                         </span>
@@ -2544,12 +2721,14 @@ const profitabilityColor =
 
                                   <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
                                     <div className="grid grid-cols-2 gap-3 text-xs text-slate-500 dark:text-slate-400">
-                                    <div>
-                                      <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                        Carrier:
-                                      </span>{' '}
-                                      <CarrierBadge code={quote.carrier} size="sm" showName />
-                                    </div>
+                                    {showCarrierInput && quote.carrier && (
+                                      <div>
+                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                          Carrier:
+                                        </span>{' '}
+                                        <CarrierBadge code={quote.carrier} size="sm" showName />
+                                      </div>
+                                    )}
 
                                     <div>
                                       <span className="font-semibold text-slate-800 dark:text-slate-200">
@@ -2985,6 +3164,60 @@ const profitabilityColor =
                       <h3 className="text-lg font-semibold">
                       Líneas de Cotización
                       </h3>
+                    )}
+
+                    {optionalClientRates.length > 0 && (
+                      <section className={cn(cardClass, 'mb-4 p-5')}>
+                        <div className="mb-4">
+                          <h3 className="text-lg font-semibold text-slate-950 dark:text-white">
+                            Cargos opcionales del cliente
+                          </h3>
+                          <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Agrega manualmente cargos configurados en el perfil del cliente.
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          {optionalClientRates.map((rate) => {
+                            const alreadyAdded = pricingItems.some(
+                              (item) => item.description === rate.rate_label
+                            )
+                            const currency = rate.currency || 'USD'
+
+                            return (
+                              <div
+                                key={rate.rate_code}
+                                className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
+                              >
+                                <div>
+                                  <p className="font-semibold text-slate-900 dark:text-white">
+                                    {rate.rate_label}
+                                  </p>
+                                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    {rate.category || 'Cargo opcional'}
+                                    {rate.unit ? ` · ${rate.unit}` : ''}
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                                    {currency} {formatCurrency(Number(rate.amount || 0))}
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => addOptionalClientRate(rate)}
+                                    disabled={isPricingActionDisabled || alreadyAdded}
+                                    className={secondaryButtonClass}
+                                  >
+                                    {alreadyAdded ? 'Agregado' : 'Agregar'}
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </section>
                     )}
 
                     {pricingItems.length === 0 ? (
