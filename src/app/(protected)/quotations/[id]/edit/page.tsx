@@ -10,12 +10,42 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { canTransition } from '@/src/lib/quotation-status'
 import {
+  cardClass,
+  fieldClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '@/src/lib/ui-classes'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+
+const formatNumber = (value: number, decimals = 2) =>
+  Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+
+type CargoDimensionLine = {
+  id: string
+  quantity: string
+  packageType: 'Caja' | 'Pallet' | 'Pieza'
+  length: string
+  width: string
+  height: string
+  dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
+  weight: string
+}
+
+type ContainerLine = {
+  container_type_id: string
+  container_type_name: string
+  quantity: number
+  notes: string | null
+}
 
 export default function EditQuotationPage() {
   const { profile, loading: userLoading } = useUser()
@@ -44,8 +74,10 @@ export default function EditQuotationPage() {
   const [ports, setPorts] = useState<any[]>([])
   const [packageTypes, setPackageTypes] = useState<any[]>([])
   const [containerTypes, setContainerTypes] = useState<any[]>([])
-  const [containerLines, setContainerLines] = useState<any[]>([])
-  const [editingContainerLineId, setEditingContainerLineId] = useState<string | null>(null)
+  const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
+  const [cargoLines, setCargoLines] = useState<CargoDimensionLine[]>([])
+  const [editingContainerLineIndex, setEditingContainerLineIndex] =
+    useState<number | null>(null)
   const [containerLineForm, setContainerLineForm] = useState({
     container_type_id: '',
     container_type_name: '',
@@ -55,6 +87,7 @@ export default function EditQuotationPage() {
 
   const [formData, setFormData] = useState({
     status: '',
+    service_product: '',
     quote_type: '',
     valid_until: '',
 
@@ -82,6 +115,7 @@ export default function EditQuotationPage() {
     commercial_value: '',
 
     observaciones: '',
+    client_notes: '',
   })
 
   useEffect(() => {
@@ -97,6 +131,7 @@ export default function EditQuotationPage() {
     if (params.id) {
       fetchQuotation(params.id as string)
       fetchContainerLines(params.id as string)
+      fetchCargoLines(params.id as string)
     }
   }, [params.id, userLoading, canEditQuotes])
 
@@ -112,7 +147,7 @@ export default function EditQuotationPage() {
 
   const AccessDenied = () => (
     <>
-      <div className="rounded-2xl border bg-white p-8">
+      <div className={cardClass}>
         <h1 className="text-2xl font-bold">
           Acceso restringido
         </h1>
@@ -176,6 +211,7 @@ export default function EditQuotationPage() {
 
     setFormData({
       status: data.status || '',
+      service_product: data.service_product || '',
       quote_type: data.quote_type || '',
       valid_until: data.valid_until || '',
 
@@ -203,6 +239,7 @@ export default function EditQuotationPage() {
       commercial_value: data.commercial_value?.toString() || '',
 
       observaciones: data.observaciones || '',
+      client_notes: data.client_notes || '',
     })
 
     setLoading(false)
@@ -220,7 +257,40 @@ export default function EditQuotationPage() {
       return
     }
 
-    setContainerLines(data || [])
+    setContainerLines(
+      (data || []).map((line) => ({
+        container_type_id: line.container_type_id || '',
+        container_type_name: line.container_type_name || '',
+        quantity: Number(line.quantity || 1),
+        notes: line.notes || null,
+      }))
+    )
+  }
+
+  const fetchCargoLines = async (quotationId: string) => {
+    const { data, error } = await supabase
+      .from('quotation_cargo_lines')
+      .select('*')
+      .eq('quotation_id', quotationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    setCargoLines(
+      (data || []).map((line) => ({
+        id: line.id || crypto.randomUUID(),
+        quantity: String(line.quantity || 1),
+        packageType: line.package_type || 'Caja',
+        length: line.length ? String(line.length) : '',
+        width: line.width ? String(line.width) : '',
+        height: line.height ? String(line.height) : '',
+        dimensionUnit: line.dimension_unit || 'in',
+        weight: line.weight_lbs ? String(line.weight_lbs) : '',
+      }))
+    )
   }
 
   const handleChange = (
@@ -237,73 +307,106 @@ export default function EditQuotationPage() {
     })
   }
 
-  const saveContainerLine = async () => {
-    if (!params.id) return
-
-    if (!containerLineForm.container_type_name) {
-      toast.error('Debes seleccionar un tipo de contenedor / unidad')
-      return
-    }
-
-    const payload = {
-      quotation_id: params.id as string,
-      container_type_id: containerLineForm.container_type_id || null,
-      container_type_name: containerLineForm.container_type_name,
-      quantity: Number(containerLineForm.quantity || 1),
-      notes: containerLineForm.notes,
-    }
-
-    const { error } = editingContainerLineId
-      ? await supabase
-          .from('quotation_containers')
-          .update(payload)
-          .eq('id', editingContainerLineId)
-      : await supabase
-          .from('quotation_containers')
-          .insert(payload)
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-
-    setEditingContainerLineId(null)
-
+  const resetContainerLineForm = () => {
     setContainerLineForm({
       container_type_id: '',
       container_type_name: '',
       quantity: '1',
       notes: '',
     })
-
-    await fetchContainerLines(params.id as string)
   }
 
-  const editContainerLine = (line: any) => {
+  const saveContainerLine = () => {
+    if (!containerLineForm.container_type_id) {
+      toast.error('Selecciona un tipo de contenedor')
+      return
+    }
+
+    const selectedContainer = containerTypes.find(
+      (container) => container.id === containerLineForm.container_type_id
+    )
+
+    const line = {
+      container_type_id: containerLineForm.container_type_id,
+      container_type_name:
+        selectedContainer?.name || containerLineForm.container_type_name,
+      quantity: Number(containerLineForm.quantity || 1),
+      notes: containerLineForm.notes || null,
+    }
+
+    if (editingContainerLineIndex !== null) {
+      setContainerLines((prev) =>
+        prev.map((item, index) =>
+          index === editingContainerLineIndex ? line : item
+        )
+      )
+      setEditingContainerLineIndex(null)
+    } else {
+      setContainerLines((prev) => [...prev, line])
+    }
+
+    resetContainerLineForm()
+  }
+
+  const editContainerLine = (index: number) => {
+    const line = containerLines[index]
+    if (!line) return
+
     setContainerLineForm({
       container_type_id: line.container_type_id || '',
       container_type_name: line.container_type_name || '',
       quantity: String(line.quantity || 1),
       notes: line.notes || '',
     })
-
-    setEditingContainerLineId(line.id)
+    setEditingContainerLineIndex(index)
   }
 
-  const deleteContainerLine = async (lineId: string) => {
-    if (!params.id) return
+  const deleteContainerLine = (index: number) => {
+    setContainerLines((prev) =>
+      prev.filter((_, itemIndex) => itemIndex !== index)
+    )
 
-    const { error } = await supabase
-      .from('quotation_containers')
-      .delete()
-      .eq('id', lineId)
+    if (editingContainerLineIndex === index) {
+      setEditingContainerLineIndex(null)
+      resetContainerLineForm()
+    }
+  }
 
-    if (error) {
-      toast.error(error.message)
-      return
+  const getCbmPerUnit = (line: CargoDimensionLine) => {
+    const length = Number(line.length || 0)
+    const width = Number(line.width || 0)
+    const height = Number(line.height || 0)
+
+    if (!length || !width || !height) return 0
+
+    if (line.dimensionUnit === 'in') {
+      return (length * width * height) / 61023.7441
     }
 
-    await fetchContainerLines(params.id as string)
+    if (line.dimensionUnit === 'cm') {
+      return (length * width * height) / 1_000_000
+    }
+
+    if (line.dimensionUnit === 'mm') {
+      return (length * width * height) / 1_000_000_000
+    }
+
+    if (line.dimensionUnit === 'm') {
+      return length * width * height
+    }
+
+    return 0
+  }
+
+  const calculateLineCbm = (line: CargoDimensionLine) => {
+    const quantity = Number(line.quantity || 0)
+    if (!quantity) return 0
+
+    return getCbmPerUnit(line) * quantity
+  }
+
+  const calculateLineFt3 = (line: CargoDimensionLine) => {
+    return calculateLineCbm(line) * 35.3147
   }
 
   const handleSendToPricing = async () => {
@@ -395,63 +498,183 @@ export default function EditQuotationPage() {
       return
     }
 
-    const requiresContainerLines =
+    const saveRequiresContainerLines =
       formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
+    const saveRequiresLooseCargo =
+      formData.quote_type === 'LCL' ||
+      formData.quote_type === 'LTL' ||
+      formData.quote_type === 'Consolidado' ||
+      formData.quote_type === 'Courier' ||
+      formData.service_product === 'miami_lcl' ||
+      formData.service_product === 'miami_air'
 
-    if (requiresContainerLines && containerLines.length === 0) {
+    if (saveRequiresContainerLines && containerLines.length === 0) {
       toast.error('Debes agregar al menos un contenedor/unidad')
       return
     }
 
+    if (saveRequiresLooseCargo && cargoLines.length === 0) {
+      toast.error('Debes agregar al menos una línea de carga')
+      return
+    }
+
+    const quotationId = params.id as string
+
     setSaving(true)
 
-    const { error } = await supabase
-      .from('quotations')
-      .update({
-        quote_type: formData.quote_type,
-        valid_until: formData.valid_until || null,
+    try {
+      const { error } = await supabase
+        .from('quotations')
+        .update({
+          quote_type: formData.quote_type,
+          valid_until: formData.valid_until || null,
 
-        incoterm: formData.incoterm,
-        tipo_transporte: formData.tipo_transporte,
+          incoterm: formData.incoterm,
+          tipo_transporte: formData.tipo_transporte,
 
-        origen: formData.origen,
-        destino: formData.destino,
-        puerto_origen: formData.puerto_origen,
-        puerto_destino: formData.puerto_destino,
-        pickup_address: formData.pickup_address,
+          origen: formData.origen,
+          destino: formData.destino,
+          puerto_origen: formData.puerto_origen,
+          puerto_destino: formData.puerto_destino,
+          pickup_address: formData.pickup_address,
 
-        preferred_carrier: formData.preferred_carrier,
+          preferred_carrier: formData.preferred_carrier,
 
-        container_type: formData.container_type,
-        package_type: formData.package_type,
-        package_details: formData.package_details,
-        peso_kg: Number(formData.peso_kg || 0),
-        gross_weight: Number(formData.gross_weight || 0),
-        volumen_cbm: Number(formData.volumen_cbm || 0),
-        cantidad_bultos: Number(formData.cantidad_bultos || 0),
-        commodity: formData.commodity,
+          container_type: formData.container_type,
+          package_type: formData.package_type,
+          package_details: formData.package_details,
+          peso_kg: saveRequiresLooseCargo
+            ? totalCargoKg > 0
+              ? totalCargoKg
+              : null
+            : Number(formData.peso_kg || 0),
+          peso_lbs: saveRequiresLooseCargo
+            ? totalCargoWeight > 0
+              ? totalCargoWeight
+              : null
+            : null,
+          gross_weight: Number(formData.gross_weight || 0),
+          volumen_cbm: saveRequiresLooseCargo
+            ? totalCargoCbm > 0
+              ? totalCargoCbm
+              : null
+            : Number(formData.volumen_cbm || 0),
+          volumen_ft3: saveRequiresLooseCargo
+            ? totalCargoFt3 > 0
+              ? totalCargoFt3
+              : null
+            : null,
+          cantidad_bultos: saveRequiresLooseCargo
+            ? totalCargoPackages
+            : Number(formData.cantidad_bultos || 0),
+          commodity: formData.commodity,
 
-        requires_insurance: formData.requires_insurance,
-        commercial_value: Number(formData.commercial_value || 0),
+          requires_insurance: formData.requires_insurance,
+          commercial_value: Number(formData.commercial_value || 0),
 
-        observaciones: formData.observaciones,
-      })
-      .eq('id', params.id as string)
+          observaciones: formData.observaciones,
+          client_notes: isMiamiFlow ? formData.client_notes || null : null,
+        })
+        .eq('id', quotationId)
 
-    setSaving(false)
+      if (error) {
+        toast.error(error.message)
+        return
+      }
 
-    if (error) {
-      toast.error(error.message)
-      return
+      if (saveRequiresContainerLines) {
+        const { error: cargoDeleteError } = await supabase
+          .from('quotation_cargo_lines')
+          .delete()
+          .eq('quotation_id', quotationId)
+
+        if (cargoDeleteError) {
+          toast.error(cargoDeleteError.message)
+          return
+        }
+
+        const { error: containerDeleteError } = await supabase
+          .from('quotation_containers')
+          .delete()
+          .eq('quotation_id', quotationId)
+
+        if (containerDeleteError) {
+          toast.error(containerDeleteError.message)
+          return
+        }
+
+        const rows = containerLines.map((line) => ({
+          quotation_id: quotationId,
+          container_type_id: line.container_type_id,
+          container_type_name: line.container_type_name,
+          quantity: Number(line.quantity || 1),
+          notes: line.notes || null,
+        }))
+
+        const { error: containerInsertError } = await supabase
+          .from('quotation_containers')
+          .insert(rows)
+
+        if (containerInsertError) {
+          toast.error(containerInsertError.message)
+          return
+        }
+      }
+
+      if (saveRequiresLooseCargo) {
+        const { error: containerDeleteError } = await supabase
+          .from('quotation_containers')
+          .delete()
+          .eq('quotation_id', quotationId)
+
+        if (containerDeleteError) {
+          toast.error(containerDeleteError.message)
+          return
+        }
+
+        const { error: cargoDeleteError } = await supabase
+          .from('quotation_cargo_lines')
+          .delete()
+          .eq('quotation_id', quotationId)
+
+        if (cargoDeleteError) {
+          toast.error(cargoDeleteError.message)
+          return
+        }
+
+        const rows = cargoLines.map((line) => ({
+          quotation_id: quotationId,
+          package_type: line.packageType,
+          quantity: Number(line.quantity || 0),
+          length: Number(line.length || 0),
+          width: Number(line.width || 0),
+          height: Number(line.height || 0),
+          dimension_unit: line.dimensionUnit,
+          weight_lbs: Number(line.weight || 0),
+          ft3: calculateLineFt3(line),
+          cbm: calculateLineCbm(line),
+        }))
+
+        const { error: cargoInsertError } = await supabase
+          .from('quotation_cargo_lines')
+          .insert(rows)
+
+        if (cargoInsertError) {
+          toast.error(cargoInsertError.message)
+          return
+        }
+      }
+
+      toast.success('Cambios guardados correctamente')
+
+      if (formData.status === 'Borrador') {
+        setSendPricingDialogOpen(true)
+        return
+      }
+      router.push(`/quotations/${params.id}`)
+    } finally {
+      setSaving(false)
     }
-
-    toast.success('Cambios guardados correctamente')
-
-    if (formData.status === 'Borrador') {
-      setSendPricingDialogOpen(true)
-      return
-    }
-    router.push(`/quotations/${params.id}`)
   }
 
   if (userLoading || loading) {
@@ -487,11 +710,37 @@ export default function EditQuotationPage() {
   const requiresContainerLines =
     formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
 
+  const isMiamiFlow =
+    formData.service_product === 'miami_lcl' ||
+    formData.service_product === 'miami_air'
+
   const requiresLooseCargo =
     formData.quote_type === 'LCL' ||
     formData.quote_type === 'LTL' ||
     formData.quote_type === 'Consolidado' ||
-    formData.quote_type === 'Courier'
+    formData.quote_type === 'Courier' ||
+    isMiamiFlow
+
+  const totalCargoFt3 = cargoLines.reduce(
+    (sum, line) => sum + calculateLineFt3(line),
+    0
+  )
+
+  const totalCargoCbm = cargoLines.reduce(
+    (sum, line) => sum + calculateLineCbm(line),
+    0
+  )
+
+  const totalCargoWeight = cargoLines.reduce(
+    (sum, line) => sum + Number(line.weight || 0) * Number(line.quantity || 0),
+    0
+  )
+
+  const totalCargoKg = totalCargoWeight / 2.20462
+  const totalCargoPackages = cargoLines.reduce(
+    (sum, line) => sum + Number(line.quantity || 0),
+    0
+  )
 
   return (
     <>
@@ -503,7 +752,8 @@ export default function EditQuotationPage() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border p-8 space-y-8">
+        <div className={cardClass}>
+          <div className="space-y-8">
           {!canEditQuotes && (
             <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               Modo lectura: tu rol no tiene permisos para editar cotizaciones.
@@ -525,7 +775,7 @@ export default function EditQuotationPage() {
                     quote_type: '',
                   })
                 }
-                className="border p-3 rounded"
+                className={fieldClass}
               >
                 <option value="">Transporte</option>
                 <option value="Aéreo">Aéreo</option>
@@ -538,7 +788,7 @@ export default function EditQuotationPage() {
                 value={formData.quote_type || ''}
                 onChange={handleChange}
                 disabled={!formData.tipo_transporte}
-                className="border p-3 rounded"
+                className={fieldClass}
               >
                 <option value="">Tipo de cotización</option>
 
@@ -554,14 +804,14 @@ export default function EditQuotationPage() {
                 name="valid_until"
                 value={formData.valid_until || ''}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               <select
                 name="incoterm"
                 value={formData.incoterm || ''}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               >
                 <option value="">Incoterm</option>
                 <option value="EXW">EXW</option>
@@ -580,17 +830,17 @@ export default function EditQuotationPage() {
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
             <div className="grid grid-cols-2 gap-4">
-              <input list="countries" name="origen" placeholder="Origen" value={formData.origen || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input list="countries" name="destino" placeholder="Destino" value={formData.destino || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input list="originPorts" name="puerto_origen" placeholder="Puerto origen" value={formData.puerto_origen || ''} onChange={handleChange} className="border p-3 rounded" />
-              <input list="destinationPorts" name="puerto_destino" placeholder="Puerto destino" value={formData.puerto_destino || ''} onChange={handleChange} className="border p-3 rounded" />
+              <input list="countries" name="origen" placeholder="Origen" value={formData.origen || ''} onChange={handleChange} className={fieldClass} />
+              <input list="countries" name="destino" placeholder="Destino" value={formData.destino || ''} onChange={handleChange} className={fieldClass} />
+              <input list="originPorts" name="puerto_origen" placeholder="Puerto origen" value={formData.puerto_origen || ''} onChange={handleChange} className={fieldClass} />
+              <input list="destinationPorts" name="puerto_destino" placeholder="Puerto destino" value={formData.puerto_destino || ''} onChange={handleChange} className={fieldClass} />
 
               <input
                 name="preferred_carrier"
                 placeholder="Naviera de preferencia"
                 value={formData.preferred_carrier || ''}
                 onChange={handleChange}
-                className="border p-3 rounded"
+                className={fieldClass}
               />
 
               {formData.incoterm === 'EXW' && (
@@ -599,7 +849,7 @@ export default function EditQuotationPage() {
                   placeholder="Dirección de recolección EXW"
                   value={formData.pickup_address || ''}
                   onChange={handleChange}
-                  className="border p-3 rounded col-span-2 h-24"
+                  className={fieldClass}
                 />
               )}
             </div>
@@ -614,42 +864,11 @@ export default function EditQuotationPage() {
                 placeholder="Commodity/Descripción de la carga *"
                 value={formData.commodity || ''}
                 onChange={handleChange}
-                className="border p-3 rounded md:col-span-3 w-full"
+                className={fieldClass}
               />
 
-              {requiresLooseCargo && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <select
-                    name="package_type"
-                    value={formData.package_type || ''}
-                    onChange={handleChange}
-                    className="border p-3 rounded"
-                  >
-                    <option value="">Tipo de empaque</option>
-
-                    {packageTypes.map((pkg) => (
-                      <option key={pkg.id} value={pkg.name}>
-                        {pkg.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input name="peso_kg" placeholder="Peso KG" value={formData.peso_kg || ''} onChange={handleChange} className="border p-3 rounded" />
-                  <input name="gross_weight" placeholder="Peso bruto" value={formData.gross_weight || ''} onChange={handleChange} className="border p-3 rounded" />
-                  <input name="volumen_cbm" placeholder="CBM" value={formData.volumen_cbm || ''} onChange={handleChange} className="border p-3 rounded" />
-                  <input name="cantidad_bultos" placeholder="Bultos" value={formData.cantidad_bultos || ''} onChange={handleChange} className="border p-3 rounded" />
-                  <textarea
-                    name="package_details"
-                    placeholder="Detalles del empaque / dimensiones / observaciones de carga"
-                    value={formData.package_details || ''}
-                    onChange={handleChange}
-                    className="border rounded-xl px-3 py-2 md:col-span-3"
-                  />
-                </div>
-              )}
-
               {requiresContainerLines && (
-                <div className="space-y-4">
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <select
                       value={containerLineForm.container_type_id}
@@ -664,7 +883,7 @@ export default function EditQuotationPage() {
                           container_type_name: selectedContainer?.name || '',
                         })
                       }}
-                      className="border p-3 rounded"
+                      className={fieldClass}
                     >
                       <option value="">Tipo de contenedor / unidad</option>
 
@@ -686,7 +905,7 @@ export default function EditQuotationPage() {
                           quantity: e.target.value,
                         })
                       }
-                      className="border p-3 rounded"
+                      className={fieldClass}
                     />
 
                     <input
@@ -698,30 +917,32 @@ export default function EditQuotationPage() {
                           notes: e.target.value,
                         })
                       }
-                      className="border p-3 rounded"
+                      className={fieldClass}
                     />
 
                     <button
                       type="button"
                       onClick={saveContainerLine}
-                      className="bg-zinc-950 text-white px-4 py-3 rounded"
+                      className={primaryButtonClass}
                     >
-                      {editingContainerLineId ? 'Actualizar' : 'Agregar'}
+                      {editingContainerLineIndex !== null
+                        ? 'Actualizar'
+                        : 'Agregar'}
                     </button>
                   </div>
 
                   {containerLines.length > 0 && (
-                    <div className="rounded border divide-y">
-                      {containerLines.map((line) => (
+                    <div className="divide-y rounded-xl border border-slate-200 bg-white">
+                      {containerLines.map((line, index) => (
                         <div
-                          key={line.id}
+                          key={`${line.container_type_id}-${index}`}
                           className="flex items-center justify-between gap-4 p-3"
                         >
                           <div>
-                            <p className="font-medium">
+                            <p className="font-semibold text-slate-900">
                               {line.container_type_name}
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-slate-500">
                               Cantidad: {line.quantity}
                               {line.notes ? ` · ${line.notes}` : ''}
                             </p>
@@ -730,16 +951,16 @@ export default function EditQuotationPage() {
                           <div className="flex items-center gap-4">
                             <button
                               type="button"
-                              onClick={() => editContainerLine(line)}
-                              className="text-blue-600 font-semibold"
+                              onClick={() => editContainerLine(index)}
+                              className={secondaryButtonClass}
                             >
                               Modificar
                             </button>
 
                             <button
                               type="button"
-                              onClick={() => deleteContainerLine(line.id)}
-                              className="text-red-700 font-semibold"
+                              onClick={() => deleteContainerLine(index)}
+                              className={secondaryButtonClass}
                             >
                               Eliminar
                             </button>
@@ -748,6 +969,254 @@ export default function EditQuotationPage() {
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {requiresLooseCargo && (
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">
+                        Detalle de carga
+                      </h3>
+                      <p className="text-sm text-slate-500">
+                        Ingresa paquetes, peso y dimensiones para calcular totales informativos.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCargoLines((prev) => [
+                          ...prev,
+                          {
+                            id: crypto.randomUUID(),
+                            quantity: '1',
+                            packageType: 'Caja',
+                            length: '',
+                            width: '',
+                            height: '',
+                            dimensionUnit: 'in',
+                            weight: '',
+                          },
+                        ])
+                      }
+                      className={secondaryButtonClass}
+                    >
+                      Agregar línea
+                    </button>
+                  </div>
+
+                  {cargoLines.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
+                      Sin líneas de carga.
+                    </div>
+                  )}
+
+                  {cargoLines.length > 0 && (
+                    <div className="space-y-3">
+                      {cargoLines.map((line, idx) => {
+                        const lineFt3 = calculateLineFt3(line)
+                        const lineCbm = calculateLineCbm(line)
+                        const lineTotalLbs =
+                          Number(line.weight || 0) * Number(line.quantity || 0)
+
+                        return (
+                          <div
+                            key={line.id}
+                            className="rounded-2xl border border-slate-200 bg-white p-4"
+                          >
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <span className="text-sm font-semibold text-slate-600">
+                                Línea #{idx + 1}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setCargoLines((prev) =>
+                                    prev.filter((item) => item.id !== line.id)
+                                  )
+                                }
+                                className={secondaryButtonClass}
+                              >
+                                Quitar
+                              </button>
+                            </div>
+
+                            <div className="grid gap-3 md:grid-cols-4">
+                              <select
+                                value={line.packageType}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? {
+                                            ...item,
+                                            packageType:
+                                              e.target.value as CargoDimensionLine['packageType'],
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              >
+                                <option>Caja</option>
+                                <option>Pallet</option>
+                                <option>Pieza</option>
+                              </select>
+
+                              <input
+                                type="number"
+                                min="1"
+                                placeholder="Cantidad"
+                                value={line.quantity}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, quantity: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <select
+                                value={line.dimensionUnit}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? {
+                                            ...item,
+                                            dimensionUnit:
+                                              e.target.value as CargoDimensionLine['dimensionUnit'],
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              >
+                                <option value="in">Pulgadas (in)</option>
+                                <option value="cm">Centímetros (cm)</option>
+                                <option value="mm">Milímetros (mm)</option>
+                                <option value="m">Metros (m)</option>
+                              </select>
+
+                              <input
+                                type="number"
+                                placeholder="Peso unitario lbs"
+                                value={line.weight}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, weight: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <input
+                                type="number"
+                                placeholder="Largo"
+                                value={line.length}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, length: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <input
+                                type="number"
+                                placeholder="Ancho"
+                                value={line.width}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, width: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <input
+                                type="number"
+                                placeholder="Alto"
+                                value={line.height}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, height: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              />
+
+                              <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                                LBS {formatNumber(lineTotalLbs, 0)} · FT3{' '}
+                                {formatNumber(lineFt3, 2)} · CBM{' '}
+                                {formatNumber(lineCbm, 3)}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        Peso KG
+                      </p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {formatNumber(totalCargoKg, 2)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        Peso LBS
+                      </p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {formatNumber(totalCargoWeight, 0)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        FT3
+                      </p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {formatNumber(totalCargoFt3, 2)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4">
+                      <p className="text-xs font-semibold uppercase text-slate-400">
+                        CBM
+                      </p>
+                      <p className="mt-1 text-lg font-semibold">
+                        {formatNumber(totalCargoCbm, 3)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -772,7 +1241,7 @@ export default function EditQuotationPage() {
                 placeholder="Valor comercial / Valor FOB"
                 value={formData.commercial_value || ''}
                 onChange={handleChange}
-                className="border p-3 rounded w-full"
+                className={fieldClass}
               />
             )}
           </section>
@@ -784,9 +1253,29 @@ export default function EditQuotationPage() {
               name="observaciones"
               value={formData.observaciones || ''}
               onChange={handleChange}
-              className="border p-3 rounded w-full h-32"
+              className={fieldClass}
             />
           </section>
+
+          {isMiamiFlow && (
+            <section className={cardClass}>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Observaciones para Cliente (PDF)
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Estas observaciones aparecerán en la cotización enviada al cliente.
+              </p>
+
+              <textarea
+                name="client_notes"
+                value={formData.client_notes || ''}
+                onChange={handleChange}
+                className={fieldClass}
+                placeholder="Ej: Tarifa sujeta a disponibilidad, no incluye aduanas..."
+              />
+            </section>
+          )}
 
           <datalist id="countries">
             {countries.map((country) => (
@@ -810,7 +1299,7 @@ export default function EditQuotationPage() {
           <div className="flex justify-end gap-4">
             <button
               onClick={() => router.push(`/quotations/${params.id}`)}
-              className="bg-gray-200 text-gray-800 px-6 py-3 rounded-xl"
+              className={secondaryButtonClass}
             >
               Cancelar
             </button>
@@ -819,7 +1308,7 @@ export default function EditQuotationPage() {
               <button
                 onClick={handleSendToPricing}
                 disabled={saving}
-                className="bg-blue-700 text-white px-6 py-3 rounded-xl"
+                className={primaryButtonClass}
               >
                 Enviar a Pricing
               </button>
@@ -829,11 +1318,12 @@ export default function EditQuotationPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-zinc-950 text-white px-6 py-3 rounded-xl"
+                className={primaryButtonClass}
               >
                 {saving ? 'Guardando...' : 'Guardar Cambios'}
               </button>
             )}
+          </div>
           </div>
         </div>
       </div>
@@ -853,7 +1343,7 @@ export default function EditQuotationPage() {
             <button
               type="button"
               onClick={() => setSendPricingDialogOpen(false)}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className={secondaryButtonClass}
             >
               No, continuar editando
             </button>
@@ -869,7 +1359,7 @@ export default function EditQuotationPage() {
                 setSavingAfterEdit(false)
                 setSendPricingDialogOpen(false)
               }}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+              className={primaryButtonClass}
             >
               {savingAfterEdit ? 'Enviando...' : 'Sí, enviar a Pricing'}
             </button>

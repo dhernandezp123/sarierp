@@ -17,7 +17,7 @@ const clientRateCatalog = [
   { code: 'consolidado_aereo_kg', label: 'Consolidado Aéreo - KG', category: 'Consolidado Aéreo', unit: 'KG' },
   { code: 'delivery_miami', label: 'DELIVERY / Miami', category: 'Consolidado Aéreo', unit: 'flat' },
   { code: 'documentos_manejo', label: 'Documentos / Manejo', category: 'Otros Cargos', unit: 'flat' },
-  { code: 'desconsolidar', label: 'Desconsolidar', category: 'Otros Cargos', unit: 'flat' },
+  { code: 'desconsolidar', label: 'Desconsolidación', category: 'Otros Cargos', unit: 'flat' },
   { code: 'bl', label: 'BL', category: 'Otros Cargos', unit: 'flat' },
   { code: 'guia', label: 'Guía', category: 'Otros Cargos', unit: 'flat' },
   { code: 'sed', label: 'SED', category: 'Otros Cargos', unit: 'flat' },

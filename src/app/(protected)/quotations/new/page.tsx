@@ -180,6 +180,7 @@ export default function NewQuotationPage() {
 
     observaciones: '',
     pricing_notes: '',
+    client_notes: '',
   }
 
   const [formData, setFormData] = useState(initialFormData)
@@ -601,7 +602,7 @@ export default function NewQuotationPage() {
           insurance_cost: Number(formData.insurance_cost),
 
           pricing_notes: formData.pricing_notes || null,
-          client_notes: null,
+          client_notes: submitIsMiamiFlow ? formData.client_notes || null : null,
           status: initialStatus,
           created_by: profile?.id,
           created_at: new Date().toISOString(),
@@ -857,7 +858,9 @@ export default function NewQuotationPage() {
   const applyStandardCharges =
     shouldApplyStandardCharges && miamiOptions.applyStandardCharges
 
-  const isMiamiFlow = usesClientRates(formData.service_product)
+  const isMiamiFlow =
+    formData.service_product === 'miami_lcl' ||
+    formData.service_product === 'miami_air'
   const canUseMiamiCalculator =
     isMiamiFlow && !!formData.cliente_id && clientRates.length > 0
 
@@ -1151,6 +1154,7 @@ export default function NewQuotationPage() {
       ),
       commercial_value: Number(formData.commercial_value || 0),
       pricing_notes: formData.pricing_notes,
+      client_notes: formData.client_notes,
     }
   }
 
@@ -2956,6 +2960,26 @@ export default function NewQuotationPage() {
               className={`${fieldClass} min-h-32`}
             />
           </section>
+          )}
+
+          {isMiamiFlow && (
+            <div className={cardClass}>
+              <h3 className="text-lg font-semibold text-slate-900">
+                Observaciones para Cliente (PDF)
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Estas observaciones aparecerán en la cotización enviada al cliente.
+              </p>
+
+              <textarea
+                name="client_notes"
+                value={formData.client_notes}
+                onChange={handleChange}
+                className={`${fieldClass} mt-4 min-h-[140px]`}
+                placeholder="Ej: Tarifa sujeta a disponibilidad, no incluye aduanas..."
+              />
+            </div>
           )}
 
           <div className="flex justify-end gap-3">

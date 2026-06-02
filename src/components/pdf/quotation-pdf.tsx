@@ -345,6 +345,14 @@ function filterItems(pricingItems: any[], types: string[]) {
   return pricingItems.filter((item) => types.includes(item.item_type))
 }
 
+function getPdfChargeDescription(item: any) {
+  if (item.description === 'Desconsolidar') {
+    return 'Desconsolidación'
+  }
+
+  return item.description
+}
+
 const getPdfChargeValues = (item: any) => {
   const qty = Number(item.quantity || item.qty || 1)
   const safeQty = qty > 0 ? qty : 1
@@ -443,7 +451,7 @@ function ChargesTable({
           return (
             <View key={item.id} style={styles.tableRow}>
               <Text style={styles.colConcept}>
-                {item.description}
+                {getPdfChargeDescription(item)}
               </Text>
 
               <Text style={styles.colSmall}>
@@ -594,14 +602,20 @@ export default function QuotationPDF({
     formatPersonName(quotation.created_by_profile) ||
     'N/A'
 
-  const isMiamiLcl = quotation.service_product === 'miami_lcl'
-  const isMiamiAir = quotation.service_product === 'miami_air'
+  const quoteType = quotation.quote_type || quotation.tipo_transporte || ''
+  const serviceProduct = quotation.service_product || ''
+
+  const isMiamiLcl = serviceProduct === 'miami_lcl'
+  const isMiamiAir = serviceProduct === 'miami_air'
+  const isFcl = quoteType === 'FCL'
+  const isFtl = quoteType === 'FTL'
+  const shouldShowCarrierScheduleFields = isFcl || isFtl
   const isLcl =
-    quotation.quote_type === 'LCL' ||
-    quotation.service_product === 'other_origin_lcl' ||
+    quoteType === 'LCL' ||
+    serviceProduct === 'other_origin_lcl' ||
     isMiamiLcl
   const isLooseCargo = ['LCL', 'LTL', 'Consolidado', 'Courier'].includes(
-    quotation.quote_type || ''
+    quoteType
   ) || isMiamiLcl || isMiamiAir
   const totalCargoLbs = cargoLines.reduce(
     (sum, line) =>
@@ -762,21 +776,25 @@ export default function QuotationPDF({
                     <Text style={styles.value}>{quotation.incoterm || 'N/A'}</Text>
                   </View>
 
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Carrier:</Text>
-                    <Text style={styles.value}>
-                      {activeAgentQuote?.carrier ||
-                        quotation.preferred_carrier ||
-                        'N/A'}
-                    </Text>
-                  </View>
+                  {shouldShowCarrierScheduleFields && (
+                    <>
+                      <View style={styles.row}>
+                        <Text style={styles.label}>Carrier:</Text>
+                        <Text style={styles.value}>
+                          {activeAgentQuote?.carrier ||
+                            quotation.preferred_carrier ||
+                            'N/A'}
+                        </Text>
+                      </View>
 
-                  <View style={styles.row}>
-                    <Text style={styles.label}>ETD:</Text>
-                    <Text style={styles.value}>
-                      {formatDateOnly(activeAgentQuote?.etd || quotation.etd)}
-                    </Text>
-                  </View>
+                      <View style={styles.row}>
+                        <Text style={styles.label}>ETD:</Text>
+                        <Text style={styles.value}>
+                          {formatDateOnly(activeAgentQuote?.etd || quotation.etd)}
+                        </Text>
+                      </View>
+                    </>
+                  )}
 
 
                   {!isLcl && (
@@ -863,10 +881,12 @@ export default function QuotationPDF({
                     </Text>
                   </View>
 
-                  <View style={styles.row}>
-                    <Text style={styles.label}>Días libres:</Text>
-                    <Text style={styles.value}>{freeDaysLabel}</Text>
-                  </View>
+                  {shouldShowCarrierScheduleFields && (
+                    <View style={styles.row}>
+                      <Text style={styles.label}>Días libres:</Text>
+                      <Text style={styles.value}>{freeDaysLabel}</Text>
+                    </View>
+                  )}
 
                   <View style={styles.row}>
                     <Text style={styles.label}>Transbordo:</Text>
