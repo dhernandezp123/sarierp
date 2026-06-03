@@ -197,6 +197,11 @@ function PricingComparisonContent() {
     useState<null | (() => Promise<void>)>(null)
   const [postApprovalDialogOpen, setPostApprovalDialogOpen] = useState(false)
   const [postApprovalReason, setPostApprovalReason] = useState('')
+  const [postApprovalDialogCopy, setPostApprovalDialogCopy] = useState({
+    title: 'Cotizacion ya enviada al cliente',
+    description:
+      'Esta cotizacion ya fue aprobada o enviada al cliente. Debes registrar el motivo del cambio para mantener trazabilidad.',
+  })
   const [pendingPostApprovalAction, setPendingPostApprovalAction] = useState<null | (() => Promise<void>)>(null)
   const [savingPostApproval, setSavingPostApproval] = useState(false)
   const [showAddChargeModal, setShowAddChargeModal] = useState(false)
@@ -503,8 +508,30 @@ function PricingComparisonContent() {
       return
     }
 
+    const editingAgentQuote = editingAgentQuoteId
+      ? agentQuotes.find((quote) => quote.id === editingAgentQuoteId)
+      : null
+    const isEditingSelectedAgentQuote = editingAgentQuote
+      ? isSelectedQuote(editingAgentQuote)
+      : false
+    const previousFinalCost = editingAgentQuote
+      ? getAgentQuoteFinalCost(editingAgentQuote)
+      : null
+
     const reason = await requestChangeReason(
-      editingAgentQuoteId ? 'Actualizar tarifa de agente' : 'Agregar tarifa de agente'
+      isEditingSelectedAgentQuote
+        ? 'selected_agent_quote_updated'
+        : editingAgentQuoteId
+          ? 'Actualizar tarifa de agente'
+          : 'Agregar tarifa de agente',
+      isEditingSelectedAgentQuote
+        ? {
+            force: true,
+            title: 'Editar tarifa seleccionada',
+            description:
+              'Esta tarifa ya está seleccionada para pricing. Debes registrar el motivo de la edición para mantener trazabilidad.',
+          }
+        : undefined
     )
 
     if (reason === null) return
@@ -557,6 +584,34 @@ function PricingComparisonContent() {
     if (error) {
       toast.error(error.message)
       return
+    }
+
+    if (isEditingSelectedAgentQuote) {
+      const updatedQuoteFields = {
+        valid_until:
+          savedAgentQuote.valid_until || selectedQuote.valid_until || null,
+        preferred_carrier:
+          savedAgentQuote.carrier || selectedQuote.preferred_carrier || null,
+        transit_time:
+          savedAgentQuote.transit_time || selectedQuote.transit_time || null,
+        transshipment:
+          savedAgentQuote.transshipment || selectedQuote.transshipment || null,
+      }
+
+      const { error: quotationUpdateError } = await supabase
+        .from('quotations')
+        .update(updatedQuoteFields)
+        .eq('id', selectedQuote.id)
+
+      if (quotationUpdateError) {
+        toast.error(quotationUpdateError.message)
+        return
+      }
+
+      setSelectedQuote({
+        ...selectedQuote,
+        ...updatedQuoteFields,
+      })
     }
 
     if (quotationContainers.length > 0 && containerRateLines.length > 0) {
@@ -616,6 +671,40 @@ function PricingComparisonContent() {
         ? 'Tarifa del agente actualizada'
         : 'Tarifa del agente guardada'
     )
+
+    if (isEditingSelectedAgentQuote) {
+      const newFinalCost = getAgentQuoteFinalCost(savedAgentQuote)
+
+      await createActivityLog({
+        module: 'pricing',
+        action: 'selected_agent_quote_updated',
+        entityType: 'agent_quote',
+        entityId: savedAgentQuote.id,
+        description: `Se editó la tarifa seleccionada de ${
+          getAgentQuoteProviderName(savedAgentQuote)
+        } para la cotización ${
+          selectedQuote.quotation_number || selectedQuote.id
+        }`,
+        metadata: {
+          reason,
+          agent:
+            savedAgentQuote.agente_nombre ||
+            savedAgentQuote.agent_name ||
+            savedAgentQuote.agent ||
+            null,
+          carrier: savedAgentQuote.carrier || null,
+          previousCost: previousFinalCost,
+          newCost: newFinalCost,
+          quotationId: selectedQuote.id,
+        },
+      })
+
+      if (pricingItems.length > 0) {
+        toast.warning(
+          'La tarifa seleccionada fue actualizada. Revisa o regenera las líneas de venta para reflejar los cambios.'
+        )
+      }
+    }
 
     setAgentForm({
       agent_id: '',
@@ -1936,15 +2025,28 @@ const profitabilityColor =
     await fetchPricingItems(selectedQuote.id)
   }
 
-  const requestChangeReason = async (changeType: string) => {
+  const requestChangeReason = async (
+    changeType: string,
+    options?: {
+      force?: boolean
+      title?: string
+      description?: string
+    }
+  ) => {
     if (!selectedQuote) return null
 
-    if (!requiresChangeReason) return ''
+    if (!requiresChangeReason && !options?.force) return ''
 
     return new Promise<string | null>((resolve) => {
       postApprovalResolveRef.current = resolve
       postApprovalReasonRef.current = ''
       setPostApprovalReason('')
+      setPostApprovalDialogCopy({
+        title: options?.title || 'Cotizacion ya enviada al cliente',
+        description:
+          options?.description ||
+          'Esta cotizacion ya fue aprobada o enviada al cliente. Debes registrar el motivo del cambio para mantener trazabilidad.',
+      })
       setPendingPostApprovalAction(() => async () => {
         const reason = postApprovalReasonRef.current.trim()
 
@@ -2814,7 +2916,7 @@ const profitabilityColor =
                                     <button
                                       type="button"
                                       onClick={() => handleEditAgentQuote(quote)}
-                                      disabled={isPricingActionDisabled || isSelected}
+                                      disabled={isPricingActionDisabled}
                                       className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                                     >
                                       <Pencil className="h-3.5 w-3.5" />
@@ -3904,11 +4006,10 @@ const profitabilityColor =
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Cotizacion ya enviada al cliente</DialogTitle>
+            <DialogTitle>{postApprovalDialogCopy.title}</DialogTitle>
 
             <DialogDescription>
-              Esta cotizacion ya fue aprobada o enviada al cliente. Debes
-              registrar el motivo del cambio para mantener trazabilidad.
+              {postApprovalDialogCopy.description}
             </DialogDescription>
           </DialogHeader>
 
