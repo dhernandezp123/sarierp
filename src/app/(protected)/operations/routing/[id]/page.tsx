@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
@@ -8,6 +8,7 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
 import { primaryButtonClass } from '@/src/lib/ui-classes'
+import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 
 type OperationsUser = {
   id: string
@@ -80,10 +81,28 @@ type ShippingInstruction = {
   notify_party_phone: string | null
 
   sales_observations: string | null
+  sales_submitted_at: string | null
 
   validated_at: string | null
   validated_by: string | null
 }
+
+type SalesInitialInfoField =
+  | 'supplier_name'
+  | 'supplier_contact'
+  | 'supplier_email'
+  | 'supplier_phone'
+  | 'supplier_address'
+  | 'sales_observations'
+
+const salesInitialInfoFields: SalesInitialInfoField[] = [
+  'supplier_name',
+  'supplier_contact',
+  'supplier_email',
+  'supplier_phone',
+  'supplier_address',
+  'sales_observations',
+]
 
 function Info({ label, value }: { label: string; value?: string | number | null }) {
   return (
@@ -94,6 +113,46 @@ function Info({ label, value }: { label: string; value?: string | number | null 
       </p>
     </div>
   )
+}
+
+function InfoContent({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
+      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
+      <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function formatDisplayDate(date?: string | null) {
+  if (!date) return 'N/A'
+
+  return new Intl.DateTimeFormat('es-HN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(date))
+}
+
+function formatContainerSummary(routing: ShippingInstruction) {
+  const containerType = routing.container_type?.trim()
+  const containerQty = routing.container_qty
+
+  if (containerType && /^\d+\s*x\s+/i.test(containerType)) {
+    return containerType
+  }
+
+  if (containerQty && containerType) {
+    return `${containerQty} x ${containerType}`
+  }
+
+  if (containerType) {
+    return containerType
+  }
+
+  return 'N/A'
 }
 
 export default function RoutingDetailPage() {
@@ -112,6 +171,12 @@ export default function RoutingDetailPage() {
   const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
   const canViewRouting =
     !!routing && (canManageRouting || routing.created_by === user?.id)
+  const canSalesEditInitialInfo =
+    profile?.rol === 'Ventas' &&
+    routing?.created_by === user?.id &&
+    !routing?.sales_submitted_at &&
+    routing?.operational_status === SI_PENDING_VALIDATION
+  const canEditInitialInfo = canManageRouting || canSalesEditInitialInfo
 
   const loadRouting = async () => {
     // TODO: Reforzar esta misma regla en Supabase RLS para shipping_instructions.
@@ -207,6 +272,51 @@ export default function RoutingDetailPage() {
     }
 
     toast.success('Shipping Instructions actualizadas')
+  }
+
+  const saveSalesInitialInfo = async (submitToOperations = false) => {
+    if (!routing) return
+    if (!canSalesEditInitialInfo) {
+      toast.error('No tienes permisos para editar esta información')
+      return
+    }
+
+    setSaving(true)
+
+    const updateData: Record<string, any> = {
+      supplier_name: routing.supplier_name,
+      supplier_contact: routing.supplier_contact,
+      supplier_email: routing.supplier_email,
+      supplier_phone: routing.supplier_phone,
+      supplier_address: routing.supplier_address,
+      sales_observations: routing.sales_observations,
+    }
+
+    if (submitToOperations) {
+      updateData.sales_submitted_at = new Date().toISOString()
+      updateData.operational_status = SI_PENDING_VALIDATION
+    }
+
+    const { data, error } = await supabase
+      .from('shipping_instructions')
+      .update(updateData)
+      .eq('id', routing.id)
+      .select('*')
+      .single()
+
+    setSaving(false)
+
+    if (error) {
+      toast.error(error.message || 'No se pudo guardar la información inicial')
+      return
+    }
+
+    setRouting(data)
+    toast.success(
+      submitToOperations
+        ? 'Información enviada a Operaciones'
+        : 'Información inicial guardada'
+    )
   }
 
   const validateRouting = async () => {
@@ -401,7 +511,13 @@ export default function RoutingDetailPage() {
     'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900'
 
   const updateRouting = (field: keyof ShippingInstruction, value: string) => {
-    if (!canManageRouting) return
+    const isSalesInitialInfoField = salesInitialInfoFields.includes(
+      field as SalesInitialInfoField
+    )
+
+    if (!canManageRouting && !(canSalesEditInitialInfo && isSalesInitialInfoField)) {
+      return
+    }
 
     setRouting({
       ...routing,
@@ -455,39 +571,74 @@ export default function RoutingDetailPage() {
           <Info label="Cliente" value={routing.cliente?.nombre} />
           <Info label="Incoterm" value={routing.quotation?.incoterm} />
           <Info label="Negociación" value={routing.freight_terms} />
-          <Info label="Carrier / Naviera" value={routing.carrier} />
+          <InfoContent label="Carrier / Naviera">
+            {routing.carrier ? (
+              <CarrierBadge code={routing.carrier} showName size="sm" />
+            ) : (
+              'N/A'
+            )}
+          </InfoContent>
           <Info label="Agente" value={routing.agent_name} />
           <Info label="Puerto Origen" value={routing.quotation?.puerto_origen} />
           <Info label="Puerto Destino" value={routing.quotation?.puerto_destino} />
           <Info
             label="Contenedores"
-            value={`${routing.container_qty || 'N/A'} ${routing.container_type || ''}`}
+            value={formatContainerSummary(routing)}
           />
           <Info label="Días libres" value={routing.free_days} />
         </div>
       </section>
 
-      {!canManageRouting && (
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Info label="Estado operativo" value={routing.operational_status || 'N/A'} />
+          <Info label="Estado embarque" value={routing.shipment_status || 'N/A'} />
+          <Info
+            label="Envío a Operaciones"
+            value={
+              routing.sales_submitted_at
+                ? `Enviada a Operaciones el ${formatDisplayDate(routing.sales_submitted_at)}`
+                : profile?.rol === 'Ventas'
+                  ? 'Completa la información inicial del proveedor y envíala a Operaciones.'
+                  : 'Pendiente'
+            }
+          />
+        </div>
+      </section>
+
+      {!canManageRouting && canSalesEditInitialInfo && (
+        <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+          Completa la información inicial del proveedor y envíala a Operaciones.
+        </div>
+      )}
+
+      {!canManageRouting && routing.sales_submitted_at && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          Información enviada a Operaciones. Ventas ya no puede modificar esta Shipping Instruction.
+        </div>
+      )}
+
+      {!canManageRouting && !canSalesEditInitialInfo && !routing.sales_submitted_at && (
         <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
           Modo lectura: Ventas puede consultar la Shipping Instruction creada, pero las acciones operativas son de Operaciones/Admin.
         </div>
       )}
 
-      <fieldset disabled={!canManageRouting} className="contents">
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Proveedor / Shipper Contact
           </h2>
 
-          <div className="mt-4 space-y-3 text-sm">
-            <div>
+          <div className="mt-4 grid gap-4 text-sm md:grid-cols-2">
+            <div className="md:col-span-2">
               <label className="mb-1 block text-xs font-medium text-slate-500">
                 Proveedor
               </label>
               <input
                 value={routing.supplier_name || ''}
                 onChange={(e) => updateRouting('supplier_name', e.target.value)}
+                disabled={!canEditInitialInfo}
                 className={inputClassName}
               />
             </div>
@@ -499,6 +650,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_contact || ''}
                 onChange={(e) => updateRouting('supplier_contact', e.target.value)}
+                disabled={!canEditInitialInfo}
                 className={inputClassName}
               />
             </div>
@@ -510,6 +662,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_email || ''}
                 onChange={(e) => updateRouting('supplier_email', e.target.value)}
+                disabled={!canEditInitialInfo}
                 className={inputClassName}
               />
             </div>
@@ -521,6 +674,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_phone || ''}
                 onChange={(e) => updateRouting('supplier_phone', e.target.value)}
+                disabled={!canEditInitialInfo}
                 className={inputClassName}
               />
             </div>
@@ -532,6 +686,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_address || ''}
                 onChange={(e) => updateRouting('supplier_address', e.target.value)}
+                disabled={!canEditInitialInfo}
                 className={inputClassName}
               />
             </div>
@@ -545,12 +700,8 @@ export default function RoutingDetailPage() {
 
           <textarea
             value={routing.sales_observations || ''}
-            onChange={(e) =>
-              setRouting({
-                ...routing,
-                sales_observations: e.target.value,
-              })
-            }
+            onChange={(e) => updateRouting('sales_observations', e.target.value)}
+            disabled={!canEditInitialInfo}
             rows={10}
             placeholder="Notas comerciales, instrucciones del cliente, información adicional del proveedor..."
             className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
@@ -761,9 +912,19 @@ export default function RoutingDetailPage() {
           </div>
         </section>
       </div>
-      </fieldset>
 
       <div className="mt-6 flex justify-end gap-3">
+        {canSalesEditInitialInfo && (
+          <button
+            type="button"
+            onClick={() => saveSalesInitialInfo(true)}
+            disabled={saving}
+            className={primaryButtonClass}
+          >
+            {saving ? 'Enviando...' : 'Enviar a Operaciones'}
+          </button>
+        )}
+
         {canManageRouting && (canCreateBooking || hasBooking) ? (
           <button
             type="button"
