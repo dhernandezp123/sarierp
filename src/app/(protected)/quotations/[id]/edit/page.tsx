@@ -91,6 +91,10 @@ export default function EditQuotationPage() {
     quote_type: '',
     valid_until: '',
 
+    contact_name: '',
+    contact_email: '',
+    contact_phone: '',
+
     incoterm: '',
     tipo_transporte: '',
 
@@ -99,8 +103,11 @@ export default function EditQuotationPage() {
     puerto_origen: '',
     puerto_destino: '',
     pickup_address: '',
+    delivery_address: '',
 
     preferred_carrier: '',
+    transit_time: '',
+    target_rate: '',
 
     container_type: '',
     package_type: '',
@@ -114,7 +121,7 @@ export default function EditQuotationPage() {
     requires_insurance: false,
     commercial_value: '',
 
-    observaciones: '',
+    pricing_notes: '',
     client_notes: '',
   })
 
@@ -215,6 +222,10 @@ export default function EditQuotationPage() {
       quote_type: data.quote_type || '',
       valid_until: data.valid_until || '',
 
+      contact_name: data.contact_name || '',
+      contact_email: data.contact_email || '',
+      contact_phone: data.contact_phone || '',
+
       incoterm: data.incoterm || '',
       tipo_transporte: data.tipo_transporte || '',
 
@@ -223,8 +234,11 @@ export default function EditQuotationPage() {
       puerto_origen: data.puerto_origen || '',
       puerto_destino: data.puerto_destino || '',
       pickup_address: data.pickup_address || '',
+      delivery_address: data.delivery_address || '',
 
       preferred_carrier: data.preferred_carrier || '',
+      transit_time: data.transit_time || '',
+      target_rate: data.target_rate && Number(data.target_rate) !== 0 ? data.target_rate.toString() : '',
 
       container_type: data.container_type || '',
       package_type: data.package_type || '',
@@ -238,7 +252,8 @@ export default function EditQuotationPage() {
       requires_insurance: data.requires_insurance || false,
       commercial_value: data.commercial_value?.toString() || '',
 
-      observaciones: data.observaciones || '',
+      pricing_notes:
+        data.pricing_notes || data.notes || data.observaciones || '',
       client_notes: data.client_notes || '',
     })
 
@@ -529,6 +544,10 @@ export default function EditQuotationPage() {
           quote_type: formData.quote_type,
           valid_until: formData.valid_until || null,
 
+          contact_name: formData.contact_name,
+          contact_email: formData.contact_email,
+          contact_phone: formData.contact_phone,
+
           incoterm: formData.incoterm,
           tipo_transporte: formData.tipo_transporte,
 
@@ -537,8 +556,11 @@ export default function EditQuotationPage() {
           puerto_origen: formData.puerto_origen,
           puerto_destino: formData.puerto_destino,
           pickup_address: formData.pickup_address,
+          delivery_address: formData.delivery_address,
 
           preferred_carrier: formData.preferred_carrier,
+          transit_time: formData.transit_time || null,
+          target_rate: Number(formData.target_rate || 0),
 
           container_type: formData.container_type,
           package_type: formData.package_type,
@@ -572,7 +594,7 @@ export default function EditQuotationPage() {
           requires_insurance: formData.requires_insurance,
           commercial_value: Number(formData.commercial_value || 0),
 
-          observaciones: formData.observaciones,
+          pricing_notes: formData.pricing_notes || null,
           client_notes: isMiamiFlow ? formData.client_notes || null : null,
         })
         .eq('id', quotationId)
@@ -823,6 +845,30 @@ export default function EditQuotationPage() {
                 <option value="DDP">DDP</option>
               </select>
 
+              <input
+                name="contact_name"
+                placeholder="Nombre de contacto"
+                value={formData.contact_name || ''}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+
+              <input
+                name="contact_email"
+                placeholder="Email de contacto"
+                value={formData.contact_email || ''}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+
+              <input
+                name="contact_phone"
+                placeholder="Teléfono de contacto"
+                value={formData.contact_phone || ''}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+
             </div>
           </section>
 
@@ -835,10 +881,34 @@ export default function EditQuotationPage() {
               <input list="originPorts" name="puerto_origen" placeholder="Puerto origen" value={formData.puerto_origen || ''} onChange={handleChange} className={fieldClass} />
               <input list="destinationPorts" name="puerto_destino" placeholder="Puerto destino" value={formData.puerto_destino || ''} onChange={handleChange} className={fieldClass} />
 
+              <textarea
+                name="delivery_address"
+                placeholder="Dirección de entrega"
+                value={formData.delivery_address || ''}
+                onChange={handleChange}
+                className={`${fieldClass} min-h-24`}
+              />
+
               <input
                 name="preferred_carrier"
                 placeholder="Naviera de preferencia"
                 value={formData.preferred_carrier || ''}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+
+              <input
+                name="transit_time"
+                placeholder="Tiempo de tránsito"
+                value={formData.transit_time || ''}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+
+              <input
+                name="target_rate"
+                placeholder="Target rate"
+                value={formData.target_rate || ''}
                 onChange={handleChange}
                 className={fieldClass}
               />
@@ -865,6 +935,22 @@ export default function EditQuotationPage() {
                 value={formData.commodity || ''}
                 onChange={handleChange}
                 className={fieldClass}
+              />
+
+              <input
+                name="package_type"
+                placeholder="Tipo de empaque"
+                value={formData.package_type || ''}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+
+              <textarea
+                name="package_details"
+                placeholder="Detalles del empaque / dimensiones / observaciones de carga"
+                value={formData.package_details || ''}
+                onChange={handleChange}
+                className={`${fieldClass} min-h-24`}
               />
 
               {requiresContainerLines && (
@@ -1246,12 +1332,14 @@ export default function EditQuotationPage() {
             )}
           </section>
 
-          <section>
-            <h2 className="text-xl font-bold mb-4">Observaciones</h2>
+          <section className={cardClass}>
+            <h2 className="text-xl font-bold mb-4">
+              Observaciones internas para Pricing
+            </h2>
 
             <textarea
-              name="observaciones"
-              value={formData.observaciones || ''}
+              name="pricing_notes"
+              value={formData.pricing_notes || ''}
               onChange={handleChange}
               className={fieldClass}
             />

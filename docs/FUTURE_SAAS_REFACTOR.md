@@ -245,6 +245,18 @@ Integraciones potenciales:
 
 ---
 
+
+# PDF Terms & Conditions Templates
+
+Cada empresa podrá configurar:
+- Términos generales
+- Términos marítimos
+- Términos aéreos
+- Términos courier
+- Cláusula de seguro
+- Cláusula de inspecciones
+- Cláusula legal
+
 # No Refactorizar Todavía
 
 Mientras no esté completo:
@@ -260,6 +272,38 @@ No ejecutar refactorizaciones masivas.
 La prioridad actual es terminar el ERP funcional para Sari Express.
 
 ---
+
+# FUTURE SAAS REFACTOR
+
+## Refactor pendiente: Producto Comercial como driver principal
+
+Estado: Post-MVP
+
+Motivo:
+Actualmente existen dos campos que representan la misma decisión:
+
+- Producto Comercial
+- Tipo de Cotización
+
+Esto genera redundancia y riesgo de inconsistencias.
+
+Objetivo futuro:
+Que Producto Comercial determine automáticamente:
+
+- Transporte
+- Tipo de Cotización
+- Reglas de validación
+- Flujo de carga
+- Requerimientos de Pricing
+
+Impacto:
+Medio
+
+Riesgo:
+Medio-Alto
+
+Prioridad:
+Después de estabilizar MVP y antes de Multi-Tenant SaaS.
 
 # Meta Final
 

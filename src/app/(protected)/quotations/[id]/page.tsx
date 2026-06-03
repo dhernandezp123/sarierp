@@ -1180,15 +1180,16 @@ const combinedTimeline = [
             <Card className="col-span-2">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-900">
-                  Observaciones
+                  Observaciones internas
                 </CardTitle>
               </CardHeader>
 
               <CardContent>
                 <p>
                   {quotation?.pricing_notes ||
+                    quotation?.notes ||
                     quotation?.observaciones ||
-                    'Sin observaciones'}
+                    'Sin observaciones internas'}
                 </p>
               </CardContent>
             </Card>

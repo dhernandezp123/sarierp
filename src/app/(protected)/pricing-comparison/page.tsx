@@ -2187,11 +2187,36 @@ const profitabilityColor =
 
                     <div>
                       <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Dirección de entrega
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.delivery_address ||
+                          selectedQuote.direccion_entrega ||
+                          'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         Commodity
                       </p>
 
                       <p className="font-semibold text-slate-900 dark:text-white">
                         {selectedQuote.mercancia || selectedQuote.commodity || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Observaciones internas
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.pricing_notes ||
+                          selectedQuote.notes ||
+                          selectedQuote.observaciones ||
+                          'N/A'}
                       </p>
                     </div>
 
