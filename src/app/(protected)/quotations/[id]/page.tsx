@@ -100,6 +100,16 @@ type CargoLine = {
   cbm: number | null
 }
 
+const formatDisplayDate = (date?: string | null) => {
+  if (!date) return 'N/A'
+
+  return new Intl.DateTimeFormat('es-HN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(date))
+}
+
 export default function QuotationDetailPage() {
   const { profile } = useUser()
   const params = useParams()
@@ -567,14 +577,15 @@ export default function QuotationDetailPage() {
           null,
         container_qty: quotation.total_containers || containerQty || null,
         container_type: quotation.container_type || containerType || null,
-        origin_address: quotation.origen || null,
-        destination_address: quotation.destino || null,
+        origin_address: quotation.puerto_origen || quotation.origen || null,
+        destination_address: quotation.puerto_destino || quotation.destino || null,
         free_days: selectedAgentQuote.free_days || null,
         freight_terms: selectedAgentQuote.freight_terms || 'Collect',
         release_type: 'Express Release',
         hbl_freight_visibility: 'No Freight Charges',
         printed_at_destination: true,
-        shipment_status: 'Pendiente de Validación',
+        shipment_status: 'Pendiente Validación',
+        operational_status: 'Pendiente Validación',
       })
       .select('*')
       .single()
@@ -710,6 +721,24 @@ const tradeDirectionLabel =
     : quotation?.trade_direction === 'export'
       ? 'Exportación'
       : 'N/A'
+
+const quoteType = quotation?.quote_type || ''
+const transportType = quotation?.tipo_transporte || ''
+const shouldShowCarrier =
+  ['FCL', 'FTL'].includes(quoteType) &&
+  ['Marítima', 'Maritima'].includes(transportType)
+const etdLabel = formatDisplayDate(selectedAgent?.etd || quotation?.etd)
+const transitDays =
+  selectedAgent?.transit_time || quotation?.transit_time || null
+const freeDays =
+  selectedAgent?.free_days_destination ||
+  selectedAgent?.free_days ||
+  selectedAgent?.dias_libres ||
+  null
+const carrierLabel =
+  selectedAgent?.carrier || quotation?.preferred_carrier || 'N/A'
+const transshipmentLabel =
+  selectedAgent?.transshipment || quotation?.transshipment || 'N/A'
 
 const combinedTimeline = [
   ...(statusHistory || []).map((item) => ({
@@ -1040,6 +1069,50 @@ const combinedTimeline = [
                   <p className="text-xs text-slate-500">Transporte</p>
                   <p className="font-semibold text-slate-900">
                     {quotation.tipo_transporte || 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Válida hasta</p>
+                  <p className="font-semibold text-slate-900">
+                    {formatDisplayDate(quotation.valid_until)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">ETD</p>
+                  <p className="font-semibold text-slate-900">
+                    {etdLabel}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Días tránsito</p>
+                  <p className="font-semibold text-slate-900">
+                    {transitDays ? `${transitDays} días` : 'N/A'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-slate-500">Días libres</p>
+                  <p className="font-semibold text-slate-900">
+                    {freeDays ? `${freeDays} días` : 'N/A'}
+                  </p>
+                </div>
+
+                {shouldShowCarrier && (
+                  <div>
+                    <p className="text-xs text-slate-500">Carrier / Naviera</p>
+                    <p className="font-semibold text-slate-900">
+                      {carrierLabel}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs text-slate-500">Transbordo</p>
+                  <p className="font-semibold text-slate-900">
+                    {transshipmentLabel}
                   </p>
                 </div>
 

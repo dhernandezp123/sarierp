@@ -12,6 +12,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/dashboard',
     '/clientes',
     '/quotations',
+    '/operations/routing',
     '/historico',
   ],
 
@@ -25,6 +26,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
 
   Operaciones: [
     '/dashboard',
+    '/operations/routing',
     '/historico',
   ],
 
@@ -38,6 +40,14 @@ export const rolePermissions: Record<UserRole, string[]> = {
 
 export function canAccessPath(role: string | null | undefined, path: string) {
   if (!role) return false
+
+  if (
+    role === 'Ventas' &&
+    path.startsWith('/operations/routing/') &&
+    path.endsWith('/booking')
+  ) {
+    return false
+  }
 
   const permissions = rolePermissions[role as UserRole]
 

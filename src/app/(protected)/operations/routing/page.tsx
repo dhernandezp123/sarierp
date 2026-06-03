@@ -32,13 +32,14 @@ type RoutingItem = {
   id: string
   routing_number: string
   shipment_status: string
+  created_by: string | null
   agent_name: string | null
   created_at: string
   operations_assigned_to: string | null
 
   status: string | null
-  origin: string | null
-  destination: string | null
+  origin_address: string | null
+  destination_address: string | null
   container_qty: number | null
   container_type: string | null
 
@@ -63,9 +64,28 @@ function getShippingInstructionStatus(status?: string | null) {
   return status || 'Pendiente de Validación'
 }
 
+function formatContainerSummary(item: RoutingItem) {
+  const containerType = item.container_type?.trim()
+  const containerQty = item.container_qty
+
+  if (containerType && /^\d+\s*x\s+/i.test(containerType)) {
+    return containerType
+  }
+
+  if (containerQty && containerType) {
+    return `${containerQty} x ${containerType}`
+  }
+
+  if (containerType) {
+    return containerType
+  }
+
+  return 'N/A'
+}
+
 export default function RoutingInboxPage() {
   const router = useRouter()
-  const { profile } = useUser()
+  const { user, profile, loading: userLoading } = useUser()
 
   const [routingList, setRoutingList] = useState<RoutingItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,10 +95,13 @@ export default function RoutingInboxPage() {
   const [assignmentFilter, setAssignmentFilter] = useState('Todos')
 
   const loadRouting = async () => {
+    if (userLoading) return
+
     setLoading(true)
     setErrorMessage('')
 
-    const { data, error } = await supabase
+    // TODO: Reforzar este filtro en Supabase RLS para shipping_instructions.
+    let query = supabase
       .from('shipping_instructions')
       .select(`
         *,
@@ -95,6 +118,18 @@ export default function RoutingInboxPage() {
       `)
       .order('created_at', { ascending: false })
 
+    if (profile?.rol === 'Ventas') {
+      if (!user?.id) {
+        setRoutingList([])
+        setLoading(false)
+        return
+      }
+
+      query = query.eq('created_by', user.id)
+    }
+
+    const { data, error } = await query
+
     if (error) {
       setErrorMessage(error.message)
       setLoading(false)
@@ -107,7 +142,7 @@ export default function RoutingInboxPage() {
 
   useEffect(() => {
     loadRouting()
-  }, [])
+  }, [profile?.rol, user?.id, userLoading])
 
   const filteredRouting = routingList.filter((item) => {
     const query = search.toLowerCase()
@@ -235,7 +270,7 @@ export default function RoutingInboxPage() {
                   </TableCell>
 
                   <TableCell>
-                    {item.origin || 'N/A'} - {item.destination || 'N/A'}
+                    {item.origin_address || 'N/A'} - {item.destination_address || 'N/A'}
                   </TableCell>
 
                   <TableCell>
@@ -243,7 +278,7 @@ export default function RoutingInboxPage() {
                   </TableCell>
 
                   <TableCell>
-                    {item.container_qty || 'N/A'} {item.container_type || ''}
+                    {formatContainerSummary(item)}
                   </TableCell>
 
                   <TableCell>

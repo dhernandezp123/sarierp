@@ -17,6 +17,8 @@ type OperationsUser = {
 }
 
 const SI_READY_FOR_BOOKING = 'Listo para Booking'
+const SI_PENDING_VALIDATION = 'Pendiente Validación'
+const SI_VALIDATED = 'Validada'
 
 type ShippingInstruction = {
   id: string
@@ -98,7 +100,7 @@ export default function RoutingDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const id = params.id
-  const { profile } = useUser()
+  const { user, profile, loading: userLoading } = useUser()
 
   const [routing, setRouting] = useState<ShippingInstruction | null>(null)
   const [operationsUsers, setOperationsUsers] = useState<OperationsUser[]>([])
@@ -107,9 +109,12 @@ export default function RoutingDetailPage() {
   const [assigning, setAssigning] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const canAssignOperations = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
+  const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
+  const canViewRouting =
+    !!routing && (canManageRouting || routing.created_by === user?.id)
 
   const loadRouting = async () => {
+    // TODO: Reforzar esta misma regla en Supabase RLS para shipping_instructions.
     const { data, error } = await supabase
       .from('shipping_instructions')
       .select(`
@@ -141,6 +146,10 @@ export default function RoutingDetailPage() {
 
   const saveRouting = async () => {
     if (!routing) return
+    if (!canManageRouting) {
+      toast.error('No tienes permisos para editar esta Shipping Instruction')
+      return
+    }
 
     setSaving(true)
 
@@ -202,6 +211,10 @@ export default function RoutingDetailPage() {
 
   const validateRouting = async () => {
     if (!routing) return
+    if (!canManageRouting) {
+      toast.error('No tienes permisos para validar esta Shipping Instruction')
+      return
+    }
 
     setValidating(true)
 
@@ -237,7 +250,7 @@ export default function RoutingDetailPage() {
     const { error } = await supabase
       .from('shipping_instructions')
       .update({
-        shipment_status: SI_READY_FOR_BOOKING,
+        shipment_status: SI_VALIDATED,
         operational_status: SI_READY_FOR_BOOKING,
         validated_at: validatedAt,
         validated_by: user.id,
@@ -270,7 +283,7 @@ export default function RoutingDetailPage() {
 
     setRouting({
       ...routing,
-      shipment_status: SI_READY_FOR_BOOKING,
+      shipment_status: SI_VALIDATED,
       operational_status: SI_READY_FOR_BOOKING,
       validated_at: validatedAt,
       validated_by: user.id,
@@ -282,7 +295,7 @@ export default function RoutingDetailPage() {
   const assignOperationsUser = async (userId: string) => {
     if (!routing) return
 
-    if (!canAssignOperations) {
+    if (!canManageRouting) {
       toast.error('No tienes permisos para asignar esta Shipping Instruction')
       return
     }
@@ -293,7 +306,7 @@ export default function RoutingDetailPage() {
       .from('shipping_instructions')
       .update({
         operations_assigned_to: userId || null,
-        shipment_status: userId ? 'Asignado' : 'Pendiente de Validación',
+        operational_status: userId ? 'Asignado' : SI_PENDING_VALIDATION,
       })
       .eq('id', routing.id)
 
@@ -327,7 +340,7 @@ export default function RoutingDetailPage() {
     setRouting({
       ...routing,
       operations_assigned_to: userId || null,
-      shipment_status: userId ? 'Asignado' : 'Pendiente de Validación',
+      operational_status: userId ? 'Asignado' : SI_PENDING_VALIDATION,
     })
 
     toast.success('Operativo asignado')
@@ -335,6 +348,10 @@ export default function RoutingDetailPage() {
 
   const handleOpenBooking = async () => {
     if (!routing) return
+    if (!canManageRouting) {
+      toast.error('No tienes permisos para crear o abrir booking desde esta Shipping Instruction')
+      return
+    }
 
     const hasBooking =
       !!routing.booking_number ||
@@ -360,10 +377,15 @@ export default function RoutingDetailPage() {
 
   useEffect(() => {
     loadRouting()
-    loadOperationsUsers()
   }, [id])
 
-  if (loading) {
+  useEffect(() => {
+    if (canManageRouting) {
+      loadOperationsUsers()
+    }
+  }, [canManageRouting])
+
+  if (loading || userLoading) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando Shipping Instructions...</p>
   }
 
@@ -371,10 +393,16 @@ export default function RoutingDetailPage() {
     return <p className="text-sm text-red-500">Shipping Instructions no encontradas.</p>
   }
 
+  if (!canViewRouting) {
+    return <p className="text-sm text-red-500">No tienes permisos para ver esta Shipping Instruction.</p>
+  }
+
   const inputClassName =
     'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900'
 
   const updateRouting = (field: keyof ShippingInstruction, value: string) => {
+    if (!canManageRouting) return
+
     setRouting({
       ...routing,
       [field]: value,
@@ -382,7 +410,7 @@ export default function RoutingDetailPage() {
   }
 
   const canCreateBooking =
-    routing.operational_status === SI_READY_FOR_BOOKING
+    canManageRouting && routing.operational_status === SI_READY_FOR_BOOKING
 
   const hasBooking =
     !!routing.booking_number ||
@@ -400,7 +428,7 @@ export default function RoutingDetailPage() {
           </p>
         </div>
 
-        {canAssignOperations && (
+        {canManageRouting && (
           <select
             value={routing.operations_assigned_to || ''}
             onChange={(e) => assignOperationsUser(e.target.value)}
@@ -439,6 +467,13 @@ export default function RoutingDetailPage() {
         </div>
       </section>
 
+      {!canManageRouting && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          Modo lectura: Ventas puede consultar la Shipping Instruction creada, pero las acciones operativas son de Operaciones/Admin.
+        </div>
+      )}
+
+      <fieldset disabled={!canManageRouting} className="contents">
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -726,9 +761,10 @@ export default function RoutingDetailPage() {
           </div>
         </section>
       </div>
+      </fieldset>
 
       <div className="mt-6 flex justify-end gap-3">
-        {canCreateBooking || hasBooking ? (
+        {canManageRouting && (canCreateBooking || hasBooking) ? (
           <button
             type="button"
             onClick={handleOpenBooking}
@@ -738,30 +774,34 @@ export default function RoutingDetailPage() {
           </button>
         ) : null}
 
-        <button
-          onClick={saveRouting}
-          disabled={saving}
-          className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          {saving ? 'Guardando...' : 'Guardar Shipping Instructions'}
-        </button>
+        {canManageRouting && (
+          <>
+            <button
+              onClick={saveRouting}
+              disabled={saving}
+              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              {saving ? 'Guardando...' : 'Guardar Shipping Instructions'}
+            </button>
 
-        <button
-          onClick={validateRouting}
-          disabled={
-            validating ||
-            routing.shipment_status === SI_READY_FOR_BOOKING ||
-            routing.shipment_status === 'Validada'
-          }
-          className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-        >
-          {routing.shipment_status === SI_READY_FOR_BOOKING ||
-          routing.shipment_status === 'Validada'
-            ? 'Listo para Booking'
-            : validating
-              ? 'Validando...'
-              : 'Validar Shipping Instructions'}
-        </button>
+            <button
+              onClick={validateRouting}
+              disabled={
+                validating ||
+                routing.operational_status === SI_READY_FOR_BOOKING ||
+                routing.shipment_status === SI_VALIDATED
+              }
+              className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {routing.operational_status === SI_READY_FOR_BOOKING ||
+              routing.shipment_status === SI_VALIDATED
+                ? 'Listo para Booking'
+                : validating
+                  ? 'Validando...'
+                  : 'Validar Shipping Instructions'}
+            </button>
+          </>
+        )}
       </div>
     </div>
   )
