@@ -31,6 +31,9 @@ type ShippingInstruction = {
   operations_assigned_to: string | null
   cliente?: any
   quotation?: any
+  quotation_number?: string | null
+  client_name?: string | null
+  incoterm?: string | null
 
   supplier_name: string | null
   supplier_contact: string | null
@@ -297,12 +300,10 @@ export default function RoutingDetailPage() {
       updateData.operational_status = SI_PENDING_VALIDATION
     }
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('shipping_instructions')
       .update(updateData)
       .eq('id', routing.id)
-      .select('*')
-      .single()
 
     setSaving(false)
 
@@ -311,7 +312,7 @@ export default function RoutingDetailPage() {
       return
     }
 
-    setRouting(data)
+    await loadRouting()
     toast.success(
       submitToOperations
         ? 'Información enviada a Operaciones'
@@ -567,9 +568,18 @@ export default function RoutingDetailPage() {
         </h2>
 
         <div className="mt-4 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
-          <Info label="No. Cotización" value={routing.quotation?.quotation_number} />
-          <Info label="Cliente" value={routing.cliente?.nombre} />
-          <Info label="Incoterm" value={routing.quotation?.incoterm} />
+          <Info
+            label="No. Cotización"
+            value={routing.quotation?.quotation_number || routing.quotation_number || 'N/A'}
+          />
+          <Info
+            label="Cliente"
+            value={routing.cliente?.nombre || routing.client_name || 'N/A'}
+          />
+          <Info
+            label="Incoterm"
+            value={routing.quotation?.incoterm || routing.incoterm || 'N/A'}
+          />
           <Info label="Negociación" value={routing.freight_terms} />
           <InfoContent label="Carrier / Naviera">
             {routing.carrier ? (
@@ -579,8 +589,14 @@ export default function RoutingDetailPage() {
             )}
           </InfoContent>
           <Info label="Agente" value={routing.agent_name} />
-          <Info label="Puerto Origen" value={routing.quotation?.puerto_origen} />
-          <Info label="Puerto Destino" value={routing.quotation?.puerto_destino} />
+          <Info
+            label="Puerto Origen"
+            value={routing.quotation?.puerto_origen || routing.origin_address || 'N/A'}
+          />
+          <Info
+            label="Puerto Destino"
+            value={routing.quotation?.puerto_destino || routing.destination_address || 'N/A'}
+          />
           <Info
             label="Contenedores"
             value={formatContainerSummary(routing)}
