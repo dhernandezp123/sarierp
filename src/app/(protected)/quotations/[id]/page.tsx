@@ -1267,6 +1267,21 @@ const combinedTimeline = [
               </CardContent>
             </Card>
 
+            <Card className="col-span-2">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-slate-900">
+                  Observaciones para Cliente (PDF)
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent>
+                <p>
+                  {quotation?.client_notes ||
+                    'Sin observaciones para cliente'}
+                </p>
+              </CardContent>
+            </Card>
+
           </div>
 
           {activityLogs.length > 0 && (

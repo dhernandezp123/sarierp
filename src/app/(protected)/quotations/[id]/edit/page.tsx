@@ -538,65 +538,69 @@ export default function EditQuotationPage() {
     setSaving(true)
 
     try {
+      const quotationPayload = {
+        quote_type: formData.quote_type,
+        valid_until: formData.valid_until || null,
+
+        contact_name: formData.contact_name,
+        contact_email: formData.contact_email,
+        contact_phone: formData.contact_phone,
+
+        incoterm: formData.incoterm,
+        tipo_transporte: formData.tipo_transporte,
+
+        origen: formData.origen,
+        destino: formData.destino,
+        puerto_origen: formData.puerto_origen,
+        puerto_destino: formData.puerto_destino,
+        pickup_address: formData.pickup_address,
+        delivery_address: formData.delivery_address,
+
+        preferred_carrier: formData.preferred_carrier,
+        transit_time: formData.transit_time || null,
+        target_rate: Number(formData.target_rate || 0),
+
+        container_type: formData.container_type,
+        package_type: formData.package_type,
+        package_details: formData.package_details,
+        peso_kg: saveRequiresLooseCargo
+          ? totalCargoKg > 0
+            ? totalCargoKg
+            : null
+          : Number(formData.peso_kg || 0),
+        peso_lbs: saveRequiresLooseCargo
+          ? totalCargoWeight > 0
+            ? totalCargoWeight
+            : null
+          : null,
+        gross_weight: Number(formData.gross_weight || 0),
+        volumen_cbm: saveRequiresLooseCargo
+          ? totalCargoCbm > 0
+            ? totalCargoCbm
+            : null
+          : Number(formData.volumen_cbm || 0),
+        volumen_ft3: saveRequiresLooseCargo
+          ? totalCargoFt3 > 0
+            ? totalCargoFt3
+            : null
+          : null,
+        cantidad_bultos: saveRequiresLooseCargo
+          ? totalCargoPackages
+          : Number(formData.cantidad_bultos || 0),
+        commodity: formData.commodity,
+
+        requires_insurance: formData.requires_insurance,
+        commercial_value: Number(formData.commercial_value || 0),
+
+        pricing_notes: formData.pricing_notes || null,
+        ...(isMiamiFlow
+          ? { client_notes: formData.client_notes || null }
+          : {}),
+      }
+
       const { error } = await supabase
         .from('quotations')
-        .update({
-          quote_type: formData.quote_type,
-          valid_until: formData.valid_until || null,
-
-          contact_name: formData.contact_name,
-          contact_email: formData.contact_email,
-          contact_phone: formData.contact_phone,
-
-          incoterm: formData.incoterm,
-          tipo_transporte: formData.tipo_transporte,
-
-          origen: formData.origen,
-          destino: formData.destino,
-          puerto_origen: formData.puerto_origen,
-          puerto_destino: formData.puerto_destino,
-          pickup_address: formData.pickup_address,
-          delivery_address: formData.delivery_address,
-
-          preferred_carrier: formData.preferred_carrier,
-          transit_time: formData.transit_time || null,
-          target_rate: Number(formData.target_rate || 0),
-
-          container_type: formData.container_type,
-          package_type: formData.package_type,
-          package_details: formData.package_details,
-          peso_kg: saveRequiresLooseCargo
-            ? totalCargoKg > 0
-              ? totalCargoKg
-              : null
-            : Number(formData.peso_kg || 0),
-          peso_lbs: saveRequiresLooseCargo
-            ? totalCargoWeight > 0
-              ? totalCargoWeight
-              : null
-            : null,
-          gross_weight: Number(formData.gross_weight || 0),
-          volumen_cbm: saveRequiresLooseCargo
-            ? totalCargoCbm > 0
-              ? totalCargoCbm
-              : null
-            : Number(formData.volumen_cbm || 0),
-          volumen_ft3: saveRequiresLooseCargo
-            ? totalCargoFt3 > 0
-              ? totalCargoFt3
-              : null
-            : null,
-          cantidad_bultos: saveRequiresLooseCargo
-            ? totalCargoPackages
-            : Number(formData.cantidad_bultos || 0),
-          commodity: formData.commodity,
-
-          requires_insurance: formData.requires_insurance,
-          commercial_value: Number(formData.commercial_value || 0),
-
-          pricing_notes: formData.pricing_notes || null,
-          client_notes: isMiamiFlow ? formData.client_notes || null : null,
-        })
+        .update(quotationPayload)
         .eq('id', quotationId)
 
       if (error) {
@@ -609,9 +613,10 @@ export default function EditQuotationPage() {
           .from('quotation_cargo_lines')
           .delete()
           .eq('quotation_id', quotationId)
+          .select('id')
 
         if (cargoDeleteError) {
-          toast.error(cargoDeleteError.message)
+          toast.error('No se pudieron reemplazar las líneas de carga')
           return
         }
 
@@ -619,6 +624,7 @@ export default function EditQuotationPage() {
           .from('quotation_containers')
           .delete()
           .eq('quotation_id', quotationId)
+          .select('id')
 
         if (containerDeleteError) {
           toast.error(containerDeleteError.message)
@@ -648,6 +654,7 @@ export default function EditQuotationPage() {
           .from('quotation_containers')
           .delete()
           .eq('quotation_id', quotationId)
+          .select('id')
 
         if (containerDeleteError) {
           toast.error(containerDeleteError.message)
@@ -658,9 +665,10 @@ export default function EditQuotationPage() {
           .from('quotation_cargo_lines')
           .delete()
           .eq('quotation_id', quotationId)
+          .select('id')
 
         if (cargoDeleteError) {
-          toast.error(cargoDeleteError.message)
+          toast.error('No se pudieron reemplazar las líneas de carga')
           return
         }
 

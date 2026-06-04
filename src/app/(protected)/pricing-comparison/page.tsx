@@ -1515,22 +1515,38 @@ function PricingComparisonContent() {
   const saveClientNotes = async () => {
     if (!selectedQuote?.id) return
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('quotations')
       .update({
         client_notes: clientNotes,
       })
       .eq('id', selectedQuote.id)
+      .select('id, client_notes')
+      .single()
 
     if (error) {
-      toast.error('No se pudieron guardar las observaciones')
+      toast.error(error.message || 'No se pudieron guardar las observaciones')
       return
     }
 
-    setSelectedQuote({
-      ...selectedQuote,
-      client_notes: clientNotes,
-    })
+    if (!data) {
+      toast.error('No se confirmó el guardado de observaciones')
+      return
+    }
+
+    setClientNotes(data.client_notes || '')
+
+    setSelectedQuote((prev: any) =>
+      prev ? { ...prev, client_notes: data.client_notes } : prev
+    )
+
+    setQuotations((prev) =>
+      prev.map((quote) =>
+        quote.id === selectedQuote.id
+          ? { ...quote, client_notes: data.client_notes }
+          : quote
+      )
+    )
 
     toast.success('Observaciones guardadas')
   }
@@ -2400,13 +2416,17 @@ const profitabilityColor =
                           const currentLine = containerRateLines.find(
                             (line) => line.quotation_container_id === container.id
                           )
+                          const containerQuantity = Number(container.quantity || 0)
+                          const unitCost = Number(currentLine?.ocean_freight || 0)
+                          const totalContainerCost =
+                            containerQuantity * unitCost
 
                           return (
                             <div
                               key={container.id}
                               className={cn(
                                 mutedCardClass,
-                                'grid items-center gap-3 p-3 md:grid-cols-[1fr_220px_140px]'
+                                'space-y-3 p-3'
                               )}
                             >
                               <div>
@@ -2418,48 +2438,55 @@ const profitabilityColor =
                                 </p>
                               </div>
 
-                              <input
-                                type="number"
-                                placeholder="Costo unitario proveedor"
-                                value={currentLine?.ocean_freight || ''}
-                                onChange={(e) => {
-                                  const value = e.target.value
+                              <div className="grid gap-2">
+                                <label className={labelClass}>
+                                  Costo por contenedor
+                                </label>
 
-                                  setContainerRateLines((prev) => {
-                                    const exists = prev.some(
-                                      (line) =>
-                                        line.quotation_container_id === container.id
-                                    )
+                                <input
+                                  type="number"
+                                  placeholder="Costo unitario proveedor"
+                                  value={currentLine?.ocean_freight || ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value
 
-                                    if (exists) {
-                                      return prev.map((line) =>
-                                        line.quotation_container_id === container.id
-                                          ? { ...line, ocean_freight: value }
-                                          : line
+                                    setContainerRateLines((prev) => {
+                                      const exists = prev.some(
+                                        (line) =>
+                                          line.quotation_container_id === container.id
                                       )
-                                    }
 
-                                    return [
-                                      ...prev,
-                                      {
-                                        quotation_container_id: container.id,
-                                        container_type_name: container.container_type_name,
-                                        quantity: container.quantity,
-                                        ocean_freight: value,
-                                      },
-                                    ]
-                                  })
-                                }}
-                                className={fieldClass}
-                              />
+                                      if (exists) {
+                                        return prev.map((line) =>
+                                          line.quotation_container_id === container.id
+                                            ? { ...line, ocean_freight: value }
+                                            : line
+                                        )
+                                      }
 
-                              <p className={cn(valueClass, 'text-right')}>
-                                USD{' '}
-                                {formatCurrency(
-                                  Number(container.quantity || 0) *
-                                    Number(currentLine?.ocean_freight || 0)
-                                )}
-                              </p>
+                                      return [
+                                        ...prev,
+                                        {
+                                          quotation_container_id: container.id,
+                                          container_type_name:
+                                            container.container_type_name,
+                                          quantity: container.quantity,
+                                          ocean_freight: value,
+                                        },
+                                      ]
+                                    })
+                                  }}
+                                  className={cn(fieldClass, 'w-full sm:max-w-[220px]')}
+                                />
+
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                  {containerQuantity} × USD{' '}
+                                  {formatCurrency(unitCost)} ={' '}
+                                  <span className={valueClass}>
+                                    USD {formatCurrency(totalContainerCost)}
+                                  </span>
+                                </p>
+                              </div>
                             </div>
                           )
                         })}
