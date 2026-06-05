@@ -42,11 +42,22 @@ type QuotationJoin = {
   cliente:           ClienteJoin | ClienteJoin[] | null
 }
 
+type SelectedAgentQuote = {
+  carrier?: string | null
+  transit_time?: string | number | null
+  transit?: string | number | null
+  free_days_destination?: string | number | null
+  free_days?: string | number | null
+  dias_libres?: string | number | null
+}
+
 type BookingRouting = {
   id: string
+  quotation_id: string | null
   routing_number: string
   booking_number: string | null
   carrier_booking: string | null
+  carrier: string | null
   master_bl: string | null
   house_bl: string | null
   etd: string | null
@@ -181,10 +192,45 @@ function resolveJoin<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value
 }
 
+function toNumber(value?: string | number | null) {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+
+  const match = value.match(/\d+/)
+  if (!match) return null
+
+  const parsed = Number(match[0])
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function addDaysToDate(dateValue?: string | null, days?: number | null) {
+  if (!dateValue || !days) return null
+
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return null
+
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
 // ─── Aplica datos de cotización/cliente a los campos vacíos del booking ────────
-function applyQuotationDefaults(data: BookingRouting): BookingRouting {
+function applyQuotationDefaults(
+  data: BookingRouting,
+  selectedAgent?: SelectedAgentQuote | null
+): BookingRouting {
   const quote  = resolveJoin(data.quotation)
   const client = quote ? resolveJoin(quote.cliente) : null
+  const estimatedTransitDays =
+    data.estimated_transit_days ??
+    toNumber(selectedAgent?.transit_time) ??
+    toNumber(selectedAgent?.transit) ??
+    toNumber(quote?.transit_time)
+  const calculatedEta = addDaysToDate(data.etd, estimatedTransitDays)
+  const remainingFreeDays =
+    data.remaining_free_days ??
+    toNumber(selectedAgent?.free_days_destination) ??
+    toNumber(selectedAgent?.free_days) ??
+    toNumber(selectedAgent?.dias_libres)
 
   return {
     ...data,
@@ -194,6 +240,11 @@ function applyQuotationDefaults(data: BookingRouting): BookingRouting {
 
     // Freight Terms desde incoterm de la cotización como referencia
     freight_terms: data.freight_terms || null,
+
+    estimated_transit_days: estimatedTransitDays,
+    eta: data.eta || calculatedEta,
+    original_eta: data.original_eta || calculatedEta,
+    remaining_free_days: remainingFreeDays,
 
     // Defaults operativos estándar si están vacíos
     release_type:           data.release_type           || 'Express Release',
@@ -223,6 +274,7 @@ export default function RoutingBookingPage() {
   const id = params.id
 
   const [routing, setRouting] = useState<BookingRouting | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<SelectedAgentQuote | null>(null)
   const [events, setEvents]   = useState<ShippingInstructionEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
@@ -239,9 +291,11 @@ export default function RoutingBookingPage() {
       .from('shipping_instructions')
       .select(`
         id,
+        quotation_id,
         routing_number,
         booking_number,
         carrier_booking,
+        carrier,
         master_bl,
         house_bl,
         etd,
@@ -303,8 +357,26 @@ export default function RoutingBookingPage() {
     if (error) {
       toast.error(error.message)
     } else {
+      const routingData = data as BookingRouting
+      const quote = resolveJoin(routingData.quotation)
+      const quotationId = routingData.quotation_id || quote?.id
+      let selectedAgentQuote: SelectedAgentQuote | null = null
+
+      if (quotationId) {
+        const { data: agentQuoteData } = await supabase
+          .from('agent_quotes')
+          .select('*')
+          .eq('quotation_id', quotationId)
+          .eq('is_selected', true)
+          .maybeSingle()
+
+        selectedAgentQuote = agentQuoteData
+      }
+
+      setSelectedAgent(selectedAgentQuote)
+
       // Aplica defaults desde la cotización/cliente antes de setear el estado
-      setRouting(applyQuotationDefaults(data as BookingRouting))
+      setRouting(applyQuotationDefaults(routingData, selectedAgentQuote))
     }
 
     setLoading(false)
@@ -445,6 +517,14 @@ export default function RoutingBookingPage() {
   if (!routing)
     return <p className="text-sm text-red-500">Booking no encontrado.</p>
 
+  const quotation = resolveJoin(routing.quotation)
+  const carrierReference =
+    routing.carrier ||
+    selectedAgent?.carrier ||
+    quotation?.preferred_carrier ||
+    ''
+  const incotermReference = quotation?.incoterm || ''
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -469,6 +549,22 @@ export default function RoutingBookingPage() {
       <div className="space-y-6">
         <div className="grid gap-6 lg:grid-cols-2">
           <SectionCard title="Referencia Operativa">
+            <Field label="Carrier / Naviera" hint="referencia">
+              <input
+                value={carrierReference}
+                readOnly
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Incoterm" hint="cotización">
+              <input
+                value={incotermReference}
+                readOnly
+                className={fieldClass}
+              />
+            </Field>
+
             <Field label="Reference Number">
               <input
                 value={routing.reference_number || ''}
