@@ -2364,150 +2364,285 @@ const profitabilityColor =
                     <CardTitle>Construcción de Tarifa</CardTitle>
                   </CardHeader>
 
-                  <CardContent className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-                    <div className="col-span-full border-b border-slate-200 pb-2 dark:border-slate-800">
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                        Datos comerciales
-                      </h3>
-                    </div>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[380px_1fr]">
+                      <div className="space-y-4">
+                        <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Datos comerciales
+                          </h3>
+                        </div>
 
-                    <div>
-                      <label className={labelClass}>
-                        Agente
-                      </label>
+                        <div>
+                          <label className={labelClass}>
+                            Agente
+                          </label>
 
-                      <AgenteCombobox
-                        agents={agents}
-                        value={agentForm.agent_id}
-                        onChange={(agentId) => {
-                          const selectedAgent = agents.find(
-                            (agent) => agent.id === agentId
-                          )
+                          <AgenteCombobox
+                            agents={agents}
+                            value={agentForm.agent_id}
+                            onChange={(agentId) => {
+                              const selectedAgent = agents.find(
+                                (agent) => agent.id === agentId
+                              )
 
-                          setAgentForm({
-                            ...agentForm,
-                            agent_id: agentId,
-                            agente_nombre: selectedAgent?.name || '',
-                            profit_per_container: String(
-                              selectedAgent?.profit_per_container || 0
-                            ),
-                            mbl_fee: String(selectedAgent?.mbl_fee || 0),
-                            moneda: selectedAgent?.currency || 'USD',
-                          })
-                        }}
-                        placeholder="Seleccionar agente/proveedor"
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                      />
-                    </div>
+                              setAgentForm({
+                                ...agentForm,
+                                agent_id: agentId,
+                                agente_nombre: selectedAgent?.name || '',
+                                profit_per_container: String(
+                                  selectedAgent?.profit_per_container || 0
+                                ),
+                                mbl_fee: String(selectedAgent?.mbl_fee || 0),
+                                moneda: selectedAgent?.currency || 'USD',
+                              })
+                            }}
+                            placeholder="Seleccionar agente/proveedor"
+                            className={cn(fieldClass, 'mt-1 w-full')}
+                          />
+                        </div>
 
-                    <div className="col-span-full border-b border-slate-200 pb-2 pt-2 dark:border-slate-800">
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                        Costos
-                      </h3>
-                    </div>
+                        <div>
+                          <label className={labelClass}>
+                            Moneda
+                          </label>
 
-                    {quotationContainers.length > 0 && (
-                      <div className="col-span-full space-y-3">
-                        <p className={labelClass}>
-                          Costos del proveedor por contenedor
-                        </p>
+                          <select
+                            name="moneda"
+                            value={agentForm.moneda}
+                            onChange={handleAgentChange}
+                            className={cn(fieldClass, 'mt-1 w-full')}
+                          >
+                            <option value="USD">USD</option>
+                            <option value="HNL">HNL</option>
+                          </select>
+                        </div>
+                      </div>
 
-                        {quotationContainers.map((container) => {
-                          const currentLine = containerRateLines.find(
-                            (line) => line.quotation_container_id === container.id
-                          )
-                          const containerQuantity = Number(container.quantity || 0)
-                          const unitCost = Number(currentLine?.ocean_freight || 0)
-                          const totalContainerCost =
-                            containerQuantity * unitCost
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,420px)_1fr]">
+                        <div className="space-y-3">
+                          <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                              Costos
+                            </h3>
+                          </div>
 
-                          return (
-                            <div
-                              key={container.id}
-                              className={cn(
-                                mutedCardClass,
-                                'space-y-3 p-3'
-                              )}
-                            >
-                              <div>
-                                <p className={valueClass}>
-                                  {container.container_type_name}
-                                </p>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                  Cantidad: {container.quantity}
-                                </p>
-                              </div>
+                          {quotationContainers.length > 0 && (
+                            <div className="space-y-3">
+                              <p className={labelClass}>
+                                Costos del proveedor por contenedor
+                              </p>
 
-                              <div className="grid gap-2">
-                                <label className={labelClass}>
-                                  Costo por contenedor
-                                </label>
+                              {quotationContainers.map((container) => {
+                                const currentLine = containerRateLines.find(
+                                  (line) => line.quotation_container_id === container.id
+                                )
+                                const containerQuantity = Number(container.quantity || 0)
+                                const unitCost = Number(currentLine?.ocean_freight || 0)
+                                const totalContainerCost =
+                                  containerQuantity * unitCost
 
-                                <input
-                                  type="number"
-                                  placeholder="Costo unitario proveedor"
-                                  value={currentLine?.ocean_freight || ''}
-                                  onChange={(e) => {
-                                    const value = e.target.value
+                                return (
+                                  <div
+                                    key={container.id}
+                                    className={cn(
+                                      mutedCardClass,
+                                      'space-y-3 p-3'
+                                    )}
+                                  >
+                                    <div>
+                                      <p className={valueClass}>
+                                        {container.container_type_name}
+                                      </p>
+                                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        Cantidad: {container.quantity}
+                                      </p>
+                                    </div>
 
-                                    setContainerRateLines((prev) => {
-                                      const exists = prev.some(
-                                        (line) =>
-                                          line.quotation_container_id === container.id
-                                      )
+                                    <div className="grid gap-2">
+                                      <label className={labelClass}>
+                                        Costo por contenedor
+                                      </label>
 
-                                      if (exists) {
-                                        return prev.map((line) =>
-                                          line.quotation_container_id === container.id
-                                            ? { ...line, ocean_freight: value }
-                                            : line
-                                        )
-                                      }
+                                      <input
+                                        type="number"
+                                        placeholder="Costo unitario proveedor"
+                                        value={currentLine?.ocean_freight || ''}
+                                        onChange={(e) => {
+                                          const value = e.target.value
 
-                                      return [
-                                        ...prev,
-                                        {
-                                          quotation_container_id: container.id,
-                                          container_type_name:
-                                            container.container_type_name,
-                                          quantity: container.quantity,
-                                          ocean_freight: value,
-                                        },
-                                      ]
-                                    })
-                                  }}
-                                  className={cn(fieldClass, 'w-full sm:max-w-[220px]')}
-                                />
+                                          setContainerRateLines((prev) => {
+                                            const exists = prev.some(
+                                              (line) =>
+                                                line.quotation_container_id === container.id
+                                            )
 
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                  {containerQuantity} × USD{' '}
-                                  {formatCurrency(unitCost)} ={' '}
-                                  <span className={valueClass}>
-                                    USD {formatCurrency(totalContainerCost)}
-                                  </span>
-                                </p>
-                              </div>
+                                            if (exists) {
+                                              return prev.map((line) =>
+                                                line.quotation_container_id === container.id
+                                                  ? { ...line, ocean_freight: value }
+                                                  : line
+                                              )
+                                            }
+
+                                            return [
+                                              ...prev,
+                                              {
+                                                quotation_container_id: container.id,
+                                                container_type_name:
+                                                  container.container_type_name,
+                                                quantity: container.quantity,
+                                                ocean_freight: value,
+                                              },
+                                            ]
+                                          })
+                                        }}
+                                        className={cn(fieldClass, 'w-full sm:max-w-[220px]')}
+                                      />
+
+                                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        {containerQuantity} × USD{' '}
+                                        {formatCurrency(unitCost)} ={' '}
+                                        <span className={valueClass}>
+                                          USD {formatCurrency(totalContainerCost)}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                )
+                              })}
                             </div>
-                          )
-                        })}
-                      </div>
-                    )}
+                          )}
 
-                    {quotationContainers.length === 0 && (
-                      <div>
-                        <label className={labelClass}>
-                          Costo proveedor
-                        </label>
+                          {quotationContainers.length === 0 && (
+                            <div>
+                              <label className={labelClass}>
+                                Costo proveedor
+                              </label>
 
-                        <input
-                          name="ocean_freight"
-                          placeholder="Ocean Freight"
-                          value={agentForm.ocean_freight}
-                          onChange={handleAgentChange}
-                          className={cn(fieldClass, 'mt-1 w-full')}
-                        />
+                              <input
+                                name="ocean_freight"
+                                placeholder="Ocean Freight"
+                                value={agentForm.ocean_freight}
+                                onChange={handleAgentChange}
+                                className={cn(fieldClass, 'mt-1 w-full')}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="border-b border-slate-200 pb-2 dark:border-slate-800">
+                            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                              Tránsito
+                            </h3>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
+                          {showCarrierInput && (
+                            <div>
+                              <label className={labelClass}>
+                                Carrier
+                              </label>
+
+                              <CarrierCombobox
+                                value={agentForm.carrier}
+                                onChange={(code) =>
+                                  setAgentForm({ ...agentForm, carrier: code })
+                                }
+                                filterType={getCarrierFilterType()}
+                                className="mt-1"
+                                disabled={isPricingActionDisabled}
+                              />
+                            </div>
+                          )}
+
+                          <div>
+                            <label className={labelClass}>
+                              Tránsito
+                            </label>
+
+                            <input
+                              name="transit_time"
+                              placeholder="Tránsito"
+                              value={agentForm.transit_time}
+                              onChange={handleAgentChange}
+                              className={cn(fieldClass, 'mt-1 w-full')}
+                            />
+                          </div>
+
+                          <div>
+                            <label className={labelClass}>
+                              Transbordo
+                            </label>
+
+                            <select
+                              className={cn(fieldClass, 'mt-1 w-full')}
+                              value={agentForm.transshipment}
+                              onChange={(e) =>
+                                setAgentForm({ ...agentForm, transshipment: e.target.value })
+                              }
+                            >
+                              <option value="">Transbordo</option>
+                              <option value="Directo">Directo</option>
+                              <option value="Sí">Sí</option>
+                              <option value="Via Panamá">Via Panamá</option>
+                              <option value="Via Cartagena">Via Cartagena</option>
+                              <option value="Via Kingston">Via Kingston</option>
+                              <option value="Via Miami">Via Miami</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className={labelClass}>
+                              Días libres
+                            </label>
+
+                            <input
+                              className={cn(fieldClass, 'mt-1 w-full')}
+                              placeholder="Días libres destino"
+                              value={agentForm.free_days_destination}
+                              onChange={(e) =>
+                                setAgentForm({
+                                  ...agentForm,
+                                  free_days_destination: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+
+                          <div>
+                            <label className={labelClass}>
+                              Vigencia tarifa
+                            </label>
+                            <input
+                              type="date"
+                              name="valid_until"
+                              value={agentForm.valid_until}
+                              onChange={handleAgentChange}
+                              className={cn(fieldClass, 'mt-1 w-full')}
+                            />
+                          </div>
+
+                          <div>
+                            <label className={labelClass}>
+                              ETD
+                            </label>
+
+                            <input
+                              type="date"
+                              name="etd"
+                              value={agentForm.etd}
+                              onChange={handleAgentChange}
+                              className={cn(fieldClass, 'mt-1 w-full')}
+                            />
+                          </div>
+                          </div>
+                        </div>
                       </div>
-                    )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
 
                     {['EXW', 'FCA'].includes(selectedQuote?.incoterm || '') && (
                       <div>
@@ -2525,127 +2660,6 @@ const profitabilityColor =
                         />
                       </div>
                     )}
-
-                    <div>
-                      <label className={labelClass}>
-                        Moneda
-                      </label>
-
-                      <select
-                        name="moneda"
-                        value={agentForm.moneda}
-                        onChange={handleAgentChange}
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                      >
-                        <option value="USD">USD</option>
-                        <option value="HNL">HNL</option>
-                      </select>
-                    </div>
-
-                    <div className="col-span-full border-b border-slate-200 pb-2 pt-2 dark:border-slate-800">
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                        Tránsito
-                      </h3>
-                    </div>
-
-                    {showCarrierInput && (
-                      <div>
-                        <label className={labelClass}>
-                          Carrier
-                        </label>
-
-                        <CarrierCombobox
-                          value={agentForm.carrier}
-                          onChange={(code) =>
-                            setAgentForm({ ...agentForm, carrier: code })
-                          }
-                          filterType={getCarrierFilterType()}
-                          className="mt-1"
-                          disabled={isPricingActionDisabled}
-                        />
-                      </div>
-                    )}
-
-                    <div>
-                      <label className={labelClass}>
-                        Tránsito
-                      </label>
-
-                      <input
-                        name="transit_time"
-                        placeholder="Tránsito"
-                        value={agentForm.transit_time}
-                        onChange={handleAgentChange}
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                      />
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>
-                        Transbordo
-                      </label>
-
-                      <select
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                        value={agentForm.transshipment}
-                        onChange={(e) =>
-                          setAgentForm({ ...agentForm, transshipment: e.target.value })
-                        }
-                      >
-                        <option value="">Transbordo</option>
-                        <option value="Directo">Directo</option>
-                        <option value="Sí">Sí</option>
-                        <option value="Via Panamá">Via Panamá</option>
-                        <option value="Via Cartagena">Via Cartagena</option>
-                        <option value="Via Kingston">Via Kingston</option>
-                        <option value="Via Miami">Via Miami</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>
-                        Días libres
-                      </label>
-
-                      <input
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                        placeholder="Días libres destino"
-                        value={agentForm.free_days_destination}
-                        onChange={(e) =>
-                          setAgentForm({
-                            ...agentForm,
-                            free_days_destination: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>
-                        Vigencia tarifa
-                      </label>
-                      <input
-                        type="date"
-                        name="valid_until"
-                        value={agentForm.valid_until}
-                        onChange={handleAgentChange}
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                      />
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>
-                        ETD
-                      </label>
-
-                      <input
-                        type="date"
-                        name="etd"
-                        value={agentForm.etd}
-                        onChange={handleAgentChange}
-                        className={cn(fieldClass, 'mt-1 w-full')}
-                      />
-                    </div>
 
                     <div className="col-span-full rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-700/40 dark:bg-emerald-950/40">
                       <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
@@ -2692,6 +2706,7 @@ const profitabilityColor =
                     >
                       {editingAgentQuoteId ? 'Actualizar Tarifa' : 'Guardar Tarifa'}
                     </button>
+                    </div>
                   </CardContent>
                 </Card>
 

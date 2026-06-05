@@ -62,7 +62,7 @@ export const CARRIERS: Carrier[] = [
     code: "COSCO",
     name: "COSCO",
     type: "ocean",
-    bg: "#C8102E",     // Rojo COSCO
+    bg: "#00508F",     // Azul COSCO
     text: "#FFFFFF",
     useTailwind: false,
   },
