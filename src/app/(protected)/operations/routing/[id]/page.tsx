@@ -1,14 +1,21 @@
 'use client'
 
 import { type ReactNode, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
+import { Download, ExternalLink, Printer } from 'lucide-react'
+import {
+  PDFDownloadLink,
+  pdf,
+} from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
-import { primaryButtonClass } from '@/src/lib/ui-classes'
+import { primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
+import RoutingOrderPDF from '@/src/components/pdf/routing-order-pdf'
 
 type OperationsUser = {
   id: string
@@ -29,6 +36,7 @@ type ShippingInstruction = {
   operational_status: string | null
   created_by: string | null
   operations_assigned_to: string | null
+  quotation_id?: string | null
   cliente?: any
   quotation?: any
   quotation_number?: string | null
@@ -63,6 +71,10 @@ type ShippingInstruction = {
   eta: string | null
 
   free_days: string | null
+  free_days_destination?: string | null
+  transit_time?: string | null
+  transit?: string | null
+  transshipment?: string | null
 
   freight_terms: string | null
   release_type: string | null
@@ -165,6 +177,7 @@ export default function RoutingDetailPage() {
   const { user, profile, loading: userLoading } = useUser()
 
   const [routing, setRouting] = useState<ShippingInstruction | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [operationsUsers, setOperationsUsers] = useState<OperationsUser[]>([])
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
@@ -188,12 +201,30 @@ export default function RoutingDetailPage() {
       .select(`
         *,
         cliente:clientes (*),
-        quotation:quotations (*)
+        quotation:quotations (
+          *,
+          cliente:clientes (*)
+        )
       `)
       .eq('id', id)
       .single()
 
     if (!error && data) {
+      const quotationId = data.quotation_id || data.quotation?.id
+
+      if (quotationId) {
+        const { data: selectedAgentData } = await supabase
+          .from('agent_quotes')
+          .select('*')
+          .eq('quotation_id', quotationId)
+          .eq('is_selected', true)
+          .maybeSingle()
+
+        setSelectedAgent(selectedAgentData || null)
+      } else {
+        setSelectedAgent(null)
+      }
+
       setRouting(data)
     }
 
@@ -486,6 +517,22 @@ export default function RoutingDetailPage() {
     router.push(`/operations/routing/${routing.id}/booking`)
   }
 
+  const handlePrintRoutingPdf = async () => {
+    if (!routing) return
+
+    const blob = await pdf(
+      <RoutingOrderPDF
+        routing={routing}
+        quotation={routing.quotation}
+        cliente={routing.quotation?.cliente || routing.cliente}
+        selectedAgent={selectedAgent}
+      />
+    ).toBlob()
+
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+  }
+
   useEffect(() => {
     loadRouting()
   }, [id])
@@ -533,6 +580,45 @@ export default function RoutingDetailPage() {
     !!routing.booking_number ||
     routing.operational_status === 'En Booking'
 
+  const quotation = routing.quotation || {}
+  const quotationId = routing.quotation_id || quotation.id
+  const quotationHref = quotationId ? `/quotations/${quotationId}` : null
+  const quotationNumber =
+    routing.quotation?.quotation_number || routing.quotation_number || 'N/A'
+  const referenceFreeDays =
+    selectedAgent?.free_days_destination ||
+    selectedAgent?.free_days ||
+    selectedAgent?.dias_libres ||
+    routing.free_days_destination ||
+    routing.free_days ||
+    'N/A'
+  const referenceEtd = selectedAgent?.etd || routing.etd
+  const referenceTransit =
+    selectedAgent?.transit_time ||
+    selectedAgent?.transit ||
+    routing.transit_time ||
+    routing.transit ||
+    'N/A'
+  const referenceTransshipment =
+    selectedAgent?.transshipment ||
+    selectedAgent?.transbordo ||
+    routing.transshipment ||
+    'N/A'
+  const referenceDeliveryAddress =
+    quotation.delivery_address ||
+    quotation.direccion_entrega ||
+    routing.cliente?.direccion ||
+    'No especificada'
+  const referenceInternalNotes =
+    quotation.pricing_notes ||
+    quotation.notes ||
+    quotation.observaciones ||
+    'N/A'
+  const referenceClientNotes = quotation.client_notes || 'N/A'
+  const canDownloadRoutingPdf =
+    canManageRouting || (profile?.rol === 'Ventas' && routing.created_by === user?.id)
+  const routingPdfFileName = `${routing.routing_number || 'routing-order'}.pdf`
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -545,33 +631,89 @@ export default function RoutingDetailPage() {
           </p>
         </div>
 
-        {canManageRouting && (
-          <select
-            value={routing.operations_assigned_to || ''}
-            onChange={(e) => assignOperationsUser(e.target.value)}
-            disabled={assigning}
-            className="min-w-[260px] rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-          >
-            <option value="">Sin asignar</option>
-            {operationsUsers.map((user) => (
-              <option key={user.id} value={user.id}>
-                {`${user.nombre || ''} ${user.apellido || ''}`.trim() || user.email}
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {canDownloadRoutingPdf && (
+            <>
+              <PDFDownloadLink
+                document={
+                    <RoutingOrderPDF
+                      routing={routing}
+                      quotation={routing.quotation}
+                      cliente={routing.quotation?.cliente || routing.cliente}
+                      selectedAgent={selectedAgent}
+                    />
+                }
+                fileName={routingPdfFileName}
+                className={`${secondaryButtonClass} inline-flex items-center justify-center gap-2 px-4 py-2`}
+              >
+                {({ loading }) => (
+                  <>
+                    <Download className="h-4 w-4" />
+                    {loading ? 'Generando PDF...' : 'Descargar Routing PDF'}
+                  </>
+                )}
+              </PDFDownloadLink>
+
+              <button
+                type="button"
+                onClick={handlePrintRoutingPdf}
+                className={`${primaryButtonClass} inline-flex items-center justify-center gap-2 px-4 py-2`}
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir Routing
+              </button>
+            </>
+          )}
+
+          {canManageRouting && (
+            <select
+              value={routing.operations_assigned_to || ''}
+              onChange={(e) => assignOperationsUser(e.target.value)}
+              disabled={assigning}
+              className="min-w-[260px] rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            >
+              <option value="">Sin asignar</option>
+              {operationsUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {`${user.nombre || ''} ${user.apellido || ''}`.trim() || user.email}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-          Datos de Cotización
-        </h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Datos de Cotización
+          </h2>
+
+          {quotationHref && (
+            <Link
+              href={quotationHref}
+              className={`${secondaryButtonClass} inline-flex items-center justify-center gap-2 px-4 py-2`}
+            >
+              Ver cotización
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-3 xl:grid-cols-5">
-          <Info
-            label="No. Cotización"
-            value={routing.quotation?.quotation_number || routing.quotation_number || 'N/A'}
-          />
+          <InfoContent label="No. Cotización">
+            {quotationHref ? (
+              <Link
+                href={quotationHref}
+                className="inline-flex items-center gap-1 text-slate-900 transition hover:text-blue-600 hover:underline dark:text-white dark:hover:text-blue-400"
+              >
+                {quotationNumber}
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            ) : (
+              quotationNumber
+            )}
+          </InfoContent>
           <Info
             label="Cliente"
             value={routing.cliente?.nombre || routing.client_name || 'N/A'}
@@ -601,7 +743,32 @@ export default function RoutingDetailPage() {
             label="Contenedores"
             value={formatContainerSummary(routing)}
           />
-          <Info label="Días libres" value={routing.free_days} />
+          <Info label="Días libres" value={referenceFreeDays} />
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          Información Operativa de Referencia
+        </h2>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Info
+            label="ETD"
+            value={referenceEtd ? formatDisplayDate(referenceEtd) : 'N/A'}
+          />
+          <Info label="Días tránsito" value={referenceTransit} />
+          <Info label="Días libres" value={referenceFreeDays} />
+          <Info label="Transbordo" value={referenceTransshipment} />
+          <Info
+            label="Dirección de entrega"
+            value={referenceDeliveryAddress}
+          />
+          <Info label="Observaciones internas" value={referenceInternalNotes} />
+          <Info
+            label="Observaciones para cliente/PDF"
+            value={referenceClientNotes}
+          />
         </div>
       </section>
 

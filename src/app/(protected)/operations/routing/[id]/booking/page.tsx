@@ -22,6 +22,26 @@ import {
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
 
+// ─── Datos del cliente que vienen en join desde la cotización ─────────────────
+type ClienteJoin = {
+  nombre:    string | null
+  direccion: string | null
+  ciudad:    string | null
+  pais:      string | null
+  telefono:  string | null
+  email_1:   string | null
+  rtn:       string | null
+  contacto:  string | null
+}
+
+type QuotationJoin = {
+  id:                string
+  preferred_carrier: string | null
+  incoterm:          string | null
+  transit_time:      string | null
+  cliente:           ClienteJoin | ClienteJoin[] | null
+}
+
 type BookingRouting = {
   id: string
   routing_number: string
@@ -45,6 +65,7 @@ type BookingRouting = {
   real_transit_days: number | null
   remaining_free_days: number | null
   operational_comments: string | null
+  supplier_name: string | null
   supplier_contact: string | null
   supplier_email: string | null
   freight_terms: string | null
@@ -64,6 +85,8 @@ type BookingRouting = {
   notify_party_contact: string | null
   notify_party_email: string | null
   notify_party_phone: string | null
+  // Join
+  quotation: QuotationJoin | QuotationJoin[] | null
 }
 
 type ShippingInstructionEvent = {
@@ -74,6 +97,10 @@ type ShippingInstructionEvent = {
   notes: string | null
   created_at: string
 }
+
+// Notify Party estándar de Sari Express (igual al documento de BL Instructions)
+const SARI_NOTIFY_PARTY =
+  'SARI EXPRESS S DE R.L. DE C.V.,\n BO. LOS ANDES 9 CALLE 12-13 AVE N.E,\n San Pedro Sula, Cortés, Honduras, CP: 21101\n RTN/TAXID: 08019003239182'
 
 function SectionCard({
   title,
@@ -89,10 +116,7 @@ function SectionCard({
       <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
         {title}
       </h2>
-
-      <div className={`mt-5 grid gap-4 ${gridClassName}`}>
-        {children}
-      </div>
+      <div className={`mt-5 grid gap-4 ${gridClassName}`}>{children}</div>
     </section>
   )
 }
@@ -100,14 +124,21 @@ function SectionCard({
 function Field({
   label,
   children,
+  hint,
 }: {
   label: string
   children: React.ReactNode
+  hint?: string
 }) {
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
         {label}
+        {hint && (
+          <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+            {hint}
+          </span>
+        )}
       </label>
       {children}
     </div>
@@ -115,42 +146,74 @@ function Field({
 }
 
 function getEventStyle(eventType: string) {
-  if (eventType.includes('Booking')) {
+  if (eventType.includes('Booking'))
     return {
       icon: CalendarClock,
       dot: 'bg-blue-500',
-      badge:
-        'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+      badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
     }
-  }
-
   if (
     eventType.includes('Zarpado') ||
     eventType.includes('Transbordo') ||
     eventType.includes('Arribo')
-  ) {
+  )
     return {
       icon: Ship,
       dot: 'bg-indigo-500',
-      badge:
-        'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+      badge: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
     }
-  }
-
-  if (eventType.includes('Despacho') || eventType.includes('Entregado')) {
+  if (eventType.includes('Despacho') || eventType.includes('Entregado'))
     return {
       icon: Truck,
       dot: 'bg-emerald-500',
-      badge:
-        'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+      badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
     }
-  }
-
   return {
     icon: CheckCircle2,
     dot: 'bg-slate-500',
-    badge:
-      'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    badge: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  }
+}
+
+// ─── Helper: normaliza el join (puede llegar como array o como objeto) ─────────
+function resolveJoin<T>(value: T | T[] | null): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? (value[0] ?? null) : value
+}
+
+// ─── Aplica datos de cotización/cliente a los campos vacíos del booking ────────
+function applyQuotationDefaults(data: BookingRouting): BookingRouting {
+  const quote  = resolveJoin(data.quotation)
+  const client = quote ? resolveJoin(quote.cliente) : null
+
+  return {
+    ...data,
+    // ETD viene de la SI directamente, no de la cotización
+    etd:       data.etd       || null,
+    free_days: data.free_days || null,
+
+    // Freight Terms desde incoterm de la cotización como referencia
+    freight_terms: data.freight_terms || null,
+
+    // Defaults operativos estándar si están vacíos
+    release_type:           data.release_type           || 'Express Release',
+    hbl_freight_visibility: data.hbl_freight_visibility || 'No Freight Charges',
+
+    // Shipper desde supplier_name que llenó Ventas en la SI
+    shipper:         data.shipper         || data.supplier_name    || null,
+
+    // Consignee desde el cliente de la cotización
+    consignee:        data.consignee        || client?.nombre    || null,
+    consignee_tax_id: data.consignee_tax_id || client?.rtn       || null,
+    consignee_address:data.consignee_address|| (
+      client ? [client.direccion, client.ciudad, client.pais].filter(Boolean).join(', ') : null
+    ),
+    consignee_email:  data.consignee_email  || client?.email_1   || null,
+    consignee_contact: data.consignee_contact || client?.contacto  || null,
+    consignee_phone:  data.consignee_phone  || client?.telefono  || null,
+
+    // Notify Party: si ya tiene valor respetarlo, si no poner el estándar de Sari Express
+    notify_party: data.notify_party || SARI_NOTIFY_PARTY,
   }
 }
 
@@ -160,14 +223,14 @@ export default function RoutingBookingPage() {
   const id = params.id
 
   const [routing, setRouting] = useState<BookingRouting | null>(null)
-  const [events, setEvents] = useState<ShippingInstructionEvent[]>([])
+  const [events, setEvents]   = useState<ShippingInstructionEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [eventType, setEventType] = useState('Booking Solicitado')
-  const [eventDate, setEventDate] = useState('')
+  const [saving,  setSaving]  = useState(false)
+  const [eventType,     setEventType]     = useState('Booking Solicitado')
+  const [eventDate,     setEventDate]     = useState('')
   const [eventLocation, setEventLocation] = useState('')
-  const [eventNotes, setEventNotes] = useState('')
-  const [savingEvent, setSavingEvent] = useState(false)
+  const [eventNotes,    setEventNotes]    = useState('')
+  const [savingEvent,   setSavingEvent]   = useState(false)
 
   const loadRouting = async () => {
     setLoading(true)
@@ -197,6 +260,7 @@ export default function RoutingBookingPage() {
         real_transit_days,
         remaining_free_days,
         operational_comments,
+        supplier_name,
         supplier_contact,
         supplier_email,
         freight_terms,
@@ -215,7 +279,23 @@ export default function RoutingBookingPage() {
         notify_party_address,
         notify_party_contact,
         notify_party_email,
-        notify_party_phone
+        notify_party_phone,
+        quotation:quotations (
+          id,
+          preferred_carrier,
+          incoterm,
+          transit_time,
+          cliente:clientes (
+            nombre,
+            direccion,
+            ciudad,
+            pais,
+            telefono,
+            email_1,
+            rtn,
+            contacto
+          )
+        )
       `)
       .eq('id', id)
       .single()
@@ -223,7 +303,8 @@ export default function RoutingBookingPage() {
     if (error) {
       toast.error(error.message)
     } else {
-      setRouting(data)
+      // Aplica defaults desde la cotización/cliente antes de setear el estado
+      setRouting(applyQuotationDefaults(data as BookingRouting))
     }
 
     setLoading(false)
@@ -236,9 +317,7 @@ export default function RoutingBookingPage() {
       .eq('shipping_instruction_id', id)
       .order('event_date', { ascending: false })
 
-    if (!error && data) {
-      setEvents(data)
-    }
+    if (!error && data) setEvents(data)
   }
 
   useEffect(() => {
@@ -248,51 +327,50 @@ export default function RoutingBookingPage() {
 
   const saveBooking = async () => {
     if (!routing) return
-
     setSaving(true)
 
     const { error } = await supabase
       .from('shipping_instructions')
       .update({
-        booking_number: routing.booking_number,
-        carrier_booking: routing.carrier_booking,
-        master_bl: routing.master_bl,
-        house_bl: routing.house_bl,
-        etd: routing.etd,
-        eta: routing.eta,
-        free_days: routing.free_days,
-        shipment_status: routing.shipment_status,
-        reference_number: routing.reference_number,
-        vessel_name: routing.vessel_name,
-        voyage: routing.voyage,
-        tracking_url: routing.tracking_url,
-        original_eta: routing.original_eta,
-        actual_etd: routing.actual_etd,
-        actual_eta: routing.actual_eta,
-        eir_date: routing.eir_date,
+        booking_number:         routing.booking_number,
+        carrier_booking:        routing.carrier_booking,
+        master_bl:              routing.master_bl,
+        house_bl:               routing.house_bl,
+        etd:                    routing.etd,
+        eta:                    routing.eta,
+        free_days:              routing.free_days,
+        shipment_status:        routing.shipment_status,
+        reference_number:       routing.reference_number,
+        vessel_name:            routing.vessel_name,
+        voyage:                 routing.voyage,
+        tracking_url:           routing.tracking_url,
+        original_eta:           routing.original_eta,
+        actual_etd:             routing.actual_etd,
+        actual_eta:             routing.actual_eta,
+        eir_date:               routing.eir_date,
         estimated_transit_days: routing.estimated_transit_days,
-        real_transit_days: routing.real_transit_days,
-        remaining_free_days: routing.remaining_free_days,
-        operational_comments: routing.operational_comments,
-        supplier_contact: routing.supplier_contact,
-        supplier_email: routing.supplier_email,
-        freight_terms: routing.freight_terms,
-        release_type: routing.release_type,
+        real_transit_days:      routing.real_transit_days,
+        remaining_free_days:    routing.remaining_free_days,
+        operational_comments:   routing.operational_comments,
+        supplier_contact:       routing.supplier_contact,
+        supplier_email:         routing.supplier_email,
+        freight_terms:          routing.freight_terms,
+        release_type:           routing.release_type,
         hbl_freight_visibility: routing.hbl_freight_visibility,
         printed_at_destination: routing.printed_at_destination,
-        shipper: routing.shipper,
-        consignee: routing.consignee,
-        consignee_tax_id: routing.consignee_tax_id,
-        consignee_address: routing.consignee_address,
-        consignee_contact: routing.consignee_contact,
-        consignee_email: routing.consignee_email,
-        consignee_phone: routing.consignee_phone,
-        notify_party: routing.notify_party,
-        notify_party_tax_id: routing.notify_party_tax_id,
-        notify_party_address: routing.notify_party_address,
-        notify_party_contact: routing.notify_party_contact,
-        notify_party_email: routing.notify_party_email,
-        notify_party_phone: routing.notify_party_phone,
+        shipper:                routing.shipper,
+        consignee:              routing.consignee,
+        consignee_tax_id:       routing.consignee_tax_id,
+        consignee_address:      routing.consignee_address,
+        consignee_contact:      routing.consignee_contact,
+        consignee_email:        routing.consignee_email,
+        consignee_phone:        routing.consignee_phone,
+        notify_party:           routing.notify_party,
+        notify_party_tax_id:    routing.notify_party_tax_id,
+        notify_party_address:   routing.notify_party_address,
+        notify_party_contact:   routing.notify_party_contact,
+        notify_party_email:     routing.notify_party_email,
+        notify_party_phone:     routing.notify_party_phone,
       })
       .eq('id', routing.id)
 
@@ -304,10 +382,10 @@ export default function RoutingBookingPage() {
     }
 
     await createActivityLog({
-      module: 'operations_booking',
-      action: 'booking_updated',
+      module:     'operations_booking',
+      action:     'booking_updated',
       entityType: 'shipping_instruction',
-      entityId: routing.id,
+      entityId:   routing.id,
       description: `Booking actualizado para ${routing.routing_number}`,
     })
 
@@ -316,12 +394,9 @@ export default function RoutingBookingPage() {
 
   const createEvent = async () => {
     if (!routing) return
-
     setSavingEvent(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       toast.error('No se pudo validar el usuario')
@@ -333,11 +408,11 @@ export default function RoutingBookingPage() {
       .from('shipping_instruction_events')
       .insert({
         shipping_instruction_id: routing.id,
-        event_type: eventType,
-        event_date: eventDate || new Date().toISOString(),
-        location: eventLocation || null,
-        notes: eventNotes || null,
-        created_by: user.id,
+        event_type:  eventType,
+        event_date:  eventDate || new Date().toISOString(),
+        location:    eventLocation || null,
+        notes:       eventNotes   || null,
+        created_by:  user.id,
       })
 
     setSavingEvent(false)
@@ -348,35 +423,27 @@ export default function RoutingBookingPage() {
     }
 
     await createActivityLog({
-      module: 'operations_booking',
-      action: 'shipment_event_created',
+      module:     'operations_booking',
+      action:     'shipment_event_created',
       entityType: 'shipping_instruction',
-      entityId: routing.id,
+      entityId:   routing.id,
       description: `${eventType} registrado para ${routing.routing_number}`,
-      metadata: {
-        eventType,
-        eventDate,
-        location: eventLocation,
-      },
+      metadata: { eventType, eventDate, location: eventLocation },
     })
 
     toast.success('Evento operativo registrado')
-
     setEventType('Booking Solicitado')
     setEventDate('')
     setEventLocation('')
     setEventNotes('')
-
     loadEvents()
   }
 
-  if (loading) {
+  if (loading)
     return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando booking...</p>
-  }
 
-  if (!routing) {
+  if (!routing)
     return <p className="text-sm text-red-500">Booking no encontrado.</p>
-  }
 
   return (
     <div>
@@ -401,87 +468,70 @@ export default function RoutingBookingPage() {
 
       <div className="space-y-6">
         <div className="grid gap-6 lg:grid-cols-2">
-        <SectionCard title="Referencia Operativa">
-          <Field label="Reference Number">
-            <input
-              value={routing.reference_number || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, reference_number: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+          <SectionCard title="Referencia Operativa">
+            <Field label="Reference Number">
+              <input
+                value={routing.reference_number || ''}
+                onChange={(e) => setRouting({ ...routing, reference_number: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Booking Number">
-            <input
-              value={routing.booking_number || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, booking_number: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+            <Field label="Booking Number">
+              <input
+                value={routing.booking_number || ''}
+                onChange={(e) => setRouting({ ...routing, booking_number: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Carrier Booking">
-            <input
-              value={routing.carrier_booking || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, carrier_booking: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+            <Field label="Carrier Booking">
+              <input
+                value={routing.carrier_booking || ''}
+                onChange={(e) => setRouting({ ...routing, carrier_booking: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Shipment Status">
-            <select
-              value={routing.shipment_status || 'Pendiente Validación'}
-              onChange={(e) =>
-                setRouting({ ...routing, shipment_status: e.target.value })
-              }
-              className={fieldClass}
-            >
-              {operationStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </SectionCard>
+            <Field label="Shipment Status">
+              <select
+                value={routing.shipment_status || 'Pendiente Validación'}
+                onChange={(e) => setRouting({ ...routing, shipment_status: e.target.value })}
+                className={fieldClass}
+              >
+                {operationStatuses.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </Field>
+          </SectionCard>
 
-        <SectionCard title="Documentación">
-          <Field label="Master BL">
-            <input
-              value={routing.master_bl || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, master_bl: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+          <SectionCard title="Documentación">
+            <Field label="Master BL">
+              <input
+                value={routing.master_bl || ''}
+                onChange={(e) => setRouting({ ...routing, master_bl: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="House BL">
-            <input
-              value={routing.house_bl || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, house_bl: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+            <Field label="House BL">
+              <input
+                value={routing.house_bl || ''}
+                onChange={(e) => setRouting({ ...routing, house_bl: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="EIR Date">
-            <input
-              type="date"
-              value={routing.eir_date || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, eir_date: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
-        </SectionCard>
-
+            <Field label="EIR Date">
+              <input
+                type="date"
+                value={routing.eir_date || ''}
+                onChange={(e) => setRouting({ ...routing, eir_date: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
+          </SectionCard>
         </div>
 
         <SectionCard
@@ -491,9 +541,7 @@ export default function RoutingBookingPage() {
           <Field label="Freight Terms">
             <select
               value={routing.freight_terms || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, freight_terms: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, freight_terms: e.target.value })}
               className={fieldClass}
             >
               <option value="">Seleccionar</option>
@@ -505,9 +553,7 @@ export default function RoutingBookingPage() {
           <Field label="Release Type">
             <select
               value={routing.release_type || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, release_type: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, release_type: e.target.value })}
               className={fieldClass}
             >
               <option value="">Seleccionar</option>
@@ -519,12 +565,7 @@ export default function RoutingBookingPage() {
           <Field label="HBL Freight Visibility">
             <select
               value={routing.hbl_freight_visibility || ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  hbl_freight_visibility: e.target.value,
-                })
-              }
+              onChange={(e) => setRouting({ ...routing, hbl_freight_visibility: e.target.value })}
               className={fieldClass}
             >
               <option value="">Seleccionar</option>
@@ -539,14 +580,10 @@ export default function RoutingBookingPage() {
               type="checkbox"
               checked={routing.printed_at_destination || false}
               onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  printed_at_destination: e.target.checked,
-                })
+                setRouting({ ...routing, printed_at_destination: e.target.checked })
               }
               className="h-4 w-4 rounded border-slate-300"
             />
-
             <label
               htmlFor="printed-at-destination"
               className="text-sm text-slate-700 dark:text-slate-300"
@@ -555,6 +592,7 @@ export default function RoutingBookingPage() {
             </label>
           </div>
 
+          {/* ── Shipper ── */}
           <div className="md:col-span-2 lg:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Shipper
@@ -564,9 +602,7 @@ export default function RoutingBookingPage() {
           <Field label="Shipper">
             <input
               value={routing.shipper || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, shipper: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, shipper: e.target.value })}
               className={fieldClass}
             />
           </Field>
@@ -574,9 +610,7 @@ export default function RoutingBookingPage() {
           <Field label="Shipper Contact">
             <input
               value={routing.supplier_contact || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, supplier_contact: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, supplier_contact: e.target.value })}
               className={fieldClass}
             />
           </Field>
@@ -584,45 +618,38 @@ export default function RoutingBookingPage() {
           <Field label="Shipper Email">
             <input
               value={routing.supplier_email || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, supplier_email: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, supplier_email: e.target.value })}
               className={fieldClass}
             />
           </Field>
 
+          {/* ── Consignee ── */}
           <div className="md:col-span-2 lg:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Consignee
             </p>
           </div>
 
-          <Field label="Consignee">
+          <Field label="Consignee" hint="cotización">
             <input
               value={routing.consignee || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, consignee: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, consignee: e.target.value })}
               className={fieldClass}
             />
           </Field>
 
-          <Field label="Consignee Tax ID">
+          <Field label="Consignee Tax ID" hint="cotización">
             <input
               value={routing.consignee_tax_id || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, consignee_tax_id: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, consignee_tax_id: e.target.value })}
               className={fieldClass}
             />
           </Field>
 
-          <Field label="Consignee Address">
+          <Field label="Consignee Address" hint="cotización">
             <input
               value={routing.consignee_address || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, consignee_address: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, consignee_address: e.target.value })}
               className={fieldClass}
             />
           </Field>
@@ -630,33 +657,28 @@ export default function RoutingBookingPage() {
           <Field label="Consignee Contact">
             <input
               value={routing.consignee_contact || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, consignee_contact: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, consignee_contact: e.target.value })}
               className={fieldClass}
             />
           </Field>
 
-          <Field label="Consignee Email">
+          <Field label="Consignee Email" hint="cotización">
             <input
               value={routing.consignee_email || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, consignee_email: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, consignee_email: e.target.value })}
               className={fieldClass}
             />
           </Field>
 
-          <Field label="Consignee Phone">
+          <Field label="Consignee Phone" hint="cotización">
             <input
               value={routing.consignee_phone || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, consignee_phone: e.target.value })
-              }
+              onChange={(e) => setRouting({ ...routing, consignee_phone: e.target.value })}
               className={fieldClass}
             />
           </Field>
 
+          {/* ── Notify Party ── */}
           <div className="md:col-span-2 lg:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Notify Party
@@ -664,183 +686,150 @@ export default function RoutingBookingPage() {
           </div>
 
           <div className="md:col-span-2 lg:col-span-4">
-            <Field label="Notify Party">
+            <Field label="Notify Party" hint="estándar">
               <input
                 value={routing.notify_party || ''}
-                placeholder="Sari Express"
-                onChange={(e) =>
-                  setRouting({ ...routing, notify_party: e.target.value })
-                }
+                onChange={(e) => setRouting({ ...routing, notify_party: e.target.value })}
                 className={fieldClass}
               />
             </Field>
           </div>
-
         </SectionCard>
 
         <div className="grid gap-6 lg:grid-cols-2">
-        <SectionCard title="Navegación / Tránsito">
-          <Field label="Vessel Name">
-            <input
-              value={routing.vessel_name || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, vessel_name: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+          <SectionCard title="Navegación / Tránsito">
+            <Field label="Vessel Name">
+              <input
+                value={routing.vessel_name || ''}
+                onChange={(e) => setRouting({ ...routing, vessel_name: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Voyage">
-            <input
-              value={routing.voyage || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, voyage: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+            <Field label="Voyage">
+              <input
+                value={routing.voyage || ''}
+                onChange={(e) => setRouting({ ...routing, voyage: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Estimated Transit Days">
-            <input
-              type="number"
-              value={routing.estimated_transit_days ?? ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  estimated_transit_days: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-              className={fieldClass}
-            />
-          </Field>
+            <Field label="Estimated Transit Days">
+              <input
+                type="number"
+                value={routing.estimated_transit_days ?? ''}
+                onChange={(e) =>
+                  setRouting({
+                    ...routing,
+                    estimated_transit_days: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Real Transit Days">
-            <input
-              type="number"
-              value={routing.real_transit_days ?? ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  real_transit_days: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-              className={fieldClass}
-            />
-          </Field>
-        </SectionCard>
+            <Field label="Real Transit Days">
+              <input
+                type="number"
+                value={routing.real_transit_days ?? ''}
+                onChange={(e) =>
+                  setRouting({
+                    ...routing,
+                    real_transit_days: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+                className={fieldClass}
+              />
+            </Field>
+          </SectionCard>
 
-        <SectionCard title="Fechas Operativas">
-          <Field label="ETD">
-            <input
-              type="date"
-              value={routing.etd || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, etd: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+          <SectionCard title="Fechas Operativas">
+            <Field label="ETD" hint="cotización">
+              <input
+                type="date"
+                value={routing.etd || ''}
+                onChange={(e) => setRouting({ ...routing, etd: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="ETA">
-            <input
-              type="date"
-              value={routing.eta || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, eta: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+            <Field label="ETA">
+              <input
+                type="date"
+                value={routing.eta || ''}
+                onChange={(e) => setRouting({ ...routing, eta: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Original ETA">
-            <input
-              type="date"
-              value={routing.original_eta || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, original_eta: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+            <Field label="Original ETA">
+              <input
+                type="date"
+                value={routing.original_eta || ''}
+                onChange={(e) => setRouting({ ...routing, original_eta: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Actual ETD">
-            <input
-              type="date"
-              value={routing.actual_etd || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, actual_etd: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
+            <Field label="Actual ETD">
+              <input
+                type="date"
+                value={routing.actual_etd || ''}
+                onChange={(e) => setRouting({ ...routing, actual_etd: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
 
-          <Field label="Actual ETA">
-            <input
-              type="date"
-              value={routing.actual_eta || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, actual_eta: e.target.value })
-              }
-              className={fieldClass}
-            />
-          </Field>
-        </SectionCard>
-
+            <Field label="Actual ETA">
+              <input
+                type="date"
+                value={routing.actual_eta || ''}
+                onChange={(e) => setRouting({ ...routing, actual_eta: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
+          </SectionCard>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
-        <SectionCard title="Tracking y Control">
-          <Field label="Tracking URL">
-            <input
-              value={routing.tracking_url || ''}
-              onChange={(e) =>
-                setRouting({ ...routing, tracking_url: e.target.value })
-              }
-              className={fieldClass}
+          <SectionCard title="Tracking y Control">
+            <Field label="Tracking URL">
+              <input
+                value={routing.tracking_url || ''}
+                onChange={(e) => setRouting({ ...routing, tracking_url: e.target.value })}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Remaining Free Days">
+              <input
+                type="number"
+                value={routing.remaining_free_days ?? ''}
+                onChange={(e) =>
+                  setRouting({
+                    ...routing,
+                    remaining_free_days: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+                className={fieldClass}
+              />
+            </Field>
+          </SectionCard>
+
+          <section className={cardClass}>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Comentarios Operativos
+            </h2>
+            <textarea
+              rows={6}
+              value={routing.operational_comments || ''}
+              onChange={(e) => setRouting({ ...routing, operational_comments: e.target.value })}
+              className={`${fieldClass} mt-5 min-h-36`}
             />
-          </Field>
-
-          <Field label="Remaining Free Days">
-            <input
-              type="number"
-              value={routing.remaining_free_days ?? ''}
-              onChange={(e) =>
-                setRouting({
-                  ...routing,
-                  remaining_free_days: e.target.value
-                    ? Number(e.target.value)
-                    : null,
-                })
-              }
-              className={fieldClass}
-            />
-          </Field>
-        </SectionCard>
-
-        <section className={cardClass}>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Comentarios Operativos
-          </h2>
-
-          <textarea
-            rows={6}
-            value={routing.operational_comments || ''}
-            onChange={(e) =>
-              setRouting({
-                ...routing,
-                operational_comments: e.target.value,
-              })
-            }
-            className={`${fieldClass} mt-5 min-h-36`}
-          />
-        </section>
-
+          </section>
         </div>
 
+        {/* ── Timeline ── */}
         <SectionCard title="Timeline Operativo">
           <Field label="Evento">
             <select
@@ -849,9 +838,7 @@ export default function RoutingBookingPage() {
               className={fieldClass}
             >
               {shipmentEventTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
+                <option key={type} value={type}>{type}</option>
               ))}
             </select>
           </Field>
@@ -865,7 +852,7 @@ export default function RoutingBookingPage() {
             />
           </Field>
 
-          <Field label="Ubicacion">
+          <Field label="Ubicación">
             <input
               value={eventLocation}
               onChange={(e) => setEventLocation(e.target.value)}
@@ -903,7 +890,7 @@ export default function RoutingBookingPage() {
 
                 {events.map((event) => {
                   const style = getEventStyle(event.event_type)
-                  const Icon = style.icon
+                  const Icon  = style.icon
 
                   return (
                     <div key={event.id} className="relative flex gap-4">
@@ -916,12 +903,9 @@ export default function RoutingBookingPage() {
                       <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
                         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                           <div>
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${style.badge}`}
-                            >
+                            <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${style.badge}`}>
                               {event.event_type}
                             </span>
-
                             {event.location && (
                               <p className="mt-2 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
                                 <MapPin className="h-4 w-4 text-slate-400" />
@@ -929,7 +913,6 @@ export default function RoutingBookingPage() {
                               </p>
                             )}
                           </div>
-
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             {new Date(event.event_date).toLocaleString()}
                           </p>
