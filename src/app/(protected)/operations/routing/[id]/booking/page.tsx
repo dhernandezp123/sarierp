@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import {
   CalendarClock,
   CheckCircle2,
+  Lock,
   MapPin,
   Ship,
   Truck,
@@ -21,6 +22,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
+import { cn } from '@/src/lib/utils'
 
 // ─── Datos del cliente que vienen en join desde la cotización ─────────────────
 type ClienteJoin = {
@@ -113,6 +115,24 @@ type ShippingInstructionEvent = {
 const SARI_NOTIFY_PARTY =
   'SARI EXPRESS S DE R.L. DE C.V.,\n BO. LOS ANDES 9 CALLE 12-13 AVE N.E,\n San Pedro Sula, Cortés, Honduras, CP: 21101\n RTN/TAXID: 08019003239182'
 
+const readonlyFieldClass = cn(
+  fieldClass,
+  'cursor-default border-slate-200 bg-slate-100 text-slate-700 focus:border-slate-200 focus:ring-0 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+)
+
+const fieldHintClass = {
+  cotizacion:
+    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  shipping:
+    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  referencia:
+    'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  estandar:
+    'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+} as const
+
+type FieldHint = keyof typeof fieldHintClass
+
 function SectionCard({
   title,
   children,
@@ -136,18 +156,30 @@ function Field({
   label,
   children,
   hint,
+  readonlySource,
 }: {
   label: string
   children: React.ReactNode
-  hint?: string
+  hint?: FieldHint
+  readonlySource?: FieldHint
 }) {
+  const badge = readonlySource || hint
+
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+      <label className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400">
         {label}
-        {hint && (
-          <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-            {hint}
+        {readonlySource && <Lock className="h-3 w-3" />}
+        {badge && (
+          <span className={cn(
+            'rounded px-1.5 py-0.5 text-[10px] font-semibold',
+            fieldHintClass[badge]
+          )}>
+            {badge === 'cotizacion'
+              ? 'cotización'
+              : badge === 'estandar'
+                ? 'estándar'
+                : badge}
           </span>
         )}
       </label>
@@ -549,19 +581,19 @@ export default function RoutingBookingPage() {
       <div className="space-y-6">
         <div className="grid gap-6 lg:grid-cols-2">
           <SectionCard title="Referencia Operativa">
-            <Field label="Carrier / Naviera" hint="referencia">
+            <Field label="Carrier / Naviera" readonlySource="referencia">
               <input
                 value={carrierReference}
                 readOnly
-                className={fieldClass}
+                className={readonlyFieldClass}
               />
             </Field>
 
-            <Field label="Incoterm" hint="cotización">
+            <Field label="Incoterm" readonlySource="cotizacion">
               <input
                 value={incotermReference}
                 readOnly
-                className={fieldClass}
+                className={readonlyFieldClass}
               />
             </Field>
 
@@ -695,27 +727,27 @@ export default function RoutingBookingPage() {
             </p>
           </div>
 
-          <Field label="Shipper">
+          <Field label="Shipper" readonlySource="shipping">
             <input
               value={routing.shipper || ''}
-              onChange={(e) => setRouting({ ...routing, shipper: e.target.value })}
-              className={fieldClass}
+              readOnly
+              className={readonlyFieldClass}
             />
           </Field>
 
-          <Field label="Shipper Contact">
+          <Field label="Shipper Contact" readonlySource="shipping">
             <input
               value={routing.supplier_contact || ''}
-              onChange={(e) => setRouting({ ...routing, supplier_contact: e.target.value })}
-              className={fieldClass}
+              readOnly
+              className={readonlyFieldClass}
             />
           </Field>
 
-          <Field label="Shipper Email">
+          <Field label="Shipper Email" readonlySource="shipping">
             <input
               value={routing.supplier_email || ''}
-              onChange={(e) => setRouting({ ...routing, supplier_email: e.target.value })}
-              className={fieldClass}
+              readOnly
+              className={readonlyFieldClass}
             />
           </Field>
 
@@ -726,27 +758,27 @@ export default function RoutingBookingPage() {
             </p>
           </div>
 
-          <Field label="Consignee" hint="cotización">
+          <Field label="Consignee" readonlySource="cotizacion">
             <input
               value={routing.consignee || ''}
-              onChange={(e) => setRouting({ ...routing, consignee: e.target.value })}
-              className={fieldClass}
+              readOnly
+              className={readonlyFieldClass}
             />
           </Field>
 
-          <Field label="Consignee Tax ID" hint="cotización">
+          <Field label="Consignee Tax ID" readonlySource="cotizacion">
             <input
               value={routing.consignee_tax_id || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_tax_id: e.target.value })}
-              className={fieldClass}
+              readOnly
+              className={readonlyFieldClass}
             />
           </Field>
 
-          <Field label="Consignee Address" hint="cotización">
+          <Field label="Consignee Address" readonlySource="cotizacion">
             <input
               value={routing.consignee_address || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_address: e.target.value })}
-              className={fieldClass}
+              readOnly
+              className={readonlyFieldClass}
             />
           </Field>
 
@@ -758,19 +790,19 @@ export default function RoutingBookingPage() {
             />
           </Field>
 
-          <Field label="Consignee Email" hint="cotización">
+          <Field label="Consignee Email" readonlySource="cotizacion">
             <input
               value={routing.consignee_email || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_email: e.target.value })}
-              className={fieldClass}
+              readOnly
+              className={readonlyFieldClass}
             />
           </Field>
 
-          <Field label="Consignee Phone" hint="cotización">
+          <Field label="Consignee Phone" readonlySource="cotizacion">
             <input
               value={routing.consignee_phone || ''}
-              onChange={(e) => setRouting({ ...routing, consignee_phone: e.target.value })}
-              className={fieldClass}
+              readOnly
+              className={readonlyFieldClass}
             />
           </Field>
 
@@ -782,7 +814,7 @@ export default function RoutingBookingPage() {
           </div>
 
           <div className="md:col-span-2 lg:col-span-4">
-            <Field label="Notify Party" hint="estándar">
+            <Field label="Notify Party" hint="estandar">
               <input
                 value={routing.notify_party || ''}
                 onChange={(e) => setRouting({ ...routing, notify_party: e.target.value })}
@@ -840,7 +872,7 @@ export default function RoutingBookingPage() {
           </SectionCard>
 
           <SectionCard title="Fechas Operativas">
-            <Field label="ETD" hint="cotización">
+            <Field label="ETD" hint="cotizacion">
               <input
                 type="date"
                 value={routing.etd || ''}

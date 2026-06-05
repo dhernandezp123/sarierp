@@ -109,6 +109,7 @@ type SalesInitialInfoField =
   | 'supplier_phone'
   | 'supplier_address'
   | 'sales_observations'
+  | 'special_instructions'
 
 const salesInitialInfoFields: SalesInitialInfoField[] = [
   'supplier_name',
@@ -117,6 +118,7 @@ const salesInitialInfoFields: SalesInitialInfoField[] = [
   'supplier_phone',
   'supplier_address',
   'sales_observations',
+  'special_instructions',
 ]
 
 function Info({ label, value }: { label: string; value?: string | number | null }) {
@@ -192,7 +194,9 @@ export default function RoutingDetailPage() {
     routing?.created_by === user?.id &&
     !routing?.sales_submitted_at &&
     routing?.operational_status === SI_PENDING_VALIDATION
-  const canEditInitialInfo = canManageRouting || canSalesEditInitialInfo
+  const canEditSupplierInfo =
+    (canManageRouting && routing?.shipment_status !== 'Finalizado') ||
+    canSalesEditInitialInfo
 
   const loadRouting = async () => {
     // TODO: Reforzar esta misma regla en Supabase RLS para shipping_instructions.
@@ -304,6 +308,17 @@ export default function RoutingDetailPage() {
       toast.error(error.message || 'No se pudieron guardar las Shipping Instructions')
       return
     }
+
+    await createActivityLog({
+      module: 'operations_routing',
+      action: 'shipping_instruction_updated',
+      entityType: 'shipping_instruction',
+      entityId: routing.id,
+      description: `Shipping Instructions ${routing.routing_number} actualizadas`,
+      metadata: {
+        updated_by: user?.id,
+      },
+    })
 
     toast.success('Shipping Instructions actualizadas')
   }
@@ -563,7 +578,11 @@ export default function RoutingDetailPage() {
       field as SalesInitialInfoField
     )
 
-    if (!canManageRouting && !(canSalesEditInitialInfo && isSalesInitialInfoField)) {
+    if (isSalesInitialInfoField && !canEditSupplierInfo) {
+      return
+    }
+
+    if (!isSalesInitialInfoField && !canManageRouting) {
       return
     }
 
@@ -821,7 +840,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_name || ''}
                 onChange={(e) => updateRouting('supplier_name', e.target.value)}
-                disabled={!canEditInitialInfo}
+                disabled={!canEditSupplierInfo}
                 className={inputClassName}
               />
             </div>
@@ -833,7 +852,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_contact || ''}
                 onChange={(e) => updateRouting('supplier_contact', e.target.value)}
-                disabled={!canEditInitialInfo}
+                disabled={!canEditSupplierInfo}
                 className={inputClassName}
               />
             </div>
@@ -845,7 +864,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_email || ''}
                 onChange={(e) => updateRouting('supplier_email', e.target.value)}
-                disabled={!canEditInitialInfo}
+                disabled={!canEditSupplierInfo}
                 className={inputClassName}
               />
             </div>
@@ -857,7 +876,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_phone || ''}
                 onChange={(e) => updateRouting('supplier_phone', e.target.value)}
-                disabled={!canEditInitialInfo}
+                disabled={!canEditSupplierInfo}
                 className={inputClassName}
               />
             </div>
@@ -869,7 +888,7 @@ export default function RoutingDetailPage() {
               <input
                 value={routing.supplier_address || ''}
                 onChange={(e) => updateRouting('supplier_address', e.target.value)}
-                disabled={!canEditInitialInfo}
+                disabled={!canEditSupplierInfo}
                 className={inputClassName}
               />
             </div>
@@ -884,7 +903,7 @@ export default function RoutingDetailPage() {
           <textarea
             value={routing.sales_observations || ''}
             onChange={(e) => updateRouting('sales_observations', e.target.value)}
-            disabled={!canEditInitialInfo}
+            disabled={!canEditSupplierInfo}
             rows={10}
             placeholder="Notas comerciales, instrucciones del cliente, información adicional del proveedor..."
             className="mt-4 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
