@@ -3,7 +3,7 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Lock } from 'lucide-react'
+import { Download, FileText, Lock, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
@@ -43,6 +43,24 @@ type BookingContainerRow = {
   container_type: string
   quantity: number | ''
   notes: string
+}
+
+type BookingDocument = {
+  id: string
+  booking_id: string
+  document_type: string
+  file_name: string
+  file_url: string
+  notes: string | null
+  uploaded_by: string | null
+  created_at: string | null
+}
+
+type ProfileRow = {
+  id: string
+  nombre: string | null
+  apellido: string | null
+  email: string | null
 }
 
 type RoutingData = {
@@ -103,6 +121,20 @@ const bookingStatusOptions = [
   'En Tránsito',
   'Arribado',
   'Finalizado',
+]
+
+const BOOKING_DOCUMENT_BUCKET = 'booking-documents'
+
+const bookingDocumentTypes = [
+  'Booking Confirmation',
+  'Master BL',
+  'House BL',
+  'Arrival Notice',
+  'Packing List',
+  'Commercial Invoice',
+  'Carrier Invoice',
+  'Supplier Invoice',
+  'Other',
 ]
 
 const readonlyFieldClass = cn(
@@ -213,6 +245,31 @@ function formatContainerSummary(containers: ContainerAllocation[]) {
     .join(', ')
 }
 
+function formatDisplayDate(value: string | null) {
+  if (!value) return 'N/A'
+
+  return new Intl.DateTimeFormat('es-HN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(value))
+}
+
+function sanitizeFileName(fileName: string) {
+  return fileName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+}
+
+function profileDisplayName(profile: ProfileRow | undefined) {
+  if (!profile) return 'N/A'
+
+  const fullName = `${profile.nombre || ''} ${profile.apellido || ''}`.trim()
+  return fullName || profile.email || 'N/A'
+}
+
 export default function RoutingBookingChildPage() {
   const params = useParams<{ id: string; bookingId: string }>()
   const router = useRouter()
@@ -228,6 +285,66 @@ export default function RoutingBookingChildPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingContainers, setSavingContainers] = useState(false)
+  const [bookingDocuments, setBookingDocuments] = useState<BookingDocument[]>([])
+  const [documentUserNames, setDocumentUserNames] = useState<Record<string, string>>({})
+  const [documentType, setDocumentType] = useState(bookingDocumentTypes[0])
+  const [documentNotes, setDocumentNotes] = useState('')
+  const [uploadingDocument, setUploadingDocument] = useState(false)
+  const [downloadingDocumentId, setDownloadingDocumentId] = useState<string | null>(null)
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
+
+  const loadBookingDocuments = async (targetBookingId = bookingId) => {
+    const { data, error } = await supabase
+      .from('booking_documents')
+      .select('*')
+      .eq('booking_id', targetBookingId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error loading booking documents:', error)
+      toast.error('No se pudieron cargar los documentos del booking')
+      setBookingDocuments([])
+      setDocumentUserNames({})
+      return
+    }
+
+    const documents = (data || []) as BookingDocument[]
+    setBookingDocuments(documents)
+
+    const userIds = Array.from(
+      new Set(
+        documents
+          .map((document) => document.uploaded_by)
+          .filter((userId): userId is string => Boolean(userId))
+      )
+    )
+
+    if (userIds.length === 0) {
+      setDocumentUserNames({})
+      return
+    }
+
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, nombre, apellido, email')
+      .in('id', userIds)
+
+    if (profilesError) {
+      console.error('Error loading document users:', profilesError)
+      setDocumentUserNames({})
+      return
+    }
+
+    const namesById = ((profilesData || []) as ProfileRow[]).reduce<Record<string, string>>(
+      (acc, profile) => {
+        acc[profile.id] = profileDisplayName(profile)
+        return acc
+      },
+      {}
+    )
+
+    setDocumentUserNames(namesById)
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -280,6 +397,8 @@ export default function RoutingBookingChildPage() {
       toast.error(bookingError?.message || 'Booking no encontrado')
       setRouting(routingData as RoutingData)
       setBooking(null)
+      setBookingDocuments([])
+      setDocumentUserNames({})
       setLoading(false)
       return
     }
@@ -385,6 +504,7 @@ export default function RoutingBookingChildPage() {
         notes: container.notes || '',
       }))
     )
+    await loadBookingDocuments((bookingData as BookingData).id)
     setLoading(false)
   }
 
@@ -604,6 +724,155 @@ export default function RoutingBookingChildPage() {
     })
     toast.success('Contenedores del booking guardados')
     await loadData()
+  }
+
+  const uploadBookingDocument = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!booking) return
+
+    const fileInput = event.currentTarget.elements.namedItem('documentFile') as HTMLInputElement | null
+    const file = fileInput?.files?.[0]
+
+    if (!file) {
+      toast.error('Selecciona un archivo para subir')
+      return
+    }
+
+    setUploadingDocument(true)
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      setUploadingDocument(false)
+      console.error('Error getting upload user:', userError)
+      toast.error('Sesión no válida. Vuelve a iniciar sesión.')
+      return
+    }
+
+    const filePath = `${booking.id}/${Date.now()}-${sanitizeFileName(file.name)}`
+
+    console.log('Upload user:', user?.id)
+    console.log('Upload path:', filePath)
+    console.log('Booking id:', booking.id)
+
+    const { error: uploadError } = await supabase.storage
+      .from(BOOKING_DOCUMENT_BUCKET)
+      .upload(filePath, file, { upsert: false })
+
+    if (uploadError) {
+      setUploadingDocument(false)
+      console.error('Error uploading booking document:', uploadError)
+      toast.error(uploadError.message || 'No se pudo subir el documento')
+      return
+    }
+
+    const { error: insertError } = await supabase
+      .from('booking_documents')
+      .insert({
+        booking_id: booking.id,
+        document_type: documentType,
+        file_name: file.name,
+        file_url: filePath,
+        notes: documentNotes.trim() || null,
+        uploaded_by: user.id,
+      })
+
+    setUploadingDocument(false)
+
+    if (insertError) {
+      console.error('Error saving booking document:', insertError)
+      const { error: cleanupError } = await supabase.storage
+        .from(BOOKING_DOCUMENT_BUCKET)
+        .remove([filePath])
+
+      if (cleanupError) {
+        console.error('Error removing orphaned booking document:', cleanupError)
+      }
+
+      toast.error(insertError.message || 'No se pudo registrar el documento')
+      return
+    }
+
+    setDocumentType(bookingDocumentTypes[0])
+    setDocumentNotes('')
+    if (fileInput) fileInput.value = ''
+
+    await recordBookingActivity({
+      action: 'booking_document_uploaded',
+      description: `Documento ${documentType} adjuntado al booking`,
+      metadata: {
+        document_type: documentType,
+        file_name: file.name,
+      },
+    })
+
+    toast.success('Documento adjuntado')
+    await loadBookingDocuments(booking.id)
+  }
+
+  const downloadBookingDocument = async (document: BookingDocument) => {
+    setDownloadingDocumentId(document.id)
+
+    const { data, error } = await supabase.storage
+      .from(BOOKING_DOCUMENT_BUCKET)
+      .createSignedUrl(document.file_url, 60)
+
+    setDownloadingDocumentId(null)
+
+    if (error || !data?.signedUrl) {
+      console.error('Error creating signed URL:', error)
+      toast.error('No se pudo descargar el documento', {
+        description: error?.message,
+      })
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const deleteBookingDocument = async (document: BookingDocument) => {
+    setDeletingDocumentId(document.id)
+
+    const { error: removeError } = await supabase.storage
+      .from(BOOKING_DOCUMENT_BUCKET)
+      .remove([document.file_url])
+
+    if (removeError) {
+      console.error('Error removing booking document file:', removeError)
+      toast.error('No se pudo eliminar el archivo del Storage', {
+        description: 'Se intentara quitar el registro del booking.',
+      })
+    }
+
+    const { error: deleteError } = await supabase
+      .from('booking_documents')
+      .delete()
+      .eq('id', document.id)
+
+    setDeletingDocumentId(null)
+
+    if (deleteError) {
+      console.error('Error deleting booking document:', deleteError)
+      toast.error('No se pudo eliminar el documento', {
+        description: deleteError.message,
+      })
+      return
+    }
+
+    await recordBookingActivity({
+      action: 'booking_document_deleted',
+      description: `Documento ${document.document_type} eliminado del booking`,
+      metadata: {
+        document_type: document.document_type,
+        file_name: document.file_name,
+      },
+    })
+
+    toast.success('Documento eliminado')
+    await loadBookingDocuments(document.booking_id)
   }
 
   if (loading) {
@@ -1080,6 +1349,146 @@ export default function RoutingBookingChildPage() {
             >
               {savingContainers ? 'Guardando...' : 'Guardar contenedores'}
             </button>
+          </div>
+        </section>
+
+        <section className={cardClass}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Documentos
+              </h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Bucket esperado en Supabase Storage: {BOOKING_DOCUMENT_BUCKET}
+              </p>
+            </div>
+          </div>
+
+          <form
+            onSubmit={uploadBookingDocument}
+            className="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70 md:grid-cols-2 lg:grid-cols-4"
+          >
+            <Field label="Tipo">
+              <select
+                value={documentType}
+                onChange={(event) => setDocumentType(event.target.value)}
+                className={fieldClass}
+              >
+                {bookingDocumentTypes.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Archivo">
+              <input
+                name="documentFile"
+                type="file"
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Notas">
+              <input
+                value={documentNotes}
+                onChange={(event) => setDocumentNotes(event.target.value)}
+                className={fieldClass}
+                placeholder="Opcional"
+              />
+            </Field>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={uploadingDocument}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Upload className="h-4 w-4" />
+                {uploadingDocument ? 'Subiendo...' : 'Subir documento'}
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="py-3 pr-4">Tipo</th>
+                  <th className="pr-4">Archivo</th>
+                  <th className="pr-4">Fecha</th>
+                  <th className="pr-4">Usuario</th>
+                  <th className="text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bookingDocuments.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="border-t border-slate-100 py-6 text-center text-slate-500 dark:border-slate-800 dark:text-slate-400"
+                    >
+                      Sin documentos adjuntos.
+                    </td>
+                  </tr>
+                ) : (
+                  bookingDocuments.map((document) => (
+                    <tr
+                      key={document.id}
+                      className="border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <td className="py-3 pr-4 font-medium text-slate-900 dark:text-white">
+                        {document.document_type}
+                      </td>
+                      <td className="pr-4">
+                        <div className="flex min-w-64 items-start gap-2 text-slate-700 dark:text-slate-200">
+                          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                          <div>
+                            <p className="break-all">{document.file_name}</p>
+                            {document.notes && (
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                {document.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="pr-4 text-slate-600 dark:text-slate-300">
+                        {formatDisplayDate(document.created_at)}
+                      </td>
+                      <td className="pr-4 text-slate-600 dark:text-slate-300">
+                        {document.uploaded_by
+                          ? documentUserNames[document.uploaded_by] || 'N/A'
+                          : 'N/A'}
+                      </td>
+                      <td className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => downloadBookingDocument(document)}
+                            disabled={downloadingDocumentId === document.id}
+                            className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Descargar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteBookingDocument(document)}
+                            disabled={deletingDocumentId === document.id}
+                            className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
 
