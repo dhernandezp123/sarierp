@@ -8,6 +8,13 @@ import { toast } from 'sonner'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/src/components/ui/dialog'
+import {
   cardClass,
   fieldClass,
   secondaryButtonClass,
@@ -292,6 +299,8 @@ export default function RoutingBookingChildPage() {
   const [uploadingDocument, setUploadingDocument] = useState(false)
   const [downloadingDocumentId, setDownloadingDocumentId] = useState<string | null>(null)
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
+  const [documentPendingDelete, setDocumentPendingDelete] =
+    useState<BookingDocument | null>(null)
 
   const loadBookingDocuments = async (targetBookingId = bookingId) => {
     const { data, error } = await supabase
@@ -849,6 +858,7 @@ export default function RoutingBookingChildPage() {
       .eq('id', document.id)
 
     setDeletingDocumentId(null)
+    setDocumentPendingDelete(null)
 
     if (deleteError) {
       console.error('Error deleting booking document:', deleteError)
@@ -1471,7 +1481,7 @@ export default function RoutingBookingChildPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => deleteBookingDocument(document)}
+                            onClick={() => setDocumentPendingDelete(document)}
                             disabled={deletingDocumentId === document.id}
                             className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
                           >
@@ -1553,6 +1563,60 @@ export default function RoutingBookingChildPage() {
           {saving ? 'Guardando...' : 'Guardar Booking'}
         </button>
       </div>
+
+      <Dialog
+        open={Boolean(documentPendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deletingDocumentId) {
+            setDocumentPendingDelete(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar documento</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro que deseas eliminar este documento? Esta acción no
+              se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+
+          {documentPendingDelete && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Archivo
+                </p>
+                <p className="mt-1 break-all text-sm font-semibold text-slate-900 dark:text-white">
+                  {documentPendingDelete.file_name}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDocumentPendingDelete(null)}
+                  disabled={Boolean(deletingDocumentId)}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => deleteBookingDocument(documentPendingDelete)}
+                  disabled={Boolean(deletingDocumentId)}
+                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deletingDocumentId
+                    ? 'Eliminando...'
+                    : 'Eliminar documento'}
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
