@@ -1,29 +1,25 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import type React from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { Trash2 } from 'lucide-react'
 import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  LineChart,
-  Line,
-} from 'recharts'
-
-import { supabase } from '../../../lib/supabase/client'
+  BarChart3,
+  BriefcaseBusiness,
+  CircleDollarSign,
+  ClipboardList,
+  Percent,
+  Target,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { useUser } from '@/src/hooks/useUser'
+import { supabase } from '@/src/lib/supabase/client'
 import {
   fieldClass,
-  cardClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
@@ -37,91 +33,255 @@ type UserTask = {
   due_date: string | null
 }
 
+type ClientJoin = {
+  id?: string | null
+  nombre: string | null
+}
+
+type ProfileJoin = {
+  id?: string | null
+  nombre: string | null
+  apellido: string | null
+  email?: string | null
+}
+
+type QuotationRow = {
+  id: string
+  quotation_number: string | null
+  status: string | null
+  created_at: string | null
+  created_by: string | null
+  quote_type: string | null
+  tipo_transporte: string | null
+  total_sale: number | string | null
+  profit_amount: number | string | null
+  gp_percentage: number | string | null
+  clientes?: ClientJoin | ClientJoin[] | null
+  cliente?: ClientJoin | ClientJoin[] | null
+  created_by_profile?: ProfileJoin | ProfileJoin[] | null
+}
+
+type PricingItemRow = {
+  quotation_id: string | null
+  cost_amount: number | string | null
+  sale_amount: number | string | null
+  quantity: number | string | null
+}
+
+type QuoteTotals = {
+  sale: number
+  cost: number
+  profit: number
+  gp: number
+}
+
+type ClientSummary = {
+  clientName: string
+  sale: number
+  profit: number
+}
+
+type SellerSummary = {
+  sellerName: string
+  won: number
+  sale: number
+  profit: number
+}
+
+const trackedStatuses = [
+  'Pendiente de Fijar Precios',
+  'Pricing Aprobado',
+  'Enviada al Cliente',
+  'Ganada',
+  'Perdida',
+]
+
+function resolveJoin<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
+}
+
+function formatCurrency(value: number) {
+  return `USD ${value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+function formatPercent(value: number) {
+  return `${value.toFixed(2)}%`
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return 'N/A'
+
+  return new Intl.DateTimeFormat('es-HN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(value))
+}
+
+function isCurrentMonth(value?: string | null) {
+  if (!value) return false
+
+  const date = new Date(value)
+  const now = new Date()
+
+  return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+}
+
+function getClientName(quote: QuotationRow) {
+  return resolveJoin(quote.clientes || quote.cliente)?.nombre || 'Sin cliente'
+}
+
+function getSellerName(quote: QuotationRow) {
+  const seller = resolveJoin(quote.created_by_profile)
+  const fullName = `${seller?.nombre || ''} ${seller?.apellido || ''}`.trim()
+  return fullName || seller?.email || 'Sin vendedor'
+}
+
+function getQuoteType(quote: QuotationRow) {
+  return [quote.quote_type, quote.tipo_transporte].filter(Boolean).join(' / ') || 'N/A'
+}
+
+function calculatePricingTotals(items: PricingItemRow[]) {
+  return items.reduce(
+    (totals, item) => {
+      const quantity = Number(item.quantity || 1)
+      const cost = Number(item.cost_amount || 0) * quantity
+      const sale = Number(item.sale_amount || 0) * quantity
+
+      totals.cost += cost
+      totals.sale += sale
+      totals.profit += sale - cost
+
+      return totals
+    },
+    { sale: 0, cost: 0, profit: 0 }
+  )
+}
+
+function getQuoteTotals(
+  quote: QuotationRow,
+  pricingByQuote: Record<string, PricingItemRow[]>
+): QuoteTotals {
+  const pricingTotals = calculatePricingTotals(pricingByQuote[quote.id] || [])
+  const storedSale = Number(quote.total_sale || 0)
+  const storedProfit = Number(quote.profit_amount || 0)
+  const sale = storedSale > 0 ? storedSale : pricingTotals.sale
+  const profit = storedSale > 0 || storedProfit !== 0 ? storedProfit : pricingTotals.profit
+  const cost = sale - profit
+  const gp = sale > 0 ? (profit / sale) * 100 : 0
+
+  return {
+    sale,
+    cost,
+    profit,
+    gp,
+  }
+}
+
+function getStatusBadgeClass(status?: string | null) {
+  switch (status) {
+    case 'Ganada':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200'
+    case 'Perdida':
+      return 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-200'
+    case 'Enviada al Cliente':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-200'
+    case 'Pricing Aprobado':
+      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-200'
+    case 'Pendiente de Fijar Precios':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-200'
+    default:
+      return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+  }
+}
+
 export default function DashboardPage() {
   const router = useRouter()
+  const { user, profile, loading: userLoading } = useUser()
+  const role = profile?.rol || ''
+  const isAdmin = role === 'Admin'
+  const isSales = role === 'Ventas'
+  const isOperations = role === 'Operaciones'
 
   const [loading, setLoading] = useState(true)
-  const [quotations, setQuotations] = useState<any[]>([])
-  const [clientes, setClientes] = useState<any[]>([])
-  const [pricingItems, setPricingItems] = useState<any[]>([])
-  const [invoiceItems, setInvoiceItems] = useState<any[]>([])
+  const [quotations, setQuotations] = useState<QuotationRow[]>([])
+  const [pricingItems, setPricingItems] = useState<PricingItemRow[]>([])
   const [tasks, setTasks] = useState<UserTask[]>([])
   const [taskTitle, setTaskTitle] = useState('')
-  const [taskPriority, setTaskPriority] =
-    useState<'Baja' | 'Media' | 'Alta'>('Media')
+  const [taskPriority, setTaskPriority] = useState<'Baja' | 'Media' | 'Alta'>('Media')
   const [taskDueDate, setTaskDueDate] = useState('')
   const [loadingTasks, setLoadingTasks] = useState(false)
 
-  useEffect(() => {
-    fetchDashboard()
-    loadTasks()
-  }, [])
-
   const fetchDashboard = async () => {
-    const { data: quotesData, error: quotesError } = await supabase
+    if (!user) return
+
+    setLoading(true)
+
+    let query = supabase
       .from('quotations')
       .select(`
         *,
         clientes (
+          id,
           nombre
+        ),
+        created_by_profile:profiles!quotations_created_by_fkey (
+          id,
+          nombre,
+          apellido,
+          email
         )
       `)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
+    if (isSales && !isAdmin) {
+      query = query.eq('created_by', user.id)
+    }
+
+    const { data: quotesData, error: quotesError } = await query
+
     if (quotesError) {
       toast.error(quotesError.message)
+      setQuotations([])
+      setPricingItems([])
+      setLoading(false)
       return
     }
 
-    const { data: clientsData, error: clientsError } = await supabase
-      .from('clientes')
-      .select('*')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-
-    if (clientsError) {
-      toast.error(clientsError.message)
-      return
-    }
-
-    const quoteIds = quotesData?.map((q) => q.id) || []
-
-    let pricingData: any[] = []
-    let invoiceData: any[] = []
+    const visibleQuotes = (quotesData || []) as QuotationRow[]
+    const quoteIds = visibleQuotes.map((quote) => quote.id)
+    let pricingData: PricingItemRow[] = []
 
     if (quoteIds.length > 0) {
-      const { data: pricingResult } = await supabase
+      const { data: pricingResult, error: pricingError } = await supabase
         .from('pricing_items')
-        .select('*')
+        .select('quotation_id, cost_amount, sale_amount, quantity')
         .in('quotation_id', quoteIds)
 
-      pricingData = pricingResult || []
+      if (pricingError) {
+        toast.error(pricingError.message)
+      }
 
-      const { data: invoiceResult } = await supabase
-        .from('provider_invoice_items')
-        .select('*')
-        .in('quotation_id', quoteIds)
-
-      invoiceData = invoiceResult || []
+      pricingData = (pricingResult || []) as PricingItemRow[]
     }
 
-    setQuotations(quotesData || [])
-    setClientes(clientsData || [])
+    setQuotations(visibleQuotes)
     setPricingItems(pricingData)
-    setInvoiceItems(invoiceData)
     setLoading(false)
   }
 
   const loadTasks = async () => {
-    const { data: userData } = await supabase.auth.getUser()
-
-    if (!userData.user) return
+    if (!user) return
 
     const { data } = await supabase
       .from('user_tasks')
       .select('*')
-      .eq('user_id', userData.user.id)
+      .eq('user_id', user.id)
       .order('status', { ascending: true })
       .order('created_at', { ascending: false })
 
@@ -130,26 +290,35 @@ export default function DashboardPage() {
     }
   }
 
-  const createTask = async () => {
-    if (!taskTitle.trim()) return
+  useEffect(() => {
+    if (userLoading) return
 
-    setLoadingTasks(true)
-
-    const { data: userData } = await supabase.auth.getUser()
-
-    if (!userData.user) {
-      setLoadingTasks(false)
+    if (!user) {
+      setLoading(false)
       return
     }
 
-    const { error } = await supabase
-      .from('user_tasks')
-      .insert({
-        user_id: userData.user.id,
-        title: taskTitle.trim(),
-        priority: taskPriority,
-        due_date: taskDueDate || null,
-      })
+    loadTasks()
+
+    if (isOperations) {
+      setLoading(false)
+      return
+    }
+
+    fetchDashboard()
+  }, [userLoading, user?.id, role])
+
+  const createTask = async () => {
+    if (!taskTitle.trim() || !user) return
+
+    setLoadingTasks(true)
+
+    const { error } = await supabase.from('user_tasks').insert({
+      user_id: user.id,
+      title: taskTitle.trim(),
+      priority: taskPriority,
+      due_date: taskDueDate || null,
+    })
 
     setLoadingTasks(false)
 
@@ -159,35 +328,25 @@ export default function DashboardPage() {
     }
 
     toast.success('Tarea creada')
-
     setTaskTitle('')
     setTaskPriority('Media')
     setTaskDueDate('')
-
     loadTasks()
   }
 
   const toggleTask = async (task: UserTask) => {
-    const nextStatus =
-      task.status === 'Pendiente'
-        ? 'Completada'
-        : 'Pendiente'
+    const nextStatus = task.status === 'Pendiente' ? 'Completada' : 'Pendiente'
 
     await supabase
       .from('user_tasks')
-      .update({
-        status: nextStatus,
-      })
+      .update({ status: nextStatus })
       .eq('id', task.id)
 
     loadTasks()
   }
 
   const deleteTask = async (taskId: string) => {
-    const { error } = await supabase
-      .from('user_tasks')
-      .delete()
-      .eq('id', taskId)
+    const { error } = await supabase.from('user_tasks').delete().eq('id', taskId)
 
     if (error) {
       toast.error('No se pudo eliminar la tarea')
@@ -195,587 +354,730 @@ export default function DashboardPage() {
     }
 
     toast.success('Tarea eliminada')
-
     loadTasks()
   }
 
-  const now = new Date()
-  const currentMonth = now.getMonth()
-  const currentYear = now.getFullYear()
-
-  const quotesThisMonth = quotations.filter((q) => {
-    const date = q.created_at ? new Date(q.created_at) : null
-    return (
-      date &&
-      date.getMonth() === currentMonth &&
-      date.getFullYear() === currentYear
+  const dashboard = useMemo(() => {
+    const pricingByQuote = pricingItems.reduce<Record<string, PricingItemRow[]>>(
+      (acc, item) => {
+        if (!item.quotation_id) return acc
+        acc[item.quotation_id] = [...(acc[item.quotation_id] || []), item]
+        return acc
+      },
+      {}
     )
-  })
 
-  const clientsThisMonth = clientes.filter((c) => {
-    const date = c.created_at ? new Date(c.created_at) : null
-    return (
-      date &&
-      date.getMonth() === currentMonth &&
-      date.getFullYear() === currentYear
+    const totalsByQuote = quotations.reduce<Record<string, QuoteTotals>>((acc, quote) => {
+      acc[quote.id] = getQuoteTotals(quote, pricingByQuote)
+      return acc
+    }, {})
+
+    const quotesThisMonth = quotations.filter((quote) => isCurrentMonth(quote.created_at))
+    const sentQuotes = quotations.filter((quote) => quote.status === 'Enviada al Cliente')
+    const wonQuotes = quotations.filter((quote) => quote.status === 'Ganada')
+    const lostQuotes = quotations.filter((quote) => quote.status === 'Perdida')
+    const pendingPricing = quotations.filter(
+      (quote) => quote.status === 'Pendiente de Fijar Precios'
     )
-  })
 
-  const wonQuotes = quotations.filter((q) => q.status === 'Ganada')
-  const pendingPricing = quotations.filter(
-    (q) => q.status === 'Pendiente de Fijar Precios'
-  )
-  const sentQuotes = quotations.filter((q) => q.status === 'Enviada al Cliente')
-  const draftQuotes = quotations.filter((q) => q.status === 'Borrador')
+    const closedQuotes = [...wonQuotes, ...lostQuotes]
+    const totalWonSale = wonQuotes.reduce(
+      (sum, quote) => sum + totalsByQuote[quote.id].sale,
+      0
+    )
+    const totalWonProfit = wonQuotes.reduce(
+      (sum, quote) => sum + totalsByQuote[quote.id].profit,
+      0
+    )
+    const averageGp =
+      wonQuotes.length > 0
+        ? wonQuotes.reduce((sum, quote) => sum + totalsByQuote[quote.id].gp, 0) /
+          wonQuotes.length
+        : 0
+    const closeRate =
+      closedQuotes.length > 0 ? (wonQuotes.length / closedQuotes.length) * 100 : 0
 
-  const statusData = [
-    { name: 'Ganadas', value: wonQuotes.length },
-    { name: 'Pendientes Pricing', value: pendingPricing.length },
-    { name: 'Enviadas', value: sentQuotes.length },
-    { name: 'Borradores', value: draftQuotes.length },
-  ].filter((item) => item.value > 0)
+    const topClients = Object.values(
+      wonQuotes.reduce<Record<string, ClientSummary>>((acc, quote) => {
+        const clientName = getClientName(quote)
+        const totals = totalsByQuote[quote.id]
 
-  const COLORS = ['#16A34A', '#CA8A04', '#2563EB', '#64748B']
+        acc[clientName] = acc[clientName] || {
+          clientName,
+          sale: 0,
+          profit: 0,
+        }
+        acc[clientName].sale += totals.sale
+        acc[clientName].profit += totals.profit
 
-  const quotedCost = pricingItems.reduce(
-    (sum, item) =>
-      sum + Number(item.cost_amount || 0) * Number(item.quantity || 1),
-    0
-  )
+        return acc
+      }, {})
+    ).sort((a, b) => b.sale - a.sale)
 
-  const quotedSale = pricingItems.reduce(
-    (sum, item) =>
-      sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
-    0
-  )
+    const topSellers = Object.values(
+      wonQuotes.reduce<Record<string, SellerSummary>>((acc, quote) => {
+        const sellerName = getSellerName(quote)
+        const totals = totalsByQuote[quote.id]
 
-  const expectedProfit = quotedSale - quotedCost
+        acc[sellerName] = acc[sellerName] || {
+          sellerName,
+          won: 0,
+          sale: 0,
+          profit: 0,
+        }
+        acc[sellerName].won += 1
+        acc[sellerName].sale += totals.sale
+        acc[sellerName].profit += totals.profit
 
-  const quoteIdsWithRealCosts = new Set(
-    invoiceItems.map((item) => item.quotation_id)
-  )
+        return acc
+      }, {})
+    ).sort((a, b) => b.sale - a.sale)
 
-  const pricingItemsWithRealCosts = pricingItems.filter((item) =>
-    quoteIdsWithRealCosts.has(item.quotation_id)
-  )
+    const statusRows = trackedStatuses.map((status) => ({
+      status,
+      count: quotations.filter((quote) => quote.status === status).length,
+    }))
 
-  const quotedSaleWithRealCosts = pricingItemsWithRealCosts.reduce(
-    (sum, item) =>
-      sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
-    0
-  )
-
-  const realCost = invoiceItems.reduce(
-    (sum, item) =>
-      sum + Number(item.total_cost || 0) + Number(item.tax_amount || 0),
-    0
-  )
-
-  const realProfit = quotedSaleWithRealCosts - realCost
-
-  const profitComparisonData = [
-    {
-      name: 'Profit',
-      Esperado: Number(expectedProfit.toFixed(2)),
-      Real: Number(realProfit.toFixed(2)),
-    },
-  ]
-
-  const monthlyQuotesMap = quotations.reduce((acc: any, quote) => {
-    if (!quote.created_at) return acc
-
-    const date = new Date(quote.created_at)
-
-    const key = `${date.getFullYear()}-${String(
-      date.getMonth() + 1
-    ).padStart(2, '0')}`
-
-    if (!acc[key]) {
-      acc[key] = {
-        month: key,
-        cotizaciones: 0,
-        ganadas: 0,
-      }
+    return {
+      pricingByQuote,
+      totalsByQuote,
+      metrics: {
+        quotesThisMonth: quotesThisMonth.length,
+        sentQuotes: sentQuotes.length,
+        wonQuotes: wonQuotes.length,
+        lostQuotes: lostQuotes.length,
+        closeRate,
+        totalWonSale,
+        totalWonProfit,
+        averageGp,
+      },
+      latestQuotes: quotations.slice(0, 8),
+      topClients: topClients.slice(0, 6),
+      topSellers: topSellers.slice(0, 6),
+      pendingPricing: pendingPricing.slice(0, 8),
+      statusRows,
     }
+  }, [quotations, pricingItems])
 
-    acc[key].cotizaciones += 1
-
-    if (quote.status === 'Ganada') {
-      acc[key].ganadas += 1
-    }
-
-    return acc
-  }, {})
-
-  const monthlyQuotesData = Object.values(monthlyQuotesMap).sort(
-    (a: any, b: any) => a.month.localeCompare(b.month)
-  )
-
-  const formatCurrency = (value: number) =>
-    value.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-
-  const currencyTooltipFormatter = (value: any) => {
-    return `USD ${formatCurrency(Number(value || 0))}`
+  if (userLoading || loading) {
+    return (
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        Cargando dashboard...
+      </p>
+    )
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Ganada':
-        return 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
-
-      case 'Pendiente de Fijar Precios':
-        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300'
-
-      case 'Enviada al Cliente':
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-
-      case 'Solicitud':
-        return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-
-      default:
-        return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-    }
-  }
-
-  const pendingFinancialValidation = wonQuotes.filter(
-    (q) => q.financial_validation_status !== 'Validado'
-  )
-
-  const latestQuotes = quotations.slice(0, 6)
-
-  if (loading) {
-    return <div className="p-8">Cargando dashboard...</div>
+  if (isOperations) {
+    return (
+      <div className="space-y-6">
+        <Header
+          subtitle="Vista limitada para Operaciones."
+          onNewQuote={() => router.push('/quotations/new')}
+        />
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Dashboard Operativo
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            El control operativo de bookings, ETAs, documentos y contenedores está
+            disponible en el módulo de Operaciones.
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push('/operations/dashboard')}
+            className={`${primaryButtonClass} mt-5`}
+          >
+            Ir a Operaciones
+          </button>
+        </section>
+        <TasksPanel
+          tasks={tasks}
+          taskTitle={taskTitle}
+          taskPriority={taskPriority}
+          taskDueDate={taskDueDate}
+          loadingTasks={loadingTasks}
+          setTaskTitle={setTaskTitle}
+          setTaskPriority={setTaskPriority}
+          setTaskDueDate={setTaskDueDate}
+          createTask={createTask}
+          toggleTask={toggleTask}
+          deleteTask={deleteTask}
+        />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-slate-900 dark:text-white">
-              Dashboard
-            </h1>
+      <Header
+        subtitle={
+          isSales
+            ? 'Resumen ejecutivo comercial de tus cotizaciones.'
+            : 'Resumen ejecutivo comercial y gerencial.'
+        }
+        onNewQuote={() => router.push('/quotations/new')}
+      />
 
-            <p className="mt-2 text-slate-500 dark:text-slate-400">
-              Resumen ejecutivo comercial, pricing y financiero.
-            </p>
-          </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Cotizaciones creadas este mes"
+          value={dashboard.metrics.quotesThisMonth}
+          icon={<ClipboardList className="h-5 w-5" />}
+        />
+        <MetricCard
+          title="Cotizaciones enviadas al cliente"
+          value={dashboard.metrics.sentQuotes}
+          icon={<BriefcaseBusiness className="h-5 w-5" />}
+        />
+        <MetricCard
+          title="Cotizaciones ganadas"
+          value={dashboard.metrics.wonQuotes}
+          icon={<TrendingUp className="h-5 w-5" />}
+          positive
+        />
+        <MetricCard
+          title="Cotizaciones perdidas"
+          value={dashboard.metrics.lostQuotes}
+          icon={<TrendingDown className="h-5 w-5" />}
+          danger
+        />
+        <MetricCard
+          title="Tasa de cierre"
+          value={formatPercent(dashboard.metrics.closeRate)}
+          icon={<Target className="h-5 w-5" />}
+        />
+        <MetricCard
+          title="Venta total ganada"
+          value={formatCurrency(dashboard.metrics.totalWonSale)}
+          icon={<CircleDollarSign className="h-5 w-5" />}
+          positive
+        />
+        <MetricCard
+          title="Profit total ganado"
+          value={formatCurrency(dashboard.metrics.totalWonProfit)}
+          icon={<BarChart3 className="h-5 w-5" />}
+          positive={dashboard.metrics.totalWonProfit >= 0}
+          danger={dashboard.metrics.totalWonProfit < 0}
+        />
+        <MetricCard
+          title="GP% promedio"
+          value={formatPercent(dashboard.metrics.averageGp)}
+          icon={<Percent className="h-5 w-5" />}
+        />
+      </div>
 
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => router.push('/quotations/new')}
-              className={primaryButtonClass}
-            >
-              Nueva Cotización
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push('/clientes/nuevo')}
-              className={secondaryButtonClass}
-            >
-              Nuevo Cliente
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push('/financial-dashboard')}
-              className={secondaryButtonClass}
-            >
-              Finanzas
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className={cardClass}>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Cotizaciones Mes
-            </p>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">
-              {quotesThisMonth.length}
-            </p>
-          </div>
-
-          <div className={cardClass}>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Ganadas
-            </p>
-            <p className="text-3xl font-bold text-green-600">
-              {wonQuotes.length}
-            </p>
-          </div>
-
-          <div className={cardClass}>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Pendientes Pricing
-            </p>
-            <p className="text-3xl font-bold text-yellow-600">
-              {pendingPricing.length}
-            </p>
-          </div>
-
-          <div className={cardClass}>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Clientes Nuevos Mes
-            </p>
-            <p className="text-3xl font-bold text-slate-900 dark:text-white">
-              {clientsThisMonth.length}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className={cardClass}>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Profit Esperado
-            </p>
-            <p className="text-2xl font-bold text-green-600">
-              USD {formatCurrency(expectedProfit)}
-            </p>
-          </div>
-
-          <div className={cardClass}>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Profit Real
-            </p>
-            <p
-              className={`text-2xl font-bold ${
-                realProfit >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}
-            >
-              USD {formatCurrency(realProfit)}
-            </p>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Solo operaciones con costos reales
-            </p>
-          </div>
-
-          <div className={cardClass}>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Pendientes Validar
-            </p>
-            <p className="text-2xl font-bold text-orange-600">
-              {pendingFinancialValidation.length}
-            </p>
-          </div>
-
-          <div className={cardClass}>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Enviadas al Cliente
-            </p>
-            <p className="text-2xl font-bold text-blue-600">
-              {sentQuotes.length}
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className={cardClass}>
-            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
-              Cotizaciones por Estado
-            </h2>
-
-            {statusData.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400">
-                No hay datos para mostrar.
-              </p>
-            ) : (
-              <div className="h-[360px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusData}
-                      dataKey="value"
-                      nameKey="name"
-                      outerRadius={110}
-                      label={{ fill: '#64748b' }}
-                    >
-                      {statusData.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
-
-                    <Tooltip />
-                    <Legend wrapperStyle={{ color: '#64748b' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-
-          <div className={cardClass}>
-            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
-              Profit Esperado vs Profit Real
-            </h2>
-
-            <div className="h-[360px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={profitComparisonData}>
-                  <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fill: '#64748b' }} />
-                  <YAxis tick={{ fill: '#64748b' }} />
-                  <Tooltip formatter={currencyTooltipFormatter} />
-                  <Legend wrapperStyle={{ color: '#64748b' }} />
-
-                  <Bar dataKey="Esperado" fill="#16A34A" />
-                  <Bar
-                    dataKey="Real"
-                    fill={
-                      realProfit >= expectedProfit
-                        ? '#16A34A'
-                        : '#DC2626'
-                    }
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              Valores en USD
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className={cardClass}>
-            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
-              Cotizaciones por Mes
-            </h2>
-
-            {monthlyQuotesData.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400">
-                No hay datos para mostrar.
-              </p>
-            ) : (
-              <div className="h-[320px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={monthlyQuotesData}>
-                    <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
-                    <XAxis dataKey="month" tick={{ fill: '#64748b' }} />
-                    <YAxis allowDecimals={false} tick={{ fill: '#64748b' }} />
-                    <Tooltip />
-                    <Legend wrapperStyle={{ color: '#64748b' }} />
-
-                    <Line
-                      type="monotone"
-                      dataKey="cotizaciones"
-                      stroke="#2563EB"
-                      strokeWidth={3}
-                    />
-
-                    <Line
-                      type="monotone"
-                      dataKey="ganadas"
-                      stroke="#16A34A"
-                      strokeWidth={3}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-          <div className={cardClass}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                  Mis tareas
-                </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Pendientes personales del usuario conectado.
-                </p>
-              </div>
-            </div>
-
-            <div className="mb-4 grid gap-3 md:grid-cols-[1fr_140px]">
-              <input
-                value={taskTitle}
-                onChange={(e) => setTaskTitle(e.target.value)}
-                placeholder="Nueva tarea..."
-                className={fieldClass}
-              />
-
-              <select
-                value={taskPriority}
-                onChange={(e) =>
-                  setTaskPriority(e.target.value as 'Baja' | 'Media' | 'Alta')
-                }
-                className={fieldClass}
-              >
-                <option value="Baja">Baja</option>
-                <option value="Media">Media</option>
-                <option value="Alta">Alta</option>
-              </select>
-
-              <input
-                type="date"
-                value={taskDueDate}
-                onChange={(e) => setTaskDueDate(e.target.value)}
-                className={fieldClass}
-              />
-
-              <button
-                onClick={createTask}
-                disabled={loadingTasks || !taskTitle.trim()}
-                className={primaryButtonClass}
-              >
-                {loadingTasks ? 'Agregando...' : 'Agregar'}
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              {tasks.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                  No tienes tareas pendientes.
-                </p>
-              ) : (
-                tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"
-                  >
-                    <div>
-                      <p
-                        className={`text-sm font-medium ${
-                          task.status === 'Completada'
-                            ? 'text-slate-400 line-through'
-                            : 'text-slate-900 dark:text-white'
-                        }`}
-                      >
-                        {task.title}
-                      </p>
-
-                      <div className="mt-1 flex gap-2 text-xs text-slate-500 dark:text-slate-400">
-                        <span>{task.priority}</span>
-                        {task.due_date && <span>- Vence: {task.due_date}</span>}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => toggleTask(task)}
-                        className={`${secondaryButtonClass} rounded-lg px-3 py-2 text-xs`}
-                      >
-                        {task.status === 'Pendiente' ? 'Completar' : 'Reabrir'}
-                      </button>
-
-                      <button
-                        onClick={() => deleteTask(task.id)}
-                        className="rounded-lg border border-red-300 p-2 text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className={cardClass}>
-            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
-              Últimas Cotizaciones
-            </h2>
-
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700/60">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-900 text-white">
-                  <tr>
-                    <th className="p-3 text-left">No.</th>
-                    <th className="p-3 text-left">Cliente</th>
-                    <th className="p-3 text-left">Estado</th>
-                    <th className="p-3 text-right">Acción</th>
-                  </tr>
-                </thead>
-
-                <tbody className="text-slate-900 dark:text-white">
-                  {latestQuotes.map((quote) => (
-                    <tr key={quote.id} className="border-b border-slate-200 hover:bg-slate-50 dark:border-slate-700/60 dark:hover:bg-slate-800">
-                      <td className="p-3 font-semibold">
-                        {quote.quotation_number || 'Sin número'}
-                      </td>
-
-                      <td className="p-3">
-                        {quote.clientes?.nombre || 'Sin cliente'}
-                      </td>
-
-                      <td className="p-3">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadge(
-                            quote.status
-                          )}`}
-                        >
-                          {quote.status}
-                        </span>
-                      </td>
-
-                      <td className="p-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            router.push(`/quotations/${quote.id}`)
-                          }
-                          className={secondaryButtonClass}
-                        >
-                          Ver
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className={cardClass}>
-            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
-              Pendientes de Pricing
-            </h2>
-
-            {pendingPricing.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400">
-                No hay cotizaciones pendientes de pricing.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {pendingPricing.slice(0, 6).map((quote) => (
-                  <div
-                    key={quote.id}
-                    className="flex items-center justify-between rounded-xl border border-slate-200 p-3 dark:border-slate-700/60"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-white">
-                        {quote.quotation_number || 'Sin número'}
-                      </p>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        {quote.clientes?.nombre || 'Sin cliente'}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        router.push(`/pricing-comparison?quoteId=${quote.id}`)
-                      }
-                      className={secondaryButtonClass}
-                    >
-                      Trabajar
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <LatestQuotesTable
+          quotes={dashboard.latestQuotes}
+          totalsByQuote={dashboard.totalsByQuote}
+        />
+        <StatusTable rows={dashboard.statusRows} total={quotations.length} />
+        <TopClientsTable rows={dashboard.topClients} />
+        <TopSellersTable rows={dashboard.topSellers} />
+        <PendingPricingTable quotes={dashboard.pendingPricing} />
+        <TasksPanel
+          tasks={tasks}
+          taskTitle={taskTitle}
+          taskPriority={taskPriority}
+          taskDueDate={taskDueDate}
+          loadingTasks={loadingTasks}
+          setTaskTitle={setTaskTitle}
+          setTaskPriority={setTaskPriority}
+          setTaskDueDate={setTaskDueDate}
+          createTask={createTask}
+          toggleTask={toggleTask}
+          deleteTask={deleteTask}
+        />
+      </div>
     </div>
+  )
+}
+
+function Header({
+  subtitle,
+  onNewQuote,
+}: {
+  subtitle: string
+  onNewQuote: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
+          Dashboard Comercial
+        </p>
+        <h1 className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
+          Resumen Ejecutivo
+        </h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          {subtitle}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <button type="button" onClick={onNewQuote} className={primaryButtonClass}>
+          Nueva Cotización
+        </button>
+        <Link href="/historico" className={secondaryButtonClass}>
+          Histórico
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function MetricCard({
+  title,
+  value,
+  icon,
+  positive,
+  danger,
+}: {
+  title: string
+  value: number | string
+  icon: React.ReactNode
+  positive?: boolean
+  danger?: boolean
+}) {
+  return (
+    <section
+      className={`rounded-2xl border p-5 shadow-sm ${
+        danger
+          ? 'border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/30'
+          : 'border-slate-200 bg-white dark:border-slate-700/60 dark:bg-[#0b1220]'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
+        <div
+          className={`rounded-xl p-2 ${
+            danger
+              ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
+              : positive
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-200'
+                : 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-200'
+          }`}
+        >
+          {icon}
+        </div>
+      </div>
+      <p className="mt-3 text-2xl font-bold text-slate-900 dark:text-white">
+        {value}
+      </p>
+    </section>
+  )
+}
+
+function Panel({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          {title}
+        </h2>
+        {description && (
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {description}
+          </p>
+        )}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function EmptyTable({ colSpan }: { colSpan: number }) {
+  return (
+    <tr>
+      <td
+        colSpan={colSpan}
+        className="border-t border-slate-100 py-6 text-center text-slate-500 dark:border-slate-800 dark:text-slate-400"
+      >
+        No hay datos para mostrar.
+      </td>
+    </tr>
+  )
+}
+
+function LatestQuotesTable({
+  quotes,
+  totalsByQuote,
+}: {
+  quotes: QuotationRow[]
+  totalsByQuote: Record<string, QuoteTotals>
+}) {
+  return (
+    <Panel title="Últimas cotizaciones">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
+            <tr>
+              <th className="py-3 pr-4">Número</th>
+              <th className="pr-4">Cliente</th>
+              <th className="pr-4">Estado</th>
+              <th className="pr-4 text-right">Venta total</th>
+              <th className="pr-4 text-right">Profit</th>
+              <th className="pr-4">Vendedor</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {quotes.length === 0 ? (
+              <EmptyTable colSpan={7} />
+            ) : (
+              quotes.map((quote) => {
+                const totals = totalsByQuote[quote.id]
+
+                return (
+                  <tr
+                    key={quote.id}
+                    className="border-t border-slate-100 dark:border-slate-800"
+                  >
+                    <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-white">
+                      {quote.quotation_number || 'Sin número'}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {getClientName(quote)}
+                    </td>
+                    <td className="pr-4">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(
+                          quote.status
+                        )}`}
+                      >
+                        {quote.status || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="pr-4 text-right text-slate-700 dark:text-slate-300">
+                      {formatCurrency(totals?.sale || 0)}
+                    </td>
+                    <td className="pr-4 text-right font-semibold text-slate-900 dark:text-white">
+                      {formatCurrency(totals?.profit || 0)}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {getSellerName(quote)}
+                    </td>
+                    <td className="text-right">
+                      <Link
+                        href={`/quotations/${quote.id}`}
+                        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        Ver
+                      </Link>
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  )
+}
+
+function TopClientsTable({ rows }: { rows: ClientSummary[] }) {
+  return (
+    <Panel title="Top clientes por venta ganada">
+      <SimpleRankingTable
+        columns={['Cliente', 'Venta total', 'Profit']}
+        rows={rows}
+        renderRow={(row) => [
+          row.clientName,
+          formatCurrency(row.sale),
+          formatCurrency(row.profit),
+        ]}
+      />
+    </Panel>
+  )
+}
+
+function TopSellersTable({ rows }: { rows: SellerSummary[] }) {
+  return (
+    <Panel title="Top vendedores">
+      <SimpleRankingTable
+        columns={['Vendedor', 'Ganadas', 'Venta total', 'Profit']}
+        rows={rows}
+        renderRow={(row) => [
+          row.sellerName,
+          String(row.won),
+          formatCurrency(row.sale),
+          formatCurrency(row.profit),
+        ]}
+      />
+    </Panel>
+  )
+}
+
+function SimpleRankingTable<T>({
+  columns,
+  rows,
+  renderRow,
+}: {
+  columns: string[]
+  rows: T[]
+  renderRow: (row: T) => string[]
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
+          <tr>
+            {columns.map((column, index) => (
+              <th
+                key={column}
+                className={`py-3 pr-4 ${index > 0 ? 'text-right' : ''}`}
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <EmptyTable colSpan={columns.length} />
+          ) : (
+            rows.map((row, index) => {
+              const values = renderRow(row)
+
+              return (
+                <tr
+                  key={index}
+                  className="border-t border-slate-100 dark:border-slate-800"
+                >
+                  {values.map((value, valueIndex) => (
+                    <td
+                      key={valueIndex}
+                      className={`py-3 pr-4 text-slate-700 dark:text-slate-300 ${
+                        valueIndex > 0 ? 'text-right font-semibold' : 'font-medium'
+                      }`}
+                    >
+                      {value}
+                    </td>
+                  ))}
+                </tr>
+              )
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function PendingPricingTable({ quotes }: { quotes: QuotationRow[] }) {
+  return (
+    <Panel title="Cotizaciones pendientes de pricing">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
+            <tr>
+              <th className="py-3 pr-4">Número</th>
+              <th className="pr-4">Cliente</th>
+              <th className="pr-4">Tipo</th>
+              <th className="pr-4">Fecha creación</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {quotes.length === 0 ? (
+              <EmptyTable colSpan={5} />
+            ) : (
+              quotes.map((quote) => (
+                <tr
+                  key={quote.id}
+                  className="border-t border-slate-100 dark:border-slate-800"
+                >
+                  <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-white">
+                    {quote.quotation_number || 'Sin número'}
+                  </td>
+                  <td className="pr-4 text-slate-700 dark:text-slate-300">
+                    {getClientName(quote)}
+                  </td>
+                  <td className="pr-4 text-slate-700 dark:text-slate-300">
+                    {getQuoteType(quote)}
+                  </td>
+                  <td className="pr-4 text-slate-700 dark:text-slate-300">
+                    {formatDate(quote.created_at)}
+                  </td>
+                  <td className="text-right">
+                    <Link
+                      href={`/pricing-comparison?quoteId=${quote.id}`}
+                      className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      Pricing
+                    </Link>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  )
+}
+
+function StatusTable({
+  rows,
+  total,
+}: {
+  rows: Array<{ status: string; count: number }>
+  total: number
+}) {
+  return (
+    <Panel title="Cotizaciones por estado">
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const percentage = total > 0 ? (row.count / total) * 100 : 0
+
+          return (
+            <div key={row.status}>
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {row.status}
+                </span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {row.count}
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                <div
+                  className="h-2 rounded-full bg-blue-600 dark:bg-blue-400"
+                  style={{ width: `${percentage}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
+
+function TasksPanel({
+  tasks,
+  taskTitle,
+  taskPriority,
+  taskDueDate,
+  loadingTasks,
+  setTaskTitle,
+  setTaskPriority,
+  setTaskDueDate,
+  createTask,
+  toggleTask,
+  deleteTask,
+}: {
+  tasks: UserTask[]
+  taskTitle: string
+  taskPriority: 'Baja' | 'Media' | 'Alta'
+  taskDueDate: string
+  loadingTasks: boolean
+  setTaskTitle: (value: string) => void
+  setTaskPriority: (value: 'Baja' | 'Media' | 'Alta') => void
+  setTaskDueDate: (value: string) => void
+  createTask: () => void
+  toggleTask: (task: UserTask) => void
+  deleteTask: (taskId: string) => void
+}) {
+  return (
+    <Panel
+      title="Mis tareas"
+      description="Pendientes personales del usuario conectado."
+    >
+      <div className="mb-4 grid gap-3 md:grid-cols-[1fr_140px]">
+        <input
+          value={taskTitle}
+          onChange={(event) => setTaskTitle(event.target.value)}
+          placeholder="Nueva tarea..."
+          className={fieldClass}
+        />
+
+        <select
+          value={taskPriority}
+          onChange={(event) =>
+            setTaskPriority(event.target.value as 'Baja' | 'Media' | 'Alta')
+          }
+          className={fieldClass}
+        >
+          <option value="Baja">Baja</option>
+          <option value="Media">Media</option>
+          <option value="Alta">Alta</option>
+        </select>
+
+        <input
+          type="date"
+          value={taskDueDate}
+          onChange={(event) => setTaskDueDate(event.target.value)}
+          className={fieldClass}
+        />
+
+        <button
+          type="button"
+          onClick={createTask}
+          disabled={loadingTasks || !taskTitle.trim()}
+          className={primaryButtonClass}
+        >
+          {loadingTasks ? 'Agregando...' : 'Agregar'}
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        {tasks.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            No tienes tareas pendientes.
+          </p>
+        ) : (
+          tasks.map((task) => (
+            <div
+              key={task.id}
+              className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"
+            >
+              <div>
+                <p
+                  className={`text-sm font-medium ${
+                    task.status === 'Completada'
+                      ? 'text-slate-400 line-through'
+                      : 'text-slate-900 dark:text-white'
+                  }`}
+                >
+                  {task.title}
+                </p>
+                <div className="mt-1 flex gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <span>{task.priority}</span>
+                  {task.due_date && <span>Vence: {formatDate(task.due_date)}</span>}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggleTask(task)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-transparent dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  {task.status === 'Pendiente' ? 'Completar' : 'Reabrir'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => deleteTask(task.id)}
+                  className="rounded-lg border border-red-300 p-2 text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </Panel>
   )
 }

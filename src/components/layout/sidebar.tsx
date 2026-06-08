@@ -17,6 +17,7 @@ import {
   Building2,
   Database,
   Route,
+  Bell,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -81,6 +82,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       label: 'Dashboard',
       href: '/dashboard',
       icon: LayoutDashboard,
+    },
+    {
+      label: 'Alertas',
+      href: '/alerts',
+      icon: Bell,
     },
     {
       label: 'Clientes',
