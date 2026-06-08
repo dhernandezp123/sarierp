@@ -392,6 +392,37 @@ export default function RoutingBookingChildPage() {
     loadData()
   }, [id, bookingId])
 
+  const recordBookingActivity = async ({
+    action,
+    description,
+    metadata,
+  }: {
+    action: string
+    description: string
+    metadata?: Record<string, unknown>
+  }) => {
+    if (!booking) return
+
+    try {
+      await createActivityLog({
+        module: 'operations_booking',
+        action,
+        entityType: 'booking',
+        entityId: booking.id,
+        description,
+        metadata: {
+          shipping_instruction_id: id,
+          routing_number: routing?.routing_number,
+          booking_id: booking.id,
+          booking_number: booking.booking_number,
+          ...metadata,
+        },
+      })
+    } catch (error) {
+      console.error('Error creating booking activity:', error)
+    }
+  }
+
   const saveBooking = async () => {
     if (!booking) return
 
@@ -435,12 +466,14 @@ export default function RoutingBookingChildPage() {
       return
     }
 
-    await createActivityLog({
-      module: 'operations_booking',
-      action: 'booking_child_updated',
-      entityType: 'booking',
-      entityId: booking.id,
+    await recordBookingActivity({
+      action: booking.shipment_status === 'Booking Confirmado'
+        ? 'booking_confirmed'
+        : 'booking_child_updated',
       description: `Booking actualizado para ${routing?.routing_number || id}`,
+      metadata: {
+        shipment_status: booking.shipment_status,
+      },
     })
 
     toast.success('Booking actualizado')
@@ -555,6 +588,20 @@ export default function RoutingBookingChildPage() {
     }
 
     setSavingContainers(false)
+    await recordBookingActivity({
+      action: 'booking_containers_assigned',
+      description: `Contenedores asignados para ${routing?.routing_number || id}`,
+      metadata: {
+        containers: rowsToInsert.map((row) => ({
+          container_type: row.container_type,
+          quantity: row.quantity,
+        })),
+        total_containers: rowsToInsert.reduce(
+          (total, row) => total + Number(row.quantity || 0),
+          0
+        ),
+      },
+    })
     toast.success('Contenedores del booking guardados')
     await loadData()
   }

@@ -45,6 +45,17 @@ type Booking = {
   }> | null
 }
 
+type OperationalTimelineEvent = {
+  id: string
+  source: 'shipping_instruction_events' | 'activity_logs'
+  date: string
+  eventType: string
+  description: string
+  userName?: string | null
+  bookingLabel?: string | null
+  metadata?: Record<string, unknown> | null
+}
+
 const SI_READY_FOR_BOOKING = 'Listo para Booking'
 const SI_PENDING_VALIDATION = 'Pendiente Validación'
 const SI_VALIDATED = 'Validada'
@@ -289,6 +300,43 @@ function countAssignedBookingContainers(bookings: Booking[]) {
   }, 0)
 }
 
+function formatMetadataSummary(metadata?: Record<string, unknown> | null) {
+  if (!metadata) return null
+
+  const entries = Object.entries(metadata)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .slice(0, 4)
+
+  if (entries.length === 0) return null
+
+  return entries
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .join(' | ')
+}
+
+function formatOperationalEvent(event: OperationalTimelineEvent) {
+  const metadataSummary = formatMetadataSummary(event.metadata)
+  const titleByAction: Record<string, string> = {
+    shipping_instruction_created: 'SI creada',
+    shipping_instruction_updated: 'Informacion operativa actualizada',
+    shipping_instruction_validated: 'SI validada por Operaciones',
+    shipping_instruction_assigned: 'Operativo asignado',
+    shipping_instruction_finalized: 'Shipping Instruction finalizada',
+    booking_child_updated: 'Booking actualizado',
+    booking_confirmed: 'Booking confirmado',
+    booking_containers_assigned: 'Contenedores asignados',
+    'Booking creado': 'Booking creado',
+    'Routing PDF generado': 'Routing PDF generado/descargado',
+    'Shipping Instruction finalizada': 'Shipping Instruction finalizada',
+  }
+
+  return {
+    title: titleByAction[event.eventType] || event.eventType,
+    description: event.description,
+    metadataSummary,
+  }
+}
+
 export default function RoutingDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -299,10 +347,12 @@ export default function RoutingDetailPage() {
   const [routing, setRouting] = useState<ShippingInstruction | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [operationalEvents, setOperationalEvents] = useState<OperationalTimelineEvent[]>([])
   const [quotedContainerTotal, setQuotedContainerTotal] = useState(0)
   const [operationsUsers, setOperationsUsers] = useState<OperationsUser[]>([])
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
+  const [finalizing, setFinalizing] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [creatingBooking, setCreatingBooking] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -430,6 +480,138 @@ export default function RoutingDetailPage() {
 
     if (!error && data) {
       setOperationsUsers(data)
+    }
+  }
+
+  const loadOperationalTimeline = async (
+    routingData: ShippingInstruction,
+    bookingRows: Booking[]
+  ) => {
+    const timelineEvents: OperationalTimelineEvent[] = []
+
+    const { data: shippingEventsData, error: shippingEventsError } = await supabase
+      .from('shipping_instruction_events')
+      .select('*')
+      .eq('shipping_instruction_id', routingData.id)
+      .order('event_date', { ascending: false })
+
+    if (shippingEventsError) {
+      console.error('Error loading shipping instruction events:', shippingEventsError)
+    }
+
+    timelineEvents.push(
+      ...(shippingEventsData || []).map((event: any) => ({
+        id: `shipping-event-${event.id}`,
+        source: 'shipping_instruction_events' as const,
+        date: event.event_date || event.created_at,
+        eventType: event.event_type,
+        description: event.notes || event.location || event.event_type,
+        userName: event.created_by || null,
+        bookingLabel: null,
+        metadata: event.location ? { location: event.location } : null,
+      }))
+    )
+
+    const relatedEntityIds = [
+      routingData.id,
+      routingData.quotation_id,
+      routingData.routing_number,
+      ...bookingRows.map((booking) => booking.id),
+    ].filter(Boolean) as string[]
+
+    if (relatedEntityIds.length > 0) {
+      const { data: activityLogsData, error: activityLogsError } = await supabase
+        .from('activity_logs')
+        .select(`
+          id,
+          action,
+          description,
+          metadata,
+          entity_type,
+          entity_id,
+          created_at,
+          created_by_profile:profiles!activity_logs_user_id_fkey (
+            nombre,
+            apellido
+          )
+        `)
+        .in('entity_id', relatedEntityIds)
+        .order('created_at', { ascending: false })
+
+      if (activityLogsError) {
+        console.error('Error loading operational activity logs:', activityLogsError)
+      }
+
+      const activityTimelineEvents = (activityLogsData || []).map((log: any) => {
+          const profile = Array.isArray(log.created_by_profile)
+            ? log.created_by_profile[0] || null
+            : log.created_by_profile
+          const userName = profile?.nombre
+            ? `${profile.nombre} ${profile.apellido || ''}`.trim()
+            : null
+          const relatedBooking = bookingRows.find((booking) => booking.id === log.entity_id)
+
+          return {
+            id: `activity-log-${log.id}`,
+            source: 'activity_logs' as const,
+            date: log.created_at,
+            eventType: log.action,
+            description: log.description,
+            userName,
+            bookingLabel: relatedBooking
+              ? relatedBooking.booking_number || 'Sin booking'
+              : null,
+            metadata: log.metadata || null,
+          }
+        })
+
+      timelineEvents.push(...activityTimelineEvents)
+    }
+
+    setOperationalEvents(
+      timelineEvents.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+    )
+  }
+
+  const recordOperationalEvent = async ({
+    eventType,
+    notes,
+    metadata,
+  }: {
+    eventType: string
+    notes: string
+    metadata?: Record<string, unknown>
+  }) => {
+    if (!routing || !user?.id) return
+
+    try {
+      const { error } = await supabase
+        .from('shipping_instruction_events')
+        .insert({
+          shipping_instruction_id: routing.id,
+          event_type: eventType,
+          notes,
+          created_by: user.id,
+        })
+
+      if (error) {
+        console.error('Error creating operational event:', error)
+      }
+
+      if (metadata) {
+        await createActivityLog({
+          module: 'operations_timeline',
+          action: eventType,
+          entityType: 'shipping_instruction',
+          entityId: routing.id,
+          description: notes,
+          metadata,
+        })
+      }
+    } catch (error) {
+      console.error('Error creating operational event:', error)
     }
   }
 
@@ -689,6 +871,104 @@ export default function RoutingDetailPage() {
     toast.success('Operativo asignado')
   }
 
+  const validateCanFinalizeRouting = () => {
+    if (!routing) return 'No se encontró la Shipping Instruction.'
+    if (bookings.length === 0) {
+      return 'No se puede finalizar: debes crear al menos un booking hijo.'
+    }
+
+    const bookingsWithoutContainers = bookings.filter(
+      (booking) => !booking.booking_containers || booking.booking_containers.length === 0
+    )
+
+    if (bookingsWithoutContainers.length > 0) {
+      return 'No se puede finalizar: todos los bookings deben tener contenedores asignados.'
+    }
+
+    if (quotedContainerTotal > 0 && assignedContainerTotal < quotedContainerTotal) {
+      return `No se puede finalizar: faltan ${
+        quotedContainerTotal - assignedContainerTotal
+      } contenedores por asignar.`
+    }
+
+    if (quotedContainerTotal > 0 && assignedContainerTotal > quotedContainerTotal) {
+      return 'No se puede finalizar: hay más contenedores asignados que cotizados.'
+    }
+
+    const nonFinalizedBookings = bookings.filter(
+      (booking) => booking.shipment_status !== 'Finalizado'
+    )
+
+    if (nonFinalizedBookings.length > 0) {
+      return 'No se puede finalizar: todos los bookings deben estar en estado Finalizado.'
+    }
+
+    return null
+  }
+
+  const finalizeRouting = async () => {
+    if (!routing) return
+    if (!canManageRouting) {
+      toast.error('No tienes permisos para finalizar esta Shipping Instruction')
+      return
+    }
+
+    const validationError = validateCanFinalizeRouting()
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+
+    setFinalizing(true)
+
+    const { error } = await supabase
+      .from('shipping_instructions')
+      .update({
+        shipment_status: 'Finalizado',
+        operational_status: 'Finalizado',
+      })
+      .eq('id', routing.id)
+
+    setFinalizing(false)
+
+    if (error) {
+      toast.error(error.message || 'No se pudo finalizar la Shipping Instruction')
+      return
+    }
+
+    await createActivityLog({
+      module: 'operations_routing',
+      action: 'shipping_instruction_finalized',
+      entityType: 'shipping_instruction',
+      entityId: routing.id,
+      description: `Shipping Instruction ${routing.routing_number} finalizada`,
+      metadata: {
+        routing_number: routing.routing_number,
+        total_bookings: bookings.length,
+        total_containers: assignedContainerTotal,
+        finalized_by: user?.id,
+      },
+    })
+
+    await recordOperationalEvent({
+      eventType: 'Shipping Instruction finalizada',
+      notes: `Shipping Instruction ${routing.routing_number} finalizada`,
+      metadata: {
+        routing_number: routing.routing_number,
+        total_bookings: bookings.length,
+        total_containers: assignedContainerTotal,
+      },
+    })
+
+    setRouting({
+      ...routing,
+      shipment_status: 'Finalizado',
+      operational_status: 'Finalizado',
+    })
+
+    toast.success('Shipping Instruction finalizada')
+  }
+
   const createBookingChild = async () => {
     if (!routing) return null
     if (!canManageRouting) {
@@ -747,6 +1027,15 @@ export default function RoutingDetailPage() {
       return null
     }
 
+    await recordOperationalEvent({
+      eventType: 'Booking creado',
+      notes: `Booking hijo creado para ${routing.routing_number}`,
+      metadata: {
+        routing_number: routing.routing_number,
+        booking_id: data.id,
+      },
+    })
+
     await loadBookings()
 
     return data as { id: string }
@@ -797,6 +1086,14 @@ export default function RoutingDetailPage() {
 
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
+
+    await recordOperationalEvent({
+      eventType: 'Routing PDF generado',
+      notes: `Routing PDF generado para ${routing.routing_number}`,
+      metadata: {
+        routing_number: routing.routing_number,
+      },
+    })
   }
 
   useEffect(() => {
@@ -809,6 +1106,12 @@ export default function RoutingDetailPage() {
       loadOperationsUsers()
     }
   }, [canManageRouting])
+
+  useEffect(() => {
+    if (routing) {
+      loadOperationalTimeline(routing, bookings)
+    }
+  }, [routing?.id, routing?.quotation_id, routing?.routing_number, bookings.map((booking) => booking.id).join('|')])
 
   if (loading || userLoading) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando Shipping Instructions...</p>
@@ -896,6 +1199,9 @@ export default function RoutingDetailPage() {
     quotedContainerTotal > 0
       ? `${assignedContainerTotal} / ${quotedContainerTotal}`
       : `${assignedContainerTotal} / N/A`
+  const isRoutingFinalized =
+    routing.shipment_status === 'Finalizado' ||
+    routing.operational_status === 'Finalizado'
 
   return (
     <div>
@@ -1205,6 +1511,65 @@ export default function RoutingDetailPage() {
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+          Timeline Operativo
+        </h2>
+
+        <div className="mt-5 space-y-3">
+          {operationalEvents.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center dark:border-slate-700">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                Aún no hay eventos operativos registrados.
+              </p>
+            </div>
+          ) : (
+            operationalEvents.map((event) => {
+              const formattedEvent = formatOperationalEvent(event)
+
+              return (
+                <div
+                  key={event.id}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {formattedEvent.title}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                        {formattedEvent.description}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                      {new Date(event.date).toLocaleString('es-HN')}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    {event.userName && (
+                      <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
+                        {event.userName}
+                      </span>
+                    )}
+                    {event.bookingLabel && (
+                      <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
+                        Booking: {event.bookingLabel}
+                      </span>
+                    )}
+                    {formattedEvent.metadataSummary && (
+                      <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
+                        {formattedEvent.metadataSummary}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })
           )}
         </div>
       </section>
@@ -1540,6 +1905,21 @@ export default function RoutingDetailPage() {
 
         {canManageRouting && (
           <>
+            {isRoutingFinalized ? (
+              <span className="inline-flex items-center rounded-xl bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                Finalizado
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={finalizeRouting}
+                disabled={finalizing}
+                className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              >
+                {finalizing ? 'Finalizando...' : 'Finalizar Shipping Instruction'}
+              </button>
+            )}
+
             <button
               onClick={saveRouting}
               disabled={saving}
