@@ -223,6 +223,72 @@ function formatBookingContainers(
   return values.map((container) => `${container.quantity} x ${container.label}`).join(', ')
 }
 
+function getBookingStatusBadgeClass(status?: string | null) {
+  switch (status) {
+    case 'Finalizado':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+    case 'Arribado':
+      return 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300'
+    case 'En Tránsito':
+      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+    case 'Embarcado':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+    case 'Booking Confirmado':
+      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
+    case 'Booking Solicitado':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+    case 'Documentación Pendiente':
+      return 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+    case 'Listo para Embarque':
+      return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+    default:
+      return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+  }
+}
+
+function getRoutingAggregateStatus(bookings: Booking[]) {
+  if (bookings.length === 0) return 'Sin bookings'
+
+  const statuses = bookings.map((booking) => booking.shipment_status || '')
+
+  if (statuses.every((status) => status === 'Finalizado')) return 'Finalizado'
+  if (statuses.some((status) => status === 'En Tránsito')) return 'En Tránsito'
+  if (statuses.some((status) => status === 'Embarcado')) return 'Embarcado'
+
+  const confirmedCount = statuses.filter((status) => status === 'Booking Confirmado').length
+  const requestedCount = statuses.filter((status) => status === 'Booking Solicitado').length
+
+  if (confirmedCount > 0 && requestedCount > 0) return 'Parcialmente Confirmado'
+  if (confirmedCount === statuses.length) return 'Booking Confirmado'
+  if (requestedCount > 0) return 'Booking Solicitado'
+
+  return 'En proceso'
+}
+
+function parseQuotedContainerTotal(routing: ShippingInstruction) {
+  const containerType = routing.container_type?.trim()
+  const containerQty = Number(routing.container_qty || 0)
+
+  if (containerQty > 0) return containerQty
+
+  if (containerType) {
+    const match = containerType.match(/^(\d+)\s*x\s+/i)
+    if (match) return Number(match[1])
+  }
+
+  return 0
+}
+
+function countAssignedBookingContainers(bookings: Booking[]) {
+  return bookings.reduce((total, booking) => {
+    const bookingContainers = booking.booking_containers || []
+    return total + bookingContainers.reduce(
+      (bookingTotal, container) => bookingTotal + Number(container.quantity || 0),
+      0
+    )
+  }, 0)
+}
+
 export default function RoutingDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -233,6 +299,7 @@ export default function RoutingDetailPage() {
   const [routing, setRouting] = useState<ShippingInstruction | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [quotedContainerTotal, setQuotedContainerTotal] = useState(0)
   const [operationsUsers, setOperationsUsers] = useState<OperationsUser[]>([])
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
@@ -288,8 +355,29 @@ export default function RoutingDetailPage() {
           .maybeSingle()
 
         setSelectedAgent(selectedAgentData || null)
+
+        const { data: quotationContainersData, error: quotationContainersError } = await supabase
+          .from('quotation_containers')
+          .select('quantity')
+          .eq('quotation_id', quotationId)
+
+        if (quotationContainersError) {
+          console.error('Error loading quotation containers:', quotationContainersError)
+        }
+
+        const quotationContainerTotal = (quotationContainersData || []).reduce(
+          (total, container) => total + Number(container.quantity || 0),
+          0
+        )
+
+        setQuotedContainerTotal(
+          quotationContainerTotal > 0
+            ? quotationContainerTotal
+            : parseQuotedContainerTotal(data as ShippingInstruction)
+        )
       } else {
         setSelectedAgent(null)
+        setQuotedContainerTotal(parseQuotedContainerTotal(data as ShippingInstruction))
       }
 
       setRouting(data)
@@ -802,6 +890,12 @@ export default function RoutingDetailPage() {
   const canDownloadRoutingPdf =
     canManageRouting || (profile?.rol === 'Ventas' && routing.created_by === user?.id)
   const routingPdfFileName = `${routing.routing_number || 'routing-order'}.pdf`
+  const aggregateBookingStatus = getRoutingAggregateStatus(bookings)
+  const assignedContainerTotal = countAssignedBookingContainers(bookings)
+  const containerAssignmentSummary =
+    quotedContainerTotal > 0
+      ? `${assignedContainerTotal} / ${quotedContainerTotal}`
+      : `${assignedContainerTotal} / N/A`
 
   return (
     <div>
@@ -1003,6 +1097,26 @@ export default function RoutingDetailPage() {
           )}
         </div>
 
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Estado agregado de bookings
+            </p>
+            <span
+              className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getBookingStatusBadgeClass(
+                aggregateBookingStatus
+              )}`}
+            >
+              {aggregateBookingStatus}
+            </span>
+          </div>
+          <Info label="Total bookings" value={bookings.length} />
+          <Info
+            label="Contenedores asignados / total cotizado"
+            value={containerAssignmentSummary}
+          />
+        </div>
+
         <div className="mt-5 overflow-x-auto">
           {bookings.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center dark:border-slate-700">
@@ -1058,8 +1172,14 @@ export default function RoutingDetailPage() {
                     <td className="pr-4 text-slate-700 dark:text-slate-300">
                       {booking.house_bl || 'N/A'}
                     </td>
-                    <td className="pr-4 text-slate-700 dark:text-slate-300">
-                      {booking.shipment_status || 'N/A'}
+                    <td className="pr-4">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getBookingStatusBadgeClass(
+                          booking.shipment_status
+                        )}`}
+                      >
+                        {booking.shipment_status || 'N/A'}
+                      </span>
                     </td>
                     <td className="pr-4 text-slate-700 dark:text-slate-300">
                       {formatDisplayDate(booking.etd)}

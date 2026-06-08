@@ -6,7 +6,6 @@ import { useParams, useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { createActivityLog } from '@/src/lib/activity-logger'
-import { operationStatuses } from '@/src/lib/operation-status'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   cardClass,
@@ -94,6 +93,17 @@ type SelectedAgentQuote = {
   free_days?: string | number | null
   dias_libres?: string | number | null
 }
+
+const bookingStatusOptions = [
+  'Booking Solicitado',
+  'Booking Confirmado',
+  'Documentación Pendiente',
+  'Listo para Embarque',
+  'Embarcado',
+  'En Tránsito',
+  'Arribado',
+  'Finalizado',
+]
 
 const readonlyFieldClass = cn(
   fieldClass,
@@ -657,7 +667,7 @@ export default function RoutingBookingChildPage() {
                 onChange={(e) => setBooking({ ...booking, shipment_status: e.target.value })}
                 className={fieldClass}
               >
-                {operationStatuses.map((status) => (
+                {bookingStatusOptions.map((status) => (
                   <option key={status} value={status}>{status}</option>
                 ))}
               </select>
