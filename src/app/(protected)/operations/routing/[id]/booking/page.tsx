@@ -6,8 +6,10 @@ import { useParams, useRouter } from 'next/navigation'
 import {
   CalendarClock,
   CheckCircle2,
+  Loader2,
   Lock,
   MapPin,
+  Plus,
   Ship,
   Truck,
 } from 'lucide-react'
@@ -19,7 +21,6 @@ import { shipmentEventTypes } from '@/src/lib/shipment-events'
 import {
   fieldClass,
   cardClass,
-  primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
@@ -958,96 +959,132 @@ export default function RoutingBookingPage() {
         </div>
 
         {/* ── Timeline ── */}
-        <SectionCard title="Timeline Operativo">
-          <Field label="Evento">
-            <select
-              value={eventType}
-              onChange={(e) => setEventType(e.target.value)}
-              className={fieldClass}
-            >
-              {shipmentEventTypes.map((type) => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
-          </Field>
+        <section className={cardClass}>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Timeline Operativo
+          </h2>
 
-          <Field label="Fecha del evento">
-            <input
-              type="datetime-local"
-              value={eventDate}
-              onChange={(e) => setEventDate(e.target.value)}
-              className={fieldClass}
-            />
-          </Field>
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700/60 dark:bg-slate-800/30">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Evento">
+                <select
+                  value={eventType}
+                  onChange={(e) => setEventType(e.target.value)}
+                  className={fieldClass}
+                >
+                  {shipmentEventTypes.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </Field>
 
-          <Field label="Ubicación">
-            <input
-              value={eventLocation}
-              onChange={(e) => setEventLocation(e.target.value)}
-              className={fieldClass}
-            />
-          </Field>
+              <Field label="Fecha del evento">
+                <input
+                  type="datetime-local"
+                  value={eventDate}
+                  onChange={(e) => setEventDate(e.target.value)}
+                  className={fieldClass}
+                />
+              </Field>
+            </div>
 
-          <Field label="Notas">
-            <input
-              value={eventNotes}
-              onChange={(e) => setEventNotes(e.target.value)}
-              className={fieldClass}
-            />
-          </Field>
+            <div className="mt-3 grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
+              <Field label="Ubicación">
+                <input
+                  value={eventLocation}
+                  onChange={(e) => setEventLocation(e.target.value)}
+                  placeholder="Puerto, ciudad, bodega..."
+                  className={fieldClass}
+                />
+              </Field>
 
-          <div className="flex justify-end md:col-span-2">
-            <button
-              type="button"
-              onClick={createEvent}
-              disabled={savingEvent}
-              className={primaryButtonClass}
-            >
-              {savingEvent ? 'Registrando...' : 'Agregar Evento'}
-            </button>
+              <Field label="Notas">
+                <input
+                  value={eventNotes}
+                  onChange={(e) => setEventNotes(e.target.value)}
+                  placeholder="Observación del evento..."
+                  className={fieldClass}
+                />
+              </Field>
+
+              <button
+                type="button"
+                onClick={createEvent}
+                disabled={savingEvent}
+                className="flex h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              >
+                {savingEvent ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Registrando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    Agregar
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
-          <div className="mt-6 md:col-span-2">
+          <div className="mt-5">
             {events.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                No hay eventos operativos registrados.
-              </p>
+              <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200 py-10 text-center dark:border-slate-700">
+                <CalendarClock className="h-6 w-6 text-slate-300 dark:text-slate-600" />
+                <p className="text-sm font-medium text-slate-400 dark:text-slate-500">
+                  Sin eventos registrados
+                </p>
+                <p className="text-xs text-slate-400 dark:text-slate-600">
+                  Agrega el primer evento operativo del embarque.
+                </p>
+              </div>
             ) : (
-              <div className="relative space-y-5">
-                <div className="absolute left-4 top-0 h-full w-px bg-slate-200 dark:bg-slate-700" />
+              <div className="relative space-y-3">
+                <div className="absolute bottom-4 left-[15px] top-4 w-px bg-slate-200 dark:bg-slate-700" />
 
                 {events.map((event) => {
                   const style = getEventStyle(event.event_type)
                   const Icon  = style.icon
 
                   return (
-                    <div key={event.id} className="relative flex gap-4">
+                    <div key={event.id} className="relative flex gap-3">
                       <div
-                        className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-white ${style.dot}`}
+                        className={`relative z-10 mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white shadow-sm ${style.dot}`}
                       >
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-3.5 w-3.5" />
                       </div>
 
-                      <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                          <div>
-                            <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${style.badge}`}>
+                      <div className="flex-1 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${style.badge}`}
+                            >
                               {event.event_type}
                             </span>
+
                             {event.location && (
-                              <p className="mt-2 flex items-center gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-                                <MapPin className="h-4 w-4 text-slate-400" />
+                              <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                                <MapPin className="h-3 w-3" />
                                 {event.location}
-                              </p>
+                              </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {new Date(event.event_date).toLocaleString()}
-                          </p>
+
+                          <span className="shrink-0 text-[11px] text-slate-400 dark:text-slate-500">
+                            {new Date(event.event_date).toLocaleString('es-HN', {
+                              day:    '2-digit',
+                              month:  'short',
+                              year:   'numeric',
+                              hour:   '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
                         </div>
 
                         {event.notes && (
-                          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                             {event.notes}
                           </p>
                         )}
@@ -1058,7 +1095,7 @@ export default function RoutingBookingPage() {
               </div>
             )}
           </div>
-        </SectionCard>
+        </section>
       </div>
 
       <div className="mt-6 flex justify-end">

@@ -1,9 +1,9 @@
 'use client'
 
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { Download, ExternalLink, Printer } from 'lucide-react'
+import { Download, ExternalLink, Plus, Printer } from 'lucide-react'
 import {
   PDFDownloadLink,
   pdf,
@@ -22,6 +22,23 @@ type OperationsUser = {
   nombre: string | null
   apellido: string | null
   email: string | null
+}
+
+type Booking = {
+  id: string
+  shipping_instruction_id: string
+  booking_number: string | null
+  carrier_booking: string | null
+  master_bl: string | null
+  house_bl: string | null
+  carrier: string | null
+  vessel_name: string | null
+  voyage: string | null
+  etd: string | null
+  eta: string | null
+  shipment_status: string | null
+  free_days: number | null
+  created_at: string | null
 }
 
 const SI_READY_FOR_BOOKING = 'Listo para Booking'
@@ -69,6 +86,8 @@ type ShippingInstruction = {
 
   etd: string | null
   eta: string | null
+  estimated_transit_days?: number | null
+  remaining_free_days?: number | null
 
   free_days: string | null
   free_days_destination?: string | null
@@ -176,14 +195,17 @@ export default function RoutingDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const id = params.id
+  const bookingsSectionRef = useRef<HTMLElement | null>(null)
   const { user, profile, loading: userLoading } = useUser()
 
   const [routing, setRouting] = useState<ShippingInstruction | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
+  const [bookings, setBookings] = useState<Booking[]>([])
   const [operationsUsers, setOperationsUsers] = useState<OperationsUser[]>([])
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
   const [assigning, setAssigning] = useState(false)
+  const [creatingBooking, setCreatingBooking] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
@@ -197,6 +219,15 @@ export default function RoutingDetailPage() {
   const canEditSupplierInfo =
     (canManageRouting && routing?.shipment_status !== 'Finalizado') ||
     canSalesEditInitialInfo
+
+  const parseIntegerValue = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return null
+
+    const numericValue = Number(value)
+    if (!Number.isFinite(numericValue)) return null
+
+    return Math.trunc(numericValue)
+  }
 
   const loadRouting = async () => {
     // TODO: Reforzar esta misma regla en Supabase RLS para shipping_instructions.
@@ -233,6 +264,37 @@ export default function RoutingDetailPage() {
     }
 
     setLoading(false)
+  }
+
+  const loadBookings = async () => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        shipping_instruction_id,
+        booking_number,
+        carrier_booking,
+        master_bl,
+        house_bl,
+        carrier,
+        vessel_name,
+        voyage,
+        etd,
+        eta,
+        shipment_status,
+        free_days,
+        created_at
+      `)
+      .eq('shipping_instruction_id', id)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Error loading bookings:', error)
+      toast.error('No se pudieron cargar los bookings asociados')
+      return
+    }
+
+    setBookings((data || []) as Booking[])
   }
 
   const loadOperationsUsers = async () => {
@@ -503,6 +565,76 @@ export default function RoutingDetailPage() {
     toast.success('Operativo asignado')
   }
 
+  const createBookingChild = async () => {
+    if (!routing) return null
+    if (!canManageRouting) {
+      toast.error('No tienes permisos para crear booking desde esta Shipping Instruction')
+      return null
+    }
+    if (!user?.id) {
+      toast.error('No se pudo validar el usuario')
+      return null
+    }
+
+    setCreatingBooking(true)
+
+    const freeDays =
+      parseIntegerValue(selectedAgent?.free_days_destination) ??
+      parseIntegerValue(selectedAgent?.free_days) ??
+      parseIntegerValue(selectedAgent?.dias_libres) ??
+      parseIntegerValue(routing.free_days_destination) ??
+      parseIntegerValue(routing.free_days)
+    const estimatedTransitDays =
+      parseIntegerValue(selectedAgent?.transit_time) ??
+      parseIntegerValue(selectedAgent?.transit) ??
+      parseIntegerValue(routing.transit_time) ??
+      parseIntegerValue(routing.transit) ??
+      parseIntegerValue(routing.estimated_transit_days)
+    const quotation = routing.quotation || {}
+
+    const { data, error } = await supabase
+      .from('bookings')
+      .insert({
+        shipping_instruction_id: routing.id,
+        carrier:
+          selectedAgent?.carrier ||
+          routing.carrier ||
+          quotation.preferred_carrier ||
+          null,
+        etd: selectedAgent?.etd || routing.etd || null,
+        eta: routing.eta || null,
+        estimated_transit_days: estimatedTransitDays,
+        free_days: freeDays,
+        remaining_free_days: parseIntegerValue(routing.remaining_free_days) ?? freeDays,
+        freight_terms: routing.freight_terms,
+        release_type: routing.release_type,
+        hbl_freight_visibility: routing.hbl_freight_visibility,
+        printed_at_destination: routing.printed_at_destination ?? true,
+        shipment_status: 'Booking Solicitado',
+        created_by: user.id,
+      })
+      .select('id')
+      .single()
+
+    setCreatingBooking(false)
+
+    if (error) {
+      toast.error(error.message || 'No se pudo crear el booking')
+      return null
+    }
+
+    await loadBookings()
+
+    return data as { id: string }
+  }
+
+  const handleCreateBookingChild = async () => {
+    const newBooking = await createBookingChild()
+    if (!routing || !newBooking) return
+
+    router.push(`/operations/routing/${routing.id}/bookings/${newBooking.id}`)
+  }
+
   const handleOpenBooking = async () => {
     if (!routing) return
     if (!canManageRouting) {
@@ -510,26 +642,21 @@ export default function RoutingDetailPage() {
       return
     }
 
-    const hasBooking =
-      !!routing.booking_number ||
-      routing.operational_status === 'En Booking'
-
-    if (!hasBooking) {
-      const { error } = await supabase
-        .from('shipping_instructions')
-        .update({
-          operational_status: 'En Booking',
-          shipment_status: 'Booking Solicitado',
-        })
-        .eq('id', routing.id)
-
-      if (error) {
-        toast.error('No se pudo crear el booking')
-        return
-      }
+    if (bookings.length === 1) {
+      router.push(`/operations/routing/${routing.id}/bookings/${bookings[0].id}`)
+      return
     }
 
-    router.push(`/operations/routing/${routing.id}/booking`)
+    if (bookings.length > 1) {
+      bookingsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      toast.info('Selecciona el booking que deseas abrir')
+      return
+    }
+
+    const newBooking = await createBookingChild()
+    if (!newBooking) return
+
+    router.push(`/operations/routing/${routing.id}/bookings/${newBooking.id}`)
   }
 
   const handlePrintRoutingPdf = async () => {
@@ -550,6 +677,7 @@ export default function RoutingDetailPage() {
 
   useEffect(() => {
     loadRouting()
+    loadBookings()
   }, [id])
 
   useEffect(() => {
@@ -596,6 +724,7 @@ export default function RoutingDetailPage() {
     canManageRouting && routing.operational_status === SI_READY_FOR_BOOKING
 
   const hasBooking =
+    bookings.length > 0 ||
     !!routing.booking_number ||
     routing.operational_status === 'En Booking'
 
@@ -805,6 +934,118 @@ export default function RoutingDetailPage() {
                   : 'Pendiente'
             }
           />
+        </div>
+      </section>
+
+      <section
+        ref={bookingsSectionRef}
+        className="mb-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Bookings asociados
+            </h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Bookings hijos vinculados a esta Shipping Instruction.
+            </p>
+            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+              Los bookings se crean por Operaciones cuando la naviera/agente confirma espacio.
+            </p>
+          </div>
+
+          {canManageRouting && (
+            <button
+              type="button"
+              onClick={handleCreateBookingChild}
+              disabled={creatingBooking}
+              className={`${primaryButtonClass} inline-flex items-center justify-center gap-2 px-4 py-2`}
+            >
+              <Plus className="h-4 w-4" />
+              {creatingBooking ? 'Creando...' : 'Nuevo Booking'}
+            </button>
+          )}
+        </div>
+
+        <div className="mt-5 overflow-x-auto">
+          {bookings.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center dark:border-slate-700">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                {canManageRouting
+                  ? 'No hay bookings asociados.'
+                  : 'No hay bookings creados todavía.'}
+              </p>
+              {canManageRouting && (
+                <button
+                  type="button"
+                  onClick={handleCreateBookingChild}
+                  disabled={creatingBooking}
+                  className={`${primaryButtonClass} mt-4 inline-flex items-center justify-center gap-2 px-4 py-2`}
+                >
+                  <Plus className="h-4 w-4" />
+                  {creatingBooking ? 'Creando...' : 'Nuevo Booking'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="py-3 pr-4">Booking</th>
+                  <th className="pr-4">Carrier Booking</th>
+                  <th className="pr-4">Master BL</th>
+                  <th className="pr-4">House BL</th>
+                  <th className="pr-4">Estado</th>
+                  <th className="pr-4">ETD</th>
+                  <th className="pr-4">ETA</th>
+                  <th className="pr-4">Dias libres</th>
+                  <th></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {bookings.map((booking) => (
+                  <tr
+                    key={booking.id}
+                    className="border-t border-slate-100 dark:border-slate-800"
+                  >
+                    <td className="py-3 pr-4 font-semibold text-slate-900 dark:text-white">
+                      {booking.booking_number || 'Sin booking'}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {booking.carrier_booking || 'N/A'}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {booking.master_bl || 'N/A'}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {booking.house_bl || 'N/A'}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {booking.shipment_status || 'N/A'}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {formatDisplayDate(booking.etd)}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {formatDisplayDate(booking.eta)}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {booking.free_days ?? 'N/A'}
+                    </td>
+                    <td className="text-right">
+                      <Link
+                        href={`/operations/routing/${routing.id}/bookings/${booking.id}`}
+                        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        Abrir
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 

@@ -586,56 +586,113 @@ export default function ClienteProfilePage() {
         )}
 
         {activeTab === 'tarifas' && (
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="mb-4 text-xl font-bold">
-              Tarifas del Cliente
-            </h2>
+          <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700/60">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+                Tarifas del Cliente
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                Tarifas personalizadas aplicadas en cotizaciones de este cliente.
+              </p>
+            </div>
 
-            <div className="space-y-6">
-              {Array.from(
-                new Set(clientRateCatalog.map((rate) => rate.category))
-              ).map((category) => (
-                <div key={category}>
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                    {category}
-                  </h3>
-
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {clientRateCatalog
-                      .filter((rate) => rate.category === category)
-                      .map((rate) => (
-                        <div
-                          key={rate.code}
-                          className="rounded-xl border border-slate-200 p-4"
-                        >
-                          <p className="text-sm font-semibold text-slate-900">
-                            {rate.label}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            Unidad: {rate.unit}
-                          </p>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={clientRates[rate.code]?.amount ?? ''}
-                            onChange={(e) =>
-                              updateClientRateAmount(rate.code, e.target.value)
-                            }
-                            className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
-                          />
+            <div className="grid gap-0 lg:grid-cols-2 lg:divide-x lg:divide-slate-200 dark:lg:divide-slate-700/60">
+              <div className="divide-y divide-slate-200 dark:divide-slate-700/60">
+                {Array.from(new Set(clientRateCatalog.map((r) => r.category)))
+                  .filter((cat) => cat.toLowerCase() !== 'otros cargos')
+                  .map((category) => {
+                    const rates = clientRateCatalog.filter((r) => r.category === category)
+                    return (
+                      <div key={category}>
+                        <div className="bg-slate-50 px-5 py-1.5 dark:bg-slate-800/40">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            {category}
+                          </span>
                         </div>
-                      ))}
-                  </div>
-                </div>
-              ))}
+                        {rates.map((rate) => (
+                          <div
+                            key={rate.code}
+                            className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-1.5 last:border-0 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/20"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm text-slate-700 dark:text-slate-300">
+                                {rate.label}
+                              </span>
+                              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                                {rate.unit}
+                              </span>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <span className="text-xs text-slate-400 dark:text-slate-500">USD</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={clientRates[rate.code]?.amount ?? ''}
+                                onChange={(e) => updateClientRateAmount(rate.code, e.target.value)}
+                                className="w-20 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-right text-sm font-medium text-slate-900 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+              </div>
 
+              <div className="divide-y divide-slate-200 dark:divide-slate-700/60">
+                {Array.from(new Set(clientRateCatalog.map((r) => r.category)))
+                  .filter((cat) => cat.toLowerCase() === 'otros cargos')
+                  .map((category) => {
+                    const rates = clientRateCatalog.filter((r) => r.category === category)
+                    return (
+                      <div key={category}>
+                        <div className="bg-slate-50 px-5 py-1.5 dark:bg-slate-800/40">
+                          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                            {category}
+                          </span>
+                        </div>
+                        {rates.map((rate) => (
+                          <div
+                            key={rate.code}
+                            className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-1.5 last:border-0 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/20"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm text-slate-700 dark:text-slate-300">
+                                {rate.label}
+                              </span>
+                              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                                {rate.unit}
+                              </span>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <span className="text-xs text-slate-400 dark:text-slate-500">USD</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={clientRates[rate.code]?.amount ?? ''}
+                                onChange={(e) => updateClientRateAmount(rate.code, e.target.value)}
+                                className="w-20 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-right text-sm font-medium text-slate-900 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-700/60">
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                Los cambios se aplican a cotizaciones nuevas de este cliente.
+              </p>
               <button
                 type="button"
                 onClick={saveClientRates}
                 disabled={savingRates}
-                className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
-                {savingRates ? 'Guardando...' : 'Guardar Tarifas'}
+                {savingRates ? 'Guardando...' : 'Guardar tarifas'}
               </button>
             </div>
           </div>
