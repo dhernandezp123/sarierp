@@ -34,10 +34,24 @@ type QuotationJoin = {
   cliente: ClienteJoin | ClienteJoin[] | null
 }
 
+type ContainerAllocation = {
+  container_type: string
+  quantity: number
+}
+
+type BookingContainerRow = {
+  id?: string
+  container_type: string
+  quantity: number | ''
+  notes: string
+}
+
 type RoutingData = {
   id: string
   quotation_id: string | null
   routing_number: string
+  container_type: string | null
+  container_qty: number | null
   supplier_name: string | null
   supplier_contact: string | null
   supplier_email: string | null
@@ -156,6 +170,39 @@ function clientAddress(client: ClienteJoin | null) {
   return [client.direccion, client.ciudad, client.pais].filter(Boolean).join(', ')
 }
 
+function normalizeContainerType(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function groupContainers(containers: ContainerAllocation[]) {
+  return containers.reduce<Record<string, ContainerAllocation>>((acc, container) => {
+    const type = container.container_type.trim()
+    if (!type) return acc
+
+    const key = normalizeContainerType(type)
+    acc[key] = {
+      container_type: acc[key]?.container_type || type,
+      quantity: (acc[key]?.quantity || 0) + Number(container.quantity || 0),
+    }
+
+    return acc
+  }, {})
+}
+
+function containerQuantityFor(containers: ContainerAllocation[], type: string) {
+  const grouped = groupContainers(containers)
+  return grouped[normalizeContainerType(type)]?.quantity || 0
+}
+
+function formatContainerSummary(containers: ContainerAllocation[]) {
+  const grouped = Object.values(groupContainers(containers))
+  if (grouped.length === 0) return 'Sin asignar'
+
+  return grouped
+    .map((container) => `${container.quantity} x ${container.container_type}`)
+    .join(', ')
+}
+
 export default function RoutingBookingChildPage() {
   const params = useParams<{ id: string; bookingId: string }>()
   const router = useRouter()
@@ -165,8 +212,12 @@ export default function RoutingBookingChildPage() {
   const [routing, setRouting] = useState<RoutingData | null>(null)
   const [booking, setBooking] = useState<BookingData | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<SelectedAgentQuote | null>(null)
+  const [availableContainers, setAvailableContainers] = useState<ContainerAllocation[]>([])
+  const [assignedInOtherBookings, setAssignedInOtherBookings] = useState<ContainerAllocation[]>([])
+  const [containerRows, setContainerRows] = useState<BookingContainerRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingContainers, setSavingContainers] = useState(false)
 
   const loadData = async () => {
     setLoading(true)
@@ -177,6 +228,8 @@ export default function RoutingBookingChildPage() {
         id,
         quotation_id,
         routing_number,
+        container_type,
+        container_qty,
         supplier_name,
         supplier_contact,
         supplier_email,
@@ -223,6 +276,7 @@ export default function RoutingBookingChildPage() {
 
     const quotation = resolveJoin((routingData as RoutingData).quotation)
     const quotationId = (routingData as RoutingData).quotation_id || quotation?.id
+    let quotedContainers: ContainerAllocation[] = []
 
     if (quotationId) {
       const { data: agentQuoteData } = await supabase
@@ -233,12 +287,94 @@ export default function RoutingBookingChildPage() {
         .maybeSingle()
 
       setSelectedAgent(agentQuoteData)
+
+      const { data: quotationContainersData, error: quotationContainersError } = await supabase
+        .from('quotation_containers')
+        .select('container_type_name, quantity')
+        .eq('quotation_id', quotationId)
+
+      if (quotationContainersError) {
+        console.error('Error loading quotation containers:', quotationContainersError)
+      }
+
+      quotedContainers = (quotationContainersData || [])
+        .map((container: any) => ({
+          container_type: container.container_type_name || '',
+          quantity: Number(container.quantity || 0),
+        }))
+        .filter((container) => container.container_type && container.quantity > 0)
     } else {
       setSelectedAgent(null)
     }
 
+    if (quotedContainers.length === 0) {
+      const routingContainerType = (routingData as RoutingData).container_type?.trim()
+      const routingContainerQty = Number((routingData as RoutingData).container_qty || 0)
+
+      if (routingContainerType && routingContainerQty > 0) {
+        quotedContainers = [{
+          container_type: routingContainerType,
+          quantity: routingContainerQty,
+        }]
+      }
+    }
+
+    const { data: currentContainersData, error: currentContainersError } = await supabase
+      .from('booking_containers')
+      .select('id, container_type, quantity, notes, created_at')
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: true })
+
+    if (currentContainersError) {
+      console.error('Error loading booking containers:', currentContainersError)
+      toast.error('No se pudieron cargar los contenedores del booking')
+    }
+
+    const { data: siblingBookingsData, error: siblingBookingsError } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('shipping_instruction_id', id)
+      .neq('id', bookingId)
+
+    if (siblingBookingsError) {
+      console.error('Error loading sibling bookings:', siblingBookingsError)
+      toast.error('No se pudieron cargar los bookings relacionados')
+    }
+
+    const siblingBookingIds = (siblingBookingsData || []).map((item) => item.id)
+    let assignedByOthers: ContainerAllocation[] = []
+
+    if (siblingBookingIds.length > 0) {
+      const { data: otherContainersData, error: otherContainersError } = await supabase
+        .from('booking_containers')
+        .select('container_type, quantity')
+        .in('booking_id', siblingBookingIds)
+
+      if (otherContainersError) {
+        console.error('Error loading containers assigned to other bookings:', otherContainersError)
+        toast.error('No se pudieron cargar los contenedores asignados en otros bookings')
+      }
+
+      assignedByOthers = (otherContainersData || [])
+        .map((container) => ({
+          container_type: container.container_type || '',
+          quantity: Number(container.quantity || 0),
+        }))
+        .filter((container) => container.container_type && container.quantity > 0)
+    }
+
     setRouting(routingData as RoutingData)
     setBooking(bookingData as BookingData)
+    setAvailableContainers(quotedContainers)
+    setAssignedInOtherBookings(Object.values(groupContainers(assignedByOthers)))
+    setContainerRows(
+      (currentContainersData || []).map((container: any) => ({
+        id: container.id,
+        container_type: container.container_type || '',
+        quantity: Number(container.quantity || 0),
+        notes: container.notes || '',
+      }))
+    )
     setLoading(false)
   }
 
@@ -300,6 +436,119 @@ export default function RoutingBookingChildPage() {
     toast.success('Booking actualizado')
   }
 
+  const addContainerRow = () => {
+    setContainerRows([
+      ...containerRows,
+      {
+        container_type: availableContainers[0]?.container_type || '',
+        quantity: 1,
+        notes: '',
+      },
+    ])
+  }
+
+  const updateContainerRow = (
+    index: number,
+    field: keyof BookingContainerRow,
+    value: string
+  ) => {
+    setContainerRows((currentRows) =>
+      currentRows.map((row, rowIndex) => {
+        if (rowIndex !== index) return row
+
+        return {
+          ...row,
+          [field]: field === 'quantity' ? (value ? Number(value) : '') : value,
+        }
+      })
+    )
+  }
+
+  const removeContainerRow = (index: number) => {
+    setContainerRows((currentRows) =>
+      currentRows.filter((_, rowIndex) => rowIndex !== index)
+    )
+  }
+
+  const validateContainerRows = () => {
+    const currentAllocations = containerRows
+      .map((row) => ({
+        container_type: row.container_type,
+        quantity: Number(row.quantity || 0),
+      }))
+      .filter((row) => row.container_type.trim() && row.quantity > 0)
+    const groupedCurrent = Object.values(groupContainers(currentAllocations))
+
+    for (const allocation of groupedCurrent) {
+      const totalQuoted = containerQuantityFor(availableContainers, allocation.container_type)
+      const assignedElsewhere = containerQuantityFor(
+        assignedInOtherBookings,
+        allocation.container_type
+      )
+      const availableForThisBooking = Math.max(totalQuoted - assignedElsewhere, 0)
+
+      if (totalQuoted <= 0) {
+        toast.error(`El tipo ${allocation.container_type} no existe en la cotizacion/SI`)
+        return false
+      }
+
+      if (allocation.quantity > availableForThisBooking) {
+        toast.error(
+          `No puedes asignar mas de ${availableForThisBooking} x ${allocation.container_type}`
+        )
+        return false
+      }
+    }
+
+    return true
+  }
+
+  const saveBookingContainers = async () => {
+    if (!booking) return
+    if (!validateContainerRows()) return
+
+    setSavingContainers(true)
+
+    const { error: deleteError } = await supabase
+      .from('booking_containers')
+      .delete()
+      .eq('booking_id', booking.id)
+      .select('id')
+
+    if (deleteError) {
+      setSavingContainers(false)
+      console.error('Error deleting booking containers:', deleteError)
+      toast.error('No se pudieron reemplazar los contenedores del booking')
+      return
+    }
+
+    const rowsToInsert = containerRows
+      .map((row) => ({
+        booking_id: booking.id,
+        container_type: row.container_type.trim(),
+        quantity: Number(row.quantity || 0),
+        notes: row.notes.trim() || null,
+      }))
+      .filter((row) => row.container_type && row.quantity > 0)
+
+    if (rowsToInsert.length > 0) {
+      const { error: insertError } = await supabase
+        .from('booking_containers')
+        .insert(rowsToInsert)
+
+      if (insertError) {
+        setSavingContainers(false)
+        console.error('Error inserting booking containers:', insertError)
+        toast.error('No se pudieron guardar los contenedores del booking')
+        return
+      }
+    }
+
+    setSavingContainers(false)
+    toast.success('Contenedores del booking guardados')
+    await loadData()
+  }
+
   if (loading) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando booking...</p>
   }
@@ -340,6 +589,15 @@ export default function RoutingBookingChildPage() {
   const bookingTitle = booking.booking_number
     ? `Booking ${booking.booking_number}`
     : 'Nuevo Booking'
+  const availableForThisBooking = Object.values(groupContainers(availableContainers))
+    .map((container) => ({
+      container_type: container.container_type,
+      quantity: Math.max(
+        container.quantity - containerQuantityFor(assignedInOtherBookings, container.container_type),
+        0
+      ),
+    }))
+    .filter((container) => container.quantity > 0)
 
   return (
     <div>
@@ -633,6 +891,140 @@ export default function RoutingBookingChildPage() {
             </Field>
           </SectionCard>
         </div>
+
+        <section className={cardClass}>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Contenedores asignados a este booking
+              </h2>
+              <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Total cotizado
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+                    {formatContainerSummary(availableContainers)}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Asignado en otros bookings
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+                    {formatContainerSummary(assignedInOtherBookings)}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Disponible para este booking
+                  </p>
+                  <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+                    {formatContainerSummary(availableForThisBooking)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={addContainerRow}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            >
+              Agregar contenedor
+            </button>
+          </div>
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr>
+                  <th className="py-3 pr-4">Tipo de contenedor</th>
+                  <th className="pr-4">Cantidad</th>
+                  <th className="pr-4">Notas</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {containerRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="border-t border-slate-100 py-6 text-center text-slate-500 dark:border-slate-800 dark:text-slate-400"
+                    >
+                      Sin contenedores asignados.
+                    </td>
+                  </tr>
+                ) : (
+                  containerRows.map((row, index) => (
+                    <tr
+                      key={row.id || index}
+                      className="border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <td className="py-3 pr-4">
+                        <select
+                          value={row.container_type}
+                          onChange={(e) =>
+                            updateContainerRow(index, 'container_type', e.target.value)
+                          }
+                          className={fieldClass}
+                        >
+                          <option value="">Seleccionar</option>
+                          {availableContainers.map((container) => (
+                            <option
+                              key={container.container_type}
+                              value={container.container_type}
+                            >
+                              {container.container_type}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="pr-4">
+                        <input
+                          type="number"
+                          min="1"
+                          value={row.quantity}
+                          onChange={(e) =>
+                            updateContainerRow(index, 'quantity', e.target.value)
+                          }
+                          className={`${fieldClass} w-28`}
+                        />
+                      </td>
+                      <td className="pr-4">
+                        <input
+                          value={row.notes}
+                          onChange={(e) => updateContainerRow(index, 'notes', e.target.value)}
+                          className={fieldClass}
+                        />
+                      </td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeContainerRow(index)}
+                          className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          Quitar
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              onClick={saveBookingContainers}
+              disabled={savingContainers}
+              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {savingContainers ? 'Guardando...' : 'Guardar contenedores'}
+            </button>
+          </div>
+        </section>
 
         <div className="grid gap-6 lg:grid-cols-2">
           <SectionCard title="Tracking y Control">

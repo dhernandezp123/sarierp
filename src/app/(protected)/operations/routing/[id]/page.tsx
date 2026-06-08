@@ -39,6 +39,10 @@ type Booking = {
   shipment_status: string | null
   free_days: number | null
   created_at: string | null
+  booking_containers?: Array<{
+    container_type: string | null
+    quantity: number | null
+  }> | null
 }
 
 const SI_READY_FOR_BOOKING = 'Listo para Booking'
@@ -191,6 +195,34 @@ function formatContainerSummary(routing: ShippingInstruction) {
   return 'N/A'
 }
 
+function formatBookingContainers(
+  containers?: Array<{ container_type: string | null; quantity: number | null }> | null
+) {
+  if (!containers || containers.length === 0) return 'Sin asignar'
+
+  const grouped = containers.reduce<Record<string, { label: string; quantity: number }>>(
+    (acc, container) => {
+      const label = container.container_type?.trim()
+      const quantity = Number(container.quantity || 0)
+      if (!label || quantity <= 0) return acc
+
+      const key = label.toLowerCase()
+      acc[key] = {
+        label: acc[key]?.label || label,
+        quantity: (acc[key]?.quantity || 0) + quantity,
+      }
+
+      return acc
+    },
+    {}
+  )
+
+  const values = Object.values(grouped)
+  if (values.length === 0) return 'Sin asignar'
+
+  return values.map((container) => `${container.quantity} x ${container.label}`).join(', ')
+}
+
 export default function RoutingDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
@@ -283,7 +315,11 @@ export default function RoutingDetailPage() {
         eta,
         shipment_status,
         free_days,
-        created_at
+        created_at,
+        booking_containers (
+          container_type,
+          quantity
+        )
       `)
       .eq('shipping_instruction_id', id)
       .order('created_at', { ascending: true })
@@ -999,6 +1035,7 @@ export default function RoutingDetailPage() {
                   <th className="pr-4">ETD</th>
                   <th className="pr-4">ETA</th>
                   <th className="pr-4">Dias libres</th>
+                  <th className="pr-4">Contenedores</th>
                   <th></th>
                 </tr>
               </thead>
@@ -1032,6 +1069,9 @@ export default function RoutingDetailPage() {
                     </td>
                     <td className="pr-4 text-slate-700 dark:text-slate-300">
                       {booking.free_days ?? 'N/A'}
+                    </td>
+                    <td className="pr-4 text-slate-700 dark:text-slate-300">
+                      {formatBookingContainers(booking.booking_containers)}
                     </td>
                     <td className="text-right">
                       <Link
