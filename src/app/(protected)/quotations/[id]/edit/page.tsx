@@ -430,6 +430,11 @@ export default function EditQuotationPage() {
     const oldStatus = formData.status || 'Borrador'
     const nextStatus = 'Pendiente de Fijar Precios'
 
+    if (oldStatus === 'Ganada') {
+      toast.error('Usa la acción "Reabrir para Repricing" desde el detalle de la cotización.')
+      return
+    }
+
     if (!canTransition(oldStatus, nextStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
       return

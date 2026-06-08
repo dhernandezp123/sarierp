@@ -118,6 +118,31 @@ type SurchargeRule = {
 
 type AgentQuote = any
 
+type OperationalImpactChange = {
+  label: string
+  previousValue: string
+  newValue: string
+}
+
+type OperationalImpact = {
+  isRepricing: boolean
+  hasShippingInstruction: boolean
+  shippingInstruction: any | null
+  shippingInstructionIds: string[]
+  bookings: any[]
+  confirmedBookings: any[]
+  changes: OperationalImpactChange[]
+  newValues: {
+    carrier: string | null
+    etd: string | null
+    transitDays: number | null
+    freeDays: number | string | null
+    transshipment: string | null
+  }
+}
+
+type OperationalSyncMode = 'skip' | 'sync'
+
 const formatDisplayDate = (date?: string | null) => {
   if (!date) return 'N/A'
 
@@ -127,6 +152,38 @@ const formatDisplayDate = (date?: string | null) => {
     year: 'numeric',
   }).format(new Date(date))
 }
+
+const displayOperationalValue = (value?: string | number | null) => {
+  if (value === null || value === undefined || value === '') return 'N/A'
+  return String(value)
+}
+
+const firstFilledValue = (...values: Array<string | number | null | undefined>) =>
+  values.find((value) => value !== null && value !== undefined && value !== '') ?? null
+
+const toOptionalNumber = (value?: string | number | null) => {
+  if (value === null || value === undefined || value === '') return null
+
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : null
+}
+
+const addDaysToDate = (dateValue?: string | null, days?: number | null) => {
+  if (!dateValue || days === null || days === undefined) return null
+
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return null
+
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+const hasConfirmedBookingData = (booking: any) =>
+  Boolean(
+    String(booking.booking_number || '').trim() ||
+      String(booking.carrier_booking || '').trim() ||
+      String(booking.master_bl || '').trim()
+  )
 
 function PricingComparisonContent() {
   const { profile } = useUser()
@@ -195,6 +252,12 @@ function PricingComparisonContent() {
   const [profitabilityReason, setProfitabilityReason] = useState('')
   const [pendingApprovePricing, setPendingApprovePricing] =
     useState<null | (() => Promise<void>)>(null)
+  const [operationalImpactDialogOpen, setOperationalImpactDialogOpen] = useState(false)
+  const [operationalImpact, setOperationalImpact] = useState<OperationalImpact | null>(null)
+  const [pendingOperationalApproval, setPendingOperationalApproval] = useState<{
+    reason?: string
+  } | null>(null)
+  const [processingOperationalApproval, setProcessingOperationalApproval] = useState(false)
   const [postApprovalDialogOpen, setPostApprovalDialogOpen] = useState(false)
   const [postApprovalReason, setPostApprovalReason] = useState('')
   const [postApprovalDialogCopy, setPostApprovalDialogCopy] = useState({
@@ -1434,15 +1497,239 @@ function PricingComparisonContent() {
     await fetchPricingItems(selectedQuote.id)
   }
 
-  const executeApprovePricing = async (reason?: string) => {
-    if (!selectedQuote) return
+  const getOperationalImpact = async (
+    selectedAgentQuote: AgentQuote | null
+  ): Promise<OperationalImpact | null> => {
+    if (!selectedQuote?.id) return null
+
+    const quoteStatus = selectedQuote.status || 'Borrador'
+    const isPendingPricing = quoteStatus === 'Pendiente de Fijar Precios'
+
+    const { data: changeLogs, error: changeLogError } = await supabase
+      .from('quotation_change_logs')
+      .select('id')
+      .eq('quotation_id', selectedQuote.id)
+      .eq('change_type', 'quotation_reopened_for_repricing')
+      .limit(1)
+
+    if (changeLogError) {
+      toast.error(changeLogError.message)
+      return null
+    }
+
+    const { data: activityLogs, error: activityLogError } = await supabase
+      .from('activity_logs')
+      .select('id')
+      .eq('entity_type', 'quotation')
+      .eq('entity_id', selectedQuote.id)
+      .eq('action', 'quotation_reopened_for_repricing')
+      .limit(1)
+
+    if (activityLogError) {
+      toast.error(activityLogError.message)
+      return null
+    }
+
+    const { data: shippingInstructions, error: siError } = await supabase
+      .from('shipping_instructions')
+      .select('id, routing_number, carrier, etd, free_days, estimated_transit_days')
+      .eq('quotation_id', selectedQuote.id)
+
+    if (siError) {
+      toast.error(siError.message)
+      return null
+    }
+
+    const shippingInstructionIds = (shippingInstructions || []).map((item) => item.id)
+    let bookings: any[] = []
+
+    if (shippingInstructionIds.length > 0) {
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          shipping_instruction_id,
+          booking_number,
+          carrier_booking,
+          master_bl,
+          carrier,
+          etd,
+          eta,
+          actual_eta,
+          estimated_transit_days,
+          free_days
+        `)
+        .in('shipping_instruction_id', shippingInstructionIds)
+
+      if (bookingsError) {
+        toast.error(bookingsError.message)
+        return null
+      }
+
+      bookings = bookingsData || []
+    }
+
+    const wasReopenedForRepricing =
+      (changeLogs || []).length > 0 || (activityLogs || []).length > 0
+    const isRepricing =
+      isPendingPricing &&
+      (wasReopenedForRepricing || shippingInstructionIds.length > 0 || bookings.length > 0)
+
+    if (!isRepricing) return null
+
+    const shippingInstruction = shippingInstructions?.[0] || null
+    const carrier = selectedAgentQuote?.carrier || selectedQuote.preferred_carrier || null
+    const etd = selectedAgentQuote?.etd || selectedQuote.etd || null
+    const transitDays = toOptionalNumber(
+      firstFilledValue(
+        selectedAgentQuote?.transit_time,
+        selectedAgentQuote?.transit,
+        selectedQuote.transit_time
+      )
+    )
+    const freeDays = firstFilledValue(
+      selectedAgentQuote?.free_days_destination,
+      selectedAgentQuote?.free_days,
+      selectedAgentQuote?.dias_libres
+    )
+    const transshipment =
+      selectedAgentQuote?.transshipment ||
+      selectedAgentQuote?.transbordo ||
+      selectedQuote.transshipment ||
+      null
+
+    const previousCarrier =
+      shippingInstruction?.carrier || selectedQuote.preferred_carrier || null
+    const previousEtd = shippingInstruction?.etd || selectedQuote.etd || null
+    const previousTransit = firstFilledValue(
+      shippingInstruction?.estimated_transit_days,
+      selectedQuote.transit_time
+    )
+    const previousFreeDays = firstFilledValue(
+      shippingInstruction?.free_days,
+      selectedQuote.free_days_destination,
+      selectedQuote.free_days,
+      selectedQuote.dias_libres
+    )
+    const previousTransshipment = selectedQuote.transshipment || null
+
+    return {
+      isRepricing,
+      hasShippingInstruction: shippingInstructionIds.length > 0,
+      shippingInstruction,
+      shippingInstructionIds,
+      bookings,
+      confirmedBookings: bookings.filter(hasConfirmedBookingData),
+      changes: [
+        {
+          label: 'Carrier',
+          previousValue: displayOperationalValue(previousCarrier),
+          newValue: displayOperationalValue(carrier),
+        },
+        {
+          label: 'ETD',
+          previousValue: previousEtd ? formatDisplayDate(previousEtd) : 'N/A',
+          newValue: etd ? formatDisplayDate(etd) : 'N/A',
+        },
+        {
+          label: 'Tránsito',
+          previousValue: displayOperationalValue(previousTransit),
+          newValue: displayOperationalValue(transitDays),
+        },
+        {
+          label: 'Días libres',
+          previousValue: displayOperationalValue(previousFreeDays),
+          newValue: displayOperationalValue(freeDays),
+        },
+        {
+          label: 'Transbordo',
+          previousValue: displayOperationalValue(previousTransshipment),
+          newValue: displayOperationalValue(transshipment),
+        },
+      ],
+      newValues: {
+        carrier,
+        etd,
+        transitDays,
+        freeDays,
+        transshipment,
+      },
+    }
+  }
+
+  const syncOperationalRepricing = async (impact: OperationalImpact) => {
+    if (!impact.hasShippingInstruction) return
+
+    const routingPayload = {
+      carrier: impact.newValues.carrier,
+      etd: impact.newValues.etd,
+      free_days:
+        impact.newValues.freeDays === null || impact.newValues.freeDays === undefined
+          ? null
+          : String(impact.newValues.freeDays),
+    }
+
+    const { error: routingError } = await supabase
+      .from('shipping_instructions')
+      .update(routingPayload)
+      .in('id', impact.shippingInstructionIds)
+
+    if (routingError) throw routingError
+
+    const editableBookings = impact.bookings.filter(
+      (booking) => !hasConfirmedBookingData(booking)
+    )
+    const freeDaysNumber = toOptionalNumber(impact.newValues.freeDays)
+
+    for (const booking of editableBookings) {
+      const eta =
+        !booking.actual_eta && impact.newValues.etd && impact.newValues.transitDays !== null
+          ? addDaysToDate(impact.newValues.etd, impact.newValues.transitDays)
+          : booking.eta || null
+
+      const { error: bookingError } = await supabase
+        .from('bookings')
+        .update({
+          carrier: impact.newValues.carrier,
+          etd: impact.newValues.etd,
+          estimated_transit_days: impact.newValues.transitDays,
+          free_days: freeDaysNumber,
+          eta,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', booking.id)
+
+      if (bookingError) throw bookingError
+    }
+  }
+
+  const executeApprovePricing = async (
+    reason?: string,
+    operationalSyncMode?: OperationalSyncMode
+  ): Promise<boolean> => {
+    if (!selectedQuote) return false
 
     const oldStatus = selectedQuote.status || 'Borrador'
-    const nextStatus = 'Pricing Aprobado'
+    const activeAgentQuote = agentQuotes.find((quote) => quote.is_selected) || null
+    const impact = await getOperationalImpact(activeAgentQuote)
+    const shouldAskOperationalAction =
+      impact &&
+      (impact.hasShippingInstruction || impact.bookings.length > 0) &&
+      !operationalSyncMode
 
-    if (!canTransition(oldStatus, nextStatus)) {
+    if (shouldAskOperationalAction) {
+      setOperationalImpact(impact)
+      setPendingOperationalApproval({ reason })
+      setOperationalImpactDialogOpen(true)
+      return false
+    }
+
+    const isRepricing = Boolean(impact?.isRepricing)
+    const nextStatus = isRepricing ? 'Ganada' : 'Pricing Aprobado'
+
+    if (!isRepricing && !canTransition(oldStatus, nextStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
-      return
+      return false
     }
 
     const { error } = await supabase
@@ -1461,7 +1748,16 @@ function PricingComparisonContent() {
 
     if (error) {
       toast.error(error.message)
-      return
+      return false
+    }
+
+    if (operationalSyncMode === 'sync' && impact) {
+      try {
+        await syncOperationalRepricing(impact)
+      } catch (syncError: any) {
+        toast.error(syncError?.message || 'No se pudo sincronizar la operación')
+        return false
+      }
     }
 
     await supabase.from('quotation_status_history').insert([
@@ -1486,6 +1782,34 @@ function PricingComparisonContent() {
       },
     })
 
+    if (isRepricing && operationalSyncMode) {
+      await createActivityLog({
+        module: 'pricing',
+        action:
+          operationalSyncMode === 'sync'
+            ? 'repricing_approved_with_operational_sync'
+            : 'repricing_approved_without_operational_sync',
+        entityType: 'quotation',
+        entityId: selectedQuote.id,
+        description:
+          operationalSyncMode === 'sync'
+            ? `Repricing aprobado y sincronizado con operación para ${
+                selectedQuote.quotation_number || selectedQuote.id
+              }`
+            : `Repricing aprobado sin actualizar operación para ${
+                selectedQuote.quotation_number || selectedQuote.id
+              }`,
+        metadata: {
+          reason: reason || null,
+          previous_status: oldStatus,
+          new_status: nextStatus,
+          has_shipping_instruction: impact?.hasShippingInstruction || false,
+          bookings_count: impact?.bookings.length || 0,
+          confirmed_bookings_count: impact?.confirmedBookings.length || 0,
+        },
+      })
+    }
+
     if (selectedQuote.created_by) {
       await createNotification({
         userId: selectedQuote.created_by,
@@ -1497,7 +1821,11 @@ function PricingComparisonContent() {
       })
     }
 
-    toast.success('Pricing aprobado correctamente')
+    toast.success(
+      isRepricing
+        ? 'Repricing aprobado. La cotización volvió a Ganada.'
+        : 'Pricing aprobado correctamente'
+    )
 
     await fetchQuotations()
 
@@ -1509,7 +1837,11 @@ function PricingComparisonContent() {
       profit_amount: profit,
       gp_percentage: gpPercentage,
       pricing_approved: true,
+      pricing_approved_by: profile?.id,
+      pricing_approved_at: new Date().toISOString(),
     })
+
+    return true
   }
 
   const saveClientNotes = async () => {
@@ -2094,6 +2426,24 @@ const profitabilityColor =
       setPostApprovalDialogOpen(true)
     })
 
+  }
+
+  const approveOperationalImpact = async (mode: OperationalSyncMode) => {
+    if (!pendingOperationalApproval) return
+
+    setProcessingOperationalApproval(true)
+
+    try {
+      const success = await executeApprovePricing(pendingOperationalApproval.reason, mode)
+
+      if (success) {
+        setOperationalImpactDialogOpen(false)
+        setOperationalImpact(null)
+        setPendingOperationalApproval(null)
+      }
+    } finally {
+      setProcessingOperationalApproval(false)
+    }
   }
 
   const resetPostApprovalDialog = () => {
@@ -4032,6 +4382,138 @@ const profitabilityColor =
               Aprobar con justificación
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={operationalImpactDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !processingOperationalApproval) {
+            setOperationalImpactDialogOpen(false)
+            setOperationalImpact(null)
+            setPendingOperationalApproval(null)
+            return
+          }
+
+          setOperationalImpactDialogOpen(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Impacto operativo detectado</DialogTitle>
+            <DialogDescription>
+              Esta cotización tiene operación asociada. Elige cómo cerrar la aprobación de repricing.
+            </DialogDescription>
+          </DialogHeader>
+
+          {operationalImpact && (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Shipping Instruction
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                    {operationalImpact.shippingInstruction?.routing_number ||
+                      operationalImpact.shippingInstruction?.id ||
+                      'No encontrada'}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Total bookings
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                    {operationalImpact.bookings.length}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Bookings confirmados
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
+                    {operationalImpact.confirmedBookings.length > 0 ? 'Sí' : 'No'}
+                  </p>
+                </div>
+              </div>
+
+              {operationalImpact.confirmedBookings.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+                  Los bookings confirmados no serán modificados.
+                </div>
+              )}
+
+              <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-700">
+                  <thead className="bg-slate-50 dark:bg-slate-900">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">
+                        Campo
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">
+                        Anterior
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">
+                        Nuevo
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {operationalImpact.changes.map((change) => (
+                      <tr key={change.label}>
+                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
+                          {change.label}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                          {change.previousValue}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                          {change.newValue}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOperationalImpactDialogOpen(false)
+                    setOperationalImpact(null)
+                    setPendingOperationalApproval(null)
+                  }}
+                  disabled={processingOperationalApproval}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => approveOperationalImpact('skip')}
+                  disabled={processingOperationalApproval}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Aprobar sin actualizar operación
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => approveOperationalImpact('sync')}
+                  disabled={processingOperationalApproval}
+                  className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {processingOperationalApproval
+                    ? 'Procesando...'
+                    : 'Aprobar y propagar'}
+                </button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

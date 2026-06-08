@@ -19,7 +19,9 @@ export const allowedTransitions = {
     'Pendiente de Fijar Precios',
   ],
 
-  Ganada: [],
+  Ganada: [
+    'Pendiente de Fijar Precios',
+  ],
 
   Perdida: [],
 } as const

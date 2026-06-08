@@ -33,6 +33,13 @@ import {
 } from '../../../../components/ui/card'
 
 import { Badge } from '../../../../components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../../../../components/ui/dialog'
 
 const statusOptions = [
   ...Object.keys(allowedTransitions),
@@ -133,6 +140,14 @@ export default function QuotationDetailPage() {
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
   const [creatingRouting, setCreatingRouting] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
+  const [repricingDialogOpen, setRepricingDialogOpen] = useState(false)
+  const [repricingReason, setRepricingReason] = useState('')
+  const [reopeningRepricing, setReopeningRepricing] = useState(false)
+  const [repricingImpact, setRepricingImpact] = useState({
+    hasShippingInstruction: false,
+    bookingsCount: 0,
+    loading: false,
+  })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -267,6 +282,33 @@ export default function QuotationDetailPage() {
     setLoading(false)
   }
 
+  const loadActivityLogs = async (quotationId: string) => {
+    const { data } = await supabase
+      .from('activity_logs')
+      .select(`
+        id,
+        action,
+        description,
+        created_at,
+        created_by_profile:profiles!activity_logs_user_id_fkey (
+          nombre,
+          apellido
+        )
+      `)
+      .eq('entity_type', 'quotation')
+      .eq('entity_id', quotationId)
+      .order('created_at', { ascending: false })
+
+    setActivityLogs(
+      (data || []).map((log) => ({
+        ...log,
+        created_by_profile: Array.isArray(log.created_by_profile)
+          ? log.created_by_profile[0] || null
+          : log.created_by_profile,
+      }))
+    )
+  }
+
   const fetchStatusHistory = async () => {
     const { data, error } = await supabase
       .from('quotation_status_history')
@@ -318,6 +360,11 @@ export default function QuotationDetailPage() {
 
     const oldStatus = quotation.status || 'Borrador'
 
+    if (oldStatus === 'Ganada' && newStatus === 'Pendiente de Fijar Precios') {
+      await openRepricingDialog()
+      return
+    }
+
     if (!canTransition(oldStatus, newStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${newStatus}`)
       return
@@ -363,6 +410,159 @@ export default function QuotationDetailPage() {
 
     await fetchStatusHistory()
     await loadChangeLogs()
+  }
+
+  const loadRepricingImpact = async () => {
+    if (!quotation?.id) return
+
+    setRepricingImpact((current) => ({ ...current, loading: true }))
+
+    const { data: shippingInstructions, error: siError } = await supabase
+      .from('shipping_instructions')
+      .select('id')
+      .eq('quotation_id', quotation.id)
+
+    if (siError) {
+      toast.error(siError.message)
+      setRepricingImpact({
+        hasShippingInstruction: false,
+        bookingsCount: 0,
+        loading: false,
+      })
+      return
+    }
+
+    const shippingInstructionIds = (shippingInstructions || []).map((item) => item.id)
+    let bookingsCount = 0
+
+    if (shippingInstructionIds.length > 0) {
+      const { count, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .in('shipping_instruction_id', shippingInstructionIds)
+
+      if (bookingsError) {
+        toast.error(bookingsError.message)
+      } else {
+        bookingsCount = count || 0
+      }
+    }
+
+    setRepricingImpact({
+      hasShippingInstruction: shippingInstructionIds.length > 0,
+      bookingsCount,
+      loading: false,
+    })
+  }
+
+  const openRepricingDialog = async () => {
+    setRepricingReason('')
+    setRepricingDialogOpen(true)
+    await loadRepricingImpact()
+  }
+
+  const resetRepricingDialog = () => {
+    setRepricingDialogOpen(false)
+    setRepricingReason('')
+    setRepricingImpact({
+      hasShippingInstruction: false,
+      bookingsCount: 0,
+      loading: false,
+    })
+  }
+
+  const reopenForRepricing = async () => {
+    if (!quotation?.id) return
+
+    const reason = repricingReason.trim()
+
+    if (!reason) {
+      toast.error('Debes ingresar el motivo del repricing.')
+      return
+    }
+
+    const previousStatus = quotation.status || 'Ganada'
+    const newStatus = 'Pendiente de Fijar Precios'
+
+    if (!canTransition(previousStatus, newStatus)) {
+      toast.error(`Transicion no permitida: ${previousStatus} a ${newStatus}`)
+      return
+    }
+
+    setReopeningRepricing(true)
+
+    const { error } = await supabase
+      .from('quotations')
+      .update({
+        status: newStatus,
+        pricing_approved: false,
+        pricing_approved_at: null,
+        pricing_approved_by: null,
+      })
+      .eq('id', quotation.id)
+
+    if (error) {
+      setReopeningRepricing(false)
+      toast.error(error.message)
+      return
+    }
+
+    await supabase.from('quotation_status_history').insert([
+      {
+        quotation_id: quotation.id,
+        old_status: previousStatus,
+        new_status: newStatus,
+        changed_by: profile?.id,
+      },
+    ])
+
+    const { error: changeLogError } = await supabase
+      .from('quotation_change_logs')
+      .insert([
+        {
+          quotation_id: quotation.id,
+          change_type: 'quotation_reopened_for_repricing',
+          reason,
+          changed_by: profile?.id,
+        },
+      ])
+
+    if (changeLogError) {
+      toast.error(changeLogError.message)
+    }
+
+    await createActivityLog({
+      module: 'quotations',
+      action: 'quotation_reopened_for_repricing',
+      entityType: 'quotation',
+      entityId: quotation.id,
+      description: `Cotización ${
+        quotation.quotation_number || quotation.id
+      } reabierta para repricing`,
+      metadata: {
+        previous_status: previousStatus,
+        new_status: newStatus,
+        reason,
+        has_shipping_instruction: repricingImpact.hasShippingInstruction,
+        bookings_count: repricingImpact.bookingsCount,
+      },
+    })
+
+    setQuotation({
+      ...quotation,
+      status: newStatus,
+      pricing_approved: false,
+      pricing_approved_at: null,
+      pricing_approved_by: null,
+    })
+
+    await fetchStatusHistory()
+    await loadChangeLogs()
+    await loadActivityLogs(quotation.id)
+
+    setReopeningRepricing(false)
+    resetRepricingDialog()
+    toast.success('Cotización reabierta para repricing.')
   }
 
   const handlePrintQuotation = async () => {
@@ -790,7 +990,11 @@ const combinedTimeline = [
                 <div className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
                   {statusOptions
                     .filter((status) =>
-                      canTransition(quotation?.status || 'Borrador', status)
+                      canTransition(quotation?.status || 'Borrador', status) &&
+                      !(
+                        quotation?.status === 'Ganada' &&
+                        status === 'Pendiente de Fijar Precios'
+                      )
                     )
                     .map((status) => (
                     <button
@@ -866,6 +1070,16 @@ const combinedTimeline = [
               {creatingRouting
                 ? 'Generando...'
                 : 'Generar Shipping Instructions'}
+            </button>
+          )}
+
+          {canManagePricing && quotation.status === 'Ganada' && (
+            <button
+              type="button"
+              onClick={openRepricingDialog}
+              className="rounded-xl bg-amber-600 px-6 py-3 font-semibold text-white transition hover:bg-amber-700"
+            >
+              Reabrir para Repricing
             </button>
           )}
 
@@ -1519,6 +1733,74 @@ const combinedTimeline = [
         </TabsContent>
       </Tabs>
     </div>
+
+    <Dialog
+      open={repricingDialogOpen}
+      onOpenChange={(open) => {
+        if (!open && !reopeningRepricing) {
+          resetRepricingDialog()
+          return
+        }
+
+        setRepricingDialogOpen(open)
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Reabrir para Repricing</DialogTitle>
+          <DialogDescription>
+            Regresa esta cotización ganada a Pendiente de Fijar Precios para corregir tarifa, costos o carrier/naviera.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {(repricingImpact.hasShippingInstruction || repricingImpact.bookingsCount > 0) && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+              Esta cotización ya tiene operación asociada. Reabrir pricing no actualizará Routing ni Bookings automáticamente en esta fase.
+            </div>
+          )}
+
+          {repricingImpact.loading && (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Revisando impacto operativo...
+            </p>
+          )}
+
+          <div>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Motivo
+            </label>
+            <textarea
+              value={repricingReason}
+              onChange={(event) => setRepricingReason(event.target.value)}
+              placeholder="Ej: Cambio de naviera / actualización de tarifa al zarpe"
+              rows={4}
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={resetRepricingDialog}
+              disabled={reopeningRepricing}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={reopenForRepricing}
+              disabled={reopeningRepricing || repricingImpact.loading}
+              className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50"
+            >
+              {reopeningRepricing ? 'Reabriendo...' : 'Confirmar reapertura'}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   </>
 )
 }
