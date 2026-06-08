@@ -754,10 +754,6 @@ export default function RoutingBookingChildPage() {
 
     const filePath = `${booking.id}/${Date.now()}-${sanitizeFileName(file.name)}`
 
-    console.log('Upload user:', user?.id)
-    console.log('Upload path:', filePath)
-    console.log('Booking id:', booking.id)
-
     const { error: uploadError } = await supabase.storage
       .from(BOOKING_DOCUMENT_BUCKET)
       .upload(filePath, file, { upsert: false })
