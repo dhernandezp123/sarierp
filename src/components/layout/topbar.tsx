@@ -2,59 +2,44 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Bell, Home, Moon, Sun } from 'lucide-react'
+import { ArrowRight, Bell, Home, Moon, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
+import { useUser } from '@/src/hooks/useUser'
+import { getSystemAlerts, type SystemAlert, type SystemAlertSeverity } from '@/src/lib/alerts'
 import { supabase } from '@/src/lib/supabase/client'
-import {
-  fetchCurrentUserNotifications,
-  markCurrentUserNotificationsAsRead,
-  type NotificationRecord,
-} from '@/src/lib/notifications'
-
-type Profile = {
-  nombre: string | null
-  apellido: string | null
-  email: string | null
-  rol: string | null
-  avatar_url: string | null
-}
 
 export default function Topbar() {
   const { theme, setTheme } = useTheme()
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [notifications, setNotifications] = useState<NotificationRecord[]>([])
-  const [notificationsOpen, setNotificationsOpen] = useState(false)
-
-  const fetchNotifications = async () => {
-    const data = await fetchCurrentUserNotifications()
-    setNotifications(data)
-  }
+  const { user, profile, loading: userLoading } = useUser()
+  const [alerts, setAlerts] = useState<SystemAlert[]>([])
+  const [alertsOpen, setAlertsOpen] = useState(false)
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+    const fetchAlerts = async () => {
+      if (userLoading) return
 
-      if (!user) return
+      if (!user) {
+        setAlerts([])
+        return
+      }
 
-      const { data } = await supabase
-        .from('profiles')
-        .select('nombre, apellido, email, rol, avatar_url')
-        .eq('id', user.id)
-        .single()
-
-      setProfile(data)
+      try {
+        const data = await getSystemAlerts(supabase, profile, user)
+        setAlerts(data)
+      } catch (error) {
+        console.error(error)
+        setAlerts([])
+      }
     }
 
-    fetchProfile()
-    fetchNotifications()
-  }, [])
+    fetchAlerts()
+  }, [profile, user, userLoading])
 
   const displayName = profile?.nombre
     ? `${profile.nombre} ${profile.apellido || ''}`.trim()
     : 'Usuario'
-  const unreadCount = notifications.filter((n) => !n.is_read).length
+  const highAlertCount = alerts.filter((alert) => alert.severity === 'Alta').length
+  const visibleAlerts = alerts.slice(0, 5)
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-6 backdrop-blur dark:border-slate-700/60 dark:bg-[#081120]/90">
@@ -92,65 +77,70 @@ export default function Topbar() {
 
         <div className="relative">
           <button
-            title="Notificaciones"
-            onClick={() => setNotificationsOpen(!notificationsOpen)}
+            title="Alertas"
+            onClick={() => setAlertsOpen(!alertsOpen)}
             className="relative rounded-xl p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >
             <Bell className="h-5 w-5" />
 
-            {unreadCount > 0 && (
+            {highAlertCount > 0 && (
               <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                {unreadCount}
+                {highAlertCount > 99 ? '99+' : highAlertCount}
               </span>
             )}
           </button>
 
-          {notificationsOpen && (
+          {alertsOpen && (
             <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Notificaciones
+                  Alertas
                 </p>
-
-                <button
-                  onClick={async () => {
-                    await markCurrentUserNotificationsAsRead()
-                    fetchNotifications()
-                  }}
-                  className="text-xs font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                >
-                  Marcar todas
-                </button>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {highAlertCount} altas
+                </span>
               </div>
 
               <div className="max-h-80 space-y-2 overflow-y-auto">
-                {notifications.length === 0 ? (
+                {visibleAlerts.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                    No tienes notificaciones.
+                    Sin alertas pendientes
                   </p>
                 ) : (
-                  notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`rounded-xl border px-3 py-2 ${
-                        notification.is_read
-                          ? 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950'
-                          : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
-                      }`}
+                  visibleAlerts.map((alert) => (
+                    <Link
+                      key={alert.id}
+                      href={alert.href}
+                      onClick={() => setAlertsOpen(false)}
+                      className="block rounded-xl border border-slate-200 bg-white px-3 py-2 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900"
                     >
-                      <p className="text-sm font-medium text-slate-900 dark:text-white">
-                        {notification.title}
-                      </p>
-
-                      {notification.message && (
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          {notification.message}
-                        </p>
-                      )}
-                    </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${severityClass(alert.severity)}`}>
+                            {alert.severity}
+                          </span>
+                          <p className="mt-1 truncate text-sm font-medium text-slate-900 dark:text-white">
+                            {alert.title}
+                          </p>
+                          <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+                            {alert.entityLabel}
+                          </p>
+                        </div>
+                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                      </div>
+                    </Link>
                   ))
                 )}
               </div>
+
+              <Link
+                href="/alerts"
+                onClick={() => setAlertsOpen(false)}
+                className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Ver todas las alertas
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
           )}
         </div>
@@ -183,4 +173,16 @@ export default function Topbar() {
       </div>
     </header>
   )
+}
+
+function severityClass(severity: SystemAlertSeverity) {
+  if (severity === 'Alta') {
+    return 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-200'
+  }
+
+  if (severity === 'Media') {
+    return 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-200'
+  }
+
+  return 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-200'
 }
