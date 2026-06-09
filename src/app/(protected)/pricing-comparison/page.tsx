@@ -146,11 +146,12 @@ type OperationalSyncMode = 'skip' | 'sync'
 const formatDisplayDate = (date?: string | null) => {
   if (!date) return 'N/A'
 
-  return new Intl.DateTimeFormat('es-HN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(date))
+  const datePart = date.split('T')[0]
+  const [year, month, day] = datePart.split('-')
+
+  if (!year || !month || !day) return date
+
+  return `${day}/${month}/${year}`
 }
 
 const displayOperationalValue = (value?: string | number | null) => {
@@ -171,10 +172,12 @@ const toOptionalNumber = (value?: string | number | null) => {
 const addDaysToDate = (dateValue?: string | null, days?: number | null) => {
   if (!dateValue || days === null || days === undefined) return null
 
-  const date = new Date(dateValue)
-  if (Number.isNaN(date.getTime())) return null
+  const [year, month, day] = dateValue.split('T')[0].split('-').map(Number)
+  if (!year || !month || !day) return null
 
-  date.setDate(date.getDate() + days)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  date.setUTCDate(date.getUTCDate() + days)
+
   return date.toISOString().slice(0, 10)
 }
 
