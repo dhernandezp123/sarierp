@@ -25,13 +25,13 @@ export default function ProtectedLayout({
   }, [pathname, profile, router])
 
   return (
-    <div className="flex min-h-screen bg-[#F5F7FA] text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
+    <div className="flex h-screen overflow-hidden bg-[#F5F7FA] text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
       <Sidebar role={profile?.rol} />
 
       <div className="flex flex-1 flex-col">
         <Topbar />
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>
 

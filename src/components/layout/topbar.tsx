@@ -1,18 +1,39 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
-import { ArrowRight, Bell, Home, Moon, Sun } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Bell, Home, Moon, Sun, Plus, FileText, Users, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useUser } from '@/src/hooks/useUser'
-import { getSystemAlerts, type SystemAlert, type SystemAlertSeverity } from '@/src/lib/alerts'
+import { getSystemAlerts, type SystemAlert } from '@/src/lib/alerts'
 import { supabase } from '@/src/lib/supabase/client'
+
+// Acciones rapidas disponibles segun rol
+const QUICK_ACTIONS = [
+  {
+    label: 'Nueva Cotizacion',
+    href: '/quotations/new',
+    icon: FileText,
+    roles: ['Admin', 'Ventas', 'Pricing'],
+  },
+  {
+    label: 'Nuevo Cliente',
+    href: '/clientes/nuevo',
+    icon: Users,
+    roles: ['Admin', 'Ventas'],
+  },
+]
 
 export default function Topbar() {
   const { theme, setTheme } = useTheme()
   const { user, profile, loading: userLoading } = useUser()
+
   const [alerts, setAlerts] = useState<SystemAlert[]>([])
   const [alertsOpen, setAlertsOpen] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)
+
+  const quickRef = useRef<HTMLDivElement>(null)
+  const alertsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const fetchAlerts = async () => {
@@ -26,8 +47,7 @@ export default function Topbar() {
       try {
         const data = await getSystemAlerts(supabase, profile, user)
         setAlerts(data)
-      } catch (error) {
-        console.error(error)
+      } catch {
         setAlerts([])
       }
     }
@@ -35,11 +55,31 @@ export default function Topbar() {
     fetchAlerts()
   }, [profile, user, userLoading])
 
+  // Cierra dropdowns al clic fuera
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (quickRef.current && !quickRef.current.contains(e.target as Node)) {
+        setQuickOpen(false)
+      }
+
+      if (alertsRef.current && !alertsRef.current.contains(e.target as Node)) {
+        setAlertsOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const displayName = profile?.nombre
     ? `${profile.nombre} ${profile.apellido || ''}`.trim()
     : 'Usuario'
-  const highAlertCount = alerts.filter((alert) => alert.severity === 'Alta').length
-  const visibleAlerts = alerts.slice(0, 5)
+
+  const highAlertCount = alerts.filter((a) => a.severity === 'Alta').length
+
+  const visibleActions = QUICK_ACTIONS.filter((action) =>
+    !profile?.rol || action.roles.includes(profile.rol)
+  )
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-6 backdrop-blur dark:border-slate-700/60 dark:bg-[#081120]/90">
@@ -57,132 +97,149 @@ export default function Topbar() {
             Sari Express ERP
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Plataforma logística interna
+            Plataforma logistica interna
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-1.5">
+        {visibleActions.length > 0 && (
+          <div ref={quickRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setQuickOpen((o) => !o)}
+              title="Acciones rapidas"
+              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition ${
+                quickOpen
+                  ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              {quickOpen ? (
+                <X className="h-3.5 w-3.5" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+            </button>
+
+            {quickOpen && (
+              <div className="absolute right-0 z-50 mt-2 w-48 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-[#0b1220]">
+                <p className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Acciones rapidas
+                </p>
+
+                {visibleActions.map((action) => {
+                  const Icon = action.icon
+
+                  return (
+                    <Link
+                      key={action.href}
+                      href={action.href}
+                      onClick={() => setQuickOpen(false)}
+                      className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Icon className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                      {action.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         <button
-          title="Cambiar tema"
+          type="button"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="rounded-xl p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          title="Cambiar tema"
+          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
         >
           {theme === 'dark' ? (
-            <Sun className="h-5 w-5" />
+            <Sun className="h-4 w-4" />
           ) : (
-            <Moon className="h-5 w-5" />
+            <Moon className="h-4 w-4" />
           )}
         </button>
 
-        <div className="relative">
+        <div ref={alertsRef} className="relative">
           <button
+            type="button"
+            onClick={() => setAlertsOpen((o) => !o)}
             title="Alertas"
-            onClick={() => setAlertsOpen(!alertsOpen)}
-            className="relative rounded-xl p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+            className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            <Bell className="h-5 w-5" />
+            <Bell className="h-4 w-4" />
 
             {highAlertCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                {highAlertCount > 99 ? '99+' : highAlertCount}
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                {highAlertCount > 9 ? '9+' : highAlertCount}
               </span>
             )}
           </button>
 
           {alertsOpen && (
-            <div className="absolute right-0 mt-3 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
-              <div className="mb-2 flex items-center justify-between">
+            <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-[#0b1220]">
+              <div className="border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">
                   Alertas
                 </p>
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  {highAlertCount} altas
-                </span>
               </div>
 
-              <div className="max-h-80 space-y-2 overflow-y-auto">
-                {visibleAlerts.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-slate-300 px-3 py-4 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                    Sin alertas pendientes
-                  </p>
-                ) : (
-                  visibleAlerts.map((alert) => (
-                    <Link
-                      key={alert.id}
-                      href={alert.href}
-                      onClick={() => setAlertsOpen(false)}
-                      className="block rounded-xl border border-slate-200 bg-white px-3 py-2 transition hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${severityClass(alert.severity)}`}>
-                            {alert.severity}
-                          </span>
-                          <p className="mt-1 truncate text-sm font-medium text-slate-900 dark:text-white">
-                            {alert.title}
-                          </p>
-                          <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
-                            {alert.entityLabel}
-                          </p>
-                        </div>
-                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </div>
+              {alerts.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                  Sin alertas activas.
+                </p>
+              ) : (
+                <ul className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                  {alerts.slice(0, 5).map((alert) => (
+                    <li key={alert.id} className="px-4 py-3">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                        {alert.title}
+                      </p>
 
-              <Link
-                href="/alerts"
-                onClick={() => setAlertsOpen(false)}
-                className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                Ver todas las alertas
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+                      {alert.description && (
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          {alert.description}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {alerts.length > 0 && (
+                <div className="border-t border-slate-100 px-4 py-2 dark:border-slate-800">
+                  <Link
+                    href="/alerts"
+                    onClick={() => setAlertsOpen(false)}
+                    className="text-xs font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                  >
+                    Ver todas las alertas -&gt;
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </div>
 
         <Link
           href="/profile"
-          className="flex items-center gap-3 rounded-xl px-2 py-1 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="ml-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-transparent dark:hover:bg-slate-800"
         >
-          {profile?.avatar_url ? (
-            <img
-              src={profile.avatar_url}
-              alt={displayName}
-              className="h-9 w-9 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700"
-            />
-          ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">
-              {displayName.slice(0, 1).toUpperCase()}
-            </div>
-          )}
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+            {displayName.slice(0, 1).toUpperCase()}
+          </div>
 
-          <div className="text-right">
-            <p className="text-sm font-medium text-slate-900 dark:text-white">
+          <div className="hidden sm:block">
+            <p className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
               {displayName}
             </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {profile?.rol || 'Sin rol'}
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+              {profile?.rol || 'Ventas'}
             </p>
           </div>
         </Link>
       </div>
     </header>
   )
-}
-
-function severityClass(severity: SystemAlertSeverity) {
-  if (severity === 'Alta') {
-    return 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-200'
-  }
-
-  if (severity === 'Media') {
-    return 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-200'
-  }
-
-  return 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-200'
 }

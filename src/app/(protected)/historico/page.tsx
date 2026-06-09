@@ -232,7 +232,7 @@ export default function HistoricoPage() {
 
         <div>
           <h1 className="text-4xl font-bold">
-            Histórico de Cotizaciones
+            Cotizaciones
           </h1>
 
           <p className="text-gray-500 mt-2">

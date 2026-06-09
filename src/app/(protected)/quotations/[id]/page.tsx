@@ -3,7 +3,17 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronDown, Printer } from 'lucide-react'
+import {
+  ChevronDown,
+  Copy,
+  Download,
+  MoreHorizontal,
+  Pencil,
+  Printer,
+  RefreshCw,
+  Route,
+  Scale,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
@@ -11,7 +21,6 @@ import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
-import { secondaryButtonClass } from '@/src/lib/ui-classes'
 import {
   PDFDownloadLink,
   pdf,
@@ -138,6 +147,7 @@ export default function QuotationDetailPage() {
   const [changeLogs, setChangeLogs] = useState<QuotationChangeLog[]>([])
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
+  const [openMoreMenu, setOpenMoreMenu] = useState(false)
   const [creatingRouting, setCreatingRouting] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const [repricingDialogOpen, setRepricingDialogOpen] = useState(false)
@@ -965,29 +975,27 @@ const combinedTimeline = [
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 !font-sans">
-            {quotation.quotation_number || 'Sin número'}
-          </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white !font-sans">
+              {quotation.quotation_number || 'Sin número'}
+            </h1>
 
-          <p className="text-gray-500 mt-2">
-            Detalle de Cotización
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {canEditQuotation && (
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => setOpenStatusMenu(!openStatusMenu)}
-                className="inline-flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                <span>{quotation?.status || 'Sin estado'}</span>
-                <ChevronDown className="h-4 w-4" />
-              </button>
+              {canEditQuotation ? (
+                <button
+                  type="button"
+                  onClick={() => setOpenStatusMenu(!openStatusMenu)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <span>{quotation?.status || 'Sin estado'}</span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <Badge>{quotation?.status || 'Sin estado'}</Badge>
+              )}
 
-              {openStatusMenu && (
-                <div className="absolute right-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
+              {canEditQuotation && openStatusMenu && (
+                <div className="absolute left-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
                   {statusOptions
                     .filter((status) =>
                       canTransition(quotation?.status || 'Borrador', status) &&
@@ -997,23 +1005,29 @@ const combinedTimeline = [
                       )
                     )
                     .map((status) => (
-                    <button
-                      key={status}
-                      type="button"
-                      onClick={async () => {
-                        await handleStatusChange(status)
-                        setOpenStatusMenu(false)
-                      }}
-                      className="block w-full px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      {status}
-                    </button>
-                  ))}
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={async () => {
+                          await handleStatusChange(status)
+                          setOpenStatusMenu(false)
+                        }}
+                        className="block w-full px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                      >
+                        {status}
+                      </button>
+                    ))}
                 </div>
               )}
             </div>
-          )}
+          </div>
 
+          <p className="text-gray-500 mt-2 dark:text-slate-400">
+            Detalle de Cotización
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
           <PDFDownloadLink
             document={
               <QuotationPDF
@@ -1025,77 +1039,120 @@ const combinedTimeline = [
               />
             }
             fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}
-            className="h-14 px-6 rounded-xl bg-black text-white hover:bg-gray-900 transition font-semibold shadow-sm flex items-center justify-center"
+            title="Descargar PDF"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            {({ loading }) =>
-              loading ? 'Generando PDF...' : 'Descargar PDF'
-            }
+            {({ loading }) => (
+              <>
+                <Download className="h-4 w-4" />
+                <span className="sr-only">
+                  {loading ? 'Generando PDF...' : 'Descargar PDF'}
+                </span>
+              </>
+            )}
           </PDFDownloadLink>
 
           <button
+            type="button"
             onClick={handlePrintQuotation}
-            className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center gap-2"
+            title="Imprimir cotización"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <Printer className="h-4 w-4" />
-            <span>Imprimir Cotización</span>
+            <span className="sr-only">Imprimir cotización</span>
           </button>
 
-          {canManagePricing && (
-            <Link
-              href={`/pricing-comparison?quotation=${quotation.id}`}
-              className="rounded-xl bg-black text-white px-6 py-3 font-semibold"
-            >
-              Gestionar Cotización
-            </Link>
-          )}
+          {(canManagePricing ||
+            canEditQuotation ||
+            (canGenerateSI && quotation.status === 'Ganada')) && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpenMoreMenu(!openMoreMenu)}
+                title="Más acciones"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">Más acciones</span>
+              </button>
 
-          {canEditQuotation && (
-            <button
-              type="button"
-              onClick={duplicateQuotation}
-              disabled={duplicating}
-              className={secondaryButtonClass}
-            >
-              {duplicating ? 'Duplicando...' : 'Duplicar Cotización'}
-            </button>
-          )}
+              {openMoreMenu && (
+                <div className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
+                  {canManagePricing && (
+                    <Link
+                      href={`/pricing-comparison?quotation=${quotation.id}`}
+                      onClick={() => setOpenMoreMenu(false)}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Scale className="h-4 w-4" />
+                      Gestionar Cotización
+                    </Link>
+                  )}
 
-          {canGenerateSI && quotation.status === 'Ganada' && (
-            <button
-              type="button"
-              onClick={createRoutingInstruction}
-              disabled={creatingRouting}
-              className="rounded-xl bg-emerald-600 px-6 py-3 font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {creatingRouting
-                ? 'Generando...'
-                : 'Generar Shipping Instructions'}
-            </button>
-          )}
+                  {canEditQuotation && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMoreMenu(false)
+                        duplicateQuotation()
+                      }}
+                      disabled={duplicating}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Copy className="h-4 w-4" />
+                      {duplicating ? 'Duplicando...' : 'Duplicar Cotización'}
+                    </button>
+                  )}
 
-          {canManagePricing && quotation.status === 'Ganada' && (
-            <button
-              type="button"
-              onClick={openRepricingDialog}
-              className="rounded-xl bg-amber-600 px-6 py-3 font-semibold text-white transition hover:bg-amber-700"
-            >
-              Reabrir para Repricing
-            </button>
+                  {canGenerateSI && quotation.status === 'Ganada' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMoreMenu(false)
+                        createRoutingInstruction()
+                      }}
+                      disabled={creatingRouting}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Route className="h-4 w-4" />
+                      {creatingRouting
+                        ? 'Generando...'
+                        : 'Generar Shipping Instructions'}
+                    </button>
+                  )}
+
+                  {canManagePricing && quotation.status === 'Ganada' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMoreMenu(false)
+                        openRepricingDialog()
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Reabrir para Repricing
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {canEditQuotation && (
             <Link
               href={`/quotations/${quotation.id}/edit`}
-              className="h-14 px-6 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition font-semibold shadow-sm flex items-center justify-center"
+              className="flex h-9 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
             >
-              Editar Qt.
+              <Pencil className="h-4 w-4" />
+              Editar
             </Link>
           )}
         </div>
       </div>
 
       {quotation.duplicated_from && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
           Esta cotización fue duplicada desde{' '}
           <span className="font-semibold">
             {quotation.duplicated_from_quote?.quotation_number || 'otra cotización'}
@@ -1104,7 +1161,7 @@ const combinedTimeline = [
       )}
 
       <Tabs defaultValue="resumen" className="space-y-6">
-  <TabsList className="bg-white border rounded-xl p-1">
+  <TabsList className="bg-white border rounded-xl p-1 dark:border-slate-700 dark:bg-[#0b1220]">
     <TabsTrigger value="resumen">Resumen</TabsTrigger>
     <TabsTrigger value="tarifas">Tarifas</TabsTrigger>
     <TabsTrigger value="validaciones">Validaciones</TabsTrigger>
@@ -1113,23 +1170,23 @@ const combinedTimeline = [
 
   <TabsContent value="resumen">
           <div className="grid grid-cols-4 gap-4 mb-6">
-            <Card className="border border-slate-200 shadow-sm">
+            <Card className="border border-slate-200 shadow-sm dark:border-slate-700/60">
               <CardContent className="p-5">
-                <p className="text-sm text-gray-500">Venta Total</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Venta Total</p>
                 <p className="text-2xl font-bold text-red-700 !font-sans">
                   {hasPricingItems
                     ? `USD ${formatCurrency(pricingTotals.total)}`
                     : 'N/A'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 mt-1 dark:text-slate-400">
                   Incluye ISV
                 </p>
               </CardContent>
             </Card>
 
-            <Card className="border border-slate-200 shadow-sm">
+            <Card className="border border-slate-200 shadow-sm dark:border-slate-700/60">
               <CardContent className="p-5">
-                <p className="text-sm text-gray-500">Costo Total</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Costo Total</p>
                 <p className="text-2xl font-bold !font-sans">
                   {hasPricingItems
                     ? `USD ${formatCurrency(pricingTotals.cost)}`
@@ -1138,9 +1195,9 @@ const combinedTimeline = [
               </CardContent>
             </Card>
 
-            <Card className="border border-slate-200 shadow-sm">
+            <Card className="border border-slate-200 shadow-sm dark:border-slate-700/60">
               <CardContent className="p-5">
-                <p className="text-sm text-gray-500">Profit</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Profit</p>
                 <p className="text-2xl font-bold text-green-700 !font-sans">
                   {hasPricingItems
                     ? `USD ${formatCurrency(pricingTotals.profit)}`
@@ -1149,13 +1206,13 @@ const combinedTimeline = [
               </CardContent>
             </Card>
 
-            <Card className="border border-slate-200 shadow-sm">
+            <Card className="border border-slate-200 shadow-sm dark:border-slate-700/60">
               <CardContent className="p-5">
-                <p className="text-sm text-gray-500">GP%</p>
+                <p className="text-sm text-gray-500 dark:text-slate-400">GP%</p>
                 <p className="text-2xl font-bold !font-sans">
                   {hasPricingItems ? `${gpPercent.toFixed(2)}%` : 'N/A'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 mt-1 dark:text-slate-400">
                   Sobre venta sin ISV
                 </p>
               </CardContent>
@@ -1163,7 +1220,7 @@ const combinedTimeline = [
           </div>
 
           {changeLogs.length > 0 && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 mb-6">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 mb-6 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
               <p className="font-semibold">
                 Esta cotización tiene {changeLogs.length} cambio
                 {changeLogs.length === 1 ? '' : 's'} registrado
@@ -1179,22 +1236,22 @@ const combinedTimeline = [
           <div className="grid grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">
+                <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
                   Información General
                 </CardTitle>
               </CardHeader>
 
               <CardContent className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
                 <div>
-                  <p className="text-xs text-slate-500">Estado</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Estado</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     <Badge>{quotation.status || 'Sin estado'}</Badge>
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Cliente</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Cliente</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.clientes
                       ? `${quotation.clientes.codigo_cliente} - ${quotation.clientes.nombre}`
                       : 'Sin cliente'}
@@ -1202,22 +1259,22 @@ const combinedTimeline = [
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Teléfono</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Teléfono</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.clientes?.telefono || 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Email</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Email</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.clientes?.email_1 || 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Ubicación</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Ubicación</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.clientes
                       ? `${quotation.clientes.ciudad || 'N/A'}, ${quotation.clientes.pais || 'N/A'}`
                       : 'N/A'}
@@ -1225,8 +1282,8 @@ const combinedTimeline = [
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Condición</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Condición</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {paymentTerms}
                   </p>
                 </div>
@@ -1245,115 +1302,115 @@ const combinedTimeline = [
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">
+                <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
                   Detalles del Embarque
                 </CardTitle>
               </CardHeader>
 
               <CardContent className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
                 <div>
-                  <p className="text-xs text-slate-500">Producto / Servicio</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Producto / Servicio</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {serviceProductLabel}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Dirección Comercial</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Dirección Comercial</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {tradeDirectionLabel}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Tipo</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Tipo</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.quote_type || 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Incoterm</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Incoterm</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.incoterm || 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Transporte</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Transporte</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.tipo_transporte || 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Válida hasta</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Válida hasta</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {formatDisplayDate(quotation.valid_until)}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">ETD</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">ETD</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {etdLabel}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Días tránsito</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Días tránsito</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {transitDays ? `${transitDays} días` : 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Días libres</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Días libres</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {freeDays ? `${freeDays} días` : 'N/A'}
                   </p>
                 </div>
 
                 {shouldShowCarrier && (
                   <div>
-                    <p className="text-xs text-slate-500">Carrier / Naviera</p>
-                    <p className="font-semibold text-slate-900">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Carrier / Naviera</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">
                       {carrierLabel}
                     </p>
                   </div>
                 )}
 
                 <div>
-                  <p className="text-xs text-slate-500">Transbordo</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Transbordo</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {transshipmentLabel}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Origen</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Origen</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.origen || 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Destino</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Destino</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.destino || 'N/A'}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Puerto Origen</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Puerto Origen</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {originPort}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Puerto Destino</p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Puerto Destino</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {destinationPort}
                   </p>
                 </div>
@@ -1381,22 +1438,22 @@ const combinedTimeline = [
                 {isLooseCargo && (
                   <>
                     <div>
-                      <p className="text-xs text-slate-500">Peso</p>
-                      <p className="font-semibold text-slate-900">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Peso</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
                         {quotation.peso_kg || 'N/A'} KG
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">CBM</p>
-                      <p className="font-semibold text-slate-900">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">CBM</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
                         {quotation.volumen_cbm || 'N/A'}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs text-slate-500">Bultos</p>
-                      <p className="font-semibold text-slate-900">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Bultos</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">
                         {quotation.cantidad_bultos || 'N/A'}
                       </p>
                     </div>
@@ -1404,10 +1461,10 @@ const combinedTimeline = [
                 )}
 
                 <div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Commodity / Descripción de la carga
                   </p>
-                  <p className="font-semibold text-slate-900">
+                  <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.commodity || 'N/A'}
                   </p>
                 </div>
@@ -1466,7 +1523,7 @@ const combinedTimeline = [
 
             <Card className="col-span-2">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">
+                <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
                   Observaciones internas
                 </CardTitle>
               </CardHeader>
@@ -1483,7 +1540,7 @@ const combinedTimeline = [
 
             <Card className="col-span-2">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-900">
+                <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
                   Observaciones para Cliente (PDF)
                 </CardTitle>
               </CardHeader>
@@ -1499,8 +1556,8 @@ const combinedTimeline = [
           </div>
 
           {activityLogs.length > 0 && (
-            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-slate-950">
+            <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <h2 className="text-lg font-semibold text-slate-950 dark:text-white">
                 Activity Timeline
               </h2>
 
@@ -1517,11 +1574,11 @@ const combinedTimeline = [
                       <div className="mt-1 h-2.5 w-2.5 rounded-full bg-slate-900" />
 
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
                           {log.description || log.action}
                         </p>
 
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {userName} · {new Date(log.created_at).toLocaleString()}
                         </p>
                       </div>
@@ -1536,14 +1593,14 @@ const combinedTimeline = [
         <TabsContent value="tarifas">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-slate-900">
+              <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
                 Tarifas de Agentes
               </CardTitle>
             </CardHeader>
 
             <CardContent>
               {agentQuotes.length === 0 ? (
-                <p className="text-gray-500">
+                <p className="text-gray-500 dark:text-slate-400">
                   No hay tarifas registradas.
                 </p>
               ) : (
@@ -1560,7 +1617,7 @@ const combinedTimeline = [
 
                   <tbody>
                     {agentQuotes.map((agent) => (
-                      <tr key={agent.id} className="border-b">
+                      <tr key={agent.id} className="border-b dark:border-slate-800">
                         <td className="p-3">{agent.agente_nombre}</td>
                         <td className="p-3">{agent.costo}</td>
                         <td className="p-3">{agent.moneda}</td>
@@ -1584,14 +1641,14 @@ const combinedTimeline = [
         <TabsContent value="validaciones">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-semibold text-slate-900">
+              <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
                 Validaciones de Costos
               </CardTitle>
             </CardHeader>
 
             <CardContent>
               {validations.length === 0 ? (
-                <p className="text-gray-500">
+                <p className="text-gray-500 dark:text-slate-400">
                   No hay validaciones registradas.
                 </p>
               ) : (
@@ -1608,7 +1665,7 @@ const combinedTimeline = [
 
                   <tbody>
                     {validations.map((validation) => (
-                      <tr key={validation.id} className="border-b">
+                      <tr key={validation.id} className="border-b dark:border-slate-800">
                         <td className="p-3">{validation.quoted_cost}</td>
                         <td className="p-3">{validation.invoiced_cost}</td>
                         <td className="p-3">{validation.difference}</td>
@@ -1626,12 +1683,12 @@ const combinedTimeline = [
         <TabsContent value="historial">
           <Card>
             <CardHeader>
-              <CardTitle>Timeline de la Cotización</CardTitle>
+              <CardTitle className="dark:text-white">Timeline de la Cotización</CardTitle>
             </CardHeader>
 
             <CardContent>
               {combinedTimeline.length === 0 ? (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-slate-400">
                   No hay movimientos registrados.
                 </p>
               ) : (
@@ -1649,31 +1706,31 @@ const combinedTimeline = [
                             <div className="mt-1 h-3 w-3 rounded-full bg-blue-600" />
 
                             {index !== combinedTimeline.length - 1 && (
-                              <div className="min-h-[40px] w-px flex-1 bg-slate-300" />
+                              <div className="min-h-[40px] w-px flex-1 bg-slate-300 dark:bg-slate-700" />
                             )}
                           </div>
 
-                          <div className="flex-1 rounded-xl border p-3">
+                          <div className="flex-1 rounded-xl border p-3 dark:border-slate-700 dark:bg-slate-950/40">
                             <div className="flex justify-between gap-4">
                               <div>
-                                <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                                <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-200">
                                   Cambio de estado
                                 </span>
 
-                                <p className="mt-2 text-sm font-semibold">
+                                <p className="mt-2 text-sm font-semibold dark:text-white">
                                   {log.old_status || 'Sin estado'} a {log.new_status}
                                 </p>
 
-                                <p className="mt-1 text-sm text-gray-600">
+                                <p className="mt-1 text-sm text-gray-600 dark:text-slate-300">
                                   Cambio de estado de la cotización.
                                 </p>
 
-                                <p className="mt-2 text-xs text-gray-400">
+                                <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
                                   Por: {userName || 'Usuario'}
                                 </p>
                               </div>
 
-                              <p className="whitespace-nowrap text-xs text-gray-400">
+                              <p className="whitespace-nowrap text-xs text-gray-400 dark:text-slate-500">
                                 {new Date(log.created_at).toLocaleString()}
                               </p>
                             </div>
@@ -1694,18 +1751,18 @@ const combinedTimeline = [
                           <div className="mt-1 h-3 w-3 rounded-full bg-amber-500" />
 
                           {index !== combinedTimeline.length - 1 && (
-                            <div className="min-h-[40px] w-px flex-1 bg-slate-300" />
+                            <div className="min-h-[40px] w-px flex-1 bg-slate-300 dark:bg-slate-700" />
                           )}
                         </div>
 
                         <div className="flex-1 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
                           <div className="flex justify-between gap-4">
                             <div>
-                              <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                              <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
                                 Cambio registrado
                               </span>
 
-                              <p className="mt-2 text-sm font-semibold">
+                              <p className="mt-2 text-sm font-semibold dark:text-white">
                                 {log.change_type}
                               </p>
 
@@ -1713,12 +1770,12 @@ const combinedTimeline = [
                                 {log.reason || `${log.field_name || 'Campo'} actualizado`}
                               </p>
 
-                              <p className="mt-2 text-xs text-gray-400">
+                              <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
                                 Por: {userName}
                               </p>
                             </div>
 
-                            <p className="whitespace-nowrap text-xs text-gray-400">
+                            <p className="whitespace-nowrap text-xs text-gray-400 dark:text-slate-500">
                               {new Date(log.created_at).toLocaleString()}
                             </p>
                           </div>

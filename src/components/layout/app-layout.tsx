@@ -9,10 +9,10 @@ interface Props {
 
 export default function AppLayout({ children, role }: Props) {
   return (
-    <div className="flex">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar role={role} />
 
-      <main className="flex-1 p-8 bg-zinc-50 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto bg-zinc-50 p-8">
         {children}
       </main>
     </div>

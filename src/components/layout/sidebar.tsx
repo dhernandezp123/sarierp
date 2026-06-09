@@ -11,6 +11,7 @@ import {
   Users,
   FileText,
   History,
+  ActivitySquare,
   Scale,
   DollarSign,
   BarChart3,
@@ -99,14 +100,9 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       icon: FileText,
     },
     {
-      label: 'Histórico',
+      label: 'Cotizaciones',
       href: '/historico',
-      icon: History,
-    },
-    {
-      label: 'Activity Center',
-      href: '/historico/activity',
-      icon: History,
+      icon: FileText,
     },
   ]
 
@@ -165,6 +161,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       href: '/admin/users',
       icon: Users,
     },
+    {
+      label: 'Activity Center',
+      href: '/historico/activity',
+      icon: ActivitySquare,
+    },
   ]
 
   const filterVisibleItems = (items: any[]) =>
@@ -200,7 +201,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   }
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r border-white/5 bg-[#0B1120] text-white">
+    <aside className="flex h-full min-h-screen w-64 flex-col border-r border-white/5 bg-[#0B1120] text-white">
       <div className="mb-8 border-b border-white/5 px-4 pb-5 pt-5">
         <p className="text-xs uppercase tracking-[0.25em] text-red-500 font-bold">
           Sari Express
@@ -218,6 +219,10 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       <div className="flex-1 overflow-y-auto pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {canViewCommercial && visibleNavItems.length > 0 && (
           <nav className="space-y-1 px-4">
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Comercial
+            </p>
+
             {visibleNavItems.map(renderItem)}
           </nav>
         )}
