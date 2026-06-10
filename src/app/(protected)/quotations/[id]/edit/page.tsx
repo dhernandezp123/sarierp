@@ -9,6 +9,9 @@ import { useUser } from '../../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { canTransition } from '@/src/lib/quotation-status'
+import { serviceProducts } from '@/src/lib/quotation-products'
+import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
+import { MiamiQuotationSection } from '@/src/components/quotations/MiamiQuotationSection'
 import {
   cardClass,
   fieldClass,
@@ -47,6 +50,17 @@ type ContainerLine = {
   notes: string | null
 }
 
+type PricingItem = {
+  id?: string
+  description: string | null
+  item_type: string | null
+  quantity: number | string | null
+  cost_amount: number | string | null
+  sale_amount: number | string | null
+  total_amount?: number | string | null
+  taxable?: boolean | null
+}
+
 export default function EditQuotationPage() {
   const { profile, loading: userLoading } = useUser()
   const params = useParams()
@@ -76,6 +90,7 @@ export default function EditQuotationPage() {
   const [containerTypes, setContainerTypes] = useState<any[]>([])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
   const [cargoLines, setCargoLines] = useState<CargoDimensionLine[]>([])
+  const [pricingItems, setPricingItems] = useState<PricingItem[]>([])
   const [editingContainerLineIndex, setEditingContainerLineIndex] =
     useState<number | null>(null)
   const [containerLineForm, setContainerLineForm] = useState({
@@ -86,6 +101,7 @@ export default function EditQuotationPage() {
   })
 
   const [formData, setFormData] = useState({
+    cliente_id: '',
     status: '',
     service_product: '',
     quote_type: '',
@@ -123,6 +139,7 @@ export default function EditQuotationPage() {
 
     pricing_notes: '',
     client_notes: '',
+    observaciones: '',
   })
 
   useEffect(() => {
@@ -139,6 +156,7 @@ export default function EditQuotationPage() {
       fetchQuotation(params.id as string)
       fetchContainerLines(params.id as string)
       fetchCargoLines(params.id as string)
+      fetchPricingItems(params.id as string)
     }
   }, [params.id, userLoading, canEditQuotes])
 
@@ -217,6 +235,7 @@ export default function EditQuotationPage() {
     }
 
     setFormData({
+      cliente_id: data.cliente_id || '',
       status: data.status || '',
       service_product: data.service_product || '',
       quote_type: data.quote_type || '',
@@ -255,9 +274,25 @@ export default function EditQuotationPage() {
       pricing_notes:
         data.pricing_notes || data.notes || data.observaciones || '',
       client_notes: data.client_notes || '',
+      observaciones: data.observaciones || '',
     })
 
     setLoading(false)
+  }
+
+  const fetchPricingItems = async (quotationId: string) => {
+    const { data, error } = await supabase
+      .from('pricing_items')
+      .select('*')
+      .eq('quotation_id', quotationId)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    setPricingItems((data || []) as PricingItem[])
   }
 
   const fetchContainerLines = async (quotationId: string) => {
@@ -320,6 +355,29 @@ export default function EditQuotationPage() {
           ? (e.target as HTMLInputElement).checked
           : value,
     })
+  }
+
+  const handleServiceProductChange = (
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const serviceProduct = e.target.value
+
+    setFormData((prev) => ({
+      ...prev,
+      service_product: serviceProduct,
+      ...(serviceProduct === 'miami_lcl'
+        ? {
+            tipo_transporte: 'Marítima',
+            quote_type: 'LCL',
+          }
+        : {}),
+      ...(serviceProduct === 'miami_air'
+        ? {
+            tipo_transporte: 'Aéreo',
+            quote_type: 'Consolidado',
+          }
+        : {}),
+    }))
   }
 
   const resetContainerLineForm = () => {
@@ -539,11 +597,42 @@ export default function EditQuotationPage() {
     }
 
     const quotationId = params.id as string
+    const saveIsMiamiFlow =
+      formData.service_product === 'miami_lcl' ||
+      formData.service_product === 'miami_air'
+
+    if (formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
+      toast.error('Ingresa FT3 o libras para calcular la tarifa Miami LCL')
+      return
+    }
+
+    if (formData.service_product === 'miami_air' && miami.airEstimated <= 0) {
+      toast.error('Ingresa KG para calcular la tarifa Miami Aereo')
+      return
+    }
+
+    const miamiPricingItems = saveIsMiamiFlow
+      ? miami.buildMiamiPricingItems(quotationId)
+      : []
+    const miamiTotalCost = miamiPricingItems.reduce(
+      (sum, item) =>
+        sum + Number(item.cost_amount || 0) * Number(item.quantity || 1),
+      0
+    )
+    const miamiTotalSale = miamiPricingItems.reduce(
+      (sum, item) =>
+        sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
+      0
+    )
+    const miamiProfit = miamiTotalSale - miamiTotalCost
+    const miamiGpPercentage =
+      miamiTotalSale > 0 ? (miamiProfit / miamiTotalSale) * 100 : 0
 
     setSaving(true)
 
     try {
       const quotationPayload = {
+        service_product: formData.service_product || null,
         quote_type: formData.quote_type,
         valid_until: formData.valid_until || null,
 
@@ -600,6 +689,18 @@ export default function EditQuotationPage() {
         pricing_notes: formData.pricing_notes || null,
         ...(isMiamiFlow
           ? { client_notes: formData.client_notes || null }
+          : {}),
+        ...(saveIsMiamiFlow
+          ? {
+              status: 'Pricing Aprobado',
+              total_cost: miamiTotalCost,
+              total_sale: miamiTotalSale,
+              profit_amount: miamiProfit,
+              gp_percentage: miamiGpPercentage,
+              pricing_approved: true,
+              pricing_approved_by: profile?.id,
+              pricing_approved_at: new Date().toISOString(),
+            }
           : {}),
       }
 
@@ -700,9 +801,37 @@ export default function EditQuotationPage() {
         }
       }
 
+      if (saveIsMiamiFlow) {
+        const { error: pricingDeleteError } = await supabase
+          .from('pricing_items')
+          .delete()
+          .eq('quotation_id', quotationId)
+          .select('id')
+
+        if (pricingDeleteError) {
+          toast.error('No se pudieron reemplazar los cargos Miami')
+          return
+        }
+
+        if (miamiPricingItems.length > 0) {
+          const { error: pricingInsertError } = await supabase
+            .from('pricing_items')
+            .insert(miamiPricingItems)
+
+          if (pricingInsertError) {
+            toast.error(pricingInsertError.message)
+            return
+          }
+
+          setPricingItems(miamiPricingItems as PricingItem[])
+        } else {
+          setPricingItems([])
+        }
+      }
+
       toast.success('Cambios guardados correctamente')
 
-      if (formData.status === 'Borrador') {
+      if (!saveIsMiamiFlow && formData.status === 'Borrador') {
         setSendPricingDialogOpen(true)
         return
       }
@@ -711,6 +840,38 @@ export default function EditQuotationPage() {
       setSaving(false)
     }
   }
+
+  const totalCargoFt3 = cargoLines.reduce(
+    (sum, line) => sum + calculateLineFt3(line),
+    0
+  )
+
+  const totalCargoCbm = cargoLines.reduce(
+    (sum, line) => sum + calculateLineCbm(line),
+    0
+  )
+
+  const totalCargoWeight = cargoLines.reduce(
+    (sum, line) => sum + Number(line.weight || 0) * Number(line.quantity || 0),
+    0
+  )
+
+  const totalCargoKg = totalCargoWeight / 2.20462
+  const totalCargoPackages = cargoLines.reduce(
+    (sum, line) => sum + Number(line.quantity || 0),
+    0
+  )
+
+  const miami = useMiamiQuotation({
+    clienteId: formData.cliente_id,
+    serviceProduct: formData.service_product,
+    incoterm: formData.incoterm,
+    totalCargoFt3,
+    totalCargoCbm,
+    totalCargoWeight,
+    createdBy: profile?.id,
+    initialPricingItems: pricingItems,
+  })
 
   if (userLoading || loading) {
     return <div className="p-8">Cargando cotización...</div>
@@ -745,9 +906,7 @@ export default function EditQuotationPage() {
   const requiresContainerLines =
     formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
 
-  const isMiamiFlow =
-    formData.service_product === 'miami_lcl' ||
-    formData.service_product === 'miami_air'
+  const isMiamiFlow = miami.isMiamiFlow
 
   const requiresLooseCargo =
     formData.quote_type === 'LCL' ||
@@ -755,27 +914,6 @@ export default function EditQuotationPage() {
     formData.quote_type === 'Consolidado' ||
     formData.quote_type === 'Courier' ||
     isMiamiFlow
-
-  const totalCargoFt3 = cargoLines.reduce(
-    (sum, line) => sum + calculateLineFt3(line),
-    0
-  )
-
-  const totalCargoCbm = cargoLines.reduce(
-    (sum, line) => sum + calculateLineCbm(line),
-    0
-  )
-
-  const totalCargoWeight = cargoLines.reduce(
-    (sum, line) => sum + Number(line.weight || 0) * Number(line.quantity || 0),
-    0
-  )
-
-  const totalCargoKg = totalCargoWeight / 2.20462
-  const totalCargoPackages = cargoLines.reduce(
-    (sum, line) => sum + Number(line.quantity || 0),
-    0
-  )
 
   return (
     <>
@@ -833,6 +971,25 @@ export default function EditQuotationPage() {
                   </option>
                 ))}
               </select>
+
+              {isMiamiFlow && (
+                <select
+                  name="service_product"
+                  value={formData.service_product || ''}
+                  onChange={handleServiceProductChange}
+                  className={fieldClass}
+                >
+                  {serviceProducts
+                    .filter((product) =>
+                      ['miami_lcl', 'miami_air'].includes(product.value)
+                    )
+                    .map((product) => (
+                      <option key={product.value} value={product.value}>
+                        {product.label}
+                      </option>
+                    ))}
+                </select>
+              )}
 
               <input
                 type="date"
@@ -1071,7 +1228,7 @@ export default function EditQuotationPage() {
                 </div>
               )}
 
-              {requiresLooseCargo && (
+              {requiresLooseCargo && !isMiamiFlow && (
                 <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1318,6 +1475,23 @@ export default function EditQuotationPage() {
                   </div>
                 </div>
               )}
+
+              <MiamiQuotationSection
+                formData={formData}
+                handleChange={handleChange}
+                fieldClass={fieldClass}
+                cardClass={cardClass}
+                todayString={new Date().toISOString().split('T')[0]}
+                cargoLines={cargoLines}
+                setCargoLines={setCargoLines}
+                calculateLineCbm={calculateLineCbm}
+                calculateLineFt3={calculateLineFt3}
+                totalCargoFt3={totalCargoFt3}
+                totalCargoCbm={totalCargoCbm}
+                totalCargoWeight={totalCargoWeight}
+                formatNumber={formatNumber}
+                miami={miami}
+              />
             </div>
           </section>
 

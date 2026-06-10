@@ -22,6 +22,16 @@ type UseMiamiQuotationParams = {
   totalCargoCbm: number
   totalCargoWeight: number
   createdBy?: string | null
+  initialPricingItems?: MiamiExistingPricingItem[]
+}
+
+type MiamiExistingPricingItem = {
+  id?: string
+  description: string | null
+  item_type: string | null
+  sale_amount: number | string | null
+  total_amount?: number | string | null
+  taxable?: boolean | null
 }
 
 export function useMiamiQuotation({
@@ -32,6 +42,7 @@ export function useMiamiQuotation({
   totalCargoCbm,
   totalCargoWeight,
   createdBy,
+  initialPricingItems = [],
 }: UseMiamiQuotationParams) {
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
@@ -56,6 +67,7 @@ export function useMiamiQuotation({
     cbm: '',
     kg: '',
   })
+  const [hydratedPricingItemsKey, setHydratedPricingItemsKey] = useState('')
 
   useEffect(() => {
     loadSurchargeRules(serviceProduct)
@@ -212,8 +224,133 @@ export function useMiamiQuotation({
       ft3: totalCargoFt3 ? totalCargoFt3.toFixed(2) : '',
       cbm: totalCargoCbm ? totalCargoCbm.toFixed(3) : '',
       lbs: totalCargoWeight ? totalCargoWeight.toFixed(2) : prev.lbs,
+      kg:
+        serviceProduct === 'miami_air' && totalCargoWeight
+          ? (totalCargoWeight / 2.20462).toFixed(2)
+          : prev.kg,
     }))
-  }, [isMiamiFlow, totalCargoFt3, totalCargoCbm, totalCargoWeight])
+  }, [
+    isMiamiFlow,
+    serviceProduct,
+    totalCargoFt3,
+    totalCargoCbm,
+    totalCargoWeight,
+  ])
+
+  useEffect(() => {
+    if (!isMiamiFlow || initialPricingItems.length === 0) return
+
+    const hydrationKey = `${serviceProduct}:${initialPricingItems
+      .map((item) => item.id || item.description || '')
+      .join('|')}`
+
+    if (hydratedPricingItemsKey === hydrationKey) return
+    if (clienteId && clientRates.length === 0) return
+
+    const normalizedStandardLabels = [
+      'bl',
+      'sed',
+      'documentos_manejo',
+      'desconsolidar',
+    ]
+      .map((code) => getClientRate(code)?.rate_label?.toLowerCase())
+      .filter(Boolean) as string[]
+
+    const conditionalRates = [
+      { code: 'hazmat_imo_charge_line', option: 'isHazmat' },
+      { code: 'declaracion_imo', option: 'isImo' },
+      { code: 'certificado_imo', option: 'includeImoCertificate' },
+    ] as const
+
+    const nextDestinationCharges: DestinationCharge[] = []
+    let nextPickupMode: 'none' | 'standard' | 'manual' = 'none'
+    let nextManualPickupAmount = 0
+    let hasStandardCharge = false
+    let hasTaxableStandardDestinationCharge = false
+    const nextMiamiOptions = { ...miamiOptions }
+
+    initialPricingItems.forEach((item) => {
+      const description = item.description || ''
+      const normalizedDescription = description.toLowerCase()
+      const amount = Number(item.sale_amount || item.total_amount || 0)
+      const itemType = item.item_type || ''
+
+      if (amount <= 0) return
+
+      if (
+        normalizedDescription.includes('flete miami') ||
+        normalizedDescription.includes('bunker')
+      ) {
+        return
+      }
+
+      if (
+        normalizedDescription.includes('pickup') ||
+        normalizedDescription.includes('recolecta')
+      ) {
+        nextPickupMode = 'manual'
+        nextManualPickupAmount = amount
+        return
+      }
+
+      const isStandardCharge = normalizedStandardLabels.some(
+        (label) => label && normalizedDescription === label
+      )
+
+      if (isStandardCharge) {
+        hasStandardCharge = true
+
+        if (
+          item.taxable &&
+          (itemType === 'destination_charge' ||
+            normalizedDescription.includes('manejo') ||
+            normalizedDescription.includes('desconsolidar'))
+        ) {
+          hasTaxableStandardDestinationCharge = true
+        }
+
+        return
+      }
+
+      const conditionalRate = conditionalRates.find((rate) => {
+        const label = getClientRate(rate.code)?.rate_label?.toLowerCase()
+        return label && normalizedDescription === label
+      })
+
+      if (conditionalRate) {
+        nextMiamiOptions[conditionalRate.option] = true
+        return
+      }
+
+      nextDestinationCharges.push({
+        id: item.id || crypto.randomUUID(),
+        description,
+        amount: String(amount),
+        taxable: Boolean(item.taxable),
+      })
+    })
+
+    setPickupMode(nextPickupMode)
+    setManualPickupAmount(nextManualPickupAmount)
+    setDestinationCharges(nextDestinationCharges)
+    setMiamiOptions({
+      ...nextMiamiOptions,
+      applyStandardCharges: hasStandardCharge,
+      taxStandardDestinationCharges:
+        hasTaxableStandardDestinationCharge ||
+        miamiOptions.taxStandardDestinationCharges,
+    })
+    setHydratedPricingItemsKey(hydrationKey)
+  }, [
+    isMiamiFlow,
+    serviceProduct,
+    clienteId,
+    clientRates,
+    initialPricingItems,
+    hydratedPricingItemsKey,
+    miamiOptions,
+    getClientRate,
+  ])
 
   return {
     clientRates,
