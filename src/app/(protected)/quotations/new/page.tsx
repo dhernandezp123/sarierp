@@ -10,46 +10,19 @@ import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
+import { MiamiQuotationSection } from '@/src/components/quotations/MiamiQuotationSection'
+import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
 import {
   serviceProducts,
   tradeDirections,
   usesClientRates,
 } from '@/src/lib/quotation-products'
-import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 
 const formatNumber = (value: number, decimals = 2) =>
   Number(value || 0).toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
-
-type ClientRate = {
-  id?: string
-  cliente_id: string
-  rate_code: string
-  rate_label: string
-  category: string
-  unit: string | null
-  currency: string
-  amount: number
-  is_active: boolean
-  valid_from: string | null
-  valid_to: string | null
-  notes: string | null
-}
-
-type SurchargeRule = {
-  code: string
-  label: string
-  service_product: string
-  calculation_type: string
-  rate_per_lbs: number | string | null
-  rate_per_ft3: number | string | null
-  fixed_amount: number | string | null
-  minimum_amount: number | string | null
-  currency: string | null
-  is_active: boolean
-}
 
 type CargoDimensionLine = {
   id: string
@@ -60,13 +33,6 @@ type CargoDimensionLine = {
   height: string
   dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
   weight: string
-}
-
-type DestinationCharge = {
-  id: string
-  description: string
-  amount: string
-  taxable: boolean
 }
 
 type ContainerLine = {
@@ -88,16 +54,6 @@ export default function NewQuotationPage() {
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
   const [containerTypes, setContainerTypes] = useState<any[]>([])
-  const [clientRates, setClientRates] = useState<ClientRate[]>([])
-  const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
-  const [showClientRates, setShowClientRates] = useState(false)
-  const [pickupMode, setPickupMode] = useState<'none' | 'standard' | 'manual'>(
-    'none'
-  )
-  const [manualPickupAmount, setManualPickupAmount] = useState(0)
-  const [destinationCharges, setDestinationCharges] = useState<
-    DestinationCharge[]
-  >([])
   const [cargoLines, setCargoLines] = useState<CargoDimensionLine[]>([
     {
       id: crypto.randomUUID(),
@@ -119,20 +75,6 @@ export default function NewQuotationPage() {
     quantity: '1',
     notes: '',
   })
-  const [miamiOptions, setMiamiOptions] = useState({
-    applyStandardCharges: true,
-    taxStandardDestinationCharges: false,
-    isImo: false,
-    isHazmat: false,
-    includeImoCertificate: false,
-  })
-  const [miamiCalc, setMiamiCalc] = useState({
-    ft3: '',
-    lbs: '',
-    cbm: '',
-    kg: '',
-  })
-
   const initialFormData = {
     cliente_id: '',
 
@@ -189,20 +131,6 @@ export default function NewQuotationPage() {
     fetchClientes()
     fetchCatalogs()
   }, [])
-
-  useEffect(() => {
-    loadSurchargeRules(formData.service_product)
-
-    if (
-      !formData.cliente_id ||
-      !usesClientRates(formData.service_product)
-    ) {
-      setClientRates([])
-      return
-    }
-
-    loadClientRates(formData.cliente_id)
-  }, [formData.cliente_id, formData.service_product])
 
   const fetchPricingUsers = async () => {
     const { data: pricingUsers } = await supabase
@@ -274,44 +202,6 @@ export default function NewQuotationPage() {
     setCountries(countriesData || [])
     setPorts(portsData || [])
     setContainerTypes(containerTypesData || [])
-  }
-
-  const loadClientRates = async (clienteId: string) => {
-    const { data, error } = await supabase
-      .from('client_rates')
-      .select('*')
-      .eq('cliente_id', clienteId)
-      .eq('is_active', true)
-      .order('category', { ascending: true })
-      .order('rate_label', { ascending: true })
-
-    if (error) {
-      toast.error('No se pudieron cargar las tarifas del cliente')
-      return
-    }
-
-    setClientRates((data || []) as ClientRate[])
-  }
-
-  const loadSurchargeRules = async (serviceProduct: string) => {
-    if (!serviceProduct) {
-      setSurchargeRules([])
-      return
-    }
-
-    const { data, error } = await supabase
-      .from('surcharge_rules')
-      .select('*')
-      .eq('service_product', serviceProduct)
-      .eq('is_active', true)
-
-    if (error) {
-      console.error('Error cargando surcharges:', error)
-      setSurchargeRules([])
-      return
-    }
-
-    setSurchargeRules((data || []) as SurchargeRule[])
   }
 
   const calculateInsurance = (data: any) => {
@@ -470,12 +360,12 @@ export default function NewQuotationPage() {
 
     const submitIsMiamiFlow = usesClientRates(formData.service_product)
 
-    if (formData.service_product === 'miami_lcl' && lclEstimated <= 0) {
+    if (formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
       toast.error('Ingresa FT3 o libras para calcular la tarifa Miami LCL')
       return
     }
 
-    if (formData.service_product === 'miami_air' && airEstimated <= 0) {
+    if (formData.service_product === 'miami_air' && miami.airEstimated <= 0) {
       toast.error('Ingresa KG para calcular la tarifa Miami Aéreo')
       return
     }
@@ -635,7 +525,7 @@ export default function NewQuotationPage() {
         }
       }
 
-      const autoItems = buildMiamiPricingItems(quotation.id)
+      const autoItems = miami.buildMiamiPricingItems(quotation.id)
 
       if (autoItems.length > 0) {
         const { error: pricingItemsError } = await supabase
@@ -821,269 +711,17 @@ export default function NewQuotationPage() {
   )
   const totalCargoKg = totalCargoWeight / 2.20462
 
-  const getClientRateAmount = (code: string) => {
-    const rate = clientRates.find((item) => item.rate_code === code)
-    return Number(rate?.amount || 0)
-  }
-
-  const getClientRate = (code: string) =>
-    clientRates.find((item) => item.rate_code === code)
-
-  const miamiLclFt3Rate = getClientRateAmount('lcl_maritimo_sps_ft3')
-  const miamiLclLbsRate = getClientRateAmount('lcl_maritimo_sps_lbs')
-  const miamiLclSmallMinimum = getClientRateAmount(
-    'small_maritimo_min_lcl_1000_lbs_45_ft3'
-  )
-  const miamiLclLargeMinimum = getClientRateAmount(
-    'minimo_maritimo_2mil_lbs_90_ft3'
-  )
-  const miamiAirKgRate = getClientRateAmount('consolidado_aereo_kg')
-
-  const miamiLclResult = calculateMiamiLcl({
-    ft3: Number(miamiCalc.ft3 || 0),
-    lbs: Number(miamiCalc.lbs || 0),
-    rateFt3: miamiLclFt3Rate,
-    rateLbs: miamiLclLbsRate,
-    minimumSmall: miamiLclSmallMinimum,
-    minimumLarge: miamiLclLargeMinimum,
+  const miami = useMiamiQuotation({
+    clienteId: formData.cliente_id,
+    serviceProduct: formData.service_product,
+    incoterm: formData.incoterm,
+    totalCargoFt3,
+    totalCargoCbm,
+    totalCargoWeight,
+    createdBy: profile?.id,
   })
 
-  const lclByFt3 = miamiLclResult.ft3Amount
-  const lclByLbs = miamiLclResult.lbsAmount
-  const lclEstimated = miamiLclResult.oceanFreight
-
-  const shouldApplyStandardCharges =
-    formData.service_product === 'miami_lcl' && !miamiLclResult.isMinimum
-
-  const applyStandardCharges =
-    shouldApplyStandardCharges && miamiOptions.applyStandardCharges
-
-  const isMiamiFlow =
-    formData.service_product === 'miami_lcl' ||
-    formData.service_product === 'miami_air'
-  const canUseMiamiCalculator =
-    isMiamiFlow && !!formData.cliente_id && clientRates.length > 0
-
-  const airEstimated = Number(miamiCalc.kg || 0) * miamiAirKgRate
-
-  const pickupRate =
-    getClientRateAmount('recolectas_internas') ||
-    getClientRateAmount('delivery_miami')
-
-  const bunkerRule = surchargeRules.find(
-    (rule) => rule.code === 'bunker_emergency_surcharge'
-  )
-
-  const bunkerAmount =
-    bunkerRule && formData.service_product === 'miami_lcl'
-      ? Math.max(
-          Number(miamiCalc.lbs || 0) * Number(bunkerRule.rate_per_lbs || 0),
-          Number(miamiCalc.ft3 || 0) * Number(bunkerRule.rate_per_ft3 || 0),
-          Number(bunkerRule.minimum_amount || 0)
-        )
-      : 0
-
-  const pickupAmount =
-    formData.incoterm === 'EXW'
-      ? pickupMode === 'standard'
-        ? pickupRate
-        : pickupMode === 'manual'
-          ? manualPickupAmount
-          : 0
-      : 0
-
-  const miamiLclTotal = lclEstimated + bunkerAmount + pickupAmount
-
-  const buildMiamiPricingItems = (quotationId: string) => {
-    if (!usesClientRates(formData.service_product)) return []
-
-    const destinationItems = destinationCharges
-      .filter((charge) => Number(charge.amount || 0) > 0)
-      .map((charge) => {
-        const amount = Number(charge.amount || 0)
-        const taxAmount = charge.taxable ? amount * 0.15 : 0
-        const description = charge.description || 'Cargo en destino'
-        const normalizedDescription = description.toLowerCase()
-        const itemType =
-          normalizedDescription.includes('aduana') ||
-          normalizedDescription.includes('entrega') ||
-          normalizedDescription.includes('delivery') ||
-          normalizedDescription.includes('destino')
-            ? 'destination_charge'
-            : 'other_charge'
-
-        return {
-          quotation_id: quotationId,
-          description,
-          item_type: itemType,
-          quantity: 1,
-          cost_amount: 0,
-          sale_amount: amount,
-          currency: 'USD',
-          taxable: charge.taxable,
-          tax_rate: charge.taxable ? 15 : 0,
-          tax_amount: taxAmount,
-          total_amount: amount + taxAmount,
-          supplier: 'Sari Express',
-          created_by: profile?.id || null,
-          notes: charge.taxable
-            ? 'Cargo en destino gravable con ISV 15%.'
-            : 'Cargo adicional en destino.',
-        }
-      })
-
-    if (formData.service_product === 'miami_lcl') {
-      const items = [
-        {
-          quotation_id: quotationId,
-          description: 'Flete Miami LCL',
-          item_type: 'freight',
-          quantity: 1,
-          cost_amount: 0,
-          sale_amount: lclEstimated,
-          tax_rate: 0,
-          tax_amount: 0,
-          total_amount: lclEstimated,
-          currency: 'USD',
-          taxable: false,
-          supplier: 'Sari Express',
-          notes: `Cálculo automático: FT3 USD ${lclByFt3.toFixed(
-            2
-          )} vs LBS USD ${lclByLbs.toFixed(
-            2
-          )}. Mínimo aplicado USD ${miamiLclResult.minimumApplied.toFixed(
-            2
-          )}.`,
-          created_by: profile?.id,
-        },
-      ]
-
-      if (bunkerRule && bunkerAmount > 0) {
-        items.push({
-          quotation_id: quotationId,
-          description: bunkerRule.label,
-          item_type: 'freight',
-          quantity: 1,
-          cost_amount: 0,
-          sale_amount: bunkerAmount,
-          tax_rate: 0,
-          tax_amount: 0,
-          total_amount: bunkerAmount,
-          currency: bunkerRule.currency || 'USD',
-          taxable: false,
-          supplier: 'Sari Express',
-          notes: `Cálculo automático: MAX(lbs x ${Number(
-            bunkerRule.rate_per_lbs || 0
-          ).toFixed(2)}, ft3 x ${Number(
-            bunkerRule.rate_per_ft3 || 0
-          ).toFixed(2)}, mínimo USD ${Number(
-            bunkerRule.minimum_amount || 0
-          ).toFixed(2)}).`,
-          created_by: profile?.id,
-        })
-      }
-
-      if (pickupAmount > 0) {
-        items.push({
-          quotation_id: quotationId,
-          description: 'Pickup / Recolecta Interna',
-          item_type: 'origin_charge',
-          quantity: 1,
-          cost_amount: 0,
-          sale_amount: pickupAmount,
-          currency: 'USD',
-          taxable: false,
-          supplier: 'Sari Express',
-          tax_rate: 0,
-          tax_amount: 0,
-          total_amount: pickupAmount,
-          created_by: profile?.id || null,
-          notes: 'Aplicado automáticamente por Incoterm EXW.',
-        })
-      }
-
-      const standardChargeCodes = applyStandardCharges
-        ? ['bl', 'sed', 'documentos_manejo', 'desconsolidar']
-        : []
-
-      const conditionalChargeCodes = [
-        miamiOptions.isHazmat ? 'hazmat_imo_charge_line' : null,
-        miamiOptions.isImo ? 'declaracion_imo' : null,
-        miamiOptions.includeImoCertificate ? 'certificado_imo' : null,
-      ].filter(Boolean) as string[]
-
-      ;[...standardChargeCodes, ...conditionalChargeCodes].forEach((code) => {
-        const rate = getClientRate(code)
-        const amount = Number(rate?.amount || 0)
-
-        if (!rate || amount <= 0) return
-
-        const isStandardDestinationCharge =
-          code === 'documentos_manejo' || code === 'desconsolidar'
-        const isTaxable =
-          isStandardDestinationCharge &&
-          miamiOptions.taxStandardDestinationCharges
-        const taxAmount = isTaxable ? amount * 0.15 : 0
-
-        items.push({
-          quotation_id: quotationId,
-          description: rate.rate_label,
-          item_type:
-            isStandardDestinationCharge
-              ? 'destination_charge'
-              : 'origin_charge',
-          quantity: 1,
-          cost_amount: 0,
-          sale_amount: amount,
-          tax_rate: isTaxable ? 15 : 0,
-          tax_amount: taxAmount,
-          total_amount: amount + taxAmount,
-          currency: rate.currency || 'USD',
-          taxable: isTaxable,
-          supplier: 'Sari Express',
-          notes: isTaxable
-            ? 'Cargo estándar en destino gravable con ISV 15%.'
-            : 'Cargo aplicado automáticamente según configuración Miami LCL.',
-          created_by: profile?.id,
-        })
-      })
-
-      return [...items, ...destinationItems]
-    }
-
-    if (formData.service_product === 'miami_air') {
-      const items = [
-        {
-          quotation_id: quotationId,
-          description: 'Flete Miami Aéreo Consolidado',
-          item_type: 'freight',
-          quantity: 1,
-          cost_amount: 0,
-          sale_amount: airEstimated,
-          tax_rate: 0,
-          tax_amount: 0,
-          total_amount: airEstimated,
-          currency: 'USD',
-          taxable: false,
-          supplier: 'Sari Express',
-          notes: 'Cálculo automático: KG x tarifa cliente.',
-          created_by: profile?.id,
-        },
-      ]
-
-      return [...items, ...destinationItems]
-    }
-
-    return []
-  }
-
-  const buildMiamiPreviewItems = () => {
-    return buildMiamiPricingItems('preview-quotation-id').map((item) => ({
-      ...item,
-      quotation_id: 'preview',
-      id: crypto.randomUUID(),
-    }))
-  }
+  const isMiamiFlow = miami.isMiamiFlow
 
   const buildPreviewCargoLines = () => {
     return cargoLines
@@ -1159,14 +797,14 @@ export default function NewQuotationPage() {
   }
 
   const handlePreviewMiamiPdf = async () => {
-    if (!canUseMiamiCalculator) return
+    if (!miami.canUseMiamiCalculator) return
 
-    if (formData.service_product === 'miami_lcl' && lclEstimated <= 0) {
+    if (formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
       toast.error('Ingresa FT3 o libras para previsualizar el PDF')
       return
     }
 
-    if (formData.service_product === 'miami_air' && airEstimated <= 0) {
+    if (formData.service_product === 'miami_air' && miami.airEstimated <= 0) {
       toast.error('Ingresa KG para previsualizar el PDF')
       return
     }
@@ -1175,7 +813,7 @@ export default function NewQuotationPage() {
       <QuotationPDF
         quotation={buildDraftQuotation()}
         selectedAgent={null}
-        pricingItems={buildMiamiPreviewItems()}
+        pricingItems={miami.buildMiamiPreviewItems()}
         quotationContainers={[]}
         cargoLines={buildPreviewCargoLines()}
       />
@@ -1184,17 +822,6 @@ export default function NewQuotationPage() {
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
   }
-
-  useEffect(() => {
-    if (!isMiamiFlow) return
-
-    setMiamiCalc((prev) => ({
-      ...prev,
-      ft3: totalCargoFt3 ? totalCargoFt3.toFixed(2) : '',
-      cbm: totalCargoCbm ? totalCargoCbm.toFixed(3) : '',
-      lbs: totalCargoWeight ? totalCargoWeight.toFixed(2) : prev.lbs,
-    }))
-  }, [isMiamiFlow, totalCargoFt3, totalCargoCbm, totalCargoWeight])
 
   return (
     <>
@@ -1330,916 +957,24 @@ export default function NewQuotationPage() {
                 ))}
               </select>
             </div>
-
-            {isMiamiFlow && (
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">
-                Este producto usa tarifas automáticas del cliente y no requiere comparación manual de agentes.
-              </div>
-            )}
-
-            {isMiamiFlow && clientRates.length > 0 && (
-              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-6 dark:border-blue-900/50 dark:bg-blue-950/30">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-blue-900 dark:text-blue-100">
-                      Tarifas activas del cliente
-                    </p>
-                    <p className="text-sm text-blue-700 dark:text-blue-300">
-                      {clientRates.length} tarifas disponibles para esta cotización.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowClientRates(!showClientRates)}
-                    className="rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
-                  >
-                    {showClientRates ? 'Ocultar tarifas' : 'Ver tarifas'}
-                  </button>
-                </div>
-
-                {showClientRates && (
-                  <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                    {clientRates.map((rate) => (
-                      <div
-                        key={rate.rate_code}
-                        className="space-y-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-blue-900/40 dark:bg-slate-950/70"
-                      >
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                          {rate.rate_label}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          USD {Number(rate.amount || 0).toFixed(2)} / {rate.unit || 'flat'}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isMiamiFlow && !formData.cliente_id && (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-                Selecciona primero un cliente para cargar sus tarifas Miami.
-              </div>
-            )}
-
-            {canUseMiamiCalculator && (
-              <div className="mt-4 space-y-5 rounded-2xl border border-blue-200 bg-blue-50/60 p-6 dark:border-blue-900/50 dark:bg-blue-950/20">
-                <div className={cardClass}>
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                    Datos del embarque Miami
-                  </h3>
-
-                  <div className="mt-5 grid gap-5 md:grid-cols-2">
-                    <input
-                      list="originPorts"
-                      name="puerto_origen"
-                      placeholder="Puerto origen"
-                      value={formData.puerto_origen}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-
-                    <input
-                      list="destinationPorts"
-                      name="puerto_destino"
-                      placeholder="Puerto destino"
-                      value={formData.puerto_destino}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-
-                    <input
-                      list="countries"
-                      name="destino"
-                      placeholder="Destino final"
-                      value={formData.destino}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-
-                    <input
-                      value={formData.transit_time}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          transit_time: e.target.value,
-                        })
-                      }
-                      placeholder="Tránsito estimado, ej. 8-12 días"
-                      className={fieldClass}
-                    />
-
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        Válida hasta
-                      </label>
-
-                      <input
-                        type="date"
-                        value={formData.valid_until}
-                        min={todayString}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            valid_until: e.target.value,
-                          })
-                        }
-                        className={fieldClass}
-                      />
-
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        La cotización será válida hasta esta fecha.
-                      </p>
-                    </div>
-
-                    <input
-                      name="commodity"
-                      placeholder="Commodity / descripción"
-                      value={formData.commodity}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-
-                    <textarea
-                      name="observaciones"
-                      placeholder="Observaciones"
-                      value={formData.observaciones}
-                      onChange={handleChange}
-                      className={`${fieldClass} min-h-24 md:col-span-2`}
-                    />
-                  </div>
-                </div>
-
-                {/* ============================================================
-    DETALLE DE CARGA — Sección rediseñada
-    Reemplaza el bloque completo de "Detalle de carga" en:
-    src/app/(protected)/quotations/new/page.tsx
-    ============================================================ */}
-
-<div className={`space-y-4 ${cardClass}`}>
-
-  {/* Header */}
-  <div className="flex items-center justify-between">
-    <div>
-      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-        Detalle de carga
-      </h3>
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        Ingresa cajas, pallets o piezas para calcular volumen y peso.
-      </p>
-    </div>
-
-    <button
-      type="button"
-      onClick={() =>
-        setCargoLines((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            quantity: '1',
-            packageType: 'Caja',
-            length: '',
-            width: '',
-            height: '',
-            dimensionUnit: 'in',
-            weight: '',
-          },
-        ])
-      }
-      className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-      Agregar línea
-    </button>
-  </div>
-
-  {/* Empty state */}
-  {cargoLines.length === 0 && (
-    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
-      Sin líneas de carga. Haz clic en "Agregar línea" para comenzar.
-    </div>
-  )}
-
-  {/* Lines */}
-  {cargoLines.length > 0 && (
-    <div className="space-y-3">
-      {cargoLines.map((line, idx) => {
-        const isLineComplete =
-          Number(line.quantity || 0) > 0 &&
-          Number(line.length || 0) > 0 &&
-          Number(line.width || 0) > 0 &&
-          Number(line.height || 0) > 0 &&
-          Number(line.weight || 0) > 0
-
-        const lineFt3 = calculateLineFt3(line)
-        const lineCbm = calculateLineCbm(line)
-        const lineTotalLbs =
-          Number(line.weight || 0) * Number(line.quantity || 0)
-
-        return (
-          <div
-            key={line.id}
-            className={`overflow-hidden rounded-2xl border transition-colors ${
-              isLineComplete
-                ? 'border-emerald-200 dark:border-emerald-900/50'
-                : 'border-slate-200 dark:border-slate-700'
-            }`}
-          >
-            {/* Line header — badge + tipo + quitar */}
-            <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
-              <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
-                #{idx + 1}
-              </span>
-
-              <select
-                value={line.packageType}
-                onChange={(e) =>
-                  setCargoLines((prev) =>
-                    prev.map((item) =>
-                      item.id === line.id
-                        ? {
-                            ...item,
-                            packageType:
-                              e.target.value as CargoDimensionLine['packageType'],
-                          }
-                        : item
-                    )
-                  )
-                }
-                className="flex-1 border-none bg-transparent text-sm font-medium text-slate-700 focus:outline-none focus:ring-0 dark:text-slate-200"
-              >
-                <option>Caja</option>
-                <option>Pallet</option>
-                <option>Pieza</option>
-              </select>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCargoLines((prev) =>
-                    prev.filter((item) => item.id !== line.id)
-                  )
-                }
-                className="ml-auto flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                </svg>
-                Quitar
-              </button>
-            </div>
-
-            {/* Line body */}
-            <div
-              className={`space-y-3 p-4 ${
-                isLineComplete
-                  ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
-                  : 'bg-white dark:bg-slate-950/40'
-              }`}
-            >
-              {/* Fila 1: Cantidad / Unidad / Peso */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Cant.
-                  </label>
-                  <input
-                    type="number"
-                    value={line.quantity}
-                    onChange={(e) =>
-                      setCargoLines((prev) =>
-                        prev.map((item) =>
-                          item.id === line.id
-                            ? { ...item, quantity: e.target.value }
-                            : item
-                        )
-                      )
-                    }
-                    placeholder="1"
-                    min="1"
-                    className={`${fieldClass} h-10 w-full`}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Unidad
-                  </label>
-                  <select
-                    value={line.dimensionUnit}
-                    onChange={(e) =>
-                      setCargoLines((prev) =>
-                        prev.map((item) =>
-                          item.id === line.id
-                            ? {
-                                ...item,
-                                dimensionUnit:
-                                  e.target.value as CargoDimensionLine['dimensionUnit'],
-                              }
-                            : item
-                        )
-                      )
-                    }
-                    className={`${fieldClass} h-10 w-full text-sm`}
-                  >
-                    <option value="in">Pulgadas (in)</option>
-                    <option value="cm">Centímetros (cm)</option>
-                    <option value="mm">Milímetros (mm)</option>
-                    <option value="m">Metros (m)</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Peso unit. lbs
-                  </label>
-                  <input
-                    type="number"
-                    value={line.weight}
-                    onChange={(e) =>
-                      setCargoLines((prev) =>
-                        prev.map((item) =>
-                          item.id === line.id
-                            ? { ...item, weight: e.target.value }
-                            : item
-                        )
-                      )
-                    }
-                    placeholder="0"
-                    className={`${fieldClass} h-10 w-full`}
-                  />
-                </div>
-              </div>
-
-              {/* Fila 2: Largo / Ancho / Alto */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Largo
-                  </label>
-                  <input
-                    type="number"
-                    value={line.length}
-                    onChange={(e) =>
-                      setCargoLines((prev) =>
-                        prev.map((item) =>
-                          item.id === line.id
-                            ? { ...item, length: e.target.value }
-                            : item
-                        )
-                      )
-                    }
-                    placeholder="0"
-                    className={`${fieldClass} h-10`}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Ancho
-                  </label>
-                  <input
-                    type="number"
-                    value={line.width}
-                    onChange={(e) =>
-                      setCargoLines((prev) =>
-                        prev.map((item) =>
-                          item.id === line.id
-                            ? { ...item, width: e.target.value }
-                            : item
-                        )
-                      )
-                    }
-                    placeholder="0"
-                    className={`${fieldClass} h-10`}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Alto
-                  </label>
-                  <input
-                    type="number"
-                    value={line.height}
-                    onChange={(e) =>
-                      setCargoLines((prev) =>
-                        prev.map((item) =>
-                          item.id === line.id
-                            ? { ...item, height: e.target.value }
-                            : item
-                        )
-                      )
-                    }
-                    placeholder="0"
-                    className={`${fieldClass} h-10`}
-                  />
-                </div>
-              </div>
-
-              {/* Resultados por línea */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Total lbs
-                  </p>
-                  <p
-                    className={`mt-0.5 text-sm font-semibold transition-colors ${
-                      lineTotalLbs > 0
-                        ? 'text-emerald-700 dark:text-emerald-400'
-                        : 'text-slate-900 dark:text-white'
-                    }`}
-                  >
-                    {formatNumber(lineTotalLbs, 0)}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    FT³
-                  </p>
-                  <p
-                    className={`mt-0.5 text-sm font-semibold transition-colors ${
-                      lineFt3 > 0
-                        ? 'text-emerald-700 dark:text-emerald-400'
-                        : 'text-slate-900 dark:text-white'
-                    }`}
-                  >
-                    {formatNumber(lineFt3, 2)}
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    CBM
-                  </p>
-                  <p
-                    className={`mt-0.5 text-sm font-semibold transition-colors ${
-                      lineCbm > 0
-                        ? 'text-emerald-700 dark:text-emerald-400'
-                        : 'text-slate-900 dark:text-white'
-                    }`}
-                  >
-                    {formatNumber(lineCbm, 3)}
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
-        )
-      })}
-    </div>
-  )}
 
-  {/* Totales globales — solo visibles cuando hay líneas */}
-  {cargoLines.length > 0 && (
-    <div className="grid gap-3 md:grid-cols-3">
-      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          FT³ total
-        </p>
-        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-          {formatNumber(totalCargoFt3, 2)}
-        </p>
-      </div>
-
-      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          CBM total
-        </p>
-        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-          {formatNumber(totalCargoCbm, 3)}
-        </p>
-      </div>
-
-      <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-          Peso total lbs
-        </p>
-        <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-          {formatNumber(totalCargoWeight, 0)}
-        </p>
-      </div>
-    </div>
-  )}
-
-</div>
-                
-                                <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                    Flujo rápido Miami Consolidado
-                  </h2>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Usa las tarifas activas del cliente para calcular y generar la cotización automáticamente.
-                  </p>
-                </div>
-
-            {formData.service_product === 'miami_lcl' && (
-              <div className={`mt-4 space-y-5 ${cardClass}`}>
-                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                  Calculadora Miami LCL
-                </h3>
-
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Calcula el flete tomando el mayor entre FT3, libras y el mínimo aplicable.
-                </p>
-
-                <div className="grid gap-5 md:grid-cols-2">
-                  <input
-                    type="number"
-                    value={miamiCalc.ft3}
-                    onChange={(e) =>
-                      setMiamiCalc({
-                        ...miamiCalc,
-                        ft3: e.target.value,
-                      })
-                    }
-                    placeholder="FT3"
-                    className={fieldClass}
-                  />
-
-                  <input
-                    type="number"
-                    value={miamiCalc.lbs}
-                    onChange={(e) =>
-                      setMiamiCalc({
-                        ...miamiCalc,
-                        lbs: e.target.value,
-                      })
-                    }
-                    placeholder="Libras"
-                    className={fieldClass}
-                  />
-                </div>
-
-                {formData.incoterm === 'EXW' && (
-                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/70">
-                    <p className="font-semibold text-slate-700 dark:text-slate-200">
-                      Tipo de Pickup
-                    </p>
-
-                    <div className="mt-3 grid gap-3 md:grid-cols-3">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="pickup_mode"
-                          checked={pickupMode === 'standard'}
-                          onChange={() => setPickupMode('standard')}
-                        />
-                        <span>Pickup Miami estándar</span>
-                      </label>
-
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="pickup_mode"
-                          checked={pickupMode === 'manual'}
-                          onChange={() => setPickupMode('manual')}
-                        />
-                        <span>Pickup manual</span>
-                      </label>
-
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          name="pickup_mode"
-                          checked={pickupMode === 'none'}
-                          onChange={() => setPickupMode('none')}
-                        />
-                        <span>Sin pickup</span>
-                      </label>
-                    </div>
-
-                    {pickupMode === 'standard' && (
-                      <p className="mt-3 font-semibold text-slate-900 dark:text-white">
-                        USD {pickupRate.toFixed(2)}
-                      </p>
-                    )}
-
-                    {pickupMode === 'manual' && (
-                      <input
-                        type="number"
-                        value={manualPickupAmount}
-                        onChange={(e) =>
-                          setManualPickupAmount(Number(e.target.value || 0))
-                        }
-                        placeholder="Monto pickup manual USD"
-                        className={`${fieldClass} mt-3 w-full`}
-                      />
-                    )}
-                  </div>
-                )}
-
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/70">
-                  <div className="flex flex-wrap items-center gap-4">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={
-                          shouldApplyStandardCharges &&
-                          miamiOptions.applyStandardCharges
-                        }
-                        disabled={!shouldApplyStandardCharges}
-                        onChange={(e) =>
-                          setMiamiOptions({
-                            ...miamiOptions,
-                            applyStandardCharges: e.target.checked,
-                          })
-                        }
-                      />
-                      <span className="font-medium text-slate-700 dark:text-slate-200">
-                        Aplicar cargos estándar: BL, SED, Documentos / Manejo,
-                        Desconsolidación
-                      </span>
-                    </label>
-
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={
-                          applyStandardCharges &&
-                          miamiOptions.taxStandardDestinationCharges
-                        }
-                        disabled={!applyStandardCharges}
-                        onChange={(e) =>
-                          setMiamiOptions({
-                            ...miamiOptions,
-                            taxStandardDestinationCharges: e.target.checked,
-                          })
-                        }
-                      />
-                      <span className="font-medium text-slate-700 dark:text-slate-200">
-                        ISV 15% en Documentos / Manejo y Desconsolidación
-                      </span>
-                    </label>
-                  </div>
-
-                  {miamiLclResult.isMinimum && (
-                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                      No aplican cargos estándar cuando el flete se calcula por mínimo.
-                    </p>
-                  )}
-
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={miamiOptions.isHazmat}
-                        onChange={(e) =>
-                          setMiamiOptions({
-                            ...miamiOptions,
-                            isHazmat: e.target.checked,
-                          })
-                        }
-                      />
-                      Hazmat IMO Charge Line
-                    </label>
-
-                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={miamiOptions.isImo}
-                        onChange={(e) =>
-                          setMiamiOptions({
-                            ...miamiOptions,
-                            isImo: e.target.checked,
-                          })
-                        }
-                      />
-                      Declaración IMO
-                    </label>
-
-                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                      <input
-                        type="checkbox"
-                        checked={miamiOptions.includeImoCertificate}
-                        onChange={(e) =>
-                          setMiamiOptions({
-                            ...miamiOptions,
-                            includeImoCertificate: e.target.checked,
-                          })
-                        }
-                      />
-                      Certificado IMO
-                    </label>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3 md:grid-cols-5">
-                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Por FT3
-                    </p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                      USD {lclByFt3.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Por LBS
-                    </p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                      USD {lclByLbs.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Mínimo aplicado
-                    </p>
-                    <p className="mt-1 font-semibold text-slate-900 dark:text-white">
-                      USD {miamiLclResult.minimumApplied.toFixed(2)}
-                    </p>
-                  </div>
-
-                  {bunkerRule && (
-                    <div className="rounded-xl bg-amber-50 p-4 dark:bg-amber-950/30">
-                      <p className="text-xs text-amber-700 dark:text-amber-300">
-                        {bunkerRule.label}
-                      </p>
-                      <p className="mt-1 font-semibold text-amber-900 dark:text-amber-100">
-                        USD {bunkerAmount.toFixed(2)}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      Total estimado
-                    </p>
-                    <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-100">
-                      USD {miamiLclTotal.toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {formData.service_product === 'miami_air' && (
-              <div className={`mt-4 space-y-5 ${cardClass}`}>
-                <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                  Calculadora Miami Aéreo
-                </h3>
-
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Calcula el flete aéreo usando la tarifa por KG.
-                </p>
-
-                <div className="grid gap-5 md:grid-cols-2">
-                  <input
-                    type="number"
-                    value={miamiCalc.kg}
-                    onChange={(e) =>
-                      setMiamiCalc({
-                        ...miamiCalc,
-                        kg: e.target.value,
-                      })
-                    }
-                    placeholder="Kilogramos"
-                    className={fieldClass}
-                  />
-                </div>
-
-                <div className="mt-4 rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    Flete estimado
-                  </p>
-                  <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-100">
-                    USD {airEstimated.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-            )}
-
-                <div className={`mt-4 space-y-5 ${cardClass}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                        Cargos adicionales en destino
-                      </h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Agrega cargos como aduanas, entrega local u otros servicios.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setDestinationCharges((prev) => [
-                          ...prev,
-                          {
-                            id: crypto.randomUUID(),
-                            description: '',
-                            amount: '',
-                            taxable: false,
-                          },
-                        ])
-                      }
-                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
-                    >
-                      Agregar cargo
-                    </button>
-                  </div>
-
-                  <div className="space-y-5">
-                    {destinationCharges.length === 0 ? (
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        No hay cargos adicionales en destino.
-                      </p>
-                    ) : (
-                      destinationCharges.map((charge) => {
-                        const isChargeComplete =
-                          charge.description.trim().length > 0 &&
-                          Number(charge.amount || 0) > 0
-
-                        return (
-                        <div
-                          key={charge.id}
-                          className={`grid gap-3 rounded-xl border p-3 md:grid-cols-[1fr_160px_140px_100px] ${
-                            isChargeComplete
-                              ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20'
-                              : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40'
-                          }`}
-                        >
-                          <input
-                            value={charge.description}
-                            onChange={(e) =>
-                              setDestinationCharges((prev) =>
-                                prev.map((item) =>
-                                  item.id === charge.id
-                                    ? {
-                                        ...item,
-                                        description: e.target.value,
-                                      }
-                                    : item
-                                )
-                              )
-                            }
-                            placeholder="Descripción"
-                            className={fieldClass}
-                          />
-
-                          <input
-                            type="number"
-                            value={charge.amount}
-                            onChange={(e) =>
-                              setDestinationCharges((prev) =>
-                                prev.map((item) =>
-                                  item.id === charge.id
-                                    ? { ...item, amount: e.target.value }
-                                    : item
-                                )
-                              )
-                            }
-                            placeholder="Monto USD"
-                            className={fieldClass}
-                          />
-
-                          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                            <input
-                              type="checkbox"
-                              checked={charge.taxable}
-                              onChange={(e) =>
-                                setDestinationCharges((prev) =>
-                                  prev.map((item) =>
-                                    item.id === charge.id
-                                      ? {
-                                          ...item,
-                                          taxable: e.target.checked,
-                                        }
-                                      : item
-                                  )
-                                )
-                              }
-                            />
-                            ISV 15%
-                          </label>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDestinationCharges((prev) =>
-                                prev.filter((item) => item.id !== charge.id)
-                              )
-                            }
-                            className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
-                          >
-                            Quitar
-                          </button>
-                        </div>
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+            <MiamiQuotationSection
+              formData={formData}
+              handleChange={handleChange}
+              fieldClass={fieldClass}
+              cardClass={cardClass}
+              todayString={todayString}
+              cargoLines={cargoLines}
+              setCargoLines={setCargoLines}
+              calculateLineCbm={calculateLineCbm}
+              calculateLineFt3={calculateLineFt3}
+              totalCargoFt3={totalCargoFt3}
+              totalCargoCbm={totalCargoCbm}
+              totalCargoWeight={totalCargoWeight}
+              formatNumber={formatNumber}
+              miami={miami}
+            />
 
           {!isMiamiFlow && (
           <div className={cardClass}>
@@ -2987,7 +1722,7 @@ export default function NewQuotationPage() {
               <button
                 type="button"
                 onClick={handlePreviewMiamiPdf}
-                disabled={!canUseMiamiCalculator}
+                disabled={!miami.canUseMiamiCalculator}
                 className="rounded-xl border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Previsualizar PDF

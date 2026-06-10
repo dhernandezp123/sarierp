@@ -288,7 +288,7 @@ export default function ClienteProfilePage() {
   }
 
   if (loading) {
-    return <div className="p-8">Cargando cliente...</div>
+    return <div className="p-8 text-slate-600 dark:text-slate-300">Cargando cliente...</div>
   }
 
   const clientTimeline = [
@@ -325,7 +325,7 @@ export default function ClienteProfilePage() {
           <button
             type="button"
             onClick={() => router.push('/clientes')}
-            className="rounded-xl border px-4 py-2 font-semibold"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             Volver a clientes
           </button>
@@ -333,7 +333,7 @@ export default function ClienteProfilePage() {
           <button
             type="button"
             onClick={() => router.push(`/clientes/${cliente.id}/edit`)}
-            className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
+            className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
           >
             Editar Cliente
           </button>
@@ -349,11 +349,11 @@ export default function ClienteProfilePage() {
         </div>
 
         <div>
-          <h1 className="text-4xl font-bold">
+          <h1 className="text-4xl font-bold text-slate-900 dark:text-white">
             {cliente?.nombre}
           </h1>
 
-          <p className="text-gray-500 mt-2">
+          <p className="mt-2 text-slate-500 dark:text-slate-400">
             Perfil comercial del cliente
           </p>
         </div>
@@ -372,8 +372,8 @@ export default function ClienteProfilePage() {
               onClick={() => setActiveTab(tab)}
               className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
                 activeTab === tab
-                  ? 'bg-black text-white'
-                  : 'border bg-white'
+                  ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
+                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
               }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -382,22 +382,22 @@ export default function ClienteProfilePage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Cotizaciones
             </p>
 
-            <p className="text-3xl font-bold">
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">
               {quotations.length}
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Ganadas
             </p>
 
-            <p className="text-3xl font-bold">
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">
               {
                 quotations.filter(
                   (q) => q.status === 'Ganada'
@@ -406,12 +406,12 @@ export default function ClienteProfilePage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Enviadas
             </p>
 
-            <p className="text-3xl font-bold">
+            <p className="text-3xl font-bold text-slate-900 dark:text-white">
               {
                 quotations.filter(
                   (q) => q.status === 'Enviada al Cliente'
@@ -420,12 +420,12 @@ export default function ClienteProfilePage() {
             </p>
           </div>
 
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Última Cotización
             </p>
 
-            <p className="text-sm font-bold mt-2">
+            <p className="mt-2 text-sm font-bold text-slate-900 dark:text-white">
               {quotations[0]?.quotation_number || 'N/A'}
             </p>
           </div>
@@ -434,20 +434,20 @@ export default function ClienteProfilePage() {
         {activeTab === 'resumen' && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-2xl border bg-white p-5">
-                <p className="text-sm text-gray-500">Código</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Código</p>
                 <p className="font-bold">{cliente?.codigo_cliente || 'N/A'}</p>
               </div>
 
-              <div className="rounded-2xl border bg-white p-5">
-                <p className="text-sm text-gray-500">RTN / NIT / RUC</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <p className="text-sm text-slate-500 dark:text-slate-400">RTN / NIT / RUC</p>
                 <p className="font-bold">
                   {cliente?.rtn || cliente?.nit || cliente?.ruc || 'N/A'}
                 </p>
               </div>
 
-              <div className="rounded-2xl border bg-white p-5">
-                <p className="text-sm text-gray-500">Condición de pago</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Condición de pago</p>
                 <p className="font-bold">
                   {cliente?.condicion_pago ||
                     cliente?.payment_terms ||
@@ -456,44 +456,44 @@ export default function ClienteProfilePage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border bg-white p-6">
-              <h2 className="text-xl font-bold mb-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
                 Información del Cliente
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Email</p>
                   <p className="font-medium">{cliente?.email_1 || 'N/A'}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-500">Persona de contacto</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Persona de contacto</p>
                   <p className="font-medium">{cliente?.contacto || 'N/A'}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-500">Teléfono</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Teléfono</p>
                   <p className="font-medium">{cliente?.telefono || 'N/A'}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-500">Tipo de cliente</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Tipo de cliente</p>
                   <p className="font-medium">{cliente?.tipo_cliente || 'N/A'}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-500">Ciudad</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Ciudad</p>
                   <p className="font-medium">{cliente?.ciudad || 'N/A'}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-500">Asegura carga</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Asegura carga</p>
                   <p className="font-medium">{cliente?.asegura_carga ? 'Sí' : 'No'}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     Vendedor asignado
                   </p>
 
@@ -505,12 +505,12 @@ export default function ClienteProfilePage() {
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-500">País</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">País</p>
                   <p className="font-medium">{cliente?.pais || 'N/A'}</p>
                 </div>
 
                 <div className="md:col-span-2">
-                  <p className="text-sm text-gray-500">Dirección</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Dirección</p>
                   <p className="font-medium">{cliente?.direccion || 'N/A'}</p>
                 </div>
               </div>
@@ -519,20 +519,20 @@ export default function ClienteProfilePage() {
         )}
 
         {activeTab === 'cotizaciones' && (
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Cotizaciones del Cliente
             </h2>
 
             {quotations.length === 0 ? (
-              <p className="text-gray-500">
+              <p className="text-slate-500 dark:text-slate-400">
                 Este cliente todavía no tiene cotizaciones.
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm text-slate-700 dark:text-slate-300">
                   <thead>
-                    <tr className="border-b text-left text-gray-500">
+                    <tr className="border-b border-slate-200 text-left text-slate-500 dark:border-slate-700 dark:text-slate-400">
                       <th className="p-3">No.</th>
                       <th className="p-3">Tipo</th>
                       <th className="p-3">Ruta</th>
@@ -544,7 +544,7 @@ export default function ClienteProfilePage() {
 
                   <tbody>
                     {quotations.map((quote) => (
-                      <tr key={quote.id} className="border-b">
+                      <tr key={quote.id} className="border-b border-slate-100 dark:border-slate-800">
                         <td className="p-3 font-semibold">
                           {quote.quotation_number || 'Sin número'}
                         </td>
@@ -571,7 +571,7 @@ export default function ClienteProfilePage() {
                           <button
                             type="button"
                             onClick={() => router.push(`/quotations/${quote.id}`)}
-                            className="rounded-xl border px-3 py-2 font-semibold"
+                            className="rounded-xl border border-slate-200 px-3 py-2 font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                           >
                             Ver detalle
                           </button>
@@ -699,8 +699,8 @@ export default function ClienteProfilePage() {
         )}
 
         {activeTab === 'notas' && (
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Notas Comerciales
             </h2>
 
@@ -709,30 +709,30 @@ export default function ClienteProfilePage() {
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
                 placeholder="Escribe una nota comercial..."
-                className="w-full rounded-xl border p-3 min-h-28"
+                className="min-h-28 w-full rounded-xl border border-slate-300 bg-white p-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-slate-400 dark:focus:ring-slate-400/20"
               />
 
               <button
                 type="button"
                 onClick={saveClientNote}
-                className="rounded-xl bg-black px-5 py-3 font-semibold text-white"
+                className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
               >
                 Guardar Nota
               </button>
 
               {clientNotes.length === 0 ? (
-                <p className="text-gray-500">
+                <p className="text-slate-500 dark:text-slate-400">
                   No hay notas comerciales registradas.
                 </p>
               ) : (
                 <div className="space-y-3">
                   {clientNotes.map((note) => (
-                    <div key={note.id} className="rounded-xl border p-4">
-                      <p className="text-sm whitespace-pre-wrap">
+                    <div key={note.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                      <p className="whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200">
                         {note.note}
                       </p>
 
-                      <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-gray-500">
+                      <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                         <p>
                           Por:{' '}
                           {note.profiles
@@ -755,13 +755,13 @@ export default function ClienteProfilePage() {
         )}
 
         {activeTab === 'historial' && (
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
               Historial del Cliente
             </h2>
 
             {clientTimeline.length === 0 ? (
-              <p className="text-gray-500">
+              <p className="text-slate-500 dark:text-slate-400">
                 No hay historial disponible.
               </p>
             ) : (
@@ -769,26 +769,26 @@ export default function ClienteProfilePage() {
                 {clientTimeline.map((event: any, index: number) => (
                   <div key={index} className="flex gap-3">
                     <div className="flex flex-col items-center">
-                      <div className="h-3 w-3 rounded-full bg-slate-700 mt-1" />
+                      <div className="mt-1 h-3 w-3 rounded-full bg-slate-700 dark:bg-slate-300" />
 
                       {index !== clientTimeline.length - 1 && (
-                        <div className="w-px flex-1 bg-slate-300 min-h-[40px]" />
+                        <div className="min-h-[40px] w-px flex-1 bg-slate-300 dark:bg-slate-700" />
                       )}
                     </div>
 
-                    <div className="flex-1 rounded-xl border p-3">
+                    <div className="flex-1 rounded-xl border border-slate-200 p-3 dark:border-slate-700 dark:bg-slate-900/40">
                       <div className="flex justify-between gap-4">
                         <div>
-                          <p className="text-sm font-semibold">
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white">
                             {event.type}
                           </p>
 
-                          <p className="text-sm text-gray-600 mt-1">
+                          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                             {event.description}
                           </p>
                         </div>
 
-                        <p className="text-xs text-gray-400 whitespace-nowrap">
+                        <p className="whitespace-nowrap text-xs text-slate-400 dark:text-slate-500">
                           {new Date(event.date).toLocaleString()}
                         </p>
                       </div>
