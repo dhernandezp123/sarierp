@@ -13,16 +13,30 @@ export default function ProtectedLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { profile } = useUser()
+  const { user, profile, loading } = useUser()
   const pathname = usePathname()
   const router = useRouter()
+  const hasValidProfile =
+    !!profile && profile.status === 'Aprobado' && profile.is_active === true
+  const hasPathAccess = hasValidProfile && canAccessPath(profile.rol, pathname)
 
   useEffect(() => {
-    if (profile && !canAccessPath(profile.rol, pathname)) {
+    if (loading) return
+
+    if (!user || !profile || profile.status !== 'Aprobado' || profile.is_active !== true) {
+      router.replace('/login')
+      return
+    }
+
+    if (!canAccessPath(profile.rol, pathname)) {
       toast.error('No tienes permisos para acceder a esta sección')
       router.replace('/dashboard')
     }
-  }, [pathname, profile, router])
+  }, [loading, pathname, profile, router, user])
+
+  if (loading || !user || !profile || !hasValidProfile || !hasPathAccess) {
+    return null
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F5F7FA] text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
