@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Pencil, X } from 'lucide-react'
+import { Pencil, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
@@ -1729,13 +1729,14 @@ function PricingComparisonContent() {
 
     const isRepricing = Boolean(impact?.isRepricing)
     const nextStatus = isRepricing ? 'Ganada' : 'Pricing Aprobado'
+    const isReapproval = oldStatus === 'Pricing Aprobado'
 
-    if (!isRepricing && !canTransition(oldStatus, nextStatus)) {
+    if (!isRepricing && !isReapproval && !canTransition(oldStatus, nextStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
       return false
     }
 
-    const { error } = await supabase
+    const { data: updatedQuote, error } = await supabase
       .from('quotations')
       .update({
         status: nextStatus,
@@ -1748,6 +1749,8 @@ function PricingComparisonContent() {
         pricing_approved_at: new Date().toISOString(),
       })
       .eq('id', selectedQuote.id)
+      .select('*')
+      .single()
 
     if (error) {
       toast.error(error.message)
@@ -1830,19 +1833,12 @@ function PricingComparisonContent() {
         : 'Pricing aprobado correctamente'
     )
 
+    await fetchPricingItems(selectedQuote.id)
     await fetchQuotations()
 
-    setSelectedQuote({
-      ...selectedQuote,
-      status: nextStatus,
-      total_cost: totalCost,
-      total_sale: totalSale,
-      profit_amount: profit,
-      gp_percentage: gpPercentage,
-      pricing_approved: true,
-      pricing_approved_by: profile?.id,
-      pricing_approved_at: new Date().toISOString(),
-    })
+    setSelectedQuote((current: any) =>
+      current ? { ...current, ...updatedQuote } : updatedQuote
+    )
 
     return true
   }
@@ -1893,8 +1889,9 @@ function PricingComparisonContent() {
 
     const oldStatus = selectedQuote.status || 'Borrador'
     const nextStatus = 'Pricing Aprobado'
+    const isReapproval = oldStatus === 'Pricing Aprobado'
 
-    if (!canTransition(oldStatus, nextStatus)) {
+    if (!isReapproval && !canTransition(oldStatus, nextStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
       return
     }
@@ -2009,6 +2006,11 @@ function PricingComparisonContent() {
   const totalSale = pricingItems.reduce(
     (sum, item) =>
       sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
+    0
+  )
+
+  const totalSaleWithTax = pricingItems.reduce(
+    (sum, item) => sum + Number(item.total_amount || 0),
     0
   )
 
@@ -3356,124 +3358,192 @@ const profitabilityColor =
                   <CardContent className="space-y-4">
                     {!isMiamiFlow && (
                       <>
-                    <div className="grid grid-cols-4 gap-4">
-                      <select
-                        name="item_type"
-                        value={pricingForm.item_type}
-                        onChange={handlePricingChange}
-                        className="border p-3 rounded"
-                      >
-                        <option value="Flete">Flete</option>
-                        <option value="Origen">Origen</option>
-                        <option value="Destino">Destino</option>
-                        <option value="Seguro">Seguro</option>
-                        <option value="Documentación">Documentación</option>
-                        <option value="Aduana">Aduana</option>
-                        <option value="Inland">Inland</option>
-                        <option value="Profit">Profit</option>
-                        <option value="Otro">Otro</option>
-                      </select>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700/60 dark:bg-slate-800/30">
+                          <div className="grid gap-3 sm:grid-cols-[160px_1fr_80px]">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Tipo
+                              </label>
+                              <select
+                                name="item_type"
+                                value={pricingForm.item_type}
+                                onChange={handlePricingChange}
+                                className={fieldClass}
+                              >
+                                <option value="Flete">Flete</option>
+                                <option value="Origen">Origen</option>
+                                <option value="Destino">Destino</option>
+                                <option value="Seguro">Seguro</option>
+                                <option value={'Documentaci\u00f3n'}>
+                                  Documentaci&oacute;n
+                                </option>
+                                <option value="Aduana">Aduana</option>
+                                <option value="Inland">Inland</option>
+                                <option value="Profit">Profit</option>
+                                <option value="Otro">Otro</option>
+                              </select>
+                            </div>
 
-                      <input
-                        name="description"
-                        placeholder="Descripción"
-                        value={pricingForm.description}
-                        onChange={handlePricingChange}
-                        className="border p-3 rounded"
-                      />
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Descripci&oacute;n
+                              </label>
+                              <input
+                                name="description"
+                                placeholder="Ej. Ocean Freight, Handling, BL Fee..."
+                                value={pricingForm.description}
+                                onChange={handlePricingChange}
+                                className={fieldClass}
+                              />
+                            </div>
 
-                      <input
-                        name="cost_amount"
-                        placeholder="Costo"
-                        value={pricingForm.cost_amount}
-                        onChange={handlePricingChange}
-                        className="border p-3 rounded"
-                      />
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                QTY
+                              </label>
+                              <input
+                                type="number"
+                                placeholder="1"
+                                value={pricingForm.quantity}
+                                onChange={(e) =>
+                                  setPricingForm({
+                                    ...pricingForm,
+                                    quantity: e.target.value,
+                                  })
+                                }
+                                className={fieldClass}
+                              />
+                            </div>
+                          </div>
 
-                      <input
-                        type="number"
-                        placeholder="QTY"
-                        value={pricingForm.quantity}
-                        onChange={(e) =>
-                          setPricingForm({
-                            ...pricingForm,
-                            quantity: e.target.value,
-                          })
-                        }
-                        className="border p-3 rounded-xl"
-                      />
+                          <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Costo unit.
+                              </label>
+                              <input
+                                name="cost_amount"
+                                placeholder="0.00"
+                                value={pricingForm.cost_amount}
+                                onChange={handlePricingChange}
+                                className={fieldClass}
+                              />
+                            </div>
 
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={pricingForm.taxable}
-                          onChange={(e) =>
-                            setPricingForm({
-                              ...pricingForm,
-                              taxable: e.target.checked,
-                            })
-                          }
-                        />
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Venta unit.
+                              </label>
+                              <input
+                                name="sale_amount"
+                                placeholder="0.00"
+                                value={pricingForm.sale_amount}
+                                onChange={handlePricingChange}
+                                className={fieldClass}
+                              />
+                            </div>
 
-                        Gravable ISV 15%
-                      </label>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Moneda
+                              </label>
+                              <select
+                                name="currency"
+                                value={pricingForm.currency}
+                                onChange={handlePricingChange}
+                                className={fieldClass}
+                              >
+                                <option value="USD">USD</option>
+                                <option value="HNL">HNL</option>
+                              </select>
+                            </div>
 
-                      <input
-                        name="sale_amount"
-                        placeholder="Venta"
-                        value={pricingForm.sale_amount}
-                        onChange={handlePricingChange}
-                        className="border p-3 rounded"
-                      />
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Proveedor
+                              </label>
+                              <input
+                                name="supplier"
+                                placeholder="Agente / proveedor"
+                                value={pricingForm.supplier}
+                                onChange={handlePricingChange}
+                                className={fieldClass}
+                              />
+                            </div>
+                          </div>
 
-                      <select
-                        name="currency"
-                        value={pricingForm.currency}
-                        onChange={handlePricingChange}
-                        className="border p-3 rounded"
-                      >
-                        <option value="USD">USD</option>
-                        <option value="HNL">HNL</option>
-                      </select>
+                          <div className="mt-3 grid items-end gap-3 sm:grid-cols-[1fr_auto_auto]">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Notas
+                              </label>
+                              <input
+                                name="notes"
+                                placeholder="Observaciones opcionales..."
+                                value={pricingForm.notes}
+                                onChange={handlePricingChange}
+                                className={fieldClass}
+                              />
+                            </div>
 
-                      <input
-                        name="supplier"
-                        placeholder="Proveedor"
-                        value={pricingForm.supplier}
-                        onChange={handlePricingChange}
-                        className="border p-3 rounded"
-                      />
+                            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                              <input
+                                type="checkbox"
+                                checked={pricingForm.taxable}
+                                onChange={(e) =>
+                                  setPricingForm({
+                                    ...pricingForm,
+                                    taxable: e.target.checked,
+                                  })
+                                }
+                                className="h-4 w-4 rounded border-slate-300"
+                              />
+                              ISV 15%
+                            </label>
 
-                      <input
-                        name="notes"
-                        placeholder="Notas"
-                        value={pricingForm.notes}
-                        onChange={handlePricingChange}
-                        className="border p-3 rounded col-span-2"
-                      />
+                            <button
+                              onClick={savePricingItem}
+                              disabled={isPricingActionDisabled}
+                              className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                            >
+                              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                              Agregar cargo
+                            </button>
+                          </div>
+                        </div>
 
-                      <button
-                        onClick={savePricingItem}
-                        disabled={isPricingActionDisabled}
-                        className="bg-zinc-950 text-white px-6 py-3 rounded-xl col-span-4"
-                      >
-                        Agregar Cargo Adicional
-                      </button>
-                    </div>
+                        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-3 dark:border-slate-700/60 dark:bg-slate-900/60">
+                          <div className="flex items-center gap-6">
+                            <div>
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Subtotal
+                              </p>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                USD {subtotal.toFixed(2)}
+                              </p>
+                            </div>
 
-                    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm">
-                      <p className="text-slate-400">
-                        Subtotal: USD {subtotal.toFixed(2)}
-                      </p>
+                            <div className="h-8 w-px bg-slate-200 dark:bg-slate-700" />
 
-                      <p className="text-slate-400">
-                        ISV: USD {taxAmount.toFixed(2)}
-                      </p>
+                            <div>
+                              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                ISV
+                              </p>
+                              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                USD {taxAmount.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
 
-                      <p className="mt-2 text-lg font-bold text-white">
-                        Total: USD {totalAmount.toFixed(2)}
-                      </p>
-                    </div>
+                          <div className="text-right">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                              Total venta
+                            </p>
+                            <p className="text-xl font-bold text-slate-900 dark:text-white">
+                              USD {totalAmount.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
                       </>
                     )}
 
@@ -4015,7 +4085,7 @@ const profitabilityColor =
                     <div className="rounded-xl border p-4">
                       <p className="text-xs text-gray-500">Venta Cliente</p>
                       <p className="text-xl font-bold">
-                        USD {formatCurrency(totalSale)}
+                        USD {formatCurrency(totalSaleWithTax)}
                       </p>
                     </div>
 
@@ -4637,4 +4707,3 @@ export default function PricingComparisonPage() {
     </Suspense>
   )
 }
-
