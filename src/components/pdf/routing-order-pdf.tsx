@@ -5,6 +5,7 @@ import {
   View,
   StyleSheet,
   Image,
+  Font,
 } from '@react-pdf/renderer'
 
 type RoutingOrderPdfProps = {
@@ -18,6 +19,8 @@ const SARI_LEGAL_NAME = 'SARI EXPRESS S DE R.L. DE C.V.'
 const SARI_ADDRESS =
   'BO. LOS ANDES 9 CALLE 12-13 AVE N.E, San Pedro Sula, Cortes, Honduras, CP: 21101'
 const SARI_RTN = '08019003239182'
+
+Font.registerHyphenationCallback((word) => [word])
 
 const styles = StyleSheet.create({
   page: {
@@ -64,13 +67,13 @@ const styles = StyleSheet.create({
     borderTop: '1 solid #e5e7eb',
   },
   cellLabel: {
-    width: '32%',
+    width: '30%',
     padding: 5,
     backgroundColor: '#f3f4f6',
     fontWeight: 700,
   },
   cellValue: {
-    width: '68%',
+    width: '70%',
     padding: 5,
     lineHeight: 1.35,
   },
@@ -230,18 +233,15 @@ export default function RoutingOrderPDF({
           <View style={styles.col}>
             <Section title="QUOTE / CUSTOMER">
               <InfoRow label="Quote number">{value(quote?.quotation_number || routing?.quotation_number)}</InfoRow>
-              <InfoRow label="Company / Consignee">{value(client?.nombre || routing?.client_name)}</InfoRow>
-              <InfoRow label="RTN">{value(client?.rtn || client?.nit)}</InfoRow>
+              <InfoRow label="Consignee">{value(client?.nombre || routing?.client_name)}</InfoRow>
+              <InfoRow label="RTN / Tax ID">{value(client?.rtn || client?.nit)}</InfoRow>
               <InfoRow label="Address">{value(client?.direccion || client?.address)}</InfoRow>
-              <InfoRow label="Contact">{value(client?.contacto || client?.contact_name)}</InfoRow>
-              <InfoRow label="Email">{value(client?.email || client?.email_1 || client?.correo)}</InfoRow>
-              <InfoRow label="Phone">{value(client?.telefono || client?.phone || client?.telefono_1)}</InfoRow>
             </Section>
           </View>
 
           <View style={styles.col}>
             <Section title="ROUTING DETAILS">
-              <InfoRow label="Routing #">{value(routing?.routing_number)}</InfoRow>
+              <InfoRow label="Routing # / SI">{value(routing?.routing_number)}</InfoRow>
               <InfoRow label="Agent">{value(routing?.agent_name || selectedAgent?.agente_nombre || selectedAgent?.agent_name)}</InfoRow>
               <InfoRow label="Agent reference">{value(agentReference)}</InfoRow>
               <InfoRow label="Carrier">{value(carrier)}</InfoRow>
@@ -267,8 +267,8 @@ export default function RoutingOrderPDF({
               <InfoRow label="Container qty">{value(containerSummary(routing))}</InfoRow>
               <InfoRow label="POL">{value(quote?.puerto_origen || routing?.origin_address)}</InfoRow>
               <InfoRow label="POD">{value(quote?.puerto_destino || routing?.destination_address)}</InfoRow>
-              <InfoRow label="Free time destination">{value(freeDays)}</InfoRow>
-              <InfoRow label="Place of delivery HBL">{value(placeOfDelivery)}</InfoRow>
+              <InfoRow label="Free time">{value(freeDays)}</InfoRow>
+              <InfoRow label="Place delivery">{value(placeOfDelivery)}</InfoRow>
               <InfoRow label="Commodity">{value(commodity)}</InfoRow>
             </Section>
           </View>
@@ -310,7 +310,7 @@ export default function RoutingOrderPDF({
           <Text style={styles.noteBox}>
             MBL consignee must be issued to {SARI_LEGAL_NAME}, {SARI_ADDRESS}. RTN: {SARI_RTN}.
           </Text>
-          <InfoRow label="Freight terms">Collect</InfoRow>
+          <InfoRow label="Freight terms">{value(routing?.freight_terms || 'Collect')}</InfoRow>
         </Section>
 
         <Section title="2. HOUSE BILL OF LADING">
@@ -318,7 +318,7 @@ export default function RoutingOrderPDF({
           <InfoRow label="Consignee / Importer">{value(routing?.consignee || client?.nombre)}</InfoRow>
           <InfoRow label="Notify party">{SARI_LEGAL_NAME}</InfoRow>
           <InfoRow label="Notify address">{SARI_ADDRESS}</InfoRow>
-          <InfoRow label="Notify RTN">{SARI_RTN}</InfoRow>
+          <InfoRow label="Notify RTN / Tax ID">{SARI_RTN}</InfoRow>
         </Section>
 
         <Section title="3. DOCUMENTS">
