@@ -2,11 +2,13 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Pencil, Plus, X } from 'lucide-react'
+import { FileText, Pencil, Plus, X } from 'lucide-react'
+import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
+import QuotationPDF from '../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
@@ -520,12 +522,32 @@ function PricingComparisonContent() {
     return 'Ocean Freight'
   }
 
-  const getChargeableKg = () => {
+  const getAirConsolidatedWeights = () => {
     const realKg = totalCargoKg || Number(selectedQuote?.peso_kg || 0)
     const cbm = totalCargoCbm || Number(selectedQuote?.volumen_cbm || 0)
     const volumetricKg = cbm * 167
 
-    return Math.max(realKg, volumetricKg, 0)
+    return {
+      actualWeightKg: realKg,
+      volumetricWeightKg: volumetricKg,
+      chargeableWeightKg: Math.max(realKg, volumetricKg, 0),
+    }
+  }
+
+  const getChargeableKg = () =>
+    getAirConsolidatedWeights().chargeableWeightKg
+
+  const getAgentAirRatePerKg = (quote: AgentQuote) => {
+    const storedRate = Number(quote.rate_per_kg || 0)
+    if (storedRate > 0) return storedRate
+
+    const chargeableKg = Number(
+      quote.chargeable_weight_kg || getChargeableKg()
+    )
+
+    if (chargeableKg <= 0) return 0
+
+    return Number(quote.ocean_freight || quote.costo || 0) / chargeableKg
   }
 
   const getTotalContainersQty = (fallbackQty?: string | number) =>
@@ -556,10 +578,9 @@ function PricingComparisonContent() {
     if (!ensureQuoteIsEditable()) return
 
     setEditingAgentQuoteId(quote.id)
-    const chargeableKg = getChargeableKg()
     const airRatePerKg =
-      isAirConsolidatedQuote() && chargeableKg > 0
-        ? Number(quote.ocean_freight || quote.costo || 0) / chargeableKg
+      isAirConsolidatedQuote()
+        ? getAgentAirRatePerKg(quote)
         : null
 
     setAgentForm({
@@ -643,7 +664,14 @@ function PricingComparisonContent() {
     if (reason === null) return
 
     const totalContainersQty = getTotalContainersQty()
-    const baseFreight = getTotalOceanFreight()
+    const airWeights = getAirConsolidatedWeights()
+    const ratePerKg = isAirConsolidatedQuote()
+      ? Number(agentForm.ocean_freight || 0)
+      : null
+    const baseFreight =
+      ratePerKg !== null
+        ? ratePerKg * airWeights.chargeableWeightKg
+        : getTotalOceanFreight()
 
     const suggestedSale =
       baseFreight +
@@ -668,6 +696,12 @@ function PricingComparisonContent() {
       valid_until: agentForm.valid_until || null,
       etd: agentForm.etd || null,
       suggested_sale: suggestedSale,
+      rate_per_kg: ratePerKg,
+      actual_weight_kg: ratePerKg !== null ? airWeights.actualWeightKg : null,
+      volumetric_weight_kg:
+        ratePerKg !== null ? airWeights.volumetricWeightKg : null,
+      chargeable_weight_kg:
+        ratePerKg !== null ? airWeights.chargeableWeightKg : null,
     }
 
     const { data: savedAgentQuote, error } = editingAgentQuoteId
@@ -958,16 +992,16 @@ function PricingComparisonContent() {
       containersQty > 0 ? Number(selectedAgentQuote.mbl_fee || 0) / containersQty : 0
 
     const freightDescription = getFreightDescription()
-    const chargeableKg = getChargeableKg()
-    const airRatePerKg =
-      isAirConsolidatedQuote() && chargeableKg > 0
-        ? oceanFreight / chargeableKg
-        : 0
+    const chargeableKg =
+      Number(selectedAgentQuote.chargeable_weight_kg || 0) || getChargeableKg()
+    const airRatePerKg = isAirConsolidatedQuote()
+      ? getAgentAirRatePerKg(selectedAgentQuote)
+      : 0
     const airFreightNotes =
       isAirConsolidatedQuote() && chargeableKg > 0
-        ? `Peso cobrable ${chargeableKg.toFixed(
+        ? `Peso cobrable ${chargeableKg.toFixed(2)} KG × USD ${airRatePerKg.toFixed(
             2
-          )} KG x tarifa proveedor USD ${airRatePerKg.toFixed(2)}/KG.`
+          )}/KG.`
         : ''
 
     const oceanFreightLines = isAirConsolidatedQuote()
@@ -1953,6 +1987,71 @@ function PricingComparisonContent() {
     toast.success('Observaciones guardadas')
   }
 
+  const previewQuotationPdf = async () => {
+    if (!selectedQuote) {
+      toast.error('Selecciona una cotización primero')
+      return
+    }
+
+    if (pricingItems.length === 0) {
+      toast.error('Agrega líneas de pricing antes de previsualizar el PDF')
+      return
+    }
+
+    try {
+      const normalizedCargoLines = cargoLines.map((line) => ({
+        quantity: Number(line.quantity || 0),
+        package_type: line.package_type || 'Caja',
+        length:
+          line.length === null || line.length === undefined
+            ? null
+            : Number(line.length || 0),
+        width:
+          line.width === null || line.width === undefined
+            ? null
+            : Number(line.width || 0),
+        height:
+          line.height === null || line.height === undefined
+            ? null
+            : Number(line.height || 0),
+        dimension_unit: line.dimension_unit || 'in',
+        weight_lbs:
+          line.weight_lbs === null || line.weight_lbs === undefined
+            ? null
+            : Number(line.weight_lbs || 0),
+        ft3:
+          line.ft3 === null || line.ft3 === undefined
+            ? calculateCargoLineFt3(line)
+            : Number(line.ft3 || 0),
+        cbm:
+          line.cbm === null || line.cbm === undefined
+            ? calculateCargoLineCbm(line)
+            : Number(line.cbm || 0),
+      }))
+
+      const blob = await pdf(
+        <QuotationPDF
+          quotation={{
+            ...selectedQuote,
+            client_notes: clientNotes || selectedQuote.client_notes,
+          }}
+          selectedAgent={selectedAgentQuote || null}
+          pricingItems={pricingItems}
+          quotationContainers={quotationContainers}
+          cargoLines={normalizedCargoLines}
+        />
+      ).toBlob()
+
+      window.open(URL.createObjectURL(blob), '_blank')
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo generar la previsualización del PDF'
+      )
+    }
+  }
+
   const approvePricing = async () => {
     if (!selectedQuote) return
 
@@ -2223,6 +2322,18 @@ const profitabilityColor =
     quote?.agent ||
     'N/A'
 
+  const getValidTransitDays = (quote?: AgentQuote | null) => {
+    const rawTransit = firstFilledValue(quote?.transit_time, quote?.transit)
+
+    if (rawTransit === null || rawTransit === undefined) return null
+
+    const normalizedTransit = normalizeText(String(rawTransit).trim())
+    if (!normalizedTransit || normalizedTransit === 'n/a') return null
+
+    const transitDays = Number(normalizedTransit)
+    return Number.isFinite(transitDays) && transitDays > 0 ? transitDays : null
+  }
+
   const validAgentQuotes = agentQuotes.filter((quote) => {
     const finalCost = getAgentQuoteFinalCost(quote)
     return finalCost > 0
@@ -2237,18 +2348,12 @@ const profitabilityColor =
       })
     : null
 
-  const fastestTransit = Math.min(
-    ...agentQuotes
-      .map((q) => Number(q.transit_time || q.transit || 0))
-      .filter((n) => n > 0)
-  )
-
   const fastestQuote = agentQuotes
-    .filter((q) => Number(q.transit_time || q.transit || 0) > 0)
+    .filter((quote) => getValidTransitDays(quote) !== null)
     .sort(
       (a, b) =>
-        Number(a.transit_time || a.transit || 0) -
-        Number(b.transit_time || b.transit || 0)
+        Number(getValidTransitDays(a)) -
+        Number(getValidTransitDays(b))
     )[0]
 
   const selectedAgentQuote = agentQuotes.find((q) => q.is_selected)
@@ -3190,10 +3295,14 @@ const profitabilityColor =
                               Más rápido
                             </p>
                             <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-                              {getAgentQuoteProviderName(fastestQuote)}
+                              {fastestQuote
+                                ? getAgentQuoteProviderName(fastestQuote)
+                                : 'Sin información'}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {Number(fastestQuote?.transit_time || fastestQuote?.transit || 0)} días
+                              {fastestQuote
+                                ? `${getValidTransitDays(fastestQuote)} días`
+                                : 'Sin información'}
                             </p>
                           </div>
 
@@ -3237,6 +3346,16 @@ const profitabilityColor =
                         {agentQuotes.map((quote) => {
                               const finalSariCost = getAgentQuoteFinalCost(quote)
                               const baseCost = getAgentQuoteBaseCost(quote)
+                              const airRatePerKg = getAgentAirRatePerKg(quote)
+                              const actualWeightKg =
+                                Number(quote.actual_weight_kg || 0) ||
+                                getAirConsolidatedWeights().actualWeightKg
+                              const volumetricWeightKg =
+                                Number(quote.volumetric_weight_kg || 0) ||
+                                getAirConsolidatedWeights().volumetricWeightKg
+                              const chargeableWeightKg =
+                                Number(quote.chargeable_weight_kg || 0) ||
+                                getAirConsolidatedWeights().chargeableWeightKg
                               const isBestCost = isBestCostQuote(quote)
                               const isFastest = isFastestQuote(quote)
                               const isNew = highlightedAgentQuoteId === quote.id
@@ -3307,26 +3426,81 @@ const profitabilityColor =
                                     </div>
                                   </div>
 
-                                  <div className="grid grid-cols-2 gap-3 text-sm">
-                                    <div className={cn(mutedCardClass, 'p-3')}>
-                                      <p className="text-base font-bold text-slate-900 dark:text-white">
-                                        {quote.moneda || 'USD'} {formatCurrency(baseCost)}
-                                      </p>
-                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                        Costo base
-                                      </p>
-                                    </div>
+                                  {isAirConsolidatedQuote() ? (
+                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                      <div className={cn(mutedCardClass, 'p-3')}>
+                                        <p className="text-base font-bold text-slate-900 dark:text-white">
+                                          {quote.moneda || 'USD'}{' '}
+                                          {formatCurrency(airRatePerKg)}/KG
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                          Tarifa proveedor
+                                        </p>
+                                      </div>
 
-                                    <div className={cn(mutedCardClass, 'p-3')}>
-                                      <p className="text-base font-bold text-slate-900 dark:text-white">
-                                        USD {formatCurrency(finalSariCost)}
-                                      </p>
-                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                        Costo final
-                                      </p>
-                                    </div>
+                                      <div className={cn(mutedCardClass, 'p-3')}>
+                                        <p className="text-base font-bold text-slate-900 dark:text-white">
+                                          USD {formatCurrency(baseCost)}
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                          Flete calculado
+                                        </p>
+                                      </div>
 
-                                  </div>
+                                      <div className={cn(mutedCardClass, 'p-3')}>
+                                        <p className="text-base font-bold text-slate-900 dark:text-white">
+                                          {formatCurrency(actualWeightKg)} KG
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                          Peso real
+                                        </p>
+                                      </div>
+
+                                      <div className={cn(mutedCardClass, 'p-3')}>
+                                        <p className="text-base font-bold text-slate-900 dark:text-white">
+                                          {formatCurrency(volumetricWeightKg)} KG
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                          Peso volumétrico
+                                        </p>
+                                      </div>
+
+                                      <div className={cn(mutedCardClass, 'col-span-2 p-3')}>
+                                        <p className="text-base font-bold text-slate-900 dark:text-white">
+                                          {formatCurrency(chargeableWeightKg)} KG
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                          Peso cobrable
+                                        </p>
+                                      </div>
+
+                                      <div className="col-span-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100">
+                                        Cálculo: USD {formatCurrency(airRatePerKg)}/KG ×{' '}
+                                        {formatCurrency(chargeableWeightKg)} KG = USD{' '}
+                                        {formatCurrency(baseCost)}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                      <div className={cn(mutedCardClass, 'p-3')}>
+                                        <p className="text-base font-bold text-slate-900 dark:text-white">
+                                          {quote.moneda || 'USD'} {formatCurrency(baseCost)}
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                          Costo base
+                                        </p>
+                                      </div>
+
+                                      <div className={cn(mutedCardClass, 'p-3')}>
+                                        <p className="text-base font-bold text-slate-900 dark:text-white">
+                                          USD {formatCurrency(finalSariCost)}
+                                        </p>
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                          Costo final
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
 
                                   <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
                                     <div className="grid grid-cols-2 gap-3 text-xs text-slate-500 dark:text-slate-400">
@@ -4137,6 +4311,18 @@ const profitabilityColor =
                 </div>
 
                 <div className="flex flex-col justify-end gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={previewQuotationPdf}
+                    className={cn(
+                      secondaryButtonClass,
+                      'inline-flex items-center justify-center gap-2'
+                    )}
+                  >
+                    <FileText className="h-4 w-4" />
+                    Previsualizar PDF
+                  </button>
+
                   <button
                     onClick={approvePricing}
                     disabled={isPricingActionDisabled}
