@@ -1411,12 +1411,12 @@ export default function RoutingDetailPage() {
                     />
                 }
                 fileName={routingPdfFileName}
-                className={`${secondaryButtonClass} inline-flex items-center justify-center gap-2 px-4 py-2`}
+                className="flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 {({ loading }) => (
                   <>
                     <Download className="h-4 w-4" />
-                    {loading ? 'Generando PDF...' : 'Descargar Routing PDF'}
+                    {loading ? 'Generando...' : 'Descargar Routing PDF'}
                   </>
                 )}
               </PDFDownloadLink>
@@ -1424,7 +1424,7 @@ export default function RoutingDetailPage() {
               <button
                 type="button"
                 onClick={handlePrintRoutingPdf}
-                className={`${primaryButtonClass} inline-flex items-center justify-center gap-2 px-4 py-2`}
+                className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
                 <Printer className="h-4 w-4" />
                 Imprimir Routing
@@ -1437,12 +1437,12 @@ export default function RoutingDetailPage() {
               value={routing.operations_assigned_to || ''}
               onChange={(e) => assignOperationsUser(e.target.value)}
               disabled={assigning}
-              className="min-w-[260px] rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              className="h-9 min-w-[200px] rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"
             >
               <option value="">Sin asignar</option>
-              {operationsUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {`${user.nombre || ''} ${user.apellido || ''}`.trim() || user.email}
+              {operationsUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {`${u.nombre || ''} ${u.apellido || ''}`.trim() || u.email}
                 </option>
               ))}
             </select>
@@ -1599,7 +1599,7 @@ export default function RoutingDetailPage() {
               {aggregateBookingStatus}
             </span>
           </div>
-          <Info label="Total bookings" value={bookings.length} />
+          <Info label="Total bookings" value={bookings.length === 0 ? '0' : bookings.length} />
           <Info
             label="Contenedores asignados / total cotizado"
             value={containerAssignmentSummary}
@@ -2007,86 +2007,97 @@ export default function RoutingDetailPage() {
         </section>
       </div>
 
-      <div className="mt-6 flex justify-end gap-3">
-        {canSalesEditInitialInfo && (
-          <button
-            type="button"
-            onClick={() => saveSalesInitialInfo(true)}
-            disabled={saving}
-            className={primaryButtonClass}
-          >
-            {saving ? 'Enviando...' : 'Enviar a Operaciones'}
-          </button>
-        )}
+      <div className="mt-6 flex items-center justify-between gap-3">
+        <div>
+          {canCancelRouting && (
+            <button
+              type="button"
+              onClick={() => setCancelDialogOpen(true)}
+              className="rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              Cancelar SI
+            </button>
+          )}
+        </div>
 
-        {canManageRouting && (canCreateBooking || hasBooking) ? (
-          <button
-            type="button"
-            onClick={handleOpenBooking}
-            className={primaryButtonClass}
-          >
-            {hasBooking ? 'Abrir Booking' : 'Crear Booking'}
-          </button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {isRoutingCancelled && (
+            <span className="inline-flex items-center rounded-xl bg-red-100 px-3 py-2 text-sm font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300">
+              Cancelada
+            </span>
+          )}
 
-        {canManageRouting && (
-          <>
-            {isRoutingCancelled ? (
-              <span className="inline-flex items-center rounded-xl bg-red-100 px-4 py-2 text-sm font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300">
-                Cancelada
-              </span>
-            ) : isRoutingFinalized ? (
-              <span className="inline-flex items-center rounded-xl bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                Finalizado
-              </span>
-            ) : (
+          {isRoutingFinalized && !isRoutingCancelled && (
+            <span className="inline-flex items-center rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+              ✓ Finalizado
+            </span>
+          )}
+
+          {canSalesEditInitialInfo && (
+            <button
+              type="button"
+              onClick={() => saveSalesInitialInfo(true)}
+              disabled={saving}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            >
+              {saving ? 'Enviando...' : 'Enviar a Operaciones'}
+            </button>
+          )}
+
+          {canManageRouting && !isRoutingCancelled && (
+            <>
+              {routing.operational_status !== SI_READY_FOR_BOOKING &&
+                routing.shipment_status !== SI_VALIDATED && (
+                  <button
+                    type="button"
+                    onClick={validateRouting}
+                    disabled={validating}
+                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    {validating ? 'Validando...' : 'Validar SI'}
+                  </button>
+                )}
+
+              {(routing.operational_status === SI_READY_FOR_BOOKING ||
+                routing.shipment_status === SI_VALIDATED) && (
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Listo para Booking
+                </span>
+              )}
+
+              {!isRoutingFinalized && (
+                <button
+                  type="button"
+                  onClick={finalizeRouting}
+                  disabled={finalizing}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  {finalizing ? 'Finalizando...' : 'Finalizar SI'}
+                </button>
+              )}
+
+              {(canCreateBooking || hasBooking) && (
+                <button
+                  type="button"
+                  onClick={handleOpenBooking}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  {hasBooking ? 'Abrir Booking' : 'Crear Booking'}
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={finalizeRouting}
-                disabled={finalizing}
-                className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                onClick={saveRouting}
+                disabled={saving || isRoutingCancelled}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
-                {finalizing ? 'Finalizando...' : 'Finalizar Shipping Instruction'}
+                {saving ? 'Guardando...' : 'Guardar SI'}
               </button>
-            )}
-
-            <button
-              onClick={saveRouting}
-              disabled={saving || isRoutingCancelled}
-              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              {saving ? 'Guardando...' : 'Guardar Shipping Instructions'}
-            </button>
-
-            <button
-              onClick={validateRouting}
-              disabled={
-                validating ||
-                isRoutingCancelled ||
-                routing.operational_status === SI_READY_FOR_BOOKING ||
-                routing.shipment_status === SI_VALIDATED
-              }
-              className="rounded-xl bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {routing.operational_status === SI_READY_FOR_BOOKING ||
-              routing.shipment_status === SI_VALIDATED
-                ? 'Listo para Booking'
-                : validating
-                  ? 'Validando...'
-                  : 'Validar Shipping Instructions'}
-            </button>
-
-            {canCancelRouting && (
-              <button
-                type="button"
-                onClick={() => setCancelDialogOpen(true)}
-                className="rounded-xl border border-red-300 px-5 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-900/70 dark:text-red-300 dark:hover:bg-red-950/30"
-              >
-                Cancelar Shipping Instruction
-              </button>
-            )}
-          </>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
@@ -2135,12 +2146,15 @@ export default function RoutingDetailPage() {
                             {formattedEvent.description}
                           </p>
                         </div>
-                        <div className="shrink-0 text-left text-xs text-slate-500 dark:text-slate-400 sm:text-right">
-                          <span className="block font-medium text-slate-600 dark:text-slate-300">
-                            Fecha
-                          </span>
-                          <span>{new Date(event.date).toLocaleString('es-HN')}</span>
-                        </div>
+                        <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                          {new Date(event.date).toLocaleString('es-HN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">

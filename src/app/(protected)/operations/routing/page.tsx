@@ -1,25 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Eye } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   fieldClass,
   cardClass,
-  primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/src/components/ui/table'
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 const shippingInstructionStatuses = [
   'Pendiente de Validación',
@@ -31,86 +24,100 @@ const shippingInstructionStatuses = [
 type RoutingItem = {
   id: string
   routing_number: string
-  shipment_status: string
+  shipment_status: string | null
+  operational_status: string | null
   created_by: string | null
   agent_name: string | null
   created_at: string
   operations_assigned_to: string | null
-
   status: string | null
   origin_address: string | null
   destination_address: string | null
   container_qty: number | null
   container_type: string | null
-
-  cliente?: {
-    nombre: string | null
-  } | null
-
-  quotation?: {
-    quotation_number: string | null
-  } | null
-
-  assigned_user?: {
-    nombre: string | null
-    apellido: string | null
-  } | null
+  cliente?: { nombre: string | null } | null
+  quotation?: { quotation_number: string | null } | null
+  assigned_user?: { nombre: string | null; apellido: string | null } | null
 }
 
-function getShippingInstructionStatus(status?: string | null) {
-  if (status === 'Pendiente Validación') return 'Pendiente de Validación'
-  if (status === 'Validada') return 'Listo para Booking'
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  return status || 'Pendiente de Validación'
+function resolveStatus(item: RoutingItem): string {
+  const s = item.shipment_status || ''
+  if (s === 'Pendiente Validación') return 'Pendiente Validación'
+  if (s === 'Validada')             return 'Listo para Booking'
+  if (s === 'Booking Solicitado')   return 'Booking Solicitado'
+  if (s === 'Booking Confirmado')   return 'Booking Confirmado'
+  if (s === 'En Tránsito')          return 'En Tránsito'
+  if (s === 'Arribado')             return 'Arribado'
+  if (s === 'Finalizado')           return 'Finalizado'
+  if (s === 'Cancelada')            return 'Cancelada'
+  return s || 'Pendiente Validación'
 }
 
-function formatContainerSummary(item: RoutingItem) {
-  const containerType = item.container_type?.trim()
-  const containerQty = item.container_qty
-
-  if (containerType && /^\d+\s*x\s+/i.test(containerType)) {
-    return containerType
+function getStatusBadge(status: string) {
+  switch (status) {
+    case 'Pendiente Validación':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+    case 'Listo para Booking':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+    case 'Booking Solicitado':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+    case 'Booking Confirmado':
+      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+    case 'En Tránsito':
+      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
+    case 'Arribado':
+    case 'Finalizado':
+      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+    case 'Cancelada':
+      return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+    default:
+      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
   }
+}
 
-  if (containerQty && containerType) {
-    return `${containerQty} x ${containerType}`
-  }
-
-  if (containerType) {
-    return containerType
-  }
-
+function formatContainer(item: RoutingItem): string {
+  const type = item.container_type?.trim()
+  const qty  = item.container_qty
+  if (type && /^\d+\s*x\s+/i.test(type)) return type
+  if (qty && type) return `${qty} x ${type}`
+  if (type) return type
   return 'N/A'
 }
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('es-HN', {
+    day:   '2-digit',
+    month: 'short',
+    year:  'numeric',
+  })
+}
+
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function RoutingInboxPage() {
   const router = useRouter()
   const { user, profile, loading: userLoading } = useUser()
 
   const [routingList, setRoutingList] = useState<RoutingItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading,      setLoading]      = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [search, setSearch] = useState('')
+  const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('Todos')
-  const [assignmentFilter, setAssignmentFilter] = useState('Todos')
+  const [assignFilter, setAssignFilter] = useState('Todos')
 
   const loadRouting = async () => {
     if (userLoading) return
-
     setLoading(true)
     setErrorMessage('')
 
-    // TODO: Reforzar este filtro en Supabase RLS para shipping_instructions.
     let query = supabase
       .from('shipping_instructions')
       .select(`
         *,
-        cliente:clientes (
-          nombre
-        ),
-        quotation:quotations (
-          quotation_number
-        ),
+        cliente:clientes ( nombre ),
+        quotation:quotations ( quotation_number ),
         assigned_user:profiles!shipping_instructions_operations_assigned_to_fkey (
           nombre,
           apellido
@@ -119,87 +126,82 @@ export default function RoutingInboxPage() {
       .order('created_at', { ascending: false })
 
     if (profile?.rol === 'Ventas') {
-      if (!user?.id) {
-        setRoutingList([])
-        setLoading(false)
-        return
-      }
-
+      if (!user?.id) { setRoutingList([]); setLoading(false); return }
       query = query.eq('created_by', user.id)
     }
 
     const { data, error } = await query
-
-    if (error) {
-      setErrorMessage(error.message)
-      setLoading(false)
-      return
-    }
-
+    if (error) { setErrorMessage(error.message); setLoading(false); return }
     setRoutingList((data || []) as RoutingItem[])
     setLoading(false)
   }
 
-  useEffect(() => {
-    loadRouting()
-  }, [profile?.rol, user?.id, userLoading])
+  useEffect(() => { loadRouting() }, [profile?.rol, user?.id, userLoading])
 
-  const filteredRouting = routingList.filter((item) => {
-    const query = search.toLowerCase()
+  // Métricas
+  const metrics = useMemo(() => ({
+    total:      routingList.length,
+    pendientes: routingList.filter(i => resolveStatus(i) === 'Pendiente Validación').length,
+    listos:     routingList.filter(i => resolveStatus(i) === 'Listo para Booking').length,
+    enBooking:  routingList.filter(i => ['Booking Solicitado', 'Booking Confirmado'].includes(resolveStatus(i))).length,
+  }), [routingList])
+
+  // Filtros
+  const filtered = routingList.filter((item) => {
+    const q      = search.toLowerCase()
+    const status = resolveStatus(item)
 
     const matchesSearch =
-      item.routing_number?.toLowerCase().includes(query) ||
-      item.agent_name?.toLowerCase().includes(query) ||
-      item.cliente?.nombre?.toLowerCase().includes(query)
-
-    const siStatus = getShippingInstructionStatus(item.shipment_status)
+      item.routing_number?.toLowerCase().includes(q) ||
+      item.agent_name?.toLowerCase().includes(q) ||
+      item.cliente?.nombre?.toLowerCase().includes(q) ||
+      item.quotation?.quotation_number?.toLowerCase().includes(q)
 
     const matchesStatus =
-      statusFilter === 'Todos' ||
-      siStatus === statusFilter
+      statusFilter === 'Todos' || status === statusFilter
 
-    const matchesAssignment =
-      assignmentFilter === 'Todos' ||
+    const matchesAssign =
+      assignFilter === 'Todos' ||
+      (assignFilter === 'Sin asignar'      && !item.operations_assigned_to) ||
+      (assignFilter === 'Mis asignados'    && item.operations_assigned_to === profile?.id) ||
+      (assignFilter === 'Pendientes'       && status === 'Pendiente Validación') ||
+      (assignFilter === 'Listos para Booking' && status === 'Listo para Booking')
 
-      (assignmentFilter === 'Sin asignar' &&
-        !item.operations_assigned_to) ||
-
-      (assignmentFilter === 'Mis asignados' &&
-        item.operations_assigned_to === profile?.id) ||
-
-      (assignmentFilter === 'Pendientes' &&
-        siStatus === 'Pendiente de Validación') ||
-
-
-      (assignmentFilter === 'Listos para Booking' &&
-        siStatus === 'Listo para Booking')
-
-    return matchesSearch && matchesStatus && matchesAssignment
+    return matchesSearch && matchesStatus && matchesAssign
   })
 
   return (
     <div className="space-y-6">
+
+      {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-slate-900 dark:text-white">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
           Shipping Instructions
         </h1>
-
-        <p className="mt-2 text-gray-500 dark:text-slate-400">
-          Gestiona las instrucciones operativas enviadas por ventas antes de crear el booking.
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Instrucciones operativas enviadas por Ventas antes del booking.
         </p>
       </div>
 
-      <div className="mb-5 grid gap-3 lg:grid-cols-3">
+      {/* Métricas */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Total" value={metrics.total} />
+        <MetricCard label="Pendientes validación" value={metrics.pendientes} color="amber" />
+        <MetricCard label="Listos para booking"   value={metrics.listos}     color="emerald" />
+        <MetricCard label="En booking"            value={metrics.enBooking}  color="blue" />
+      </div>
+
+      {/* Filtros */}
+      <div className="grid gap-3 lg:grid-cols-3">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar RT, cliente o agente..."
+          placeholder="Buscar RT, cotización, cliente o agente..."
           className={fieldClass}
         />
-
         <select
-          value={assignmentFilter}
-          onChange={(e) => setAssignmentFilter(e.target.value)}
+          value={assignFilter}
+          onChange={(e) => setAssignFilter(e.target.value)}
           className={fieldClass}
         >
           <option value="Todos">Todos</option>
@@ -208,113 +210,154 @@ export default function RoutingInboxPage() {
           <option value="Pendientes">Pendientes</option>
           <option value="Listos para Booking">Listos para Booking</option>
         </select>
-
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className={fieldClass}
         >
           <option value="Todos">Todos los estados</option>
-
-          {shippingInstructionStatuses.map((status) => (
-            <option key={status} value={status}>
-              {status}
-            </option>
+          {shippingInstructionStatuses.map((s) => (
+            <option key={s} value={s}>{s}</option>
           ))}
         </select>
       </div>
 
-      <div className={`${cardClass} overflow-x-auto p-0`}>
+      {/* Tabla */}
+      <div className={`${cardClass} overflow-hidden p-0`}>
         {loading ? (
           <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
             Cargando instrucciones...
           </p>
         ) : errorMessage ? (
-          <p className="p-6 text-sm text-red-500">
-            {errorMessage}
-          </p>
-        ) : filteredRouting.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
-            No hay Shipping Instructions generadas.
-          </p>
+          <p className="p-6 text-sm text-red-500">{errorMessage}</p>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-14 text-center">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+              Sin resultados
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              No hay Shipping Instructions que coincidan con los filtros.
+            </p>
+          </div>
         ) : (
-          <Table>
-            <TableHeader className="bg-black dark:bg-[#081120]">
-              <TableRow className="bg-black hover:bg-black dark:bg-[#081120] dark:hover:bg-[#081120]">
-                <TableHead className="text-white">SI</TableHead>
-                <TableHead className="text-white">Cotización</TableHead>
-                <TableHead className="text-white">Cliente</TableHead>
-                <TableHead className="text-white">Ruta</TableHead>
-                <TableHead className="text-white">Agente</TableHead>
-                <TableHead className="text-white">Contenedor</TableHead>
-                <TableHead className="text-white">Asignado a</TableHead>
-                <TableHead className="text-white">Estado operativo</TableHead>
-                <TableHead className="text-white">Estado</TableHead>
-                <TableHead className="text-white">Detalle</TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {filteredRouting.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-semibold">
-                    {item.routing_number || item.id}
-                  </TableCell>
-
-                  <TableCell>
-                    {item.quotation?.quotation_number || 'N/A'}
-                  </TableCell>
-
-                  <TableCell>
-                    {item.cliente?.nombre || 'N/A'}
-                  </TableCell>
-
-                  <TableCell>
-                    {item.origin_address || 'N/A'} - {item.destination_address || 'N/A'}
-                  </TableCell>
-
-                  <TableCell>
-                    {item.agent_name || 'N/A'}
-                  </TableCell>
-
-                  <TableCell>
-                    {formatContainerSummary(item)}
-                  </TableCell>
-
-                  <TableCell>
-                    {item.assigned_user
-                      ? `${item.assigned_user.nombre || ''} ${item.assigned_user.apellido || ''}`.trim()
-                      : 'Sin asignar'}
-                  </TableCell>
-
-                  <TableCell>
-                    <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                      {getShippingInstructionStatus(item.shipment_status)}
-                    </span>
-                  </TableCell>
-
-                  <TableCell>
-                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {item.status || 'Pendiente'}
-                    </span>
-                  </TableCell>
-
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/operations/routing/${item.id}`)}
-                      title="Abrir SI"
-                      className={`${secondaryButtonClass} inline-flex h-9 w-9 items-center justify-center p-0`}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-900 dark:bg-[#081120]">
+                  {['SI', 'Cotización', 'Cliente', 'Ruta', 'Agente', 'Contenedor', 'Fecha', 'Asignado a', 'Estado', ''].map((h) => (
+                    <th
+                      key={h}
+                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-300"
                     >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((item) => {
+                  const status  = resolveStatus(item)
+                  const badge   = getStatusBadge(status)
+                  const assigned = item.assigned_user
+                    ? `${item.assigned_user.nombre || ''} ${item.assigned_user.apellido || ''}`.trim()
+                    : 'Sin asignar'
+
+                  return (
+                    <tr
+                      key={item.id}
+                      onClick={() => router.push(`/operations/routing/${item.id}`)}
+                      className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+                    >
+                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
+                        {item.routing_number || item.id}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                        {item.quotation?.quotation_number || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 dark:text-slate-200">
+                        {item.cliente?.nombre || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                        {[item.origin_address, item.destination_address]
+                          .filter(Boolean)
+                          .join(' → ') || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                        {item.agent_name || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                        {formatContainer(item)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
+                        {formatDate(item.created_at)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                        {assigned}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
+                          {status}
+                        </span>
+                      </td>
+                      <td
+                        className="px-4 py-3 text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/operations/routing/${item.id}`)}
+                          title="Abrir SI"
+                          className={`${secondaryButtonClass} inline-flex h-8 w-8 items-center justify-center p-0`}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+
+            <div className="border-t border-slate-100 px-4 py-2.5 dark:border-slate-800">
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                Mostrando {filtered.length} de {routingList.length} instrucciones
+              </p>
+            </div>
+          </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── MetricCard ───────────────────────────────────────────────────────────────
+
+function MetricCard({
+  label,
+  value,
+  color = 'slate',
+}: {
+  label: string
+  value: number
+  color?: 'slate' | 'amber' | 'emerald' | 'blue'
+}) {
+  const colors = {
+    slate:   'border-slate-200 bg-white dark:border-slate-700/60 dark:bg-[#0b1220]',
+    amber:   'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20',
+    emerald: 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20',
+    blue:    'border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/20',
+  }
+  const valueColors = {
+    slate:   'text-slate-900 dark:text-white',
+    amber:   'text-amber-700 dark:text-amber-300',
+    emerald: 'text-emerald-700 dark:text-emerald-300',
+    blue:    'text-blue-700 dark:text-blue-300',
+  }
+
+  return (
+    <div className={`rounded-2xl border p-5 shadow-sm ${colors[color]}`}>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
+      <p className={`mt-2 text-3xl font-bold ${valueColors[color]}`}>{value}</p>
     </div>
   )
 }
