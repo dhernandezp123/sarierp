@@ -300,38 +300,87 @@ function countAssignedBookingContainers(bookings: Booking[]) {
   }, 0)
 }
 
+function looksLikeUuid(value: unknown) {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+function isReadableUserName(value?: string | null) {
+  return Boolean(value && !looksLikeUuid(value))
+}
+
+function getMetadataValue(metadata: Record<string, unknown>, keys: string[]) {
+  return keys
+    .map((key) => metadata[key])
+    .find((value) => value !== null && value !== undefined && value !== '')
+}
+
 function formatMetadataSummary(metadata?: Record<string, unknown> | null) {
   if (!metadata) return null
 
-  const entries = Object.entries(metadata)
-    .filter(([, value]) => value !== null && value !== undefined && value !== '')
-    .slice(0, 4)
+  const summaryParts: string[] = []
+  const previousStatus = getMetadataValue(metadata, ['oldStatus', 'previous_status', 'previousStatus'])
+  const newStatus = getMetadataValue(metadata, ['newStatus', 'new_status'])
 
-  if (entries.length === 0) return null
+  if (previousStatus && newStatus) {
+    summaryParts.push(`Estado: ${String(previousStatus)} → ${String(newStatus)}`)
+  }
 
-  return entries
-    .map(([key, value]) => `${key}: ${String(value)}`)
-    .join(' | ')
+  const businessFields: Array<[string, string]> = [
+    ['routingCode', 'Routing'],
+    ['routing_number', 'Routing'],
+    ['quotationNumber', 'Cotización'],
+    ['quotation_number', 'Cotización'],
+    ['booking_number', 'Booking'],
+    ['carrier', 'Carrier'],
+    ['bookings_count', 'Bookings asociados'],
+    ['confirmed_bookings_count', 'Bookings confirmados'],
+    ['total_containers', 'Contenedores'],
+    ['reason', 'Motivo'],
+    ['location', 'Ubicación'],
+  ]
+
+  businessFields.forEach(([key, label]) => {
+    const value = metadata[key]
+    if (value === null || value === undefined || value === '' || looksLikeUuid(value)) return
+    summaryParts.push(`${label}: ${String(value)}`)
+  })
+
+  if (summaryParts.length === 0) return null
+
+  return summaryParts.slice(0, 6)
 }
 
 function formatOperationalEvent(event: OperationalTimelineEvent) {
   const metadataSummary = formatMetadataSummary(event.metadata)
-  const titleByAction: Record<string, string> = {
-    shipping_instruction_created: 'SI creada',
-    shipping_instruction_updated: 'Informacion operativa actualizada',
-    shipping_instruction_validated: 'SI validada por Operaciones',
-    shipping_instruction_assigned: 'Operativo asignado',
-    shipping_instruction_finalized: 'Shipping Instruction finalizada',
-    booking_child_updated: 'Booking actualizado',
-    booking_confirmed: 'Booking confirmado',
-    booking_containers_assigned: 'Contenedores asignados',
-    'Booking creado': 'Booking creado',
-    'Routing PDF generado': 'Routing PDF generado/descargado',
-    'Shipping Instruction finalizada': 'Shipping Instruction finalizada',
+  const titleByAction: Record<string, { icon: string; title: string }> = {
+    send_to_pricing: { icon: '📄', title: 'Cotización enviada a Pricing' },
+    status_changed: { icon: '🔁', title: 'Estado actualizado' },
+    pricing_approved: { icon: '💰', title: 'Pricing aprobado' },
+    sent_to_client: { icon: '📄', title: 'Cotización enviada al cliente' },
+    quotation_reopened_for_repricing: { icon: '🔁', title: 'Cotización reabierta para repricing' },
+    repricing_approved_with_operational_sync: { icon: '💰', title: 'Repricing aprobado y operación actualizada' },
+    repricing_approved_without_operational_sync: { icon: '💰', title: 'Repricing aprobado sin actualizar operación' },
+    post_approval_change: { icon: '🔁', title: 'Cambio posterior a aprobación' },
+    shipping_instruction_created: { icon: '🚢', title: 'Shipping Instruction creada' },
+    shipping_instruction_updated: { icon: '🚢', title: 'Información operativa actualizada' },
+    shipping_instruction_validated: { icon: '✅', title: 'SI validada por Operaciones' },
+    shipping_instruction_assigned: { icon: '👤', title: 'Operativo asignado' },
+    shipping_instruction_finalized: { icon: '🚢', title: 'Shipping Instruction finalizada' },
+    booking_created: { icon: '📦', title: 'Booking creado' },
+    'Booking creado': { icon: '📦', title: 'Booking creado' },
+    booking_confirmed: { icon: '📦', title: 'Booking confirmado' },
+    booking_child_updated: { icon: '📦', title: 'Booking actualizado' },
+    booking_updated: { icon: '📦', title: 'Booking actualizado' },
+    booking_containers_assigned: { icon: '🚚', title: 'Contenedores asignados' },
+    'Routing PDF generado': { icon: '🖨️', title: 'Routing PDF generado' },
+    shipment_event_created: { icon: '🚢', title: 'Evento de embarque registrado' },
+    'Shipping Instruction finalizada': { icon: '🚢', title: 'Shipping Instruction finalizada' },
   }
+  const mappedEvent = titleByAction[event.eventType]
 
   return {
-    title: titleByAction[event.eventType] || event.eventType,
+    title: mappedEvent ? `${mappedEvent.icon} ${mappedEvent.title}` : event.eventType,
     description: event.description,
     metadataSummary,
   }
@@ -348,6 +397,7 @@ export default function RoutingDetailPage() {
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [operationalEvents, setOperationalEvents] = useState<OperationalTimelineEvent[]>([])
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false)
   const [quotedContainerTotal, setQuotedContainerTotal] = useState(0)
   const [operationsUsers, setOperationsUsers] = useState<OperationsUser[]>([])
   const [saving, setSaving] = useState(false)
@@ -365,6 +415,10 @@ export default function RoutingDetailPage() {
     routing?.created_by === user?.id &&
     !routing?.sales_submitted_at &&
     routing?.operational_status === SI_PENDING_VALIDATION
+  const visibleOperationalEvents = isTimelineExpanded
+    ? operationalEvents
+    : operationalEvents.slice(0, 3)
+  const shouldShowTimelineToggle = operationalEvents.length > 3
   const canEditSupplierInfo =
     (canManageRouting && routing?.shipment_status !== 'Finalizado') ||
     canSalesEditInitialInfo
@@ -506,7 +560,7 @@ export default function RoutingDetailPage() {
         date: event.event_date || event.created_at,
         eventType: event.event_type,
         description: event.notes || event.location || event.event_type,
-        userName: event.created_by || null,
+        userName: isReadableUserName(event.created_by) ? event.created_by : null,
         bookingLabel: null,
         metadata: event.location ? { location: event.location } : null,
       }))
@@ -1514,65 +1568,6 @@ export default function RoutingDetailPage() {
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-          Timeline Operativo
-        </h2>
-
-        <div className="mt-5 space-y-3">
-          {operationalEvents.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center dark:border-slate-700">
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                Aún no hay eventos operativos registrados.
-              </p>
-            </div>
-          ) : (
-            operationalEvents.map((event) => {
-              const formattedEvent = formatOperationalEvent(event)
-
-              return (
-                <div
-                  key={event.id}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                        {formattedEvent.title}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                        {formattedEvent.description}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
-                      {new Date(event.date).toLocaleString('es-HN')}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    {event.userName && (
-                      <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
-                        {event.userName}
-                      </span>
-                    )}
-                    {event.bookingLabel && (
-                      <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
-                        Booking: {event.bookingLabel}
-                      </span>
-                    )}
-                    {formattedEvent.metadataSummary && (
-                      <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
-                        {formattedEvent.metadataSummary}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-      </section>
-
       {!canManageRouting && canSalesEditInitialInfo && (
         <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
           Completa la información inicial del proveedor y envíala a Operaciones.
@@ -1948,6 +1943,89 @@ export default function RoutingDetailPage() {
           </>
         )}
       </div>
+
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Timeline Operativo ({operationalEvents.length} eventos)
+          </h2>
+
+          {shouldShowTimelineToggle && (
+            <button
+              type="button"
+              onClick={() => setIsTimelineExpanded((current) => !current)}
+              className={`${secondaryButtonClass} inline-flex items-center justify-center px-4 py-2 text-sm`}
+            >
+              {isTimelineExpanded ? 'Ocultar historial' : 'Ver historial completo'}
+            </button>
+          )}
+        </div>
+
+        <div className="mt-5">
+          {operationalEvents.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center dark:border-slate-700">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                Aún no hay eventos operativos registrados.
+              </p>
+            </div>
+          ) : (
+            <div className="relative space-y-4">
+              <div className="absolute bottom-4 left-3 top-4 w-px bg-slate-200 dark:bg-slate-800" />
+              {visibleOperationalEvents.map((event) => {
+                const formattedEvent = formatOperationalEvent(event)
+
+                return (
+                  <div
+                    key={event.id}
+                    className="relative pl-9"
+                  >
+                    <span className="absolute left-0 top-5 h-6 w-6 rounded-full border-4 border-white bg-blue-600 shadow-sm dark:border-[#0b1220]" />
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                            {formattedEvent.title}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                            {formattedEvent.description}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-left text-xs text-slate-500 dark:text-slate-400 sm:text-right">
+                          <span className="block font-medium text-slate-600 dark:text-slate-300">
+                            Fecha
+                          </span>
+                          <span>{new Date(event.date).toLocaleString('es-HN')}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        {event.userName && (
+                          <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
+                            Usuario: {event.userName}
+                          </span>
+                        )}
+                        {event.bookingLabel && (
+                          <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
+                            Booking: {event.bookingLabel}
+                          </span>
+                        )}
+                        {formattedEvent.metadataSummary?.map((detail) => (
+                          <span
+                            key={detail}
+                            className="rounded-full bg-white px-2 py-1 dark:bg-slate-900"
+                          >
+                            {detail}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   )
 }
