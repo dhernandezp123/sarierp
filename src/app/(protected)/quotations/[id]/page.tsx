@@ -89,10 +89,24 @@ type ActivityLog = {
   action: string
   description: string | null
   created_at: string
+  metadata?: Record<string, unknown> | null
+  entity_type?: string | null
+  entity_id?: string | null
   created_by_profile?: {
     nombre: string | null
     apellido: string | null
   } | null
+}
+
+type CommercialTimelineEvent = {
+  id: string
+  created_at: string
+  title: string
+  description: string
+  userName: string
+  metadataChips: string[]
+  dotClassName: string
+  cardClassName: string
 }
 
 type QuotationDetail = any & {
@@ -124,6 +138,78 @@ const formatDisplayDate = (date?: string | null) => {
     month: '2-digit',
     year: 'numeric',
   }).format(new Date(date))
+}
+
+const looksLikeUuid = (value: unknown) =>
+  typeof value === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+
+const getProfileName = (
+  profile?: { nombre: string | null; apellido: string | null } | null,
+  fallback = 'Sistema'
+) => {
+  const name = profile?.nombre || profile?.apellido
+    ? `${profile?.nombre || ''} ${profile?.apellido || ''}`.trim()
+    : ''
+
+  return name || fallback
+}
+
+const getMetadataValue = (metadata: Record<string, unknown>, keys: string[]) =>
+  keys
+    .map((key) => metadata[key])
+    .find((value) => value !== null && value !== undefined && value !== '')
+
+const formatCommercialMetadata = (metadata?: Record<string, unknown> | null) => {
+  if (!metadata) return []
+
+  const chips: string[] = []
+  const previousStatus = getMetadataValue(metadata, ['oldStatus', 'previous_status', 'previousStatus'])
+  const newStatus = getMetadataValue(metadata, ['newStatus', 'new_status'])
+
+  if (previousStatus && newStatus) {
+    chips.push(`Estado: ${String(previousStatus)} → ${String(newStatus)}`)
+  }
+
+  const fields: Array<[string, string]> = [
+    ['reason', 'Motivo'],
+    ['bookings_count', 'Bookings asociados'],
+    ['confirmed_bookings_count', 'Bookings confirmados'],
+    ['routingCode', 'Routing'],
+    ['routing_number', 'Routing'],
+  ]
+
+  fields.forEach(([key, label]) => {
+    const value = metadata[key]
+    if (value === null || value === undefined || value === '' || looksLikeUuid(value)) return
+    chips.push(`${label}: ${String(value)}`)
+  })
+
+  return chips
+}
+
+const getCommercialActivityTitle = (action: string) => {
+  const titleByAction: Record<string, string> = {
+    pricing_approved: '💰 Pricing aprobado',
+    sent_to_client: '📤 Cotización enviada al cliente',
+    status_changed: '🔁 Estado actualizado',
+    quotation_reopened_for_repricing: '📄 Cotización reabierta para repricing',
+    repricing_approved_with_operational_sync: '💰 Repricing aprobado y operación actualizada',
+    repricing_approved_without_operational_sync: '💰 Repricing aprobado sin actualizar operación',
+    post_approval_change: '✏️ Cambio posterior a aprobación',
+    send_to_pricing: '📄 Cotización enviada a Pricing',
+    shipping_instruction_created: '🚢 Shipping Instruction creada',
+  }
+
+  return titleByAction[action] || action
+}
+
+const getCommercialChangeTitle = (changeType: string) => {
+  if (changeType === 'quotation_reopened_for_repricing') {
+    return '📄 Cotización reabierta para repricing'
+  }
+
+  return '✏️ Cambio posterior a aprobación'
 }
 
 export default function QuotationDetailPage() {
@@ -247,6 +333,9 @@ export default function QuotationDetailPage() {
         id,
         action,
         description,
+        metadata,
+        entity_type,
+        entity_id,
         created_at,
         created_by_profile:profiles!activity_logs_user_id_fkey (
           nombre,
@@ -299,6 +388,9 @@ export default function QuotationDetailPage() {
         id,
         action,
         description,
+        metadata,
+        entity_type,
+        entity_id,
         created_at,
         created_by_profile:profiles!activity_logs_user_id_fkey (
           nombre,
@@ -950,18 +1042,74 @@ const carrierLabel =
 const transshipmentLabel =
   selectedAgent?.transshipment || quotation?.transshipment || 'N/A'
 
-const combinedTimeline = [
-  ...(statusHistory || []).map((item) => ({
-    type: 'status' as const,
-    created_at: item.created_at,
-    data: item,
-  })),
+const isDuplicateStatusActivity = (log: ActivityLog) => {
+  if (log.action !== 'status_changed' || !log.metadata) return false
 
-  ...(changeLogs || []).map((item) => ({
-    type: 'change' as const,
-    created_at: item.created_at,
-    data: item,
-  })),
+  const oldStatus = getMetadataValue(log.metadata, ['oldStatus', 'previous_status'])
+  const newStatus = getMetadataValue(log.metadata, ['newStatus', 'new_status'])
+
+  if (!oldStatus || !newStatus) return false
+
+  return (statusHistory || []).some((statusLog) => {
+    const timeDiff = Math.abs(
+      new Date(statusLog.created_at).getTime() - new Date(log.created_at).getTime()
+    )
+
+    return (
+      String(statusLog.old_status || '') === String(oldStatus) &&
+      String(statusLog.new_status || '') === String(newStatus) &&
+      timeDiff <= 60_000
+    )
+  })
+}
+
+const combinedTimeline: CommercialTimelineEvent[] = [
+  ...(statusHistory || []).map((log) => {
+    const userName = getProfileName(log.profiles, 'Usuario')
+
+    return {
+      id: `status-${log.id}`,
+      created_at: log.created_at,
+      title: '🔁 Estado actualizado',
+      description: 'Cambio de estado de la cotización.',
+      userName,
+      metadataChips: [`Estado: ${log.old_status || 'Sin estado'} → ${log.new_status}`],
+      dotClassName: 'bg-blue-600',
+      cardClassName: 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40',
+    }
+  }),
+
+  ...(changeLogs || []).map((log) => {
+    const userName = getProfileName(log.user, 'Usuario no identificado')
+
+    return {
+      id: `change-${log.id}`,
+      created_at: log.created_at,
+      title: getCommercialChangeTitle(log.change_type),
+      description: log.reason || `${log.field_name || 'Campo'} actualizado`,
+      userName,
+      metadataChips: log.reason ? [`Motivo: ${log.reason}`] : [],
+      dotClassName: 'bg-amber-500',
+      cardClassName: 'border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20',
+    }
+  }),
+
+  ...(activityLogs || [])
+    .filter((log) => !isDuplicateStatusActivity(log))
+    .map((log) => {
+      const userName = getProfileName(log.created_by_profile)
+
+      return {
+        id: `activity-${log.id}`,
+        created_at: log.created_at,
+        title: getCommercialActivityTitle(log.action),
+        description: log.description || getCommercialActivityTitle(log.action),
+        userName,
+        metadataChips: formatCommercialMetadata(log.metadata),
+        dotClassName: 'bg-slate-900 dark:bg-slate-100',
+        cardClassName: 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40',
+      }
+    }),
 ]
   .filter((item) => item.created_at)
   .sort(
@@ -1683,7 +1831,10 @@ const combinedTimeline = [
         <TabsContent value="historial">
           <Card>
             <CardHeader>
-              <CardTitle className="dark:text-white">Timeline de la Cotización</CardTitle>
+              <CardTitle className="dark:text-white">Historial Comercial</CardTitle>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Cambios de estado, pricing, repricing y actividad comercial.
+              </p>
             </CardHeader>
 
             <CardContent>
@@ -1692,97 +1843,50 @@ const combinedTimeline = [
                   No hay movimientos registrados.
                 </p>
               ) : (
-                <div className="space-y-4">
-                  {combinedTimeline.map((item, index) => {
-                    if (item.type === 'status') {
-                      const log = item.data
-                      const userName = log.profiles
-                        ? `${log.profiles.nombre || ''} ${log.profiles.apellido || ''}`.trim()
-                        : 'Usuario'
+                <div className="relative space-y-4">
+                  <div className="absolute bottom-4 left-3 top-4 w-px bg-slate-200 dark:bg-slate-800" />
+                  {combinedTimeline.map((item) => (
+                    <div key={item.id} className="relative pl-9">
+                      <span
+                        className={`absolute left-0 top-5 h-6 w-6 rounded-full border-4 border-white shadow-sm dark:border-[#0b1220] ${item.dotClassName}`}
+                      />
 
-                      return (
-                        <div key={`status-${log.id}`} className="flex gap-3">
-                          <div className="flex flex-col items-center">
-                            <div className="mt-1 h-3 w-3 rounded-full bg-blue-600" />
-
-                            {index !== combinedTimeline.length - 1 && (
-                              <div className="min-h-[40px] w-px flex-1 bg-slate-300 dark:bg-slate-700" />
-                            )}
-                          </div>
-
-                          <div className="flex-1 rounded-xl border p-3 dark:border-slate-700 dark:bg-slate-950/40">
-                            <div className="flex justify-between gap-4">
-                              <div>
-                                <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-200">
-                                  Cambio de estado
-                                </span>
-
-                                <p className="mt-2 text-sm font-semibold dark:text-white">
-                                  {log.old_status || 'Sin estado'} a {log.new_status}
-                                </p>
-
-                                <p className="mt-1 text-sm text-gray-600 dark:text-slate-300">
-                                  Cambio de estado de la cotización.
-                                </p>
-
-                                <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
-                                  Por: {userName || 'Usuario'}
-                                </p>
-                              </div>
-
-                              <p className="whitespace-nowrap text-xs text-gray-400 dark:text-slate-500">
-                                {new Date(log.created_at).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    }
-
-                    const log = item.data
-                    const userName =
-                      log.user?.nombre || log.user?.apellido
-                        ? `${log.user?.nombre || ''} ${log.user?.apellido || ''}`.trim()
-                        : 'Usuario no identificado'
-
-                    return (
-                      <div key={`change-${log.id}`} className="flex gap-3">
-                        <div className="flex flex-col items-center">
-                          <div className="mt-1 h-3 w-3 rounded-full bg-amber-500" />
-
-                          {index !== combinedTimeline.length - 1 && (
-                            <div className="min-h-[40px] w-px flex-1 bg-slate-300 dark:bg-slate-700" />
-                          )}
-                        </div>
-
-                        <div className="flex-1 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
-                          <div className="flex justify-between gap-4">
-                            <div>
-                              <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-200">
-                                Cambio registrado
-                              </span>
-
-                              <p className="mt-2 text-sm font-semibold dark:text-white">
-                                {log.change_type}
-                              </p>
-
-                              <p className="mt-1 text-sm text-gray-600 dark:text-slate-300">
-                                {log.reason || `${log.field_name || 'Campo'} actualizado`}
-                              </p>
-
-                              <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
-                                Por: {userName}
-                              </p>
-                            </div>
-
-                            <p className="whitespace-nowrap text-xs text-gray-400 dark:text-slate-500">
-                              {new Date(log.created_at).toLocaleString()}
+                      <div className={`rounded-xl border p-4 shadow-sm ${item.cardClassName}`}>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                              {item.title}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                              {item.description}
                             </p>
                           </div>
+
+                          <div className="shrink-0 text-left text-xs text-slate-500 dark:text-slate-400 sm:text-right">
+                            <span className="block font-medium text-slate-600 dark:text-slate-300">
+                              Fecha
+                            </span>
+                            <span>{new Date(item.created_at).toLocaleString()}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
+                            Usuario: {item.userName}
+                          </span>
+
+                          {item.metadataChips.map((chip) => (
+                            <span
+                              key={chip}
+                              className="rounded-full bg-white px-2 py-1 dark:bg-slate-900"
+                            >
+                              {chip}
+                            </span>
+                          ))}
                         </div>
                       </div>
-                    )
-                  })}
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
