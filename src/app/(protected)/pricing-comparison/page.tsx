@@ -502,6 +502,32 @@ function PricingComparisonContent() {
     return Number(rate?.amount || 0)
   }
 
+  const normalizeText = (value?: string | null) =>
+    (value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+
+  const isAirQuote = (quote = selectedQuote) =>
+    normalizeText(quote?.tipo_transporte) === 'aereo'
+
+  const isAirConsolidatedQuote = (quote = selectedQuote) =>
+    isAirQuote(quote) && normalizeText(quote?.quote_type) === 'consolidado'
+
+  const getFreightDescription = (quote = selectedQuote) => {
+    if (isAirConsolidatedQuote(quote)) return 'Air Freight Consolidado'
+    if (isAirQuote(quote)) return 'Air Freight'
+    return 'Ocean Freight'
+  }
+
+  const getChargeableKg = () => {
+    const realKg = totalCargoKg || Number(selectedQuote?.peso_kg || 0)
+    const cbm = totalCargoCbm || Number(selectedQuote?.volumen_cbm || 0)
+    const volumetricKg = cbm * 167
+
+    return Math.max(realKg, volumetricKg, 0)
+  }
+
   const getTotalContainersQty = (fallbackQty?: string | number) =>
     quotationContainers.length > 0
       ? quotationContainers.reduce(
@@ -510,8 +536,12 @@ function PricingComparisonContent() {
         )
       : Number(fallbackQty || agentForm.containers_qty || 1)
 
-  const getTotalOceanFreight = () =>
-    containerRateLines.length > 0
+  const getTotalOceanFreight = () => {
+    if (isAirConsolidatedQuote()) {
+      return Number(agentForm.ocean_freight || 0) * getChargeableKg()
+    }
+
+    return containerRateLines.length > 0
       ? containerRateLines.reduce(
           (sum, line) =>
             sum +
@@ -520,16 +550,26 @@ function PricingComparisonContent() {
           0
         )
       : Number(agentForm.ocean_freight || 0)
+  }
 
   const handleEditAgentQuote = async (quote: any) => {
     if (!ensureQuoteIsEditable()) return
 
     setEditingAgentQuoteId(quote.id)
+    const chargeableKg = getChargeableKg()
+    const airRatePerKg =
+      isAirConsolidatedQuote() && chargeableKg > 0
+        ? Number(quote.ocean_freight || quote.costo || 0) / chargeableKg
+        : null
 
     setAgentForm({
       agent_id: quote.agent_id || '',
       agente_nombre: quote.agente_nombre || '',
-      ocean_freight: String(quote.ocean_freight || quote.costo || ''),
+      ocean_freight: String(
+        airRatePerKg !== null
+          ? airRatePerKg
+          : quote.ocean_freight || quote.costo || ''
+      ),
       exw_cost: String(quote.exw_cost || ''),
       mbl_fee: String(quote.mbl_fee || ''),
       profit_per_container: String(quote.profit_per_container || ''),
@@ -603,10 +643,10 @@ function PricingComparisonContent() {
     if (reason === null) return
 
     const totalContainersQty = getTotalContainersQty()
-    const totalOceanFreight = getTotalOceanFreight()
+    const baseFreight = getTotalOceanFreight()
 
     const suggestedSale =
-      totalOceanFreight +
+      baseFreight +
       Number(agentForm.exw_cost || 0) +
       Number(agentForm.mbl_fee || 0) +
       Number(agentForm.profit_per_container || 0) * totalContainersQty
@@ -614,8 +654,8 @@ function PricingComparisonContent() {
     const agentQuotePayload = {
       agent_id: agentForm.agent_id || null,
       agente_nombre: agentForm.agente_nombre,
-      costo: totalOceanFreight,
-      ocean_freight: totalOceanFreight,
+      costo: baseFreight,
+      ocean_freight: baseFreight,
       exw_cost: Number(agentForm.exw_cost || 0),
       mbl_fee: Number(agentForm.mbl_fee || 0),
       profit_per_container: Number(agentForm.profit_per_container || 0),
@@ -917,8 +957,39 @@ function PricingComparisonContent() {
     const mblPerContainer =
       containersQty > 0 ? Number(selectedAgentQuote.mbl_fee || 0) / containersQty : 0
 
-    const oceanFreightLines =
-      containerRatesData && containerRatesData.length > 0
+    const freightDescription = getFreightDescription()
+    const chargeableKg = getChargeableKg()
+    const airRatePerKg =
+      isAirConsolidatedQuote() && chargeableKg > 0
+        ? oceanFreight / chargeableKg
+        : 0
+    const airFreightNotes =
+      isAirConsolidatedQuote() && chargeableKg > 0
+        ? `Peso cobrable ${chargeableKg.toFixed(
+            2
+          )} KG x tarifa proveedor USD ${airRatePerKg.toFixed(2)}/KG.`
+        : ''
+
+    const oceanFreightLines = isAirConsolidatedQuote()
+      ? [
+          {
+            quotation_id: selectedQuote.id,
+            item_type: 'Flete',
+            description: freightDescription,
+            cost_amount: oceanFreight + mblFee + totalProfit,
+            sale_amount: oceanFreight + mblFee + totalProfit,
+            quantity: 1,
+            taxable: false,
+            tax_rate: 15,
+            tax_amount: 0,
+            total_amount: oceanFreight + mblFee + totalProfit,
+            currency,
+            supplier,
+            notes: airFreightNotes,
+            created_by: profile?.id,
+          },
+        ]
+      : containerRatesData && containerRatesData.length > 0
         ? containerRatesData.map((rate) => {
             const unitOceanFreight =
               Number(rate.ocean_freight || 0) +
@@ -930,7 +1001,7 @@ function PricingComparisonContent() {
             return {
               quotation_id: selectedQuote.id,
               item_type: 'Flete',
-              description: `Ocean Freight ${rate.container_type_name}`,
+              description: `${freightDescription} ${rate.container_type_name}`,
               cost_amount: unitOceanFreight,
               sale_amount: unitOceanFreight,
               quantity,
@@ -948,7 +1019,7 @@ function PricingComparisonContent() {
             {
               quotation_id: selectedQuote.id,
               item_type: 'Flete',
-              description: 'Ocean Freight',
+              description: freightDescription,
               cost_amount: oceanFreight + mblFee + totalProfit,
               sale_amount: oceanFreight + mblFee + totalProfit,
               quantity: 1,
@@ -2093,7 +2164,9 @@ const profitabilityColor =
       : Number(agentForm.containers_qty || 1)
 
   const totalOceanFreight =
-    containerRateLines.length > 0
+    isAirConsolidatedQuote()
+      ? Number(agentForm.ocean_freight || 0) * getChargeableKg()
+      : containerRateLines.length > 0
       ? containerRateLines.reduce(
           (sum, line) =>
             sum +
@@ -2192,12 +2265,6 @@ const profitabilityColor =
 
   const isSelectedQuote = (quote: AgentQuote) =>
     selectedAgentQuote?.id === quote.id || quote.is_selected
-
-  const normalizeText = (value?: string | null) =>
-    (value || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
 
   const getServiceProductLabel = (serviceProduct?: string | null) => {
     return (
@@ -2872,12 +2939,16 @@ const profitabilityColor =
                           {quotationContainers.length === 0 && (
                             <div>
                               <label className={labelClass}>
-                                Costo proveedor
+                                {isAirConsolidatedQuote()
+                                  ? 'Tarifa por KG proveedor'
+                                  : 'Costo proveedor'}
                               </label>
 
                               <input
                                 name="ocean_freight"
-                                placeholder="Ocean Freight"
+                                placeholder={
+                                  isAirConsolidatedQuote() ? 'Ej. 3.50' : 'Ocean Freight'
+                                }
                                 value={agentForm.ocean_freight}
                                 onChange={handleAgentChange}
                                 className={cn(fieldClass, 'mt-1 w-full')}
@@ -2931,21 +3002,35 @@ const profitabilityColor =
                               Transbordo
                             </label>
 
-                            <select
-                              className={cn(fieldClass, 'mt-1 w-full')}
-                              value={agentForm.transshipment}
-                              onChange={(e) =>
-                                setAgentForm({ ...agentForm, transshipment: e.target.value })
-                              }
-                            >
-                              <option value="">Transbordo</option>
-                              <option value="Directo">Directo</option>
-                              <option value="Sí">Sí</option>
-                              <option value="Via Panamá">Via Panamá</option>
-                              <option value="Via Cartagena">Via Cartagena</option>
-                              <option value="Via Kingston">Via Kingston</option>
-                              <option value="Via Miami">Via Miami</option>
-                            </select>
+                            {isAirQuote() ? (
+                              <input
+                                className={cn(fieldClass, 'mt-1 w-full')}
+                                placeholder="BCN-LGG-ATL-MIA-SAP"
+                                value={agentForm.transshipment}
+                                onChange={(e) =>
+                                  setAgentForm({
+                                    ...agentForm,
+                                    transshipment: e.target.value,
+                                  })
+                                }
+                              />
+                            ) : (
+                              <select
+                                className={cn(fieldClass, 'mt-1 w-full')}
+                                value={agentForm.transshipment}
+                                onChange={(e) =>
+                                  setAgentForm({ ...agentForm, transshipment: e.target.value })
+                                }
+                              >
+                                <option value="">Transbordo</option>
+                                <option value="Directo">Directo</option>
+                                <option value="Sí">Sí</option>
+                                <option value="Via Panamá">Via Panamá</option>
+                                <option value="Via Cartagena">Via Cartagena</option>
+                                <option value="Via Kingston">Via Kingston</option>
+                                <option value="Via Miami">Via Miami</option>
+                              </select>
+                            )}
                           </div>
 
                           <div>
