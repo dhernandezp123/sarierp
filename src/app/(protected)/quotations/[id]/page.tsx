@@ -160,6 +160,29 @@ const getMetadataValue = (metadata: Record<string, unknown>, keys: string[]) =>
     .map((key) => metadata[key])
     .find((value) => value !== null && value !== undefined && value !== '')
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const formatSignedCurrency = (value: unknown) => {
+  const amount = Number(value || 0)
+  const sign = amount >= 0 ? '+' : '-'
+
+  return `${sign}USD ${Math.abs(amount).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+const formatSignedPoints = (value: unknown) => {
+  const amount = Number(value || 0)
+  const sign = amount >= 0 ? '+' : '-'
+
+  return `${sign}${Math.abs(amount).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} pts`
+}
+
 const formatCommercialMetadata = (metadata?: Record<string, unknown> | null) => {
   if (!metadata) return []
 
@@ -184,6 +207,13 @@ const formatCommercialMetadata = (metadata?: Record<string, unknown> | null) => 
     if (value === null || value === undefined || value === '' || looksLikeUuid(value)) return
     chips.push(`${label}: ${String(value)}`)
   })
+
+  if (isRecord(metadata.delta)) {
+    chips.push(`Venta: ${formatSignedCurrency(metadata.delta.total_sale)}`)
+    chips.push(`Costo: ${formatSignedCurrency(metadata.delta.total_cost)}`)
+    chips.push(`Profit: ${formatSignedCurrency(metadata.delta.profit_amount)}`)
+    chips.push(`GP: ${formatSignedPoints(metadata.delta.gp_percentage)}`)
+  }
 
   return chips
 }

@@ -145,6 +145,13 @@ type OperationalImpact = {
 
 type OperationalSyncMode = 'skip' | 'sync'
 
+type FinancialTotalsSnapshot = {
+  total_cost: number
+  total_sale: number
+  profit_amount: number
+  gp_percentage: number
+}
+
 const formatDisplayDate = (date?: string | null) => {
   if (!date) return 'N/A'
 
@@ -1811,6 +1818,79 @@ function PricingComparisonContent() {
     }
   }
 
+  const getPersistedFinancialTotals = (quote: any): FinancialTotalsSnapshot | null => {
+    const fields = [
+      quote?.total_cost,
+      quote?.total_sale,
+      quote?.profit_amount,
+      quote?.gp_percentage,
+    ]
+
+    if (fields.some((value) => value === null || value === undefined || value === '')) {
+      return null
+    }
+
+    const snapshot = {
+      total_cost: Number(quote.total_cost),
+      total_sale: Number(quote.total_sale),
+      profit_amount: Number(quote.profit_amount),
+      gp_percentage: Number(quote.gp_percentage),
+    }
+
+    if (Object.values(snapshot).some((value) => !Number.isFinite(value))) {
+      return null
+    }
+
+    return snapshot
+  }
+
+  const getCurrentFinancialTotals = (): FinancialTotalsSnapshot => ({
+    total_cost: totalCost,
+    total_sale: totalSale,
+    profit_amount: profit,
+    gp_percentage: gpPercentage,
+  })
+
+  const getFinancialDelta = (
+    previous: FinancialTotalsSnapshot,
+    next: FinancialTotalsSnapshot
+  ): FinancialTotalsSnapshot => ({
+    total_cost: next.total_cost - previous.total_cost,
+    total_sale: next.total_sale - previous.total_sale,
+    profit_amount: next.profit_amount - previous.profit_amount,
+    gp_percentage: next.gp_percentage - previous.gp_percentage,
+  })
+
+  const shouldCreateFinancialSnapshot = (
+    quote: any,
+    oldStatus: string,
+    isRepricing: boolean
+  ) => {
+    const snapshotStatuses = [
+      'Pricing Aprobado',
+      'Enviada al Cliente',
+      'Ganada',
+    ]
+
+    return (
+      Boolean(getPersistedFinancialTotals(quote)) &&
+      (snapshotStatuses.includes(oldStatus) || isRepricing)
+    )
+  }
+
+  const buildFinancialSnapshotMetadata = (
+    previous: FinancialTotalsSnapshot,
+    next: FinancialTotalsSnapshot,
+    reason: string | undefined,
+    changeType: string
+  ) => ({
+    reason: reason || null,
+    change_type: changeType,
+    previous_totals: previous,
+    new_totals: next,
+    delta: getFinancialDelta(previous, next),
+  })
+
   const executeApprovePricing = async (
     reason?: string,
     operationalSyncMode?: OperationalSyncMode
@@ -1835,6 +1915,28 @@ function PricingComparisonContent() {
     const isRepricing = Boolean(impact?.isRepricing)
     const nextStatus = isRepricing ? 'Ganada' : 'Pricing Aprobado'
     const isReapproval = oldStatus === 'Pricing Aprobado'
+    const previousFinancialTotals = shouldCreateFinancialSnapshot(
+      selectedQuote,
+      oldStatus,
+      isRepricing
+    )
+      ? getPersistedFinancialTotals(selectedQuote)
+      : null
+    const newFinancialTotals = previousFinancialTotals
+      ? getCurrentFinancialTotals()
+      : null
+    const getFinancialSnapshotMetadata = (changeType: string) =>
+      previousFinancialTotals && newFinancialTotals
+        ? buildFinancialSnapshotMetadata(
+            previousFinancialTotals,
+            newFinancialTotals,
+            reason,
+            changeType
+          )
+        : {
+            reason: reason || null,
+            change_type: changeType,
+          }
 
     if (!isRepricing && !isReapproval && !canTransition(oldStatus, nextStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
@@ -1888,18 +1990,18 @@ function PricingComparisonContent() {
       description: `Pricing aprobó la cotización ${
         selectedQuote.quotation_number || selectedQuote.id
       }`,
-      metadata: {
-        reason: reason || null,
-      },
+      metadata: getFinancialSnapshotMetadata('pricing_approved'),
     })
 
     if (isRepricing && operationalSyncMode) {
+      const repricingAction =
+        operationalSyncMode === 'sync'
+          ? 'repricing_approved_with_operational_sync'
+          : 'repricing_approved_without_operational_sync'
+
       await createActivityLog({
         module: 'pricing',
-        action:
-          operationalSyncMode === 'sync'
-            ? 'repricing_approved_with_operational_sync'
-            : 'repricing_approved_without_operational_sync',
+        action: repricingAction,
         entityType: 'quotation',
         entityId: selectedQuote.id,
         description:
@@ -1911,7 +2013,7 @@ function PricingComparisonContent() {
                 selectedQuote.quotation_number || selectedQuote.id
               }`,
         metadata: {
-          reason: reason || null,
+          ...getFinancialSnapshotMetadata(repricingAction),
           previous_status: oldStatus,
           new_status: nextStatus,
           has_shipping_instruction: impact?.hasShippingInstruction || false,
