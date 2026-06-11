@@ -16,6 +16,13 @@ import { supabase } from '@/src/lib/supabase/client'
 import { primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import RoutingOrderPDF from '@/src/components/pdf/routing-order-pdf'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/src/components/ui/dialog'
 
 type OperationsUser = {
   id: string
@@ -59,6 +66,7 @@ type OperationalTimelineEvent = {
 const SI_READY_FOR_BOOKING = 'Listo para Booking'
 const SI_PENDING_VALIDATION = 'Pendiente Validación'
 const SI_VALIDATED = 'Validada'
+const SI_CANCELLED = 'Cancelada'
 
 type ShippingInstruction = {
   id: string
@@ -367,6 +375,7 @@ function formatOperationalEvent(event: OperationalTimelineEvent) {
     shipping_instruction_validated: { icon: '✅', title: 'SI validada por Operaciones' },
     shipping_instruction_assigned: { icon: '👤', title: 'Operativo asignado' },
     shipping_instruction_finalized: { icon: '🚢', title: 'Shipping Instruction finalizada' },
+    shipping_instruction_cancelled: { icon: '🚫', title: 'Shipping Instruction cancelada' },
     booking_created: { icon: '📦', title: 'Booking creado' },
     'Booking creado': { icon: '📦', title: 'Booking creado' },
     booking_confirmed: { icon: '📦', title: 'Booking confirmado' },
@@ -376,6 +385,7 @@ function formatOperationalEvent(event: OperationalTimelineEvent) {
     'Routing PDF generado': { icon: '🖨️', title: 'Routing PDF generado' },
     shipment_event_created: { icon: '🚢', title: 'Evento de embarque registrado' },
     'Shipping Instruction finalizada': { icon: '🚢', title: 'Shipping Instruction finalizada' },
+    'Shipping Instruction cancelada': { icon: '🚫', title: 'Shipping Instruction cancelada' },
   }
   const mappedEvent = titleByAction[event.eventType]
 
@@ -405,6 +415,9 @@ export default function RoutingDetailPage() {
   const [finalizing, setFinalizing] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [creatingBooking, setCreatingBooking] = useState(false)
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelling, setCancelling] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
@@ -420,7 +433,10 @@ export default function RoutingDetailPage() {
     : operationalEvents.slice(0, 3)
   const shouldShowTimelineToggle = operationalEvents.length > 3
   const canEditSupplierInfo =
-    (canManageRouting && routing?.shipment_status !== 'Finalizado') ||
+    (canManageRouting &&
+      routing?.shipment_status !== 'Finalizado' &&
+      routing?.shipment_status !== SI_CANCELLED &&
+      routing?.operational_status !== SI_CANCELLED) ||
     canSalesEditInitialInfo
 
   const parseIntegerValue = (value: unknown) => {
@@ -674,6 +690,10 @@ export default function RoutingDetailPage() {
       toast.error('No tienes permisos para editar esta Shipping Instruction')
       return
     }
+    if (routing.shipment_status === SI_CANCELLED || routing.operational_status === SI_CANCELLED) {
+      toast.error('Esta Shipping Instruction está cancelada')
+      return
+    }
 
     setSaving(true)
 
@@ -791,6 +811,10 @@ export default function RoutingDetailPage() {
     if (!routing) return
     if (!canManageRouting) {
       toast.error('No tienes permisos para validar esta Shipping Instruction')
+      return
+    }
+    if (routing.shipment_status === SI_CANCELLED || routing.operational_status === SI_CANCELLED) {
+      toast.error('Esta Shipping Instruction está cancelada')
       return
     }
 
@@ -965,6 +989,10 @@ export default function RoutingDetailPage() {
       toast.error('No tienes permisos para finalizar esta Shipping Instruction')
       return
     }
+    if (routing.shipment_status === SI_CANCELLED || routing.operational_status === SI_CANCELLED) {
+      toast.error('Esta Shipping Instruction está cancelada')
+      return
+    }
 
     const validationError = validateCanFinalizeRouting()
     if (validationError) {
@@ -1022,10 +1050,98 @@ export default function RoutingDetailPage() {
     toast.success('Shipping Instruction finalizada')
   }
 
+  const cancelRouting = async () => {
+    if (!routing) return
+
+    if (!canManageRouting) {
+      toast.error('No tienes permisos para cancelar esta Shipping Instruction')
+      return
+    }
+
+    const reason = cancelReason.trim()
+
+    if (!reason) {
+      toast.error('Ingresa el motivo de cancelación')
+      return
+    }
+
+    if (bookings.length > 0) {
+      toast.error('No se puede cancelar desde aquí porque ya existen bookings')
+      return
+    }
+
+    if (routing.shipment_status === 'Finalizado' || routing.operational_status === 'Finalizado') {
+      toast.error('No se puede cancelar una Shipping Instruction finalizada')
+      return
+    }
+
+    if (routing.shipment_status === SI_CANCELLED || routing.operational_status === SI_CANCELLED) {
+      toast.error('Esta Shipping Instruction ya está cancelada')
+      return
+    }
+
+    setCancelling(true)
+
+    const previousShipmentStatus = routing.shipment_status
+    const previousOperationalStatus = routing.operational_status
+
+    const { error } = await supabase
+      .from('shipping_instructions')
+      .update({
+        shipment_status: SI_CANCELLED,
+        operational_status: SI_CANCELLED,
+      })
+      .eq('id', routing.id)
+
+    setCancelling(false)
+
+    if (error) {
+      toast.error(error.message || 'No se pudo cancelar la Shipping Instruction')
+      return
+    }
+
+    await createActivityLog({
+      module: 'operations_routing',
+      action: 'shipping_instruction_cancelled',
+      entityType: 'shipping_instruction',
+      entityId: routing.id,
+      description: `Shipping Instruction ${routing.routing_number} cancelada`,
+      metadata: {
+        routing_number: routing.routing_number,
+        previous_shipment_status: previousShipmentStatus,
+        previous_operational_status: previousOperationalStatus,
+        reason,
+        cancelled_by: user?.id,
+      },
+    })
+
+    await recordOperationalEvent({
+      eventType: 'Shipping Instruction cancelada',
+      notes: `Shipping Instruction ${routing.routing_number} cancelada. Motivo: ${reason}`,
+      metadata: {
+        routing_number: routing.routing_number,
+        reason,
+      },
+    })
+
+    setRouting({
+      ...routing,
+      shipment_status: SI_CANCELLED,
+      operational_status: SI_CANCELLED,
+    })
+    setCancelDialogOpen(false)
+    setCancelReason('')
+    toast.success('Shipping Instruction cancelada')
+  }
+
   const createBookingChild = async () => {
     if (!routing) return null
     if (!canManageRouting) {
       toast.error('No tienes permisos para crear booking desde esta Shipping Instruction')
+      return null
+    }
+    if (routing.shipment_status === SI_CANCELLED || routing.operational_status === SI_CANCELLED) {
+      toast.error('Esta Shipping Instruction está cancelada')
       return null
     }
     if (!user?.id) {
@@ -1190,6 +1306,13 @@ export default function RoutingDetailPage() {
       return
     }
 
+    if (
+      !isSalesInitialInfoField &&
+      (routing.shipment_status === SI_CANCELLED || routing.operational_status === SI_CANCELLED)
+    ) {
+      return
+    }
+
     if (!isSalesInitialInfoField && !canManageRouting) {
       return
     }
@@ -1200,8 +1323,19 @@ export default function RoutingDetailPage() {
     })
   }
 
+  const isRoutingFinalized =
+    routing.shipment_status === 'Finalizado' ||
+    routing.operational_status === 'Finalizado'
+  const isRoutingCancelled =
+    routing.shipment_status === SI_CANCELLED ||
+    routing.operational_status === SI_CANCELLED
+  const canCancelRouting =
+    canManageRouting &&
+    bookings.length === 0 &&
+    !isRoutingFinalized &&
+    !isRoutingCancelled
   const canCreateBooking =
-    canManageRouting && routing.operational_status === SI_READY_FOR_BOOKING
+    canManageRouting && !isRoutingCancelled && routing.operational_status === SI_READY_FOR_BOOKING
 
   const hasBooking =
     bookings.length > 0 ||
@@ -1252,10 +1386,6 @@ export default function RoutingDetailPage() {
     quotedContainerTotal > 0
       ? `${assignedContainerTotal} / ${quotedContainerTotal}`
       : `${assignedContainerTotal} / N/A`
-  const isRoutingFinalized =
-    routing.shipment_status === 'Finalizado' ||
-    routing.operational_status === 'Finalizado'
-
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1302,7 +1432,7 @@ export default function RoutingDetailPage() {
             </>
           )}
 
-          {canManageRouting && (
+          {canManageRouting && !isRoutingCancelled && (
             <select
               value={routing.operations_assigned_to || ''}
               onChange={(e) => assignOperationsUser(e.target.value)}
@@ -1443,7 +1573,7 @@ export default function RoutingDetailPage() {
             </p>
           </div>
 
-          {canManageRouting && (
+          {canManageRouting && !isRoutingCancelled && (
             <button
               type="button"
               onClick={handleCreateBookingChild}
@@ -1484,7 +1614,7 @@ export default function RoutingDetailPage() {
                   ? 'No hay bookings asociados.'
                   : 'No hay bookings creados todavía.'}
               </p>
-              {canManageRouting && (
+              {canManageRouting && !isRoutingCancelled && (
                 <button
                   type="button"
                   onClick={handleCreateBookingChild}
@@ -1901,7 +2031,11 @@ export default function RoutingDetailPage() {
 
         {canManageRouting && (
           <>
-            {isRoutingFinalized ? (
+            {isRoutingCancelled ? (
+              <span className="inline-flex items-center rounded-xl bg-red-100 px-4 py-2 text-sm font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                Cancelada
+              </span>
+            ) : isRoutingFinalized ? (
               <span className="inline-flex items-center rounded-xl bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                 Finalizado
               </span>
@@ -1918,7 +2052,7 @@ export default function RoutingDetailPage() {
 
             <button
               onClick={saveRouting}
-              disabled={saving}
+              disabled={saving || isRoutingCancelled}
               className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
               {saving ? 'Guardando...' : 'Guardar Shipping Instructions'}
@@ -1928,6 +2062,7 @@ export default function RoutingDetailPage() {
               onClick={validateRouting}
               disabled={
                 validating ||
+                isRoutingCancelled ||
                 routing.operational_status === SI_READY_FOR_BOOKING ||
                 routing.shipment_status === SI_VALIDATED
               }
@@ -1940,6 +2075,16 @@ export default function RoutingDetailPage() {
                   ? 'Validando...'
                   : 'Validar Shipping Instructions'}
             </button>
+
+            {canCancelRouting && (
+              <button
+                type="button"
+                onClick={() => setCancelDialogOpen(true)}
+                className="rounded-xl border border-red-300 px-5 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-900/70 dark:text-red-300 dark:hover:bg-red-950/30"
+              >
+                Cancelar Shipping Instruction
+              </button>
+            )}
           </>
         )}
       </div>
@@ -2026,6 +2171,58 @@ export default function RoutingDetailPage() {
           )}
         </div>
       </section>
+
+      <Dialog
+        open={cancelDialogOpen}
+        onOpenChange={(open) => {
+          setCancelDialogOpen(open)
+
+          if (!open && !cancelling) {
+            setCancelReason('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Cancelar Shipping Instruction</DialogTitle>
+            <DialogDescription>
+              Esta acción marcará la Shipping Instruction como cancelada. No eliminará la cotización ni los datos operativos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Motivo de cancelación
+            </label>
+            <textarea
+              value={cancelReason}
+              onChange={(event) => setCancelReason(event.target.value)}
+              rows={4}
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+              placeholder="Ej. Cliente canceló la operación antes de confirmar booking."
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setCancelDialogOpen(false)}
+              disabled={cancelling}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={cancelRouting}
+              disabled={cancelling}
+              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {cancelling ? 'Cancelando...' : 'Confirmar cancelación'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
