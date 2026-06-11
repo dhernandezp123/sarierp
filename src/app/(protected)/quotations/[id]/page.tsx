@@ -105,8 +105,22 @@ type CommercialTimelineEvent = {
   description: string
   userName: string
   metadataChips: string[]
+  financialComparison?: FinancialComparison | null
   dotClassName: string
   cardClassName: string
+}
+
+type FinancialTotals = {
+  total_cost: number
+  total_sale: number
+  profit_amount: number
+  gp_percentage: number
+}
+
+type FinancialComparison = {
+  previous: FinancialTotals
+  next: FinancialTotals
+  delta: FinancialTotals
 }
 
 type QuotationDetail = any & {
@@ -181,6 +195,57 @@ const formatSignedPoints = (value: unknown) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} pts`
+}
+
+const formatCurrencyValue = (value: unknown) =>
+  `USD ${Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+
+const formatPercentValue = (value: unknown) =>
+  `${Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`
+
+const getDeltaClassName = (value: unknown) => {
+  const amount = Number(value || 0)
+
+  if (amount > 0) return 'text-emerald-600 dark:text-emerald-400'
+  if (amount < 0) return 'text-red-600 dark:text-red-400'
+  return 'text-slate-500 dark:text-slate-400'
+}
+
+const parseFinancialTotals = (value: unknown): FinancialTotals | null => {
+  if (!isRecord(value)) return null
+
+  const totals = {
+    total_cost: Number(value.total_cost),
+    total_sale: Number(value.total_sale),
+    profit_amount: Number(value.profit_amount),
+    gp_percentage: Number(value.gp_percentage),
+  }
+
+  if (Object.values(totals).some((amount) => !Number.isFinite(amount))) {
+    return null
+  }
+
+  return totals
+}
+
+const getFinancialComparison = (
+  metadata?: Record<string, unknown> | null
+): FinancialComparison | null => {
+  if (!metadata) return null
+
+  const previous = parseFinancialTotals(metadata.previous_totals)
+  const next = parseFinancialTotals(metadata.new_totals)
+  const delta = parseFinancialTotals(metadata.delta)
+
+  if (!previous || !next || !delta) return null
+
+  return { previous, next, delta }
 }
 
 const formatCommercialMetadata = (metadata?: Record<string, unknown> | null) => {
@@ -1104,6 +1169,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       description: 'Cambio de estado de la cotización.',
       userName,
       metadataChips: [`Estado: ${log.old_status || 'Sin estado'} → ${log.new_status}`],
+      financialComparison: null,
       dotClassName: 'bg-blue-600',
       cardClassName: 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40',
     }
@@ -1119,6 +1185,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       description: log.reason || `${log.field_name || 'Campo'} actualizado`,
       userName,
       metadataChips: log.reason ? [`Motivo: ${log.reason}`] : [],
+      financialComparison: null,
       dotClassName: 'bg-amber-500',
       cardClassName: 'border-amber-200 bg-amber-50/60 dark:border-amber-900/60 dark:bg-amber-950/20',
     }
@@ -1136,6 +1203,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         description: log.description || getCommercialActivityTitle(log.action),
         userName,
         metadataChips: formatCommercialMetadata(log.metadata),
+        financialComparison: getFinancialComparison(log.metadata),
         dotClassName: 'bg-slate-900 dark:bg-slate-100',
         cardClassName: 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40',
       }
@@ -1914,6 +1982,56 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                             </span>
                           ))}
                         </div>
+
+                        {item.financialComparison && (
+                          <div className="mt-4 rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-slate-800 dark:bg-slate-900/60">
+                            <div className="grid gap-3 text-xs md:grid-cols-3">
+                              <div>
+                                <p className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Antes
+                                </p>
+                                <div className="mt-2 space-y-1 text-slate-700 dark:text-slate-300">
+                                  <p>Venta: {formatCurrencyValue(item.financialComparison.previous.total_sale)}</p>
+                                  <p>Costo: {formatCurrencyValue(item.financialComparison.previous.total_cost)}</p>
+                                  <p>Profit: {formatCurrencyValue(item.financialComparison.previous.profit_amount)}</p>
+                                  <p>GP: {formatPercentValue(item.financialComparison.previous.gp_percentage)}</p>
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Después
+                                </p>
+                                <div className="mt-2 space-y-1 text-slate-700 dark:text-slate-300">
+                                  <p>Venta: {formatCurrencyValue(item.financialComparison.next.total_sale)}</p>
+                                  <p>Costo: {formatCurrencyValue(item.financialComparison.next.total_cost)}</p>
+                                  <p>Profit: {formatCurrencyValue(item.financialComparison.next.profit_amount)}</p>
+                                  <p>GP: {formatPercentValue(item.financialComparison.next.gp_percentage)}</p>
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  Diferencia
+                                </p>
+                                <div className="mt-2 space-y-1 font-semibold">
+                                  <p className={getDeltaClassName(item.financialComparison.delta.total_sale)}>
+                                    Venta: {formatSignedCurrency(item.financialComparison.delta.total_sale)}
+                                  </p>
+                                  <p className={getDeltaClassName(item.financialComparison.delta.total_cost)}>
+                                    Costo: {formatSignedCurrency(item.financialComparison.delta.total_cost)}
+                                  </p>
+                                  <p className={getDeltaClassName(item.financialComparison.delta.profit_amount)}>
+                                    Profit: {formatSignedCurrency(item.financialComparison.delta.profit_amount)}
+                                  </p>
+                                  <p className={getDeltaClassName(item.financialComparison.delta.gp_percentage)}>
+                                    GP: {formatSignedPoints(item.financialComparison.delta.gp_percentage)}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
