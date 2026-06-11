@@ -42,6 +42,7 @@ export default function EditClientePage() {
     vendedor_asignado: '',
     origen_frecuente: '',
     asegura_carga: false,
+    seguro_porcentaje: '',
     notas_tarifas: '',
   })
 
@@ -86,6 +87,7 @@ export default function EditClientePage() {
       vendedor_asignado: data.vendedor_asignado || '',
       origen_frecuente: data.origen_frecuente || '',
       asegura_carga: Boolean(data.asegura_carga),
+      seguro_porcentaje: data.seguro_porcentaje?.toString() || '',
       notas_tarifas: data.notas_tarifas || '',
     })
 
@@ -157,6 +159,9 @@ export default function EditClientePage() {
       vendedor_asignado: formData.vendedor_asignado || null,
       origen_frecuente: formData.origen_frecuente,
       asegura_carga: formData.asegura_carga,
+      seguro_porcentaje: formData.asegura_carga
+        ? Number(formData.seguro_porcentaje || 0)
+        : null,
       notas_tarifas: formData.notas_tarifas,
     }
 
@@ -375,8 +380,21 @@ export default function EditClientePage() {
                 onChange={handleChange}
                 className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500 dark:border-slate-700"
               />
-              Asegura carga
+              Cliente asegura carga
             </label>
+
+            {formData.asegura_carga && (
+              <input
+                type="number"
+                name="seguro_porcentaje"
+                min="0"
+                step="0.01"
+                placeholder="Porcentaje de seguro (%)"
+                value={formData.seguro_porcentaje || ''}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            )}
           </div>
 
           <textarea

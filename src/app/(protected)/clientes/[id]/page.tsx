@@ -291,6 +291,14 @@ export default function ClienteProfilePage() {
     return <div className="p-8 text-slate-600 dark:text-slate-300">Cargando cliente...</div>
   }
 
+  const insurancePercentage =
+    cliente?.asegura_carga && cliente?.seguro_porcentaje !== null && cliente?.seguro_porcentaje !== undefined
+      ? `${Number(cliente.seguro_porcentaje).toLocaleString('es-GT', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        })}%`
+      : 'No aplica'
+
   const clientTimeline = [
     cliente?.created_at && {
       type: 'Cliente creado',
@@ -490,6 +498,13 @@ export default function ClienteProfilePage() {
                 <div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">Asegura carga</p>
                   <p className="font-medium">{cliente?.asegura_carga ? 'Sí' : 'No'}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Porcentaje de seguro
+                  </p>
+                  <p className="font-medium">{insurancePercentage}</p>
                 </div>
 
                 <div>
