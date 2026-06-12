@@ -174,40 +174,37 @@ export default function NuevoClientePage() {
     }
 
     const vendedorAsignado = formData.vendedor_asignado || user.id
+    const clientePayload = {
+      nombre: formData.nombre,
+      contacto: formData.contacto,
+      nit: formData.nit,
+      telefono: formData.telefono,
+      direccion: formData.direccion,
+      ciudad: formData.ciudad,
+      departamento_estado: formData.departamento_estado,
+      pais: formData.pais,
+      email_1: formData.email_1,
+      email_2: formData.email_2,
+      email_3: formData.email_3,
+      observaciones: formData.observaciones,
+      tipo_persona: formData.tipo_persona,
+      condicion_pago: formData.condicion_pago,
+      dias_credito: isCreditPayment(formData.condicion_pago)
+        ? Number(formData.dias_credito || 0)
+        : 0,
+      tipo_cliente: formData.tipo_cliente,
+      vendedor_asignado: vendedorAsignado,
+      origen_frecuente: formData.origen_frecuente,
+      asegura_carga: formData.asegura_carga,
+      seguro_porcentaje: formData.asegura_carga
+        ? Number(formData.seguro_porcentaje || 0)
+        : null,
+      notas_tarifas: formData.notas_tarifas,
+    }
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('clientes')
-      .insert([
-        {
-          nombre: formData.nombre,
-          contacto: formData.contacto,
-          nit: formData.nit,
-          telefono: formData.telefono,
-          direccion: formData.direccion,
-          ciudad: formData.ciudad,
-          departamento_estado: formData.departamento_estado,
-          pais: formData.pais,
-          email_1: formData.email_1,
-          email_2: formData.email_2,
-          email_3: formData.email_3,
-          observaciones: formData.observaciones,
-          tipo_persona: formData.tipo_persona,
-          condicion_pago: formData.condicion_pago,
-          dias_credito: isCreditPayment(formData.condicion_pago)
-            ? Number(formData.dias_credito || 0)
-            : 0,
-          tipo_cliente: formData.tipo_cliente,
-          vendedor_asignado: vendedorAsignado,
-          origen_frecuente: formData.origen_frecuente,
-          asegura_carga: formData.asegura_carga,
-          seguro_porcentaje: formData.asegura_carga
-            ? Number(formData.seguro_porcentaje || 0)
-            : null,
-          notas_tarifas: formData.notas_tarifas,
-        },
-      ])
-      .select()
-      .single()
+      .insert([clientePayload])
 
     if (error) {
       toast.error(error.message)
@@ -215,21 +212,36 @@ export default function NuevoClientePage() {
       return
     }
 
-    await supabase.from('cliente_history').insert([
-      {
-        cliente_id: data.id,
-        changed_by: profile?.id,
-        action: 'Cliente creado',
-        notes: `Cliente ${data.codigo_cliente} creado`,
-      },
-    ])
+    const { data: createdCliente } = await supabase
+      .from('clientes')
+      .select('id, codigo_cliente, nombre')
+      .eq('vendedor_asignado', vendedorAsignado)
+      .eq('nombre', formData.nombre)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-    toast.success(`Cliente creado: ${data.codigo_cliente}`)
+    if (createdCliente) {
+      await supabase.from('cliente_history').insert([
+        {
+          cliente_id: createdCliente.id,
+          changed_by: profile?.id,
+          action: 'Cliente creado',
+          notes: `Cliente ${createdCliente.codigo_cliente} creado`,
+        },
+      ])
+    }
+
+    toast.success(
+      createdCliente?.codigo_cliente
+        ? `Cliente creado: ${createdCliente.codigo_cliente}`
+        : 'Cliente creado correctamente'
+    )
     setCreating(false)
     setFormData(initialFormData)
 
     setTimeout(() => {
-      router.push('/clientes')
+      router.push(createdCliente?.id ? `/clientes/${createdCliente.id}` : '/clientes')
     }, 1200)
   }
 
