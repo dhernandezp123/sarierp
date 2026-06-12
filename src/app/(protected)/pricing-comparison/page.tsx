@@ -218,6 +218,7 @@ function PricingComparisonContent() {
   const [savingCargo, setSavingCargo] = useState(false)
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
+  const [insuranceTaxable, setInsuranceTaxable] = useState(true)
 
   const [agentForm, setAgentForm] = useState({
     agent_id: '',
@@ -309,7 +310,9 @@ function PricingComparisonContent() {
         *,
         clientes (
           codigo_cliente,
-          nombre
+          nombre,
+          asegura_carga,
+          seguro_porcentaje
         )
       `)
       .is('deleted_at', null)
@@ -2595,6 +2598,141 @@ const profitabilityColor =
     return false
   }
 
+  const isInsurancePricingItem = (item: any) => {
+    const normalizedType = normalizeText(item.item_type)
+    const normalizedDescription = normalizeText(item.description)
+
+    return (
+      normalizedType === 'seguro' ||
+      normalizedDescription.includes('seguro de carga')
+    )
+  }
+
+  const clientRequiresCargoInsurance =
+    selectedQuote?.clientes?.asegura_carga === true ||
+    selectedQuote?.requires_insurance === true
+
+  const showCargoInsuranceButton = Boolean(
+    selectedQuote && clientRequiresCargoInsurance
+  )
+
+  const applyCargoInsurance = async () => {
+    if (!selectedQuote) {
+      toast.error('Selecciona una cotizacion primero')
+      return
+    }
+
+    if (!clientRequiresCargoInsurance) {
+      toast.error('La cotizacion no requiere seguro de carga')
+      return
+    }
+
+    if (!ensureQuoteIsEditable()) return
+
+    const fob = Number(selectedQuote.commercial_value || 0)
+    if (fob <= 0) {
+      toast.error('Ingresa un valor FOB mayor a cero para calcular el seguro')
+      return
+    }
+
+    const saleRatePercent = Number(
+      selectedQuote.clientes?.seguro_porcentaje || 0
+    )
+    if (saleRatePercent <= 0) {
+      toast.error('El cliente no tiene porcentaje de seguro configurado')
+      return
+    }
+
+    const serviceItemsWithoutInsurance = pricingItems.filter(
+      (item) => !isInsurancePricingItem(item)
+    )
+    const serviceSaleWithoutInsurance = serviceItemsWithoutInsurance.reduce(
+      (sum, item) =>
+        sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
+      0
+    )
+    const serviceCostWithoutInsurance = serviceItemsWithoutInsurance.reduce(
+      (sum, item) =>
+        sum + Number(item.cost_amount || 0) * Number(item.quantity || 1),
+      0
+    )
+
+    if (serviceSaleWithoutInsurance <= 0) {
+      toast.error('No se detectaron cargos base para calcular seguro full cover.')
+      return
+    }
+
+    const insuranceMarkupMultiplier = 1.1
+    const costRatePercent = 0.27
+    const insuredBaseSale = fob + serviceSaleWithoutInsurance
+    const insuredBaseCost = fob + serviceCostWithoutInsurance
+    const insuranceSale =
+      insuredBaseSale * insuranceMarkupMultiplier * (saleRatePercent / 100)
+    const insuranceCost =
+      insuredBaseCost * insuranceMarkupMultiplier * (costRatePercent / 100)
+    const insuranceTaxAmount = insuranceTaxable ? insuranceSale * 0.15 : 0
+    const insuranceTotalAmount = insuranceSale + insuranceTaxAmount
+    const notes = [
+      `Base full cover venta: FOB USD ${formatCurrency(
+        fob
+      )} + Servicios USD ${formatCurrency(
+        serviceSaleWithoutInsurance
+      )} = USD ${formatCurrency(insuredBaseSale)}`,
+      `Seguro venta: USD ${formatCurrency(
+        insuredBaseSale
+      )} × 1.10 × ${saleRatePercent}% = USD ${formatCurrency(insuranceSale)}`,
+      `Base full cover costo: FOB USD ${formatCurrency(
+        fob
+      )} + Servicios costo USD ${formatCurrency(
+        serviceCostWithoutInsurance
+      )} = USD ${formatCurrency(insuredBaseCost)}`,
+      `Seguro costo: USD ${formatCurrency(
+        insuredBaseCost
+      )} × 1.10 × 0.27% = USD ${formatCurrency(insuranceCost)}`,
+      `ISV 15% aplicado: ${insuranceTaxable ? 'Sí' : 'No'}`,
+    ].join('\n')
+    const existingInsuranceItem = pricingItems.find(isInsurancePricingItem)
+    const pricingItemPayload = {
+      quotation_id: selectedQuote.id,
+      item_type: 'Seguro',
+      description: 'Seguro de Carga',
+      supplier: 'JAH Insurance',
+      quantity: 1,
+      cost_amount: insuranceCost,
+      sale_amount: insuranceSale,
+      currency: 'USD',
+      taxable: insuranceTaxable,
+      tax_rate: insuranceTaxable ? 15 : 0,
+      tax_amount: insuranceTaxAmount,
+      total_amount: insuranceTotalAmount,
+      notes,
+    }
+
+    const { error } = existingInsuranceItem
+      ? await supabase
+          .from('pricing_items')
+          .update(pricingItemPayload)
+          .eq('id', existingInsuranceItem.id)
+      : await supabase.from('pricing_items').insert([
+          {
+            ...pricingItemPayload,
+            created_by: profile?.id,
+          },
+        ])
+
+    if (error) {
+      toast.error(error.message || 'No se pudo aplicar el seguro de carga')
+      return
+    }
+
+    toast.success(
+      existingInsuranceItem
+        ? 'Seguro de carga actualizado'
+        : 'Seguro de carga agregado'
+    )
+    await fetchPricingItems(selectedQuote.id)
+  }
+
   const addOptionalClientRate = async (rate: ClientRate) => {
     if (!selectedQuote) {
       toast.error('Selecciona una cotizacion primero')
@@ -2841,7 +2979,7 @@ const profitabilityColor =
                     </CardTitle>
                   </CardHeader>
 
-                  <CardContent className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-5">
+                  <CardContent className="grid grid-cols-2 gap-6 md:grid-cols-3 xl:grid-cols-6">
                     <div>
                       <p className="text-sm text-slate-500 dark:text-slate-400">Estado</p>
                       <Badge>{selectedQuote.status}</Badge>
@@ -2894,11 +3032,35 @@ const profitabilityColor =
 
                     <div>
                       <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Valor FOB
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {Number(selectedQuote.commercial_value || 0) > 0
+                          ? `USD ${formatCurrency(
+                              Number(selectedQuote.commercial_value || 0)
+                            )}`
+                          : 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
                         Origen
                       </p>
 
                       <p className="font-semibold text-slate-900 dark:text-white">
                         {selectedQuote.origen || 'N/A'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Dirección origen EXW
+                      </p>
+
+                      <p className="font-semibold text-slate-900 dark:text-white">
+                        {selectedQuote.pickup_address || 'N/A'}
                       </p>
                     </div>
 
@@ -4117,6 +4279,31 @@ const profitabilityColor =
                       <h3 className="text-lg font-semibold">
                       Líneas de Cotización
                       </h3>
+                    )}
+
+                    {showCargoInsuranceButton && (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={insuranceTaxable}
+                            onChange={(event) =>
+                              setInsuranceTaxable(event.target.checked)
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                          />
+                          Aplicar ISV 15% al seguro
+                        </label>
+
+                        <button
+                          type="button"
+                          className={secondaryButtonClass}
+                          disabled={isPricingActionDisabled}
+                          onClick={applyCargoInsurance}
+                        >
+                          Aplicar seguro de carga
+                        </button>
+                      </div>
                     )}
 
                     {optionalClientRates.length > 0 && (

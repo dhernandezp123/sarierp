@@ -223,6 +223,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  serviceGroupRow: {
+    paddingVertical: 5,
+    paddingHorizontal: 7,
+    backgroundColor: '#F1F3F5',
+    borderTop: '1 solid #D5D9E0',
+    borderBottomWidth: 1,
+    borderBottomColor: '#D5D9E0',
+  },
+  serviceGroupText: {
+    width: '100%',
+    color: '#B3282D',
+    fontSize: 7,
+    fontWeight: 700,
+    textTransform: 'uppercase',
+  },
   colConcept: {
     width: '34%',
   },
@@ -261,6 +276,40 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderTopWidth: 1,
     borderTopColor: '#CBD5E1',
+  },
+  cargoCompactTable: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  cargoCompactHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#0F172A',
+    color: '#FFFFFF',
+    fontSize: 7,
+    fontWeight: 'bold',
+  },
+  cargoCompactRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    fontSize: 8,
+    fontWeight: 'bold',
+  },
+  cargoCompactCell: {
+    width: '20%',
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    textAlign: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#E5E7EB',
+  },
+  cargoCompactLastCell: {
+    width: '20%',
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    textAlign: 'center',
   },
   summaryBox: {
     width: 250,
@@ -302,6 +351,13 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 4,
     marginTop: 8,
+  },
+  observationNotes: {
+    border: '1px solid #e5e7eb',
+    padding: 10,
+    borderRadius: 4,
+    marginTop: 8,
+    marginBottom: 16,
   },
   terms: {
   marginTop: 14,
@@ -470,18 +526,18 @@ const getChargesSummary = (items: any[]) => {
   )
 }
 
-function ChargesTable({
-  title,
-  items,
+function ServicesDetailTable({
+  groups,
 }: {
-  title: string
-  items: any[]
+  groups: Array<{ title: string; items: any[] }>
 }) {
-  if (items.length === 0) return null
+  const visibleGroups = groups.filter((group) => group.items.length > 0)
+
+  if (visibleGroups.length === 0) return null
 
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.sectionTitle}>DETALLE DE SERVICIOS</Text>
 
       <View style={styles.table}>
         <View style={styles.tableHeader}>
@@ -492,34 +548,131 @@ function ChargesTable({
           <Text style={styles.colAmount}>Total</Text>
         </View>
 
-        {items.map((item) => {
-          const values = getPdfChargeValues(item)
-          const currency = item.currency || 'USD'
+        {visibleGroups.map((group) => (
+          <View key={group.title}>
+            <View style={styles.serviceGroupRow}>
+              <Text style={styles.serviceGroupText}>{group.title}</Text>
+            </View>
+
+            {group.items.map((item) => {
+              const values = getPdfChargeValues(item)
+              const currency = item.currency || 'USD'
+
+              return (
+                <View key={item.id} style={styles.tableRow}>
+                  <Text style={styles.colConcept}>
+                    {getPdfChargeDescription(item)}
+                  </Text>
+
+                  <Text style={styles.colSmall}>
+                    {values.qty}
+                  </Text>
+
+                  <Text style={styles.colAmount}>
+                    {currency} {formatCurrency(values.unitValue)}
+                  </Text>
+
+                  <Text style={styles.colAmount}>
+                    {currency} {formatCurrency(values.tax)}
+                  </Text>
+
+                  <Text style={styles.colAmount}>
+                    {currency} {formatCurrency(values.total)}
+                  </Text>
+                </View>
+              )
+            })}
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+function CargoDetailsTable({
+  title,
+  cargoLines,
+  totalCargoLbs,
+  totalCargoKg,
+  totalCargoFt3,
+  totalCargoCbm,
+  showTotalKg = false,
+}: {
+  title: string
+  cargoLines: Array<{
+    quantity: number
+    package_type: string
+    length: number | null
+    width: number | null
+    height: number | null
+    dimension_unit: string
+    weight_lbs: number | null
+    ft3: number | null
+    cbm: number | null
+  }>
+  totalCargoLbs: number
+  totalCargoKg?: number
+  totalCargoFt3: number
+  totalCargoCbm: number
+  showTotalKg?: boolean
+}) {
+  if (cargoLines.length === 0) return null
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+
+      <View style={styles.table}>
+        <View style={styles.tableHeader}>
+          <Text style={styles.cargoQtyCell}>Cant.</Text>
+          <Text style={styles.cargoTypeCell}>Tipo</Text>
+          <Text style={styles.cargoDimensionsCell}>Dimensiones</Text>
+          <Text style={styles.cargoNumberCell}>Peso unit.</Text>
+          <Text style={styles.cargoNumberCell}>Total lbs</Text>
+          <Text style={styles.cargoNumberCell}>FT3</Text>
+          <Text style={styles.cargoNumberCell}>CBM</Text>
+        </View>
+
+        {cargoLines.map((line, index) => {
+          const lineTotalLbs =
+            Number(line.weight_lbs || 0) * Number(line.quantity || 0)
 
           return (
-            <View key={item.id} style={styles.tableRow}>
-              <Text style={styles.colConcept}>
-                {getPdfChargeDescription(item)}
+            <View key={index} style={styles.tableRow}>
+              <Text style={styles.cargoQtyCell}>
+                {String(line.quantity)}
               </Text>
-
-              <Text style={styles.colSmall}>
-                {values.qty}
+              <Text style={styles.cargoTypeCell}>
+                {line.package_type}
               </Text>
-
-              <Text style={styles.colAmount}>
-                {currency} {formatCurrency(values.unitValue)}
+              <Text style={styles.cargoDimensionsCell}>
+                {line.length ?? 'N/A'} x {line.width ?? 'N/A'} x{' '}
+                {line.height ?? 'N/A'} {line.dimension_unit}
               </Text>
-
-              <Text style={styles.colAmount}>
-                {currency} {formatCurrency(values.tax)}
+              <Text style={styles.cargoNumberCell}>
+                {formatNumber(Number(line.weight_lbs || 0), 2)}
               </Text>
-
-              <Text style={styles.colAmount}>
-                {currency} {formatCurrency(values.total)}
+              <Text style={styles.cargoNumberCell}>
+                {formatNumber(lineTotalLbs, 2)}
+              </Text>
+              <Text style={styles.cargoNumberCell}>
+                {formatNumber(Number(line.ft3 || 0), 2)}
+              </Text>
+              <Text style={styles.cargoNumberCell}>
+                {formatNumber(Number(line.cbm || 0), 3)}
               </Text>
             </View>
           )
         })}
+
+        <View style={styles.cargoSummary}>
+          {showTotalKg && (
+            <Text>Total KG: {formatNumber(Number(totalCargoKg || 0), 2)}</Text>
+          )}
+          <Text>Total lbs: {formatNumber(totalCargoLbs, 0)}</Text>
+          <Text>Total FT3: {formatNumber(totalCargoFt3, 2)}</Text>
+          <Text>Total CBM: {formatNumber(totalCargoCbm, 3)}</Text>
+        </View>
       </View>
     </View>
   )
@@ -678,6 +831,8 @@ export default function QuotationPDF({
     (sum, line) => sum + Number(line.cbm || 0),
     0
   )
+  const totalCargoKg = totalCargoLbs / 2.20462
+  const useCargoAnnex = cargoLines.length > 4
 
   return (
     <Document>
@@ -960,80 +1115,56 @@ export default function QuotationPDF({
           </View>
         </View>
 
-        {cargoLines.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>DETALLE DE CARGA</Text>
+        {cargoLines.length > 0 && !useCargoAnnex && (
+          <CargoDetailsTable
+            title="DETALLE DE CARGA"
+            cargoLines={cargoLines}
+            totalCargoLbs={totalCargoLbs}
+            totalCargoFt3={totalCargoFt3}
+            totalCargoCbm={totalCargoCbm}
+          />
+        )}
 
-            <View style={styles.table}>
-              <View style={styles.tableHeader}>
-                <Text style={styles.cargoQtyCell}>Cant.</Text>
-                <Text style={styles.cargoTypeCell}>Tipo</Text>
-                <Text style={styles.cargoDimensionsCell}>Dimensiones</Text>
-                <Text style={styles.cargoNumberCell}>Peso unit.</Text>
-                <Text style={styles.cargoNumberCell}>Total lbs</Text>
-                <Text style={styles.cargoNumberCell}>FT3</Text>
-                <Text style={styles.cargoNumberCell}>CBM</Text>
+        {useCargoAnnex && (
+          <View style={styles.section} wrap={false}>
+            <Text style={styles.sectionTitle}>DETALLE DE CARGA</Text>
+            <View style={styles.cargoCompactTable}>
+              <View style={styles.cargoCompactHeader}>
+                <Text style={styles.cargoCompactCell}>Líneas</Text>
+                <Text style={styles.cargoCompactCell}>Total KG</Text>
+                <Text style={styles.cargoCompactCell}>Total lbs</Text>
+                <Text style={styles.cargoCompactCell}>Total FT3</Text>
+                <Text style={styles.cargoCompactLastCell}>Total CBM</Text>
               </View>
 
-              {cargoLines.map((line, index) => {
-                const lineTotalLbs =
-                  Number(line.weight_lbs || 0) * Number(line.quantity || 0)
-
-                return (
-                  <View key={index} style={styles.tableRow}>
-                    <Text style={styles.cargoQtyCell}>
-                      {String(line.quantity)}
-                    </Text>
-                    <Text style={styles.cargoTypeCell}>
-                      {line.package_type}
-                    </Text>
-                    <Text style={styles.cargoDimensionsCell}>
-                      {line.length ?? 'N/A'} x {line.width ?? 'N/A'} x{' '}
-                      {line.height ?? 'N/A'} {line.dimension_unit}
-                    </Text>
-                    <Text style={styles.cargoNumberCell}>
-                      {formatNumber(Number(line.weight_lbs || 0), 2)}
-                    </Text>
-                    <Text style={styles.cargoNumberCell}>
-                      {formatNumber(lineTotalLbs, 2)}
-                    </Text>
-                    <Text style={styles.cargoNumberCell}>
-                      {formatNumber(Number(line.ft3 || 0), 2)}
-                    </Text>
-                    <Text style={styles.cargoNumberCell}>
-                      {formatNumber(Number(line.cbm || 0), 3)}
-                    </Text>
-                  </View>
-                )
-              })}
-
-              <View style={styles.cargoSummary}>
-                <Text>Total lbs: {formatNumber(totalCargoLbs, 0)}</Text>
-                <Text>Total FT3: {formatNumber(totalCargoFt3, 2)}</Text>
-                <Text>Total CBM: {formatNumber(totalCargoCbm, 3)}</Text>
+              <View style={styles.cargoCompactRow}>
+                <Text style={styles.cargoCompactCell}>
+                  {cargoLines.length}
+                </Text>
+                <Text style={styles.cargoCompactCell}>
+                  {formatNumber(totalCargoKg, 2)}
+                </Text>
+                <Text style={styles.cargoCompactCell}>
+                  {formatNumber(totalCargoLbs, 0)}
+                </Text>
+                <Text style={styles.cargoCompactCell}>
+                  {formatNumber(totalCargoFt3, 2)}
+                </Text>
+                <Text style={styles.cargoCompactLastCell}>
+                  {formatNumber(totalCargoCbm, 3)}
+                </Text>
               </View>
             </View>
           </View>
         )}
 
-        <ChargesTable
-          title="Flete"
-          items={freightItems}
-        />
-
-        <ChargesTable
-          title="Gastos de Origen"
-          items={originCharges}
-        />
-
-        <ChargesTable
-          title="Gastos en Destino"
-          items={destinationCharges}
-        />
-
-        <ChargesTable
-          title="Otros Cargos"
-          items={otherCharges}
+        <ServicesDetailTable
+          groups={[
+            { title: 'FLETE', items: freightItems },
+            { title: 'GASTOS DE ORIGEN', items: originCharges },
+            { title: 'GASTOS EN DESTINO', items: destinationCharges },
+            { title: 'OTROS CARGOS', items: otherCharges },
+          ]}
         />
 
         {pricingItems.length === 0 && (
@@ -1063,12 +1194,26 @@ export default function QuotationPDF({
           </View>
         </View>
 
-        <View style={styles.notes}>
+        <View style={styles.observationNotes} wrap={false}>
           <Text style={styles.sectionTitle}>Observaciones</Text>
           <Text>
             {quotation.client_notes || 'Sin observaciones'}
           </Text>
         </View>
+
+        {useCargoAnnex && (
+          <View wrap={false}>
+            <CargoDetailsTable
+              title="ANEXO - Detalle de Carga"
+              cargoLines={cargoLines}
+              totalCargoLbs={totalCargoLbs}
+              totalCargoKg={totalCargoKg}
+              totalCargoFt3={totalCargoFt3}
+              totalCargoCbm={totalCargoCbm}
+              showTotalKg
+            />
+          </View>
+        )}
 
         <Text
           style={styles.pageFooter}
