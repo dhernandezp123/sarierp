@@ -5,60 +5,122 @@ import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../../../lib/supabase/client'
+import { useUser } from '../../../../../hooks/useUser'
+import { cn } from '../../../../../lib/utils'
 import {
   CONDICIONES_PAGO,
   TIPOS_CLIENTE,
   TIPOS_EMPRESA,
 } from '../../../../../lib/constants/clientes'
+import {
+  CIUDADES_POR_DEPARTAMENTO,
+  DEPARTAMENTOS_HN,
+  PAISES_FRECUENTES,
+} from '../../../../../lib/constants/honduras'
+
+const initialFormData = {
+  nombre: '',
+  contacto: '',
+  nit: '',
+  telefono: '',
+  direccion: '',
+  ciudad: '',
+  departamento_estado: '',
+  pais: 'Honduras',
+  email_1: '',
+  email_2: '',
+  email_3: '',
+  observaciones: '',
+  tipo_persona: 'Corporativo',
+  condicion_pago: 'Contado',
+  dias_credito: '',
+  tipo_cliente: '',
+  vendedor_asignado: '',
+  origen_frecuente: '',
+  asegura_carga: false,
+  seguro_porcentaje: '',
+  notas_tarifas: '',
+}
 
 const fieldClass =
-  'w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400 dark:focus:ring-slate-400/20 dark:disabled:bg-slate-800 dark:disabled:text-slate-500'
+  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-500/10 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400 dark:focus:ring-slate-400/10 dark:disabled:bg-slate-900'
 
-export default function EditClientePage() {
-  const params = useParams()
+const isCreditPayment = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .startsWith('credito')
+
+function Field({
+  label,
+  required,
+  children,
+  className,
+}: {
+  label: string
+  required?: boolean
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('flex flex-col gap-1.5', className)}>
+      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        {label}
+        {required && <span className="ml-0.5 text-red-500">*</span>}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function SectionHeader({
+  title,
+  description,
+}: {
+  title: string
+  description?: string
+}) {
+  return (
+    <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
+      <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+        {title}
+      </h2>
+      {description && (
+        <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+          {description}
+        </p>
+      )}
+    </div>
+  )
+}
+
+export default function EditarClientePage() {
+  const { profile } = useUser()
   const router = useRouter()
+  const params = useParams()
+  const clientId = params.id as string
 
+  const [formData, setFormData] = useState(initialFormData)
+  const [vendedores, setVendedores] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [vendedores, setVendedores] = useState<any[]>([])
 
-  const [formData, setFormData] = useState({
-    nombre: '',
-    contacto: '',
-    nit: '',
-    telefono: '',
-    direccion: '',
-    ciudad: '',
-    departamento_estado: '',
-    pais: 'Honduras',
-    email_1: '',
-    email_2: '',
-    email_3: '',
-    observaciones: '',
-    tipo_persona: 'Corporativo',
-    condicion_pago: 'Contado',
-    dias_credito: '',
-    tipo_cliente: '',
-    vendedor_asignado: '',
-    origen_frecuente: '',
-    asegura_carga: false,
-    seguro_porcentaje: '',
-    notas_tarifas: '',
-  })
+  const ciudadesDisponibles =
+    formData.pais === 'Honduras' && formData.departamento_estado
+      ? CIUDADES_POR_DEPARTAMENTO[formData.departamento_estado] ?? []
+      : []
 
   useEffect(() => {
-    if (params.id) {
-      fetchCliente()
-      fetchVendedores()
-    }
-  }, [params.id])
+    fetchCliente()
+    fetchVendedores()
+  }, [clientId])
 
   const fetchCliente = async () => {
     const { data, error } = await supabase
       .from('clientes')
       .select('*')
-      .eq('id', params.id as string)
-      .is('deleted_at', null)
+      .eq('id', clientId)
       .single()
 
     if (error) {
@@ -70,7 +132,7 @@ export default function EditClientePage() {
     setFormData({
       nombre: data.nombre || '',
       contacto: data.contacto || '',
-      nit: data.nit || data.rtn || '',
+      nit: data.nit || '',
       telefono: data.telefono || '',
       direccion: data.direccion || '',
       ciudad: data.ciudad || '',
@@ -90,7 +152,6 @@ export default function EditClientePage() {
       seguro_porcentaje: data.seguro_porcentaje?.toString() || '',
       notas_tarifas: data.notas_tarifas || '',
     })
-
     setLoading(false)
   }
 
@@ -114,21 +175,26 @@ export default function EditClientePage() {
     const { name, value, type } = e.target
     const nextFormData = {
       ...formData,
-      [name]:
-        type === 'checkbox'
-          ? (e.target as HTMLInputElement).checked
-          : value,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
+    }
+
+    if (name === 'pais') {
+      nextFormData.departamento_estado = ''
+      nextFormData.ciudad = ''
+    }
+
+    if (name === 'departamento_estado') {
+      nextFormData.ciudad = ''
     }
 
     if (name === 'condicion_pago') {
-      const diasCredito = value.match(/\d+/)?.[0] ?? ''
-      nextFormData.dias_credito = diasCredito
+      nextFormData.dias_credito = value.match(/\d+/)?.[0] ?? ''
     }
 
     setFormData(nextFormData)
   }
 
-  const handleSave = async () => {
+  const updateCliente = async () => {
     if (!formData.nombre) {
       toast.error('El nombre del cliente es obligatorio')
       return
@@ -136,7 +202,7 @@ export default function EditClientePage() {
 
     setSaving(true)
 
-    const payload = {
+    const updateData = {
       nombre: formData.nombre,
       contacto: formData.contacto,
       nit: formData.nit,
@@ -151,10 +217,9 @@ export default function EditClientePage() {
       observaciones: formData.observaciones,
       tipo_persona: formData.tipo_persona,
       condicion_pago: formData.condicion_pago,
-      dias_credito:
-        formData.condicion_pago.startsWith('Crédito')
-          ? Number(formData.dias_credito || 0)
-          : 0,
+      dias_credito: isCreditPayment(formData.condicion_pago)
+        ? Number(formData.dias_credito || 0)
+        : 0,
       tipo_cliente: formData.tipo_cliente,
       vendedor_asignado: formData.vendedor_asignado || null,
       origen_frecuente: formData.origen_frecuente,
@@ -165,11 +230,10 @@ export default function EditClientePage() {
       notas_tarifas: formData.notas_tarifas,
     }
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('clientes')
-      .update(payload)
-      .eq('id', params.id as string)
-      .select('*')
+      .update(updateData)
+      .eq('id', clientId)
 
     if (error) {
       toast.error(error.message)
@@ -177,262 +241,416 @@ export default function EditClientePage() {
       return
     }
 
-    if (!data || data.length === 0) {
-      toast.error('No se actualizó ningún cliente. Revisa el ID usado.')
-      setSaving(false)
-      return
-    }
+    await supabase.from('cliente_history').insert([
+      {
+        cliente_id: clientId,
+        changed_by: profile?.id,
+        action: 'Cliente actualizado',
+        notes: 'Datos del cliente actualizados',
+      },
+    ])
 
     toast.success('Cliente actualizado correctamente')
     setSaving(false)
-    router.push(`/clientes/${params.id}`)
+    router.push(`/clientes/${clientId}`)
+  }
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    updateCliente()
   }
 
   if (loading) {
-    return <div className="p-8">Cargando cliente...</div>
+    return (
+      <div className="p-8 text-slate-600 dark:text-slate-300">
+        Cargando cliente...
+      </div>
+    )
   }
 
   return (
-    <>
-      <div className="max-w-5xl space-y-6">
-        <button
-          type="button"
-          onClick={() => router.push(`/clientes/${params.id}`)}
-          className="rounded-xl border px-4 py-2 font-semibold"
-        >
-          Volver al perfil
-        </button>
-
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold">Editar Cliente</h1>
-          <p className="text-gray-500 mt-2">
-            Actualiza la información comercial, fiscal y de contacto del cliente.
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Editar Cliente
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Actualiza la informacion comercial y de contacto del cliente.
           </p>
         </div>
 
+        <button
+          type="button"
+          onClick={() => router.push(`/clientes/${clientId}`)}
+          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          Volver
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <input
-              name="nombre"
-              placeholder="Nombre"
-              value={formData.nombre || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
+          <SectionHeader
+            title="Datos principales"
+            description="Nombre, contacto y datos de identificacion fiscal"
+          />
 
-            <input
-              name="contacto"
-              placeholder="Contacto"
-              value={formData.contacto || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="nit"
-              placeholder="RTN / NIT"
-              value={formData.nit || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="telefono"
-              placeholder="Teléfono"
-              value={formData.telefono || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="direccion"
-              placeholder="Dirección"
-              value={formData.direccion || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="ciudad"
-              placeholder="Ciudad"
-              value={formData.ciudad || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="departamento_estado"
-              placeholder="Departamento / Estado"
-              value={formData.departamento_estado || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="pais"
-              placeholder="País"
-              value={formData.pais || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="email_1"
-              placeholder="Email 1"
-              value={formData.email_1 || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="email_2"
-              placeholder="Email 2"
-              value={formData.email_2 || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <input
-              name="email_3"
-              placeholder="Email 3"
-              value={formData.email_3 || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
-
-            <select
-              name="tipo_persona"
-              value={formData.tipo_persona || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            >
-              {TIPOS_EMPRESA.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {tipo}
-                </option>
-              ))}
-            </select>
-
-            <select
-              name="condicion_pago"
-              value={formData.condicion_pago || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            >
-              {CONDICIONES_PAGO.map((condicion) => (
-                <option key={condicion} value={condicion}>
-                  {condicion}
-                </option>
-              ))}
-            </select>
-
-            {formData.condicion_pago.startsWith('Crédito') && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Nombre / Razon social" required className="lg:col-span-2">
               <input
-                name="dias_credito"
-                placeholder="Días de crédito"
-                value={formData.dias_credito || ''}
+                name="nombre"
+                placeholder="Inversiones XX S. de R.L."
+                value={formData.nombre}
                 onChange={handleChange}
                 className={fieldClass}
               />
+            </Field>
+
+            <Field label="RTN / NIT">
+              <input
+                name="nit"
+                placeholder="RTN / NIT"
+                value={formData.nit}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Contacto principal">
+              <input
+                name="contacto"
+                placeholder="Nombre del contacto"
+                value={formData.contacto}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Telefono">
+              <input
+                name="telefono"
+                placeholder="+504 0000-0000"
+                value={formData.telefono}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Origen frecuente">
+              <input
+                name="origen_frecuente"
+                placeholder="Ej. China, Miami"
+                value={formData.origen_frecuente}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <SectionHeader
+            title="Direccion"
+            description="Ubicacion fisica del cliente"
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Pais">
+              <select
+                name="pais"
+                value={formData.pais}
+                onChange={handleChange}
+                className={fieldClass}
+              >
+                {PAISES_FRECUENTES.map((pais) => (
+                  <option key={pais} value={pais}>
+                    {pais}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Departamento / Estado">
+              {formData.pais === 'Honduras' ? (
+                <select
+                  name="departamento_estado"
+                  value={formData.departamento_estado}
+                  onChange={handleChange}
+                  className={fieldClass}
+                >
+                  <option value="">Seleccionar departamento</option>
+                  {DEPARTAMENTOS_HN.map((departamento) => (
+                    <option key={departamento} value={departamento}>
+                      {departamento}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  name="departamento_estado"
+                  placeholder="Departamento / Estado / Provincia"
+                  value={formData.departamento_estado}
+                  onChange={handleChange}
+                  className={fieldClass}
+                />
+              )}
+            </Field>
+
+            <Field label="Ciudad">
+              {formData.pais === 'Honduras' && ciudadesDisponibles.length > 0 ? (
+                <select
+                  name="ciudad"
+                  value={formData.ciudad}
+                  onChange={handleChange}
+                  className={fieldClass}
+                >
+                  <option value="">Seleccionar ciudad</option>
+                  {ciudadesDisponibles.map((ciudad) => (
+                    <option key={ciudad} value={ciudad}>
+                      {ciudad}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  name="ciudad"
+                  placeholder="Ciudad"
+                  value={formData.ciudad}
+                  onChange={handleChange}
+                  className={fieldClass}
+                />
+              )}
+            </Field>
+
+            <Field label="Direccion" className="sm:col-span-2 lg:col-span-3">
+              <input
+                name="direccion"
+                placeholder="Calle, colonia, numero..."
+                value={formData.direccion}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <SectionHeader
+            title="Correos electronicos"
+            description="Hasta tres emails de contacto para el cliente"
+          />
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Email principal">
+              <input
+                name="email_1"
+                type="email"
+                placeholder="email@empresa.com"
+                value={formData.email_1}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Email 2">
+              <input
+                name="email_2"
+                type="email"
+                placeholder="email2@empresa.com"
+                value={formData.email_2}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Email 3">
+              <input
+                name="email_3"
+                type="email"
+                placeholder="email3@empresa.com"
+                value={formData.email_3}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <SectionHeader
+            title="Clasificacion comercial"
+            description="Tipo de empresa, condicion de pago y segmentacion"
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Tipo de empresa">
+              <select
+                name="tipo_persona"
+                value={formData.tipo_persona}
+                onChange={handleChange}
+                className={fieldClass}
+              >
+                {TIPOS_EMPRESA.map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {tipo}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Condicion de pago">
+              <select
+                name="condicion_pago"
+                value={formData.condicion_pago}
+                onChange={handleChange}
+                className={fieldClass}
+              >
+                {CONDICIONES_PAGO.map((condicion) => (
+                  <option key={condicion} value={condicion}>
+                    {condicion}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {isCreditPayment(formData.condicion_pago) && (
+              <Field label="Dias de credito">
+                <input
+                  name="dias_credito"
+                  type="number"
+                  placeholder="30"
+                  value={formData.dias_credito}
+                  onChange={handleChange}
+                  className={fieldClass}
+                />
+              </Field>
             )}
 
-            <select
-              name="tipo_cliente"
-              value={formData.tipo_cliente || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            >
-              <option value="">Tipo de Cliente / Segmento</option>
-              {TIPOS_CLIENTE.map((tipo) => (
-                <option key={tipo} value={tipo}>
-                  {tipo}
-                </option>
-              ))}
-            </select>
+            <Field label="Segmento / Tipo de cliente">
+              <select
+                name="tipo_cliente"
+                value={formData.tipo_cliente}
+                onChange={handleChange}
+                className={fieldClass}
+              >
+                <option value="">Seleccionar segmento</option>
+                {TIPOS_CLIENTE.map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {tipo}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-            <select
-              name="vendedor_asignado"
-              value={formData.vendedor_asignado || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            >
-              <option value="">Vendedor asignado</option>
-              {vendedores.map((vendedor) => (
-                <option key={vendedor.id} value={vendedor.id}>
-                  {vendedor.nombre} {vendedor.apellido}
-                </option>
-              ))}
-            </select>
+            <Field label="Vendedor asignado">
+              <select
+                name="vendedor_asignado"
+                value={formData.vendedor_asignado}
+                onChange={handleChange}
+                disabled={loading}
+                className={fieldClass}
+              >
+                <option value="">Seleccionar vendedor</option>
+                {vendedores.map((vendedor) => (
+                  <option key={vendedor.id} value={vendedor.id}>
+                    {vendedor.nombre} {vendedor.apellido}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </div>
 
-            <input
-              name="origen_frecuente"
-              placeholder="Origen frecuente"
-              value={formData.origen_frecuente || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <SectionHeader
+            title="Seguro de carga"
+            description="Configuracion de seguro para cotizaciones automaticas"
+          />
 
-            <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
               <input
                 type="checkbox"
                 name="asegura_carga"
                 checked={formData.asegura_carga}
                 onChange={handleChange}
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500 dark:border-slate-700"
+                className="h-4 w-4 rounded border-slate-300"
               />
-              Cliente asegura carga
+              <div>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                  Cliente asegura carga
+                </p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  Se aplicara el porcentaje al calcular el seguro
+                </p>
+              </div>
             </label>
 
             {formData.asegura_carga && (
-              <input
-                type="number"
-                name="seguro_porcentaje"
-                min="0"
-                step="0.01"
-                placeholder="Porcentaje de seguro (%)"
-                value={formData.seguro_porcentaje || ''}
-                onChange={handleChange}
-                className={fieldClass}
-              />
+              <Field label="Porcentaje de seguro (%)">
+                <input
+                  type="number"
+                  name="seguro_porcentaje"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={formData.seguro_porcentaje}
+                  onChange={handleChange}
+                  className={fieldClass}
+                />
+              </Field>
             )}
           </div>
+        </div>
 
-          <textarea
-            name="observaciones"
-            placeholder="Observaciones"
-            value={formData.observaciones || ''}
-            onChange={handleChange}
-            className={`${fieldClass} mt-4 min-h-24 resize-y`}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <SectionHeader
+            title="Notas"
+            description="Observaciones internas y condiciones especiales de tarifas"
           />
 
-          <textarea
-            name="notas_tarifas"
-            placeholder="Notas o condiciones especiales de tarifas"
-            value={formData.notas_tarifas || ''}
-            onChange={handleChange}
-            className={`${fieldClass} mt-4 min-h-24 resize-y`}
-          />
+          <div className="space-y-4">
+            <Field label="Observaciones">
+              <textarea
+                name="observaciones"
+                placeholder="Observaciones generales del cliente..."
+                value={formData.observaciones}
+                onChange={handleChange}
+                rows={3}
+                className={cn(fieldClass, 'resize-y')}
+              />
+            </Field>
 
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => router.push(`/clientes/${params.id}`)}
-              className="rounded-xl border px-6 py-3 font-semibold"
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-xl bg-black px-6 py-3 text-white font-semibold disabled:opacity-60"
-            >
-              {saving ? 'Guardando...' : 'Guardar Cambios'}
-            </button>
+            <Field label="Notas o condiciones especiales de tarifas">
+              <textarea
+                name="notas_tarifas"
+                placeholder="Condiciones especiales de precios, acuerdos, etc..."
+                value={formData.notas_tarifas}
+                onChange={handleChange}
+                rows={3}
+                className={cn(fieldClass, 'resize-y')}
+              />
+            </Field>
           </div>
         </div>
-      </div>
-    </>
+
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220] sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            Los cambios quedaran registrados en el historial del cliente.
+          </p>
+          <button
+            type="submit"
+            disabled={saving}
+            className={cn(
+              'rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100',
+              saving && 'cursor-not-allowed'
+            )}
+          >
+            {saving ? 'Guardando...' : 'Guardar cambios'}
+          </button>
+        </div>
+      </form>
+    </div>
   )
 }
