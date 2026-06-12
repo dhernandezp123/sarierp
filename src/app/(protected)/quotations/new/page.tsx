@@ -33,6 +33,7 @@ type CargoDimensionLine = {
   height: string
   dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
   weight: string
+  weightUnit?: 'lbs' | 'kg'
 }
 
 type ContainerLine = {
@@ -64,6 +65,7 @@ export default function NewQuotationPage() {
       height: '',
       dimensionUnit: 'in',
       weight: '',
+      weightUnit: 'lbs',
     },
   ])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
@@ -557,7 +559,7 @@ export default function NewQuotationPage() {
           width: Number(line.width || 0),
           height: Number(line.height || 0),
           dimension_unit: line.dimensionUnit,
-          weight_lbs: Number(line.weight || 0),
+          weight_lbs: getLineUnitWeightLbs(line),
           ft3: calculateLineFt3(line),
           cbm: calculateLineCbm(line),
         }))
@@ -695,6 +697,25 @@ export default function NewQuotationPage() {
     return calculateLineCbm(line) * 35.3147
   }
 
+  const getCargoWeightUnit = (line: CargoDimensionLine) =>
+    line.weightUnit || 'lbs'
+
+  const getLineUnitWeightLbs = (line: CargoDimensionLine) => {
+    const weight = Number(line.weight || 0)
+    return getCargoWeightUnit(line) === 'kg' ? weight * 2.20462 : weight
+  }
+
+  const getLineUnitWeightKg = (line: CargoDimensionLine) => {
+    const weight = Number(line.weight || 0)
+    return getCargoWeightUnit(line) === 'kg' ? weight : weight / 2.20462
+  }
+
+  const getLineTotalWeightLbs = (line: CargoDimensionLine) =>
+    getLineUnitWeightLbs(line) * Number(line.quantity || 0)
+
+  const getLineTotalWeightKg = (line: CargoDimensionLine) =>
+    getLineUnitWeightKg(line) * Number(line.quantity || 0)
+
   const totalCargoFt3 = cargoLines.reduce(
     (sum, line) => sum + calculateLineFt3(line),
     0
@@ -706,10 +727,13 @@ export default function NewQuotationPage() {
   )
 
   const totalCargoWeight = cargoLines.reduce(
-    (sum, line) => sum + Number(line.weight || 0) * Number(line.quantity || 0),
+    (sum, line) => sum + getLineTotalWeightLbs(line),
     0
   )
-  const totalCargoKg = totalCargoWeight / 2.20462
+  const totalCargoKg = cargoLines.reduce(
+    (sum, line) => sum + getLineTotalWeightKg(line),
+    0
+  )
 
   const miami = useMiamiQuotation({
     clienteId: formData.cliente_id,
@@ -740,7 +764,7 @@ export default function NewQuotationPage() {
         width: Number(line.width || 0),
         height: Number(line.height || 0),
         dimension_unit: line.dimensionUnit,
-        weight_lbs: Number(line.weight || 0),
+        weight_lbs: getLineUnitWeightLbs(line),
         ft3: calculateLineFt3(line),
         cbm: calculateLineCbm(line),
       }))
@@ -1356,6 +1380,7 @@ export default function NewQuotationPage() {
                             height: '',
                             dimensionUnit: 'in',
                             weight: '',
+                            weightUnit: 'lbs',
                           },
                         ])
                       }
@@ -1376,8 +1401,9 @@ export default function NewQuotationPage() {
                       {cargoLines.map((line, idx) => {
                         const lineFt3 = calculateLineFt3(line)
                         const lineCbm = calculateLineCbm(line)
-                        const lineTotalLbs =
-                          Number(line.weight || 0) * Number(line.quantity || 0)
+                        const lineWeightUnit = getCargoWeightUnit(line)
+                        const lineTotalLbs = getLineTotalWeightLbs(line)
+                        const lineTotalKg = getLineTotalWeightKg(line)
 
                         return (
                           <div
@@ -1465,21 +1491,44 @@ export default function NewQuotationPage() {
                                 <option value="m">Metros (m)</option>
                               </select>
 
-                              <input
-                                type="number"
-                                placeholder="Peso unitario lbs"
-                                value={line.weight}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? { ...item, weight: e.target.value }
-                                        : item
+                              <div className="grid grid-cols-[1fr_92px] gap-2">
+                                <input
+                                  type="number"
+                                  placeholder={`Peso unitario ${lineWeightUnit}`}
+                                  value={line.weight}
+                                  onChange={(e) =>
+                                    setCargoLines((prev) =>
+                                      prev.map((item) =>
+                                        item.id === line.id
+                                          ? { ...item, weight: e.target.value }
+                                          : item
+                                      )
                                     )
-                                  )
-                                }
-                                className={fieldClass}
-                              />
+                                  }
+                                  className={fieldClass}
+                                />
+
+                                <select
+                                  value={lineWeightUnit}
+                                  onChange={(e) =>
+                                    setCargoLines((prev) =>
+                                      prev.map((item) =>
+                                        item.id === line.id
+                                          ? {
+                                              ...item,
+                                              weightUnit:
+                                                e.target.value as CargoDimensionLine['weightUnit'],
+                                            }
+                                          : item
+                                      )
+                                    )
+                                  }
+                                  className={fieldClass}
+                                >
+                                  <option value="lbs">LBS</option>
+                                  <option value="kg">KG</option>
+                                </select>
+                              </div>
 
                               <input
                                 type="number"
@@ -1530,7 +1579,8 @@ export default function NewQuotationPage() {
                               />
 
                               <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                                LBS {formatNumber(lineTotalLbs, 0)} · FT3{' '}
+                                KG {formatNumber(lineTotalKg, 2)} · LBS{' '}
+                                {formatNumber(lineTotalLbs, 0)} · FT3{' '}
                                 {formatNumber(lineFt3, 2)} · CBM{' '}
                                 {formatNumber(lineCbm, 3)}
                               </div>

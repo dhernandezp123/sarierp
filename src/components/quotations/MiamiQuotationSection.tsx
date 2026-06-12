@@ -13,6 +13,7 @@ export type MiamiCargoDimensionLine = {
   height: string
   dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
   weight: string
+  weightUnit?: 'lbs' | 'kg'
 }
 
 type MiamiQuotationFormData = {
@@ -65,6 +66,21 @@ export function MiamiQuotationSection({
   formatNumber,
   miami,
 }: MiamiQuotationSectionProps) {
+  const getCargoWeightUnit = (line: MiamiCargoDimensionLine) =>
+    line.weightUnit || 'lbs'
+
+  const getLineUnitWeightLbs = (line: MiamiCargoDimensionLine) => {
+    const weight = Number(line.weight || 0)
+    return getCargoWeightUnit(line) === 'kg' ? weight * 2.20462 : weight
+  }
+
+  const getLineUnitWeightKg = (line: MiamiCargoDimensionLine) => {
+    const weight = Number(line.weight || 0)
+    return getCargoWeightUnit(line) === 'kg' ? weight : weight / 2.20462
+  }
+
+  const totalCargoKg = totalCargoWeight / 2.20462
+
   if (!miami.isMiamiFlow) return null
 
   return (
@@ -225,6 +241,7 @@ export function MiamiQuotationSection({
                       height: '',
                       dimensionUnit: 'in',
                       weight: '',
+                      weightUnit: 'lbs',
                     },
                   ])
                 }
@@ -255,8 +272,11 @@ export function MiamiQuotationSection({
 
                   const lineFt3 = calculateLineFt3(line)
                   const lineCbm = calculateLineCbm(line)
+                  const lineWeightUnit = getCargoWeightUnit(line)
                   const lineTotalLbs =
-                    Number(line.weight || 0) * Number(line.quantity || 0)
+                    getLineUnitWeightLbs(line) * Number(line.quantity || 0)
+                  const lineTotalKg =
+                    getLineUnitWeightKg(line) * Number(line.quantity || 0)
 
                   return (
                     <div
@@ -370,23 +390,46 @@ export function MiamiQuotationSection({
 
                           <div className="flex flex-col gap-1">
                             <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                              Peso unit. lbs
+                              Peso unit. {lineWeightUnit}
                             </label>
-                            <input
-                              type="number"
-                              value={line.weight}
-                              onChange={(e) =>
-                                setCargoLines((prev) =>
-                                  prev.map((item) =>
-                                    item.id === line.id
-                                      ? { ...item, weight: e.target.value }
-                                      : item
+                            <div className="grid grid-cols-[1fr_82px] gap-2">
+                              <input
+                                type="number"
+                                value={line.weight}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, weight: e.target.value }
+                                        : item
+                                    )
                                   )
-                                )
-                              }
-                              placeholder="0"
-                              className={`${fieldClass} h-10 w-full`}
-                            />
+                                }
+                                placeholder={`Peso unit. ${lineWeightUnit}`}
+                                className={`${fieldClass} h-10 w-full`}
+                              />
+
+                              <select
+                                value={lineWeightUnit}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? {
+                                            ...item,
+                                            weightUnit:
+                                              e.target.value as MiamiCargoDimensionLine['weightUnit'],
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={`${fieldClass} h-10 w-full`}
+                              >
+                                <option value="lbs">LBS</option>
+                                <option value="kg">KG</option>
+                              </select>
+                            </div>
                           </div>
                         </div>
 
@@ -455,7 +498,22 @@ export function MiamiQuotationSection({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                          <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                              Total kg
+                            </p>
+                            <p
+                              className={`mt-0.5 text-sm font-semibold transition-colors ${
+                                lineTotalKg > 0
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-slate-900 dark:text-white'
+                              }`}
+                            >
+                              {formatNumber(lineTotalKg, 2)}
+                            </p>
+                          </div>
+
                           <div className="rounded-xl bg-white/80 p-2.5 dark:bg-slate-950/50">
                             <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                               Total lbs
@@ -509,7 +567,25 @@ export function MiamiQuotationSection({
             )}
 
             {cargoLines.length > 0 && (
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Peso total kg
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
+                    {formatNumber(totalCargoKg, 2)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                    Peso total lbs
+                  </p>
+                  <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
+                    {formatNumber(totalCargoWeight, 0)}
+                  </p>
+                </div>
+
                 <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     FT³ total
@@ -528,14 +604,6 @@ export function MiamiQuotationSection({
                   </p>
                 </div>
 
-                <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-950/70">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                    Peso total lbs
-                  </p>
-                  <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-                    {formatNumber(totalCargoWeight, 0)}
-                  </p>
-                </div>
               </div>
             )}
           </div>
