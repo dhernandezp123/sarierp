@@ -36,6 +36,14 @@ const clientRateCatalog = [
   { code: 'bonded_documentacion_7512', label: 'Bonded Documentación 7512', category: 'Otros Cargos', unit: 'flat' },
 ]
 
+const MIAMI_DESTINATION_RATE_CODES = new Set([
+  'lcl_maritimo_sps_ft3',
+  'lcl_maritimo_sps_lbs',
+  'small_maritimo_min_lcl_1000_lbs_45_ft3',
+  'minimo_maritimo_2mil_lbs_90_ft3',
+  'consolidado_aereo_kg',
+])
+
 type ClientRate = {
   id?: string
   cliente_id: string
@@ -48,7 +56,13 @@ type ClientRate = {
   is_active: boolean
   valid_from: string | null
   valid_to: string | null
+  miami_rate_destination?: string | null
   notes: string | null
+}
+
+const getMiamiRateDestinationLabel = (value: string | null | undefined) => {
+  if (value === 'TGU') return 'Tegucigalpa'
+  return 'San Pedro Sula'
 }
 
 export default function ClienteProfilePage() {
@@ -71,7 +85,6 @@ export default function ClienteProfilePage() {
       fetchCliente()
       fetchQuotations()
       fetchClientNotes()
-      loadClientRates()
     }
   }, [id])
 
@@ -99,6 +112,7 @@ export default function ClienteProfilePage() {
     console.log('Telefono cargado en perfil:', data?.telefono)
 
     setCliente(data)
+    await loadClientRates(data?.preferred_miami_rate_destination || 'SPS')
     setLoading(false)
   }
 
@@ -162,7 +176,7 @@ export default function ClienteProfilePage() {
     await fetchClientNotes()
   }
 
-  const loadClientRates = async () => {
+  const loadClientRates = async (activeDestination = 'SPS') => {
     if (!id) return
 
     const { data, error } = await supabase
@@ -170,6 +184,7 @@ export default function ClienteProfilePage() {
       .select('*')
       .eq('cliente_id', id)
       .eq('is_active', true)
+      .or(`miami_rate_destination.is.null,miami_rate_destination.eq.${activeDestination}`)
 
     if (error) {
       toast.error('No se pudieron cargar las tarifas')
@@ -211,8 +226,12 @@ export default function ClienteProfilePage() {
 
     setSavingRates(true)
 
+    const activeDestination =
+      cliente?.preferred_miami_rate_destination === 'TGU' ? 'TGU' : 'SPS'
+
     const rows = clientRateCatalog.map((item) => {
       const existing = clientRates[item.code]
+      const isDestinationRate = MIAMI_DESTINATION_RATE_CODES.has(item.code)
 
       return {
         cliente_id: id,
@@ -225,26 +244,79 @@ export default function ClienteProfilePage() {
         is_active: true,
         valid_from: existing?.valid_from || null,
         valid_to: existing?.valid_to || null,
+        miami_rate_destination: isDestinationRate ? activeDestination : null,
         notes: existing?.notes || null,
       }
     })
 
-    const { error } = await supabase
+    const destinationRateCodes = clientRateCatalog
+      .filter((item) => MIAMI_DESTINATION_RATE_CODES.has(item.code))
+      .map((item) => item.code)
+    const globalRateCodes = clientRateCatalog
+      .filter((item) => !MIAMI_DESTINATION_RATE_CODES.has(item.code))
+      .map((item) => item.code)
+    const destinationRows = rows.filter(
+      (row) => row.miami_rate_destination === activeDestination
+    )
+    const globalRows = rows.filter((row) => row.miami_rate_destination === null)
+
+    const { error: deleteDestinationError } = await supabase
       .from('client_rates')
-      .upsert(rows, {
-        onConflict: 'cliente_id,rate_code',
-      })
+      .delete()
+      .eq('cliente_id', id)
+      .eq('miami_rate_destination', activeDestination)
+      .in('rate_code', destinationRateCodes)
 
-    setSavingRates(false)
+    if (deleteDestinationError) {
+      console.error('Error deleting destination client rates:', deleteDestinationError)
+      toast.error(
+        deleteDestinationError.message || 'No se pudieron guardar las tarifas'
+      )
+      setSavingRates(false)
+      return
+    }
 
-    if (error) {
-      console.error('Error saving client rates:', error)
-      toast.error(error.message || 'No se pudieron guardar las tarifas')
+    const { error: deleteGlobalError } = await supabase
+      .from('client_rates')
+      .delete()
+      .eq('cliente_id', id)
+      .is('miami_rate_destination', null)
+      .in('rate_code', globalRateCodes)
+
+    if (deleteGlobalError) {
+      console.error('Error deleting global client rates:', deleteGlobalError)
+      toast.error(deleteGlobalError.message || 'No se pudieron guardar las tarifas')
+      setSavingRates(false)
+      return
+    }
+
+    const { error: insertDestinationError } = await supabase
+      .from('client_rates')
+      .insert(destinationRows)
+
+    if (insertDestinationError) {
+      console.error('Error inserting destination client rates:', insertDestinationError)
+      toast.error(
+        insertDestinationError.message || 'No se pudieron guardar las tarifas'
+      )
+      setSavingRates(false)
+      return
+    }
+
+    const { error: insertGlobalError } = await supabase
+      .from('client_rates')
+      .insert(globalRows)
+
+    if (insertGlobalError) {
+      console.error('Error inserting global client rates:', insertGlobalError)
+      toast.error(insertGlobalError.message || 'No se pudieron guardar las tarifas')
+      setSavingRates(false)
       return
     }
 
     toast.success('Tarifas del cliente guardadas')
-    loadClientRates()
+    await loadClientRates(activeDestination)
+    setSavingRates(false)
   }
 
   const archiveClient = async () => {
@@ -498,6 +570,17 @@ export default function ClienteProfilePage() {
                 <div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">Asegura carga</p>
                   <p className="font-medium">{cliente?.asegura_carga ? 'Sí' : 'No'}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Destino tarifario Miami
+                  </p>
+                  <p className="font-medium">
+                    {getMiamiRateDestinationLabel(
+                      cliente?.preferred_miami_rate_destination
+                    )}
+                  </p>
                 </div>
 
                 <div>

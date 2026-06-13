@@ -37,10 +37,16 @@ const initialFormData = {
   tipo_cliente: '',
   vendedor_asignado: '',
   origen_frecuente: '',
+  preferred_miami_rate_destination: 'SPS',
   asegura_carga: false,
   seguro_porcentaje: '',
   notas_tarifas: '',
 }
+
+const MIAMI_RATE_DESTINATION_OPTIONS = [
+  { value: 'SPS', label: 'SPS — San Pedro Sula' },
+  { value: 'TGU', label: 'TGU — Tegucigalpa' },
+]
 
 const fieldClass =
   'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-500/10 disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400 dark:focus:ring-slate-400/10 dark:disabled:bg-slate-900'
@@ -195,6 +201,8 @@ export default function NuevoClientePage() {
       tipo_cliente: formData.tipo_cliente,
       vendedor_asignado: vendedorAsignado,
       origen_frecuente: formData.origen_frecuente,
+      preferred_miami_rate_destination:
+        formData.preferred_miami_rate_destination,
       asegura_carga: formData.asegura_carga,
       seguro_porcentaje: formData.asegura_carga
         ? Number(formData.seguro_porcentaje || 0)
@@ -537,6 +545,21 @@ export default function NuevoClientePage() {
                 {vendedores.map((vendedor) => (
                   <option key={vendedor.id} value={vendedor.id}>
                     {vendedor.nombre} {vendedor.apellido}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Destino tarifario Miami">
+              <select
+                name="preferred_miami_rate_destination"
+                value={formData.preferred_miami_rate_destination}
+                onChange={handleChange}
+                className={fieldClass}
+              >
+                {MIAMI_RATE_DESTINATION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
