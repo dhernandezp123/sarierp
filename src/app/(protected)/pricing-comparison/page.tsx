@@ -42,6 +42,18 @@ import {
   CardHeader,
   CardTitle,
 } from '../../../components/ui/card'
+
+const pricingItemTypeOptions = [
+  'Flete',
+  'Origen',
+  'Destino',
+  'Seguro',
+  'Documentación',
+  'Aduana',
+  'Inland',
+  'Profit',
+  'Otro',
+]
 import {
   Dialog,
   DialogContent,
@@ -1555,16 +1567,20 @@ function PricingComparisonContent() {
     }
   }
 
+  const formatEditableMoney = (value: unknown) =>
+    Number(value || 0).toFixed(2)
+
   const startEditingPricingItem = (item: any) => {
     if (!ensureQuoteIsEditable()) return
 
     setEditingPricingItemId(item.id)
 
     setEditingPricingItemForm({
+      item_type: item.item_type || 'Otro',
       description: item.description || '',
       quantity: item.quantity || 1,
-      sale_amount: item.sale_amount || 0,
-      cost_amount: item.cost_amount || 0,
+      sale_amount: formatEditableMoney(item.sale_amount),
+      cost_amount: formatEditableMoney(item.cost_amount),
       provider: item.provider || item.supplier || '',
       notes: item.notes || '',
     })
@@ -1593,6 +1609,7 @@ function PricingComparisonContent() {
     const { error } = await supabase
       .from('pricing_items')
       .update({
+        item_type: editingPricingItemForm.item_type || 'Otro',
         description: editingPricingItemForm.description,
         quantity,
         cost_amount: Number(editingPricingItemForm.cost_amount || 0),
@@ -3903,17 +3920,11 @@ const profitabilityColor =
                                 onChange={handlePricingChange}
                                 className={fieldClass}
                               >
-                                <option value="Flete">Flete</option>
-                                <option value="Origen">Origen</option>
-                                <option value="Destino">Destino</option>
-                                <option value="Seguro">Seguro</option>
-                                <option value={'Documentaci\u00f3n'}>
-                                  Documentaci&oacute;n
-                                </option>
-                                <option value="Aduana">Aduana</option>
-                                <option value="Inland">Inland</option>
-                                <option value="Profit">Profit</option>
-                                <option value="Otro">Otro</option>
+                                {pricingItemTypeOptions.map((type) => (
+                                  <option key={type} value={type}>
+                                    {type}
+                                  </option>
+                                ))}
                               </select>
                             </div>
 
@@ -4379,6 +4390,7 @@ const profitabilityColor =
                         <thead className="bg-zinc-950 text-white">
                           <tr>
                             <th className="p-2 text-xs uppercase text-gray-500">Descripción</th>
+                            <th className="p-2 text-xs uppercase text-gray-500">Tipo</th>
                             <th className="p-2 text-xs uppercase text-gray-500">Proveedor</th>
                             <th className="p-2 text-xs uppercase text-gray-500">QTY</th>
                             <th className="p-2 text-xs uppercase text-gray-500">Costo Unit.</th>
@@ -4449,6 +4461,34 @@ const profitabilityColor =
                                 </td>
 
                                 <td className="p-2 text-sm">
+                                  {editingPricingItemId === item.id ? (
+                                    <select
+                                      value={
+                                        editingPricingItemForm?.item_type ||
+                                        'Otro'
+                                      }
+                                      onChange={(e) =>
+                                        setEditingPricingItemForm({
+                                          ...editingPricingItemForm,
+                                          item_type: e.target.value,
+                                        })
+                                      }
+                                      className="w-full rounded border px-2 py-1 text-sm"
+                                    >
+                                      {pricingItemTypeOptions.map((type) => (
+                                        <option key={type} value={type}>
+                                          {type}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                      {item.item_type || 'Otro'}
+                                    </span>
+                                  )}
+                                </td>
+
+                                <td className="p-2 text-sm">
                                   {item.supplier || 'N/A'}
                                 </td>
 
@@ -4474,6 +4514,7 @@ const profitabilityColor =
                                   {editingPricingItemId === item.id ? (
                                     <input
                                       type="number"
+                                      step="0.01"
                                       value={editingPricingItemForm?.cost_amount || ''}
                                       onChange={(e) =>
                                         setEditingPricingItemForm({
@@ -4496,6 +4537,7 @@ const profitabilityColor =
                                   {editingPricingItemId === item.id ? (
                                     <input
                                       type="number"
+                                      step="0.01"
                                       value={editingPricingItemForm?.sale_amount || ''}
                                       onChange={(e) =>
                                         setEditingPricingItemForm({
