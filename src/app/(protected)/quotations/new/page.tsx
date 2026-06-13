@@ -34,6 +34,8 @@ type CargoDimensionLine = {
   dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
   weight: string
   weightUnit?: 'lbs' | 'kg'
+  volumeMode?: 'dimensions' | 'manual'
+  manualCbm?: string | number
 }
 
 type ContainerLine = {
@@ -66,6 +68,8 @@ export default function NewQuotationPage() {
       dimensionUnit: 'in',
       weight: '',
       weightUnit: 'lbs',
+      volumeMode: 'dimensions',
+      manualCbm: '',
     },
   ])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
@@ -546,9 +550,7 @@ export default function NewQuotationPage() {
         .filter((line) => {
           return (
             Number(line.quantity || 0) > 0 &&
-            Number(line.length || 0) > 0 &&
-            Number(line.width || 0) > 0 &&
-            Number(line.height || 0) > 0
+            hasLineVolume(line)
           )
         })
         .map((line) => ({
@@ -686,7 +688,26 @@ export default function NewQuotationPage() {
     return 0
   }
 
+  const getCargoVolumeMode = (line: CargoDimensionLine) =>
+    line.volumeMode || 'dimensions'
+
+  const hasLineVolume = (line: CargoDimensionLine) => {
+    if (getCargoVolumeMode(line) === 'manual') {
+      return Number(line.manualCbm || 0) > 0
+    }
+
+    return (
+      Number(line.length || 0) > 0 &&
+      Number(line.width || 0) > 0 &&
+      Number(line.height || 0) > 0
+    )
+  }
+
   const calculateLineCbm = (line: CargoDimensionLine) => {
+    if (getCargoVolumeMode(line) === 'manual') {
+      return Number(line.manualCbm || 0)
+    }
+
     const quantity = Number(line.quantity || 0)
     if (!quantity) return 0
 
@@ -752,9 +773,7 @@ export default function NewQuotationPage() {
       .filter((line) => {
         return (
           Number(line.quantity || 0) > 0 &&
-          Number(line.length || 0) > 0 &&
-          Number(line.width || 0) > 0 &&
-          Number(line.height || 0) > 0
+          hasLineVolume(line)
         )
       })
       .map((line) => ({
@@ -1381,6 +1400,8 @@ export default function NewQuotationPage() {
                             dimensionUnit: 'in',
                             weight: '',
                             weightUnit: 'lbs',
+                            volumeMode: 'dimensions',
+                            manualCbm: '',
                           },
                         ])
                       }
@@ -1402,6 +1423,7 @@ export default function NewQuotationPage() {
                         const lineFt3 = calculateLineFt3(line)
                         const lineCbm = calculateLineCbm(line)
                         const lineWeightUnit = getCargoWeightUnit(line)
+                        const lineVolumeMode = getCargoVolumeMode(line)
                         const lineTotalLbs = getLineTotalWeightLbs(line)
                         const lineTotalKg = getLineTotalWeightKg(line)
 
@@ -1469,6 +1491,32 @@ export default function NewQuotationPage() {
                               />
 
                               <select
+                                value={lineVolumeMode}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? {
+                                            ...item,
+                                            volumeMode:
+                                              e.target.value as CargoDimensionLine['volumeMode'],
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={fieldClass}
+                              >
+                                <option value="dimensions">
+                                  Calcular por dimensiones
+                                </option>
+                                <option value="manual">
+                                  Ingresar CBM manual
+                                </option>
+                              </select>
+
+                              {lineVolumeMode === 'dimensions' ? (
+                                <select
                                 value={line.dimensionUnit}
                                 onChange={(e) =>
                                   setCargoLines((prev) =>
@@ -1490,6 +1538,32 @@ export default function NewQuotationPage() {
                                 <option value="mm">Milímetros (mm)</option>
                                 <option value="m">Metros (m)</option>
                               </select>
+                              ) : (
+                                <div className="flex flex-col gap-1">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    placeholder="CBM total de la línea"
+                                    value={line.manualCbm || ''}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? {
+                                                ...item,
+                                                manualCbm: e.target.value,
+                                              }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    className={fieldClass}
+                                  />
+                                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                                    CBM total de la línea
+                                  </span>
+                                </div>
+                              )}
 
                               <div className="grid grid-cols-[1fr_92px] gap-2">
                                 <input
@@ -1530,53 +1604,57 @@ export default function NewQuotationPage() {
                                 </select>
                               </div>
 
-                              <input
-                                type="number"
-                                placeholder="Largo"
-                                value={line.length}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? { ...item, length: e.target.value }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              />
+                              {lineVolumeMode === 'dimensions' && (
+                                <>
+                                  <input
+                                    type="number"
+                                    placeholder="Largo"
+                                    value={line.length}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, length: e.target.value }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    className={fieldClass}
+                                  />
 
-                              <input
-                                type="number"
-                                placeholder="Ancho"
-                                value={line.width}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? { ...item, width: e.target.value }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              />
+                                  <input
+                                    type="number"
+                                    placeholder="Ancho"
+                                    value={line.width}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, width: e.target.value }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    className={fieldClass}
+                                  />
 
-                              <input
-                                type="number"
-                                placeholder="Alto"
-                                value={line.height}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? { ...item, height: e.target.value }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              />
+                                  <input
+                                    type="number"
+                                    placeholder="Alto"
+                                    value={line.height}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, height: e.target.value }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    className={fieldClass}
+                                  />
+                                </>
+                              )}
 
                               <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                                 KG {formatNumber(lineTotalKg, 2)} · LBS{' '}

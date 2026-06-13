@@ -14,6 +14,8 @@ export type MiamiCargoDimensionLine = {
   dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
   weight: string
   weightUnit?: 'lbs' | 'kg'
+  volumeMode?: 'dimensions' | 'manual'
+  manualCbm?: string | number
 }
 
 type MiamiQuotationFormData = {
@@ -68,6 +70,21 @@ export function MiamiQuotationSection({
 }: MiamiQuotationSectionProps) {
   const getCargoWeightUnit = (line: MiamiCargoDimensionLine) =>
     line.weightUnit || 'lbs'
+
+  const getCargoVolumeMode = (line: MiamiCargoDimensionLine) =>
+    line.volumeMode || 'dimensions'
+
+  const hasLineVolume = (line: MiamiCargoDimensionLine) => {
+    if (getCargoVolumeMode(line) === 'manual') {
+      return Number(line.manualCbm || 0) > 0
+    }
+
+    return (
+      Number(line.length || 0) > 0 &&
+      Number(line.width || 0) > 0 &&
+      Number(line.height || 0) > 0
+    )
+  }
 
   const getLineUnitWeightLbs = (line: MiamiCargoDimensionLine) => {
     const weight = Number(line.weight || 0)
@@ -242,6 +259,8 @@ export function MiamiQuotationSection({
                       dimensionUnit: 'in',
                       weight: '',
                       weightUnit: 'lbs',
+                      volumeMode: 'dimensions',
+                      manualCbm: '',
                     },
                   ])
                 }
@@ -265,14 +284,13 @@ export function MiamiQuotationSection({
                 {cargoLines.map((line, idx) => {
                   const isLineComplete =
                     Number(line.quantity || 0) > 0 &&
-                    Number(line.length || 0) > 0 &&
-                    Number(line.width || 0) > 0 &&
-                    Number(line.height || 0) > 0 &&
+                    hasLineVolume(line) &&
                     Number(line.weight || 0) > 0
 
                   const lineFt3 = calculateLineFt3(line)
                   const lineCbm = calculateLineCbm(line)
                   const lineWeightUnit = getCargoWeightUnit(line)
+                  const lineVolumeMode = getCargoVolumeMode(line)
                   const lineTotalLbs =
                     getLineUnitWeightLbs(line) * Number(line.quantity || 0)
                   const lineTotalKg =
@@ -337,7 +355,7 @@ export function MiamiQuotationSection({
                             : 'bg-white dark:bg-slate-950/40'
                         }`}
                       >
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                           <div className="flex flex-col gap-1">
                             <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
                               Cant.
@@ -362,18 +380,18 @@ export function MiamiQuotationSection({
 
                           <div className="flex flex-col gap-1">
                             <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                              Unidad
+                              Volumen
                             </label>
                             <select
-                              value={line.dimensionUnit}
+                              value={lineVolumeMode}
                               onChange={(e) =>
                                 setCargoLines((prev) =>
                                   prev.map((item) =>
                                     item.id === line.id
                                       ? {
                                           ...item,
-                                          dimensionUnit:
-                                            e.target.value as MiamiCargoDimensionLine['dimensionUnit'],
+                                          volumeMode:
+                                            e.target.value as MiamiCargoDimensionLine['volumeMode'],
                                         }
                                       : item
                                   )
@@ -381,12 +399,62 @@ export function MiamiQuotationSection({
                               }
                               className={`${fieldClass} h-10 w-full text-sm`}
                             >
-                              <option value="in">Pulgadas (in)</option>
-                              <option value="cm">Centímetros (cm)</option>
-                              <option value="mm">Milímetros (mm)</option>
-                              <option value="m">Metros (m)</option>
+                              <option value="dimensions">Calcular por dimensiones</option>
+                              <option value="manual">Ingresar CBM manual</option>
                             </select>
                           </div>
+
+                          {lineVolumeMode === 'dimensions' ? (
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Unidad
+                              </label>
+                              <select
+                                value={line.dimensionUnit}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? {
+                                            ...item,
+                                            dimensionUnit:
+                                              e.target.value as MiamiCargoDimensionLine['dimensionUnit'],
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className={`${fieldClass} h-10 w-full text-sm`}
+                              >
+                                <option value="in">Pulgadas (in)</option>
+                                <option value="cm">Centímetros (cm)</option>
+                                <option value="mm">Milímetros (mm)</option>
+                                <option value="m">Metros (m)</option>
+                              </select>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                CBM total de la línea
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={line.manualCbm || ''}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, manualCbm: e.target.value }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="CBM total de la línea"
+                                className={`${fieldClass} h-10 w-full`}
+                              />
+                            </div>
+                          )}
 
                           <div className="flex flex-col gap-1">
                             <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
@@ -433,69 +501,78 @@ export function MiamiQuotationSection({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                              Largo
-                            </label>
-                            <input
-                              type="number"
-                              value={line.length}
-                              onChange={(e) =>
-                                setCargoLines((prev) =>
-                                  prev.map((item) =>
-                                    item.id === line.id
-                                      ? { ...item, length: e.target.value }
-                                      : item
+                        {lineVolumeMode === 'dimensions' && (
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Largo
+                              </label>
+                              <input
+                                type="number"
+                                value={line.length}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, length: e.target.value }
+                                        : item
+                                    )
                                   )
-                                )
-                              }
-                              placeholder="0"
-                              className={`${fieldClass} h-10`}
-                            />
-                          </div>
+                                }
+                                placeholder="0"
+                                className={`${fieldClass} h-10`}
+                              />
+                            </div>
 
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                              Ancho
-                            </label>
-                            <input
-                              type="number"
-                              value={line.width}
-                              onChange={(e) =>
-                                setCargoLines((prev) =>
-                                  prev.map((item) =>
-                                    item.id === line.id
-                                      ? { ...item, width: e.target.value }
-                                      : item
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Ancho
+                              </label>
+                              <input
+                                type="number"
+                                value={line.width}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, width: e.target.value }
+                                        : item
+                                    )
                                   )
-                                )
-                              }
-                              placeholder="0"
-                              className={`${fieldClass} h-10`}
-                            />
-                          </div>
+                                }
+                                placeholder="0"
+                                className={`${fieldClass} h-10`}
+                              />
+                            </div>
 
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                              Alto
-                            </label>
-                            <input
-                              type="number"
-                              value={line.height}
-                              onChange={(e) =>
-                                setCargoLines((prev) =>
-                                  prev.map((item) =>
-                                    item.id === line.id
-                                      ? { ...item, height: e.target.value }
-                                      : item
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                Alto
+                              </label>
+                              <input
+                                type="number"
+                                value={line.height}
+                                onChange={(e) =>
+                                  setCargoLines((prev) =>
+                                    prev.map((item) =>
+                                      item.id === line.id
+                                        ? { ...item, height: e.target.value }
+                                        : item
+                                    )
                                   )
-                                )
-                              }
-                              placeholder="0"
-                              className={`${fieldClass} h-10`}
-                            />
+                                }
+                                placeholder="0"
+                                className={`${fieldClass} h-10`}
+                              />
+                            </div>
                           </div>
+                        )}
+
+                        <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                          KG {formatNumber(lineTotalKg, 2)} · LBS{' '}
+                          {formatNumber(lineTotalLbs, 0)} · FT3{' '}
+                          {formatNumber(lineFt3, 2)} · CBM{' '}
+                          {formatNumber(lineCbm, 3)}
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">

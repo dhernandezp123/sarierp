@@ -1583,6 +1583,15 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 </div>
 
                 <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Valor FOB</p>
+                  <p className="font-semibold text-slate-900 dark:text-white">
+                    {Number(quotation.commercial_value || 0) > 0
+                      ? formatCurrencyValue(quotation.commercial_value)
+                      : 'N/A'}
+                  </p>
+                </div>
+
+                <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Transporte</p>
                   <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.tipo_transporte || 'N/A'}

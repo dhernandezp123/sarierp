@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -27,6 +27,34 @@ type Profile = {
 }
 
 const roles = ['Admin', 'Ventas', 'Pricing', 'Contabilidad', 'Operaciones']
+
+const getRolBadgeClass = (rol: string) => {
+  switch (rol) {
+    case 'Admin':
+      return 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+    case 'Ventas':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+    case 'Pricing':
+      return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+    case 'Contabilidad':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+    case 'Operaciones':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+    default:
+      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+  }
+}
+
+const getStatusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'Aprobado':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+    case 'Rechazado':
+      return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+    default:
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+  }
+}
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<Profile[]>([])
@@ -243,8 +271,11 @@ export default function AdminUsersPage() {
     fetchUsers()
   }
 
-  if (loading) {
-    return <div className="text-sm text-slate-500 dark:text-slate-400">Cargando usuarios...</div>
+  const openRoleDialog = (user: Profile) => {
+    setSelectedUser(user)
+    setNewRole(user.rol)
+    setChangeReason('')
+    setRoleDialogOpen(true)
   }
 
   const filteredUsers = users.filter((user) => {
@@ -261,154 +292,238 @@ export default function AdminUsersPage() {
     return matchesSearch && matchesStatus
   })
 
+  const metrics = {
+    total: users.length,
+    pending: users.filter((user) => user.status === 'Pendiente').length,
+    active: users.filter((user) => user.is_active).length,
+  }
+
   return (
     <AdminGuard>
-      <>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Administración de usuarios
-        </h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Gestión de accesos y permisos del ERP.
-        </p>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              Administración de usuarios
+            </h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Gestión de accesos y permisos del ERP.
+            </p>
+          </div>
 
-        <div className="mt-4">
           <Link
             href="/dashboard"
-            className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            ← Regresar al dashboard
+            ← Dashboard
           </Link>
         </div>
-      </div>
 
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por nombre o correo..."
-          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-400 md:max-w-sm"
-        />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Total usuarios
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
+              {metrics.total}
+            </p>
+          </div>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-400"
-        >
-          <option value="Todos">Todos</option>
-          <option value="Pendiente">Pendientes</option>
-          <option value="Aprobado">Aprobados</option>
-          <option value="Rechazado">Rechazados</option>
-        </select>
-      </div>
+          <div
+            className={`rounded-2xl border p-5 shadow-sm ${
+              metrics.pending > 0
+                ? 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20'
+                : 'border-slate-200 bg-white dark:border-slate-700/60 dark:bg-[#0b1220]'
+            }`}
+          >
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Pendientes
+            </p>
+            <p
+              className={`mt-2 text-3xl font-bold ${
+                metrics.pending > 0
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : 'text-slate-900 dark:text-white'
+              }`}
+            >
+              {metrics.pending}
+            </p>
+          </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-800/70">
-            <tr>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Usuario</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Rol</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Estado</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Acceso</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Acciones</th>
-            </tr>
-          </thead>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Activos
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
+              {metrics.active}
+            </p>
+          </div>
+        </div>
 
-          <tbody>
-            {filteredUsers.map((user) => (
-              <tr key={user.id} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="px-4 py-3">
-                  <div className="font-medium text-slate-900 dark:text-white">
-                    {user.nombre || 'Sin nombre'} {user.apellido || ''}
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    {user.email || 'Sin email'}
-                  </div>
-                </td>
+        <div className="grid gap-3 sm:grid-cols-[1fr_200px]">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar por nombre o correo..."
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-400/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          />
 
-                <td className="px-4 py-3">
-                  <select
-                    value={user.rol}
-                    onChange={(e) => {
-                      setSelectedUser(user)
-                      setNewRole(e.target.value)
-                      setChangeReason('')
-                      setRoleDialogOpen(true)
-                    }}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                  >
-                    {roles.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                </td>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-400/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          >
+            <option value="Todos">Todos</option>
+            <option value="Pendiente">Pendientes</option>
+            <option value="Aprobado">Aprobados</option>
+            <option value="Rechazado">Rechazados</option>
+          </select>
+        </div>
 
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      user.status === 'Aprobado'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : user.status === 'Rechazado'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {user.status}
-                  </span>
-                </td>
-
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      user.is_active
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}
-                  >
-                    {user.is_active ? 'Activo' : 'Inactivo'}
-                  </span>
-                </td>
-
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    {user.status !== 'Aprobado' && (
-                      <button
-                        onClick={() => approveUser(user.id)}
-                        className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-700"
-                      >
-                        Aprobar
-                      </button>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          {loading ? (
+            <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
+              Cargando usuarios...
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-900 dark:bg-[#081120]">
+                    {['Usuario', 'Rol', 'Estado', 'Acceso', 'Acciones'].map(
+                      (heading) => (
+                        <th
+                          key={heading}
+                          className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-300"
+                        >
+                          {heading}
+                        </th>
+                      )
                     )}
+                  </tr>
+                </thead>
 
-                    <button
-                      onClick={() => rejectUser(user.id)}
-                      className="rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700"
-                    >
-                      Rechazar
-                    </button>
+                <tbody>
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500"
+                      >
+                        No hay usuarios registrados.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <tr
+                        key={user.id}
+                        className="border-b border-slate-100 transition hover:bg-slate-50/70 dark:border-slate-800 dark:hover:bg-slate-800/30"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                              {(user.nombre?.[0] || '?').toUpperCase()}
+                            </div>
 
-                    <button
-                      onClick={() => toggleActive(user.id, user.is_active)}
-                      className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
-                    >
-                      {user.is_active ? 'Desactivar' : 'Activar'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                            <div>
+                              <p className="font-medium text-slate-900 dark:text-white">
+                                {user.nombre || 'Sin nombre'}{' '}
+                                {user.apellido || ''}
+                              </p>
+                              <p className="text-xs text-slate-400 dark:text-slate-500">
+                                {user.email || 'Sin email'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
 
-            {filteredUsers.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
-                  No hay usuarios registrados.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${getRolBadgeClass(
+                                user.rol
+                              )}`}
+                            >
+                              {user.rol}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => openRoleDialog(user)}
+                              className="text-xs text-slate-400 underline underline-offset-2 transition hover:text-slate-700 dark:hover:text-slate-200"
+                            >
+                              Cambiar
+                            </button>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${getStatusBadgeClass(
+                              user.status
+                            )}`}
+                          >
+                            {user.status || 'Pendiente'}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                              user.is_active
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                            }`}
+                          >
+                            {user.is_active ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {user.status !== 'Aprobado' && (
+                              <button
+                                type="button"
+                                onClick={() => approveUser(user.id)}
+                                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-500 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-emerald-900/50 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400"
+                              >
+                                Aprobar
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => rejectUser(user.id)}
+                              className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-500 transition hover:border-red-200 hover:text-red-600 dark:border-slate-700 dark:text-slate-400 dark:hover:border-red-900/50 dark:hover:text-red-400"
+                            >
+                              Rechazar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                toggleActive(user.id, user.is_active)
+                              }
+                              className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            >
+                              {user.is_active ? 'Desactivar' : 'Activar'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              <div className="border-t border-slate-100 px-4 py-2.5 dark:border-slate-800">
+                <p className="text-xs text-slate-400 dark:text-slate-500">
+                  {filteredUsers.length} de {users.length} usuarios
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <Dialog
@@ -428,25 +543,30 @@ export default function AdminUsersPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                 Usuario
               </label>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                 {selectedUser?.nombre || 'Sin nombre'}{' '}
                 {selectedUser?.apellido || ''}
+                {selectedUser?.email && (
+                  <span className="ml-2 text-xs text-slate-400">
+                    ({selectedUser.email})
+                  </span>
+                )}
               </div>
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                 Nuevo rol
               </label>
 
               <select
                 value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                onChange={(event) => setNewRole(event.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
               >
                 {roles.map((role) => (
                   <option key={role} value={role}>
@@ -457,30 +577,32 @@ export default function AdminUsersPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                Motivo del cambio
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                Motivo del cambio <span className="text-red-400">*</span>
               </label>
 
               <textarea
                 value={changeReason}
-                onChange={(e) =>
-                  setChangeReason(e.target.value)
+                onChange={(event) =>
+                  setChangeReason(event.target.value)
                 }
-                rows={4}
+                rows={3}
                 placeholder="Describe el motivo del cambio..."
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
               />
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-1">
               <button
+                type="button"
                 onClick={() => setRoleDialogOpen(false)}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm"
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Cancelar
               </button>
 
               <button
+                type="button"
                 disabled={
                   savingRole ||
                   !changeReason.trim() ||
@@ -501,7 +623,7 @@ export default function AdminUsersPage() {
 
                   setRoleDialogOpen(false)
                 }}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
                 {savingRole
                   ? 'Guardando...'
@@ -511,10 +633,6 @@ export default function AdminUsersPage() {
           </div>
         </DialogContent>
       </Dialog>
-      </>
     </AdminGuard>
   )
 }
-
-
-

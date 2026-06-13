@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FileText, Pencil, Plus, X } from 'lucide-react'
+import { FileText, Pencil, Plus, Save, X } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 
@@ -3452,69 +3452,79 @@ const profitabilityColor =
                     </div>
 
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                      {['EXW', 'FCA'].includes(selectedQuote?.incoterm || '') && (
+                        <div>
+                          <label className={labelClass}>
+                            Costo EXW / Recolección en origen
+                          </label>
 
-                    {['EXW', 'FCA'].includes(selectedQuote?.incoterm || '') && (
-                      <div>
-                        <label className={labelClass}>
-                          Costo EXW / Recolección en origen
-                        </label>
+                          <input
+                            type="number"
+                            name="exw_cost"
+                            value={agentForm.exw_cost}
+                            onChange={handleAgentChange}
+                            className={cn(fieldClass, 'mt-1 w-full')}
+                            placeholder="0.00"
+                          />
+                        </div>
+                      )}
 
-                        <input
-                          type="number"
-                          name="exw_cost"
-                          value={agentForm.exw_cost}
-                          onChange={handleAgentChange}
-                          className={cn(fieldClass, 'mt-1 w-full')}
-                          placeholder="0.00"
-                        />
-                      </div>
-                    )}
+                      <div className="col-span-full">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-slate-900/60">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                                Costo base Sari
+                              </p>
+                              <p className="mt-1 text-3xl font-bold text-slate-900 dark:text-white">
+                                {agentForm.moneda || 'USD'}{' '}
+                                {agentTotalCost.toLocaleString('en-US', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </p>
+                            </div>
 
-                    <div className="col-span-full rounded-2xl border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-700/40 dark:bg-emerald-950/40">
-                      <p className="text-xs uppercase tracking-wide text-emerald-700 font-semibold">
-                        Costo base Sari
-                      </p>
-
-                      <p className="mt-2 text-3xl font-bold text-emerald-700">
-                        {agentForm.moneda || 'USD'}{' '}
-                        {agentTotalCost.toLocaleString('en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </p>
-
-                      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                        {suggestedSales.map((item) => (
-                          <div
-                            key={item.margin}
-                            className={cn(
-                              mutedCardClass,
-                              'border border-emerald-100 p-3 dark:border-slate-800 dark:bg-slate-950/70'
-                            )}
-                          >
-                            <p className="text-xs text-gray-500">
-                              +{item.margin}%
-                            </p>
-
-                            <p className="mt-1 font-bold text-emerald-700">
-                              {agentForm.moneda || 'USD'}{' '}
-                              {item.sale.toLocaleString('en-US', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </p>
+                            <button
+                              onClick={saveAgentQuote}
+                              disabled={isPricingActionDisabled}
+                              className="flex shrink-0 items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                            >
+                              <Save className="h-3.5 w-3.5" />
+                              {editingAgentQuoteId
+                                ? 'Actualizar Tarifa'
+                                : 'Guardar Tarifa'}
+                            </button>
                           </div>
-                        ))}
-                      </div>
-                    </div>
 
-                    <button
-                      onClick={saveAgentQuote}
-                      disabled={isPricingActionDisabled}
-                      className="col-span-full rounded-xl bg-zinc-950 px-6 py-3 font-semibold text-white transition hover:bg-zinc-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
-                    >
-                      {editingAgentQuoteId ? 'Actualizar Tarifa' : 'Guardar Tarifa'}
-                    </button>
+                          <div className="my-4 border-t border-slate-100 dark:border-slate-800" />
+
+                          <div>
+                            <p className="mb-2.5 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                              Venta sugerida con margen
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-5">
+                              {suggestedSales.map((item) => (
+                                <div
+                                  key={item.margin}
+                                  className="rounded-xl border border-slate-100 bg-slate-50 p-3 transition hover:border-emerald-200 hover:bg-emerald-50 dark:border-slate-800 dark:bg-slate-950/50 dark:hover:border-emerald-900/40 dark:hover:bg-emerald-950/20"
+                                >
+                                  <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                                    +{item.margin}%
+                                  </p>
+                                  <p className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                                    {agentForm.moneda || 'USD'}{' '}
+                                    {item.sale.toLocaleString('en-US', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
