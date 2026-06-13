@@ -398,6 +398,23 @@ export default function ClienteProfilePage() {
         new Date(b.date).getTime() - new Date(a.date).getTime()
     )
 
+  function InfoRow({
+    label,
+    value,
+  }: {
+    label: string
+    value?: string | null
+  }) {
+    return (
+      <div className="flex items-start justify-between gap-4">
+        <p className="shrink-0 text-xs text-slate-400 dark:text-slate-500">{label}</p>
+        <p className="text-right text-sm font-medium text-slate-800 dark:text-slate-200">
+          {value || 'N/A'}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <>
       <div className="space-y-6">
@@ -512,110 +529,160 @@ export default function ClienteProfilePage() {
         </div>
 
         {activeTab === 'resumen' && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Código</p>
-                <p className="font-bold">{cliente?.codigo_cliente || 'N/A'}</p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
-                <p className="text-sm text-slate-500 dark:text-slate-400">RTN / NIT / RUC</p>
-                <p className="font-bold">
-                  {cliente?.rtn || cliente?.nit || cliente?.ruc || 'N/A'}
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  Código
+                </p>
+                <p className="mt-1 text-base font-bold text-slate-900 dark:text-white">
+                  {cliente?.codigo_cliente || 'N/A'}
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Condición de pago</p>
-                <p className="font-bold">
-                  {cliente?.condicion_pago ||
-                    cliente?.payment_terms ||
-                    'Contado'}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  RTN / NIT
+                </p>
+                <p className="mt-1 text-base font-bold text-slate-900 dark:text-white">
+                  {cliente?.rtn || cliente?.nit || 'N/A'}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  Condición de pago
+                </p>
+                <p className="mt-1 text-base font-bold text-slate-900 dark:text-white">
+                  {cliente?.condicion_pago || 'Contado'}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  Vendedor asignado
+                </p>
+                <p className="mt-1 text-base font-bold text-slate-900 dark:text-white">
+                  {cliente?.vendedor
+                    ? `${cliente.vendedor.nombre} ${cliente.vendedor.apellido}`
+                    : 'Sin asignar'}
                 </p>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
-              <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
-                Información del Cliente
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Email</p>
-                  <p className="font-medium">{cliente?.email_1 || 'N/A'}</p>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">
+                  Contacto
+                </h3>
+                <div className="space-y-3">
+                  <InfoRow label="Persona de contacto" value={cliente?.contacto} />
+                  <InfoRow label="Teléfono" value={cliente?.telefono} />
+                  <InfoRow label="Email" value={cliente?.email_1} />
+                  {cliente?.email_2 && (
+                    <InfoRow label="Email 2" value={cliente.email_2} />
+                  )}
                 </div>
+              </div>
 
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Persona de contacto</p>
-                  <p className="font-medium">{cliente?.contacto || 'N/A'}</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">
+                  Ubicación
+                </h3>
+                <div className="space-y-3">
+                  <InfoRow label="País" value={cliente?.pais} />
+                  <InfoRow
+                    label="Departamento / Estado"
+                    value={cliente?.departamento_estado}
+                  />
+                  <InfoRow label="Ciudad" value={cliente?.ciudad} />
+                  <InfoRow label="Dirección" value={cliente?.direccion} />
                 </div>
+              </div>
 
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Teléfono</p>
-                  <p className="font-medium">{cliente?.telefono || 'N/A'}</p>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">
+                  Clasificación comercial
+                </h3>
+                <div className="space-y-3">
+                  <InfoRow label="Tipo de cliente" value={cliente?.tipo_cliente} />
+                  <InfoRow label="Tipo de empresa" value={cliente?.tipo_persona} />
+                  <InfoRow
+                    label="Origen frecuente"
+                    value={cliente?.origen_frecuente}
+                  />
                 </div>
+              </div>
 
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Tipo de cliente</p>
-                  <p className="font-medium">{cliente?.tipo_cliente || 'N/A'}</p>
-                </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">
+                  Logística y seguro
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      Asegura carga
+                    </p>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                        cliente?.asegura_carga
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                          : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                      }`}
+                    >
+                      {cliente?.asegura_carga ? 'Sí' : 'No'}
+                    </span>
+                  </div>
 
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Ciudad</p>
-                  <p className="font-medium">{cliente?.ciudad || 'N/A'}</p>
-                </div>
+                  {cliente?.asegura_carga && (
+                    <InfoRow
+                      label="Porcentaje de seguro"
+                      value={insurancePercentage}
+                    />
+                  )}
 
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Asegura carga</p>
-                  <p className="font-medium">{cliente?.asegura_carga ? 'Sí' : 'No'}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Destino tarifario Miami
-                  </p>
-                  <p className="font-medium">
-                    {getMiamiRateDestinationLabel(
+                  <InfoRow
+                    label="Destino tarifario Miami"
+                    value={getMiamiRateDestinationLabel(
                       cliente?.preferred_miami_rate_destination
                     )}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Porcentaje de seguro
-                  </p>
-                  <p className="font-medium">{insurancePercentage}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Vendedor asignado
-                  </p>
-
-                  <p className="font-medium">
-                    {cliente?.vendedor
-                      ? `${cliente.vendedor.nombre} ${cliente.vendedor.apellido}`
-                      : 'N/A'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">País</p>
-                  <p className="font-medium">{cliente?.pais || 'N/A'}</p>
-                </div>
-
-                <div className="md:col-span-2">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Dirección</p>
-                  <p className="font-medium">{cliente?.direccion || 'N/A'}</p>
+                  />
                 </div>
               </div>
             </div>
-          </>
-        )}
 
+            {(cliente?.observaciones || cliente?.notas_tarifas) && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">
+                  Observaciones
+                </h3>
+                <div className="space-y-4">
+                  {cliente?.observaciones && (
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                        Observaciones generales
+                      </p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        {cliente.observaciones}
+                      </p>
+                    </div>
+                  )}
+
+                  {cliente?.notas_tarifas && (
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                        Notas de tarifas
+                      </p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300">
+                        {cliente.notas_tarifas}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {activeTab === 'cotizaciones' && (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
             <h2 className="mb-4 text-xl font-bold text-slate-900 dark:text-white">
@@ -901,3 +968,4 @@ export default function ClienteProfilePage() {
     </>
   )
 }
+
