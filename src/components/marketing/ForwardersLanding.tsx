@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import type { Variants } from 'framer-motion'
 import {
   ArrowRight,
   BarChart3,
@@ -23,12 +24,12 @@ import {
 
 // ─── Tokens de animación ──────────────────────────────────────────────────────
 
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 18 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 }
 
-const stagger = {
+const stagger: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.06 } },
 }
@@ -70,6 +71,13 @@ const benefits = [
   },
 ]
 
+const operationalProblems = [
+  'Excel para tarifas',
+  'Correos para aprobaciones',
+  'WhatsApp para seguimiento',
+  'Carpetas para documentos',
+]
+
 const features = [
   {
     title: 'Clientes y tarifas',
@@ -77,7 +85,7 @@ const features = [
     items: [
       'Historial comercial',
       'Contactos por empresa',
-      'Tarifas por cliente',
+      'Tarifas organizadas por cliente',
       'Seguro de carga',
     ],
   },
@@ -130,8 +138,8 @@ const features = [
     title: 'Seguridad empresarial',
     icon: ShieldCheck,
     items: [
-      'Permisos por rol',
-      'Control de acceso',
+      'Permisos seguros por rol',
+      'Control de acceso empresarial',
       'Auditoría de cambios',
       'Visibilidad controlada',
     ],
@@ -143,9 +151,9 @@ const workflow = [
   'Cotización',
   'Pricing',
   'Aprobación',
-  'Operación',
+  'Shipping Instruction',
   'Documentos',
-  'Validación',
+  'Validación de Costos',
   'Dashboard',
 ]
 
@@ -441,9 +449,9 @@ export function ForwardersLanding() {
               variants={fadeUp}
               className="mt-7 text-4xl font-bold leading-[1.1] tracking-tight text-[#07111F] sm:text-5xl lg:text-[64px]"
             >
-              Cotiza, aprueba y opera{' '}
+              Deja de gestionar tu freight forwarding en{' '}
               <span className="relative inline-block">
-                <span className="relative z-10 text-[#0038BD]">sin salir del sistema.</span>
+                <span className="relative z-10 text-[#0038BD]">Excel.</span>
                 <span className="absolute -bottom-1 left-0 right-0 h-[3px] rounded-full bg-[#EF8E01]/60" />
               </span>
             </motion.h1>
@@ -452,9 +460,8 @@ export function ForwardersLanding() {
               variants={fadeUp}
               className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-slate-500"
             >
-              Forwarders ERP by DHer centraliza clientes, tarifas, cotizaciones,
-              pricing, operaciones y trazabilidad en un sistema diseñado para
-              freight forwarders que no pueden perder margen por procesos manuales.
+              Cotizaciones, pricing, clientes, operaciones y control de m&aacute;rgenes
+              en una sola plataforma dise&ntilde;ada para freight forwarders.
             </motion.p>
 
             <motion.div
@@ -490,6 +497,66 @@ export function ForwardersLanding() {
       </section>
 
       {/* ── Beneficios ───────────────────────────────────────────────────── */}
+      <section className="bg-white px-5 py-16 sm:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid gap-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
+            <motion.div
+              variants={fadeUp}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: '-80px' }}
+            >
+              <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#EF8E01]">
+                OPERACI&Oacute;N TRADICIONAL
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#07111F] sm:text-4xl">
+                El problema no es vender m&aacute;s. Es operar sin perder control.
+              </h2>
+              <p className="mt-4 text-base leading-8 text-slate-500">
+                La mayor&iacute;a de freight forwarders todav&iacute;a dependen de
+                Excel, correos, WhatsApp y carpetas compartidas para cotizar,
+                aprobar tarifas, coordinar operaciones y validar costos.
+                Forwarders ERP centraliza ese flujo en una sola plataforma.
+              </p>
+            </motion.div>
+
+            <motion.div
+              variants={fadeUp}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: '-80px' }}
+              className="group"
+            >
+              <img
+                src="/excel-desktop-image.png"
+                alt="Escritorio operativo con procesos log&iacute;sticos gestionados en Excel"
+                className="h-auto w-full rounded-3xl border border-slate-200/70 bg-white object-contain shadow-2xl shadow-[#0038BD]/15 ring-1 ring-slate-900/5 transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[#0038BD]/20"
+              />
+            </motion.div>
+          </div>
+          <motion.div
+            variants={stagger}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-80px' }}
+            className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+          >
+            {operationalProblems.map((item) => (
+              <motion.div
+                variants={fadeUp}
+                key={item}
+                className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#0038BD]/20 hover:shadow-lg"
+              >
+                <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl bg-[#EF8E01]/10 text-[#EF8E01] transition group-hover:bg-[#EF8E01]/15">
+                  <Check size={18} />
+                </div>
+                <h3 className="font-semibold text-[#07111F]">{item}</h3>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
       <section id="beneficios" className="bg-white px-5 py-20 sm:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionHeading
