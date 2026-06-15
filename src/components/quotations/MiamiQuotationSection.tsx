@@ -1,6 +1,7 @@
 'use client'
 
 import type React from 'react'
+import { useEffect } from 'react'
 
 import type { MiamiQuotationState } from '@/src/hooks/useMiamiQuotation'
 
@@ -12,6 +13,7 @@ export type MiamiCargoDimensionLine = {
   width: string
   height: string
   dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
+  dimension_unit?: 'in' | 'cm' | 'mm' | 'm'
   weight: string
   weightUnit?: 'lbs' | 'kg'
   volumeMode?: 'dimensions' | 'manual'
@@ -68,35 +70,142 @@ export function MiamiQuotationSection({
   formatNumber,
   miami,
 }: MiamiQuotationSectionProps) {
+  const parseNumericValue = (value: string | number | undefined | null) => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+
+    const normalizedValue = String(value || '').trim().replace(',', '.')
+    const parsedValue = Number(normalizedValue)
+
+    return Number.isFinite(parsedValue) ? parsedValue : 0
+  }
+
   const getCargoWeightUnit = (line: MiamiCargoDimensionLine) =>
     line.weightUnit || 'lbs'
 
   const getCargoVolumeMode = (line: MiamiCargoDimensionLine) =>
     line.volumeMode || 'dimensions'
 
+  const getCargoDimensionUnit = (line: MiamiCargoDimensionLine) =>
+    line.dimensionUnit ?? line.dimension_unit ?? 'm'
+
+  useEffect(() => {
+    setCargoLines((prev) => {
+      let shouldUpdate = false
+
+      const nextLines = prev.map((line) => {
+        const isLegacyBlankInchesLine =
+          line.dimensionUnit === 'in' &&
+          line.dimension_unit == null &&
+          !line.length &&
+          !line.width &&
+          !line.height &&
+          !line.manualCbm
+
+        if (!isLegacyBlankInchesLine) return line
+
+        shouldUpdate = true
+
+        return {
+          ...line,
+          dimensionUnit: 'm' as const,
+          dimension_unit: 'm' as const,
+        }
+      })
+
+      return shouldUpdate ? nextLines : prev
+    })
+  }, [setCargoLines])
+
   const hasLineVolume = (line: MiamiCargoDimensionLine) => {
     if (getCargoVolumeMode(line) === 'manual') {
-      return Number(line.manualCbm || 0) > 0
+      return parseNumericValue(line.manualCbm) > 0
     }
 
     return (
-      Number(line.length || 0) > 0 &&
-      Number(line.width || 0) > 0 &&
-      Number(line.height || 0) > 0
+      parseNumericValue(line.length) > 0 &&
+      parseNumericValue(line.width) > 0 &&
+      parseNumericValue(line.height) > 0
     )
   }
 
   const getLineUnitWeightLbs = (line: MiamiCargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
+    const weight = parseNumericValue(line.weight)
     return getCargoWeightUnit(line) === 'kg' ? weight * 2.20462 : weight
   }
 
   const getLineUnitWeightKg = (line: MiamiCargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
+    const weight = parseNumericValue(line.weight)
     return getCargoWeightUnit(line) === 'kg' ? weight : weight / 2.20462
   }
 
-  const totalCargoKg = totalCargoWeight / 2.20462
+  const calculateCargoLineCbm = (line: MiamiCargoDimensionLine) => {
+    if (getCargoVolumeMode(line) === 'manual') {
+      return parseNumericValue(line.manualCbm)
+    }
+
+    const quantity = parseNumericValue(line.quantity)
+    const length = parseNumericValue(line.length)
+    const width = parseNumericValue(line.width)
+    const height = parseNumericValue(line.height)
+
+    if (!quantity || !length || !width || !height) return 0
+
+    const dimensionUnit = getCargoDimensionUnit(line)
+
+    if (dimensionUnit === 'cm') {
+      return (quantity * length * width * height) / 1_000_000
+    }
+
+    if (dimensionUnit === 'in') {
+      const ft3 = (quantity * length * width * height) / 1_728
+      return ft3 / 35.3147
+    }
+
+    if (dimensionUnit === 'mm') {
+      return (quantity * length * width * height) / 1_000_000_000
+    }
+
+    return quantity * length * width * height
+  }
+
+  const calculateCargoLineFt3 = (line: MiamiCargoDimensionLine) => {
+    if (getCargoVolumeMode(line) === 'dimensions') {
+      const quantity = parseNumericValue(line.quantity)
+      const length = parseNumericValue(line.length)
+      const width = parseNumericValue(line.width)
+      const height = parseNumericValue(line.height)
+
+      if (
+        getCargoDimensionUnit(line) === 'in' &&
+        quantity &&
+        length &&
+        width &&
+        height
+      ) {
+        return (quantity * length * width * height) / 1_728
+      }
+    }
+
+    return calculateCargoLineCbm(line) * 35.3147
+  }
+
+  const displayTotalCargoFt3 = cargoLines.reduce(
+    (sum, line) => sum + calculateCargoLineFt3(line),
+    0
+  )
+
+  const displayTotalCargoCbm = cargoLines.reduce(
+    (sum, line) => sum + calculateCargoLineCbm(line),
+    0
+  )
+
+  const displayTotalCargoWeight = cargoLines.reduce(
+    (sum, line) =>
+      sum + getLineUnitWeightLbs(line) * parseNumericValue(line.quantity),
+    0
+  )
+
+  const totalCargoKg = displayTotalCargoWeight / 2.20462
 
   if (!miami.isMiamiFlow) return null
 
@@ -256,7 +365,8 @@ export function MiamiQuotationSection({
                       length: '',
                       width: '',
                       height: '',
-                      dimensionUnit: 'in',
+                      dimensionUnit: 'm',
+                      dimension_unit: 'm',
                       weight: '',
                       weightUnit: 'lbs',
                       volumeMode: 'dimensions',
@@ -283,18 +393,19 @@ export function MiamiQuotationSection({
               <div className="space-y-3">
                 {cargoLines.map((line, idx) => {
                   const isLineComplete =
-                    Number(line.quantity || 0) > 0 &&
+                    parseNumericValue(line.quantity) > 0 &&
                     hasLineVolume(line) &&
-                    Number(line.weight || 0) > 0
+                    parseNumericValue(line.weight) > 0
 
-                  const lineFt3 = calculateLineFt3(line)
-                  const lineCbm = calculateLineCbm(line)
+                  const lineFt3 = calculateCargoLineFt3(line)
+                  const lineCbm = calculateCargoLineCbm(line)
                   const lineWeightUnit = getCargoWeightUnit(line)
                   const lineVolumeMode = getCargoVolumeMode(line)
+                  const lineDimensionUnit = getCargoDimensionUnit(line)
                   const lineTotalLbs =
-                    getLineUnitWeightLbs(line) * Number(line.quantity || 0)
+                    getLineUnitWeightLbs(line) * parseNumericValue(line.quantity)
                   const lineTotalKg =
-                    getLineUnitWeightKg(line) * Number(line.quantity || 0)
+                    getLineUnitWeightKg(line) * parseNumericValue(line.quantity)
 
                   return (
                     <div
@@ -410,20 +521,24 @@ export function MiamiQuotationSection({
                                 Unidad
                               </label>
                               <select
-                                value={line.dimensionUnit}
-                                onChange={(e) =>
+                                value={lineDimensionUnit}
+                                onChange={(e) => {
+                                  const dimensionUnit =
+                                    e.target
+                                      .value as MiamiCargoDimensionLine['dimensionUnit']
+
                                   setCargoLines((prev) =>
                                     prev.map((item) =>
                                       item.id === line.id
                                         ? {
                                             ...item,
-                                            dimensionUnit:
-                                              e.target.value as MiamiCargoDimensionLine['dimensionUnit'],
+                                            dimensionUnit,
+                                            dimension_unit: dimensionUnit,
                                           }
                                         : item
                                     )
                                   )
-                                }
+                                }}
                                 className={`${fieldClass} h-10 w-full text-sm`}
                               >
                                 <option value="in">Pulgadas (in)</option>
@@ -440,6 +555,7 @@ export function MiamiQuotationSection({
                               <input
                                 type="number"
                                 min="0"
+                                step="any"
                                 value={line.manualCbm || ''}
                                 onChange={(e) =>
                                   setCargoLines((prev) =>
@@ -463,6 +579,7 @@ export function MiamiQuotationSection({
                             <div className="grid grid-cols-[1fr_82px] gap-2">
                               <input
                                 type="number"
+                                step="any"
                                 value={line.weight}
                                 onChange={(e) =>
                                   setCargoLines((prev) =>
@@ -509,6 +626,7 @@ export function MiamiQuotationSection({
                               </label>
                               <input
                                 type="number"
+                                step="any"
                                 value={line.length}
                                 onChange={(e) =>
                                   setCargoLines((prev) =>
@@ -530,6 +648,7 @@ export function MiamiQuotationSection({
                               </label>
                               <input
                                 type="number"
+                                step="any"
                                 value={line.width}
                                 onChange={(e) =>
                                   setCargoLines((prev) =>
@@ -551,6 +670,7 @@ export function MiamiQuotationSection({
                               </label>
                               <input
                                 type="number"
+                                step="any"
                                 value={line.height}
                                 onChange={(e) =>
                                   setCargoLines((prev) =>
@@ -659,7 +779,7 @@ export function MiamiQuotationSection({
                     Peso total lbs
                   </p>
                   <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-                    {formatNumber(totalCargoWeight, 0)}
+                    {formatNumber(displayTotalCargoWeight, 0)}
                   </p>
                 </div>
 
@@ -668,7 +788,7 @@ export function MiamiQuotationSection({
                     FT³ total
                   </p>
                   <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-                    {formatNumber(totalCargoFt3, 2)}
+                    {formatNumber(displayTotalCargoFt3, 2)}
                   </p>
                 </div>
 
@@ -677,7 +797,7 @@ export function MiamiQuotationSection({
                     CBM total
                   </p>
                   <p className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
-                    {formatNumber(totalCargoCbm, 3)}
+                    {formatNumber(displayTotalCargoCbm, 3)}
                   </p>
                 </div>
 
