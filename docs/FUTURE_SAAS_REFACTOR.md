@@ -305,6 +305,28 @@ Medio-Alto
 Prioridad:
 Después de estabilizar MVP y antes de Multi-Tenant SaaS.
 
+# BLOCKERS PARA SAAS
+
+## Críticos
+
+- Multi tenant
+- Catálogos configurables
+- Numeración por empresa
+- Branding por empresa
+- Templates PDF por empresa
+
+## Altos
+
+- Producto Comercial como driver principal
+- Workflow configurable
+- Campos configurables por flujo
+
+## Medios
+
+- Dashboard configurable
+- Notificaciones configurables
+- Automatizaciones
+
 # Meta Final
 
 Convertir Sari ERP en:
