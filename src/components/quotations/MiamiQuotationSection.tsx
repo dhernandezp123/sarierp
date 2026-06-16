@@ -70,6 +70,13 @@ export function MiamiQuotationSection({
   formatNumber,
   miami,
 }: MiamiQuotationSectionProps) {
+  const fieldLabelClass =
+    'text-xs font-medium text-slate-500 dark:text-slate-400'
+  const compactFieldClass = `${fieldClass} md:max-w-[180px]`
+  const moneyFieldClass = `${fieldClass} md:max-w-[220px]`
+  const dateFieldClass = `${fieldClass} md:max-w-[220px]`
+  const mediumFieldClass = `${fieldClass} md:max-w-xl`
+
   const parseNumericValue = (value: string | number | undefined | null) => {
     if (typeof value === 'number') return Number.isFinite(value) ? value : 0
 
@@ -270,40 +277,60 @@ export function MiamiQuotationSection({
             </h3>
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Puerto origen
+                </label>
               <input
                 list="originPorts"
                 name="puerto_origen"
                 placeholder="Puerto origen"
                 value={formData.puerto_origen}
                 onChange={handleChange}
-                className={fieldClass}
+                className={compactFieldClass}
               />
+              </div>
 
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Puerto destino
+                </label>
               <input
                 list="destinationPorts"
                 name="puerto_destino"
                 placeholder="Puerto destino"
                 value={formData.puerto_destino}
                 onChange={handleChange}
-                className={fieldClass}
+                className={compactFieldClass}
               />
+              </div>
 
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Destino final
+                </label>
               <input
                 list="countries"
                 name="destino"
                 placeholder="Destino final"
                 value={formData.destino}
                 onChange={handleChange}
-                className={fieldClass}
+                className={mediumFieldClass}
               />
+              </div>
 
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Tránsito estimado
+                </label>
               <input
                 name="transit_time"
                 value={formData.transit_time}
                 onChange={handleChange}
                 placeholder="Tránsito estimado, ej. 8-12 días"
-                className={fieldClass}
+                className={compactFieldClass}
               />
+              </div>
 
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -316,7 +343,7 @@ export function MiamiQuotationSection({
                   value={formData.valid_until}
                   min={todayString}
                   onChange={handleChange}
-                  className={fieldClass}
+                  className={dateFieldClass}
                 />
 
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -324,14 +351,23 @@ export function MiamiQuotationSection({
                 </p>
               </div>
 
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Commodity / descripción
+                </label>
               <input
                 name="commodity"
                 placeholder="Commodity / descripción"
                 value={formData.commodity}
                 onChange={handleChange}
-                className={fieldClass}
+                className={mediumFieldClass}
               />
+              </div>
 
+              <div className="flex flex-col gap-1.5 md:col-span-2">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Observaciones
+                </label>
               <textarea
                 name="observaciones"
                 placeholder="Observaciones"
@@ -339,6 +375,7 @@ export function MiamiQuotationSection({
                 onChange={handleChange}
                 className={`${fieldClass} min-h-24 md:col-span-2`}
               />
+              </div>
             </div>
           </div>
 
@@ -824,35 +861,41 @@ export function MiamiQuotationSection({
                 Calcula el flete tomando el mayor entre FT3, libras y el mínimo aplicable.
               </p>
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <input
-                  type="number"
-                  value={miami.miamiCalc.ft3}
-                  onChange={(e) =>
-                    miami.setMiamiCalc({
-                      ...miami.miamiCalc,
-                      ft3: e.target.value,
-                    })
-                  }
-                  placeholder="FT3"
-                  className={fieldClass}
-                />
+              <div className="flex flex-wrap gap-5">
+                <div className="flex flex-col gap-1.5">
+                  <label className={fieldLabelClass}>FT3</label>
+                  <input
+                    type="number"
+                    value={miami.miamiCalc.ft3}
+                    onChange={(e) =>
+                      miami.setMiamiCalc({
+                        ...miami.miamiCalc,
+                        ft3: e.target.value,
+                      })
+                    }
+                    placeholder="FT3"
+                    className={compactFieldClass}
+                  />
+                </div>
 
-                <input
-                  type="number"
-                  value={miami.miamiCalc.lbs}
-                  onChange={(e) =>
-                    miami.setMiamiCalc({
-                      ...miami.miamiCalc,
-                      lbs: e.target.value,
-                    })
-                  }
-                  placeholder="Libras"
-                  className={fieldClass}
-                />
+                <div className="flex flex-col gap-1.5">
+                  <label className={fieldLabelClass}>Libras</label>
+                  <input
+                    type="number"
+                    value={miami.miamiCalc.lbs}
+                    onChange={(e) =>
+                      miami.setMiamiCalc({
+                        ...miami.miamiCalc,
+                        lbs: e.target.value,
+                      })
+                    }
+                    placeholder="Libras"
+                    className={compactFieldClass}
+                  />
+                </div>
               </div>
 
-              {formData.incoterm === 'EXW' && (
+              {false && formData.incoterm === 'EXW' && (
                 <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/70">
                   <p className="font-semibold text-slate-700 dark:text-slate-200">
                     Tipo de Pickup
@@ -1066,29 +1109,94 @@ export function MiamiQuotationSection({
                 Calcula el flete aéreo usando la tarifa por KG.
               </p>
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <input
-                  type="number"
-                  value={miami.miamiCalc.kg}
-                  onChange={(e) =>
-                    miami.setMiamiCalc({
-                      ...miami.miamiCalc,
-                      kg: e.target.value,
-                    })
-                  }
-                  placeholder="Kilogramos"
-                  className={fieldClass}
-                />
+              <div className="grid gap-4 md:grid-cols-[220px_minmax(240px,360px)] md:items-end">
+                <div className="flex flex-col gap-1.5">
+                  <label className={fieldLabelClass}>Kilogramos</label>
+                  <input
+                    type="number"
+                    value={miami.miamiCalc.kg}
+                    onChange={(e) =>
+                      miami.setMiamiCalc({
+                        ...miami.miamiCalc,
+                        kg: e.target.value,
+                      })
+                    }
+                    placeholder="Kilogramos"
+                    className={compactFieldClass}
+                  />
+                </div>
+                <div className="rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    Flete estimado
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-100">
+                    USD {miami.airEstimated.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {formData.incoterm === 'EXW' && (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/70">
+              <p className="font-semibold text-slate-700 dark:text-slate-200">
+                Tipo de Pickup
+              </p>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="pickup_mode"
+                    checked={miami.pickupMode === 'standard'}
+                    onChange={() => miami.setPickupMode('standard')}
+                  />
+                  <span>Pickup Miami estándar</span>
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="pickup_mode"
+                    checked={miami.pickupMode === 'manual'}
+                    onChange={() => miami.setPickupMode('manual')}
+                  />
+                  <span>Pickup manual</span>
+                </label>
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="pickup_mode"
+                    checked={miami.pickupMode === 'none'}
+                    onChange={() => miami.setPickupMode('none')}
+                  />
+                  <span>Sin pickup</span>
+                </label>
               </div>
 
-              <div className="mt-4 rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
-                <p className="text-xs text-blue-700 dark:text-blue-300">
-                  Flete estimado
+              {miami.pickupMode === 'standard' && (
+                <p className="mt-3 font-semibold text-slate-900 dark:text-white">
+                  USD {miami.pickupRate.toFixed(2)}
                 </p>
-                <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-100">
-                  USD {miami.airEstimated.toFixed(2)}
-                </p>
-              </div>
+              )}
+
+              {miami.pickupMode === 'manual' && (
+                <div className="mt-3 flex flex-col gap-1.5">
+                  <label className={fieldLabelClass}>
+                    Monto pickup manual (USD)
+                  </label>
+                  <input
+                    type="number"
+                    value={miami.manualPickupAmount}
+                    onChange={(e) =>
+                      miami.setManualPickupAmount(Number(e.target.value || 0))
+                    }
+                    placeholder="Monto pickup manual USD"
+                    className={moneyFieldClass}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -1136,48 +1244,54 @@ export function MiamiQuotationSection({
                   return (
                     <div
                       key={charge.id}
-                      className={`grid gap-3 rounded-xl border p-3 md:grid-cols-[1fr_160px_140px_100px] ${
+                      className={`grid gap-3 rounded-xl border p-3 md:grid-cols-[1fr_160px_140px_100px] md:items-end ${
                         isChargeComplete
                           ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20'
                           : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950/40'
                       }`}
                     >
-                      <input
-                        value={charge.description}
-                        onChange={(e) =>
-                          miami.setDestinationCharges((prev) =>
-                            prev.map((item) =>
-                              item.id === charge.id
-                                ? {
-                                    ...item,
-                                    description: e.target.value,
-                                  }
-                                : item
+                      <div className="flex flex-col gap-1.5">
+                        <label className={fieldLabelClass}>Descripción</label>
+                        <input
+                          value={charge.description}
+                          onChange={(e) =>
+                            miami.setDestinationCharges((prev) =>
+                              prev.map((item) =>
+                                item.id === charge.id
+                                  ? {
+                                      ...item,
+                                      description: e.target.value,
+                                    }
+                                  : item
+                              )
                             )
-                          )
-                        }
-                        placeholder="Descripción"
-                        className={fieldClass}
-                      />
+                          }
+                          placeholder="Descripción"
+                          className={fieldClass}
+                        />
+                      </div>
 
-                      <input
-                        type="number"
-                        value={charge.amount}
-                        onChange={(e) =>
-                          miami.setDestinationCharges((prev) =>
-                            prev.map((item) =>
-                              item.id === charge.id
-                                ? {
-                                    ...item,
-                                    amount: e.target.value,
-                                  }
-                                : item
+                      <div className="flex flex-col gap-1.5">
+                        <label className={fieldLabelClass}>Monto (USD)</label>
+                        <input
+                          type="number"
+                          value={charge.amount}
+                          onChange={(e) =>
+                            miami.setDestinationCharges((prev) =>
+                              prev.map((item) =>
+                                item.id === charge.id
+                                  ? {
+                                      ...item,
+                                      amount: e.target.value,
+                                    }
+                                  : item
+                              )
                             )
-                          )
-                        }
-                        placeholder="Monto"
-                        className={fieldClass}
-                      />
+                          }
+                          placeholder="Monto"
+                          className={moneyFieldClass}
+                        />
+                      </div>
 
                       <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-200">
                         <input

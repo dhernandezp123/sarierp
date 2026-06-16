@@ -781,6 +781,8 @@ export default function QuotationDetailPage() {
     if (!quotation || duplicating) return
 
     setDuplicating(true)
+    router.push(`/quotations/new?duplicateFrom=${quotation.id}`)
+    return
 
     try {
       const isMiami =
@@ -819,7 +821,7 @@ export default function QuotationDetailPage() {
 
         return {
           ...copy,
-          quotation_id: newQuote.id,
+          quotation_id: newQuote!.id,
         }
       })
 
@@ -839,7 +841,7 @@ export default function QuotationDetailPage() {
 
         return {
           ...copy,
-          quotation_id: newQuote.id,
+          quotation_id: newQuote!.id,
         }
       })
 
@@ -858,7 +860,7 @@ export default function QuotationDetailPage() {
         module: 'quotations',
         action: 'quotation_duplicated',
         entityType: 'quotation',
-        entityId: newQuote.id,
+        entityId: newQuote!.id,
         description: `Cotización duplicada desde ${
           quotation.quotation_number || quotation.id
         }`,
@@ -871,7 +873,7 @@ export default function QuotationDetailPage() {
       })
 
       toast.success('Cotización duplicada')
-      router.push(`/quotations/${newQuote.id}`)
+      router.push(`/quotations/${newQuote!.id}`)
     } finally {
       setDuplicating(false)
     }

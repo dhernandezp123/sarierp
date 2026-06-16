@@ -73,6 +73,10 @@ export default function NewQuotationPage() {
     },
   ])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
+  const [duplicateSource, setDuplicateSource] = useState<{
+    id: string
+    quotation_number: string | null
+  } | null>(null)
   const [editingContainerLineIndex, setEditingContainerLineIndex] =
     useState<number | null>(null)
   const [containerLineForm, setContainerLineForm] = useState({
@@ -136,6 +140,16 @@ export default function NewQuotationPage() {
   useEffect(() => {
     fetchClientes()
     fetchCatalogs()
+  }, [])
+
+  useEffect(() => {
+    const duplicateFromId = new URLSearchParams(window.location.search).get(
+      'duplicateFrom'
+    )
+
+    if (duplicateFromId) {
+      loadDuplicateSource(duplicateFromId)
+    }
   }, [])
 
   const fetchPricingUsers = async () => {
@@ -208,6 +222,162 @@ export default function NewQuotationPage() {
     setCountries(countriesData || [])
     setPorts(portsData || [])
     setContainerTypes(containerTypesData || [])
+  }
+
+  const toFormString = (value: unknown) =>
+    value === null || value === undefined ? '' : String(value)
+
+  const getReusableValidUntil = (value?: string | null) => {
+    if (!value) return defaultValidUntil
+
+    const dateValue = value.split('T')[0]
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const validUntilDate = new Date(dateValue)
+    validUntilDate.setHours(0, 0, 0, 0)
+
+    return validUntilDate < today ? defaultValidUntil : dateValue
+  }
+
+  const toPackageType = (
+    value?: string | null
+  ): CargoDimensionLine['packageType'] => {
+    if (value === 'Pallet' || value === 'Pieza') return value
+    return 'Caja'
+  }
+
+  const loadDuplicateSource = async (quotationId: string) => {
+    setLoading(true)
+
+    try {
+      const [
+        { data: sourceQuote, error: quoteError },
+        { data: sourceContainers, error: containerError },
+        { data: sourceCargoLines, error: cargoError },
+      ] = await Promise.all([
+        supabase
+          .from('quotations')
+          .select('*')
+          .eq('id', quotationId)
+          .is('deleted_at', null)
+          .single(),
+        supabase
+          .from('quotation_containers')
+          .select('*')
+          .eq('quotation_id', quotationId)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('quotation_cargo_lines')
+          .select('*')
+          .eq('quotation_id', quotationId)
+          .order('created_at', { ascending: true }),
+      ])
+
+      if (quoteError || !sourceQuote) {
+        toast.error('No se pudo cargar la cotización a duplicar')
+        return
+      }
+
+      if (containerError) {
+        toast.error(containerError.message)
+      }
+
+      if (cargoError) {
+        toast.error(cargoError.message)
+      }
+
+      setDuplicateSource({
+        id: sourceQuote.id,
+        quotation_number: sourceQuote.quotation_number,
+      })
+      setFormData({
+        cliente_id: toFormString(sourceQuote.cliente_id),
+        trade_direction: sourceQuote.trade_direction || 'import',
+        service_product: sourceQuote.service_product || '',
+        quote_type: sourceQuote.quote_type || '',
+        valid_until: getReusableValidUntil(sourceQuote.valid_until),
+        contact_name: sourceQuote.contact_name || '',
+        contact_email: sourceQuote.contact_email || '',
+        contact_phone: sourceQuote.contact_phone || '',
+        contact_state: sourceQuote.contact_state || '',
+        contact_country: sourceQuote.contact_country || '',
+        preferred_carrier: sourceQuote.preferred_carrier || '',
+        transit_time: toFormString(sourceQuote.transit_time),
+        target_rate: toFormString(sourceQuote.target_rate),
+        commercial_value: toFormString(
+          sourceQuote.commercial_value || sourceQuote.fob_value
+        ),
+        incoterm: sourceQuote.incoterm || '',
+        tipo_transporte: sourceQuote.tipo_transporte || '',
+        origen: sourceQuote.origen || '',
+        destino: sourceQuote.destino || '',
+        puerto_origen: sourceQuote.puerto_origen || '',
+        puerto_destino: sourceQuote.puerto_destino || '',
+        pickup_address: sourceQuote.pickup_address || '',
+        delivery_address: sourceQuote.delivery_address || '',
+        container_type: sourceQuote.container_type || '',
+        container_qty: toFormString(sourceQuote.container_qty),
+        package_type: sourceQuote.package_type || '',
+        package_details: sourceQuote.package_details || '',
+        peso_kg: toFormString(sourceQuote.peso_kg),
+        gross_weight: toFormString(sourceQuote.gross_weight),
+        volumen_cbm: toFormString(sourceQuote.volumen_cbm),
+        cantidad_bultos: toFormString(sourceQuote.cantidad_bultos),
+        commodity: sourceQuote.commodity || '',
+        requires_insurance: Boolean(sourceQuote.requires_insurance),
+        fob_value: toFormString(sourceQuote.fob_value),
+        freight_value: toFormString(sourceQuote.freight_value),
+        insurance_markup_percentage: toFormString(
+          sourceQuote.insurance_markup_percentage || 10
+        ),
+        insurance_rate: toFormString(sourceQuote.insurance_rate || 1),
+        insurance_cost: toFormString(sourceQuote.insurance_cost || 0),
+        observaciones: sourceQuote.observaciones || '',
+        pricing_notes: sourceQuote.pricing_notes || '',
+        client_notes: sourceQuote.client_notes || '',
+      })
+
+      setContainerLines(
+        (sourceContainers || []).map((line: any) => ({
+          container_type_id: line.container_type_id || '',
+          container_type_name:
+            line.container_type_name || line.container_type || '',
+          quantity: Number(line.quantity || 1),
+          notes: line.notes || null,
+        }))
+      )
+
+      const copiedCargoLines = (sourceCargoLines || []).map((line: any) => {
+        const cbm = Number(line.cbm || 0)
+        const hasDimensions =
+          Number(line.length || 0) > 0 &&
+          Number(line.width || 0) > 0 &&
+          Number(line.height || 0) > 0
+
+        return {
+          id: crypto.randomUUID(),
+          quantity: toFormString(line.quantity || 1),
+          packageType: toPackageType(line.package_type),
+          length: toFormString(line.length),
+          width: toFormString(line.width),
+          height: toFormString(line.height),
+          dimensionUnit: line.dimension_unit || 'm',
+          weight: toFormString(line.weight_lbs),
+          weightUnit: 'lbs',
+          volumeMode: hasDimensions ? 'dimensions' : 'manual',
+          manualCbm: hasDimensions ? '' : toFormString(cbm),
+        } satisfies CargoDimensionLine
+      })
+
+      if (copiedCargoLines.length > 0) {
+        setCargoLines(copiedCargoLines)
+      }
+
+      toast.success('Cotización cargada para duplicar')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const calculateInsurance = (data: any) => {
@@ -549,6 +719,7 @@ export default function NewQuotationPage() {
 
           pricing_notes: formData.pricing_notes || null,
           client_notes: submitIsMiamiFlow ? formData.client_notes || null : null,
+          duplicated_from: duplicateSource?.id || null,
           status: initialStatus,
           created_by: profile?.id,
           created_at: new Date().toISOString(),
@@ -662,8 +833,25 @@ export default function NewQuotationPage() {
         }
       }
 
+      if (duplicateSource && quotation) {
+        await createActivityLog({
+          module: 'quotations',
+          action: 'quotation_duplicated',
+          entityType: 'quotation',
+          entityId: quotation.id,
+          description: `Cotización duplicada desde ${
+            duplicateSource.quotation_number || duplicateSource.id
+          }`,
+          metadata: {
+            sourceQuotationId: duplicateSource.id,
+            sourceQuotationNumber: duplicateSource.quotation_number,
+          },
+        })
+      }
+
       setFormData(initialFormData)
       setContainerLines([])
+      setDuplicateSource(null)
       setEditingContainerLineIndex(null)
       resetContainerLineForm()
 
@@ -922,13 +1110,24 @@ export default function NewQuotationPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Nueva Cotización
+              {duplicateSource ? 'Duplicar Cotización' : 'Nueva Cotización'}
             </h1>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Completa los datos para generar la cotización.
+              {duplicateSource
+                ? `Edita la información copiada de ${
+                    duplicateSource.quotation_number || 'la cotización origen'
+                  } antes de enviarla a Pricing.`
+                : 'Completa los datos para generar la cotización.'}
             </p>
           </div>
         </div>
+
+        {duplicateSource && (
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+            Esta nueva cotización quedará vinculada a{' '}
+            {duplicateSource.quotation_number || 'la cotización origen'}.
+          </div>
+        )}
 
         <section className={cardClass}>
           <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">

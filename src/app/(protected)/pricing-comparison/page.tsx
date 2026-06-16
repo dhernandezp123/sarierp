@@ -4093,40 +4093,40 @@ const profitabilityColor =
 
                     {isMiamiFlow && (
                       <section className={cn(cardClass, 'p-5')}>
-                        <h2 className="text-lg font-semibold text-slate-950 dark:text-white">
+                        <h2 className="text-base font-semibold text-slate-900 dark:text-white">
                           Gestión operativa Miami
                         </h2>
-                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
                           Esta cotización usa tarifas propias de Sari Express. No requiere comparativo de agentes.
                         </p>
 
-                        <div className="mt-4 grid gap-4 md:grid-cols-4">
-                          <div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Producto</p>
-                            <p className="font-semibold text-slate-950 dark:text-white">
+                        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/60">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Producto</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                               {selectedQuote.service_product === 'miami_lcl'
                                 ? 'Miami Consolidado LCL'
                                 : 'Miami Consolidado Aéreo'}
                             </p>
                           </div>
 
-                          <div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Incoterm</p>
-                            <p className="font-semibold text-slate-950 dark:text-white">
+                          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/60">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Incoterm</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                               {selectedQuote.incoterm || 'N/A'}
                             </p>
                           </div>
 
-                          <div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Origen</p>
-                            <p className="font-semibold text-slate-950 dark:text-white">
+                          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/60">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Origen</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                               {selectedQuote.origen || 'N/A'}
                             </p>
                           </div>
 
-                          <div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Destino</p>
-                            <p className="font-semibold text-slate-950 dark:text-white">
+                          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/60">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">Destino</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                               {selectedQuote.destino || 'N/A'}
                             </p>
                           </div>
@@ -4138,7 +4138,7 @@ const profitabilityColor =
                       <section className={cn(cardClass, 'p-5')}>
                         <div className="flex items-center justify-between gap-4">
                           <div>
-                            <h3 className="text-lg font-semibold text-slate-950 dark:text-white">
+                            <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                               Editar carga / Recalcular Miami
                             </h3>
                             <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -4146,7 +4146,7 @@ const profitabilityColor =
                             </p>
                           </div>
 
-                          <div className="flex gap-2">
+                          <div className="flex shrink-0 gap-2">
                             <button
                               type="button"
                               onClick={saveCargoLines}
@@ -4168,12 +4168,12 @@ const profitabilityColor =
                               }
                               onClick={recalculateMiamiPricing}
                             >
-                              Recalcular tarifas
+                              Recalcular
                             </button>
                           </div>
                         </div>
 
-                        <div className="mt-5 space-y-4">
+                        <div className="mt-4 space-y-3">
                           {cargoLines.length === 0 ? (
                             <p className="text-sm text-slate-500 dark:text-slate-400">
                               No hay líneas de carga registradas.
@@ -4182,10 +4182,10 @@ const profitabilityColor =
                             cargoLines.map((line, index) => (
                               <div
                                 key={line.id}
-                                className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40"
+                                className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
                               >
-                                <div className="mb-3 flex items-center justify-between">
-                                  <p className="font-semibold text-slate-900 dark:text-white">
+                                <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-2 dark:border-slate-800 dark:bg-slate-800/40">
+                                  <p className="flex-1 text-sm font-medium text-slate-700 dark:text-slate-300">
                                     Línea #{index + 1}
                                   </p>
                                   <button
@@ -4196,81 +4196,153 @@ const profitabilityColor =
                                       )
                                     }
                                     disabled={isPricingActionDisabled}
-                                    className="text-sm font-semibold text-red-600 hover:text-red-700"
+                                    className="flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
                                   >
                                     Quitar
                                   </button>
                                 </div>
 
-                                <div className="grid gap-3 md:grid-cols-3">
-                                  <input
-                                    className={fieldClass}
-                                    type="number"
-                                    value={line.quantity ?? ''}
-                                    onChange={(e) =>
-                                      updateCargoLine(line.id, 'quantity', e.target.value)
-                                    }
-                                    placeholder="Cantidad"
-                                  />
-                                  <input
-                                    className={fieldClass}
-                                    value={line.package_type ?? ''}
-                                    onChange={(e) =>
-                                      updateCargoLine(line.id, 'package_type', e.target.value)
-                                    }
-                                    placeholder="Tipo de paquete"
-                                  />
-                                  <input
-                                    className={fieldClass}
-                                    type="number"
-                                    value={line.weight_lbs ?? ''}
-                                    onChange={(e) =>
-                                      updateCargoLine(line.id, 'weight_lbs', e.target.value)
-                                    }
-                                    placeholder="Peso lbs"
-                                  />
-                                </div>
+                                <div className="space-y-3 bg-white p-4 dark:bg-slate-950/40">
+                                  <div className="grid gap-3 sm:grid-cols-3">
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Cantidad
+                                      </label>
+                                      <input
+                                        className={fieldClass}
+                                        type="number"
+                                        min="1"
+                                        value={line.quantity ?? ''}
+                                        onChange={(e) =>
+                                          updateCargoLine(line.id, 'quantity', e.target.value)
+                                        }
+                                        placeholder="1"
+                                      />
+                                    </div>
 
-                                <div className="mt-3 grid gap-3 md:grid-cols-4">
-                                  <input
-                                    className={fieldClass}
-                                    type="number"
-                                    value={line.length ?? ''}
-                                    onChange={(e) =>
-                                      updateCargoLine(line.id, 'length', e.target.value)
-                                    }
-                                    placeholder="Largo"
-                                  />
-                                  <input
-                                    className={fieldClass}
-                                    type="number"
-                                    value={line.width ?? ''}
-                                    onChange={(e) =>
-                                      updateCargoLine(line.id, 'width', e.target.value)
-                                    }
-                                    placeholder="Ancho"
-                                  />
-                                  <input
-                                    className={fieldClass}
-                                    type="number"
-                                    value={line.height ?? ''}
-                                    onChange={(e) =>
-                                      updateCargoLine(line.id, 'height', e.target.value)
-                                    }
-                                    placeholder="Alto"
-                                  />
-                                  <input
-                                    className={fieldClass}
-                                    value={line.dimension_unit ?? ''}
-                                    onChange={(e) =>
-                                      updateCargoLine(line.id, 'dimension_unit', e.target.value)
-                                    }
-                                    placeholder="Unidad"
-                                  />
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Tipo de paquete
+                                      </label>
+                                      <select
+                                        className={fieldClass}
+                                        value={line.package_type ?? 'Caja'}
+                                        onChange={(e) =>
+                                          updateCargoLine(line.id, 'package_type', e.target.value)
+                                        }
+                                      >
+                                        <option>Caja</option>
+                                        <option>Pallet</option>
+                                        <option>Pieza</option>
+                                      </select>
+                                    </div>
+
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Peso unit. (lbs)
+                                      </label>
+                                      <input
+                                        className={fieldClass}
+                                        type="number"
+                                        value={line.weight_lbs ?? ''}
+                                        onChange={(e) =>
+                                          updateCargoLine(line.id, 'weight_lbs', e.target.value)
+                                        }
+                                        placeholder="0"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid gap-3 sm:grid-cols-4">
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Largo
+                                      </label>
+                                      <input
+                                        className={fieldClass}
+                                        type="number"
+                                        value={line.length ?? ''}
+                                        onChange={(e) =>
+                                          updateCargoLine(line.id, 'length', e.target.value)
+                                        }
+                                        placeholder="0"
+                                      />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Ancho
+                                      </label>
+                                      <input
+                                        className={fieldClass}
+                                        type="number"
+                                        value={line.width ?? ''}
+                                        onChange={(e) =>
+                                          updateCargoLine(line.id, 'width', e.target.value)
+                                        }
+                                        placeholder="0"
+                                      />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Alto
+                                      </label>
+                                      <input
+                                        className={fieldClass}
+                                        type="number"
+                                        value={line.height ?? ''}
+                                        onChange={(e) =>
+                                          updateCargoLine(line.id, 'height', e.target.value)
+                                        }
+                                        placeholder="0"
+                                      />
+                                    </div>
+
+                                    <div className="flex flex-col gap-1.5">
+                                      <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                        Unidad
+                                      </label>
+                                      <select
+                                        className={fieldClass}
+                                        value={line.dimension_unit ?? 'in'}
+                                        onChange={(e) =>
+                                          updateCargoLine(line.id, 'dimension_unit', e.target.value)
+                                        }
+                                      >
+                                        <option value="in">Pulgadas (in)</option>
+                                        <option value="cm">Centímetros (cm)</option>
+                                        <option value="mm">Milímetros (mm)</option>
+                                        <option value="m">Metros (m)</option>
+                                      </select>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             ))
                           )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCargoLines((prev) => [
+                                ...prev,
+                                {
+                                  id: crypto.randomUUID(),
+                                  quantity: 1,
+                                  package_type: 'Caja',
+                                  length: '',
+                                  width: '',
+                                  height: '',
+                                  dimension_unit: 'in',
+                                  weight_lbs: '',
+                                },
+                              ])
+                            }
+                            disabled={isPricingActionDisabled}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-sm text-slate-400 hover:border-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-500 dark:hover:border-slate-600 dark:hover:text-slate-300"
+                          >
+                            Agregar línea
+                          </button>
                         </div>
                       </section>
                     )}
@@ -4330,7 +4402,7 @@ const profitabilityColor =
                     {optionalClientRates.length > 0 && (
                       <section className={cn(cardClass, 'mb-4 p-5')}>
                         <div className="mb-4">
-                          <h3 className="text-lg font-semibold text-slate-950 dark:text-white">
+                          <h3 className="text-base font-semibold text-slate-900 dark:text-white">
                             Cargos opcionales del cliente
                           </h3>
                           <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -4338,7 +4410,12 @@ const profitabilityColor =
                           </p>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                          <div className="grid grid-cols-[1fr_140px_120px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
+                            <span>Cargo</span>
+                            <span className="text-right">Monto</span>
+                            <span className="text-right">Acción</span>
+                          </div>
                           {optionalClientRates.map((rate) => {
                             const alreadyAdded = pricingItems.some(
                               (item) => item.description === rate.rate_label
@@ -4348,20 +4425,30 @@ const profitabilityColor =
                             return (
                               <div
                                 key={rate.rate_code}
-                                className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950"
+                                className={`grid grid-cols-[1fr_140px_120px] items-center gap-4 border-b border-slate-100 px-4 py-2.5 last:border-0 dark:border-slate-800 ${
+                                  alreadyAdded
+                                    ? 'bg-emerald-50/50 dark:bg-emerald-950/10'
+                                    : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/20'
+                                }`}
                               >
                                 <div>
-                                  <p className="font-semibold text-slate-900 dark:text-white">
+                                  <p
+                                    className={`text-sm font-medium ${
+                                      alreadyAdded
+                                        ? 'text-slate-400 dark:text-slate-500'
+                                        : 'text-slate-900 dark:text-white'
+                                    }`}
+                                  >
                                     {rate.rate_label}
                                   </p>
-                                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
                                     {rate.category || 'Cargo opcional'}
                                     {rate.unit ? ` · ${rate.unit}` : ''}
                                   </p>
                                 </div>
 
-                                <div className="flex items-center gap-3">
-                                  <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                                <div className="contents">
+                                  <span className="text-right text-sm font-semibold text-slate-900 dark:text-white">
                                     {currency} {formatCurrency(Number(rate.amount || 0))}
                                   </span>
 
@@ -4369,7 +4456,7 @@ const profitabilityColor =
                                     type="button"
                                     onClick={() => addOptionalClientRate(rate)}
                                     disabled={isPricingActionDisabled || alreadyAdded}
-                                    className={secondaryButtonClass}
+                                    className={alreadyAdded ? 'text-right text-xs font-medium text-emerald-600 disabled:opacity-100 dark:text-emerald-400' : `${secondaryButtonClass} text-xs`}
                                   >
                                     {alreadyAdded ? 'Agregado' : 'Agregar'}
                                   </button>

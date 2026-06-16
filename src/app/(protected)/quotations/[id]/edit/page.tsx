@@ -959,6 +959,15 @@ export default function EditQuotationPage() {
     Terrestre: ['LTL', 'FTL'],
   }
 
+  const formLabelClass =
+    'text-xs font-medium text-slate-500 dark:text-slate-400'
+
+  const fieldGroupClass = 'flex flex-col gap-1.5'
+  const compactFieldClass = `${fieldClass} md:max-w-[180px]`
+  const moneyFieldClass = `${fieldClass} md:max-w-[220px]`
+  const dateFieldClass = `${fieldClass} md:max-w-[220px]`
+  const mediumFieldClass = `${fieldClass} md:max-w-xl`
+
   const requiresContainerLines =
     formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
 
@@ -993,7 +1002,9 @@ export default function EditQuotationPage() {
           <section>
             <h2 className="text-xl font-bold mb-4">Información General</h2>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Transporte</label>
               <select
                 name="tipo_transporte"
                 value={formData.tipo_transporte || ''}
@@ -1011,7 +1022,10 @@ export default function EditQuotationPage() {
                 <option value="Marítima">Marítima</option>
                 <option value="Terrestre">Terrestre</option>
               </select>
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Tipo de cotización</label>
               <select
                 name="quote_type"
                 value={formData.quote_type || ''}
@@ -1027,8 +1041,11 @@ export default function EditQuotationPage() {
                   </option>
                 ))}
               </select>
+              </div>
 
               {isMiamiFlow && (
+                <div className={fieldGroupClass}>
+                  <label className={formLabelClass}>Producto / servicio Miami</label>
                 <select
                   name="service_product"
                   value={formData.service_product || ''}
@@ -1045,21 +1062,27 @@ export default function EditQuotationPage() {
                       </option>
                     ))}
                 </select>
+                </div>
               )}
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Válida hasta</label>
               <input
                 type="date"
                 name="valid_until"
                 value={formData.valid_until || ''}
                 onChange={handleChange}
-                className={fieldClass}
+                className={dateFieldClass}
               />
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Incoterm</label>
               <select
                 name="incoterm"
                 value={formData.incoterm || ''}
                 onChange={handleChange}
-                className={fieldClass}
+                className={compactFieldClass}
               >
                 <option value="">Incoterm</option>
                 <option value="EXW">EXW</option>
@@ -1070,7 +1093,10 @@ export default function EditQuotationPage() {
                 <option value="DAP">DAP</option>
                 <option value="DDP">DDP</option>
               </select>
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Nombre de contacto</label>
               <input
                 name="contact_name"
                 placeholder="Nombre de contacto"
@@ -1078,7 +1104,10 @@ export default function EditQuotationPage() {
                 onChange={handleChange}
                 className={fieldClass}
               />
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Email de contacto</label>
               <input
                 name="contact_email"
                 placeholder="Email de contacto"
@@ -1086,7 +1115,10 @@ export default function EditQuotationPage() {
                 onChange={handleChange}
                 className={fieldClass}
               />
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Teléfono de contacto</label>
               <input
                 name="contact_phone"
                 placeholder="Teléfono de contacto"
@@ -1094,6 +1126,7 @@ export default function EditQuotationPage() {
                 onChange={handleChange}
                 className={fieldClass}
               />
+              </div>
 
             </div>
           </section>
@@ -1101,12 +1134,26 @@ export default function EditQuotationPage() {
           <section>
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
-            <div className="grid grid-cols-2 gap-4">
-              <input list="countries" name="origen" placeholder="Origen" value={formData.origen || ''} onChange={handleChange} className={fieldClass} />
-              <input list="countries" name="destino" placeholder="Destino" value={formData.destino || ''} onChange={handleChange} className={fieldClass} />
-              <input list="originPorts" name="puerto_origen" placeholder="Puerto origen" value={formData.puerto_origen || ''} onChange={handleChange} className={fieldClass} />
-              <input list="destinationPorts" name="puerto_destino" placeholder="Puerto destino" value={formData.puerto_destino || ''} onChange={handleChange} className={fieldClass} />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Origen</label>
+                <input list="countries" name="origen" placeholder="Origen" value={formData.origen || ''} onChange={handleChange} className={fieldClass} />
+              </div>
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Destino</label>
+                <input list="countries" name="destino" placeholder="Destino" value={formData.destino || ''} onChange={handleChange} className={fieldClass} />
+              </div>
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Puerto origen</label>
+                <input list="originPorts" name="puerto_origen" placeholder="Puerto origen" value={formData.puerto_origen || ''} onChange={handleChange} className={fieldClass} />
+              </div>
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Puerto destino</label>
+                <input list="destinationPorts" name="puerto_destino" placeholder="Puerto destino" value={formData.puerto_destino || ''} onChange={handleChange} className={fieldClass} />
+              </div>
 
+              <div className={`${fieldGroupClass} md:col-span-2`}>
+                <label className={formLabelClass}>Dirección de entrega</label>
               <textarea
                 name="delivery_address"
                 placeholder="Dirección de entrega"
@@ -1114,7 +1161,10 @@ export default function EditQuotationPage() {
                 onChange={handleChange}
                 className={`${fieldClass} min-h-24`}
               />
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Naviera de preferencia</label>
               <input
                 name="preferred_carrier"
                 placeholder="Naviera de preferencia"
@@ -1122,24 +1172,33 @@ export default function EditQuotationPage() {
                 onChange={handleChange}
                 className={fieldClass}
               />
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Tiempo de tránsito</label>
               <input
                 name="transit_time"
                 placeholder="Tiempo de tránsito"
                 value={formData.transit_time || ''}
                 onChange={handleChange}
-                className={fieldClass}
+                className={compactFieldClass}
               />
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Target rate</label>
               <input
                 name="target_rate"
                 placeholder="Target rate"
                 value={formData.target_rate || ''}
                 onChange={handleChange}
-                className={fieldClass}
+                className={moneyFieldClass}
               />
+              </div>
 
               {formData.incoterm === 'EXW' && (
+                <div className={`${fieldGroupClass} md:col-span-2`}>
+                  <label className={formLabelClass}>Dirección de recolección EXW</label>
                 <textarea
                   name="pickup_address"
                   placeholder="Dirección de recolección EXW"
@@ -1147,6 +1206,7 @@ export default function EditQuotationPage() {
                   onChange={handleChange}
                   className={fieldClass}
                 />
+                </div>
               )}
             </div>
           </section>
@@ -1155,22 +1215,30 @@ export default function EditQuotationPage() {
             <h2 className="text-xl font-bold mb-4">Carga</h2>
 
             <div className="space-y-4">
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Commodity / descripción de la carga</label>
               <input
                 name="commodity"
                 placeholder="Commodity/Descripción de la carga *"
                 value={formData.commodity || ''}
                 onChange={handleChange}
-                className={fieldClass}
+                className={mediumFieldClass}
               />
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Tipo de empaque</label>
               <input
                 name="package_type"
                 placeholder="Tipo de empaque"
                 value={formData.package_type || ''}
                 onChange={handleChange}
-                className={fieldClass}
+                className={mediumFieldClass}
               />
+              </div>
 
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Detalles del empaque / observaciones de carga</label>
               <textarea
                 name="package_details"
                 placeholder="Detalles del empaque / dimensiones / observaciones de carga"
@@ -1178,10 +1246,13 @@ export default function EditQuotationPage() {
                 onChange={handleChange}
                 className={`${fieldClass} min-h-24`}
               />
+              </div>
 
               {requiresContainerLines && (
                 <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                    <div className={fieldGroupClass}>
+                      <label className={formLabelClass}>Tipo de contenedor / unidad</label>
                     <select
                       value={containerLineForm.container_type_id}
                       onChange={(e) => {
@@ -1205,7 +1276,10 @@ export default function EditQuotationPage() {
                         </option>
                       ))}
                     </select>
+                    </div>
 
+                    <div className={fieldGroupClass}>
+                      <label className={formLabelClass}>Cantidad</label>
                     <input
                       type="number"
                       min="1"
@@ -1219,7 +1293,10 @@ export default function EditQuotationPage() {
                       }
                       className={fieldClass}
                     />
+                    </div>
 
+                    <div className={fieldGroupClass}>
+                      <label className={formLabelClass}>Notas</label>
                     <input
                       placeholder="Notas"
                       value={containerLineForm.notes}
@@ -1231,6 +1308,7 @@ export default function EditQuotationPage() {
                       }
                       className={fieldClass}
                     />
+                    </div>
 
                     <button
                       type="button"
@@ -1639,25 +1717,36 @@ export default function EditQuotationPage() {
           <section>
             <h2 className="text-xl font-bold mb-4">Seguro de Carga</h2>
 
-            <label className="flex items-center gap-2 mb-4">
-              <input
-                type="checkbox"
-                name="requires_insurance"
-                checked={formData.requires_insurance}
-                onChange={handleChange}
-              />
-              Cliente solicita seguro de carga
-            </label>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <input
+                  type="checkbox"
+                  name="requires_insurance"
+                  checked={formData.requires_insurance}
+                  onChange={handleChange}
+                />
+                <span className="text-sm font-medium text-slate-700">
+                  Cliente solicita seguro de carga
+                </span>
+              </label>
 
-            {formData.requires_insurance && (
-              <input
-                name="commercial_value"
-                placeholder="Valor comercial / Valor FOB"
-                value={formData.commercial_value || ''}
-                onChange={handleChange}
-                className={fieldClass}
-              />
-            )}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-500">
+                  Valor FOB / valor comercial (USD)
+                </label>
+                <input
+                  name="commercial_value"
+                  placeholder="0.00"
+                  value={formData.commercial_value || ''}
+                  onChange={handleChange}
+                  className={moneyFieldClass}
+                />
+              </div>
+            </div>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Pricing usa este valor FOB para calcular el seguro de carga.
+            </p>
           </section>
 
           <section className={cardClass}>
@@ -1665,12 +1754,15 @@ export default function EditQuotationPage() {
               Observaciones internas para Pricing
             </h2>
 
-            <textarea
-              name="pricing_notes"
-              value={formData.pricing_notes || ''}
-              onChange={handleChange}
-              className={fieldClass}
-            />
+            <div className={fieldGroupClass}>
+              <label className={formLabelClass}>Notas internas para Pricing</label>
+              <textarea
+                name="pricing_notes"
+                value={formData.pricing_notes || ''}
+                onChange={handleChange}
+                className={`${fieldClass} min-h-28`}
+              />
+            </div>
           </section>
 
           {isMiamiFlow && (
@@ -1683,13 +1775,16 @@ export default function EditQuotationPage() {
                 Estas observaciones aparecerán en la cotización enviada al cliente.
               </p>
 
-              <textarea
-                name="client_notes"
-                value={formData.client_notes || ''}
-                onChange={handleChange}
-                className={fieldClass}
-                placeholder="Ej: Tarifa sujeta a disponibilidad, no incluye aduanas..."
-              />
+              <div className={fieldGroupClass}>
+                <label className={formLabelClass}>Notas comerciales para el PDF</label>
+                <textarea
+                  name="client_notes"
+                  value={formData.client_notes || ''}
+                  onChange={handleChange}
+                  className={`${fieldClass} min-h-28`}
+                  placeholder="Ej: Tarifa sujeta a disponibilidad, no incluye aduanas..."
+                />
+              </div>
             </section>
           )}
 

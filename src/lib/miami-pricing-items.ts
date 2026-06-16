@@ -255,6 +255,25 @@ export function buildMiamiPricingItems({
       },
     ]
 
+    if (pickupAmount > 0) {
+      items.push({
+        quotation_id: quotationId,
+        description: 'Pickup / Recolecta Interna',
+        item_type: 'origin_charge',
+        quantity: 1,
+        cost_amount: 0,
+        sale_amount: pickupAmount,
+        currency: 'USD',
+        taxable: false,
+        supplier: 'Sari Express',
+        tax_rate: 0,
+        tax_amount: 0,
+        total_amount: pickupAmount,
+        created_by: createdBy || null,
+        notes: 'Aplicado automáticamente por Incoterm EXW.',
+      })
+    }
+
     return [...items, ...destinationItems]
   }
 
