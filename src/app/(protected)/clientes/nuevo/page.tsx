@@ -123,7 +123,9 @@ export default function NuevoClientePage() {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .in('rol', ['Ventas', 'Admin'])
+      .eq('is_active', true)
+      .order('nombre', { ascending: true })
+      .order('apellido', { ascending: true })
 
     if (error) {
       toast.error(error.message)
