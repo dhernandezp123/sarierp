@@ -450,7 +450,7 @@ export function MiamiQuotationSection({
                       key={line.id}
                       className={`overflow-hidden rounded-2xl border transition-colors ${
                         isLineComplete
-                          ? 'border-emerald-200 dark:border-emerald-900/50'
+                          ? 'border-sky-300 dark:border-sky-800/70'
                           : 'border-slate-200 dark:border-slate-700'
                       }`}
                     >
@@ -500,7 +500,7 @@ export function MiamiQuotationSection({
                       <div
                         className={`space-y-3 p-4 ${
                           isLineComplete
-                            ? 'bg-emerald-50/60 dark:bg-emerald-950/20'
+                            ? 'bg-sky-50/80 dark:bg-sky-950/25'
                             : 'bg-white dark:bg-slate-950/40'
                         }`}
                       >
@@ -741,7 +741,7 @@ export function MiamiQuotationSection({
                             <p
                               className={`mt-0.5 text-sm font-semibold transition-colors ${
                                 lineTotalKg > 0
-                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  ? 'text-sky-800 dark:text-sky-300'
                                   : 'text-slate-900 dark:text-white'
                               }`}
                             >
@@ -756,7 +756,7 @@ export function MiamiQuotationSection({
                             <p
                               className={`mt-0.5 text-sm font-semibold transition-colors ${
                                 lineTotalLbs > 0
-                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  ? 'text-sky-800 dark:text-sky-300'
                                   : 'text-slate-900 dark:text-white'
                               }`}
                             >
@@ -771,7 +771,7 @@ export function MiamiQuotationSection({
                             <p
                               className={`mt-0.5 text-sm font-semibold transition-colors ${
                                 lineFt3 > 0
-                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  ? 'text-sky-800 dark:text-sky-300'
                                   : 'text-slate-900 dark:text-white'
                               }`}
                             >
@@ -786,7 +786,7 @@ export function MiamiQuotationSection({
                             <p
                               className={`mt-0.5 text-sm font-semibold transition-colors ${
                                 lineCbm > 0
-                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  ? 'text-sky-800 dark:text-sky-300'
                                   : 'text-slate-900 dark:text-white'
                               }`}
                             >

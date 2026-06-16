@@ -977,6 +977,7 @@ export default function EditQuotationPage() {
 
   const formLabelClass =
     'text-xs font-medium text-slate-500 dark:text-slate-400'
+  const sectionTitleClass = 'text-xl font-bold text-slate-900'
 
   const fieldGroupClass = 'flex flex-col gap-1.5'
   const compactFieldClass = `${fieldClass} md:max-w-[180px]`
@@ -1778,7 +1779,7 @@ export default function EditQuotationPage() {
 
           <div className={`grid gap-4 ${isMiamiFlow ? 'lg:grid-cols-2' : ''}`}>
             <section className={cardClass}>
-              <h2 className="text-xl font-bold mb-4">
+              <h2 className={`${sectionTitleClass} mb-4`}>
                 Observaciones internas para Pricing
               </h2>
 
@@ -1795,9 +1796,9 @@ export default function EditQuotationPage() {
 
             {isMiamiFlow && (
               <section className={cardClass}>
-                <h3 className="text-lg font-semibold text-slate-900">
+                <h2 className={`${sectionTitleClass} mb-4`}>
                   Observaciones para Cliente (PDF)
-                </h3>
+                </h2>
 
                 <div className={fieldGroupClass}>
                   <label className={formLabelClass}>Notas comerciales para el PDF</label>
