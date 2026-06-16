@@ -167,9 +167,10 @@ const workflow = [
   'Pricing',
   'Aprobación',
   'Shipping Instruction',
-  'Documentos',
+  'Booking / BL',
   'Validación de Costos',
-  'Dashboard',
+  'Facturación',
+  'Dashboard Ejecutivo',
 ]
 
 const comparison = [
@@ -219,17 +220,31 @@ function SectionHeading({
   description,
   light = false,
   eyebrowTone = 'default',
+  prominent = false,
 }: {
   eyebrow: string
   title: ReactNode
   description?: string
   light?: boolean
   eyebrowTone?: 'default' | 'danger'
+  prominent?: boolean
 }) {
   const eyebrowClassName =
     eyebrowTone === 'danger'
       ? 'inline-flex rounded-full bg-red-600 px-3.5 py-1.5 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-sm'
       : 'text-xs font-bold uppercase tracking-[0.25em] text-[#EF8E01]'
+  const titleClassName = prominent
+    ? `mt-4 text-4xl font-extrabold tracking-tight sm:text-5xl ${
+        light ? 'text-white' : 'text-[#07111F]'
+      }`
+    : `mt-3 text-3xl font-semibold tracking-tight sm:text-4xl ${
+        light ? 'text-white' : 'text-[#07111F]'
+      }`
+  const descriptionClassName = prominent
+    ? `mx-auto mt-6 max-w-2xl text-lg leading-8 ${
+        light ? 'text-blue-100' : 'text-slate-600'
+      }`
+    : `mt-4 text-base leading-8 ${light ? 'text-blue-100' : 'text-slate-500'}`
 
   return (
     <motion.div
@@ -242,19 +257,11 @@ function SectionHeading({
       <p className={eyebrowClassName}>
         {eyebrow}
       </p>
-      <h2
-        className={`mt-3 text-3xl font-semibold tracking-tight sm:text-4xl ${
-          light ? 'text-white' : 'text-[#07111F]'
-        }`}
-      >
+      <h2 className={titleClassName}>
         {title}
       </h2>
       {description && (
-        <p
-          className={`mt-4 text-base leading-8 ${
-            light ? 'text-blue-100' : 'text-slate-500'
-          }`}
-        >
+        <p className={descriptionClassName}>
           {description}
         </p>
       )}
@@ -777,9 +784,10 @@ export function ForwardersLanding() {
       <section id="funcionalidades" className="bg-white px-5 py-20 sm:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionHeading
-            eyebrow="Funcionalidades"
-            title="Todo el ciclo operativo en un solo sistema."
-            description="Módulos diseñados para controlar cotizaciones, pricing, documentación, finanzas y actividad operativa sin perder contexto entre equipos."
+            eyebrow="Motor Operativo"
+            title="Todo el ciclo logístico, centralizado."
+            description="Elimina la fricción operativa. Forwarders ERP sincroniza cotizaciones, pricing y documentación en un entorno colaborativo diseñado para maximizar tu rentabilidad por embarque."
+            prominent
           />
           <motion.div
             variants={stagger}
@@ -821,39 +829,161 @@ export function ForwardersLanding() {
       </section>
 
       {/* ── Workflow ─────────────────────────────────────────────────────── */}
-      <section id="workflow" className="bg-[#07111F] px-5 py-20 sm:px-8">
+      <section id="workflow" className="bg-[#07111F] px-5 py-24 sm:px-8">
         <div className="mx-auto max-w-7xl">
           <SectionHeading
             eyebrow="Workflow"
-            title="Del cliente a la operación cerrada."
-            description="Una línea de trabajo conectada para que cada equipo vea qué pasó antes, qué falta ahora y qué margen queda al final."
+            title="De la cotización al margen final, sin perder el control."
+            description="Ventas, pricing, operaciones y finanzas trabajan sobre el mismo flujo: cada cotización, cargo, documento y validación queda conectado desde el primer contacto hasta el cierre del embarque."
             light
           />
-          <div className="mt-12 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="grid gap-2 sm:grid-cols-4 lg:grid-cols-8">
+
+          <div className="mt-16 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur-sm">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9">
               {workflow.map((step, index) => (
                 <motion.div
                   key={step}
-                  initial={{ opacity: 0, y: 14 }}
-                  whileInView={{ opacity: 1, y: 0 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
                   viewport={{ once: true }}
-                  transition={{ delay: index * 0.04, duration: 0.4 }}
-                  className="relative rounded-xl bg-white/8 p-4"
+                  transition={{ delay: index * 0.05, duration: 0.5 }}
+                  className="group relative flex flex-col justify-between rounded-2xl border border-white/5 bg-white/[0.03] p-5 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.06] hover:shadow-lg"
                 >
-                  <p className="text-[10px] font-bold text-[#EF8E01]">
-                    {String(index + 1).padStart(2, '0')}
+                  <div className="flex items-center justify-between">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#07111F] text-[10px] font-bold text-[#EF8E01] ring-1 ring-white/10">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                  </div>
+
+                  <p className="mt-6 text-sm font-semibold leading-snug tracking-tight text-white">
+                    {step}
                   </p>
-                  <p className="mt-2 text-sm font-semibold text-white">{step}</p>
+
                   {index < workflow.length - 1 && (
                     <ChevronRight
-                      className="absolute right-2 top-1/2 hidden -translate-y-1/2 text-white/20 lg:block"
-                      size={16}
+                      className="absolute -right-3 top-[45%] hidden rounded-full bg-[#07111F] text-white/30 ring-1 ring-white/10 transition-colors group-hover:text-[#EF8E01] xl:block"
+                      size={20}
                     />
                   )}
                 </motion.div>
               ))}
             </div>
+
+            <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-white">
+                Todo conectado en una sola plataforma.
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                {['Cotizaciones', 'Pricing', 'Operaciones', 'Costos', 'Facturación'].map(
+                  (item) => (
+                    <span
+                      key={item}
+                      className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-blue-100"
+                    >
+                      {item}
+                    </span>
+                  ),
+                )}
+              </div>
+            </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Equipos ──────────────────────────────────────────────────────── */}
+      <section className="bg-white px-5 py-20 sm:px-8">
+        <div className="mx-auto max-w-7xl">
+          <SectionHeading
+            eyebrow="Equipos"
+            title="Diseñado para cada equipo de tu operación."
+            description="Forwarders ERP conecta a los equipos que normalmente trabajan separados: comercial, pricing, operaciones, finanzas y dirección."
+          />
+
+          <motion.div
+            variants={stagger}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-80px' }}
+            className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-5"
+          >
+            {[
+              {
+                title: 'Director General',
+                icon: BarChart3,
+                items: [
+                  'Visibilidad del negocio',
+                  'Control de márgenes',
+                  'Decisiones con datos',
+                ],
+              },
+              {
+                title: 'Jefe Comercial',
+                icon: Users,
+                items: [
+                  'Pipeline de cotizaciones',
+                  'Clientes y vendedores',
+                  'Seguimiento de oportunidades',
+                ],
+              },
+              {
+                title: 'Pricing Analyst',
+                icon: Scale,
+                items: [
+                  'Costos vs ventas',
+                  'Tarifas por cliente',
+                  'Márgenes automáticos',
+                ],
+              },
+              {
+                title: 'Operaciones',
+                icon: Route,
+                items: [
+                  'Shipping Instructions',
+                  'Booking / BL',
+                  'Documentos por embarque',
+                ],
+              },
+              {
+                title: 'Finanzas',
+                icon: ClipboardCheck,
+                items: [
+                  'Validación de costos',
+                  'Rentabilidad por operación',
+                  'Control de facturación',
+                ],
+              },
+            ].map((role) => {
+              const Icon = role.icon
+
+              return (
+                <motion.div
+                  key={role.title}
+                  variants={fadeUp}
+                  className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#0038BD]/30 hover:shadow-xl hover:shadow-[#0038BD]/5"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-[#0038BD] to-[#EF8E01] transition-transform duration-300 group-hover:scale-x-100" />
+
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-50 text-slate-400 transition-all duration-300 group-hover:bg-[#0038BD] group-hover:text-white group-hover:shadow-md">
+                    <Icon size={20} />
+                  </div>
+
+                  <h3 className="mt-4 font-semibold text-[#07111F]">{role.title}</h3>
+                  <ul className="mt-3 space-y-1.5">
+                    {role.items.map((item) => (
+                      <li key={item} className="flex items-start gap-2 text-sm text-slate-500">
+                        <Check
+                          size={13}
+                          className="mt-0.5 shrink-0 text-[#EF8E01]/40 transition-colors duration-300 group-hover:text-[#EF8E01]"
+                        />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              )
+            })}
+          </motion.div>
         </div>
       </section>
 
