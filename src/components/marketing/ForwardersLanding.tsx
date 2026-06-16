@@ -3,23 +3,34 @@
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
+import type { ReactNode } from 'react'
 import {
   ArrowRight,
+  Activity,
   BarChart3,
+  Calculator,
   Check,
   ChevronRight,
   ClipboardCheck,
+  Eye,
+  FileSpreadsheet,
   FileText,
+  FolderOpen,
   Globe2,
   LockKeyhole,
+  Mail,
+  MessageCircle,
   Plane,
   Route,
   Scale,
   ShieldCheck,
   Ship,
   Sparkles,
+  Tags,
   Users,
   Warehouse,
+  Waypoints,
+  Zap,
 } from 'lucide-react'
 
 // ─── Tokens de animación ──────────────────────────────────────────────────────
@@ -56,26 +67,30 @@ const benefits = [
   {
     title: 'Cotiza más rápido',
     text: 'LCL, FCL, aéreo, terrestre y courier desde un flujo ordenado. Sin tablas dispersas, sin correos intermedios.',
+    icon: Zap,
   },
   {
     title: 'Protege tus márgenes',
     text: 'Compara costos de proveedor con la venta al cliente antes de aprobar cualquier propuesta.',
+    icon: ShieldCheck,
   },
   {
     title: 'Elimina reprocesos',
     text: 'Datos de clientes, tarifas y operaciones en un sistema. Sin reescribir información entre equipos.',
+    icon: Waypoints,
   },
   {
     title: 'Visibilidad operativa real',
     text: 'Cada equipo ve el estado del embarque, el historial relevante y los documentos en un mismo lugar.',
+    icon: Eye,
   },
 ]
 
 const operationalProblems = [
-  'Excel para tarifas',
-  'Correos para aprobaciones',
-  'WhatsApp para seguimiento',
-  'Carpetas para documentos',
+  { title: 'Excel para tarifas', icon: FileSpreadsheet },
+  { title: 'Correos para aprobaciones', icon: Mail },
+  { title: 'WhatsApp para seguimiento', icon: MessageCircle },
+  { title: 'Carpetas para documentos', icon: FolderOpen },
 ]
 
 const features = [
@@ -203,12 +218,19 @@ function SectionHeading({
   title,
   description,
   light = false,
+  eyebrowTone = 'default',
 }: {
   eyebrow: string
-  title: string
+  title: ReactNode
   description?: string
   light?: boolean
+  eyebrowTone?: 'default' | 'danger'
 }) {
+  const eyebrowClassName =
+    eyebrowTone === 'danger'
+      ? 'inline-flex rounded-full bg-red-600 px-3.5 py-1.5 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-sm'
+      : 'text-xs font-bold uppercase tracking-[0.25em] text-[#EF8E01]'
+
   return (
     <motion.div
       variants={fadeUp}
@@ -217,7 +239,7 @@ function SectionHeading({
       viewport={{ once: true, margin: '-100px' }}
       className="mx-auto max-w-3xl text-center"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#EF8E01]">
+      <p className={eyebrowClassName}>
         {eyebrow}
       </p>
       <h2
@@ -497,26 +519,34 @@ export function ForwardersLanding() {
       </section>
 
       {/* ── Beneficios ───────────────────────────────────────────────────── */}
-      <section className="bg-white px-5 py-16 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-10 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
+      <section className="relative overflow-hidden bg-slate-50 px-5 py-24 sm:px-8">
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.02)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,white,transparent_85%)]" />
+
+        <div className="relative z-10 mx-auto max-w-7xl">
+          <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <motion.div
               variants={fadeUp}
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, margin: '-80px' }}
+              className="pr-4"
             >
-              <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#EF8E01]">
-                OPERACI&Oacute;N TRADICIONAL
-              </p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#07111F] sm:text-4xl">
-                El problema no es vender m&aacute;s. Es operar sin perder control.
+              <div className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-red-600">
+                <span className="flex h-1.5 w-1.5 rounded-full bg-red-500" />
+                Operaci&oacute;n Tradicional
+              </div>
+
+              <h2 className="mt-5 text-3xl font-extrabold leading-[1.15] tracking-tight text-[#07111F] sm:text-4xl">
+                El problema no es vender m&aacute;s.{' '}
+                <span className="text-red-600">Es operar sin perder control.</span>
               </h2>
-              <p className="mt-4 text-base leading-8 text-slate-500">
+
+              <p className="mt-5 text-lg leading-relaxed text-slate-500">
                 La mayor&iacute;a de freight forwarders todav&iacute;a dependen de
                 Excel, correos, WhatsApp y carpetas compartidas para cotizar,
                 aprobar tarifas, coordinar operaciones y validar costos.
-                Forwarders ERP centraliza ese flujo en una sola plataforma.
+                <span className="font-semibold text-[#0038BD]">Forwarders ERP</span>{' '}
+                centraliza ese flujo en una sola plataforma.
               </p>
             </motion.div>
 
@@ -525,34 +555,54 @@ export function ForwardersLanding() {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, margin: '-80px' }}
-              className="group"
+              className="group relative"
             >
-              <img
-                src="/excel-desktop-image.png"
-                alt="Escritorio operativo con procesos log&iacute;sticos gestionados en Excel"
-                className="h-auto w-full rounded-3xl border border-slate-200/70 bg-white object-contain shadow-2xl shadow-[#0038BD]/15 ring-1 ring-slate-900/5 transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[#0038BD]/20"
-              />
+              <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 p-2 shadow-2xl shadow-slate-300/50 ring-1 ring-slate-900/5 transition-transform duration-500 group-hover:-translate-y-2">
+                <div className="flex items-center gap-1.5 pb-2 pl-2 pt-1 opacity-60">
+                  <div className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+                  <div className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+                  <div className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+                </div>
+
+                <img
+                  src="/excel-desktop-image.png"
+                  alt="Escritorio operativo con procesos log&iacute;sticos gestionados en Excel"
+                  className="h-auto w-full rounded-xl border border-slate-200/50 bg-white object-contain"
+                />
+              </div>
             </motion.div>
           </div>
+
           <motion.div
             variants={stagger}
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: '-80px' }}
-            className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+            className="mt-16 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
           >
-            {operationalProblems.map((item) => (
-              <motion.div
-                variants={fadeUp}
-                key={item}
-                className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#0038BD]/20 hover:shadow-lg"
-              >
-                <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl bg-[#EF8E01]/10 text-[#EF8E01] transition group-hover:bg-[#EF8E01]/15">
-                  <Check size={18} />
-                </div>
-                <h3 className="font-semibold text-[#07111F]">{item}</h3>
-              </motion.div>
-            ))}
+            {operationalProblems.map((item) => {
+              const Icon = item.icon
+
+              return (
+                <motion.div
+                  variants={fadeUp}
+                  key={item.title}
+                  className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-red-200 hover:bg-red-50/30 hover:shadow-xl hover:shadow-red-900/5"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-400 to-[#EF8E01] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400 transition-all duration-300 group-hover:scale-110 group-hover:bg-red-100 group-hover:text-red-500">
+                      <Icon size={18} strokeWidth={2.5} />
+                    </div>
+
+                    <h3 className="text-sm font-semibold leading-tight text-slate-700 transition-colors duration-300 group-hover:text-[#07111F]">
+                      {item.title}
+                    </h3>
+                  </div>
+                </motion.div>
+              )
+            })}
           </motion.div>
         </div>
       </section>
@@ -561,7 +611,13 @@ export function ForwardersLanding() {
         <div className="mx-auto max-w-7xl">
           <SectionHeading
             eyebrow="El problema"
-            title="Tu operación no debería depender de Excel."
+            eyebrowTone="danger"
+            title={
+              <>
+                Tu operación no debería depender de{' '}
+                <span className="text-[#217346]">Excel.</span>
+              </>
+            }
             description="Cuando ventas, pricing y operaciones trabajan en archivos separados, el margen se vuelve invisible y los errores llegan tarde."
           />
           <motion.div
@@ -569,86 +625,150 @@ export function ForwardersLanding() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: '-80px' }}
-            className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+            className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-4"
           >
-            {benefits.map((benefit) => (
-              <motion.div
-                variants={fadeUp}
-                key={benefit.title}
-                className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#0038BD]/20 hover:shadow-lg"
-              >
-                <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl bg-[#EF8E01]/10 text-[#EF8E01] transition group-hover:bg-[#EF8E01]/15">
-                  <Check size={18} />
-                </div>
-                <h3 className="font-semibold text-[#07111F]">{benefit.title}</h3>
-                <p className="mt-2.5 text-sm leading-6 text-slate-500">{benefit.text}</p>
-              </motion.div>
-            ))}
+            {benefits.map((benefit) => {
+              const Icon = benefit.icon
+
+              return (
+                <motion.div
+                  variants={fadeUp}
+                  key={benefit.title}
+                  className="group relative flex flex-col items-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#0038BD]/30 hover:shadow-xl hover:shadow-[#0038BD]/5"
+                >
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#0038BD] to-[#EF8E01] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+                  <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0038BD]/5 text-[#0038BD] transition-all duration-300 group-hover:scale-110 group-hover:bg-[#0038BD] group-hover:text-white group-hover:shadow-md">
+                    <Icon size={26} strokeWidth={2} />
+                  </div>
+
+                  <h3 className="font-bold tracking-tight text-[#07111F]">
+                    {benefit.title}
+                  </h3>
+
+                  <p className="mt-2.5 text-sm leading-relaxed text-slate-500">
+                    {benefit.text}
+                  </p>
+                </motion.div>
+              )
+            })}
           </motion.div>
         </div>
       </section>
 
-      {/* ── Propuesta de valor ───────────────────────────────────────────── */}
-      <section className="bg-[#F0F2F5] px-5 py-20 sm:px-8">
-        <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2 lg:items-center">
+      {/* ── Propuesta de valor / Solución ───────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-[#F0F2F5] px-5 py-24 sm:px-8">
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-16 lg:grid-cols-2 lg:items-center">
           <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: '-100px' }}
             variants={stagger}
+            className="max-w-xl"
           >
-            <motion.p
+            <motion.div
               variants={fadeUp}
-              className="text-xs font-bold uppercase tracking-[0.25em] text-[#EF8E01]"
+              className="mb-4 inline-flex rounded-full bg-[#EF8E01]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-[#EF8E01]"
             >
-              Solución
-            </motion.p>
+              Soluci&oacute;n Integral
+            </motion.div>
             <motion.h2
               variants={fadeUp}
-              className="mt-3 text-3xl font-semibold tracking-tight text-[#07111F] sm:text-4xl"
+              className="mt-2 text-4xl font-extrabold leading-[1.15] tracking-tight text-[#07111F] sm:text-5xl"
             >
               Un ERP diseñado para equipos de carga internacional.
             </motion.h2>
             <motion.p
               variants={fadeUp}
-              className="mt-5 text-base leading-8 text-slate-500"
+              className="mt-6 text-xl leading-relaxed text-slate-500"
             >
               Forwarders ERP by DHer conecta el flujo comercial con la
               operación: clientes, tarifas, cotizaciones, pricing, documentos y
               actividad del equipo en una experiencia clara para el día a día.
             </motion.p>
-            <motion.a
-              variants={fadeUp}
-              href="#funcionalidades"
-              className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-[#0038BD] transition hover:gap-2.5"
-            >
-              Ver todas las funcionalidades
-              <ArrowRight size={15} />
-            </motion.a>
+            <motion.div variants={fadeUp} className="mt-8 flex items-center gap-5">
+              <a
+                href="#funcionalidades"
+                className="group flex h-12 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-bold text-[#07111F] shadow-sm ring-1 ring-slate-200 transition-all hover:bg-slate-50 hover:ring-[#0038BD]/30"
+              >
+                Explorar el sistema
+                <ArrowRight
+                  size={16}
+                  className="text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-[#0038BD]"
+                />
+              </a>
+            </motion.div>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, x: 24 }}
+            initial={{ opacity: 0, x: 30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true, margin: '-100px' }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="grid gap-3 sm:grid-cols-2"
+            transition={{ duration: 0.7, ease: 'easeOut' }}
+            className="grid gap-4 sm:grid-cols-2"
           >
             {[
-              { title: 'Clientes y contactos', desc: 'Perfil comercial con historial y tarifas propias' },
-              { title: 'Tarifas organizadas', desc: 'Por cliente, por servicio y por destino' },
-              { title: 'Cotizaciones guiadas', desc: 'FCL, LCL, aéreo, terrestre y Miami consolidado' },
-              { title: 'Seguimiento operativo', desc: 'Booking, SI, timeline y documentos en un mismo expediente' },
-            ].map((item) => (
-              <div
-                key={item.title}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <Check className="mb-3 text-[#EF8E01]" size={18} />
-                <p className="font-semibold text-[#07111F]">{item.title}</p>
-                <p className="mt-1.5 text-xs text-slate-500">{item.desc}</p>
-              </div>
-            ))}
+              {
+                title: 'Clientes y contactos',
+                desc: 'Perfil comercial con historial y tarifas propias',
+                icon: Users,
+                color: 'text-blue-600',
+                bg: 'bg-blue-50',
+                hover: 'group-hover:border-blue-300',
+              },
+              {
+                title: 'Tarifas organizadas',
+                desc: 'Por cliente, por servicio y por destino',
+                icon: Tags,
+                color: 'text-emerald-600',
+                bg: 'bg-emerald-50',
+                hover: 'group-hover:border-emerald-300',
+              },
+              {
+                title: 'Cotizaciones guiadas',
+                desc: 'FCL, LCL, aéreo, terrestre y consolidado',
+                icon: Calculator,
+                color: 'text-purple-600',
+                bg: 'bg-purple-50',
+                hover: 'group-hover:border-purple-300',
+              },
+              {
+                title: 'Seguimiento operativo',
+                desc: 'Booking, SI, timeline y documentos en un lugar',
+                icon: Activity,
+                color: 'text-[#EF8E01]',
+                bg: 'bg-[#EF8E01]/10',
+                hover: 'group-hover:border-[#EF8E01]/40',
+              },
+            ].map((item, index) => {
+              const Icon = item.icon
+
+              return (
+                <div
+                  key={item.title}
+                  className={`group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-lg shadow-slate-200/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${item.hover} ${
+                    index === 1 || index === 3 ? 'sm:mt-8' : ''
+                  }`}
+                >
+                  <div
+                    className={`absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${item.bg}`}
+                  />
+
+                  <div className="relative z-10">
+                    <div
+                      className={`mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${item.bg} ${item.color} transition-transform duration-300 group-hover:scale-110`}
+                    >
+                      <Icon size={24} strokeWidth={2.5} />
+                    </div>
+
+                    <p className="mb-2 text-lg font-bold leading-tight tracking-tight text-[#07111F]">
+                      {item.title}
+                    </p>
+                    <p className="text-sm leading-relaxed text-slate-500">{item.desc}</p>
+                  </div>
+                </div>
+              )
+            })}
           </motion.div>
         </div>
       </section>
@@ -674,16 +794,21 @@ export function ForwardersLanding() {
                 <motion.div
                   key={feature.title}
                   variants={fadeUp}
-                  className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#0038BD]/20 hover:shadow-lg"
+                  className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#0038BD]/30 hover:shadow-xl hover:shadow-[#0038BD]/5"
                 >
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0038BD]/7 text-[#0038BD] transition group-hover:bg-[#0038BD]/12">
+                  <div className="absolute inset-x-0 top-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-[#0038BD] to-[#EF8E01] transition-transform duration-300 group-hover:scale-x-100" />
+
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-50 text-slate-400 transition-all duration-300 group-hover:bg-[#0038BD] group-hover:text-white group-hover:shadow-md">
                     <Icon size={20} />
                   </div>
                   <h3 className="mt-4 font-semibold text-[#07111F]">{feature.title}</h3>
                   <ul className="mt-3 space-y-1.5">
                     {feature.items.map((item) => (
                       <li key={item} className="flex items-start gap-2 text-sm text-slate-500">
-                        <Check size={13} className="mt-0.5 shrink-0 text-[#EF8E01]" />
+                        <Check
+                          size={13}
+                          className="mt-0.5 shrink-0 text-[#EF8E01]/35 transition-colors duration-300 group-hover:text-[#EF8E01]"
+                        />
                         {item}
                       </li>
                     ))}
