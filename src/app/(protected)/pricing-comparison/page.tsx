@@ -1864,12 +1864,48 @@ function PricingComparisonContent() {
     return snapshot
   }
 
-  const getCurrentFinancialTotals = (): FinancialTotalsSnapshot => ({
-    total_cost: totalCost,
-    total_sale: totalSale,
-    profit_amount: profit,
-    gp_percentage: gpPercentage,
-  })
+  const calculateFinancialTotalsFromItems = (
+    items: Array<{
+      cost_amount?: number | string | null
+      sale_amount?: number | string | null
+      quantity?: number | string | null
+    }>
+  ): FinancialTotalsSnapshot => {
+    const currentTotalCost = items.reduce(
+      (sum, item) =>
+        sum + Number(item.cost_amount || 0) * Number(item.quantity || 1),
+      0
+    )
+    const currentTotalSale = items.reduce(
+      (sum, item) =>
+        sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
+      0
+    )
+
+    return {
+      total_cost: currentTotalCost,
+      total_sale: currentTotalSale,
+      profit_amount: currentTotalSale - currentTotalCost,
+      gp_percentage: calculateGrossProfitPercent({
+        saleTotal: currentTotalSale,
+        costTotal: currentTotalCost,
+      }),
+    }
+  }
+
+  const fetchCurrentFinancialTotals = async (quotationId: string) => {
+    const { data, error } = await supabase
+      .from('pricing_items')
+      .select('cost_amount, sale_amount, quantity')
+      .eq('quotation_id', quotationId)
+
+    if (error) {
+      toast.error(error.message)
+      return null
+    }
+
+    return calculateFinancialTotalsFromItems(data || [])
+  }
 
   const getFinancialDelta = (
     previous: FinancialTotalsSnapshot,
@@ -1942,8 +1978,14 @@ function PricingComparisonContent() {
     )
       ? getPersistedFinancialTotals(selectedQuote)
       : null
+    const currentFinancialTotals = await fetchCurrentFinancialTotals(
+      selectedQuote.id
+    )
+
+    if (!currentFinancialTotals) return false
+
     const newFinancialTotals = previousFinancialTotals
-      ? getCurrentFinancialTotals()
+      ? currentFinancialTotals
       : null
     const getFinancialSnapshotMetadata = (changeType: string) =>
       previousFinancialTotals && newFinancialTotals
@@ -1967,10 +2009,10 @@ function PricingComparisonContent() {
       .from('quotations')
       .update({
         status: nextStatus,
-        total_cost: totalCost,
-        total_sale: totalSale,
-        profit_amount: profit,
-        gp_percentage: gpPercentage,
+        total_cost: currentFinancialTotals.total_cost,
+        total_sale: currentFinancialTotals.total_sale,
+        profit_amount: currentFinancialTotals.profit_amount,
+        gp_percentage: currentFinancialTotals.gp_percentage,
         pricing_approved: true,
         pricing_approved_by: profile?.id,
         pricing_approved_at: new Date().toISOString(),
