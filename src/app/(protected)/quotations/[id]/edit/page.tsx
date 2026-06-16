@@ -959,6 +959,22 @@ export default function EditQuotationPage() {
     Terrestre: ['LTL', 'FTL'],
   }
 
+  const packageTypeOptions =
+    packageTypes.length > 0
+      ? packageTypes.map((packageType) => packageType.name)
+      : [
+          'Cajas',
+          'Pallets',
+          'Envases',
+          'Tubos',
+          'Cajas metálicas',
+          'Cilindros',
+          'Rollos',
+          'Sacos',
+          'Granel',
+          'Otro',
+        ]
+
   const formLabelClass =
     'text-xs font-medium text-slate-500 dark:text-slate-400'
 
@@ -966,6 +982,7 @@ export default function EditQuotationPage() {
   const compactFieldClass = `${fieldClass} md:max-w-[180px]`
   const moneyFieldClass = `${fieldClass} md:max-w-[220px]`
   const dateFieldClass = `${fieldClass} md:max-w-[220px]`
+  const shortTextFieldClass = `${fieldClass} md:max-w-[260px]`
   const mediumFieldClass = `${fieldClass} md:max-w-xl`
 
   const requiresContainerLines =
@@ -1131,10 +1148,10 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section>
+          <section className="pt-3">
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Origen</label>
                 <input list="countries" name="origen" placeholder="Origen" value={formData.origen || ''} onChange={handleChange} className={fieldClass} />
@@ -1152,14 +1169,14 @@ export default function EditQuotationPage() {
                 <input list="destinationPorts" name="puerto_destino" placeholder="Puerto destino" value={formData.puerto_destino || ''} onChange={handleChange} className={fieldClass} />
               </div>
 
-              <div className={`${fieldGroupClass} md:col-span-2`}>
+              <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Dirección de entrega</label>
               <textarea
                 name="delivery_address"
                 placeholder="Dirección de entrega"
                 value={formData.delivery_address || ''}
                 onChange={handleChange}
-                className={`${fieldClass} min-h-24`}
+                className={`${fieldClass} min-h-12`}
               />
               </div>
 
@@ -1170,7 +1187,7 @@ export default function EditQuotationPage() {
                 placeholder="Naviera de preferencia"
                 value={formData.preferred_carrier || ''}
                 onChange={handleChange}
-                className={fieldClass}
+                className={shortTextFieldClass}
               />
               </div>
 
@@ -1204,14 +1221,14 @@ export default function EditQuotationPage() {
                   placeholder="Dirección de recolección EXW"
                   value={formData.pickup_address || ''}
                   onChange={handleChange}
-                  className={fieldClass}
+                  className={`${fieldClass} min-h-12`}
                 />
                 </div>
               )}
             </div>
           </section>
 
-          <section>
+          <section className="pt-3">
             <h2 className="text-xl font-bold mb-4">Carga</h2>
 
             <div className="space-y-4">
@@ -1228,13 +1245,19 @@ export default function EditQuotationPage() {
 
               <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Tipo de empaque</label>
-              <input
+              <select
                 name="package_type"
-                placeholder="Tipo de empaque"
                 value={formData.package_type || ''}
                 onChange={handleChange}
                 className={mediumFieldClass}
-              />
+              >
+                <option value="">Seleccionar</option>
+                {packageTypeOptions.map((packageType) => (
+                  <option key={packageType} value={packageType}>
+                    {packageType}
+                  </option>
+                ))}
+              </select>
               </div>
 
               <div className={fieldGroupClass}>
@@ -1244,7 +1267,7 @@ export default function EditQuotationPage() {
                 placeholder="Detalles del empaque / dimensiones / observaciones de carga"
                 value={formData.package_details || ''}
                 onChange={handleChange}
-                className={`${fieldClass} min-h-24`}
+                className={`${fieldClass} min-h-16`}
               />
               </div>
 
@@ -1714,7 +1737,7 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section>
+          <section className="pt-6">
             <h2 className="text-xl font-bold mb-4">Seguro de Carga</h2>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -1770,10 +1793,6 @@ export default function EditQuotationPage() {
               <h3 className="text-lg font-semibold text-slate-900">
                 Observaciones para Cliente (PDF)
               </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                Estas observaciones aparecerán en la cotización enviada al cliente.
-              </p>
 
               <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Notas comerciales para el PDF</label>

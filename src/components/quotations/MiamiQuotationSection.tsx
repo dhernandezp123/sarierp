@@ -75,6 +75,7 @@ export function MiamiQuotationSection({
   const compactFieldClass = `${fieldClass} md:max-w-[180px]`
   const moneyFieldClass = `${fieldClass} md:max-w-[220px]`
   const dateFieldClass = `${fieldClass} md:max-w-[220px]`
+  const routeFieldClass = `${fieldClass} md:max-w-[260px]`
   const mediumFieldClass = `${fieldClass} md:max-w-xl`
 
   const parseNumericValue = (value: string | number | undefined | null) => {
@@ -276,7 +277,7 @@ export function MiamiQuotationSection({
               Datos del embarque Miami
             </h3>
 
-            <div className="mt-5 grid gap-5 md:grid-cols-2">
+            <div className="mt-5 grid gap-5 md:grid-cols-3">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   Puerto origen
@@ -287,7 +288,7 @@ export function MiamiQuotationSection({
                 placeholder="Puerto origen"
                 value={formData.puerto_origen}
                 onChange={handleChange}
-                className={compactFieldClass}
+                className={routeFieldClass}
               />
               </div>
 
@@ -301,7 +302,7 @@ export function MiamiQuotationSection({
                 placeholder="Puerto destino"
                 value={formData.puerto_destino}
                 onChange={handleChange}
-                className={compactFieldClass}
+                className={routeFieldClass}
               />
               </div>
 
@@ -315,7 +316,7 @@ export function MiamiQuotationSection({
                 placeholder="Destino final"
                 value={formData.destino}
                 onChange={handleChange}
-                className={mediumFieldClass}
+                className={routeFieldClass}
               />
               </div>
 
@@ -332,8 +333,8 @@ export function MiamiQuotationSection({
               />
               </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              <div className="flex flex-col gap-1.5">
+                <label className={fieldLabelClass}>
                   Válida hasta
                 </label>
 
@@ -360,11 +361,11 @@ export function MiamiQuotationSection({
                 placeholder="Commodity / descripción"
                 value={formData.commodity}
                 onChange={handleChange}
-                className={mediumFieldClass}
+                className={routeFieldClass}
               />
               </div>
 
-              <div className="flex flex-col gap-1.5 md:col-span-2">
+              <div className="flex flex-col gap-1.5 md:col-span-3">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   Observaciones
                 </label>
