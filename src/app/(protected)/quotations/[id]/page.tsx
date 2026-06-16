@@ -314,7 +314,9 @@ export default function QuotationDetailPage() {
   const userRole = profile?.rol
   const canManagePricing = ['Admin', 'Pricing'].includes(userRole || '')
   const canGenerateSI = ['Admin', 'Ventas'].includes(userRole || '')
-  const canEditQuotation = ['Admin', 'Ventas'].includes(userRole || '')
+  const canEditQuotation = ['Admin', 'Ventas', 'Operaciones'].includes(
+    userRole || ''
+  )
 
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any>(null)

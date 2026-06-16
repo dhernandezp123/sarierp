@@ -14,7 +14,7 @@ const QUICK_ACTIONS = [
     label: 'Nueva Cotizacion',
     href: '/quotations/new',
     icon: FileText,
-    roles: ['Admin', 'Ventas', 'Pricing'],
+    roles: ['Admin', 'Ventas', 'Pricing', 'Operaciones'],
   },
   {
     label: 'Nuevo Cliente',

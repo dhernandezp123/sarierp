@@ -31,6 +31,8 @@ export const rolePermissions: Record<UserRole, string[]> = {
   Operaciones: [
     '/dashboard',
     '/alerts',
+    '/clientes',
+    '/quotations',
     '/operations/dashboard',
     '/operations/bookings',
     '/operations/routing',

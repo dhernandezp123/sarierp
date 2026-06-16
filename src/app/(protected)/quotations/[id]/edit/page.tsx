@@ -71,6 +71,7 @@ export default function EditQuotationPage() {
   const role = profile?.rol || ''
   const isAdmin = role === 'Admin'
   const isSales = role === 'Ventas'
+  const isOperations = role === 'Operaciones'
   const isPricing = role === 'Pricing'
   const isFinance = role === 'Finanzas' || role === 'Contabilidad'
 
@@ -81,7 +82,7 @@ export default function EditQuotationPage() {
   const canEditFinance =
     isAdmin || isFinance
   const canEditQuotes =
-    isAdmin || isSales
+    isAdmin || isSales || isOperations
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
