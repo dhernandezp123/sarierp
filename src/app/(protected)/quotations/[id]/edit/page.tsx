@@ -1232,43 +1232,47 @@ export default function EditQuotationPage() {
             <h2 className="text-xl font-bold mb-4">Carga</h2>
 
             <div className="space-y-4">
-              <div className={fieldGroupClass}>
-                <label className={formLabelClass}>Commodity / descripción de la carga</label>
-              <input
-                name="commodity"
-                placeholder="Commodity/Descripción de la carga *"
-                value={formData.commodity || ''}
-                onChange={handleChange}
-                className={mediumFieldClass}
-              />
-              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-4">
+                  <div className={fieldGroupClass}>
+                    <label className={formLabelClass}>Commodity / descripción de la carga</label>
+                    <input
+                      name="commodity"
+                      placeholder="Commodity/Descripción de la carga *"
+                      value={formData.commodity || ''}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    />
+                  </div>
 
-              <div className={fieldGroupClass}>
-                <label className={formLabelClass}>Tipo de empaque</label>
-              <select
-                name="package_type"
-                value={formData.package_type || ''}
-                onChange={handleChange}
-                className={mediumFieldClass}
-              >
-                <option value="">Seleccionar</option>
-                {packageTypeOptions.map((packageType) => (
-                  <option key={packageType} value={packageType}>
-                    {packageType}
-                  </option>
-                ))}
-              </select>
-              </div>
+                  <div className={fieldGroupClass}>
+                    <label className={formLabelClass}>Tipo de empaque</label>
+                    <select
+                      name="package_type"
+                      value={formData.package_type || ''}
+                      onChange={handleChange}
+                      className={fieldClass}
+                    >
+                      <option value="">Seleccionar</option>
+                      {packageTypeOptions.map((packageType) => (
+                        <option key={packageType} value={packageType}>
+                          {packageType}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-              <div className={fieldGroupClass}>
-                <label className={formLabelClass}>Detalles del empaque / observaciones de carga</label>
-              <textarea
-                name="package_details"
-                placeholder="Detalles del empaque / dimensiones / observaciones de carga"
-                value={formData.package_details || ''}
-                onChange={handleChange}
-                className={`${fieldClass} min-h-16`}
-              />
+                <div className={fieldGroupClass}>
+                  <label className={formLabelClass}>Detalles del empaque / observaciones de carga</label>
+                  <textarea
+                    name="package_details"
+                    placeholder="Detalles del empaque / dimensiones / observaciones de carga"
+                    value={formData.package_details || ''}
+                    onChange={handleChange}
+                    className={`${fieldClass} min-h-[132px]`}
+                  />
+                </div>
               </div>
 
               {requiresContainerLines && (
@@ -1772,40 +1776,42 @@ export default function EditQuotationPage() {
             </p>
           </section>
 
-          <section className={cardClass}>
-            <h2 className="text-xl font-bold mb-4">
-              Observaciones internas para Pricing
-            </h2>
-
-            <div className={fieldGroupClass}>
-              <label className={formLabelClass}>Notas internas para Pricing</label>
-              <textarea
-                name="pricing_notes"
-                value={formData.pricing_notes || ''}
-                onChange={handleChange}
-                className={`${fieldClass} min-h-28`}
-              />
-            </div>
-          </section>
-
-          {isMiamiFlow && (
+          <div className={`grid gap-4 ${isMiamiFlow ? 'lg:grid-cols-2' : ''}`}>
             <section className={cardClass}>
-              <h3 className="text-lg font-semibold text-slate-900">
-                Observaciones para Cliente (PDF)
-              </h3>
+              <h2 className="text-xl font-bold mb-4">
+                Observaciones internas para Pricing
+              </h2>
 
               <div className={fieldGroupClass}>
-                <label className={formLabelClass}>Notas comerciales para el PDF</label>
+                <label className={formLabelClass}>Notas internas para Pricing</label>
                 <textarea
-                  name="client_notes"
-                  value={formData.client_notes || ''}
+                  name="pricing_notes"
+                  value={formData.pricing_notes || ''}
                   onChange={handleChange}
-                  className={`${fieldClass} min-h-28`}
-                  placeholder="Ej: Tarifa sujeta a disponibilidad, no incluye aduanas..."
+                  className={`${fieldClass} min-h-36`}
                 />
               </div>
             </section>
-          )}
+
+            {isMiamiFlow && (
+              <section className={cardClass}>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Observaciones para Cliente (PDF)
+                </h3>
+
+                <div className={fieldGroupClass}>
+                  <label className={formLabelClass}>Notas comerciales para el PDF</label>
+                  <textarea
+                    name="client_notes"
+                    value={formData.client_notes || ''}
+                    onChange={handleChange}
+                    className={`${fieldClass} min-h-36`}
+                    placeholder="Ej: Tarifa sujeta a disponibilidad, no incluye aduanas..."
+                  />
+                </div>
+              </section>
+            )}
+          </div>
 
           <datalist id="countries">
             {countries.map((country) => (
