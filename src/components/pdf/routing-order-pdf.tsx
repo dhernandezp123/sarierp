@@ -24,7 +24,7 @@ Font.registerHyphenationCallback((word) => [word])
 
 const styles = StyleSheet.create({
   page: {
-    padding: 28,
+    padding: 24,
     fontSize: 9,
     fontFamily: 'Helvetica',
     color: '#111827',
@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderBottom: '1 solid #111827',
     paddingBottom: 10,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   logo: {
     width: 118,
@@ -53,12 +53,12 @@ const styles = StyleSheet.create({
   },
   section: {
     border: '1 solid #d1d5db',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   sectionTitle: {
     backgroundColor: '#111827',
     color: '#ffffff',
-    padding: 6,
+    padding: 5,
     fontSize: 10,
     fontWeight: 700,
   },
@@ -68,18 +68,18 @@ const styles = StyleSheet.create({
   },
   cellLabel: {
     width: '30%',
-    padding: 5,
+    padding: 4,
     backgroundColor: '#f3f4f6',
     fontWeight: 700,
   },
   cellValue: {
     width: '70%',
-    padding: 5,
+    padding: 4,
     lineHeight: 1.35,
   },
   twoCols: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   col: {
     flex: 1,
@@ -89,17 +89,17 @@ const styles = StyleSheet.create({
     lineHeight: 1.45,
   },
   noteBox: {
-    padding: 8,
+    padding: 6,
     lineHeight: 1.4,
-    minHeight: 34,
+    minHeight: 24,
   },
   footer: {
     position: 'absolute',
-    bottom: 18,
-    left: 28,
-    right: 28,
+    bottom: 16,
+    left: 24,
+    right: 24,
     borderTop: '1 solid #e5e7eb',
-    paddingTop: 6,
+    paddingTop: 5,
     fontSize: 8,
     color: '#6b7280',
     textAlign: 'center',
@@ -148,6 +148,25 @@ function InfoRow({ label, children }: { label: string; children: any }) {
     <View style={styles.row}>
       <Text style={styles.cellLabel}>{label}</Text>
       <Text style={styles.cellValue}>{children}</Text>
+    </View>
+  )
+}
+
+function DualInfoRow({
+  label1, val1, label2, val2,
+}: { label1: string; val1: string; label2?: string; val2?: string }) {
+  return (
+    <View style={styles.row}>
+      <Text style={[styles.cellLabel, { width: '22%' }]}>{label1}</Text>
+      <Text style={[styles.cellValue, { width: '28%', borderRight: '1 solid #e5e7eb' }]}>{val1}</Text>
+      {label2 !== undefined ? (
+        <>
+          <Text style={[styles.cellLabel, { width: '22%' }]}>{label2}</Text>
+          <Text style={[styles.cellValue, { width: '28%' }]}>{val2 ?? 'N/A'}</Text>
+        </>
+      ) : (
+        <Text style={[styles.cellValue, { width: '50%' }]} />
+      )}
     </View>
   )
 }
@@ -275,11 +294,17 @@ export default function RoutingOrderPDF({
         </View>
 
         <Section title="ADDITIONAL REFERENCES">
-          <InfoRow label="Insurance">{insurance}</InfoRow>
-          <InfoRow label="Customs / local transport">{value(customsLocalTransport)}</InfoRow>
-          <InfoRow label="ETD">{dateValue(selectedAgent?.etd || routing?.etd)}</InfoRow>
-          <InfoRow label="Transit days">{value(selectedAgent?.transit_time || selectedAgent?.transit || routing?.transit_time || routing?.transit)}</InfoRow>
-          <InfoRow label="Transshipment">{value(selectedAgent?.transshipment || selectedAgent?.transbordo || routing?.transshipment)}</InfoRow>
+          <DualInfoRow
+            label1="Insurance" val1={insurance}
+            label2="ETD" val2={dateValue(selectedAgent?.etd || routing?.etd)}
+          />
+          <DualInfoRow
+            label1="Customs / local transport" val1={value(customsLocalTransport)}
+            label2="Transit days" val2={value(selectedAgent?.transit_time || selectedAgent?.transit || routing?.transit_time || routing?.transit)}
+          />
+          <DualInfoRow
+            label1="Transshipment" val1={value(selectedAgent?.transshipment || selectedAgent?.transbordo || routing?.transshipment)}
+          />
         </Section>
 
         <Section title="REMARKS">
