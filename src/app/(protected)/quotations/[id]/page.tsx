@@ -956,43 +956,66 @@ export default function QuotationDetailPage() {
             .join(', ')
         : quotation.container_type || quotation.quote_type || null
 
-    const { data: shippingInstruction, error } = await supabase
-      .from('shipping_instructions')
-      .insert({
-        quotation_id: quotation.id,
-        client_id: quotation.cliente_id || quotation.client_id || null,
-        created_by: user.id,
-        carrier: selectedAgentQuote.carrier || null,
-        agent_name:
-          selectedAgentQuote.agent_name ||
-          selectedAgentQuote.agente_nombre ||
-          selectedAgentQuote.agent ||
-          null,
-        agent_contact:
-          selectedAgentQuote.agent_contact ||
-          selectedAgentQuote.contact ||
-          null,
-        agent_email:
-          selectedAgentQuote.agent_email ||
-          selectedAgentQuote.email ||
-          null,
-        container_qty: quotation.total_containers || containerQty || null,
-        container_type: quotation.container_type || containerType || null,
-        origin_address: quotation.puerto_origen || quotation.origen || null,
-        destination_address: quotation.puerto_destino || quotation.destino || null,
-        free_days: selectedAgentQuote.free_days || null,
-        freight_terms: selectedAgentQuote.freight_terms || 'Collect',
-        release_type: 'Express Release',
-        hbl_freight_visibility: 'No Freight Charges',
-        printed_at_destination: true,
-        shipment_status: 'Pendiente Validación',
-        operational_status: 'Pendiente Validación',
-      })
-      .select('*')
-      .single()
+    const shippingInstructionPayload = {
+      quotation_id: quotation.id,
+      client_id: quotation.cliente_id || quotation.client_id || null,
+      created_by: user.id,
+      carrier: selectedAgentQuote.carrier || null,
+      agent_name:
+        selectedAgentQuote.agent_name ||
+        selectedAgentQuote.agente_nombre ||
+        selectedAgentQuote.agent ||
+        null,
+      agent_contact:
+        selectedAgentQuote.agent_contact ||
+        selectedAgentQuote.contact ||
+        null,
+      agent_email:
+        selectedAgentQuote.agent_email ||
+        selectedAgentQuote.email ||
+        null,
+      container_qty: quotation.total_containers || containerQty || null,
+      container_type: quotation.container_type || containerType || null,
+      origin_address: quotation.puerto_origen || quotation.origen || null,
+      destination_address: quotation.puerto_destino || quotation.destino || null,
+      free_days: selectedAgentQuote.free_days || null,
+      freight_terms: selectedAgentQuote.freight_terms || 'Collect',
+      release_type: 'Express Release',
+      hbl_freight_visibility: 'No Freight Charges',
+      printed_at_destination: true,
+      shipment_status: 'Pendiente Validación',
+      operational_status: 'Pendiente Validación',
+    }
 
-    if (error) {
-      toast.error(error.message)
+    const insertResult = await supabase
+      .from('shipping_instructions')
+      .insert(shippingInstructionPayload)
+
+    if (insertResult.error) {
+      toast.error(insertResult.error.message)
+      setCreatingRouting(false)
+      return
+    }
+
+    const selectResult = await supabase
+      .from('shipping_instructions')
+      .select('*')
+      .eq('quotation_id', quotation.id)
+      .eq('created_by', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (selectResult.error) {
+      toast.error(selectResult.error.message)
+      setCreatingRouting(false)
+      return
+    }
+
+    const shippingInstruction = selectResult.data
+
+    if (!shippingInstruction) {
+      toast.error('Shipping Instruction creada, pero no se pudo recuperar el registro.')
       setCreatingRouting(false)
       return
     }

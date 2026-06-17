@@ -1165,34 +1165,48 @@ export default function RoutingDetailPage() {
       parseIntegerValue(routing.estimated_transit_days)
     const quotation = routing.quotation || {}
 
-    const { data, error } = await supabase
+    const bookingPayload = {
+      shipping_instruction_id: routing.id,
+      carrier:
+        selectedAgent?.carrier ||
+        routing.carrier ||
+        quotation.preferred_carrier ||
+        null,
+      etd: selectedAgent?.etd || routing.etd || null,
+      eta: routing.eta || null,
+      estimated_transit_days: estimatedTransitDays,
+      free_days: freeDays,
+      remaining_free_days: parseIntegerValue(routing.remaining_free_days) ?? freeDays,
+      freight_terms: routing.freight_terms,
+      release_type: routing.release_type,
+      hbl_freight_visibility: routing.hbl_freight_visibility,
+      printed_at_destination: routing.printed_at_destination ?? true,
+      shipment_status: 'Booking Solicitado',
+      created_by: user.id,
+    }
+
+    const { error } = await supabase
       .from('bookings')
-      .insert({
-        shipping_instruction_id: routing.id,
-        carrier:
-          selectedAgent?.carrier ||
-          routing.carrier ||
-          quotation.preferred_carrier ||
-          null,
-        etd: selectedAgent?.etd || routing.etd || null,
-        eta: routing.eta || null,
-        estimated_transit_days: estimatedTransitDays,
-        free_days: freeDays,
-        remaining_free_days: parseIntegerValue(routing.remaining_free_days) ?? freeDays,
-        freight_terms: routing.freight_terms,
-        release_type: routing.release_type,
-        hbl_freight_visibility: routing.hbl_freight_visibility,
-        printed_at_destination: routing.printed_at_destination ?? true,
-        shipment_status: 'Booking Solicitado',
-        created_by: user.id,
-      })
-      .select('id')
-      .single()
+      .insert(bookingPayload)
 
     setCreatingBooking(false)
 
     if (error) {
       toast.error(error.message || 'No se pudo crear el booking')
+      return null
+    }
+
+    const { data, error: selectError } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('shipping_instruction_id', routing.id)
+      .eq('created_by', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (selectError) {
+      toast.error(selectError.message || 'No se pudo crear el booking')
       return null
     }
 

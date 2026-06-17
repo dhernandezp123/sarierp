@@ -1021,15 +1021,15 @@ export function ForwardersLanding() {
                 Contacto
               </p>
               <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">
-                Moderniza tu operación logística.
+                Moderniza tu operaci&oacute;n log&iacute;stica.
               </h2>
               <p className="mt-4 max-w-xl text-base leading-8 text-slate-400">
-                Deja atrás Excel y correos interminables. Centraliza tu operación
-                en una plataforma diseñada para freight forwarders que quieren
-                vender más, operar mejor y controlar sus márgenes.
+                Deja atr&aacute;s Excel y correos interminables. Centraliza tu operaci&oacute;n
+                en una plataforma dise&ntilde;ada para freight forwarders que quieren
+                vender m&aacute;s, operar mejor y controlar sus m&aacute;rgenes.
               </p>
               <p className="mt-4 text-sm text-slate-500">
-                Escríbenos a{' '}
+                Escr&iacute;benos a{' '}
                 <a
                   href="mailto:contacto@dher.dev"
                   className="font-semibold text-[#EF8E01] hover:underline"
@@ -1059,42 +1059,71 @@ export function ForwardersLanding() {
         </div>
       </section>
 
-      {/* ── Footer ───────────────────────────────────────────────────────── */}
-      <footer className="border-t border-slate-200 bg-white px-5 py-10 sm:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-8 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#EF8E01] text-white">
-                <Globe2 size={16} />
-              </span>
-              <span className="text-sm font-bold text-[#07111F]">Forwarders ERP by DHer</span>
+      {/* Footer */}
+      <footer className="relative overflow-hidden border-t border-white/10 bg-[#07111F] px-5 py-12 text-white sm:px-8">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,56,189,0.22),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(239,142,1,0.16),transparent_34%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] opacity-50 [mask-image:radial-gradient(ellipse_at_center,white,transparent_78%)]" />
+
+        <div className="relative mx-auto flex max-w-7xl flex-col gap-10">
+          <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-md">
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#EF8E01] to-[#0038BD] text-white shadow-lg shadow-[#0038BD]/20">
+                  <Globe2 size={20} />
+                </span>
+                <span>
+                  <span className="block text-sm font-bold text-white">
+                    Forwarders ERP by DHer
+                  </span>
+                  <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#EF8E01]">
+                    Freight Forwarding Platform
+                  </span>
+                </span>
+              </div>
+
+              <p className="mt-4 text-sm leading-7 text-slate-400">
+                ERP log&iacute;stico para freight forwarders que necesitan cotizar,
+                operar y proteger margen con mayor visibilidad.
+              </p>
             </div>
-            <p className="mt-1.5 text-xs text-slate-400">
-              Freight Forwarding Management Platform · Honduras & Centroamérica
-            </p>
+
+            <div className="flex flex-col gap-4 md:items-end">
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: 'Beneficios', href: '#beneficios' },
+                  { label: 'Funcionalidades', href: '#funcionalidades' },
+                  { label: 'Workflow', href: '#workflow' },
+                  { label: 'Contacto', href: '#demo' },
+                ].map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300 transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.08] hover:text-white hover:shadow-lg hover:shadow-[#0038BD]/10"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+
+              <a
+                href="mailto:contacto@dher.dev"
+                className="inline-flex items-center gap-2 rounded-full border border-[#EF8E01]/20 bg-[#EF8E01]/10 px-4 py-2 text-sm font-semibold text-[#EF8E01] transition hover:bg-[#EF8E01]/15"
+              >
+                <Mail size={15} />
+                contacto@dher.dev
+              </a>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-5 text-sm text-slate-400">
-            {['Beneficios', 'Funcionalidades', 'Workflow', 'Contacto'].map((link) => (
-              <a
-                key={link}
-                href={`#${link.toLowerCase()}`}
-                className="transition hover:text-[#0038BD]"
-              >
-                {link}
-              </a>
-            ))}
-            <a
-              href="mailto:contacto@dher.dev"
-              className="transition hover:text-[#0038BD]"
-            >
-              contacto@dher.dev
-            </a>
+          <div className="flex flex-col gap-3 border-t border-white/10 pt-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              &copy; 2026 Forwarders ERP by DHer. Todos los derechos reservados.
+            </p>
+            <p>
+              Honduras & Centroam&eacute;rica
+            </p>
           </div>
         </div>
-        <p className="mt-8 text-center text-xs text-slate-400">
-          © 2026 Forwarders ERP by DHer. Todos los derechos reservados.
-        </p>
       </footer>
     </main>
   )

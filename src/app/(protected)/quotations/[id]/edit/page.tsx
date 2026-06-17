@@ -773,7 +773,6 @@ export default function EditQuotationPage() {
           .from('quotation_cargo_lines')
           .delete()
           .eq('quotation_id', quotationId)
-          .select('id')
 
         if (cargoDeleteError) {
           toast.error('No se pudieron reemplazar las líneas de carga')
@@ -784,7 +783,6 @@ export default function EditQuotationPage() {
           .from('quotation_containers')
           .delete()
           .eq('quotation_id', quotationId)
-          .select('id')
 
         if (containerDeleteError) {
           toast.error(containerDeleteError.message)
@@ -814,7 +812,6 @@ export default function EditQuotationPage() {
           .from('quotation_containers')
           .delete()
           .eq('quotation_id', quotationId)
-          .select('id')
 
         if (containerDeleteError) {
           toast.error(containerDeleteError.message)
@@ -825,7 +822,6 @@ export default function EditQuotationPage() {
           .from('quotation_cargo_lines')
           .delete()
           .eq('quotation_id', quotationId)
-          .select('id')
 
         if (cargoDeleteError) {
           toast.error('No se pudieron reemplazar las líneas de carga')
@@ -860,7 +856,6 @@ export default function EditQuotationPage() {
           .from('pricing_items')
           .delete()
           .eq('quotation_id', quotationId)
-          .select('id')
 
         if (pricingDeleteError) {
           toast.error('No se pudieron reemplazar los cargos Miami')
