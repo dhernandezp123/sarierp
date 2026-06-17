@@ -27,7 +27,7 @@ const BRAND_NAVY = '#1e3a5f'
 
 const styles = StyleSheet.create({
   page: {
-    padding: 24,
+    padding: 20,
     fontSize: 9,
     fontFamily: 'Helvetica',
     color: '#111827',
@@ -36,8 +36,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     borderBottom: `2 solid ${BRAND_RED}`,
-    paddingBottom: 10,
-    marginBottom: 12,
+    paddingBottom: 8,
+    marginBottom: 10,
   },
   logo: {
     width: 118,
@@ -57,14 +57,14 @@ const styles = StyleSheet.create({
   },
   section: {
     border: '1 solid #d1d5db',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   sectionTitle: {
     backgroundColor: BRAND_NAVY,
     color: '#ffffff',
-    padding: 5,
-    paddingLeft: 8,
-    fontSize: 10,
+    padding: 4,
+    paddingLeft: 7,
+    fontSize: 9,
     fontWeight: 700,
     borderLeft: `3 solid ${BRAND_RED}`,
   },
@@ -74,51 +74,41 @@ const styles = StyleSheet.create({
   },
   cellLabel: {
     width: '30%',
-    padding: 4,
+    padding: 3,
     backgroundColor: '#e8edf5',
     fontWeight: 700,
   },
   cellValue: {
     width: '70%',
-    padding: 4,
-    lineHeight: 1.35,
+    padding: 3,
+    lineHeight: 1.3,
   },
   twoCols: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   col: {
     flex: 1,
   },
   paragraph: {
-    marginBottom: 8,
-    lineHeight: 1.45,
+    marginBottom: 7,
+    lineHeight: 1.4,
   },
   noteBox: {
-    padding: 6,
-    lineHeight: 1.4,
-    minHeight: 24,
+    padding: 5,
+    lineHeight: 1.35,
+    minHeight: 20,
   },
-  footerLeft: {
+  footer: {
     position: 'absolute',
     bottom: 16,
-    left: 24,
+    left: 20,
+    right: 20,
     borderTop: `1 solid ${BRAND_RED}`,
     paddingTop: 5,
     fontSize: 8,
     color: '#6b7280',
-    width: '60%',
-  },
-  footerRight: {
-    position: 'absolute',
-    bottom: 16,
-    right: 24,
-    borderTop: `1 solid ${BRAND_RED}`,
-    paddingTop: 5,
-    fontSize: 8,
-    color: '#6b7280',
-    textAlign: 'right',
-    width: '30%',
+    textAlign: 'center',
   },
 })
 
@@ -327,8 +317,7 @@ export default function RoutingOrderPDF({
           <Text style={styles.noteBox}>{value(remarks)}</Text>
         </Section>
 
-        <Text style={styles.footerLeft}>Sari Express ERP · Routing Order {value(routing?.routing_number)}</Text>
-        <Text style={styles.footerRight} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  ·  Routing Order ${value(routing?.routing_number)}  ·  Page ${pageNumber} of ${totalPages}`} />
       </Page>
 
       <Page size="A4" style={styles.page}>
@@ -373,8 +362,7 @@ export default function RoutingOrderPDF({
           </Text>
         </Section>
 
-        <Text style={styles.footerLeft}>Sari Express ERP · Bill of Lading Instructions</Text>
-        <Text style={styles.footerRight} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  ·  Bill of Lading Instructions  ·  Page ${pageNumber} of ${totalPages}`} />
       </Page>
     </Document>
   )
