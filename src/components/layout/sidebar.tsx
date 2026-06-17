@@ -188,40 +188,66 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       <Link
         key={item.href}
         href={item.href}
-        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+        className={`group relative flex items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-sm font-medium transition-all duration-300 ${
           isActive
-            ? 'bg-white/10 text-white shadow-sm'
-            : 'text-slate-300 hover:bg-white/5 hover:text-white'
+            ? 'border-white/15 bg-white/[0.075] text-white shadow-md shadow-[#0038BD]/10'
+            : 'border-transparent text-slate-300 hover:-translate-y-0.5 hover:border-white/10 hover:bg-white/[0.06] hover:text-white hover:shadow-lg hover:shadow-[#0038BD]/5'
         }`}
       >
-        <Icon size={18} />
-        <span>{item.label}</span>
+        {isActive && (
+          <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-gradient-to-b from-[#0038BD] to-[#EF8E01]" />
+        )}
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition ${
+            isActive
+              ? 'bg-white/10 text-[#EF8E01]'
+              : 'bg-white/[0.03] text-slate-400 group-hover:bg-white/10 group-hover:text-[#EF8E01]'
+          }`}
+        >
+          <Icon size={17} />
+        </span>
+        <span className="relative z-10 truncate">{item.label}</span>
       </Link>
     )
   }
 
   return (
-    <aside className="flex h-full min-h-screen w-64 flex-col border-r border-white/5 bg-[#0B1120] text-white">
-      <div className="mb-8 border-b border-white/5 px-4 pb-5 pt-5">
-        <p className="text-xs uppercase tracking-[0.25em] text-red-500 font-bold">
-          Sari Express
-        </p>
+    <aside className="relative flex h-full min-h-screen w-64 flex-col overflow-hidden border-r border-white/10 bg-[#07111F] text-white shadow-2xl shadow-slate-950/20">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,56,189,0.24),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(239,142,1,0.16),transparent_32%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:28px_28px] opacity-40 [mask-image:linear-gradient(to_bottom,white,transparent_88%)]" />
 
-        <h2 className="mt-2 text-xl font-bold tracking-tight leading-tight">
-          Forwarders ERP
-        </h2>
+      <div className="relative mb-6 border-b border-white/10 px-4 pb-5 pt-5">
+        <Link
+          href="/dashboard"
+          className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-lg shadow-slate-950/10 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.09]"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#EF8E01] to-[#0038BD] text-white shadow-lg shadow-[#0038BD]/20">
+            <LayoutDashboard size={19} />
+          </span>
 
-        <p className="mt-2 text-xs leading-relaxed text-slate-400">
-          Freight Management Platform
-        </p>
+          <span className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-[0.22em] text-[#EF8E01]">
+              Sari Express
+            </span>
+            <span className="mt-1 block truncate text-base font-bold leading-tight tracking-tight text-white">
+              Forwarders ERP
+            </span>
+            <span className="mt-1 block truncate text-[11px] text-slate-400">
+              ERP Log&iacute;stico
+            </span>
+          </span>
+        </Link>
       </div>
 
-      <div className="flex-1 overflow-y-auto pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="relative flex-1 overflow-y-auto pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {canViewCommercial && visibleNavItems.length > 0 && (
           <nav className="space-y-1 px-4">
-            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Comercial
-            </p>
+            <div className="mb-2 flex items-center gap-2 px-3">
+              <span className="h-px flex-1 bg-white/10" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                Comercial
+              </p>
+            </div>
 
             {visibleNavItems.map(renderItem)}
           </nav>
@@ -233,9 +259,12 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         <div className="mt-8 px-4">
           {visibleCostItems.length > 0 && (
             <>
-              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Pricing
-              </p>
+              <div className="mb-2 flex items-center gap-2 px-3">
+                <span className="h-px flex-1 bg-white/10" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  Pricing
+                </p>
+              </div>
 
               <nav className="space-y-1">
                 {visibleCostItems.map(renderItem)}
@@ -245,9 +274,12 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
           {visibleFinancialItems.length > 0 && (
             <>
-              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Finanzas
-              </p>
+              <div className="mb-2 mt-6 flex items-center gap-2 px-3">
+                <span className="h-px flex-1 bg-white/10" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  Finanzas
+                </p>
+              </div>
 
               <nav className="space-y-1">
                 {visibleFinancialItems.map(renderItem)}
@@ -257,9 +289,12 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
           {visibleOperationsItems.length > 0 && (
             <>
-              <p className="mb-2 mt-6 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Operaciones
-              </p>
+              <div className="mb-2 mt-6 flex items-center gap-2 px-3">
+                <span className="h-px flex-1 bg-white/10" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  Operaciones
+                </p>
+              </div>
 
               <nav className="space-y-1">
                 {visibleOperationsItems.map(renderItem)}
@@ -271,9 +306,12 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
       {visibleAdminItems.length > 0 && (
         <div className="mt-8 px-4">
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Administración
-          </p>
+          <div className="mb-2 flex items-center gap-2 px-3">
+            <span className="h-px flex-1 bg-white/10" />
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+              Administración
+            </p>
+          </div>
 
           <nav className="space-y-1">
             {visibleAdminItems.map(renderItem)}
@@ -283,10 +321,10 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
       </div>
 
-      <div className="border-t border-white/5 p-4">
+      <div className="relative border-t border-white/10 bg-[#07111F]/65 p-4 backdrop-blur-xl">
         <Link
           href="/profile"
-          className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/5 p-3 transition hover:bg-white/10"
+          className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] p-3 shadow-sm shadow-slate-950/10 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.085] hover:shadow-lg hover:shadow-[#0038BD]/10"
         >
           {profile?.avatar_url ? (
             <img
@@ -295,7 +333,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
               className="h-9 w-9 rounded-full object-cover"
             />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-sm font-semibold text-white">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#0038BD] to-[#EF8E01] text-sm font-semibold text-white shadow-md">
               {displayName.slice(0, 1).toUpperCase()}
             </div>
           )}
@@ -312,7 +350,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
         <button
           onClick={handleLogout}
-          className="mt-4 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white"
+          className="mt-3 flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/10 hover:bg-white/[0.06] hover:text-white"
         >
           <LogOut className="h-4 w-4" />
           Cerrar sesión
