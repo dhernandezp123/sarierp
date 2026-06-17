@@ -99,21 +99,26 @@ const styles = StyleSheet.create({
     lineHeight: 1.4,
     minHeight: 24,
   },
-  footer: {
+  footerLeft: {
     position: 'absolute',
     bottom: 16,
     left: 24,
+    borderTop: `1 solid ${BRAND_RED}`,
+    paddingTop: 5,
+    fontSize: 8,
+    color: '#6b7280',
+    width: '60%',
+  },
+  footerRight: {
+    position: 'absolute',
+    bottom: 16,
     right: 24,
     borderTop: `1 solid ${BRAND_RED}`,
     paddingTop: 5,
     fontSize: 8,
     color: '#6b7280',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  footerText: {
-    fontSize: 8,
-    color: '#6b7280',
+    textAlign: 'right',
+    width: '30%',
   },
 })
 
@@ -322,10 +327,8 @@ export default function RoutingOrderPDF({
           <Text style={styles.noteBox}>{value(remarks)}</Text>
         </Section>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Sari Express ERP · Routing Order {value(routing?.routing_number)}</Text>
-          <Text style={styles.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
-        </View>
+        <Text style={styles.footerLeft}>Sari Express ERP · Routing Order {value(routing?.routing_number)}</Text>
+        <Text style={styles.footerRight} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
       </Page>
 
       <Page size="A4" style={styles.page}>
@@ -370,10 +373,8 @@ export default function RoutingOrderPDF({
           </Text>
         </Section>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Sari Express ERP · Bill of Lading Instructions</Text>
-          <Text style={styles.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
-        </View>
+        <Text style={styles.footerLeft}>Sari Express ERP · Bill of Lading Instructions</Text>
+        <Text style={styles.footerRight} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
       </Page>
     </Document>
   )
