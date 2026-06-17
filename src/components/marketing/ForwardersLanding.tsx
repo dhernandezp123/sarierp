@@ -95,72 +95,46 @@ const operationalProblems = [
 
 const features = [
   {
-    title: 'Clientes y tarifas',
+    title: 'Comercial y clientes',
     icon: Users,
     items: [
-      'Historial comercial',
-      'Contactos por empresa',
-      'Tarifas organizadas por cliente',
-      'Seguro de carga',
+      'Historial por cliente',
+      'Contactos y empresas',
+      'Tarifas negociadas',
+      'Pipeline comercial',
     ],
   },
   {
-    title: 'Cotizaciones',
+    title: 'Cotizaciones y pricing',
     icon: FileText,
-    items: ['Aéreo', 'Marítimo', 'Terrestre', 'Courier', 'LCL / FCL'],
-  },
-  {
-    title: 'Pricing',
-    icon: Scale,
     items: [
-      'Costos vs ventas',
-      'Margen estimado',
-      'Cargos por categoría',
-      'Comparación de opciones',
+      'FCL, LCL, a\u00e9reo y terrestre',
+      'Costos contra venta',
+      'Opciones de agentes',
+      'Margen antes de aprobar',
     ],
   },
   {
-    title: 'Miami Consolidado',
-    icon: Ship,
-    items: ['Tarifas por cliente', 'KG / LBS', 'FT3 / CBM', 'CBM manual'],
-  },
-  {
-    title: 'Operaciones',
+    title: 'Operaci\u00f3n y documentos',
     icon: Route,
     items: [
       'Shipping Instructions',
       'Control de booking',
       'Timeline operativo',
-      'Gestión documental',
+      'Documentos por embarque',
     ],
   },
   {
-    title: 'Validación de costos',
+    title: 'Costos y direcci\u00f3n',
     icon: ClipboardCheck,
     items: [
-      'Costos de proveedor',
-      'Soporte de facturas',
-      'Revisión financiera',
-      'Diferencias visibles',
-    ],
-  },
-  {
-    title: 'Reportes ejecutivos',
-    icon: BarChart3,
-    items: ['KPIs comerciales', 'Revenue', 'Pipeline', 'Actividad operativa'],
-  },
-  {
-    title: 'Seguridad empresarial',
-    icon: ShieldCheck,
-    items: [
-      'Permisos seguros por rol',
-      'Control de acceso empresarial',
-      'Auditoría de cambios',
-      'Visibilidad controlada',
+      'Validaci\u00f3n financiera',
+      'Soportes de proveedor',
+      'Rentabilidad por embarque',
+      'KPIs ejecutivos',
     ],
   },
 ]
-
 const workflow = [
   'Cliente',
   'Cotización',
@@ -430,14 +404,15 @@ export function ForwardersLanding() {
             </span>
           </Link>
 
-          <div className="hidden items-center gap-7 lg:flex">
+          <div className="hidden items-center gap-1 rounded-full border border-white/70 bg-white/55 px-2 py-2 shadow-lg shadow-[#0038BD]/5 ring-1 ring-slate-900/5 backdrop-blur-xl lg:flex">
             {navigation.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
-                className="text-sm font-medium text-slate-500 transition hover:text-[#0038BD]"
+                className="group relative overflow-hidden rounded-full px-4 py-2 text-sm font-medium text-slate-600 transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/75 hover:text-[#0038BD] hover:shadow-lg hover:shadow-[#0038BD]/10"
               >
-                {item.label}
+                <span className="absolute inset-x-3 top-0 h-px scale-x-0 bg-gradient-to-r from-[#0038BD] to-[#EF8E01] transition-transform duration-300 group-hover:scale-x-100" />
+                <span className="relative z-10">{item.label}</span>
               </a>
             ))}
           </div>
@@ -526,7 +501,7 @@ export function ForwardersLanding() {
       </section>
 
       {/* ── Beneficios ───────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-slate-50 px-5 py-24 sm:px-8">
+      <section id="beneficios" className="relative overflow-hidden bg-slate-50 px-5 py-16 sm:px-8 lg:py-20">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.02)_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,white,transparent_85%)]" />
 
         <div className="relative z-10 mx-auto max-w-7xl">
@@ -551,10 +526,35 @@ export function ForwardersLanding() {
               <p className="mt-5 text-lg leading-relaxed text-slate-500">
                 La mayor&iacute;a de freight forwarders todav&iacute;a dependen de
                 Excel, correos, WhatsApp y carpetas compartidas para cotizar,
-                aprobar tarifas, coordinar operaciones y validar costos.
+                aprobar tarifas, coordinar operaciones y validar costos.{' '}
                 <span className="font-semibold text-[#0038BD]">Forwarders ERP</span>{' '}
                 centraliza ese flujo en una sola plataforma.
               </p>
+
+              <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                {operationalProblems.map((item) => {
+                  const Icon = item.icon
+
+                  return (
+                    <div
+                      key={item.title}
+                      className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-red-200 hover:bg-red-50/30 hover:shadow-xl hover:shadow-red-900/5"
+                    >
+                      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-400 to-[#EF8E01] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+                      <div className="flex items-center gap-3.5">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400 transition-all duration-300 group-hover:scale-110 group-hover:bg-red-100 group-hover:text-red-500">
+                          <Icon size={18} strokeWidth={2.5} />
+                        </div>
+
+                        <h3 className="text-sm font-semibold leading-tight text-slate-700 transition-colors duration-300 group-hover:text-[#07111F]">
+                          {item.title}
+                        </h3>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </motion.div>
 
             <motion.div
@@ -580,66 +580,14 @@ export function ForwardersLanding() {
             </motion.div>
           </div>
 
-          <motion.div
-            variants={stagger}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-80px' }}
-            className="mt-16 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-          >
-            {operationalProblems.map((item) => {
-              const Icon = item.icon
-
-              return (
-                <motion.div
-                  variants={fadeUp}
-                  key={item.title}
-                  className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-red-200 hover:bg-red-50/30 hover:shadow-xl hover:shadow-red-900/5"
-                >
-                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-400 to-[#EF8E01] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
-                  <div className="flex items-center gap-3.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400 transition-all duration-300 group-hover:scale-110 group-hover:bg-red-100 group-hover:text-red-500">
-                      <Icon size={18} strokeWidth={2.5} />
-                    </div>
-
-                    <h3 className="text-sm font-semibold leading-tight text-slate-700 transition-colors duration-300 group-hover:text-[#07111F]">
-                      {item.title}
-                    </h3>
-                  </div>
-                </motion.div>
-              )
-            })}
-          </motion.div>
-        </div>
-      </section>
-
-      <section id="beneficios" className="bg-white px-5 py-20 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <SectionHeading
-            eyebrow="El problema"
-            eyebrowTone="danger"
-            title={
-              <>
-                Tu operación no debería depender de{' '}
-                <span className="text-[#217346]">Excel.</span>
-              </>
-            }
-            description="Cuando ventas, pricing y operaciones trabajan en archivos separados, el margen se vuelve invisible y los errores llegan tarde."
-          />
-          <motion.div
-            variants={stagger}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-80px' }}
+          <div
             className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-4"
           >
             {benefits.map((benefit) => {
               const Icon = benefit.icon
 
               return (
-                <motion.div
-                  variants={fadeUp}
+                <div
                   key={benefit.title}
                   className="group relative flex flex-col items-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#0038BD]/30 hover:shadow-xl hover:shadow-[#0038BD]/5"
                 >
@@ -656,10 +604,10 @@ export function ForwardersLanding() {
                   <p className="mt-2.5 text-sm leading-relaxed text-slate-500">
                     {benefit.text}
                   </p>
-                </motion.div>
+                </div>
               )
             })}
-          </motion.div>
+          </div>
         </div>
       </section>
 
@@ -781,12 +729,52 @@ export function ForwardersLanding() {
       </section>
 
       {/* ── Funcionalidades ──────────────────────────────────────────────── */}
-      <section id="funcionalidades" className="bg-white px-5 py-20 sm:px-8">
+      <section className="bg-white px-5 py-14 sm:px-8 lg:py-16">
+        <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+          <motion.div
+            variants={fadeUp}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-80px' }}
+          >
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#EF8E01]">
+              Industrias
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#07111F] sm:text-4xl">
+              Pensado para operadores log&iacute;sticos de alto movimiento.
+            </h2>
+            <p className="mt-4 text-base leading-8 text-slate-500">
+              Especializado para compa&ntilde;&iacute;as que viven de cotizar
+              r&aacute;pido, operar con orden y proteger margen por embarque.
+            </p>
+          </motion.div>
+
+          <div
+            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          >
+            {industries.map(({ label, icon: Icon }) => (
+              <div
+                key={label}
+                className="group flex min-h-24 items-center gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 transition hover:-translate-y-1 hover:border-[#0038BD]/25 hover:bg-white hover:shadow-lg hover:shadow-[#0038BD]/5"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[#0038BD] shadow-sm ring-1 ring-slate-200 transition group-hover:bg-[#0038BD] group-hover:text-white">
+                  <Icon size={20} />
+                </span>
+                <span className="text-sm font-semibold leading-tight text-[#07111F]">
+                  {label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="funcionalidades" className="bg-white px-5 py-16 sm:px-8 lg:py-20">
         <div className="mx-auto max-w-7xl">
           <SectionHeading
-            eyebrow="Motor Operativo"
-            title="Todo el ciclo logístico, centralizado."
-            description="Elimina la fricción operativa. Forwarders ERP sincroniza cotizaciones, pricing y documentación en un entorno colaborativo diseñado para maximizar tu rentabilidad por embarque."
+            eyebrow="M&oacute;dulos"
+            title="Herramientas concretas para cada equipo."
+            description="Cada &aacute;rea trabaja con funciones espec&iacute;ficas: clientes, tarifas, pricing, documentos, costos y reportes sin salir del mismo sistema."
             prominent
           />
           <motion.div
@@ -839,7 +827,7 @@ export function ForwardersLanding() {
           />
 
           <div className="mt-16 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur-sm">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9">
+            <div className="grid gap-3 lg:grid-cols-3 xl:grid-cols-9 xl:gap-4">
               {workflow.map((step, index) => (
                 <motion.div
                   key={step}
@@ -847,7 +835,7 @@ export function ForwardersLanding() {
                   whileInView={{ opacity: 1, scale: 1 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.05, duration: 0.5 }}
-                  className="group relative flex flex-col justify-between rounded-2xl border border-white/5 bg-white/[0.03] p-5 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.06] hover:shadow-lg"
+                  className="group relative flex min-h-[92px] items-center gap-4 rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.06] hover:shadow-lg xl:min-h-[152px] xl:flex-col xl:items-stretch xl:justify-between xl:p-5"
                 >
                   <div className="flex items-center justify-between">
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#07111F] text-[10px] font-bold text-[#EF8E01] ring-1 ring-white/10">
@@ -855,7 +843,7 @@ export function ForwardersLanding() {
                     </span>
                   </div>
 
-                  <p className="mt-6 text-sm font-semibold leading-snug tracking-tight text-white">
+                  <p className="text-sm font-semibold leading-snug tracking-tight text-white xl:mt-6">
                     {step}
                   </p>
 
@@ -1020,28 +1008,6 @@ export function ForwardersLanding() {
         </div>
       </section>
 
-      {/* ── Industrias ───────────────────────────────────────────────────── */}
-      <section className="bg-[#F0F2F5] px-5 py-20 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <SectionHeading
-            eyebrow="Industrias"
-            title="Pensado para operadores logísticos de alto movimiento."
-            description="Especializado para compañías que viven de cotizar rápido, operar con orden y proteger margen por embarque."
-          />
-          <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {industries.map(({ label, icon: Icon }) => (
-              <div
-                key={label}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#0038BD]/20 hover:shadow-md"
-              >
-                <Icon className="mb-4 text-[#0038BD]" size={20} />
-                <p className="text-sm font-semibold text-[#07111F]">{label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── CTA / Demo ───────────────────────────────────────────────────── */}
       <section id="demo" className="bg-white px-5 py-24 sm:px-8">
         <div className="relative mx-auto max-w-5xl overflow-hidden rounded-3xl bg-[#07111F] p-8 shadow-2xl shadow-[#07111F]/30 sm:p-12 lg:p-16">
@@ -1083,7 +1049,7 @@ export function ForwardersLanding() {
               </a>
               <Link
                 href="/login"
-                className="inline-flex h-12 items-center justify-center rounded-xl border border-white/15 bg-white/8 px-6 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
+                className="inline-flex h-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.08] px-6 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
               >
                 Ingresar al ERP
                 <LockKeyhole className="ml-2" size={14} />
