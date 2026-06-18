@@ -8,7 +8,7 @@ export type SystemAlert = {
   title: string
   description: string
   entityLabel: string
-  entityType: 'Cotización' | 'RT' | 'Booking'
+  entityType: 'Cotización' | 'SI' | 'Booking'
   href: string
   createdAt: string
   ageLabel: string
@@ -139,7 +139,7 @@ function bookingLabel(booking: BookingRow) {
 }
 
 function routingLabel(routing?: { routing_number: string | null; id: string } | null) {
-  return routing?.routing_number || routing?.id || 'Sin RT'
+  return routing?.routing_number || routing?.id || 'Sin SI'
 }
 
 function hoursSince(value?: string | null) {
@@ -510,10 +510,10 @@ export async function getSystemAlerts(
           id: `rt-no-bookings-${routing.id}`,
           category: 'Operativa',
           severity: 'Alta',
-          title: 'RT sin bookings',
+          title: 'SI sin bookings',
           description: `${clientNameFromRouting(routing)} no tiene bookings creados.`,
           entityLabel: routingLabel(routing),
-          entityType: 'RT',
+          entityType: 'SI',
           href: `/operations/shipping-instructions/${routing.id}`,
           createdAt: new Date().toISOString(),
           ageLabel: 'Activo',
@@ -546,7 +546,7 @@ export async function getSystemAlerts(
         title: 'Contenedores sin asignar',
         description: `${assigned}/${expected} asignados. Faltan ${missing}.`,
         entityLabel: routingLabel(routing),
-        entityType: 'RT',
+        entityType: 'SI',
         href: `/operations/shipping-instructions/${routingId}`,
         createdAt: new Date().toISOString(),
         ageLabel: 'Activo',

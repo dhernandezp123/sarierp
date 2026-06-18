@@ -335,8 +335,8 @@ function formatMetadataSummary(metadata?: Record<string, unknown> | null) {
   }
 
   const businessFields: Array<[string, string]> = [
-    ['routingCode', 'Routing'],
-    ['routing_number', 'Routing'],
+    ['routingCode', 'SI'],
+    ['routing_number', 'SI'],
     ['quotationNumber', 'Cotización'],
     ['quotation_number', 'Cotización'],
     ['booking_number', 'Booking'],
@@ -382,7 +382,7 @@ function formatOperationalEvent(event: OperationalTimelineEvent) {
     booking_child_updated: { icon: '📦', title: 'Booking actualizado' },
     booking_updated: { icon: '📦', title: 'Booking actualizado' },
     booking_containers_assigned: { icon: '🚚', title: 'Contenedores asignados' },
-    'Routing PDF generado': { icon: '🖨️', title: 'Routing PDF generado' },
+    'Routing PDF generado': { icon: '🖨️', title: 'SI PDF generado' },
     shipment_event_created: { icon: '🚢', title: 'Evento de embarque registrado' },
     'Shipping Instruction finalizada': { icon: '🚢', title: 'Shipping Instruction finalizada' },
     'Shipping Instruction cancelada': { icon: '🚫', title: 'Shipping Instruction cancelada' },
@@ -1393,7 +1393,7 @@ export default function RoutingDetailPage() {
   const referenceClientNotes = quotation.client_notes || 'N/A'
   const canDownloadRoutingPdf =
     canManageRouting || (profile?.rol === 'Ventas' && routing.created_by === user?.id)
-  const routingPdfFileName = `${routing.routing_number || 'routing-order'}.pdf`
+  const routingPdfFileName = `SI-${routing.routing_number || 'shipping-instruction'}.pdf`
   const aggregateBookingStatus = getRoutingAggregateStatus(bookings)
   const assignedContainerTotal = countAssignedBookingContainers(bookings)
   const containerAssignmentSummary =
@@ -1430,7 +1430,7 @@ export default function RoutingDetailPage() {
                 {({ loading }) => (
                   <>
                     <Download className="h-4 w-4" />
-                    {loading ? 'Generando...' : 'Descargar Routing PDF'}
+                    {loading ? 'Generando...' : 'Descargar SI PDF'}
                   </>
                 )}
               </PDFDownloadLink>
@@ -1441,7 +1441,7 @@ export default function RoutingDetailPage() {
                 className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
                 <Printer className="h-4 w-4" />
-                Imprimir Routing
+                Imprimir SI
               </button>
             </>
           )}

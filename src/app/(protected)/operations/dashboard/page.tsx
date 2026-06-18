@@ -515,7 +515,7 @@ export default function OperationsDashboardPage() {
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
         <MetricCard
-          title="RT abiertos"
+          title="SI abiertos"
           value={dashboard.metrics.openRoutings}
           icon={<CalendarDays className="h-5 w-5" />}
         />
@@ -764,7 +764,7 @@ function PendingConfirmationTable({ bookings }: { bookings: BookingRow[] }) {
       <table className="w-full text-sm">
         <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
           <tr>
-            <th className="py-3 pr-4">RT / Cliente</th>
+            <th className="py-3 pr-4">SI / Cliente</th>
             <th className="pr-4">Booking</th>
             <th className="pr-4">Carrier Booking</th>
             <th>Estado</th>
@@ -809,7 +809,7 @@ function ContainerGapsTable({ gaps }: { gaps: RoutingContainerGap[] }) {
       <table className="w-full text-sm">
         <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
           <tr>
-            <th className="py-3 pr-4">RT</th>
+            <th className="py-3 pr-4">SI</th>
             <th className="pr-4">Cliente</th>
             <th className="pr-4">Esperados</th>
             <th className="pr-4">Asignados</th>

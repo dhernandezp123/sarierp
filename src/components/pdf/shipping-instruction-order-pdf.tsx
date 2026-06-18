@@ -317,7 +317,7 @@ export default function RoutingOrderPDF({
           <Text style={styles.noteBox}>{value(remarks)}</Text>
         </Section>
 
-        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  ·  Routing Order ${value(routing?.routing_number)}  ·  Page ${pageNumber} of ${totalPages}`} />
+        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  ·  Shipping Instruction ${value(routing?.routing_number)}  ·  Page ${pageNumber} of ${totalPages}`} />
       </Page>
 
       <Page size="A4" style={styles.page}>

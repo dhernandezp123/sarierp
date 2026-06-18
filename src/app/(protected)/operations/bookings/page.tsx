@@ -298,7 +298,7 @@ export default function OperationsBookingsPage() {
             <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
               <tr>
                 <th className="py-3">Referencia</th>
-                <th>RT</th>
+                <th>SI</th>
                 <th>Cliente</th>
                 <th>Carrier</th>
                 <th>Booking</th>
