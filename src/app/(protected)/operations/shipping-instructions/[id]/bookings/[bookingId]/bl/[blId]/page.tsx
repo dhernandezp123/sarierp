@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { Download, FileText, Upload } from 'lucide-react'
+import { Download, FileText, Plus, Trash2, Upload } from 'lucide-react'
+import { PDFDownloadLink } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import HouseBLPdf, { type HBLData } from '@/src/components/pdf/house-bl-pdf'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
 
@@ -133,6 +135,59 @@ function SectionCard({ title, children, cols = 2 }: { title: string; children: R
   )
 }
 
+type BLContainer = {
+  id?: string
+  container_number: string
+  seal_number: string
+  container_type: string
+  quantity: number | ''
+  gross_weight_kg: string
+  measurement_cbm: string
+  notes: string
+}
+
+function formToHBLData(form: BLForm): HBLData {
+  return {
+    bl_number: form.bl_number || null,
+    bl_date: form.bl_date || null,
+    release_type: form.release_type || null,
+    originals_count: form.originals_count,
+    copies_count: form.copies_count,
+    freight_terms: form.freight_terms || null,
+    hbl_freight_visibility: form.hbl_freight_visibility || null,
+    issue_date: form.issue_date || null,
+    shipper: form.shipper || null,
+    shipper_address: form.shipper_address || null,
+    consignee: form.consignee || null,
+    consignee_address: form.consignee_address || null,
+    consignee_tax_id: form.consignee_tax_id || null,
+    consignee_contact: form.consignee_contact || null,
+    consignee_email: form.consignee_email || null,
+    notify_party: form.notify_party || null,
+    notify_party_address: form.notify_party_address || null,
+    notify_party_tax_id: form.notify_party_tax_id || null,
+    notify_party_contact: form.notify_party_contact || null,
+    notify_party_email: form.notify_party_email || null,
+    place_of_receipt: form.place_of_receipt || null,
+    port_of_loading: form.port_of_loading || null,
+    port_of_discharge: form.port_of_discharge || null,
+    place_of_delivery: form.place_of_delivery || null,
+    carrier: form.carrier || null,
+    vessel_name: form.vessel_name || null,
+    voyage: form.voyage || null,
+    etd: form.etd || null,
+    eta: form.eta || null,
+    description_of_goods: form.description_of_goods || null,
+    marks_and_numbers: form.marks_and_numbers || null,
+    number_of_packages: form.number_of_packages ? Number(form.number_of_packages) : null,
+    package_type: form.package_type || null,
+    gross_weight_kg: form.gross_weight_kg ? Number(form.gross_weight_kg) : null,
+    measurement_cbm: form.measurement_cbm ? Number(form.measurement_cbm) : null,
+    special_instructions: form.special_instructions || null,
+    printed_at_destination: form.printed_at_destination,
+  }
+}
+
 function sanitizeFileName(name: string) {
   return name
     .normalize('NFD')
@@ -167,6 +222,8 @@ export default function BLPage() {
   const [saving, setSaving] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
   const [uploadingDraft, setUploadingDraft] = useState(false)
+  const [containers, setContainers] = useState<BLContainer[]>([])
+  const [savingContainers, setSavingContainers] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const set = (field: keyof BLForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -206,6 +263,26 @@ export default function BLPage() {
         setLoading(false)
         return
       }
+
+      // Load containers
+      const { data: containerData } = await supabase
+        .from('bl_containers')
+        .select('*')
+        .eq('bl_id', blId)
+        .order('created_at', { ascending: true })
+
+      setContainers(
+        (containerData || []).map((c: any) => ({
+          id: c.id,
+          container_number: c.container_number || '',
+          seal_number: c.seal_number || '',
+          container_type: c.container_type || '',
+          quantity: Number(c.quantity || 1),
+          gross_weight_kg: c.gross_weight_kg ? String(c.gross_weight_kg) : '',
+          measurement_cbm: c.measurement_cbm ? String(c.measurement_cbm) : '',
+          notes: c.notes || '',
+        }))
+      )
 
       setForm({
         bl_type: blData.bl_type as 'MBL' | 'HBL',
@@ -433,6 +510,38 @@ export default function BLPage() {
       description: `${form.bl_type} actualizado`,
       metadata: { status: form.status, booking_id: bookingId },
     })
+  }
+
+  const saveContainers = async () => {
+    if (isNew) return
+    setSavingContainers(true)
+
+    // Delete existing and re-insert
+    await supabase.from('bl_containers').delete().eq('bl_id', blId)
+
+    const rows = containers.filter((c) => c.container_number || c.container_type)
+    if (rows.length > 0) {
+      const { error } = await supabase.from('bl_containers').insert(
+        rows.map((c) => ({
+          bl_id: blId,
+          container_number: c.container_number || null,
+          seal_number: c.seal_number || null,
+          container_type: c.container_type || null,
+          quantity: c.quantity ? Number(c.quantity) : 1,
+          gross_weight_kg: c.gross_weight_kg ? Number(c.gross_weight_kg) : null,
+          measurement_cbm: c.measurement_cbm ? Number(c.measurement_cbm) : null,
+          notes: c.notes || null,
+        }))
+      )
+      if (error) {
+        toast.error(error.message)
+        setSavingContainers(false)
+        return
+      }
+    }
+
+    setSavingContainers(false)
+    toast.success('Contenedores guardados')
   }
 
   const advanceStatus = async () => {
@@ -744,6 +853,135 @@ export default function BLPage() {
         </Field>
       </SectionCard>
 
+      {/* Contenedores (FCL) */}
+      {!isNew && (
+        <section className={cardClass}>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+              Contenedores
+            </h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setContainers((prev) => [
+                    ...prev,
+                    { container_number: '', seal_number: '', container_type: '', quantity: 1, gross_weight_kg: '', measurement_cbm: '', notes: '' },
+                  ])
+                }
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Agregar
+              </button>
+              <button
+                type="button"
+                onClick={saveContainers}
+                disabled={savingContainers}
+                className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingContainers ? 'Guardando...' : 'Guardar contenedores'}
+              </button>
+            </div>
+          </div>
+
+          {containers.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Sin contenedores. Usa "Agregar" para FCL.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700">
+                    {['Contenedor #', 'Precinto', 'Tipo', 'Qty', 'KG', 'CBM', 'Notas', ''].map((h) => (
+                      <th key={h} className="pb-2 pr-3 text-left font-semibold text-slate-500 dark:text-slate-400">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {containers.map((c, i) => (
+                    <tr key={i} className="border-b border-slate-100 dark:border-slate-800">
+                      {(
+                        [
+                          ['container_number', 'ABCU1234567'],
+                          ['seal_number', 'SL123'],
+                          ['container_type', '20GP / 40HC'],
+                        ] as const
+                      ).map(([field, ph]) => (
+                        <td key={field} className="pr-2 py-1">
+                          <input
+                            value={c[field]}
+                            onChange={(e) => {
+                              const updated = [...containers]
+                              updated[i] = { ...updated[i], [field]: e.target.value }
+                              setContainers(updated)
+                            }}
+                            placeholder={ph}
+                            className={`${fieldClass} text-xs`}
+                          />
+                        </td>
+                      ))}
+                      <td className="pr-2 py-1 w-16">
+                        <input
+                          type="number"
+                          min={1}
+                          value={c.quantity}
+                          onChange={(e) => {
+                            const updated = [...containers]
+                            updated[i] = { ...updated[i], quantity: e.target.value === '' ? '' : Number(e.target.value) }
+                            setContainers(updated)
+                          }}
+                          className={`${fieldClass} text-xs`}
+                        />
+                      </td>
+                      {(['gross_weight_kg', 'measurement_cbm'] as const).map((field) => (
+                        <td key={field} className="pr-2 py-1 w-24">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={c[field]}
+                            onChange={(e) => {
+                              const updated = [...containers]
+                              updated[i] = { ...updated[i], [field]: e.target.value }
+                              setContainers(updated)
+                            }}
+                            className={`${fieldClass} text-xs`}
+                          />
+                        </td>
+                      ))}
+                      <td className="pr-2 py-1">
+                        <input
+                          value={c.notes}
+                          onChange={(e) => {
+                            const updated = [...containers]
+                            updated[i] = { ...updated[i], notes: e.target.value }
+                            setContainers(updated)
+                          }}
+                          className={`${fieldClass} text-xs`}
+                        />
+                      </td>
+                      <td className="py-1">
+                        <button
+                          type="button"
+                          onClick={() => setContainers((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Instrucciones especiales */}
       <section className={cardClass}>
         <h2 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">
@@ -795,15 +1033,18 @@ export default function BLPage() {
         )}
 
         {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && (
-          <a
-            href={`/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${blId}/pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <PDFDownloadLink
+            document={<HouseBLPdf bl={formToHBLData(form)} />}
+            fileName={`HBL-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
           >
-            <Download className="h-4 w-4" />
-            Descargar HBL PDF
-          </a>
+            {({ loading: pdfLoading }) => (
+              <>
+                <Download className="h-4 w-4" />
+                {pdfLoading ? 'Generando...' : 'Descargar HBL PDF'}
+              </>
+            )}
+          </PDFDownloadLink>
         )}
       </div>
     </div>
