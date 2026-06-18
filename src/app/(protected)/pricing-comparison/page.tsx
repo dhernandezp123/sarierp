@@ -4875,18 +4875,37 @@ const profitabilityColor =
                       </p>
                     </div>
 
-                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                    <div
+                      className={`rounded-xl border p-4 ${
+                        gpPercentage >= 15
+                          ? 'border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-950/30'
+                          : gpPercentage >= 8
+                          ? 'border-orange-200 bg-orange-50 dark:border-orange-800/50 dark:bg-orange-950/30'
+                          : 'border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-950/30'
+                      }`}
+                    >
                       <p className="text-xs text-gray-500 dark:text-slate-400">GP %</p>
                       <p
                         className={`text-xl font-bold ${
                           gpPercentage >= 15
-                            ? 'text-green-600'
+                            ? 'text-green-700 dark:text-green-400'
                             : gpPercentage >= 8
-                            ? 'text-orange-500'
-                            : 'text-red-600'
+                            ? 'text-orange-600 dark:text-orange-400'
+                            : 'text-red-600 dark:text-red-400'
                         }`}
                       >
                         {gpPercentage.toFixed(2)}%
+                      </p>
+                      <p
+                        className={`mt-0.5 text-[10px] font-semibold ${
+                          gpPercentage >= 15
+                            ? 'text-green-600 dark:text-green-500'
+                            : gpPercentage >= 8
+                            ? 'text-orange-500 dark:text-orange-400'
+                            : 'text-red-500 dark:text-red-400'
+                        }`}
+                      >
+                        {profitabilityStatus}
                       </p>
                     </div>
 

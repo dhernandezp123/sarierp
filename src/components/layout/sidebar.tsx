@@ -38,6 +38,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   const router = useRouter()
   const [currentRole, setCurrentRole] = useState<string | null>(profileRole ?? null)
   const [profile, setProfile] = useState<ProfileSummary | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -56,14 +57,22 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
       if (!user) return
 
-      const { data } = await supabase
-        .from('profiles')
-        .select('nombre, apellido, email, rol, avatar_url')
-        .eq('id', user.id)
-        .single()
+      const [profileResult, notifResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('nombre, apellido, email, rol, avatar_url')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('is_read', false),
+      ])
 
-      setProfile(data)
-      setCurrentRole(data?.rol ?? profileRole ?? null)
+      setProfile(profileResult.data)
+      setCurrentRole(profileResult.data?.rol ?? profileRole ?? null)
+      setUnreadCount(notifResult.count ?? 0)
     }
 
     fetchRole()
@@ -183,6 +192,8 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   const renderItem = (item: any) => {
     const Icon = item.icon
     const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+    const isAlerts = item.href === '/alerts'
+    const showBadge = isAlerts && unreadCount > 0
 
     return (
       <Link
@@ -198,15 +209,25 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
           <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-gradient-to-b from-[#0038BD] to-[#EF8E01]" />
         )}
         <span
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition ${
+          className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition ${
             isActive
               ? 'bg-white/10 text-[#EF8E01]'
               : 'bg-white/[0.03] text-slate-400 group-hover:bg-white/10 group-hover:text-[#EF8E01]'
           }`}
         >
           <Icon size={17} />
+          {showBadge && (
+            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
         </span>
-        <span className="relative z-10 truncate">{item.label}</span>
+        <span className="relative z-10 flex-1 truncate">{item.label}</span>
+        {showBadge && (
+          <span className="ml-auto shrink-0 rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">
+            {unreadCount}
+          </span>
+        )}
       </Link>
     )
   }

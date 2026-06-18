@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, BellRing, BriefcaseBusiness, Clock3, Ship } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BellRing, BriefcaseBusiness, Clock3, RefreshCw, Ship } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
@@ -12,6 +12,9 @@ import {
   type SystemAlertCategory,
   type SystemAlertSeverity,
 } from '@/src/lib/alerts'
+
+type CategoryFilter = 'Todas' | SystemAlertCategory
+type SeverityFilter = 'Todas' | SystemAlertSeverity
 
 function severityClass(severity: SystemAlertSeverity) {
   if (severity === 'Alta') {
@@ -41,42 +44,45 @@ export default function AlertsPage() {
   const { user, profile, loading: userLoading } = useUser()
   const [alerts, setAlerts] = useState<SystemAlert[]>([])
   const [loading, setLoading] = useState(true)
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('Todas')
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('Todas')
+  const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    const loadAlerts = async () => {
-      if (userLoading) return
-
-      if (!user) {
-        setAlerts([])
-        setLoading(false)
-        return
-      }
-
-      try {
-        setLoading(true)
-        const data = await getSystemAlerts(supabase, profile, user)
-        setAlerts(data)
-      } catch (error: any) {
-        console.error(error)
-        toast.error(error?.message || 'No se pudieron cargar las alertas.')
-      } finally {
-        setLoading(false)
-      }
+  const loadAlerts = async (silent = false) => {
+    if (userLoading || !user) {
+      if (!userLoading) { setAlerts([]); setLoading(false) }
+      return
     }
-
-    loadAlerts()
-  }, [profile, user, userLoading])
-
-  const summary = useMemo(() => {
-    return {
-      Comercial: alerts.filter((alert) => alert.category === 'Comercial').length,
-      Operativa: alerts.filter((alert) => alert.category === 'Operativa').length,
-      Gerencial: alerts.filter((alert) => alert.category === 'Gerencial').length,
-      Alta: alerts.filter((alert) => alert.severity === 'Alta').length,
+    if (silent) setRefreshing(true)
+    else setLoading(true)
+    try {
+      const data = await getSystemAlerts(supabase, profile, user)
+      setAlerts(data)
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'No se pudieron cargar las alertas.'
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-  }, [alerts])
+  }
 
-  const emptyState = !loading && alerts.length === 0
+  useEffect(() => { loadAlerts() }, [profile, user, userLoading])
+
+  const summary = useMemo(() => ({
+    Comercial: alerts.filter((a) => a.category === 'Comercial').length,
+    Operativa: alerts.filter((a) => a.category === 'Operativa').length,
+    Gerencial: alerts.filter((a) => a.category === 'Gerencial').length,
+    Alta: alerts.filter((a) => a.severity === 'Alta').length,
+  }), [alerts])
+
+  const filteredAlerts = useMemo(() => alerts.filter((a) => {
+    const matchCat = categoryFilter === 'Todas' || a.category === categoryFilter
+    const matchSev = severityFilter === 'Todas' || a.severity === severityFilter
+    return matchCat && matchSev
+  }), [alerts, categoryFilter, severityFilter])
+
+  const emptyState = !loading && filteredAlerts.length === 0
 
   return (
     <div className="space-y-6">
@@ -90,13 +96,24 @@ export default function AlertsPage() {
           </h1>
         </div>
 
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-        >
-          Dashboard
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => loadAlerts(true)}
+            disabled={refreshing || loading}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Dashboard
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -124,6 +141,52 @@ export default function AlertsPage() {
           icon={<AlertTriangle className="h-5 w-5" />}
           tone="rose"
         />
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Categoría:</span>
+        {(['Todas', 'Comercial', 'Operativa', 'Gerencial'] as CategoryFilter[]).map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            onClick={() => setCategoryFilter(cat)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              categoryFilter === cat
+                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+        <span className="ml-4 text-xs font-semibold text-slate-500 dark:text-slate-400">Severidad:</span>
+        {(['Todas', 'Alta', 'Media', 'Baja'] as SeverityFilter[]).map((sev) => (
+          <button
+            key={sev}
+            type="button"
+            onClick={() => setSeverityFilter(sev)}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              severityFilter === sev
+                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            {sev}
+          </button>
+        ))}
+        {(categoryFilter !== 'Todas' || severityFilter !== 'Todas') && (
+          <button
+            type="button"
+            onClick={() => { setCategoryFilter('Todas'); setSeverityFilter('Todas') }}
+            className="ml-2 text-xs text-slate-400 underline hover:text-slate-600 dark:hover:text-slate-200"
+          >
+            Limpiar filtros
+          </button>
+        )}
+        <span className="ml-auto text-xs text-slate-400">
+          {filteredAlerts.length} de {alerts.length} alertas
+        </span>
       </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
@@ -177,7 +240,7 @@ export default function AlertsPage() {
                   </td>
                 </tr>
               ) : (
-                alerts.map((alert) => (
+                filteredAlerts.map((alert) => (
                   <tr key={alert.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <td className="px-5 py-4">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${categoryClass(alert.category)}`}>
