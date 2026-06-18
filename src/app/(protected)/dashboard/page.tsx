@@ -88,6 +88,20 @@ type SellerSummary = {
   profit: number
 }
 
+type SellerBreakdown = {
+  sellerName: string
+  total: number
+  pipeline: number
+  won: number
+  lost: number
+}
+
+type FunnelStage = {
+  label: string
+  count: number
+  pct: number
+}
+
 const trackedStatuses = [
   'Pendiente de Fijar Precios',
   'Pricing Aprobado',
@@ -472,6 +486,35 @@ export default function DashboardPage() {
       count: filteredQuotations.filter((quote) => quote.status === status).length,
     }))
 
+    const sellerBreakdown: SellerBreakdown[] = Object.values(
+      filteredQuotations.reduce<Record<string, SellerBreakdown>>((acc, quote) => {
+        const sellerName = getSellerName(quote)
+        acc[sellerName] = acc[sellerName] || { sellerName, total: 0, pipeline: 0, won: 0, lost: 0 }
+        acc[sellerName].total += 1
+        if (quote.status === 'Ganada') acc[sellerName].won += 1
+        else if (quote.status === 'Perdida') acc[sellerName].lost += 1
+        else acc[sellerName].pipeline += 1
+        return acc
+      }, {})
+    ).sort((a, b) => b.total - a.total)
+
+    const totalCount = filteredQuotations.length
+    const inPricingCount = filteredQuotations.filter((q) =>
+      ['Pricing Aprobado', 'Enviada al Cliente', 'Ganada', 'Perdida'].includes(q.status || '')
+    ).length
+    const sentCount = filteredQuotations.filter((q) =>
+      ['Enviada al Cliente', 'Ganada', 'Perdida'].includes(q.status || '')
+    ).length
+    const closedCount = wonQuotes.length + lostQuotes.length
+
+    const funnelStages: FunnelStage[] = [
+      { label: 'Cotizaciones creadas', count: totalCount, pct: 100 },
+      { label: 'Llegaron a pricing', count: inPricingCount, pct: totalCount > 0 ? (inPricingCount / totalCount) * 100 : 0 },
+      { label: 'Enviadas al cliente', count: sentCount, pct: totalCount > 0 ? (sentCount / totalCount) * 100 : 0 },
+      { label: 'Cerradas', count: closedCount, pct: totalCount > 0 ? (closedCount / totalCount) * 100 : 0 },
+      { label: 'Ganadas', count: wonQuotes.length, pct: totalCount > 0 ? (wonQuotes.length / totalCount) * 100 : 0 },
+    ]
+
     return {
       pricingByQuote,
       totalsByQuote,
@@ -490,6 +533,8 @@ export default function DashboardPage() {
       topSellers: topSellers.slice(0, 6),
       pendingPricing: pendingPricing.slice(0, 8),
       statusRows,
+      sellerBreakdown,
+      funnelStages,
     }
   }, [filteredQuotations, pricingItems])
 
@@ -648,9 +693,11 @@ export default function DashboardPage() {
           quotes={dashboard.latestQuotes}
           totalsByQuote={dashboard.totalsByQuote}
         />
-        <StatusTable rows={dashboard.statusRows} total={filteredQuotations.length} />
+        <ConversionFunnel stages={dashboard.funnelStages} />
         <TopClientsTable rows={dashboard.topClients} />
         <TopSellersTable rows={dashboard.topSellers} />
+        <SellerBreakdownTable rows={dashboard.sellerBreakdown} />
+        <StatusTable rows={dashboard.statusRows} total={filteredQuotations.length} />
         <PendingPricingTable quotes={dashboard.pendingPricing} />
         <TasksPanel
           tasks={tasks}
@@ -947,6 +994,114 @@ function SimpleRankingTable<T>({
         </tbody>
       </table>
     </div>
+  )
+}
+
+function ConversionFunnel({ stages }: { stages: FunnelStage[] }) {
+  return (
+    <Panel
+      title="Embudo de conversión"
+      description="Flujo acumulado desde creación hasta cierre."
+    >
+      <div className="space-y-3">
+        {stages.map((stage, i) => {
+          const prev = stages[i - 1]
+          const convRate = prev && prev.count > 0 ? (stage.count / prev.count) * 100 : null
+
+          return (
+            <div key={stage.label}>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {stage.label}
+                </span>
+                <div className="flex items-center gap-3">
+                  {convRate !== null && (
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
+                      {convRate.toFixed(0)}% del anterior
+                    </span>
+                  )}
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">
+                    {stage.count}
+                  </span>
+                </div>
+              </div>
+              <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800">
+                <div
+                  className={`h-2.5 rounded-full transition-all ${
+                    stage.label === 'Ganadas'
+                      ? 'bg-emerald-500 dark:bg-emerald-400'
+                      : stage.label === 'Cerradas'
+                        ? 'bg-slate-500 dark:bg-slate-400'
+                        : 'bg-blue-500 dark:bg-blue-400'
+                  }`}
+                  style={{ width: `${Math.max(stage.pct, stage.count > 0 ? 2 : 0)}%` }}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Panel>
+  )
+}
+
+function SellerBreakdownTable({ rows }: { rows: SellerBreakdown[] }) {
+  return (
+    <Panel
+      title="Pipeline por vendedor"
+      description="Actividad completa: todas las cotizaciones del período."
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
+            <tr>
+              <th className="py-3 pr-4">Vendedor</th>
+              <th className="pr-4 text-right">Total</th>
+              <th className="pr-4 text-right">Pipeline</th>
+              <th className="pr-4 text-right">Ganadas</th>
+              <th className="pr-4 text-right">Perdidas</th>
+              <th className="text-right">Cierre</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <EmptyTable colSpan={6} />
+            ) : (
+              rows.map((row) => {
+                const closed = row.won + row.lost
+                const closeRate = closed > 0 ? (row.won / closed) * 100 : null
+
+                return (
+                  <tr
+                    key={row.sellerName}
+                    className="border-t border-slate-100 dark:border-slate-800"
+                  >
+                    <td className="py-3 pr-4 font-medium text-slate-900 dark:text-white">
+                      {row.sellerName}
+                    </td>
+                    <td className="pr-4 text-right text-slate-700 dark:text-slate-300">
+                      {row.total}
+                    </td>
+                    <td className="pr-4 text-right text-slate-500 dark:text-slate-400">
+                      {row.pipeline}
+                    </td>
+                    <td className="pr-4 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                      {row.won}
+                    </td>
+                    <td className="pr-4 text-right font-semibold text-rose-600 dark:text-rose-400">
+                      {row.lost}
+                    </td>
+                    <td className="text-right text-slate-700 dark:text-slate-300">
+                      {closeRate !== null ? `${closeRate.toFixed(0)}%` : '—'}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   )
 }
 
