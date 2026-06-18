@@ -181,6 +181,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       href: '/historico/activity',
       icon: ActivitySquare,
     },
+    {
+      label: 'Config. Empresa',
+      href: '/settings/company',
+      icon: Building2,
+    },
   ]
 
   const filterVisibleItems = (items: any[]) =>

@@ -4,6 +4,7 @@ export type UserRole =
   | 'Pricing'
   | 'Operaciones'
   | 'Contabilidad'
+  | 'Finanzas'
 
 export const rolePermissions: Record<UserRole, string[]> = {
   Admin: ['*'],
@@ -47,10 +48,24 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/invoicing',
     '/historico',
   ],
+
+  Finanzas: [
+    '/dashboard',
+    '/alerts',
+    '/financial-dashboard',
+    '/cost-validation',
+    '/invoicing',
+    '/historico',
+  ],
 }
+
+export const SETTINGS_READ_PATHS = ['/settings/company']
 
 export function canAccessPath(role: string | null | undefined, path: string) {
   if (!role) return false
+
+  // Settings pages are readable by all authenticated roles (edit guarded inside the page)
+  if (SETTINGS_READ_PATHS.some((p) => path.startsWith(p))) return true
 
   if (
     role === 'Ventas' &&
