@@ -1410,7 +1410,7 @@ export default function EditQuotationPage() {
                             length: '',
                             width: '',
                             height: '',
-                            dimensionUnit: 'in',
+                            dimensionUnit: 'm',
                             weight: '',
                             weightUnit: 'lbs',
                             volumeMode: 'dimensions',
@@ -1754,23 +1754,24 @@ export default function EditQuotationPage() {
                 </span>
               </label>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-slate-500">
-                  Valor FOB / valor comercial (USD)
-                </label>
-                <input
-                  name="commercial_value"
-                  placeholder="0.00"
-                  value={formData.commercial_value || ''}
-                  onChange={handleChange}
-                  className={moneyFieldClass}
-                />
-              </div>
+              {formData.requires_insurance && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-slate-500">
+                    Valor FOB / valor comercial (USD)
+                  </label>
+                  <input
+                    name="commercial_value"
+                    placeholder="0.00"
+                    value={formData.commercial_value || ''}
+                    onChange={handleChange}
+                    className={moneyFieldClass}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Pricing usa este valor FOB para calcular el seguro de carga.
+                  </p>
+                </div>
+              )}
             </div>
-
-            <p className="mt-2 text-xs text-slate-500">
-              Pricing usa este valor FOB para calcular el seguro de carga.
-            </p>
           </section>
 
           <div className={`grid gap-4 ${isMiamiFlow ? 'lg:grid-cols-2' : ''}`}>

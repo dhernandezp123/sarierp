@@ -1,8 +1,8 @@
 export const fieldClass =
-  'h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500'
+  'h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-950 dark:disabled:bg-slate-900 dark:disabled:text-slate-500'
 
 export const cardClass =
-  'rounded-2xl border border-slate-200 bg-white p-6 shadow-sm'
+  'rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]'
 
 export const compactCardClass =
   'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm'

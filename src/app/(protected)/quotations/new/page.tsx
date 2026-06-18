@@ -17,6 +17,7 @@ import {
   tradeDirections,
   usesClientRates,
 } from '@/src/lib/quotation-products'
+import { fieldClass, cardClass } from '@/src/lib/ui-classes'
 
 const formatNumber = (value: number, decimals = 2) =>
   Number(value || 0).toLocaleString('en-US', {
@@ -893,12 +894,6 @@ export default function NewQuotationPage() {
     formData.quote_type === 'LTL' ||
     formData.quote_type === 'Consolidado' ||
     formData.quote_type === 'Courier'
-
-  const fieldClass =
-    'h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-950 dark:disabled:bg-slate-900 dark:disabled:text-slate-500'
-
-  const cardClass =
-    'rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]'
 
   const getCbmPerUnit = (line: CargoDimensionLine) => {
     const length = Number(line.length || 0)

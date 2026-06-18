@@ -1609,6 +1609,15 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   </p>
                 </div>
 
+                {quotation.incoterm === 'EXW' && quotation.pickup_address && (
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Dirección de recolección EXW</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">
+                      {quotation.pickup_address}
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Valor FOB</p>
                   <p className="font-semibold text-slate-900 dark:text-white">
