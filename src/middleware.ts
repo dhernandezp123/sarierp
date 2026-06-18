@@ -2,33 +2,20 @@ import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/register', '/init', '/']
-
+// NOTE: This app uses @supabase/supabase-js directly (localStorage sessions),
+// not @supabase/ssr (cookie sessions). The middleware only refreshes the
+// session token on each request to keep it alive — it does NOT gate access.
+// Route protection is handled client-side in src/app/(protected)/layout.tsx.
+//
+// To add true server-side gating, migrate supabase/client.ts to use
+// createBrowserClient from @supabase/ssr (FASE 4 task).
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
-
-  const isPublic =
-    PUBLIC_PATHS.includes(req.nextUrl.pathname) ||
-    req.nextUrl.pathname.startsWith('/_next') ||
-    req.nextUrl.pathname.startsWith('/api') ||
-    req.nextUrl.pathname.includes('.')
-
-  if (isPublic) return res
-
   const supabase = createMiddlewareClient({ req, res })
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    const loginUrl = new URL('/login', req.url)
-    loginUrl.searchParams.set('next', req.nextUrl.pathname)
-    return NextResponse.redirect(loginUrl)
-  }
-
+  await supabase.auth.getSession()
   return res
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api).*)'],
 }
