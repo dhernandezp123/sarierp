@@ -410,15 +410,36 @@ export default function BLPage() {
     loadData()
   }, [id, bookingId, blId])
 
+  const generateHBLNumber = async (): Promise<string> => {
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const prefix = `SARI-HBL-${dateStr}-`
+    const { data } = await supabase
+      .from('bills_of_lading')
+      .select('bl_number')
+      .eq('bl_type', 'HBL')
+      .like('bl_number', `${prefix}%`)
+      .order('bl_number', { ascending: false })
+      .limit(1)
+    const lastSeq = data?.[0]?.bl_number?.replace(prefix, '')
+    const seq = lastSeq ? Number.parseInt(lastSeq, 10) + 1 : 1
+    return `${prefix}${String(seq).padStart(3, '0')}`
+  }
+
   const saveBL = async () => {
     setSaving(true)
+
+    let blNumber = form.bl_number || null
+    if (isNew && form.bl_type === 'HBL' && !blNumber) {
+      blNumber = await generateHBLNumber()
+      setForm((prev) => ({ ...prev, bl_number: blNumber! }))
+    }
 
     const payload = {
       booking_id: bookingId,
       shipping_instruction_id: id,
       bl_type: form.bl_type,
       parent_bl_id: form.parent_bl_id || null,
-      bl_number: form.bl_number || null,
+      bl_number: blNumber,
       status: form.status,
       release_type: form.release_type || null,
       originals_count: form.originals_count,
@@ -713,7 +734,16 @@ export default function BLPage() {
       {/* Identificación */}
       <SectionCard title="Identificación" cols={3}>
         <Field label="Número de BL">
-          <input value={form.bl_number} onChange={set('bl_number')} className={fieldClass} placeholder="MOLU1234567" />
+          <input
+            value={form.bl_number}
+            onChange={set('bl_number')}
+            className={fieldClass}
+            placeholder={
+              isNew && form.bl_type === 'HBL'
+                ? 'Se generará automáticamente (SARI-HBL-...)'
+                : 'MOLU1234567'
+            }
+          />
         </Field>
         <Field label="Fecha BL">
           <input type="date" value={form.bl_date} onChange={set('bl_date')} className={fieldClass} />
