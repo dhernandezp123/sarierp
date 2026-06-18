@@ -4,9 +4,12 @@ import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Download, FileText, Lock, Trash2, Upload } from 'lucide-react'
+import { PDFDownloadLink } from '@react-pdf/renderer'
 import { toast } from 'sonner'
+import { useUser } from '@/src/hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
+import ArrivalNoticePdf, { type ArrivalNoticeData } from '@/src/components/pdf/arrival-notice-pdf'
 import {
   Dialog,
   DialogContent,
@@ -293,6 +296,7 @@ function profileDisplayName(profile: ProfileRow | undefined) {
 export default function RoutingBookingChildPage() {
   const params = useParams<{ id: string; bookingId: string }>()
   const router = useRouter()
+  const { profile } = useUser()
   const id = params.id
   const bookingId = params.bookingId
 
@@ -967,24 +971,77 @@ export default function RoutingBookingChildPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            {bookingTitle}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Shipping Instruction {routing.routing_number}
-          </p>
-        </div>
+      {(() => {
+        const isArrived = ['Arribado', 'Finalizado'].includes(booking.shipment_status || '')
+        const issuedHBL = billsOfLading.find((bl) => bl.bl_type === 'HBL' && bl.status === 'Emitido')
+        const arrivalNoticeData: ArrivalNoticeData = {
+          si_number: routing.routing_number,
+          booking_number: booking.booking_number,
+          carrier_booking: booking.carrier_booking,
+          master_bl: booking.master_bl,
+          house_bl: issuedHBL?.bl_number || booking.house_bl,
+          carrier: booking.carrier,
+          vessel_name: booking.vessel_name,
+          voyage: booking.voyage,
+          etd: booking.etd,
+          eta: booking.eta,
+          actual_eta: booking.actual_eta,
+          port_of_loading: null,
+          port_of_discharge: null,
+          free_days: booking.free_days,
+          remaining_free_days: booking.remaining_free_days,
+          freight_terms: booking.freight_terms,
+          release_type: booking.release_type,
+          consignee: consigneeName,
+          consignee_address: consigneeAddress,
+          consignee_tax_id: consigneeTaxId,
+          consignee_contact: consigneeContact,
+          consignee_email: consigneeEmail,
+          consignee_phone: consigneePhone,
+          description_of_goods: null,
+          number_of_packages: null,
+          package_type: null,
+          gross_weight_kg: null,
+          measurement_cbm: null,
+          issued_by_name: profile ? `${profile.nombre || ''} ${profile.apellido || ''}`.trim() : null,
+        }
+        return (
+          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+                {bookingTitle}
+              </h1>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Shipping Instruction {routing.routing_number}
+              </p>
+            </div>
 
-        <button
-          type="button"
-          onClick={() => router.push(`/operations/shipping-instructions/${id}`)}
-          className={secondaryButtonClass}
-        >
-          Volver a Shipping Instruction
-        </button>
-      </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {isArrived && (
+                <PDFDownloadLink
+                  document={<ArrivalNoticePdf data={arrivalNoticeData} />}
+                  fileName={`Aviso-Llegada-${booking.booking_number || bookingId}.pdf`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  {({ loading: pdfLoading }) => (
+                    <>
+                      <Download className="h-4 w-4" />
+                      {pdfLoading ? 'Generando...' : 'Aviso de Llegada'}
+                    </>
+                  )}
+                </PDFDownloadLink>
+              )}
+              <button
+                type="button"
+                onClick={() => router.push(`/operations/shipping-instructions/${id}`)}
+                className={secondaryButtonClass}
+              >
+                Volver a SI
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       <div className="space-y-6">
         <div className="grid gap-6 lg:grid-cols-2">
