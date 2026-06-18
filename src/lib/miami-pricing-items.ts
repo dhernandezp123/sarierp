@@ -100,6 +100,7 @@ export function buildMiamiPricingItems({
 
       return {
         quotation_id: quotationId,
+        rate_code: `destination_charge:${charge.id}`,
         description,
         item_type: itemType,
         quantity: 1,
@@ -122,6 +123,7 @@ export function buildMiamiPricingItems({
     const items = [
       {
         quotation_id: quotationId,
+        rate_code: 'miami_lcl_freight',
         description: 'Flete Miami LCL',
         item_type: 'freight',
         quantity: 1,
@@ -145,6 +147,7 @@ export function buildMiamiPricingItems({
     if (bunkerRule && bunkerAmount > 0) {
       items.push({
         quotation_id: quotationId,
+        rate_code: bunkerRule.code,
         description: bunkerRule.label,
         item_type: 'freight',
         quantity: 1,
@@ -170,6 +173,7 @@ export function buildMiamiPricingItems({
     if (pickupAmount > 0) {
       items.push({
         quotation_id: quotationId,
+        rate_code: 'pickup_recolecta',
         description: 'Pickup / Recolecta Interna',
         item_type: 'origin_charge',
         quantity: 1,
@@ -211,6 +215,7 @@ export function buildMiamiPricingItems({
 
       items.push({
         quotation_id: quotationId,
+        rate_code: code,
         description: rate.rate_label,
         item_type:
           isStandardDestinationCharge
@@ -239,6 +244,7 @@ export function buildMiamiPricingItems({
     const items = [
       {
         quotation_id: quotationId,
+        rate_code: 'miami_air_freight',
         description: 'Flete Miami Aéreo Consolidado',
         item_type: 'freight',
         quantity: 1,
@@ -258,6 +264,7 @@ export function buildMiamiPricingItems({
     if (pickupAmount > 0) {
       items.push({
         quotation_id: quotationId,
+        rate_code: 'pickup_recolecta',
         description: 'Pickup / Recolecta Interna',
         item_type: 'origin_charge',
         quantity: 1,

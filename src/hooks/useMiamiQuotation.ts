@@ -27,6 +27,7 @@ type UseMiamiQuotationParams = {
 
 type MiamiExistingPricingItem = {
   id?: string
+  rate_code?: string | null
   description: string | null
   item_type: string | null
   sale_amount: number | string | null
@@ -262,6 +263,18 @@ export function useMiamiQuotation({
       { code: 'certificado_imo', option: 'includeImoCertificate' },
     ] as const
 
+    const standardCodes = new Set(['bl', 'sed', 'documentos_manejo', 'desconsolidar'])
+    const autoCalculatedCodes = new Set([
+      'miami_lcl_freight',
+      'miami_air_freight',
+      'bunker_emergency_surcharge',
+    ])
+    const conditionalCodeMap: Record<string, keyof MiamiOptions> = {
+      hazmat_imo_charge_line: 'isHazmat',
+      declaracion_imo: 'isImo',
+      certificado_imo: 'includeImoCertificate',
+    }
+
     const nextDestinationCharges: DestinationCharge[] = []
     let nextPickupMode: 'none' | 'standard' | 'manual' = 'none'
     let nextManualPickupAmount = 0
@@ -274,9 +287,47 @@ export function useMiamiQuotation({
       const normalizedDescription = description.toLowerCase()
       const amount = Number(item.sale_amount || item.total_amount || 0)
       const itemType = item.item_type || ''
+      const rateCode = item.rate_code || null
 
       if (amount <= 0) return
 
+      // --- Path A: item has rate_code (new items) ---
+      if (rateCode) {
+        if (autoCalculatedCodes.has(rateCode) || rateCode.startsWith('bunker_')) return
+
+        if (rateCode === 'pickup_recolecta') {
+          nextPickupMode = 'manual'
+          nextManualPickupAmount = amount
+          return
+        }
+
+        if (standardCodes.has(rateCode)) {
+          hasStandardCharge = true
+          if (item.taxable && (rateCode === 'documentos_manejo' || rateCode === 'desconsolidar')) {
+            hasTaxableStandardDestinationCharge = true
+          }
+          return
+        }
+
+        if (rateCode in conditionalCodeMap) {
+          nextMiamiOptions[conditionalCodeMap[rateCode]] = true
+          return
+        }
+
+        if (rateCode.startsWith('destination_charge:')) {
+          nextDestinationCharges.push({
+            id: item.id || crypto.randomUUID(),
+            description,
+            amount: String(amount),
+            taxable: Boolean(item.taxable),
+          })
+          return
+        }
+
+        return
+      }
+
+      // --- Path B: legacy items without rate_code — string matching fallback ---
       if (
         normalizedDescription.includes('flete miami') ||
         normalizedDescription.includes('bunker')
@@ -299,7 +350,6 @@ export function useMiamiQuotation({
 
       if (isStandardCharge) {
         hasStandardCharge = true
-
         if (
           item.taxable &&
           (itemType === 'destination_charge' ||
@@ -308,7 +358,6 @@ export function useMiamiQuotation({
         ) {
           hasTaxableStandardDestinationCharge = true
         }
-
         return
       }
 

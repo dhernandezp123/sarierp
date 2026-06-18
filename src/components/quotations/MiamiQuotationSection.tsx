@@ -895,64 +895,9 @@ export function MiamiQuotationSection({
                   />
                 </div>
               </div>
-
-              {false && formData.incoterm === 'EXW' && (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/70">
-                  <p className="font-semibold text-slate-700 dark:text-slate-200">
-                    Tipo de Pickup
-                  </p>
-
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="pickup_mode"
-                        checked={miami.pickupMode === 'standard'}
-                        onChange={() => miami.setPickupMode('standard')}
-                      />
-                      <span>Pickup Miami estándar</span>
-                    </label>
-
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="pickup_mode"
-                        checked={miami.pickupMode === 'manual'}
-                        onChange={() => miami.setPickupMode('manual')}
-                      />
-                      <span>Pickup manual</span>
-                    </label>
-
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="pickup_mode"
-                        checked={miami.pickupMode === 'none'}
-                        onChange={() => miami.setPickupMode('none')}
-                      />
-                      <span>Sin pickup</span>
-                    </label>
-                  </div>
-
-                  {miami.pickupMode === 'standard' && (
-                    <p className="mt-3 font-semibold text-slate-900 dark:text-white">
-                      USD {miami.pickupRate.toFixed(2)}
-                    </p>
-                  )}
-
-                  {miami.pickupMode === 'manual' && (
-                    <input
-                      type="number"
-                      value={miami.manualPickupAmount}
-                      onChange={(e) =>
-                        miami.setManualPickupAmount(Number(e.target.value || 0))
-                      }
-                      placeholder="Monto pickup manual USD"
-                      className={`${fieldClass} mt-3 w-full`}
-                    />
-                  )}
-                </div>
-              )}
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                FT3 y libras se calculan automáticamente desde las líneas de carga. Puedes editarlos manualmente si necesitas ajustar.
+              </p>
 
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/70">
                 <div className="flex flex-wrap items-center gap-4">
@@ -1125,6 +1070,9 @@ export function MiamiQuotationSection({
                     placeholder="Kilogramos"
                     className={compactFieldClass}
                   />
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    Calculado desde las líneas de carga. Editable.
+                  </p>
                 </div>
                 <div className="rounded-xl bg-blue-50 p-4 dark:bg-blue-950/30">
                   <p className="text-xs text-blue-700 dark:text-blue-300">

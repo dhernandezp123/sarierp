@@ -719,6 +719,7 @@ export default function NewQuotationPage() {
           insurance_cost: Number(formData.insurance_cost),
 
           pricing_notes: formData.pricing_notes || null,
+          observaciones: formData.observaciones || null,
           client_notes: submitIsMiamiFlow ? formData.client_notes || null : null,
           duplicated_from: duplicateSource?.id || null,
           status: initialStatus,
@@ -894,6 +895,9 @@ export default function NewQuotationPage() {
     formData.quote_type === 'LTL' ||
     formData.quote_type === 'Consolidado' ||
     formData.quote_type === 'Courier'
+
+  const moneyFieldClass = `${fieldClass} md:max-w-[180px]`
+  const dateFieldClass = `${fieldClass} md:max-w-[220px]`
 
   const getCbmPerUnit = (line: CargoDimensionLine) => {
     const length = Number(line.length || 0)
@@ -1191,7 +1195,7 @@ export default function NewQuotationPage() {
                 value={formData.valid_until}
                 min={todayString}
                 onChange={handleChange}
-                className={fieldClass}
+                className={dateFieldClass}
               />
             </div>
           </div>
@@ -1427,11 +1431,11 @@ export default function NewQuotationPage() {
               <section className={cardClass}>
                 <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    Información del Embarque
+                    Ruta
                   </h2>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
                       País de origen
@@ -1510,7 +1514,7 @@ export default function NewQuotationPage() {
                       placeholder="0.00"
                       value={formData.target_rate || ''}
                       onChange={handleChange}
-                      className={fieldClass}
+                      className={moneyFieldClass}
                     />
                   </div>
 
@@ -1548,7 +1552,7 @@ export default function NewQuotationPage() {
               <section className={cardClass}>
                 <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
                   <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    Información de Carga
+                    Carga
                   </h2>
                 </div>
 
@@ -2197,7 +2201,7 @@ export default function NewQuotationPage() {
             <section className={cardClass}>
               <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Observaciones para Pricing
+                  Observaciones internas para Pricing
                 </h2>
                 <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
                   Notas internas que verá el equipo de Pricing al revisar la cotización.

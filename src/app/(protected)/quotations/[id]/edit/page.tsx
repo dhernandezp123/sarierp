@@ -741,6 +741,7 @@ export default function EditQuotationPage() {
         commercial_value: Number(formData.commercial_value || 0),
 
         pricing_notes: formData.pricing_notes || null,
+        observaciones: formData.observaciones || null,
         ...(isMiamiFlow
           ? { client_notes: formData.client_notes || null }
           : {}),
@@ -1738,7 +1739,7 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section className="pt-6">
+          <section className="py-6">
             <h2 className="text-xl font-bold mb-4">Seguro de Carga</h2>
 
             <div className="grid gap-4 md:grid-cols-2">
