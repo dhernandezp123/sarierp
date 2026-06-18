@@ -43,6 +43,13 @@ export type ArrivalNoticeData = {
   package_type: string | null
   gross_weight_kg: number | null
   measurement_cbm: number | null
+  // Containers (FCL)
+  containers?: Array<{
+    container_number: string | null
+    seal_number: string | null
+    container_type: string | null
+    quantity: number | null
+  }>
   // Sari contact
   issued_by_name: string | null
 }
@@ -288,6 +295,26 @@ export default function ArrivalNoticePdf({ data }: { data: ArrivalNoticeData }) 
               <Text style={styles.cargoCell}>{v(data.gross_weight_kg)}</Text>
               <Text style={styles.cargoCell}>{v(data.measurement_cbm)}</Text>
             </View>
+          </View>
+        )}
+
+        {/* Containers (FCL) */}
+        {data.containers && data.containers.length > 0 && (
+          <View style={[styles.sectionBox, { marginBottom: 12 }]}>
+            <View style={styles.cargoHeader}>
+              <Text style={[styles.cargoCell, { flex: 2 }]}>CONTENEDOR</Text>
+              <Text style={styles.cargoCell}>TIPO</Text>
+              <Text style={styles.cargoCell}>QTY</Text>
+              <Text style={styles.cargoCell}>PRECINTO</Text>
+            </View>
+            {data.containers.map((c, i) => (
+              <View key={i} style={styles.cargoRow}>
+                <Text style={[styles.cargoCell, { flex: 2 }]}>{v(c.container_number)}</Text>
+                <Text style={styles.cargoCell}>{v(c.container_type)}</Text>
+                <Text style={styles.cargoCell}>{v(c.quantity)}</Text>
+                <Text style={styles.cargoCell}>{v(c.seal_number)}</Text>
+              </View>
+            ))}
           </View>
         )}
 

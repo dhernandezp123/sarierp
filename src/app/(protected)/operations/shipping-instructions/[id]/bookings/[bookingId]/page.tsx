@@ -990,6 +990,14 @@ export default function RoutingBookingChildPage() {
           package_type: null,
           gross_weight_kg: null,
           measurement_cbm: null,
+          containers: containerRows
+            .filter((c) => c.container_type)
+            .map((c) => ({
+              container_number: null,
+              seal_number: null,
+              container_type: c.container_type,
+              quantity: typeof c.quantity === 'number' ? c.quantity : null,
+            })),
           issued_by_name: profile ? `${profile.nombre || ''} ${profile.apellido || ''}`.trim() : null,
         }
         return (
