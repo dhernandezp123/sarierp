@@ -541,6 +541,8 @@ function PricingComparisonContent() {
   const getFreightDescription = (quote = selectedQuote) => {
     if (isAirConsolidatedQuote(quote)) return 'Air Freight Consolidado'
     if (isAirQuote(quote)) return 'Air Freight'
+    const transport = normalizeText(quote?.tipo_transporte)
+    if (transport === 'terrestre') return 'Flete Terrestre'
     return 'Ocean Freight'
   }
 
@@ -3398,7 +3400,9 @@ const profitabilityColor =
                               <input
                                 name="ocean_freight"
                                 placeholder={
-                                  isAirConsolidatedQuote() ? 'Ej. 3.50' : 'Ocean Freight'
+                                  isAirConsolidatedQuote()
+                                    ? 'Ej. 3.50'
+                                    : getFreightDescription()
                                 }
                                 value={agentForm.ocean_freight}
                                 onChange={handleAgentChange}
