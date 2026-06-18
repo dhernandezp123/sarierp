@@ -501,6 +501,15 @@ export default function BLPage() {
       return
     }
 
+    // Sync bl_number back to bookings for legacy display
+    if (form.bl_number) {
+      if (form.bl_type === 'MBL') {
+        await supabase.from('bookings').update({ master_bl: form.bl_number }).eq('id', bookingId)
+      } else if (form.bl_type === 'HBL' && ['Emitido', 'Liberado'].includes(form.status)) {
+        await supabase.from('bookings').update({ house_bl: form.bl_number }).eq('id', bookingId)
+      }
+    }
+
     toast.success('BL guardado')
     await createActivityLog({
       module: 'operations_bl',
@@ -581,8 +590,15 @@ export default function BLPage() {
       return
     }
 
-    setForm((prev) => ({ ...prev, status: transition.next, ...Object.fromEntries(Object.entries(extraFields).filter(([k]) => k !== 'updated_at')) }))
-    toast.success(`Estado actualizado: ${transition.next}`)
+    const newStatus = transition.next
+    setForm((prev) => ({ ...prev, status: newStatus, ...Object.fromEntries(Object.entries(extraFields).filter(([k]) => k !== 'updated_at')) }))
+
+    // Sync HBL number to bookings when issued
+    if (newStatus === 'Emitido' && form.bl_type === 'HBL' && form.bl_number) {
+      await supabase.from('bookings').update({ house_bl: form.bl_number }).eq('id', bookingId)
+    }
+
+    toast.success(`Estado actualizado: ${newStatus}`)
 
     await createActivityLog({
       module: 'operations_bl',
