@@ -216,6 +216,40 @@ export default function DashboardPage() {
   const [taskDueDate, setTaskDueDate] = useState('')
   const [loadingTasks, setLoadingTasks] = useState(false)
 
+  // Date range filter — defaults to current month
+  const today = new Date()
+  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
+  const [dateFrom, setDateFrom] = useState(firstOfMonth)
+  const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10))
+
+  const filteredQuotations = useMemo(() => {
+    if (!dateFrom && !dateTo) return quotations
+    return quotations.filter((q) => {
+      const d = (q.created_at || '').slice(0, 10)
+      if (dateFrom && d < dateFrom) return false
+      if (dateTo && d > dateTo) return false
+      return true
+    })
+  }, [quotations, dateFrom, dateTo])
+
+  const applyPreset = (preset: 'month' | 'quarter' | 'year' | 'all') => {
+    const now = new Date()
+    const to = now.toISOString().slice(0, 10)
+    if (preset === 'month') {
+      setDateFrom(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10))
+      setDateTo(to)
+    } else if (preset === 'quarter') {
+      setDateFrom(new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10))
+      setDateTo(to)
+    } else if (preset === 'year') {
+      setDateFrom(`${now.getFullYear()}-01-01`)
+      setDateTo(to)
+    } else {
+      setDateFrom('')
+      setDateTo('')
+    }
+  }
+
   const fetchDashboard = async () => {
     if (!user) return
 
@@ -367,16 +401,16 @@ export default function DashboardPage() {
       {}
     )
 
-    const totalsByQuote = quotations.reduce<Record<string, QuoteTotals>>((acc, quote) => {
+    const totalsByQuote = filteredQuotations.reduce<Record<string, QuoteTotals>>((acc, quote) => {
       acc[quote.id] = getQuoteTotals(quote, pricingByQuote)
       return acc
     }, {})
 
-    const quotesThisMonth = quotations.filter((quote) => isCurrentMonth(quote.created_at))
-    const sentQuotes = quotations.filter((quote) => quote.status === 'Enviada al Cliente')
-    const wonQuotes = quotations.filter((quote) => quote.status === 'Ganada')
-    const lostQuotes = quotations.filter((quote) => quote.status === 'Perdida')
-    const pendingPricing = quotations.filter(
+    const quotesThisMonth = filteredQuotations.filter((quote) => isCurrentMonth(quote.created_at))
+    const sentQuotes = filteredQuotations.filter((quote) => quote.status === 'Enviada al Cliente')
+    const wonQuotes = filteredQuotations.filter((quote) => quote.status === 'Ganada')
+    const lostQuotes = filteredQuotations.filter((quote) => quote.status === 'Perdida')
+    const pendingPricing = filteredQuotations.filter(
       (quote) => quote.status === 'Pendiente de Fijar Precios'
     )
 
@@ -435,7 +469,7 @@ export default function DashboardPage() {
 
     const statusRows = trackedStatuses.map((status) => ({
       status,
-      count: quotations.filter((quote) => quote.status === status).length,
+      count: filteredQuotations.filter((quote) => quote.status === status).length,
     }))
 
     return {
@@ -451,19 +485,25 @@ export default function DashboardPage() {
         totalWonProfit,
         averageGp,
       },
-      latestQuotes: quotations.slice(0, 8),
+      latestQuotes: filteredQuotations.slice(0, 8),
       topClients: topClients.slice(0, 6),
       topSellers: topSellers.slice(0, 6),
       pendingPricing: pendingPricing.slice(0, 8),
       statusRows,
     }
-  }, [quotations, pricingItems])
+  }, [filteredQuotations, pricingItems])
 
   if (userLoading || loading) {
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        Cargando dashboard...
-      </p>
+      <div className="animate-pulse space-y-6">
+        <div className="h-8 w-64 rounded-xl bg-slate-200 dark:bg-slate-700" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="h-24 rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900" />
+          ))}
+        </div>
+        <div className="h-48 rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900" />
+      </div>
     )
   }
 
@@ -518,6 +558,43 @@ export default function DashboardPage() {
         onNewQuote={() => router.push('/quotations/new')}
       />
 
+      {/* Date range filter */}
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Período:</span>
+        {([
+          { label: 'Este mes', preset: 'month' as const },
+          { label: 'Último trimestre', preset: 'quarter' as const },
+          { label: 'Este año', preset: 'year' as const },
+          { label: 'Todo', preset: 'all' as const },
+        ]).map(({ label, preset }) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => applyPreset(preset)}
+            className="rounded-full px-3 py-1 text-xs font-semibold transition bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            {label}
+          </button>
+        ))}
+        <span className="ml-2 text-xs text-slate-400">o personalizado:</span>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+        />
+        <span className="text-xs text-slate-400">—</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+        />
+        <span className="ml-auto text-xs text-slate-400">
+          {filteredQuotations.length} cotización{filteredQuotations.length !== 1 ? 'es' : ''} en período
+        </span>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Cotizaciones creadas este mes"
@@ -571,7 +648,7 @@ export default function DashboardPage() {
           quotes={dashboard.latestQuotes}
           totalsByQuote={dashboard.totalsByQuote}
         />
-        <StatusTable rows={dashboard.statusRows} total={quotations.length} />
+        <StatusTable rows={dashboard.statusRows} total={filteredQuotations.length} />
         <TopClientsTable rows={dashboard.topClients} />
         <TopSellersTable rows={dashboard.topSellers} />
         <PendingPricingTable quotes={dashboard.pendingPricing} />

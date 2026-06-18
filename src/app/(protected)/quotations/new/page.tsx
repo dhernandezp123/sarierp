@@ -137,6 +137,13 @@ export default function NewQuotationPage() {
   }
 
   const [formData, setFormData] = useState(initialFormData)
+  const [submitted, setSubmitted] = useState(false)
+
+  // Returns red border class if field is required, form was submitted, and value is empty
+  const reqClass = (value: string) =>
+    submitted && !value
+      ? 'border-red-400 dark:border-red-500 ring-1 ring-red-300 dark:ring-red-700'
+      : ''
 
   useEffect(() => {
     fetchClientes()
@@ -570,6 +577,8 @@ export default function NewQuotationPage() {
   }
 
   const handleSubmit = async (status: string) => {
+    setSubmitted(true)
+
     if (!formData.cliente_id) {
       toast.error('Debes seleccionar un cliente')
       return
@@ -1149,7 +1158,7 @@ export default function NewQuotationPage() {
                   } as React.ChangeEvent<HTMLSelectElement>)
                 }}
                 placeholder="Seleccionar cliente"
-                className={fieldClass}
+                className={`${fieldClass} ${reqClass(formData.cliente_id)}`}
               />
             </div>
 
@@ -1317,7 +1326,7 @@ export default function NewQuotationPage() {
                 name="service_product"
                 value={formData.service_product}
                 onChange={handleServiceProductChange}
-                className={fieldClass}
+                className={`${fieldClass} ${reqClass(formData.service_product)}`}
               >
                 <option value="">Seleccionar producto</option>
                 {serviceProducts.map((product) => (
@@ -1379,7 +1388,7 @@ export default function NewQuotationPage() {
                     Tipo de transporte <span className="text-red-400">*</span>
                   </label>
                   <select
-                    className={fieldClass}
+                    className={`${fieldClass} ${reqClass(formData.tipo_transporte)}`}
                     value={formData.tipo_transporte}
                     onChange={(e) => {
                       setFormData({
@@ -1402,7 +1411,7 @@ export default function NewQuotationPage() {
                     Modalidad <span className="text-red-400">*</span>
                   </label>
                   <select
-                    className={fieldClass}
+                    className={`${fieldClass} ${reqClass(formData.quote_type)}`}
                     value={formData.quote_type}
                     onChange={(e) => {
                       setFormData({ ...formData, quote_type: e.target.value })
