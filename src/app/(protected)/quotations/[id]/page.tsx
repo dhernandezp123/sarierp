@@ -123,6 +123,10 @@ type FinancialComparison = {
   delta: FinancialTotals
 }
 
+// QuotationDetail is intentionally typed as `any` — the quotation object carries
+// a large number of joined fields that vary by query context. A full type is
+// tracked under FASE 4 (centralized DB types via supabase gen types).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type QuotationDetail = any & {
   duplicated_from: string | null
   duplicated_from_quote?: {
@@ -133,6 +137,7 @@ type QuotationDetail = any & {
 
 type CargoLine = {
   id: string
+  created_at?: string
   quantity: number
   package_type: string
   length: number | null
@@ -799,7 +804,7 @@ export default function QuotationDetailPage() {
         clientes,
         created_by_profile,
         ...quoteCopy
-      } = quotation as any
+      } = quotation
 
       const { data: newQuote, error: quoteError } = await supabase
         .from('quotations')
@@ -819,7 +824,7 @@ export default function QuotationDetailPage() {
       }
 
       const copiedItems = pricingItems.map((item) => {
-        const { id, created_at, ...copy } = item as any
+        const { id, created_at, ...copy } = item
 
         return {
           ...copy,
@@ -839,7 +844,7 @@ export default function QuotationDetailPage() {
       }
 
       const copiedCargoLines = cargoLines.map((line) => {
-        const { id, created_at, ...copy } = line as any
+        const { id, created_at, ...copy } = line
 
         return {
           ...copy,
