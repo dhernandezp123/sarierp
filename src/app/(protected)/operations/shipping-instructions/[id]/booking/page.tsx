@@ -24,6 +24,7 @@ import {
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
+import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 
 // ─── Datos del cliente que vienen en join desde la cotización ─────────────────
 type ClienteJoin = {
@@ -544,8 +545,7 @@ export default function RoutingBookingPage() {
     loadEvents()
   }
 
-  if (loading)
-    return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando booking...</p>
+  if (loading) return <PageSkeleton cards={3} rows={5} />
 
   if (!routing)
     return <p className="text-sm text-red-500">Booking no encontrado.</p>

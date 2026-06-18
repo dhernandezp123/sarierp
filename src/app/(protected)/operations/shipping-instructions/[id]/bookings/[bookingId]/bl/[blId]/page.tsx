@@ -10,6 +10,7 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import HouseBLPdf, { type HBLData } from '@/src/components/pdf/house-bl-pdf'
+import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
 
@@ -643,7 +644,7 @@ export default function BLPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  if (loading) return <p className="p-8 text-sm text-slate-500">Cargando...</p>
+  if (loading) return <PageSkeleton cards={2} rows={4} />
 
   const transition = isNew ? null : STATUS_FLOW[form.status]
   const blLabel = form.bl_type === 'MBL' ? 'Master BL' : 'House BL'

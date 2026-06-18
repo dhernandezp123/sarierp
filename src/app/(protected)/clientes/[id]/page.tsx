@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
+import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 
 const clientRateCatalog = [
   { code: 'small_maritimo_min_lcl_1000_lbs_45_ft3', label: 'Small Mínimo LCL 1000 lbs / 45 ft3', category: 'Small Marítimo', unit: 'flat' },
@@ -356,9 +357,7 @@ export default function ClienteProfilePage() {
     }, 1000)
   }
 
-  if (loading) {
-    return <div className="p-8 text-slate-600 dark:text-slate-300">Cargando cliente...</div>
-  }
+  if (loading) return <PageSkeleton cards={3} rows={4} />
 
   const insurancePercentage =
     cliente?.asegura_carga && cliente?.seguro_porcentaje !== null && cliente?.seguro_porcentaje !== undefined

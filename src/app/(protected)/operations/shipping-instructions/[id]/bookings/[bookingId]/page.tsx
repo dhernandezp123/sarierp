@@ -23,6 +23,7 @@ import {
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
+import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 
 type ClienteJoin = {
   nombre: string | null
@@ -919,9 +920,7 @@ export default function RoutingBookingChildPage() {
     await loadBookingDocuments(document.booking_id)
   }
 
-  if (loading) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando booking...</p>
-  }
+  if (loading) return <PageSkeleton cards={4} rows={4} />
 
   if (!routing) {
     return <p className="text-sm text-red-500">Shipping Instruction no encontrada.</p>
