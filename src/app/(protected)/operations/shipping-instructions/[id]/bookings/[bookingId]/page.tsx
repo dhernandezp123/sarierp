@@ -41,6 +41,8 @@ type QuotationJoin = {
   incoterm: string | null
   transit_time: string | null
   preferred_carrier: string | null
+  origen: string | null
+  destino: string | null
   cliente: ClienteJoin | ClienteJoin[] | null
 }
 
@@ -333,7 +335,7 @@ export default function RoutingBookingChildPage() {
     setLoadingBLs(false)
 
     if (error) {
-      console.error('Error loading BLs:', error)
+      toast.error('No se pudieron cargar los BLs')
       return
     }
 
@@ -348,7 +350,6 @@ export default function RoutingBookingChildPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error loading booking documents:', error)
       toast.error('No se pudieron cargar los documentos del booking')
       setBookingDocuments([])
       setDocumentUserNames({})
@@ -377,7 +378,6 @@ export default function RoutingBookingChildPage() {
       .in('id', userIds)
 
     if (profilesError) {
-      console.error('Error loading document users:', profilesError)
       setDocumentUserNames({})
       return
     }
@@ -412,6 +412,8 @@ export default function RoutingBookingChildPage() {
           incoterm,
           transit_time,
           preferred_carrier,
+          origen,
+          destino,
           cliente:clientes (
             nombre,
             direccion,
@@ -470,7 +472,6 @@ export default function RoutingBookingChildPage() {
         .eq('quotation_id', quotationId)
 
       if (quotationContainersError) {
-        console.error('Error loading quotation containers:', quotationContainersError)
       }
 
       quotedContainers = (quotationContainersData || [])
@@ -502,7 +503,6 @@ export default function RoutingBookingChildPage() {
       .order('created_at', { ascending: true })
 
     if (currentContainersError) {
-      console.error('Error loading booking containers:', currentContainersError)
       toast.error('No se pudieron cargar los contenedores del booking')
     }
 
@@ -513,7 +513,6 @@ export default function RoutingBookingChildPage() {
       .neq('id', bookingId)
 
     if (siblingBookingsError) {
-      console.error('Error loading sibling bookings:', siblingBookingsError)
       toast.error('No se pudieron cargar los bookings relacionados')
     }
 
@@ -527,7 +526,6 @@ export default function RoutingBookingChildPage() {
         .in('booking_id', siblingBookingIds)
 
       if (otherContainersError) {
-        console.error('Error loading containers assigned to other bookings:', otherContainersError)
         toast.error('No se pudieron cargar los contenedores asignados en otros bookings')
       }
 
@@ -587,7 +585,6 @@ export default function RoutingBookingChildPage() {
         },
       })
     } catch (error) {
-      console.error('Error creating booking activity:', error)
     }
   }
 
@@ -728,7 +725,6 @@ export default function RoutingBookingChildPage() {
 
     if (deleteError) {
       setSavingContainers(false)
-      console.error('Error deleting booking containers:', deleteError)
       toast.error('No se pudieron reemplazar los contenedores del booking')
       return
     }
@@ -749,7 +745,6 @@ export default function RoutingBookingChildPage() {
 
       if (insertError) {
         setSavingContainers(false)
-        console.error('Error inserting booking containers:', insertError)
         toast.error('No se pudieron guardar los contenedores del booking')
         return
       }
@@ -795,7 +790,6 @@ export default function RoutingBookingChildPage() {
 
     if (userError || !user) {
       setUploadingDocument(false)
-      console.error('Error getting upload user:', userError)
       toast.error('Sesión no válida. Vuelve a iniciar sesión.')
       return
     }
@@ -808,7 +802,6 @@ export default function RoutingBookingChildPage() {
 
     if (uploadError) {
       setUploadingDocument(false)
-      console.error('Error uploading booking document:', uploadError)
       toast.error(uploadError.message || 'No se pudo subir el documento')
       return
     }
@@ -827,13 +820,11 @@ export default function RoutingBookingChildPage() {
     setUploadingDocument(false)
 
     if (insertError) {
-      console.error('Error saving booking document:', insertError)
       const { error: cleanupError } = await supabase.storage
         .from(BOOKING_DOCUMENT_BUCKET)
         .remove([filePath])
 
       if (cleanupError) {
-        console.error('Error removing orphaned booking document:', cleanupError)
       }
 
       toast.error(insertError.message || 'No se pudo registrar el documento')
@@ -867,7 +858,6 @@ export default function RoutingBookingChildPage() {
     setDownloadingDocumentId(null)
 
     if (error || !data?.signedUrl) {
-      console.error('Error creating signed URL:', error)
       toast.error('No se pudo descargar el documento', {
         description: error?.message,
       })
@@ -885,7 +875,6 @@ export default function RoutingBookingChildPage() {
       .remove([document.file_url])
 
     if (removeError) {
-      console.error('Error removing booking document file:', removeError)
       toast.error('No se pudo eliminar el archivo del Storage', {
         description: 'Se intentara quitar el registro del booking.',
       })
@@ -900,7 +889,6 @@ export default function RoutingBookingChildPage() {
     setDocumentPendingDelete(null)
 
     if (deleteError) {
-      console.error('Error deleting booking document:', deleteError)
       toast.error('No se pudo eliminar el documento', {
         description: deleteError.message,
       })
@@ -985,8 +973,8 @@ export default function RoutingBookingChildPage() {
           etd: booking.etd,
           eta: booking.eta,
           actual_eta: booking.actual_eta,
-          port_of_loading: null,
-          port_of_discharge: null,
+          port_of_loading: quotation?.origen || null,
+          port_of_discharge: quotation?.destino || null,
           free_days: booking.free_days,
           remaining_free_days: booking.remaining_free_days,
           freight_terms: booking.freight_terms,
