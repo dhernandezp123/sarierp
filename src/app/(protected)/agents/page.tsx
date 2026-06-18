@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase/client'
-import { fieldClass, cardClass } from '@/src/lib/ui-classes'
+import { fieldClass, cardClass, primaryButtonClass } from '@/src/lib/ui-classes'
+import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,10 +58,11 @@ export default function AgentsPage() {
   useEffect(() => { fetchAgents() }, [])
 
   const fetchAgents = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('agents')
       .select('*')
       .order('created_at', { ascending: false })
+    if (error) toast.error('Error al cargar agentes')
     setAgents(data || [])
     setLoading(false)
   }
@@ -95,16 +97,21 @@ export default function AgentsPage() {
     )
   })
 
+  if (loading) return <PageSkeleton cards={1} rows={5} />
+
   return (
     <div className="space-y-6">
 
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
+          Catálogos
+        </p>
+        <h1 className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
           Agentes / Proveedores
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Catálogo base para pricing, márgenes y tarifas por proveedor.
+          Catálogo de agentes con tarifas base y tarifas por ruta.
         </p>
       </div>
 
@@ -240,7 +247,7 @@ export default function AgentsPage() {
               type="button"
               onClick={handleCreate}
               disabled={saving}
-              className="w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              className={`w-full ${primaryButtonClass}`}
             >
               {saving ? 'Guardando...' : 'Guardar agente'}
             </button>
@@ -266,9 +273,7 @@ export default function AgentsPage() {
             />
           </div>
 
-          {loading ? (
-            <p className="p-6 text-sm text-slate-500 dark:text-slate-400">Cargando...</p>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-12 text-center">
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
                 {search ? 'Sin resultados' : 'No hay agentes registrados.'}

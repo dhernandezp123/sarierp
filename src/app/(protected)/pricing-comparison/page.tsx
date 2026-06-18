@@ -231,6 +231,7 @@ function PricingComparisonContent() {
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
   const [insuranceTaxable, setInsuranceTaxable] = useState(true)
+  const [agentRouteRates, setAgentRouteRates] = useState<any[]>([])
 
   const [agentForm, setAgentForm] = useState({
     agent_id: '',
@@ -459,6 +460,30 @@ function PricingComparisonContent() {
     await fetchQuotationContainers(quote.id)
     await loadCargoLines(quote.id)
     await loadMiamiRates(quote)
+  }
+
+  const fetchAgentRouteRates = async (agentId: string) => {
+    if (!agentId) { setAgentRouteRates([]); return }
+    const { data } = await supabase
+      .from('agent_route_rates')
+      .select('*')
+      .eq('agent_id', agentId)
+      .order('valid_until', { ascending: false })
+    setAgentRouteRates(data || [])
+  }
+
+  const applyAgentRouteRate = (rate: any) => {
+    setAgentForm((prev) => ({
+      ...prev,
+      ocean_freight: String(rate.base_rate ?? ''),
+      transit_time: String(rate.transit_time ?? ''),
+      transshipment: rate.transshipment ?? prev.transshipment,
+      free_days_destination: String(rate.free_days_destination ?? ''),
+      valid_until: rate.valid_until ?? prev.valid_until,
+      carrier: rate.carrier ?? prev.carrier,
+      moneda: rate.currency ?? prev.moneda,
+    }))
+    toast.success(`Tarifa aplicada: ${rate.origin} → ${rate.destination}`)
   }
 
   const handleAgentChange = (
@@ -3271,10 +3296,59 @@ const profitabilityColor =
                                 mbl_fee: String(selectedAgent?.mbl_fee || 0),
                                 moneda: selectedAgent?.currency || 'USD',
                               })
+                              fetchAgentRouteRates(agentId)
                             }}
                             placeholder="Seleccionar agente/proveedor"
                             className={cn(fieldClass, 'mt-1 w-full')}
                           />
+
+                          {/* Sugerencia de tarifas guardadas */}
+                          {agentRouteRates.length > 0 && (() => {
+                            const qt = normalizeText(selectedQuote?.quote_type)
+                            const matchingRates = agentRouteRates.filter((r) => {
+                              const st = normalizeText(r.service_type)
+                              if (qt === 'fcl') return st.startsWith('fcl')
+                              if (qt === 'lcl') return st === 'lcl'
+                              if (qt === 'aereo' || qt === 'consolidado') return st.includes('aereo')
+                              if (qt === 'terrestre') return st.includes('terrestre')
+                              if (qt === 'courier') return st === 'courier'
+                              return true
+                            })
+                            const toShow = matchingRates.length > 0 ? matchingRates : agentRouteRates.slice(0, 5)
+                            return (
+                              <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50/70 p-2 dark:border-blue-800/40 dark:bg-blue-950/20">
+                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                                  Tarifas guardadas del agente
+                                </p>
+                                <div className="space-y-1">
+                                  {toShow.map((r: any) => {
+                                    const expired = r.valid_until && r.valid_until < new Date().toISOString().slice(0, 10)
+                                    return (
+                                      <button
+                                        key={r.id}
+                                        type="button"
+                                        onClick={() => applyAgentRouteRate(r)}
+                                        className={cn(
+                                          'flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs transition hover:bg-blue-100 dark:hover:bg-blue-900/40',
+                                          expired ? 'opacity-50' : ''
+                                        )}
+                                      >
+                                        <span className="font-medium text-slate-700 dark:text-slate-200">
+                                          {r.origin} → {r.destination}
+                                          {r.carrier ? ` · ${r.carrier}` : ''}
+                                          <span className="ml-1.5 text-slate-400">({r.service_type})</span>
+                                        </span>
+                                        <span className="ml-3 shrink-0 font-semibold text-blue-700 dark:text-blue-300">
+                                          {r.currency} {Number(r.base_rate).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                          {expired && <span className="ml-1 text-rose-500">⚠</span>}
+                                        </span>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })()}
                         </div>
 
                         <div>
