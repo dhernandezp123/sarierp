@@ -19,6 +19,7 @@ import {
   Database,
   Route,
   Bell,
+  Receipt,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -143,6 +144,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       label: 'Validación de Costos',
       href: '/cost-validation',
       icon: DollarSign,
+    },
+    {
+      label: 'Facturación',
+      href: '/invoicing',
+      icon: Receipt,
     },
   ]
 

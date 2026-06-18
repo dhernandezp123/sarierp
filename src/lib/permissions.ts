@@ -44,6 +44,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/alerts',
     '/financial-dashboard',
     '/cost-validation',
+    '/invoicing',
     '/historico',
   ],
 }
