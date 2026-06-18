@@ -76,26 +76,32 @@ export function validatePricingCompleteness({
 }: PricingValidationInput) {
   const errors: string[] = []
 
-  if (!selectedAgentQuote?.id) {
+  const isMiamiFlow =
+    selectedQuote?.service_product === 'miami_lcl' ||
+    selectedQuote?.service_product === 'miami_air'
+
+  if (!isMiamiFlow && !selectedAgentQuote?.id) {
     errors.push('Debe seleccionar una tarifa activa de agente.')
   }
 
-  const agentName =
-    selectedAgentQuote?.agent_name ||
-    selectedAgentQuote?.agente_nombre ||
-    selectedAgentQuote?.provider_name ||
-    selectedAgentQuote?.agent ||
-    selectedAgentQuote?.agent_id
+  if (!isMiamiFlow) {
+    const agentName =
+      selectedAgentQuote?.agent_name ||
+      selectedAgentQuote?.agente_nombre ||
+      selectedAgentQuote?.provider_name ||
+      selectedAgentQuote?.agent ||
+      selectedAgentQuote?.agent_id
 
-  if (!agentName) {
-    errors.push('La tarifa seleccionada no tiene agente.')
+    if (!agentName) {
+      errors.push('La tarifa seleccionada no tiene agente.')
+    }
   }
 
   if (requiresCarrier(selectedQuote) && !selectedAgentQuote?.carrier) {
     errors.push('La tarifa seleccionada no tiene carrier/naviera.')
   }
 
-  if (!selectedAgentQuote?.valid_until && !selectedAgentQuote?.validity_date) {
+  if (!isMiamiFlow && !selectedAgentQuote?.valid_until && !selectedAgentQuote?.validity_date) {
     errors.push('La tarifa seleccionada no tiene vigencia.')
   }
 
@@ -106,7 +112,7 @@ export function validatePricingCompleteness({
       0
   )
 
-  if (finalCost <= 0) {
+  if (!isMiamiFlow && finalCost <= 0) {
     errors.push('El costo final debe ser mayor a cero.')
   }
 

@@ -1026,19 +1026,21 @@ function PricingComparisonContent() {
           )}/KG.`
         : ''
 
+    const totalSaleFreight = oceanFreight + mblFee + totalProfit
+
     const oceanFreightLines = isAirConsolidatedQuote()
       ? [
           {
             quotation_id: selectedQuote.id,
             item_type: 'Flete',
             description: freightDescription,
-            cost_amount: oceanFreight + mblFee + totalProfit,
-            sale_amount: oceanFreight + mblFee + totalProfit,
+            cost_amount: oceanFreight + mblFee,
+            sale_amount: totalSaleFreight,
             quantity: 1,
             taxable: false,
-            tax_rate: 15,
+            tax_rate: 0,
             tax_amount: 0,
-            total_amount: oceanFreight + mblFee + totalProfit,
+            total_amount: totalSaleFreight,
             currency,
             supplier,
             notes: airFreightNotes,
@@ -1047,7 +1049,9 @@ function PricingComparisonContent() {
         ]
       : containerRatesData && containerRatesData.length > 0
         ? containerRatesData.map((rate) => {
-            const unitOceanFreight =
+            const unitCost =
+              Number(rate.ocean_freight || 0) + mblPerContainer
+            const unitSale =
               Number(rate.ocean_freight || 0) +
               agentProfitPerContainer +
               mblPerContainer
@@ -1058,13 +1062,13 @@ function PricingComparisonContent() {
               quotation_id: selectedQuote.id,
               item_type: 'Flete',
               description: `${freightDescription} ${rate.container_type_name}`,
-              cost_amount: unitOceanFreight,
-              sale_amount: unitOceanFreight,
+              cost_amount: unitCost,
+              sale_amount: unitSale,
               quantity,
               taxable: false,
-              tax_rate: 15,
+              tax_rate: 0,
               tax_amount: 0,
-              total_amount: unitOceanFreight * quantity,
+              total_amount: unitSale * quantity,
               currency,
               supplier,
               notes: '',
@@ -1076,13 +1080,13 @@ function PricingComparisonContent() {
               quotation_id: selectedQuote.id,
               item_type: 'Flete',
               description: freightDescription,
-              cost_amount: oceanFreight + mblFee + totalProfit,
-              sale_amount: oceanFreight + mblFee + totalProfit,
+              cost_amount: oceanFreight + mblFee,
+              sale_amount: totalSaleFreight,
               quantity: 1,
               taxable: false,
-              tax_rate: 15,
+              tax_rate: 0,
               tax_amount: 0,
-              total_amount: oceanFreight + mblFee + totalProfit,
+              total_amount: totalSaleFreight,
               currency,
               supplier,
               notes: '',
@@ -1090,24 +1094,30 @@ function PricingComparisonContent() {
             },
           ]
 
+    const exwLines = exwCost > 0
+      ? [
+          {
+            quotation_id: selectedQuote.id,
+            item_type: 'Origen',
+            description: 'EXW',
+            cost_amount: exwCost,
+            sale_amount: exwCost,
+            quantity: 1,
+            taxable: false,
+            tax_rate: 0,
+            tax_amount: 0,
+            total_amount: exwCost,
+            currency,
+            supplier,
+            notes: '',
+            created_by: profile?.id,
+          },
+        ]
+      : []
+
     const pricingLines = [
       ...oceanFreightLines,
-      {
-        quotation_id: selectedQuote.id,
-        item_type: 'Origen',
-        description: 'EXW',
-        cost_amount: exwCost,
-        sale_amount: exwCost,
-        quantity: 1,
-        taxable: false,
-        tax_rate: 15,
-        tax_amount: 0,
-        total_amount: exwCost,
-        currency,
-        supplier,
-        notes: '',
-        created_by: profile?.id,
-      },
+      ...exwLines,
     ]
 
     const { error: pricingError } = await supabase
@@ -2231,6 +2241,19 @@ function PricingComparisonContent() {
     }
 
     const selectedAgentQuote = agentQuotes.find((quote) => quote.is_selected)
+
+    if (selectedAgentQuote?.etd) {
+      const [y, m, d] = selectedAgentQuote.etd.split('T')[0].split('-').map(Number)
+      const etdDate = new Date(y, m - 1, d)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (etdDate < today) {
+        toast.warning(
+          `ETD de la tarifa (${formatDisplayDate(selectedAgentQuote.etd)}) ya venció. Verifica que la tarifa siga vigente antes de aprobar.`
+        )
+      }
+    }
+
     const validationAgentQuote = selectedAgentQuote
       ? {
           ...selectedAgentQuote,
@@ -4135,6 +4158,12 @@ const profitabilityColor =
 
                     {isMiamiFlow && (
                       <section className={cn(cardClass, 'p-5')}>
+                        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700/60 dark:bg-amber-950/20">
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                            Esta cotización usa el flujo Miami. Las tarifas fueron generadas automáticamente por el sistema. Puedes editar los pricing items y aprobar desde aquí.
+                          </p>
+                        </div>
+
                         <h2 className="text-base font-semibold text-slate-900 dark:text-white">
                           Gestión operativa Miami
                         </h2>
@@ -4704,6 +4733,11 @@ const profitabilityColor =
                                   >
                                     USD {formatCurrency(margin)}
                                   </span>
+                                  {displaySaleSubtotal > 0 && (
+                                    <span className="block text-xs text-slate-400 dark:text-slate-500">
+                                      {((margin / displaySaleSubtotal) * 100).toFixed(1)}%
+                                    </span>
+                                  )}
                                 </td>
 
                                 <td className="p-2 text-sm">
@@ -4816,22 +4850,22 @@ const profitabilityColor =
                   </CardHeader>
 
                   <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Costo Base Sari</p>
-                      <p className="text-xl font-bold">
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Costo Base Sari</p>
+                      <p className="text-xl font-bold dark:text-white">
                         USD {formatCurrency(totalCost)}
                       </p>
                     </div>
 
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Venta Cliente</p>
-                      <p className="text-xl font-bold">
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Venta Cliente</p>
+                      <p className="text-xl font-bold dark:text-white">
                         USD {formatCurrency(totalSaleWithTax)}
                       </p>
                     </div>
 
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Profit</p>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Profit</p>
                       <p
                         className={`text-xl font-bold ${
                           profit >= 0 ? 'text-green-600' : 'text-red-600'
@@ -4841,8 +4875,8 @@ const profitabilityColor =
                       </p>
                     </div>
 
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">GP %</p>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">GP %</p>
                       <p
                         className={`text-xl font-bold ${
                           gpPercentage >= 15
@@ -4856,17 +4890,17 @@ const profitabilityColor =
                       </p>
                     </div>
 
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Target Cliente</p>
-                      <p className="text-xl font-bold">
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Target Cliente</p>
+                      <p className="text-xl font-bold dark:text-white">
                         {targetRate > 0
                           ? `USD ${formatCurrency(targetRate)}`
                           : 'N/A'}
                       </p>
                     </div>
 
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs text-gray-500">Vs Target</p>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Vs Target</p>
 
                       {targetRate > 0 ? (
                         <>
