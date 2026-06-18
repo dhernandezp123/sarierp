@@ -21,8 +21,10 @@ import {
 const initialFormData = {
   nombre: '',
   contacto: '',
+  contacto_2: '',
   nit: '',
   telefono: '',
+  telefono_2: '',
   direccion: '',
   ciudad: '',
   departamento_estado: '',
@@ -34,6 +36,8 @@ const initialFormData = {
   tipo_persona: 'Corporativo',
   condicion_pago: 'Contado',
   dias_credito: '',
+  limite_credito: '',
+  moneda_credito: 'USD',
   tipo_cliente: '',
   vendedor_asignado: '',
   origen_frecuente: '',
@@ -138,8 +142,10 @@ export default function EditarClientePage() {
     setFormData({
       nombre: data.nombre || '',
       contacto: data.contacto || '',
+      contacto_2: data.contacto_2 || '',
       nit: data.nit || '',
       telefono: data.telefono || '',
+      telefono_2: data.telefono_2 || '',
       direccion: data.direccion || '',
       ciudad: data.ciudad || '',
       departamento_estado: data.departamento_estado || '',
@@ -151,6 +157,8 @@ export default function EditarClientePage() {
       tipo_persona: data.tipo_persona || 'Corporativo',
       condicion_pago: data.condicion_pago || 'Contado',
       dias_credito: data.dias_credito?.toString() || '',
+      limite_credito: data.limite_credito?.toString() || '',
+      moneda_credito: data.moneda_credito || 'USD',
       tipo_cliente: data.tipo_cliente || '',
       vendedor_asignado: data.vendedor_asignado || '',
       origen_frecuente: data.origen_frecuente || '',
@@ -215,8 +223,10 @@ export default function EditarClientePage() {
     const updateData = {
       nombre: formData.nombre,
       contacto: formData.contacto,
+      contacto_2: formData.contacto_2 || null,
       nit: formData.nit,
       telefono: formData.telefono,
+      telefono_2: formData.telefono_2 || null,
       direccion: formData.direccion,
       ciudad: formData.ciudad,
       departamento_estado: formData.departamento_estado,
@@ -230,6 +240,8 @@ export default function EditarClientePage() {
       dias_credito: isCreditPayment(formData.condicion_pago)
         ? Number(formData.dias_credito || 0)
         : 0,
+      limite_credito: formData.limite_credito ? Number(formData.limite_credito) : null,
+      moneda_credito: formData.moneda_credito || 'USD',
       tipo_cliente: formData.tipo_cliente,
       vendedor_asignado: formData.vendedor_asignado || null,
       origen_frecuente: formData.origen_frecuente,
@@ -344,6 +356,26 @@ export default function EditarClientePage() {
                 name="telefono"
                 placeholder="+504 0000-0000"
                 value={formData.telefono}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Contacto 2">
+              <input
+                name="contacto_2"
+                placeholder="Nombre del contacto secundario"
+                value={formData.contacto_2}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Telefono 2">
+              <input
+                name="telefono_2"
+                placeholder="+504 0000-0000"
+                value={formData.telefono_2}
                 onChange={handleChange}
                 className={fieldClass}
               />
@@ -538,6 +570,31 @@ export default function EditarClientePage() {
                 />
               </Field>
             )}
+
+            <Field label="Limite de credito">
+              <input
+                name="limite_credito"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={formData.limite_credito}
+                onChange={handleChange}
+                className={fieldClass}
+              />
+            </Field>
+
+            <Field label="Moneda del limite">
+              <select
+                name="moneda_credito"
+                value={formData.moneda_credito}
+                onChange={handleChange}
+                className={fieldClass}
+              >
+                <option value="USD">USD</option>
+                <option value="HNL">HNL</option>
+              </select>
+            </Field>
 
             <Field label="Segmento / Tipo de cliente">
               <select

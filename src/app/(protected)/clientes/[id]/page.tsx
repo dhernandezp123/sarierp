@@ -574,6 +574,12 @@ export default function ClienteProfilePage() {
                 <div className="space-y-3">
                   <InfoRow label="Persona de contacto" value={cliente?.contacto} />
                   <InfoRow label="Teléfono" value={cliente?.telefono} />
+                  {cliente?.contacto_2 && (
+                    <InfoRow label="Contacto 2" value={cliente.contacto_2} />
+                  )}
+                  {cliente?.telefono_2 && (
+                    <InfoRow label="Teléfono 2" value={cliente.telefono_2} />
+                  )}
                   <InfoRow label="Email" value={cliente?.email_1} />
                   {cliente?.email_2 && (
                     <InfoRow label="Email 2" value={cliente.email_2} />
@@ -607,6 +613,26 @@ export default function ClienteProfilePage() {
                     label="Origen frecuente"
                     value={cliente?.origen_frecuente}
                   />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-[#0b1220]">
+                <h3 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">
+                  Crédito
+                </h3>
+                <div className="space-y-3">
+                  <InfoRow label="Condición de pago" value={cliente?.condicion_pago} />
+                  {cliente?.dias_credito ? (
+                    <InfoRow label="Días de crédito" value={`${cliente.dias_credito} días`} />
+                  ) : null}
+                  {cliente?.limite_credito ? (
+                    <InfoRow
+                      label="Límite de crédito"
+                      value={`${cliente.moneda_credito || 'USD'} ${Number(cliente.limite_credito).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                    />
+                  ) : (
+                    <InfoRow label="Límite de crédito" value="Sin límite definido" />
+                  )}
                 </div>
               </div>
 
