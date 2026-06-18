@@ -364,7 +364,7 @@ export default function OperationsBookingsPage() {
                     <td>{assigned}</td>
                     <td className="text-right">
                       <Link
-                        href={`/operations/routing/${item.id}/booking`}
+                        href={`/operations/shipping-instructions/${item.id}/booking`}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         Abrir

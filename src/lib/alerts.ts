@@ -514,7 +514,7 @@ export async function getSystemAlerts(
           description: `${clientNameFromRouting(routing)} no tiene bookings creados.`,
           entityLabel: routingLabel(routing),
           entityType: 'RT',
-          href: `/operations/routing/${routing.id}`,
+          href: `/operations/shipping-instructions/${routing.id}`,
           createdAt: new Date().toISOString(),
           ageLabel: 'Activo',
         })
@@ -547,7 +547,7 @@ export async function getSystemAlerts(
         description: `${assigned}/${expected} asignados. Faltan ${missing}.`,
         entityLabel: routingLabel(routing),
         entityType: 'RT',
-        href: `/operations/routing/${routingId}`,
+        href: `/operations/shipping-instructions/${routingId}`,
         createdAt: new Date().toISOString(),
         ageLabel: 'Activo',
       })
@@ -569,7 +569,7 @@ export async function getSystemAlerts(
         description: `Faltan: ${missingDocs.join(', ')}.`,
         entityLabel: bookingLabel(booking),
         entityType: 'Booking',
-        href: `/operations/routing/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
         createdAt: new Date().toISOString(),
         ageLabel: routingLabel(routing),
       })
@@ -591,7 +591,7 @@ export async function getSystemAlerts(
         }.`,
         entityLabel: bookingLabel(booking),
         entityType: 'Booking',
-        href: `/operations/routing/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
         createdAt: booking.actual_eta || booking.eta || new Date().toISOString(),
         ageLabel: routingLabel(routing),
       })
@@ -611,7 +611,7 @@ export async function getSystemAlerts(
         description: `Quedan ${remainingFreeDays} días libres.`,
         entityLabel: bookingLabel(booking),
         entityType: 'Booking',
-        href: `/operations/routing/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
         createdAt: new Date().toISOString(),
         ageLabel: routingLabel(routing),
       })

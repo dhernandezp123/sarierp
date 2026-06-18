@@ -900,7 +900,7 @@ export default function QuotationDetailPage() {
 
     if (existingSI?.id) {
       toast.warning('Esta cotización ya tiene Shipping Instructions.')
-      router.push(`/operations/routing/${existingSI.id}`)
+      router.push(`/operations/shipping-instructions/${existingSI.id}`)
       setCreatingRouting(false)
       return
     }
@@ -1059,7 +1059,7 @@ export default function QuotationDetailPage() {
     })
 
     toast.success('Shipping Instructions generadas')
-    router.push(`/operations/routing/${shippingInstruction.id}`)
+    router.push(`/operations/shipping-instructions/${shippingInstruction.id}`)
   }
 
   if (loading) {

@@ -572,10 +572,10 @@ export default function RoutingBookingPage() {
 
         <button
           type="button"
-          onClick={() => router.push(`/operations/routing/${routing.id}`)}
+          onClick={() => router.push(`/operations/shipping-instructions/${routing.id}`)}
           className={secondaryButtonClass}
         >
-          Volver al Routing
+          Volver a Shipping Instruction
         </button>
       </div>
 

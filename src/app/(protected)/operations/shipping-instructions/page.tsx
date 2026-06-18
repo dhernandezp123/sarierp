@@ -265,7 +265,7 @@ export default function RoutingInboxPage() {
                   return (
                     <tr
                       key={item.id}
-                      onClick={() => router.push(`/operations/routing/${item.id}`)}
+                      onClick={() => router.push(`/operations/shipping-instructions/${item.id}`)}
                       className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
                     >
                       <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
@@ -305,7 +305,7 @@ export default function RoutingInboxPage() {
                       >
                         <button
                           type="button"
-                          onClick={() => router.push(`/operations/routing/${item.id}`)}
+                          onClick={() => router.push(`/operations/shipping-instructions/${item.id}`)}
                           title="Abrir SI"
                           className={`${secondaryButtonClass} inline-flex h-8 w-8 items-center justify-center p-0`}
                         >

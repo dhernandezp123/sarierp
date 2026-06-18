@@ -150,7 +150,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
     },
     {
       label: 'Shipping Instructions',
-      href: '/operations/routing',
+      href: '/operations/shipping-instructions',
       icon: Route,
     },
   ]

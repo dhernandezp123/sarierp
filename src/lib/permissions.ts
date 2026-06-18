@@ -13,7 +13,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/alerts',
     '/clientes',
     '/quotations',
-    '/operations/routing',
+    '/operations/shipping-instructions',
     '/historico',
   ],
 
@@ -35,7 +35,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/quotations',
     '/operations/dashboard',
     '/operations/bookings',
-    '/operations/routing',
+    '/operations/shipping-instructions',
     '/historico',
   ],
 
@@ -53,8 +53,15 @@ export function canAccessPath(role: string | null | undefined, path: string) {
 
   if (
     role === 'Ventas' &&
-    path.startsWith('/operations/routing/') &&
+    path.startsWith('/operations/shipping-instructions/') &&
     path.endsWith('/booking')
+  ) {
+    return false
+  }
+
+  if (
+    role === 'Ventas' &&
+    path.includes('/bl/')
   ) {
     return false
   }

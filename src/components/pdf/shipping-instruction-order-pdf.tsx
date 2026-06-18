@@ -248,8 +248,8 @@ export default function RoutingOrderPDF({
           <Image src="/logo/sari-logo.png" style={styles.logo} />
 
           <View>
-            <Text style={styles.title}>ROUTING ORDER</Text>
-            <Text style={styles.subtitle}>Shipping Instructions</Text>
+            <Text style={styles.title}>SHIPPING INSTRUCTION</Text>
+            <Text style={styles.subtitle}>Instrucción de Embarque</Text>
             <Text style={styles.subtitle}>{value(routing?.routing_number)}</Text>
           </View>
         </View>

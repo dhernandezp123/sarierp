@@ -213,11 +213,11 @@ function routingNumberFor(booking: BookingRow) {
 }
 
 function bookingLink(booking: BookingRow) {
-  return `/operations/routing/${booking.shipping_instruction_id}/bookings/${booking.id}`
+  return `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`
 }
 
 function routingLink(routingId: string) {
-  return `/operations/routing/${routingId}`
+  return `/operations/shipping-instructions/${routingId}`
 }
 
 function statusBadgeClass(status?: string | null) {

@@ -15,7 +15,7 @@ import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
 import { primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
-import RoutingOrderPDF from '@/src/components/pdf/routing-order-pdf'
+import ShippingInstructionOrderPDF from '@/src/components/pdf/shipping-instruction-order-pdf'
 import {
   Dialog,
   DialogContent,
@@ -1228,7 +1228,7 @@ export default function RoutingDetailPage() {
     const newBooking = await createBookingChild()
     if (!routing || !newBooking) return
 
-    router.push(`/operations/routing/${routing.id}/bookings/${newBooking.id}`)
+    router.push(`/operations/shipping-instructions/${routing.id}/bookings/${newBooking.id}`)
   }
 
   const handleOpenBooking = async () => {
@@ -1239,7 +1239,7 @@ export default function RoutingDetailPage() {
     }
 
     if (bookings.length === 1) {
-      router.push(`/operations/routing/${routing.id}/bookings/${bookings[0].id}`)
+      router.push(`/operations/shipping-instructions/${routing.id}/bookings/${bookings[0].id}`)
       return
     }
 
@@ -1252,14 +1252,14 @@ export default function RoutingDetailPage() {
     const newBooking = await createBookingChild()
     if (!newBooking) return
 
-    router.push(`/operations/routing/${routing.id}/bookings/${newBooking.id}`)
+    router.push(`/operations/shipping-instructions/${routing.id}/bookings/${newBooking.id}`)
   }
 
   const handlePrintRoutingPdf = async () => {
     if (!routing) return
 
     const blob = await pdf(
-      <RoutingOrderPDF
+      <ShippingInstructionOrderPDF
         routing={routing}
         quotation={routing.quotation}
         cliente={routing.quotation?.cliente || routing.cliente}
@@ -1417,7 +1417,7 @@ export default function RoutingDetailPage() {
             <>
               <PDFDownloadLink
                 document={
-                    <RoutingOrderPDF
+                    <ShippingInstructionOrderPDF
                       routing={routing}
                       quotation={routing.quotation}
                       cliente={routing.quotation?.cliente || routing.cliente}
@@ -1698,7 +1698,7 @@ export default function RoutingDetailPage() {
                     </td>
                     <td className="text-right">
                       <Link
-                        href={`/operations/routing/${routing.id}/bookings/${booking.id}`}
+                        href={`/operations/shipping-instructions/${routing.id}/bookings/${booking.id}`}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         Abrir

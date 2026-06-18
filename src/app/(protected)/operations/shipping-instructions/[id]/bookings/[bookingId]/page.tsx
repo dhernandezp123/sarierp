@@ -119,6 +119,19 @@ type SelectedAgentQuote = {
   dias_libres?: string | number | null
 }
 
+type BillOfLading = {
+  id: string
+  bl_type: 'MBL' | 'HBL'
+  parent_bl_id: string | null
+  bl_number: string | null
+  status: string
+  release_type: string | null
+  carrier: string | null
+  vessel_name: string | null
+  etd: string | null
+  created_at: string | null
+}
+
 const bookingStatusOptions = [
   'Booking Solicitado',
   'Booking Confirmado',
@@ -301,6 +314,26 @@ export default function RoutingBookingChildPage() {
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null)
   const [documentPendingDelete, setDocumentPendingDelete] =
     useState<BookingDocument | null>(null)
+  const [billsOfLading, setBillsOfLading] = useState<BillOfLading[]>([])
+  const [loadingBLs, setLoadingBLs] = useState(false)
+
+  const loadBillsOfLading = async (targetBookingId = bookingId) => {
+    setLoadingBLs(true)
+    const { data, error } = await supabase
+      .from('bills_of_lading')
+      .select('id, bl_type, parent_bl_id, bl_number, status, release_type, carrier, vessel_name, etd, created_at')
+      .eq('booking_id', targetBookingId)
+      .order('created_at', { ascending: true })
+
+    setLoadingBLs(false)
+
+    if (error) {
+      console.error('Error loading BLs:', error)
+      return
+    }
+
+    setBillsOfLading((data || []) as BillOfLading[])
+  }
 
   const loadBookingDocuments = async (targetBookingId = bookingId) => {
     const { data, error } = await supabase
@@ -514,6 +547,7 @@ export default function RoutingBookingChildPage() {
       }))
     )
     await loadBookingDocuments((bookingData as BookingData).id)
+    await loadBillsOfLading((bookingData as BookingData).id)
     setLoading(false)
   }
 
@@ -895,7 +929,7 @@ export default function RoutingBookingChildPage() {
         <p className="text-sm text-red-500">Booking no encontrado.</p>
         <button
           type="button"
-          onClick={() => router.push(`/operations/routing/${id}`)}
+          onClick={() => router.push(`/operations/shipping-instructions/${id}`)}
           className={`${secondaryButtonClass} mt-4`}
         >
           Volver a Shipping Instruction
@@ -945,7 +979,7 @@ export default function RoutingBookingChildPage() {
 
         <button
           type="button"
-          onClick={() => router.push(`/operations/routing/${id}`)}
+          onClick={() => router.push(`/operations/shipping-instructions/${id}`)}
           className={secondaryButtonClass}
         >
           Volver a Shipping Instruction
@@ -1563,6 +1597,132 @@ export default function RoutingBookingChildPage() {
           {saving ? 'Guardando...' : 'Guardar Booking'}
         </button>
       </div>
+
+      {/* Bills of Lading */}
+      <section className={`${cardClass} mt-6`}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            Bills of Lading
+          </h2>
+          {booking.booking_number && (
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/new?type=MBL`
+                )
+              }
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              + Crear MBL
+            </button>
+          )}
+        </div>
+
+        {loadingBLs ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">Cargando...</p>
+        ) : billsOfLading.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {booking.booking_number
+              ? 'No hay BLs registrados. Crea el MBL para iniciar el proceso.'
+              : 'Confirma el Booking Number antes de crear el MBL.'}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {billsOfLading
+              .filter((bl) => bl.bl_type === 'MBL')
+              .map((mbl) => {
+                const hbls = billsOfLading.filter(
+                  (bl) => bl.bl_type === 'HBL' && bl.parent_bl_id === mbl.id
+                )
+                return (
+                  <div
+                    key={mbl.id}
+                    className="rounded-xl border border-slate-200 dark:border-slate-700"
+                  >
+                    <div className="flex items-center justify-between p-4">
+                      <div className="flex items-center gap-3">
+                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          MBL
+                        </span>
+                        <div>
+                          <p className="font-semibold text-slate-900 dark:text-white">
+                            {mbl.bl_number || 'Sin número'}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {mbl.carrier || '—'} · {mbl.status}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {mbl.status === 'MBL Validado' && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              router.push(
+                                `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/new?type=HBL&parentBlId=${mbl.id}`
+                              )
+                            }
+                            className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                          >
+                            + Crear HBL
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            router.push(
+                              `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${mbl.id}`
+                            )
+                          }
+                          className={secondaryButtonClass}
+                        >
+                          Abrir
+                        </button>
+                      </div>
+                    </div>
+
+                    {hbls.length > 0 && (
+                      <div className="border-t border-slate-100 dark:border-slate-800">
+                        {hbls.map((hbl) => (
+                          <div
+                            key={hbl.id}
+                            className="flex items-center justify-between px-4 py-3 pl-10"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                HBL
+                              </span>
+                              <div>
+                                <p className="font-semibold text-slate-900 dark:text-white">
+                                  {hbl.bl_number || 'Sin número'}
+                                </p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                  {hbl.status} · {hbl.release_type || '—'}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                router.push(
+                                  `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${hbl.id}`
+                                )
+                              }
+                              className={secondaryButtonClass}
+                            >
+                              Abrir
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+          </div>
+        )}
+      </section>
 
       <Dialog
         open={Boolean(documentPendingDelete)}
