@@ -39,7 +39,7 @@ Breadcrumbs añadidos en: clientes, invoicing, shipping-instructions, quotations
 
 Tablas: `miami_packages`, `miami_manifests`, `miami_pre_alerts`, `client_addresses`,
 `miami_incidencias`, `client_notifications`, `client_pickup_requests`.
-Bucket `miami-package-photos`. RLS + RPCs `next_warehouse_number()` / `next_manifest_number()`.
+Bucket `miami-package-photos` creado en Supabase. RLS + RPCs `next_warehouse_number()` / `next_manifest_number()`.
 
 ### Fase 5 — Módulo Bodega Miami (para rol Operaciones/Admin)
 **Estado:** ✅ Completado | Commit: `1fd68dc`
@@ -261,6 +261,7 @@ Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en i
 | Todos (Fases 1-12) | ✅ Ejecutados |
 | `sql/20260619_bl_amendments.sql` | ✅ Ejecutado |
 | `sql/20260619_phase17_suppliers_ap.sql` | ✅ Ejecutado |
+| `sql/20260619_audit_harden_remaining_rls.sql` | ✅ Ejecutado |
 
 ---
 
