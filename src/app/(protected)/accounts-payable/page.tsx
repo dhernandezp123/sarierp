@@ -20,7 +20,7 @@ type CuentaPagar = {
   status: string
   pagos_proveedor?: { monto: number; fecha_pago: string | null }[]
   proveedores: { id: string; nombre: string; tipo: string } | null
-  quotations: { numero_cotizacion: string | null } | null
+  quotations: { quotation_number: string | null } | null
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -62,7 +62,7 @@ export default function AccountsPayablePage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('cuentas_pagar')
-      .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, pagos_proveedor(monto, fecha_pago), proveedores(id, nombre, tipo), quotations(numero_cotizacion)')
+      .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, pagos_proveedor(monto, fecha_pago), proveedores(id, nombre, tipo), quotations(quotation_number)')
       .order('fecha_vencimiento', { ascending: true })
 
     if (error) toast.error(error.message)
@@ -187,7 +187,7 @@ export default function AccountsPayablePage() {
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-800 dark:text-slate-200">{(c.proveedores as any)?.nombre || '-'}</div>
                         <div className="text-xs text-slate-500">{c.descripcion}</div>
-                        {c.quotations && <div className="text-xs text-blue-500">Cot. {(c.quotations as any).numero_cotizacion}</div>}
+                        {c.quotations && <div className="text-xs text-blue-500">Cot. {(c.quotations as any).quotation_number}</div>}
                       </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{c.numero_factura_proveedor || '-'}</td>
                       <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{fmtMoney(c.monto, c.moneda)}</td>

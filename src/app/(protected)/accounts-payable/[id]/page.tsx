@@ -22,7 +22,7 @@ type CuentaPagar = {
   status: string
   notas: string | null
   proveedores: { id: string; nombre: string; tipo: string; terminos_pago: number } | null
-  quotations: { id: string; numero_cotizacion: string | null } | null
+  quotations: { id: string; quotation_number: string | null } | null
   bookings: { id: string; booking_number: string | null } | null
 }
 
@@ -75,7 +75,7 @@ export default function APDetailPage() {
     setLoading(true)
     const [{ data: cp }, { data: pp }] = await Promise.all([
       supabase.from('cuentas_pagar')
-        .select('*, proveedores(id, nombre, tipo, terminos_pago), quotations(id, numero_cotizacion), bookings(id, booking_number)')
+        .select('*, proveedores(id, nombre, tipo, terminos_pago), quotations(id, quotation_number), bookings(id, booking_number)')
         .eq('id', id).single(),
       supabase.from('pagos_proveedor').select('*').eq('cuenta_pagar_id', id).order('fecha_pago', { ascending: false }),
     ])
@@ -219,7 +219,7 @@ export default function APDetailPage() {
             <div className="flex gap-2">
               <span className="w-32 shrink-0 font-medium text-slate-500">Cotizacion:</span>
               <Link href={`/quotations/${(cuenta.quotations as any).id}`} className="text-blue-600 hover:underline dark:text-blue-400">
-                {(cuenta.quotations as any).numero_cotizacion || 'Ver cotizacion'}
+                {(cuenta.quotations as any).quotation_number || 'Ver cotizacion'}
               </Link>
             </div>
           )}

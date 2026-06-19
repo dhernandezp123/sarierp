@@ -30,7 +30,6 @@ type ProfileJoin = { id: string | null; nombre: string | null; apellido: string 
 type QuotationRow = {
   id: string
   quotation_number: string | null
-  numero_cotizacion?: string | null
   created_at: string | null
   status: string | null
   quote_type: string | null
@@ -101,7 +100,7 @@ type PayableRow = {
   status: string
   pagos_proveedor?: { monto: number | string; fecha_pago: string | null }[]
   proveedores: Join<{ id: string; nombre: string; tipo: string }>
-  quotations: Join<{ quotation_number: string | null; numero_cotizacion: string | null }>
+  quotations: Join<{ quotation_number: string | null }>
 }
 
 type ReportRow = ReportPdfRow & {
@@ -162,8 +161,8 @@ function sellerName(value: Join<ProfileJoin> | undefined) {
   return fullName || seller?.email || 'Sin vendedor'
 }
 
-function quoteNumber(q: Pick<QuotationRow, 'quotation_number' | 'numero_cotizacion'>) {
-  return q.quotation_number || q.numero_cotizacion || '-'
+function quoteNumber(q: Pick<QuotationRow, 'quotation_number'>) {
+  return q.quotation_number || '-'
 }
 
 function serviceLabel(quoteType?: string | null, transport?: string | null) {
@@ -279,7 +278,6 @@ export default function ReportsPage() {
           .select(`
             id,
             quotation_number,
-            numero_cotizacion,
             created_at,
             status,
             quote_type,
@@ -368,7 +366,7 @@ export default function ReportsPage() {
       tasks.push(
         supabase
           .from('cuentas_pagar')
-          .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, pagos_proveedor(monto, fecha_pago), proveedores(id, nombre, tipo), quotations(quotation_number, numero_cotizacion)')
+          .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, pagos_proveedor(monto, fecha_pago), proveedores(id, nombre, tipo), quotations(quotation_number)')
           .order('fecha_vencimiento', { ascending: true })
           .then(({ data, error }) => {
             if (error) toast.error('No se pudieron cargar cuentas por pagar')
@@ -526,7 +524,7 @@ export default function ReportsPage() {
           proveedor: supplier?.nombre || 'Sin proveedor',
           tipo: supplier?.tipo || '-',
           factura: payable.numero_factura_proveedor || '-',
-          cotizacion: quotation?.quotation_number || quotation?.numero_cotizacion || '-',
+          cotizacion: quotation?.quotation_number || '-',
           descripcion: payable.descripcion,
           vencimiento: fmtDate(payable.fecha_vencimiento),
           estado: payable.status,

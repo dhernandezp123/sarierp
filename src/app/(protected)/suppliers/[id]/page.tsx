@@ -36,13 +36,13 @@ type CuentaPagar = {
   fecha_factura: string | null
   fecha_vencimiento: string | null
   status: string
-  quotations: { numero_cotizacion: string | null } | null
+  quotations: { quotation_number: string | null } | null
   pagos_proveedor?: { monto: number }[]
 }
 
 type ApprovedQuotation = {
   id: string
-  numero_cotizacion: string | null
+  quotation_number: string | null
   clientes: { nombre: string | null }[] | { nombre: string | null } | null
 }
 
@@ -98,11 +98,11 @@ export default function SupplierDetailPage() {
     const [{ data: prov }, { data: cp }, { data: quotations }] = await Promise.all([
       supabase.from('proveedores').select('*, agents(id, name)').eq('id', id).single(),
       supabase.from('cuentas_pagar')
-        .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, quotations(numero_cotizacion), pagos_proveedor(monto)')
+        .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, quotations(quotation_number), pagos_proveedor(monto)')
         .eq('proveedor_id', id)
         .order('created_at', { ascending: false }),
       supabase.from('quotations')
-        .select('id, numero_cotizacion, clientes(nombre)')
+        .select('id, quotation_number, clientes(nombre)')
         .eq('status', 'Aprobada')
         .order('created_at', { ascending: false })
         .limit(80),
@@ -346,7 +346,7 @@ export default function SupplierDetailPage() {
                   <option value="">Sin vincular</option>
                   {approvedQuotations.map((q) => (
                     <option key={q.id} value={q.id}>
-                      {q.numero_cotizacion || 'Sin numero'}{(() => {
+                      {q.quotation_number || 'Sin numero'}{(() => {
                         const cliente = Array.isArray(q.clientes) ? q.clientes[0] : q.clientes
                         return cliente?.nombre ? ` - ${cliente.nombre}` : ''
                       })()}
@@ -416,7 +416,7 @@ export default function SupplierDetailPage() {
                     <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/20">
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-slate-800 dark:text-slate-200">{c.descripcion}</div>
-                        {c.quotations && <div className="text-xs text-slate-400">Cot. {(c.quotations as any).numero_cotizacion}</div>}
+                        {c.quotations && <div className="text-xs text-slate-400">Cot. {(c.quotations as any).quotation_number}</div>}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400">{c.numero_factura_proveedor || '-'}</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-800 dark:text-slate-200">{fmtMoney(Number(c.monto), c.moneda)}</td>
