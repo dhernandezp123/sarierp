@@ -6,6 +6,8 @@ import { AlertTriangle, ArrowRight, BellRing, BriefcaseBusiness, Clock3, Refresh
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { EmptyState } from '@/src/components/ui/EmptyState'
 import {
   getSystemAlerts,
   type SystemAlert,
@@ -202,6 +204,21 @@ export default function AlertsPage() {
           <Clock3 className="h-5 w-5 text-slate-400" />
         </div>
 
+        {loading ? (
+          <div className="p-6">
+            <TableSkeleton rows={5} cols={6} />
+          </div>
+        ) : emptyState ? (
+          <EmptyState
+            icon={<BellRing className="h-6 w-6" />}
+            title={alerts.length === 0 ? 'Sin alertas activas' : 'Sin resultados'}
+            description={
+              alerts.length === 0
+                ? 'El sistema no detectó ninguna alerta en este momento.'
+                : 'Ninguna alerta coincide con los filtros aplicados.'
+            }
+          />
+        ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-900/60">
@@ -227,20 +244,7 @@ export default function AlertsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400">
-                    Cargando alertas...
-                  </td>
-                </tr>
-              ) : emptyState ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-10 text-center text-slate-500 dark:text-slate-400">
-                    Sin alertas pendientes
-                  </td>
-                </tr>
-              ) : (
-                filteredAlerts.map((alert) => (
+              {filteredAlerts.map((alert) => (
                   <tr key={alert.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <td className="px-5 py-4">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${categoryClass(alert.category)}`}>
@@ -278,11 +282,11 @@ export default function AlertsPage() {
                       </Link>
                     </td>
                   </tr>
-                ))
-              )}
+                ))}
             </tbody>
           </table>
         </div>
+        )}
       </section>
     </div>
   )

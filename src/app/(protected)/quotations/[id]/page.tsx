@@ -19,6 +19,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
+import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { createNotification } from '@/src/lib/notifications'
 import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
 import {
@@ -1290,6 +1291,12 @@ const combinedTimeline: CommercialTimelineEvent[] = [
   return (
   <>
     <div className="space-y-6 !font-sans [&_*]:!font-sans">
+      <Breadcrumbs
+        items={[
+          { label: 'Cotizaciones', href: '/quotations' },
+          { label: quotation.quotation_number || 'Detalle' },
+        ]}
+      />
 
       <div className="flex items-start justify-between gap-4">
         <div>

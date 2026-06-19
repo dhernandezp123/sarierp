@@ -23,6 +23,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 
 type UserTask = {
   id: string
@@ -1220,11 +1221,26 @@ function TasksPanel({
   toggleTask: (task: UserTask) => void
   deleteTask: (taskId: string) => void
 }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
   return (
     <Panel
       title="Mis tareas"
       description="Pendientes personales del usuario conectado."
     >
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null) }}
+        title="Eliminar tarea"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={() => {
+          if (confirmDeleteId) deleteTask(confirmDeleteId)
+          setConfirmDeleteId(null)
+        }}
+      />
+
       <div className="mb-4 grid gap-3 md:grid-cols-[1fr_140px]">
         <input
           value={taskTitle}
@@ -1300,7 +1316,7 @@ function TasksPanel({
 
                 <button
                   type="button"
-                  onClick={() => deleteTask(task.id)}
+                  onClick={() => setConfirmDeleteId(task.id)}
                   className="rounded-lg border border-red-300 p-2 text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
                 >
                   <Trash2 className="h-4 w-4" />

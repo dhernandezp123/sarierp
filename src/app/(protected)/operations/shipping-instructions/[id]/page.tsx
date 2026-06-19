@@ -14,6 +14,7 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
 import { primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import ShippingInstructionOrderPDF from '@/src/components/pdf/shipping-instruction-order-pdf'
 import {
@@ -1402,7 +1403,14 @@ export default function RoutingDetailPage() {
       : `${assignedContainerTotal} / N/A`
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <Breadcrumbs
+        items={[
+          { label: 'Shipping Instructions', href: '/operations/shipping-instructions' },
+          { label: routing.routing_number || 'Detalle' },
+        ]}
+      />
+
+      <div className="mb-6 mt-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             Shipping Instructions {routing.routing_number}

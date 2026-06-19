@@ -3,7 +3,10 @@
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { toast } from 'sonner'
+import { supabase } from '@/src/lib/supabase/client'
 import {
   ArrowRight,
   Activity,
@@ -19,8 +22,10 @@ import {
   Globe2,
   LockKeyhole,
   Mail,
+  Menu,
   MessageCircle,
   Plane,
+  Printer,
   Route,
   Scale,
   ShieldCheck,
@@ -30,6 +35,7 @@ import {
   Users,
   Warehouse,
   Waypoints,
+  X,
   Zap,
 } from 'lucide-react'
 
@@ -109,19 +115,29 @@ const features = [
     icon: FileText,
     items: [
       'FCL, LCL, a\u00e9reo y terrestre',
+      'Comparativo multi-agente',
       'Costos contra venta',
-      'Opciones de agentes',
       'Margen antes de aprobar',
     ],
   },
   {
-    title: 'Operaci\u00f3n y documentos',
+    title: 'Documentos y PDFs',
+    icon: Printer,
+    items: [
+      'PDF de cotizaci\u00f3n comercial',
+      'Bill of Lading / HBL',
+      'Aviso de llegada',
+      'Routing Order',
+    ],
+  },
+  {
+    title: 'Operaci\u00f3n log\u00edstica',
     icon: Route,
     items: [
       'Shipping Instructions',
       'Control de booking',
       'Timeline operativo',
-      'Documentos por embarque',
+      'Seguimiento por embarque',
     ],
   },
   {
@@ -129,9 +145,9 @@ const features = [
     icon: ClipboardCheck,
     items: [
       'Validaci\u00f3n financiera',
-      'Soportes de proveedor',
       'Rentabilidad por embarque',
-      'KPIs ejecutivos',
+      'Dashboard ejecutivo',
+      'KPIs con exportaci\u00f3n CSV',
     ],
   },
 ]
@@ -159,14 +175,34 @@ const comparison = [
     product: 'Tarifas organizadas por cliente',
   },
   {
+    item: 'Comparativo de agentes',
+    generic: 'Hojas por proveedor separadas',
+    product: 'Multi-agente integrado en el flujo',
+  },
+  {
     item: 'Pricing logístico',
     generic: 'Cálculos manuales',
     product: 'Comparación clara de costos y ventas',
   },
   {
+    item: 'Generación de PDFs',
+    generic: 'Word o Excel manual',
+    product: 'PDFs automáticos por embarque',
+  },
+  {
+    item: 'BL y HBL',
+    generic: 'Documentos en papel',
+    product: 'Auto-numeración y gestión integrada',
+  },
+  {
     item: 'Miami Consolidado',
     generic: 'Conversiones manuales',
     product: 'KG/LBS y FT3/CBM en el flujo',
+  },
+  {
+    item: 'Roles por equipo',
+    generic: 'Acceso sin control diferenciado',
+    product: 'Ventas, Pricing, Ops y Finanzas',
   },
   {
     item: 'Seguimiento operativo',
@@ -382,6 +418,24 @@ function DashboardMockup() {
 // ─── Landing principal ────────────────────────────────────────────────────────
 
 export function ForwardersLanding() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [form, setForm] = useState({ nombre: '', empresa: '', email: '', telefono: '' })
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSubmitting(true)
+    const { error } = await supabase.from('leads').insert([form])
+    setSubmitting(false)
+    if (error) {
+      toast.error('Error al enviar. Intenta de nuevo.')
+      return
+    }
+    setSubmitted(true)
+    toast.success('¡Mensaje recibido! Te contactaremos pronto.')
+  }
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#F7F8FA] text-[#07111F]">
 
@@ -430,8 +484,40 @@ export function ForwardersLanding() {
             >
               Ingresar
             </Link>
+            <button
+              onClick={() => setMobileMenuOpen((o) => !o)}
+              aria-label="Menú"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:text-[#0038BD] lg:hidden"
+            >
+              {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
           </div>
         </nav>
+
+        {/* Mobile menu */}
+        {mobileMenuOpen && (
+          <div className="relative z-10 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur-xl lg:hidden">
+            <div className="mx-auto flex max-w-7xl flex-col gap-1">
+              {navigation.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-lg px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-[#0038BD]"
+                >
+                  {item.label}
+                </a>
+              ))}
+              <a
+                href="#demo"
+                onClick={() => setMobileMenuOpen(false)}
+                className="mt-2 rounded-full bg-[#EF8E01] px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-[#db8000]"
+              >
+                Solicitar Demo
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Hero copy */}
         <div className="relative z-10 mx-auto max-w-7xl px-5 pb-20 pt-12 text-center sm:px-8 lg:pb-24">
@@ -446,7 +532,7 @@ export function ForwardersLanding() {
               className="mx-auto inline-flex items-center gap-2 rounded-full border border-[#0038BD]/12 bg-white px-4 py-2 text-sm text-slate-600 shadow-sm"
             >
               <Sparkles size={14} className="text-[#EF8E01]" />
-              Freight Forwarding Management Platform
+              Plataforma de Gestión Logística
             </motion.div>
 
             <motion.h1
@@ -492,7 +578,7 @@ export function ForwardersLanding() {
               variants={fadeUp}
               className="mt-6 text-xs text-slate-400"
             >
-              Diseñado para freight forwarders en Honduras y Centroamérica · Operativo en producción
+              +70 cotizaciones procesadas · Operativo en producción · Honduras y Centroamérica
             </motion.p>
           </motion.div>
 
@@ -782,7 +868,7 @@ export function ForwardersLanding() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: '-80px' }}
-            className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+            className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
           >
             {features.map((feature) => {
               const Icon = feature.icon
@@ -863,7 +949,7 @@ export function ForwardersLanding() {
               </p>
 
               <div className="flex flex-wrap gap-2">
-                {['Cotizaciones', 'Pricing', 'Operaciones', 'Costos', 'Facturación'].map(
+                {['Cotizaciones', 'Pricing', 'Documentos', 'Operaciones', 'Costos', 'Facturación'].map(
                   (item) => (
                     <span
                       key={item}
@@ -885,7 +971,7 @@ export function ForwardersLanding() {
           <SectionHeading
             eyebrow="Equipos"
             title="Diseñado para cada equipo de tu operación."
-            description="Forwarders ERP conecta a los equipos que normalmente trabajan separados: comercial, pricing, operaciones, finanzas y dirección."
+            description="Forwarders ERP conecta a los equipos que normalmente trabajan separados. Cada rol tiene su propia vista y permisos: cada equipo ve exactamente lo que necesita."
           />
 
           <motion.div
@@ -1015,7 +1101,7 @@ export function ForwardersLanding() {
           <div className="pointer-events-none absolute -right-20 -top-20 h-80 w-80 rounded-full bg-[#EF8E01]/15 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-[#0038BD]/20 blur-3xl" />
 
-          <div className="relative z-10 grid gap-10 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="relative z-10 grid gap-10 lg:grid-cols-[1fr_1.3fr] lg:items-start">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#EF8E01]">
                 Contacto
@@ -1028,33 +1114,74 @@ export function ForwardersLanding() {
                 en una plataforma dise&ntilde;ada para freight forwarders que quieren
                 vender m&aacute;s, operar mejor y controlar sus m&aacute;rgenes.
               </p>
-              <p className="mt-4 text-sm text-slate-500">
-                Escr&iacute;benos a{' '}
-                <a
-                  href="mailto:contacto@dher.dev"
-                  className="font-semibold text-[#EF8E01] hover:underline"
-                >
-                  contacto@dher.dev
-                </a>
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 lg:min-w-[220px]">
-              <a
-                href="mailto:contacto@dher.dev?subject=Solicitar%20Demo%20Forwarders%20ERP"
-                className="inline-flex h-12 items-center justify-center rounded-xl bg-[#EF8E01] px-6 text-sm font-bold text-white shadow-lg shadow-[#EF8E01]/20 transition hover:bg-[#db8000]"
-              >
-                Solicitar Demo
-                <ArrowRight className="ml-2" size={16} />
-              </a>
               <Link
                 href="/login"
-                className="inline-flex h-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.08] px-6 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/15"
+                className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-400 transition hover:text-white"
               >
-                Ingresar al ERP
-                <LockKeyhole className="ml-2" size={14} />
+                ¿Ya tienes acceso?{' '}
+                <span className="text-[#EF8E01]">Ingresar al ERP →</span>
               </Link>
             </div>
+
+            {submitted ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] p-10 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#EF8E01]/20 text-[#EF8E01]">
+                  <Check size={28} />
+                </div>
+                <h3 className="mt-4 text-lg font-bold text-white">¡Mensaje recibido!</h3>
+                <p className="mt-2 text-sm text-slate-400">Te contactaremos a la brevedad.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    placeholder="Tu nombre"
+                    required
+                    value={form.nombre}
+                    onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+                    className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#EF8E01]/50 focus:ring-1 focus:ring-[#EF8E01]/30"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Empresa"
+                    required
+                    value={form.empresa}
+                    onChange={(e) => setForm((f) => ({ ...f, empresa: e.target.value }))}
+                    className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#EF8E01]/50 focus:ring-1 focus:ring-[#EF8E01]/30"
+                  />
+                </div>
+                <input
+                  type="email"
+                  placeholder="Correo electrónico"
+                  required
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#EF8E01]/50 focus:ring-1 focus:ring-[#EF8E01]/30"
+                />
+                <input
+                  type="tel"
+                  placeholder="Teléfono (opcional)"
+                  value={form.telefono}
+                  onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+                  className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#EF8E01]/50 focus:ring-1 focus:ring-[#EF8E01]/30"
+                />
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="mt-1 inline-flex h-12 items-center justify-center rounded-xl bg-[#EF8E01] px-6 text-sm font-bold text-white shadow-lg shadow-[#EF8E01]/20 transition hover:bg-[#db8000] disabled:opacity-60"
+                >
+                  {submitting ? 'Enviando...' : 'Solicitar Demo'}
+                  {!submitting && <ArrowRight className="ml-2" size={16} />}
+                </button>
+                <p className="text-center text-xs text-slate-500">
+                  O escríbenos a{' '}
+                  <a href="mailto:contacto@dher.dev" className="text-[#EF8E01] hover:underline">
+                    contacto@dher.dev
+                  </a>
+                </p>
+              </form>
+            )}
           </div>
         </div>
       </section>
@@ -1076,7 +1203,7 @@ export function ForwardersLanding() {
                     Forwarders ERP by DHer
                   </span>
                   <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#EF8E01]">
-                    Freight Forwarding Platform
+                    Plataforma de Gestión Logística
                   </span>
                 </span>
               </div>
@@ -1084,6 +1211,10 @@ export function ForwardersLanding() {
               <p className="mt-4 text-sm leading-7 text-slate-400">
                 ERP log&iacute;stico para freight forwarders que necesitan cotizar,
                 operar y proteger margen con mayor visibilidad.
+              </p>
+              <p className="mt-3 text-sm">
+                <span className="font-semibold text-white">Creado por Forwarders, para Forwarders.</span>{' '}
+                <span className="text-slate-500">No por quien nunca vio un BL.</span>
               </p>
             </div>
 

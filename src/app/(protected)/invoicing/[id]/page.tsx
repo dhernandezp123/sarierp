@@ -8,6 +8,7 @@ import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass } from '@/src/lib/ui-classes'
+import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 
 type Invoice = {
   id: string
@@ -184,6 +185,13 @@ export default function InvoiceDetailPage() {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs
+        items={[
+          { label: 'Facturación', href: '/invoicing' },
+          { label: invoice.invoice_number || 'Detalle de factura' },
+        ]}
+      />
+
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex items-start gap-4">

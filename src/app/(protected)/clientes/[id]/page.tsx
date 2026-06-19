@@ -9,6 +9,7 @@ import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 
 const clientRateCatalog = [
   { code: 'small_maritimo_min_lcl_1000_lbs_45_ft3', label: 'Small Mínimo LCL 1000 lbs / 45 ft3', category: 'Small Marítimo', unit: 'flat' },
@@ -414,6 +415,13 @@ export default function ClienteProfilePage() {
   return (
     <>
       <div className="space-y-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Clientes', href: '/clientes' },
+            { label: cliente.nombre || 'Perfil de cliente' },
+          ]}
+        />
+
         <div className="flex flex-wrap gap-3">
           <button
             type="button"

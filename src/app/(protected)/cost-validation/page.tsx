@@ -6,6 +6,9 @@ import { toast } from 'sonner'
 
 import { useUser } from '../../../hooks/useUser'
 import { supabase } from '../../../lib/supabase/client'
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { EmptyState } from '@/src/components/ui/EmptyState'
+import { ShieldOff, ClipboardCheck } from 'lucide-react'
 
 type ShipmentCostValidationItem = {
   id: string
@@ -49,11 +52,13 @@ export default function CostValidationPage() {
   }, [userLoading, canViewCostValidation])
 
   const AccessDenied = () => (
-    <div className="rounded-2xl border bg-white p-8">
-      <h1 className="text-2xl font-bold">Acceso restringido</h1>
-
-      <p className="mt-2 text-gray-500">
-        No tienes permiso para ver este modulo.
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-16 text-center shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
+      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800">
+        <ShieldOff className="h-7 w-7 text-slate-500 dark:text-slate-400" />
+      </div>
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Acceso restringido</h2>
+      <p className="mt-2 max-w-sm text-sm text-slate-500 dark:text-slate-400">
+        Solo usuarios con rol Finanzas o Administrador pueden acceder a este módulo.
       </p>
     </div>
   )
@@ -113,7 +118,17 @@ export default function CostValidationPage() {
   }
 
   if (userLoading || loading) {
-    return <div className="p-8">Cargando validaciones...</div>
+    return (
+      <div className="space-y-6">
+        <div>
+          <div className="h-8 w-72 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" />
+          <div className="mt-2 h-4 w-96 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
+          <TableSkeleton rows={5} cols={8} />
+        </div>
+      </div>
+    )
   }
 
   if (!canViewCostValidation) {
@@ -139,9 +154,11 @@ export default function CostValidationPage() {
         </h2>
 
         {shipments.length === 0 ? (
-          <p className="text-gray-500">
-            No hay operaciones con cotizacion ganada pendientes de validar.
-          </p>
+          <EmptyState
+            icon={<ClipboardCheck className="h-6 w-6" />}
+            title="Sin operaciones pendientes"
+            description="No hay operaciones con cotización ganada pendientes de validar."
+          />
         ) : (
           <div className="overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">

@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { EmptyState } from '@/src/components/ui/EmptyState'
+import { Users } from 'lucide-react'
 
 const getTipoBadgeClass = (tipo?: string | null) => {
   if (tipo === 'Corporativo') {
@@ -166,9 +169,21 @@ export default function ClientesPage() {
           </div>
 
           {loading ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">Cargando clientes...</p>
+            <TableSkeleton rows={6} cols={8} />
           ) : filteredClientes.length === 0 ? (
-            <p className="text-slate-500 dark:text-slate-400">No hay clientes registrados.</p>
+            clientes.length === 0 ? (
+              <EmptyState
+                icon={<Users className="h-6 w-6" />}
+                title="Sin clientes registrados"
+                description="Agrega tu primer cliente para comenzar."
+                action={{ label: 'Nuevo Cliente', href: '/clientes/nuevo' }}
+              />
+            ) : (
+              <EmptyState
+                title="Sin resultados"
+                description="Ningún cliente coincide con los filtros aplicados."
+              />
+            )
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-sm text-slate-700 dark:text-slate-300">

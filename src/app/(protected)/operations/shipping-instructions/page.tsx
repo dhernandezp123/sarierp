@@ -11,6 +11,9 @@ import {
   cardClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { EmptyState } from '@/src/components/ui/EmptyState'
+import { Route } from 'lucide-react'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -162,10 +165,8 @@ export default function RoutingInboxPage() {
 
     const matchesAssign =
       assignFilter === 'Todos' ||
-      (assignFilter === 'Sin asignar'      && !item.operations_assigned_to) ||
-      (assignFilter === 'Mis asignados'    && item.operations_assigned_to === profile?.id) ||
-      (assignFilter === 'Pendientes'       && status === 'Pendiente Validación') ||
-      (assignFilter === 'Listos para Booking' && status === 'Listo para Booking')
+      (assignFilter === 'Sin asignar'   && !item.operations_assigned_to) ||
+      (assignFilter === 'Mis asignados' && item.operations_assigned_to === profile?.id)
 
     return matchesSearch && matchesStatus && matchesAssign
   })
@@ -204,11 +205,9 @@ export default function RoutingInboxPage() {
           onChange={(e) => setAssignFilter(e.target.value)}
           className={fieldClass}
         >
-          <option value="Todos">Todos</option>
+          <option value="Todos">Toda la asignación</option>
           <option value="Sin asignar">Sin asignar</option>
           <option value="Mis asignados">Mis asignados</option>
-          <option value="Pendientes">Pendientes</option>
-          <option value="Listos para Booking">Listos para Booking</option>
         </select>
         <select
           value={statusFilter}
@@ -225,20 +224,24 @@ export default function RoutingInboxPage() {
       {/* Tabla */}
       <div className={`${cardClass} overflow-hidden p-0`}>
         {loading ? (
-          <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
-            Cargando instrucciones...
-          </p>
+          <div className="p-6">
+            <TableSkeleton rows={6} cols={10} />
+          </div>
         ) : errorMessage ? (
           <p className="p-6 text-sm text-red-500">{errorMessage}</p>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-14 text-center">
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-              Sin resultados
-            </p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              No hay Shipping Instructions que coincidan con los filtros.
-            </p>
-          </div>
+          routingList.length === 0 ? (
+            <EmptyState
+              icon={<Route className="h-6 w-6" />}
+              title="Sin instrucciones de embarque"
+              description="Las Shipping Instructions aparecen aquí cuando Ventas las genera desde una cotización."
+            />
+          ) : (
+            <EmptyState
+              title="Sin resultados"
+              description="Ninguna SI coincide con los filtros aplicados."
+            />
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
