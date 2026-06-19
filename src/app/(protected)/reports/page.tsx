@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { PDFDownloadLink } from '@react-pdf/renderer'
+import { PDFDownloadLink, pdf } from '@react-pdf/renderer'
 import {
   BarChart3,
   CalendarDays,
@@ -19,7 +19,7 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { ReportPdf, type ReportPdfColumn, type ReportPdfData, type ReportPdfRow } from '@/src/components/pdf/report-pdf'
 
-type ReportId = 'commercial' | 'operations' | 'billing' | 'receivable' | 'payable' | 'overdue'
+type ReportId = 'commercial' | 'operations' | 'billing' | 'receivable' | 'payable' | 'overdue' | 'supplier_payments'
 type DatePreset = 'month' | 'quarter' | 'year' | 'all' | 'custom'
 
 type Join<T> = T | T[] | null
@@ -87,6 +87,23 @@ type InvoiceRow = {
   due_date: string | null
   total: number | string | null
   currency: string
+  clientes: Join<{
+    ciudad: string | null
+    tipo_cliente: string | null
+    vendedor_profile: Join<{ nombre: string | null; apellido: string | null }>
+  }>
+}
+
+type ProveedorPaymentRow = {
+  id: string
+  monto: number | string
+  moneda: string
+  fecha_pago: string | null
+  metodo_pago: string | null
+  cuentas_pagar: Join<{
+    descripcion: string
+    proveedores: Join<{ nombre: string; tipo: string }>
+  }>
 }
 
 type PayableRow = {
@@ -111,15 +128,17 @@ type ReportRow = ReportPdfRow & {
   __status?: string
   __currency?: string
   __amount?: number
+  __gp?: number
 }
 
 const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[] = [
   { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones, ventas, GP y vendedores', roles: ['Admin', 'Ventas', 'Pricing'] },
   { id: 'operations', label: 'Cargas', scope: 'Shipping instructions, bookings, carrier y ETA', roles: ['Admin', 'Operaciones'] },
-  { id: 'billing', label: 'Facturacion', scope: 'Facturas, notas, estados y montos emitidos', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
+  { id: 'billing', label: 'Facturación', scope: 'Facturas por cliente, tipo, ciudad, segmento y vendedor', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'receivable', label: 'Cuentas por cobrar', scope: 'Facturas enviadas/aprobadas/vencidas pendientes', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'payable', label: 'Cuentas por pagar', scope: 'Proveedores, saldos, pagos y vencimientos', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
-  { id: 'overdue', label: 'Vencidas', scope: 'Facturas y cuentas por pagar vencidas con dias', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
+  { id: 'overdue', label: 'Vencidas', scope: 'Facturas y cuentas por pagar vencidas con días', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
+  { id: 'supplier_payments', label: 'Pagos a Proveedores', scope: 'Pagos por proveedor/tipo: mensual, trimestral, anual', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
 ]
 
 const STATUS_OPTIONS = ['Todos', 'Pendiente de Fijar Precios', 'Pricing Aprobado', 'Enviada al Cliente', 'Ganada', 'Perdida', 'Pendiente', 'Parcialmente Pagada', 'Pagada', 'Vencida', 'Enviada', 'Aprobada', 'Anulada']
@@ -248,6 +267,7 @@ export default function ReportsPage() {
   const [bookings, setBookings] = useState<BookingRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [payables, setPayables] = useState<PayableRow[]>([])
+  const [proveedorPayments, setProveedorPayments] = useState<ProveedorPaymentRow[]>([])
 
   const availableReports = useMemo(
     () => REPORTS.filter((report) => report.roles.includes(role)),
@@ -355,12 +375,21 @@ export default function ReportsPage() {
       tasks.push(
         supabase
           .from('invoices')
-          .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, issue_date, due_date, total, currency')
+          .select(`
+            id, invoice_number, invoice_type, status,
+            cliente_id, cliente_nombre,
+            issue_date, due_date, total, currency,
+            clientes!cliente_id(
+              ciudad,
+              tipo_cliente,
+              vendedor_profile:profiles!vendedor_asignado(nombre, apellido)
+            )
+          `)
           .is('deleted_at', null)
           .order('issue_date', { ascending: false })
           .then(({ data, error }) => {
             if (error) toast.error('No se pudieron cargar facturas')
-            setInvoices((data || []) as InvoiceRow[])
+            setInvoices((data || []) as unknown as InvoiceRow[])
           })
       )
       tasks.push(
@@ -371,6 +400,22 @@ export default function ReportsPage() {
           .then(({ data, error }) => {
             if (error) toast.error('No se pudieron cargar cuentas por pagar')
             setPayables((data || []) as unknown as PayableRow[])
+          })
+      )
+      tasks.push(
+        supabase
+          .from('pagos_proveedor')
+          .select(`
+            id, monto, moneda, fecha_pago, metodo_pago,
+            cuentas_pagar(
+              descripcion,
+              proveedores(nombre, tipo)
+            )
+          `)
+          .order('fecha_pago', { ascending: false })
+          .then(({ data, error }) => {
+            if (error) toast.error('No se pudieron cargar pagos a proveedores')
+            setProveedorPayments((data || []) as unknown as ProveedorPaymentRow[])
           })
       )
     }
@@ -404,6 +449,7 @@ export default function ReportsPage() {
           __status: q.status || '',
           __currency: 'USD',
           __amount: sale,
+          __gp: profit,
           numero: quoteNumber(q),
           fecha: fmtDate(q.created_at),
           cliente: client,
@@ -472,21 +518,29 @@ export default function ReportsPage() {
     }
 
     if (activeReport === 'billing') {
-      return invoices.map((invoice) => ({
-        __key: invoice.id,
-        __date: invoice.issue_date || '',
-        __client: invoice.cliente_nombre || 'Sin cliente',
-        __status: invoice.status,
-        __currency: invoice.currency,
-        __amount: Number(invoice.total || 0),
-        numero: invoice.invoice_number || '-',
-        tipo: invoice.invoice_type,
-        cliente: invoice.cliente_nombre || 'Sin cliente',
-        emision: fmtDate(invoice.issue_date),
-        vencimiento: fmtDate(invoice.due_date),
-        estado: invoice.status,
-        total: fmtMoney(Number(invoice.total || 0), invoice.currency),
-      }))
+      return invoices.map((invoice) => {
+        const cl = resolveJoin(invoice.clientes)
+        const vp = resolveJoin(cl?.vendedor_profile)
+        const vendedor = vp ? `${vp.nombre || ''} ${vp.apellido || ''}`.trim() : '-'
+        return {
+          __key: invoice.id,
+          __date: invoice.issue_date || '',
+          __client: invoice.cliente_nombre || 'Sin cliente',
+          __seller: vendedor,
+          __status: invoice.status,
+          __currency: invoice.currency,
+          __amount: Number(invoice.total || 0),
+          numero: invoice.invoice_number || '-',
+          tipo: invoice.invoice_type,
+          cliente: invoice.cliente_nombre || 'Sin cliente',
+          segmento: cl?.tipo_cliente || '-',
+          ciudad: cl?.ciudad || '-',
+          vendedor,
+          emision: fmtDate(invoice.issue_date),
+          estado: invoice.status,
+          total: fmtMoney(Number(invoice.total || 0), invoice.currency),
+        }
+      })
     }
 
     if (activeReport === 'receivable') {
@@ -503,7 +557,7 @@ export default function ReportsPage() {
           cliente: invoice.cliente_nombre || 'Sin cliente',
           emision: fmtDate(invoice.issue_date),
           vencimiento: fmtDate(invoice.due_date),
-          dias: invoice.due_date ? daysOverdue(invoice.due_date) : 0,
+          dias: invoice.due_date && daysOverdue(invoice.due_date) > 0 ? `${daysOverdue(invoice.due_date)} días` : '-',
           estado: invoice.status,
           saldo: fmtMoney(Number(invoice.total || 0), invoice.currency),
         }))
@@ -547,7 +601,7 @@ export default function ReportsPage() {
           tercero: invoice.cliente_nombre || 'Sin cliente',
           documento: invoice.invoice_number || '-',
           vencimiento: fmtDate(invoice.due_date),
-          dias: daysOverdue(invoice.due_date),
+          dias: `${daysOverdue(invoice.due_date)} días`,
           estado: invoice.status,
           monto: fmtMoney(Number(invoice.total || 0), invoice.currency),
         })),
@@ -567,13 +621,40 @@ export default function ReportsPage() {
             tercero: supplier?.nombre || 'Sin proveedor',
             documento: payable.numero_factura_proveedor || payable.descripcion,
             vencimiento: fmtDate(payable.fecha_vencimiento),
-            dias: daysOverdue(payable.fecha_vencimiento),
+            dias: `${daysOverdue(payable.fecha_vencimiento)} días`,
             estado: payable.status,
             monto: fmtMoney(balance, payable.moneda),
           }
         }),
     ]
-  }, [activeReport, bookings, instructions, invoices, payables, quotations])
+
+    if (activeReport === 'supplier_payments') {
+      return proveedorPayments.map((pago) => {
+        const cp = resolveJoin(pago.cuentas_pagar)
+        const proveedor = resolveJoin(cp?.proveedores)
+        const periodo = pago.fecha_pago ? pago.fecha_pago.slice(0, 7) : '-'
+        const [yr, mo] = periodo !== '-' ? periodo.split('-') : ['', '']
+        const periodoLabel = yr && mo ? `${mo}/${yr}` : '-'
+        const monto = Number(pago.monto || 0)
+        return {
+          __key: pago.id,
+          __date: pago.fecha_pago || '',
+          __client: proveedor?.nombre || 'Sin proveedor',
+          __currency: pago.moneda,
+          __amount: monto,
+          tipo: proveedor?.tipo || '-',
+          proveedor: proveedor?.nombre || 'Sin proveedor',
+          descripcion: cp?.descripcion || '-',
+          periodo: periodoLabel,
+          fecha: fmtDate(pago.fecha_pago),
+          metodo: pago.metodo_pago || '-',
+          monto: fmtMoney(monto, pago.moneda),
+        }
+      })
+    }
+
+    return []
+  }, [activeReport, bookings, instructions, invoices, payables, proveedorPayments, quotations])
 
   const rows = useMemo(() => {
     return baseRows.filter((row) => {
@@ -617,13 +698,15 @@ export default function ReportsPage() {
     }
     if (activeReport === 'billing') {
       return [
-        { key: 'numero', label: 'Documento', width: '14%' },
-        { key: 'tipo', label: 'Tipo', width: '12%' },
-        { key: 'cliente', label: 'Cliente', width: '24%' },
-        { key: 'emision', label: 'Emision', width: '10%' },
-        { key: 'vencimiento', label: 'Vence', width: '10%' },
-        { key: 'estado', label: 'Estado', width: '12%' },
-        { key: 'total', label: 'Total', width: '18%', align: 'right' },
+        { key: 'numero', label: 'Documento', width: '11%' },
+        { key: 'tipo', label: 'Tipo', width: '10%' },
+        { key: 'cliente', label: 'Cliente', width: '18%' },
+        { key: 'segmento', label: 'Segmento', width: '10%' },
+        { key: 'ciudad', label: 'Ciudad', width: '9%' },
+        { key: 'vendedor', label: 'Vendedor', width: '11%' },
+        { key: 'emision', label: 'Emisión', width: '9%' },
+        { key: 'estado', label: 'Estado', width: '10%' },
+        { key: 'total', label: 'Total', width: '12%', align: 'right' },
       ]
     }
     if (activeReport === 'receivable') {
@@ -654,10 +737,22 @@ export default function ReportsPage() {
       { key: 'tercero', label: 'Cliente / Proveedor', width: '27%' },
       { key: 'documento', label: 'Documento', width: '20%' },
       { key: 'vencimiento', label: 'Vence', width: '11%' },
-      { key: 'dias', label: 'Dias', width: '8%', align: 'right' },
+      { key: 'dias', label: 'Días', width: '8%', align: 'right' },
       { key: 'estado', label: 'Estado', width: '10%' },
       { key: 'monto', label: 'Monto', width: '11%', align: 'right' },
     ]
+    if (activeReport === 'supplier_payments') {
+      return [
+        { key: 'tipo', label: 'Tipo Proveedor', width: '12%' },
+        { key: 'proveedor', label: 'Proveedor', width: '20%' },
+        { key: 'descripcion', label: 'Descripción / Servicio', width: '24%' },
+        { key: 'periodo', label: 'Período', width: '9%' },
+        { key: 'fecha', label: 'Fecha', width: '9%' },
+        { key: 'metodo', label: 'Método', width: '11%' },
+        { key: 'monto', label: 'Monto', width: '15%', align: 'right' },
+      ]
+    }
+    return []
   }, [activeReport])
 
   const options = useMemo(() => {
@@ -672,6 +767,8 @@ export default function ReportsPage() {
   }, [baseRows])
 
   const totalAmount = rows.reduce((sum, row) => sum + Number(row.__amount || 0), 0)
+  const totalGp = rows.reduce((sum, row) => sum + Number(row.__gp || 0), 0)
+  const avgMargen = totalAmount > 0 ? (totalGp / totalAmount) * 100 : 0
   const currencyLabel = currencyFilter === ALL ? (rows[0]?.__currency || 'USD') : currencyFilter
   const activeDatePreset = resolveDatePreset(dateFrom, dateTo)
   const activeFilterCount = [clientFilter, sellerFilter, serviceFilter, statusFilter, currencyFilter].filter((value) => value !== ALL).length + (activeDatePreset === 'custom' ? 1 : 0)
@@ -681,25 +778,81 @@ export default function ReportsPage() {
         ? 'border-blue-600 bg-blue-600 text-white shadow-sm dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
         : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
     }`
+
+  // Which columns show totals per report
+  const totalColumnsConfig: Record<ReportId, string[]> = {
+    commercial: ['venta', 'gp', 'margen'],
+    operations: [],
+    billing: ['total'],
+    receivable: ['saldo'],
+    payable: ['saldo'],
+    overdue: ['monto'],
+    supplier_payments: ['monto'],
+  }
+  const activeTotalColumns = totalColumnsConfig[activeReport]
+
+  // Build totals row used by both table tfoot and PDF
+  const pdfTotals: Record<string, string> = {}
+  if (activeTotalColumns.length > 0) {
+    columns.forEach((col, idx) => {
+      if (col.key === 'gp') {
+        pdfTotals[col.key] = fmtMoney(totalGp, currencyLabel)
+      } else if (col.key === 'margen') {
+        pdfTotals[col.key] = rows.length > 0 ? `${avgMargen.toFixed(1)}% prom.` : '-'
+      } else if (activeTotalColumns.includes(col.key)) {
+        pdfTotals[col.key] = fmtMoney(totalAmount, currencyLabel)
+      } else if (idx === 0) {
+        pdfTotals[col.key] = `${rows.length} registros`
+      } else {
+        pdfTotals[col.key] = ''
+      }
+    })
+  }
+
+  const dateRangeLabel = `${dateFrom ? fmtDate(dateFrom) : 'Inicio'} – ${dateTo ? fmtDate(dateTo) : 'Hoy'}`
+
   const pdfData: ReportPdfData = {
     title: `Reporte ${reportConfig.label}`,
     subtitle: reportConfig.scope,
+    dateRange: dateRangeLabel,
     generatedAt: new Date().toLocaleString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
     filters: [
-      `Fechas: ${dateFrom ? fmtDate(dateFrom) : 'Inicio'} - ${dateTo ? fmtDate(dateTo) : 'Hoy'}`,
-      `Cliente/Proveedor: ${clientFilter}`,
-      `Vendedor: ${sellerFilter}`,
-      `Servicio: ${serviceFilter}`,
-      `Estado: ${statusFilter}`,
-      `Moneda: ${currencyFilter}`,
-    ],
-    metrics: [
-      { label: 'Registros', value: String(rows.length) },
-      { label: activeReport === 'commercial' ? 'Venta filtrada' : 'Monto filtrado', value: fmtMoney(totalAmount, currencyLabel) },
-      { label: 'Reporte', value: reportConfig.label },
-    ],
+      `Período: ${dateRangeLabel}`,
+      clientFilter !== ALL ? `Cliente/Proveedor: ${clientFilter}` : '',
+      sellerFilter !== ALL ? `Vendedor: ${sellerFilter}` : '',
+      serviceFilter !== ALL ? `Servicio: ${serviceFilter}` : '',
+      statusFilter !== ALL ? `Estado: ${statusFilter}` : '',
+      currencyFilter !== ALL ? `Moneda: ${currencyFilter}` : '',
+    ].filter(Boolean),
+    metrics: activeReport === 'commercial'
+      ? [
+          { label: 'Cotizaciones', value: String(rows.length) },
+          { label: 'Venta total', value: fmtMoney(totalAmount, currencyLabel) },
+          { label: 'GP total', value: fmtMoney(totalGp, currencyLabel) },
+          { label: 'Margen promedio', value: rows.length > 0 ? `${avgMargen.toFixed(1)}%` : '-' },
+        ]
+      : [
+          { label: 'Registros', value: String(rows.length) },
+          { label: 'Monto total', value: fmtMoney(totalAmount, currencyLabel) },
+          { label: 'Período', value: dateRangeLabel },
+        ],
     columns,
     rows,
+    totals: activeTotalColumns.length > 0 ? pdfTotals : undefined,
+  }
+
+  const [generatingPdf, setGeneratingPdf] = useState(false)
+
+  const handleOpenPdf = async () => {
+    setGeneratingPdf(true)
+    try {
+      const blob = await pdf(<ReportPdf data={pdfData} />).toBlob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } finally {
+      setGeneratingPdf(false)
+    }
   }
 
   if (userLoading || loading) return <PageSkeleton cards={3} rows={7} />
@@ -768,12 +921,15 @@ export default function ReportsPage() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
-            title="Imprimir"
-            className={actionIconButtonClass}
+            onClick={handleOpenPdf}
+            title={generatingPdf ? 'Generando PDF...' : 'Abrir PDF en nueva pestaña'}
+            disabled={generatingPdf}
+            className={`${actionIconButtonClass} disabled:opacity-40`}
           >
-            <Printer className="h-4 w-4" />
-            <span className="sr-only">Imprimir</span>
+            {generatingPdf
+              ? <RefreshCcw className="h-4 w-4 animate-spin" />
+              : <Printer className="h-4 w-4" />}
+            <span className="sr-only">Abrir PDF</span>
           </button>
           <PDFDownloadLink
             document={<ReportPdf data={pdfData} />}
@@ -922,10 +1078,24 @@ export default function ReportsPage() {
                   </tr>
                 ))}
               </tbody>
+              {activeTotalColumns.length > 0 && rows.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/60">
+                    {columns.map((col) => (
+                      <td
+                        key={col.key}
+                        className={`px-3 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-100 ${col.align === 'right' ? 'text-right' : ''}`}
+                      >
+                        {pdfTotals[col.key] || ''}
+                      </td>
+                    ))}
+                  </tr>
+                </tfoot>
+              )}
             </table>
             {rows.length > 120 && (
               <p className="border-t border-slate-100 px-3 py-2 text-xs text-slate-400 dark:border-slate-800">
-                Vista previa limitada a 120 filas. CSV incluye todas las filas filtradas.
+                Vista previa: 120 de {rows.length} filas. El CSV y PDF incluyen todas.
               </p>
             )}
           </div>

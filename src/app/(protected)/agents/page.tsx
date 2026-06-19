@@ -108,10 +108,10 @@ export default function AgentsPage() {
           Catálogos
         </p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">
-          Agentes / Proveedores
+          Agentes de Carga
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Catálogo de agentes con tarifas base y tarifas por ruta.
+          Catálogo operativo de agentes con tarifas base y rutas. Para pagos y cuentas por pagar, ve a <a href="/suppliers" className="text-blue-600 hover:underline dark:text-blue-400">Proveedores</a>.
         </p>
       </div>
 

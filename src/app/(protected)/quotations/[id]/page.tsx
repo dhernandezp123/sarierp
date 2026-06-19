@@ -6,6 +6,7 @@ import Link from 'next/link'
 import {
   ChevronDown,
   Copy,
+  CreditCard,
   Download,
   MoreHorizontal,
   Pencil,
@@ -320,9 +321,8 @@ export default function QuotationDetailPage() {
   const userRole = profile?.rol
   const canManagePricing = ['Admin', 'Pricing'].includes(userRole || '')
   const canGenerateSI = ['Admin', 'Ventas'].includes(userRole || '')
-  const canEditQuotation = ['Admin', 'Ventas', 'Operaciones'].includes(
-    userRole || ''
-  )
+  const canEditQuotation = ['Admin', 'Ventas', 'Operaciones'].includes(userRole || '')
+  const canGenerateCxP = ['Admin', 'Finanzas', 'Contabilidad'].includes(userRole || '')
 
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any>(null)
@@ -338,6 +338,7 @@ export default function QuotationDetailPage() {
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
   const [openMoreMenu, setOpenMoreMenu] = useState(false)
   const [creatingRouting, setCreatingRouting] = useState(false)
+  const [generandoCxP, setGenerandoCxP] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const [repricingDialogOpen, setRepricingDialogOpen] = useState(false)
   const [repricingReason, setRepricingReason] = useState('')
@@ -779,6 +780,73 @@ export default function QuotationDetailPage() {
 
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
+  }
+
+  const handleGenerarCxP = async () => {
+    if (!quotation) return
+
+    if (!selectedAgent) {
+      toast.error('Esta cotización no tiene una tarifa seleccionada. Ve a Pricing para seleccionar una tarifa antes de generar la CxP.')
+      return
+    }
+
+    if (!selectedAgent.agent_id) {
+      toast.error('La tarifa seleccionada no tiene un agente vinculado. Edítala en Pricing Comparison para asociar un agente.')
+      return
+    }
+
+    setGenerandoCxP(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { toast.error('No se pudo validar el usuario'); return }
+
+      const { data: proveedor, error: provError } = await supabase
+        .from('proveedores')
+        .select('id, nombre, moneda, terminos_pago')
+        .eq('agente_id', selectedAgent.agent_id)
+        .maybeSingle()
+
+      if (provError) {
+        toast.error('Error al buscar proveedor: ' + provError.message)
+        return
+      }
+
+      if (!proveedor) {
+        toast.error(
+          `El agente "${selectedAgent.agente_nombre}" no tiene un proveedor vinculado. ` +
+          'Ve a Proveedores → edita o crea el proveedor y vincula el agente.'
+        )
+        return
+      }
+
+      const monto = Number(selectedAgent.costo || 0)
+      const moneda = selectedAgent.moneda || proveedor.moneda || 'USD'
+      const today = new Date().toISOString().split('T')[0]
+      const terminos = Number(proveedor.terminos_pago ?? 30)
+      const vencimiento = new Date(Date.now() + terminos * 86400000).toISOString().split('T')[0]
+
+      const { error: insertError } = await supabase.from('cuentas_pagar').insert({
+        proveedor_id: proveedor.id,
+        quotation_id: quotation.id,
+        descripcion: `Flete - ${quotation.quotation_number}`,
+        monto,
+        moneda,
+        fecha_factura: today,
+        fecha_vencimiento: vencimiento,
+        notas: `Generado desde cotización ${quotation.quotation_number}`,
+        created_by: user.id,
+      })
+
+      if (insertError) {
+        toast.error('Error al crear la cuenta por pagar: ' + insertError.message)
+        return
+      }
+
+      toast.success(`Cuenta por pagar creada para ${proveedor.nombre}. Ve a Cuentas por Pagar para registrar el pago.`)
+      setOpenMoreMenu(false)
+    } finally {
+      setGenerandoCxP(false)
+    }
   }
 
   const duplicateQuotation = async () => {
@@ -1385,7 +1453,8 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
           {(canManagePricing ||
             canEditQuotation ||
-            (canGenerateSI && quotation.status === 'Ganada')) && (
+            (canGenerateSI && quotation.status === 'Ganada') ||
+            (canGenerateCxP && quotation.status === 'Ganada')) && (
             <div className="relative">
               <button
                 type="button"
@@ -1453,6 +1522,18 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     >
                       <RefreshCw className="h-4 w-4" />
                       Reabrir para Repricing
+                    </button>
+                  )}
+
+                  {canGenerateCxP && quotation.status === 'Ganada' && (
+                    <button
+                      type="button"
+                      onClick={handleGenerarCxP}
+                      disabled={generandoCxP}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                    >
+                      <CreditCard className="h-4 w-4" />
+                      {generandoCxP ? 'Generando CxP...' : 'Generar Cuenta por Pagar'}
                     </button>
                   )}
                 </div>

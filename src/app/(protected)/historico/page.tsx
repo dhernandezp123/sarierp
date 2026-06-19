@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Eye } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
@@ -144,6 +143,46 @@ const getStatusBadgeClass = (status?: string | null) => {
   return 'bg-slate-100 text-slate-600'
 }
 
+// ── Fase 19: columnas # Cont. y Vence ────────────────────────────────────────
+
+function isFclFtl(quote: any): boolean {
+  const t = (quote.quote_type || '').toLowerCase()
+  const s = (quote.service_product || '').toLowerCase()
+  return t.includes('fcl') || t.includes('ftl') || s.includes('fcl') || s.includes('ftl')
+}
+
+function getUnitCount(quote: any): string {
+  if (isFclFtl(quote)) {
+    const total = (quote.quotation_containers || []).reduce(
+      (sum: number, c: any) => sum + Number(c.quantity || 0), 0
+    )
+    return total > 0 ? `${total} cont.` : '—'
+  }
+  const total = (quote.quotation_cargo_lines || []).reduce(
+    (sum: number, c: any) => sum + Number(c.quantity || 0), 0
+  )
+  return total > 0 ? `${total} bts` : '—'
+}
+
+type ExpiryDisplay = { label: string; cls: string }
+
+function getExpiryDisplay(quote: any): ExpiryDisplay | null {
+  const selected = (quote.agent_quotes || []).find((aq: any) => aq.is_selected)
+  if (!selected?.valid_until) return null
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const expiry = new Date(selected.valid_until + 'T00:00:00')
+  const diffDays = Math.floor((expiry.getTime() - today.getTime()) / 86400000)
+  const label = expiry.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+  if (diffDays < 0) return { label, cls: 'bg-red-100 text-red-700 ring-red-200' }
+  if (diffDays <= 7) return { label, cls: 'bg-orange-100 text-orange-700 ring-orange-200' }
+  return { label, cls: 'bg-slate-100 text-slate-600 ring-slate-200' }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function HistoricoPage() {
   const router = useRouter()
 
@@ -162,7 +201,10 @@ export default function HistoricoPage() {
       .select(`
         *,
         cliente:clientes(*),
-        created_by_profile:profiles!quotations_created_by_fkey(*)
+        created_by_profile:profiles!quotations_created_by_fkey(*),
+        agent_quotes(valid_until, is_selected),
+        quotation_containers(quantity),
+        quotation_cargo_lines(quantity)
       `)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -395,16 +437,16 @@ export default function HistoricoPage() {
                     Tipo
                   </TableHead>
 
-                  <TableHead className="w-[110px] text-white whitespace-nowrap">
-                    Incoterm
+                  <TableHead className="w-[90px] text-white whitespace-nowrap">
+                    # Unid.
+                  </TableHead>
+
+                  <TableHead className="w-[120px] text-white whitespace-nowrap">
+                    Vence
                   </TableHead>
 
                   <TableHead className="w-[140px] px-4 py-3 text-left text-white whitespace-nowrap">
                     Estado
-                  </TableHead>
-
-                  <TableHead className="w-[90px] text-white whitespace-nowrap">
-                    Detalle
                   </TableHead>
 
                 </TableRow>
@@ -456,8 +498,20 @@ export default function HistoricoPage() {
                       </span>
                     </TableCell>
 
+                    <TableCell className="px-4 py-3 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">
+                      {getUnitCount(quote)}
+                    </TableCell>
+
                     <TableCell className="px-4 py-3 whitespace-nowrap">
-                      {quote.incoterm}
+                      {(() => {
+                        const exp = getExpiryDisplay(quote)
+                        if (!exp) return <span className="text-slate-300 text-xs">—</span>
+                        return (
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${exp.cls}`}>
+                            {exp.label}
+                          </span>
+                        )
+                      })()}
                     </TableCell>
 
                     <TableCell className="px-4 py-3">
@@ -468,19 +522,6 @@ export default function HistoricoPage() {
                       >
                         {quote.status || 'Solicitud'}
                       </span>
-                    </TableCell>
-
-                    <TableCell className="px-4 py-3 whitespace-nowrap">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          router.push(`/quotations/${quote.id}`)
-                        }}
-                        title="Ver detalle"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
                     </TableCell>
 
                   </TableRow>

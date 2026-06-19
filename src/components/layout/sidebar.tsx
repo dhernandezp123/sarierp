@@ -307,10 +307,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
           </span>
 
           <span className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-[0.22em] text-[#EF8E01]">
-              Sari Express
-            </span>
-            <span className="mt-1 block truncate text-base font-bold leading-tight tracking-tight text-white">
+            <span className="block truncate text-base font-bold leading-tight tracking-tight text-white">
               Forwarders ERP
             </span>
             <span className="mt-1 block truncate text-[11px] text-slate-400">
