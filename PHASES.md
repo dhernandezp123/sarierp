@@ -157,6 +157,117 @@ Páginas implementadas:
 
 ---
 
+## Fase 11 — Facturación SAR Honduras (cumplimiento fiscal)
+**Estado:** 🔲 Pendiente — arrancar próxima sesión
+
+### Contexto
+El módulo de facturación actual (`/invoicing`) tiene estructura base pero NO cumple los
+requisitos del Art. 10 y 11 del Reglamento del SAR Honduras para facturas de autoimpresor.
+
+### Lo que ya existe ✅
+- `company_settings` tiene: `legal_name`, `trade_name`, `rtn`, `address`, `phone`, `email`
+  → cubre los datos del EMISOR requeridos por Art. 10
+- Módulo `/invoicing`: lista, nueva factura, detalle con pagos, flujo de estados
+- ISV 15% en líneas de factura
+- Datos del cliente: nombre, RTN, dirección, email
+
+### Gaps a implementar ❌
+
+#### 1. Nueva tabla `cai_ranges` (gestión de rangos CAI del SAR)
+```
+id, cai (text), rango_desde (text), rango_hasta (text),
+fecha_limite_emision (date), lugar_emision (text),
+is_active (bool), created_at, created_by
+```
+- Un CAI cubre N facturas consecutivas dentro del rango autorizado
+- El sistema usa el rango activo al crear cada factura
+- Formato número SAR: `NNN-NNN-NN-NNNNNNNN` (16 dígitos, ej. `000-001-01-00000001`)
+
+#### 2. Campos nuevos en tabla `invoices`
+```
+cai              text        — heredado del cai_range activo al crear
+rango_desde      text        — heredado
+rango_hasta      text        — heredado
+fecha_limite_emision date    — heredado
+lugar_emision    text        — heredado / editable
+es_exonerado     boolean default false
+orden_compra_exenta     text (nullable) — No. OCE para exonerados
+no_constancia_exonerado text (nullable) — constancia del registro
+no_registro_sag         text (nullable) — registro SAG agropecuario
+isv_15_amount    numeric     — monto gravado al 15% (renombrar tax_amount)
+isv_18_rate      numeric default 0
+isv_18_amount    numeric default 0
+importe_exento   numeric default 0
+importe_exonerado numeric default 0
+```
+
+#### 3. Cambio en formato de número de factura
+- Actual: `SARI-FAC-202506-001`
+- SAR requiere: `NNN-NNN-NN-NNNNNNNN` dentro del rango autorizado
+- El número se genera como el siguiente correlativo dentro del `cai_range` activo
+- Mantener formato actual para Proformas (no son documentos fiscales)
+
+#### 4. Formulario nueva factura — campos adicionales
+- CAI se auto-hereda del rango activo (lectura)
+- Rango autorizado y fecha límite se muestran (solo lectura)
+- Toggle "Cliente exonerado"
+- Si exonerado: campos OCE, constancia, SAG
+- Selector de tasa ISV por línea (15% / 18% / Exento)
+
+#### 5. Página de administración de rangos CAI (`/settings/cai` o tab en company settings)
+- CRUD de rangos CAI
+- Marcar uno como activo
+- Alerta cuando el rango esté cerca de agotarse o la fecha límite próxima
+
+#### 6. PDF de Factura SAR-compliant (`src/components/pdf/invoice-pdf.tsx`)
+Debe incluir en la cabecera:
+- Logo + razón social + RTN + nombre comercial + dirección + tel + email (de company_settings)
+- "FACTURA" como denominación
+- Número en formato SAR: `NNN-NNN-NN-NNNNNNNN`
+- Fecha de emisión
+- "MODO DEMO / No es documento fiscal válido" si en modo demo
+
+Datos del cliente:
+- Nombre / razón social + RTN + dirección
+
+Cuerpo: líneas de detalle con descripción, qty, precio, ISV %, importe
+
+Totales (estructura SAR):
+- No. Orden de compra exenta (si aplica)
+- No. Constancia de exoneración (si aplica)
+- No. Registro SAG (si aplica)
+- Descuento total
+- Importe exento
+- Importe exonerado
+- Importe gravado 15%
+- Importe gravado 18%
+- ISV 15%
+- ISV 18%
+- Envío
+- **TOTAL FACTURA** (en letras)
+
+Pie de página (datos SAR obligatorios):
+- Rango autorizado del: ... al ...
+- Fecha de vencimiento: DD/MM/YYYY
+- CAI: XXXXXX-XXXXX-XXXXX-XXXXXXXX-XXXXX-XX
+- Lugar de emisión: ...
+- Original: Cliente / Copia: Emisor
+
+### Orden de implementación sugerida
+1. SQL migration (`sql/20260619_phase11_sar_invoicing.sql`)
+   - Tabla `cai_ranges`
+   - Alter `invoices` (agregar campos SAR)
+2. Página `/settings/cai` — CRUD de rangos CAI
+3. Actualizar formulario nueva factura (herencia CAI + campos exonerados + ISV por línea)
+4. PDF de factura (`invoice-pdf.tsx`)
+5. Botón "Imprimir / Descargar PDF" en detalle de factura
+
+### Nota sobre company_settings
+Agregar a `company_settings`:
+- `lugar_emision_defecto` text — punto de emisión por defecto para facturas
+
+---
+
 ## Decisiones técnicas confirmadas
 
 - **Ingreso de trackings:** combinación escáner de barras + tipeo manual
