@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
@@ -12,6 +12,8 @@ import {
   cardClass,
   fieldClass,
 } from '@/src/lib/ui-classes'
+
+type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
 type InvoiceItem = {
   id: string
@@ -46,6 +48,19 @@ type CaiRange = {
   lugar_emision: string | null
 }
 
+type ParentInvoice = {
+  id: string
+  invoice_number: string | null
+  invoice_type: InvoiceType
+  cliente_id: string | null
+  cliente_nombre: string | null
+  cliente_rtn: string | null
+  cliente_direccion: string | null
+  cliente_email: string | null
+  total: number
+  currency: string
+}
+
 function newItem(): InvoiceItem {
   return {
     id: crypto.randomUUID(),
@@ -67,13 +82,28 @@ function fmtDate(iso: string) {
   return `${d}/${m}/${y}`
 }
 
+const IS_FISCAL: Record<InvoiceType, boolean> = {
+  Factura: true,
+  'Nota de Crédito': true,
+  'Nota de Débito': true,
+  Proforma: false,
+}
+
+const IS_NOTE: Record<InvoiceType, boolean> = {
+  'Nota de Crédito': true,
+  'Nota de Débito': true,
+  Factura: false,
+  Proforma: false,
+}
+
 export default function NewInvoicePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useUser()
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  const [invoiceType, setInvoiceType] = useState<'Proforma' | 'Factura'>('Factura')
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>('Factura')
   const [clienteId, setClienteId] = useState('')
   const [quotationId, setQuotationId] = useState('')
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10))
@@ -81,6 +111,7 @@ export default function NewInvoicePage() {
   const [currency, setCurrency] = useState('USD')
   const [exchangeRate, setExchangeRate] = useState('25.30')
   const [notes, setNotes] = useState('')
+  const [motivo, setMotivo] = useState('')
   const [items, setItems] = useState<InvoiceItem[]>([newItem()])
 
   // SAR fields
@@ -90,26 +121,84 @@ export default function NewInvoicePage() {
   const [noConstanciaExonerado, setNoConstanciaExonerado] = useState('')
   const [noRegistroSag, setNoRegistroSag] = useState('')
 
+  // Parent invoice (for NC/ND)
+  const [parentInvoice, setParentInvoice] = useState<ParentInvoice | null>(null)
+  const parentId = searchParams.get('parent')
+  const docType = searchParams.get('doc_type') // 'nc' | 'nd'
+
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [quotations, setQuotations] = useState<Quotation[]>([])
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('clientes').select('id, nombre, rtn, direccion, email').order('nombre'),
-      supabase.from('cai_ranges').select('*').eq('is_active', true).limit(1).single(),
-      supabase.from('company_settings').select('exchange_rate_usd_hnl').limit(1).single(),
-    ]).then(([clientesRes, caiRes, settingsRes]) => {
+    const init = async () => {
+      const [clientesRes, caiRes, settingsRes] = await Promise.all([
+        supabase.from('clientes').select('id, nombre, rtn, direccion, email').order('nombre'),
+        supabase.from('cai_ranges').select('*').eq('is_active', true).limit(1).single(),
+        supabase.from('company_settings').select('exchange_rate_usd_hnl').limit(1).single(),
+      ])
+
       setClientes((clientesRes.data || []) as Cliente[])
       if (caiRes.data) setActiveCai(caiRes.data as CaiRange)
       if (settingsRes.data?.exchange_rate_usd_hnl) {
         setExchangeRate(String(settingsRes.data.exchange_rate_usd_hnl))
       }
-    })
-  }, [])
+
+      // If creating NC/ND from a parent invoice
+      if (parentId) {
+        const type: InvoiceType = docType === 'nd' ? 'Nota de Débito' : 'Nota de Crédito'
+        setInvoiceType(type)
+
+        const { data: parent } = await supabase
+          .from('invoices')
+          .select('id, invoice_number, invoice_type, cliente_id, cliente_nombre, cliente_rtn, cliente_direccion, cliente_email, total, currency')
+          .eq('id', parentId)
+          .single()
+
+        if (parent) {
+          setParentInvoice(parent as ParentInvoice)
+          setCurrency(parent.currency)
+          if (parent.cliente_id) {
+            setClienteId(parent.cliente_id)
+            setSelectedCliente({
+              id: parent.cliente_id,
+              nombre: parent.cliente_nombre || '',
+              rtn: parent.cliente_rtn,
+              direccion: parent.cliente_direccion,
+              email: parent.cliente_email,
+            })
+          }
+
+          // Pre-fill items from parent
+          const { data: parentItems } = await supabase
+            .from('invoice_items')
+            .select('description, quantity, unit_price, amount, sort_order')
+            .eq('invoice_id', parentId)
+            .order('sort_order')
+
+          if (parentItems && parentItems.length > 0) {
+            setItems(parentItems.map((it) => ({
+              id: crypto.randomUUID(),
+              description: it.description,
+              quantity: String(it.quantity),
+              unit_price: String(it.unit_price),
+              amount: it.amount,
+              isv_rate: 15 as const,
+            })))
+          }
+        }
+      } else {
+        // Set type from query param if present (direct navigation)
+        if (docType === 'nc') setInvoiceType('Nota de Crédito')
+        else if (docType === 'nd') setInvoiceType('Nota de Débito')
+      }
+    }
+
+    init()
+  }, [parentId, docType])
 
   useEffect(() => {
-    if (!clienteId) { setQuotations([]); setQuotationId(''); return }
+    if (!clienteId || parentId) return
     const c = clientes.find((x) => x.id === clienteId) || null
     setSelectedCliente(c)
     supabase
@@ -120,7 +209,7 @@ export default function NewInvoicePage() {
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .then(({ data }) => setQuotations((data || []) as Quotation[]))
-  }, [clienteId, clientes])
+  }, [clienteId, clientes, parentId])
 
   const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
     setItems((prev) =>
@@ -139,7 +228,8 @@ export default function NewInvoicePage() {
     setItems((prev) => prev.filter((it) => it.id !== id))
   }
 
-  // Totals breakdown (SAR)
+  // Totals
+  const isFiscal = IS_FISCAL[invoiceType]
   const importeExento = items.filter((i) => i.isv_rate === 0).reduce((s, i) => s + i.amount, 0)
   const importeGravado15 = items.filter((i) => i.isv_rate === 15).reduce((s, i) => s + i.amount, 0)
   const importeGravado18 = items.filter((i) => i.isv_rate === 18).reduce((s, i) => s + i.amount, 0)
@@ -150,7 +240,7 @@ export default function NewInvoicePage() {
   const total = subtotal + taxAmount
   const totalLps = currency === 'USD' ? total * (parseFloat(exchangeRate) || 1) : total
 
-  const generateNumber = async (type: 'Proforma' | 'Factura'): Promise<string> => {
+  const generateNumber = async (type: InvoiceType): Promise<string> => {
     if (type === 'Proforma') {
       const now = new Date()
       const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -167,52 +257,52 @@ export default function NewInvoicePage() {
       return `${prefix}${String(seq).padStart(3, '0')}`
     }
 
-    // Factura: SAR format within active CAI range
-    if (!activeCai) {
-      // Fallback to SARI-FAC format if no CAI configured
-      const now = new Date()
-      const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
-      const prefix = `SARI-FAC-${ym}-`
+    // All fiscal types: Factura, Nota de Crédito, Nota de Débito
+    if (activeCai) {
+      const lastDash = activeCai.rango_desde.lastIndexOf('-')
+      const prefix = activeCai.rango_desde.substring(0, lastDash + 1)
+      const startNum = parseInt(activeCai.rango_desde.substring(lastDash + 1), 10)
+      const endNum = parseInt(activeCai.rango_hasta.substring(lastDash + 1), 10)
+      const digits = activeCai.rango_desde.length - lastDash - 1
+
+      // Find last used across ALL fiscal docs in this CAI
       const { data } = await supabase
         .from('invoices')
         .select('invoice_number')
-        .eq('invoice_type', 'Factura')
-        .like('invoice_number', `${prefix}%`)
+        .eq('cai', activeCai.cai)
         .order('invoice_number', { ascending: false })
         .limit(1)
-      const last = data?.[0]?.invoice_number?.replace(prefix, '')
-      const seq = last ? parseInt(last, 10) + 1 : 1
-      return `${prefix}${String(seq).padStart(3, '0')}`
+
+      let nextNum: number
+      if (data?.[0]?.invoice_number) {
+        const lastDashUsed = data[0].invoice_number.lastIndexOf('-')
+        nextNum = parseInt(data[0].invoice_number.substring(lastDashUsed + 1), 10) + 1
+      } else {
+        nextNum = startNum
+      }
+
+      if (nextNum > endNum) {
+        throw new Error('El rango CAI está agotado. Registra un nuevo rango antes de emitir documentos fiscales.')
+      }
+
+      return `${prefix}${String(nextNum).padStart(digits, '0')}`
     }
 
-    // SAR sequential within rango
-    const lastDash = activeCai.rango_desde.lastIndexOf('-')
-    const prefix = activeCai.rango_desde.substring(0, lastDash + 1)
-    const startNum = parseInt(activeCai.rango_desde.substring(lastDash + 1), 10)
-    const endNum = parseInt(activeCai.rango_hasta.substring(lastDash + 1), 10)
-    const digits = activeCai.rango_desde.length - lastDash - 1
-
+    // Fallback internal numbering
+    const now = new Date()
+    const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
+    const internalType = type === 'Nota de Crédito' ? 'NC' : type === 'Nota de Débito' ? 'ND' : 'FAC'
+    const prefix = `SARI-${internalType}-${ym}-`
     const { data } = await supabase
       .from('invoices')
       .select('invoice_number')
-      .eq('cai', activeCai.cai)
-      .eq('invoice_type', 'Factura')
+      .eq('invoice_type', type)
+      .like('invoice_number', `${prefix}%`)
       .order('invoice_number', { ascending: false })
       .limit(1)
-
-    let nextNum: number
-    if (data?.[0]?.invoice_number) {
-      const lastDashUsed = data[0].invoice_number.lastIndexOf('-')
-      nextNum = parseInt(data[0].invoice_number.substring(lastDashUsed + 1), 10) + 1
-    } else {
-      nextNum = startNum
-    }
-
-    if (nextNum > endNum) {
-      throw new Error('El rango CAI está agotado. Registra un nuevo rango antes de emitir facturas.')
-    }
-
-    return `${prefix}${String(nextNum).padStart(digits, '0')}`
+    const last = data?.[0]?.invoice_number?.replace(prefix, '')
+    const seq = last ? parseInt(last, 10) + 1 : 1
+    return `${prefix}${String(seq).padStart(3, '0')}`
   }
 
   const handleSave = async () => {
@@ -225,7 +315,11 @@ export default function NewInvoicePage() {
       toast.error('Todas las líneas deben tener descripción')
       return
     }
-    if (invoiceType === 'Factura' && esExonerado && !ordenCompraExenta) {
+    if (IS_NOTE[invoiceType] && !motivo) {
+      toast.error('El motivo es requerido para notas de crédito / débito')
+      return
+    }
+    if (isFiscal && esExonerado && !ordenCompraExenta) {
       toast.error('Ingresa el número de Orden de Compra Exenta')
       return
     }
@@ -240,8 +334,6 @@ export default function NewInvoicePage() {
       setSaving(false)
       return
     }
-
-    const isFact = invoiceType === 'Factura'
 
     const { data: invoice, error: invError } = await supabase
       .from('invoices')
@@ -265,16 +357,18 @@ export default function NewInvoicePage() {
         exchange_rate: parseFloat(exchangeRate) || 1,
         total_lps: currency === 'USD' ? totalLps : null,
         notes: notes || null,
+        motivo: IS_NOTE[invoiceType] ? motivo : null,
+        parent_invoice_id: parentId || null,
         created_by: user?.id || null,
-        // SAR fields (solo Factura)
-        ...(isFact && activeCai ? {
+        // SAR fields (solo documentos fiscales)
+        ...(isFiscal && activeCai ? {
           cai: activeCai.cai,
           rango_desde: activeCai.rango_desde,
           rango_hasta: activeCai.rango_hasta,
           fecha_limite_emision: activeCai.fecha_limite_emision,
           lugar_emision: activeCai.lugar_emision || null,
         } : {}),
-        ...(isFact ? {
+        ...(isFiscal ? {
           es_exonerado: esExonerado,
           orden_compra_exenta: esExonerado ? ordenCompraExenta || null : null,
           no_constancia_exonerado: esExonerado ? noConstanciaExonerado || null : null,
@@ -289,7 +383,7 @@ export default function NewInvoicePage() {
       .single()
 
     if (invError || !invoice) {
-      toast.error('Error al crear la factura')
+      toast.error('Error al crear el documento')
       setSaving(false)
       return
     }
@@ -305,7 +399,7 @@ export default function NewInvoicePage() {
 
     const { error: itemsError } = await supabase.from('invoice_items').insert(lineItems)
     if (itemsError) {
-      toast.error('Error al guardar líneas de la factura')
+      toast.error('Error al guardar líneas del documento')
       setSaving(false)
       return
     }
@@ -314,7 +408,13 @@ export default function NewInvoicePage() {
     router.push(`/invoicing/${invoice.id}`)
   }
 
-  const isFact = invoiceType === 'Factura'
+  const isNote = IS_NOTE[invoiceType]
+  const clienteLocked = !!parentInvoice
+
+  const docLabel = invoiceType === 'Nota de Crédito' ? 'Nota de Crédito'
+    : invoiceType === 'Nota de Débito' ? 'Nota de Débito'
+    : invoiceType === 'Proforma' ? 'Proforma'
+    : 'Factura'
 
   return (
     <div className="space-y-6">
@@ -322,7 +422,7 @@ export default function NewInvoicePage() {
       <div className="flex items-center gap-4">
         <button
           type="button"
-          onClick={() => router.push('/invoicing')}
+          onClick={() => router.push(parentId ? `/invoicing/${parentId}` : '/invoicing')}
           className={secondaryButtonClass}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -332,59 +432,84 @@ export default function NewInvoicePage() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
             Facturación
           </p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">Nueva factura</h1>
+          <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
+            {parentInvoice ? `Nueva ${docLabel}` : 'Nuevo documento'}
+          </h1>
         </div>
       </div>
 
-      {/* CAI alert banner (solo Factura sin CAI activo) */}
-      {isFact && !activeCai && (
+      {/* Alert: no CAI activo para documentos fiscales */}
+      {isFiscal && !activeCai && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>No hay un rango CAI activo. Las facturas se numerarán en formato interno. <a href="/settings/cai" className="underline font-semibold">Registrar rango CAI →</a></span>
+          <span>No hay un rango CAI activo. El documento se numerará en formato interno. <a href="/settings/cai" className="underline font-semibold">Registrar rango CAI →</a></span>
+        </div>
+      )}
+
+      {/* Panel factura original (NC/ND) */}
+      {parentInvoice && (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-800/50 dark:bg-blue-950/20">
+          <LinkIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+          <div className="text-sm">
+            <p className="font-semibold text-blue-800 dark:text-blue-200">
+              Emitida contra: {parentInvoice.invoice_type} {parentInvoice.invoice_number}
+            </p>
+            <p className="text-blue-600 dark:text-blue-400">
+              Cliente: {parentInvoice.cliente_nombre} · Total: {parentInvoice.currency} {parentInvoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+          </div>
         </div>
       )}
 
       {/* Main form */}
       <div className="grid gap-6 xl:grid-cols-3">
-        {/* Left col */}
         <div className="space-y-6 xl:col-span-2">
           <section className={cardClass}>
             <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Datos generales</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              {/* Tipo */}
+              {/* Tipo (bloqueado si viene de NC/ND parent) */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                   Tipo de documento <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={invoiceType}
-                  onChange={(e) => setInvoiceType(e.target.value as typeof invoiceType)}
-                  className={`${fieldClass} ${reqClass(submitted, invoiceType)}`}
+                  onChange={(e) => setInvoiceType(e.target.value as InvoiceType)}
+                  disabled={!!parentInvoice}
+                  className={`${fieldClass} ${reqClass(submitted, invoiceType)} disabled:opacity-60`}
                 >
                   <option value="Factura">Factura</option>
                   <option value="Proforma">Proforma</option>
+                  <option value="Nota de Crédito">Nota de Crédito</option>
+                  <option value="Nota de Débito">Nota de Débito</option>
                 </select>
               </div>
 
-              {/* Cliente */}
+              {/* Cliente (bloqueado si viene de parent) */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                   Cliente <span className="text-red-500">*</span>
                 </label>
-                <select
-                  value={clienteId}
-                  onChange={(e) => setClienteId(e.target.value)}
-                  className={`${fieldClass} ${reqClass(submitted, clienteId)}`}
-                >
-                  <option value="">Seleccionar cliente...</option>
-                  {clientes.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
+                {clienteLocked ? (
+                  <div className={`${fieldClass} bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300`}>
+                    {selectedCliente?.nombre || '—'}
+                  </div>
+                ) : (
+                  <select
+                    value={clienteId}
+                    onChange={(e) => setClienteId(e.target.value)}
+                    className={`${fieldClass} ${reqClass(submitted, clienteId)}`}
+                  >
+                    <option value="">Seleccionar cliente...</option>
+                    {clientes.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nombre}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
-              {/* Cotización vinculada */}
-              {quotations.length > 0 && (
+              {/* Cotización (solo sin parent y sin nota) */}
+              {!parentId && !isNote && quotations.length > 0 && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Cotización vinculada (opcional)
@@ -418,18 +543,20 @@ export default function NewInvoicePage() {
                 />
               </div>
 
-              {/* Fecha vencimiento */}
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Fecha de vencimiento
-                </label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className={fieldClass}
-                />
-              </div>
+              {/* Fecha vencimiento (no aplica para NC/ND) */}
+              {!isNote && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Fecha de vencimiento
+                  </label>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
+              )}
 
               {/* Moneda */}
               <div>
@@ -439,7 +566,8 @@ export default function NewInvoicePage() {
                 <select
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
-                  className={fieldClass}
+                  disabled={clienteLocked}
+                  className={`${fieldClass} disabled:opacity-60`}
                 >
                   <option value="USD">USD</option>
                   <option value="HNL">HNL</option>
@@ -464,6 +592,22 @@ export default function NewInvoicePage() {
               )}
             </div>
 
+            {/* Motivo (requerido para NC/ND) */}
+            {isNote && (
+              <div className="mt-4">
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  Motivo <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  rows={2}
+                  placeholder={`Describe el motivo de la ${docLabel.toLowerCase()}...`}
+                  className={`${fieldClass} resize-none ${reqClass(submitted, motivo)}`}
+                />
+              </div>
+            )}
+
             {/* Notas */}
             <div className="mt-4">
               <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
@@ -479,8 +623,8 @@ export default function NewInvoicePage() {
             </div>
           </section>
 
-          {/* CAI info (solo Factura con CAI activo) */}
-          {isFact && activeCai && (
+          {/* CAI info (solo documentos fiscales con CAI activo) */}
+          {isFiscal && activeCai && (
             <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/50 dark:bg-emerald-950/20">
               <div className="mb-2 flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -506,8 +650,8 @@ export default function NewInvoicePage() {
             </section>
           )}
 
-          {/* Exoneración (solo Factura) */}
-          {isFact && (
+          {/* Exoneración (solo documentos fiscales) */}
+          {isFiscal && (
             <section className={cardClass}>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-base font-semibold text-slate-900 dark:text-white">Exoneración</h2>
@@ -563,7 +707,7 @@ export default function NewInvoicePage() {
           {/* Line items */}
           <section className={cardClass}>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Líneas de factura</h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Líneas del documento</h2>
               <button
                 type="button"
                 onClick={() => setItems((prev) => [...prev, newItem()])}
@@ -575,12 +719,11 @@ export default function NewInvoicePage() {
             </div>
 
             <div className="space-y-2">
-              {/* Header */}
-              <div className={`grid gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 ${isFact ? 'grid-cols-[1fr_72px_110px_90px_110px_36px]' : 'grid-cols-[1fr_72px_110px_110px_36px]'}`}>
+              <div className={`grid gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 ${isFiscal ? 'grid-cols-[1fr_72px_110px_90px_110px_36px]' : 'grid-cols-[1fr_72px_110px_110px_36px]'}`}>
                 <span>Descripción</span>
                 <span className="text-right">Qty</span>
                 <span className="text-right">Precio unit.</span>
-                {isFact && <span className="text-center">ISV</span>}
+                {isFiscal && <span className="text-center">ISV</span>}
                 <span className="text-right">Importe</span>
                 <span />
               </div>
@@ -588,7 +731,7 @@ export default function NewInvoicePage() {
               {items.map((it) => (
                 <div
                   key={it.id}
-                  className={`grid items-center gap-2 ${isFact ? 'grid-cols-[1fr_72px_110px_90px_110px_36px]' : 'grid-cols-[1fr_72px_110px_110px_36px]'}`}
+                  className={`grid items-center gap-2 ${isFiscal ? 'grid-cols-[1fr_72px_110px_90px_110px_36px]' : 'grid-cols-[1fr_72px_110px_110px_36px]'}`}
                 >
                   <input
                     type="text"
@@ -613,7 +756,7 @@ export default function NewInvoicePage() {
                     step="0.01"
                     className={`${fieldClass} text-right text-sm`}
                   />
-                  {isFact && (
+                  {isFiscal && (
                     <select
                       value={it.isv_rate}
                       onChange={(e) => updateItem(it.id, 'isv_rate', Number(e.target.value) as 0 | 15 | 18)}
@@ -641,12 +784,12 @@ export default function NewInvoicePage() {
           </section>
         </div>
 
-        {/* Right col: totals + actions */}
+        {/* Right col */}
         <div className="space-y-4">
           <section className={cardClass}>
             <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Resumen</h2>
             <div className="space-y-2 text-sm">
-              {isFact ? (
+              {isFiscal ? (
                 <>
                   {importeExento > 0 && (
                     <div className="flex justify-between">
@@ -708,7 +851,6 @@ export default function NewInvoicePage() {
             </div>
           </section>
 
-          {/* Cliente info snapshot */}
           {selectedCliente && (
             <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700/60 dark:bg-slate-900/50">
               <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Datos del cliente</p>
@@ -725,11 +867,11 @@ export default function NewInvoicePage() {
             disabled={saving}
             className={`w-full ${primaryButtonClass}`}
           >
-            {saving ? 'Guardando...' : `Crear ${invoiceType}`}
+            {saving ? 'Guardando...' : `Crear ${docLabel}`}
           </button>
           <button
             type="button"
-            onClick={() => router.push('/invoicing')}
+            onClick={() => router.push(parentId ? `/invoicing/${parentId}` : '/invoicing')}
             className={`w-full ${secondaryButtonClass}`}
           >
             Cancelar

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, Trash2, Download } from 'lucide-react'
+import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, Trash2, Download, MinusCircle, PlusCircle, Link as LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { supabase } from '../../../../lib/supabase/client'
@@ -49,6 +49,20 @@ type Invoice = {
   isv_18_amount: number
   importe_exento: number
   importe_exonerado: number
+  // NC/ND fields
+  parent_invoice_id: string | null
+  motivo: string | null
+}
+
+type LinkedNote = {
+  id: string
+  invoice_number: string | null
+  invoice_type: string
+  status: string
+  total: number
+  currency: string
+  issue_date: string | null
+  motivo: string | null
 }
 
 type CompanySettings = {
@@ -121,6 +135,7 @@ export default function InvoiceDetailPage() {
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [items, setItems] = useState<InvoiceItem[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
+  const [linkedNotes, setLinkedNotes] = useState<LinkedNote[]>([])
   const [companySetting, setCompanySetting] = useState<CompanySettings | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -138,17 +153,19 @@ export default function InvoiceDetailPage() {
 
   const fetchAll = async () => {
     setLoading(true)
-    const [invRes, itemsRes, paymentsRes, settingsRes] = await Promise.all([
+    const [invRes, itemsRes, paymentsRes, settingsRes, notesRes] = await Promise.all([
       supabase.from('invoices').select('*').eq('id', id).single(),
       supabase.from('invoice_items').select('*').eq('invoice_id', id).order('sort_order'),
       supabase.from('invoice_payments').select('*').eq('invoice_id', id).order('payment_date', { ascending: false }),
       supabase.from('company_settings').select('legal_name, trade_name, rtn, address, phone, email, invoice_footer_note').limit(1).single(),
+      supabase.from('invoices').select('id, invoice_number, invoice_type, status, total, currency, issue_date, motivo').eq('parent_invoice_id', id).order('created_at'),
     ])
 
     if (invRes.error) { toast.error('Factura no encontrada'); router.push('/invoicing'); return }
     setInvoice(invRes.data as Invoice)
     setItems((itemsRes.data || []) as InvoiceItem[])
     setPayments((paymentsRes.data || []) as Payment[])
+    setLinkedNotes((notesRes.data || []) as LinkedNote[])
     if (!settingsRes.error) setCompanySetting(settingsRes.data as CompanySettings)
     setLoading(false)
   }
@@ -314,12 +331,32 @@ export default function InvoiceDetailPage() {
               </button>
             )}
           </PDFDownloadLink>
+          {invoice.invoice_type === 'Factura' && !['Anulada'].includes(invoice.status) && (
+            <>
+              <button
+                type="button"
+                onClick={() => router.push(`/invoicing/new?parent=${invoice.id}&doc_type=nc`)}
+                className="inline-flex items-center gap-2 rounded-xl border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30"
+              >
+                <MinusCircle className="h-4 w-4" />
+                Nota de Crédito
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(`/invoicing/new?parent=${invoice.id}&doc_type=nd`)}
+                className="inline-flex items-center gap-2 rounded-xl border border-orange-300 px-4 py-2 text-sm font-semibold text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+              >
+                <PlusCircle className="h-4 w-4" />
+                Nota de Débito
+              </button>
+            </>
+          )}
           {!['Pagada', 'Anulada'].includes(invoice.status) && (
             <button
               type="button"
               onClick={cancelInvoice}
               disabled={cancelling}
-              className="inline-flex items-center gap-2 rounded-xl border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               <XCircle className="h-4 w-4" />
               Anular
@@ -480,6 +517,88 @@ export default function InvoiceDetailPage() {
             <section className={cardClass}>
               <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-white">Notas</h3>
               <p className="text-sm text-slate-600 dark:text-slate-400">{invoice.notes}</p>
+            </section>
+          )}
+
+          {/* Factura original (cuando este doc es NC/ND) */}
+          {invoice.parent_invoice_id && (
+            <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800/50 dark:bg-blue-950/20">
+              <div className="mb-2 flex items-center gap-2">
+                <LinkIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <p className="text-xs font-bold uppercase tracking-wide text-blue-700 dark:text-blue-400">
+                  Emitida contra
+                </p>
+              </div>
+              {invoice.motivo && (
+                <p className="mb-2 text-xs italic text-slate-600 dark:text-slate-400">{invoice.motivo}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => router.push(`/invoicing/${invoice.parent_invoice_id}`)}
+                className="text-sm font-semibold text-blue-600 underline dark:text-blue-400"
+              >
+                Ver factura original →
+              </button>
+            </section>
+          )}
+
+          {/* Notas vinculadas (NC/ND) — solo para Facturas */}
+          {linkedNotes.length > 0 && (
+            <section className={cardClass}>
+              <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Notas vinculadas</h3>
+              <div className="space-y-2">
+                {linkedNotes.map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    onClick={() => router.push(`/invoicing/${note.id}`)}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 text-left text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  >
+                    <div>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold mr-2 ${
+                        note.invoice_type === 'Nota de Crédito'
+                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                          : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                      }`}>
+                        {note.invoice_type === 'Nota de Crédito' ? 'NC' : 'ND'}
+                      </span>
+                      <span className="font-medium text-slate-900 dark:text-white">
+                        {note.invoice_number || 'Sin número'}
+                      </span>
+                      <span className="ml-2 text-xs text-slate-500">{formatDate(note.issue_date)}</span>
+                    </div>
+                    <span className={`font-semibold ${note.invoice_type === 'Nota de Crédito' ? 'text-rose-600 dark:text-rose-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                      {note.invoice_type === 'Nota de Crédito' ? '-' : '+'}{note.currency} {note.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {/* Balance efectivo */}
+              {invoice.invoice_type === 'Factura' && (
+                <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500 dark:text-slate-400">Factura original</span>
+                    <span>{invoice.currency} {invoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  {linkedNotes.map((note) => (
+                    <div key={note.id} className="flex justify-between text-sm">
+                      <span className="text-slate-500 dark:text-slate-400">{note.invoice_type === 'Nota de Crédito' ? 'Crédito' : 'Débito'}</span>
+                      <span className={note.invoice_type === 'Nota de Crédito' ? 'text-rose-600' : 'text-orange-600'}>
+                        {note.invoice_type === 'Nota de Crédito' ? '-' : '+'}{note.currency} {note.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold dark:border-slate-700">
+                    <span>Balance efectivo</span>
+                    <span className="text-slate-900 dark:text-white">
+                      {invoice.currency} {(
+                        invoice.total +
+                        linkedNotes.reduce((s, n) => s + (n.invoice_type === 'Nota de Débito' ? n.total : -n.total), 0)
+                      ).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 

@@ -9,10 +9,12 @@ import { supabase } from '../../../lib/supabase/client'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, cardClass, fieldClass } from '@/src/lib/ui-classes'
 
+type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
+
 type Invoice = {
   id: string
   invoice_number: string | null
-  invoice_type: 'Proforma' | 'Factura'
+  invoice_type: InvoiceType
   status: string
   cliente_nombre: string | null
   issue_date: string | null
@@ -20,6 +22,7 @@ type Invoice = {
   total: number
   currency: string
   quotation_id: string | null
+  parent_invoice_id: string | null
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -46,7 +49,7 @@ export default function InvoicingPage() {
   const [loading, setLoading] = useState(true)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [search, setSearch] = useState('')
-  const [filterType, setFilterType] = useState<'all' | 'Proforma' | 'Factura'>('all')
+  const [filterType, setFilterType] = useState<'all' | InvoiceType>('all')
   const [filterStatus, setFilterStatus] = useState('all')
 
   useEffect(() => { fetchInvoices() }, [])
@@ -55,7 +58,7 @@ export default function InvoicingPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('invoices')
-      .select('id, invoice_number, invoice_type, status, cliente_nombre, issue_date, due_date, total, currency, quotation_id')
+      .select('id, invoice_number, invoice_type, status, cliente_nombre, issue_date, due_date, total, currency, quotation_id, parent_invoice_id')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
@@ -94,7 +97,7 @@ export default function InvoicingPage() {
           </p>
           <h1 className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">Facturación</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Gestión de proformas y facturas.
+            Facturas, proformas, notas de crédito y débito.
           </p>
         </div>
         <button
@@ -143,6 +146,8 @@ export default function InvoicingPage() {
           <option value="all">Todos los tipos</option>
           <option value="Proforma">Proforma</option>
           <option value="Factura">Factura</option>
+          <option value="Nota de Crédito">Nota de Crédito</option>
+          <option value="Nota de Débito">Nota de Débito</option>
         </select>
         <select
           value={filterStatus}
@@ -205,11 +210,12 @@ export default function InvoicingPage() {
                       </td>
                       <td className="pr-4">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          inv.invoice_type === 'Proforma'
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                            : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          inv.invoice_type === 'Proforma' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                          : inv.invoice_type === 'Factura' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                          : inv.invoice_type === 'Nota de Crédito' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                          : 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
                         }`}>
-                          {inv.invoice_type}
+                          {inv.invoice_type === 'Nota de Crédito' ? 'NC' : inv.invoice_type === 'Nota de Débito' ? 'ND' : inv.invoice_type}
                         </span>
                       </td>
                       <td className="pr-4 text-slate-700 dark:text-slate-300">
