@@ -265,6 +265,10 @@ Pie de página (datos SAR obligatorios):
 ### Nota sobre company_settings
 Agregar a `company_settings`:
 - `lugar_emision_defecto` text — punto de emisión por defecto para facturas
+- `exchange_rate_usd_hnl` numeric — tasa de cambio USD → HNL vigente (ej. 25.30)
+  - El formulario de nueva factura debe leerla como valor por defecto del campo tipo de cambio
+  - Admin la actualiza desde Settings cuando el BCH cambie la tasa oficial
+  - Las facturas guardan la tasa usada al momento de emisión (ya existe `exchange_rate` en `invoices`)
 
 ---
 
