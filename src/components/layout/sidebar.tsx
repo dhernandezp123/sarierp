@@ -216,6 +216,16 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       href: '/miami/manifiestos',
       icon: ClipboardList,
     },
+    {
+      label: 'Inventario',
+      href: '/miami/inventario',
+      icon: Database,
+    },
+    {
+      label: 'Lista de Embarque',
+      href: '/miami/embarques',
+      icon: Route,
+    },
   ]
 
   const adminItems = [

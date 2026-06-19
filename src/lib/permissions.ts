@@ -48,6 +48,8 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/reports',
     '/historico',
     '/miami',
+    '/miami/inventario',
+    '/miami/embarques',
   ],
 
   Contabilidad: [

@@ -11,6 +11,7 @@ import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from 
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 
 const CARRIERS = ['UPS', 'FedEx', 'DHL', 'USPS', 'Amazon Logistics', 'OnTrac', 'LaserShip', 'Otro']
+const TIPOS_CARGA = ['Paquetería', 'LCL', 'Aéreo Consolidado'] as const
 
 type ClienteOption = { id: string; nombre: string; codigo_cliente: string | null }
 
@@ -29,6 +30,7 @@ export default function MiamiIngresoPage() {
   const [form, setForm] = useState({
     tracking_number: '',
     carrier: '',
+    tipo_carga: 'Paquetería',
     weight_lbs: '',
     length_in: '',
     width_in: '',
@@ -82,6 +84,8 @@ export default function MiamiIngresoPage() {
         .insert({
           tracking_number: form.tracking_number.trim().toUpperCase(),
           carrier:         form.carrier || null,
+          tipo_carga:      form.tipo_carga,
+          cargo_status:    'Recibido en Miami',
           weight_lbs,
           weight_kg:       weight_lbs ? parseFloat((weight_lbs * 0.453592).toFixed(2)) : null,
           length_in,
@@ -176,6 +180,13 @@ export default function MiamiIngresoPage() {
                   autoComplete="off"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Tipo de carga</label>
+              <select value={form.tipo_carga} onChange={set('tipo_carga')} className={fieldClass}>
+                {TIPOS_CARGA.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
 
             <div>
