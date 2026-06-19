@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 import { supabase } from '../../../../../lib/supabase/client'
 import { useUser } from '../../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
+import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { createNotification } from '@/src/lib/notifications'
 import { canTransition } from '@/src/lib/quotation-status'
 import { serviceProducts } from '@/src/lib/quotation-products'
@@ -86,6 +88,7 @@ export default function EditQuotationPage() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [quotationNumber, setQuotationNumber] = useState<string | null>(null)
   const [sendPricingDialogOpen, setSendPricingDialogOpen] = useState(false)
   const [savingAfterEdit, setSavingAfterEdit] = useState(false)
   const [countries, setCountries] = useState<any[]>([])
@@ -281,6 +284,7 @@ export default function EditQuotationPage() {
       observaciones: data.observaciones || '',
     })
 
+    setQuotationNumber(data.quotation_number || null)
     setLoading(false)
   }
 
@@ -927,7 +931,7 @@ export default function EditQuotationPage() {
   })
 
   if (userLoading || loading) {
-    return <div className="p-8">Cargando cotización...</div>
+    return <PageSkeleton cards={1} rows={10} />
   }
 
   if (!canEditQuotes) {
@@ -998,6 +1002,14 @@ export default function EditQuotationPage() {
   return (
     <>
       <div className="max-w-6xl space-y-6">
+        <Breadcrumbs
+          items={[
+            { label: 'Cotizaciones', href: '/quotations' },
+            { label: quotationNumber || 'Cotización', href: `/quotations/${params.id}` },
+            { label: 'Editar' },
+          ]}
+        />
+
         <div>
           <h1 className="text-4xl font-bold">Editar Cotización</h1>
           <p className="text-gray-500 mt-2">

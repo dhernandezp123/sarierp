@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { operationStatuses } from '@/src/lib/operation-status'
 import { supabase } from '@/src/lib/supabase/client'
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 
 type BookingItem = {
   id: string
@@ -230,9 +231,15 @@ export default function OperationsBookingsPage() {
 
   if (loading) {
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        Cargando bookings...
-      </p>
+      <div className="space-y-6">
+        <div>
+          <div className="h-7 w-56 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" />
+          <div className="mt-2 h-4 w-80 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
+          <TableSkeleton rows={7} cols={8} />
+        </div>
+      </div>
     )
   }
 

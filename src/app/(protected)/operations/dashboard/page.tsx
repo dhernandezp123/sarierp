@@ -12,6 +12,7 @@ import {
   Ship,
 } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 
 type ClientJoin = {
   nombre: string | null
@@ -477,9 +478,17 @@ export default function OperationsDashboardPage() {
 
   if (loading) {
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">
-        Cargando dashboard operativo...
-      </p>
+      <div className="space-y-6">
+        <div className="h-7 w-64 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-28 animate-pulse rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-800" />
+          ))}
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
+          <TableSkeleton rows={6} cols={6} />
+        </div>
+      </div>
     )
   }
 

@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 import { supabase } from '../../../../../lib/supabase/client'
 import { useUser } from '../../../../../hooks/useUser'
 import { cn } from '../../../../../lib/utils'
+import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import {
   CONDICIONES_PAGO,
   TIPOS_CLIENTE,
@@ -285,15 +287,19 @@ export default function EditarClientePage() {
   }
 
   if (loading) {
-    return (
-      <div className="p-8 text-slate-600 dark:text-slate-300">
-        Cargando cliente...
-      </div>
-    )
+    return <PageSkeleton cards={1} rows={8} />
   }
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs
+        items={[
+          { label: 'Clientes', href: '/clientes' },
+          { label: formData.nombre || 'Cliente', href: `/clientes/${clientId}` },
+          { label: 'Editar' },
+        ]}
+      />
+
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">

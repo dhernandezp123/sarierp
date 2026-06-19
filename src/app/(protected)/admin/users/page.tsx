@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 
 type Profile = {
   id: string
@@ -382,9 +383,9 @@ export default function AdminUsersPage() {
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           {loading ? (
-            <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
-              Cargando usuarios...
-            </p>
+            <div className="p-6">
+              <TableSkeleton rows={5} cols={5} />
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

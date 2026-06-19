@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase/client'
 import { cn } from '../../../lib/utils'
 import { allowedTransitions } from '@/src/lib/quotation-status'
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import {
   fieldClass,
   cardClass,
@@ -352,13 +353,13 @@ export default function HistoricoPage() {
 
           {loading ? (
 
-            <p className="p-6">
-              Cargando cotizaciones...
-            </p>
+            <div className="p-6">
+              <TableSkeleton rows={7} cols={7} />
+            </div>
 
           ) : filteredQuotations.length === 0 ? (
 
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-sm text-slate-500 dark:text-slate-400">
               No se encontraron cotizaciones con los filtros aplicados.
             </div>
 
