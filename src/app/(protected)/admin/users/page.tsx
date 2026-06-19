@@ -89,7 +89,7 @@ export default function AdminUsersPage() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, nombre, apellido, email, rol, status, is_active, approved_at, cliente_id, clientes(id, nombre, codigo_cliente)')
+      .select('id, nombre, apellido, email, rol, status, is_active, approved_at, cliente_id, clientes!cliente_id(id, nombre, codigo_cliente)')
       .order('created_at', { ascending: false })
 
     if (error) {
