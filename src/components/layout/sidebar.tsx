@@ -23,6 +23,7 @@ import {
   Package,
   ClipboardList,
   Warehouse,
+  ShieldCheck,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -206,6 +207,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       label: 'Config. Empresa',
       href: '/settings/company',
       icon: Building2,
+    },
+    {
+      label: 'Rangos CAI',
+      href: '/settings/cai',
+      icon: ShieldCheck,
     },
   ]
 

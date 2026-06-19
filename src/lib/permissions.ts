@@ -65,7 +65,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
   ],
 }
 
-export const SETTINGS_READ_PATHS = ['/settings/company']
+export const SETTINGS_READ_PATHS = ['/settings/company', '/settings/cai']
 
 export function canAccessPath(role: string | null | undefined, path: string) {
   if (!role) return false

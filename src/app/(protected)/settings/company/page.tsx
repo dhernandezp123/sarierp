@@ -25,6 +25,8 @@ type CompanySettings = {
   default_currency: string | null
   default_tax_rate: number | null
   invoice_footer_note: string | null
+  lugar_emision_defecto: string | null
+  exchange_rate_usd_hnl: number | null
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -59,6 +61,8 @@ export default function CompanySettingsPage() {
     default_currency: 'USD',
     default_tax_rate: 15,
     invoice_footer_note: '',
+    lugar_emision_defecto: '',
+    exchange_rate_usd_hnl: 25.30,
   })
 
   const isAdmin = profile?.rol === 'Admin'
@@ -96,6 +100,8 @@ export default function CompanySettingsPage() {
         default_currency: data.default_currency ?? 'USD',
         default_tax_rate: data.default_tax_rate ?? 15,
         invoice_footer_note: data.invoice_footer_note ?? '',
+        lugar_emision_defecto: data.lugar_emision_defecto ?? '',
+        exchange_rate_usd_hnl: data.exchange_rate_usd_hnl ?? 25.30,
       })
     }
     setLoading(false)
@@ -330,6 +336,29 @@ export default function CompanySettingsPage() {
                   min="0"
                   max="100"
                   step="0.01"
+                  className={`${fieldClass} disabled:opacity-60`}
+                />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Lugar de emisión (SAR)">
+                <input
+                  value={form.lugar_emision_defecto ?? ''}
+                  onChange={(e) => set('lugar_emision_defecto', e.target.value)}
+                  disabled={!isAdmin}
+                  placeholder="Ej. San Pedro Sula, Honduras"
+                  className={`${fieldClass} disabled:opacity-60`}
+                />
+              </Field>
+              <Field label="Tipo de cambio USD → HNL">
+                <input
+                  type="number"
+                  value={form.exchange_rate_usd_hnl ?? 25.30}
+                  onChange={(e) => set('exchange_rate_usd_hnl', Number(e.target.value))}
+                  disabled={!isAdmin}
+                  min="1"
+                  step="0.0001"
+                  placeholder="25.3000"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
               </Field>
