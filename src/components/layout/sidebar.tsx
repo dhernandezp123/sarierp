@@ -120,6 +120,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       href: '/historico',
       icon: FileText,
     },
+    {
+      label: 'Reportes',
+      href: '/reports',
+      icon: BarChart3,
+    },
   ]
 
   const costItems = [

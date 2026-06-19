@@ -165,7 +165,7 @@ Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en i
 | 15 | Calidad de código: tipos centralizados, error boundaries | ✅ |
 | 16 | Retenciones ISV (agentes de retención SAR) | 🔲 |
 | 17 | Proveedores + Cuentas por Pagar | ✅ |
-| 18 | Reportes exportables PDF/CSV | 🔲 |
+| 18 | Reportes exportables PDF/CSV | ✅ |
 
 ---
 
@@ -251,6 +251,19 @@ Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en i
 ### Pendiente para siguiente fase
 - Reportes exportables PDF/CSV con filtros comerciales, cargas, facturación, cuentas por cobrar y cuentas por pagar → **Fase 18**
 - Botón directo desde cotización aprobada / shipment para crear cuenta por pagar prellenada
+
+---
+
+## Fase 18 — Reportes exportables PDF/CSV
+**Estado:** ✅ Completado
+
+### Entregado
+- `/reports` — módulo central de reportes con tabs por Comercial, Cargas, Facturación, Cuentas por cobrar, Cuentas por pagar y Vencidas
+- Filtros comunes: rango de fechas, cliente/proveedor, vendedor, servicio, estado y moneda
+- Exportación CSV para todas las filas filtradas
+- Exportación PDF con plantilla uniforme Sari Express ERP y KPIs del reporte
+- Permisos: Admin ve todo; Ventas/Pricing ven Comercial; Operaciones ve Cargas; Finanzas/Contabilidad ven reportes financieros
+- Sidebar: acceso "Reportes" dentro del grupo Comercial para roles autorizados
 
 ---
 
