@@ -26,6 +26,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   CreditCard,
+  ShieldAlert,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -191,6 +192,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       label: 'Shipping Instructions',
       href: '/operations/shipping-instructions',
       icon: Route,
+    },
+    {
+      label: 'Garantías Navieras',
+      href: '/operations/garantias',
+      icon: ShieldAlert,
     },
   ]
 
