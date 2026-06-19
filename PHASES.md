@@ -159,7 +159,7 @@ Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en i
 | 9 | Notificaciones (in-app) | ✅ |
 | 10 | Integración + Auto-match + Pulido | ✅ |
 | 11 | ERP Core: mejoras globales + módulos nuevos | ✅ |
-| 12 | Facturación SAR Honduras (cumplimiento fiscal) | 🔲 |
+| 12 | Facturación SAR Honduras (cumplimiento fiscal) | ✅ |
 | 13 | BL: flujo completo (email draft, enmiendas, PDF HBL) | 🔲 |
 | 14 | Usuarios: invitaciones + onboarding | 🔲 |
 | 15 | Calidad de código: tipos centralizados, error boundaries | 🔲 |
@@ -167,7 +167,7 @@ Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en i
 ---
 
 ## Fase 12 — Facturación SAR Honduras (cumplimiento fiscal)
-**Estado:** 🔲 Pendiente
+**Estado:** ✅ Completado | Commits: `14e04a5` → `70147a7`
 
 ### Contexto
 El módulo `/invoicing` tiene estructura base pero NO cumple los requisitos del
@@ -286,8 +286,7 @@ Cada factura guarda la tasa usada en el momento de emisión (`exchange_rate` ya 
 
 | Archivo | Estado |
 |---------|--------|
-| `sql/20260618_phase10_auto_match.sql` | ⚠ Pendiente |
-| Resto (Fases 1-11) | ✅ Ejecutados |
+| Todos (Fases 1-12) | ✅ Ejecutados |
 
 ---
 
