@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, Trash2, Download } from 'lucide-react'
 import { toast } from 'sonner'
+import { PDFDownloadLink } from '@react-pdf/renderer'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { InvoicePdf, type InvoicePdfData } from '@/src/components/pdf/invoice-pdf'
 
 type Invoice = {
   id: string
@@ -34,6 +36,29 @@ type Invoice = {
   payment_method: string | null
   payment_reference: string | null
   notes: string | null
+  // SAR fields
+  cai: string | null
+  rango_desde: string | null
+  rango_hasta: string | null
+  fecha_limite_emision: string | null
+  lugar_emision: string | null
+  es_exonerado: boolean
+  orden_compra_exenta: string | null
+  no_constancia_exonerado: string | null
+  no_registro_sag: string | null
+  isv_18_amount: number
+  importe_exento: number
+  importe_exonerado: number
+}
+
+type CompanySettings = {
+  legal_name: string | null
+  trade_name: string | null
+  rtn: string | null
+  address: string | null
+  phone: string | null
+  email: string | null
+  invoice_footer_note: string | null
 }
 
 type InvoiceItem = {
@@ -96,6 +121,7 @@ export default function InvoiceDetailPage() {
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [items, setItems] = useState<InvoiceItem[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
+  const [companySetting, setCompanySetting] = useState<CompanySettings | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [cancelling, setCancelling] = useState(false)
 
@@ -112,16 +138,18 @@ export default function InvoiceDetailPage() {
 
   const fetchAll = async () => {
     setLoading(true)
-    const [invRes, itemsRes, paymentsRes] = await Promise.all([
+    const [invRes, itemsRes, paymentsRes, settingsRes] = await Promise.all([
       supabase.from('invoices').select('*').eq('id', id).single(),
       supabase.from('invoice_items').select('*').eq('invoice_id', id).order('sort_order'),
       supabase.from('invoice_payments').select('*').eq('invoice_id', id).order('payment_date', { ascending: false }),
+      supabase.from('company_settings').select('legal_name, trade_name, rtn, address, phone, email, invoice_footer_note').limit(1).single(),
     ])
 
     if (invRes.error) { toast.error('Factura no encontrada'); router.push('/invoicing'); return }
     setInvoice(invRes.data as Invoice)
     setItems((itemsRes.data || []) as InvoiceItem[])
     setPayments((paymentsRes.data || []) as Payment[])
+    if (!settingsRes.error) setCompanySetting(settingsRes.data as CompanySettings)
     setLoading(false)
   }
 
@@ -183,6 +211,52 @@ export default function InvoiceDetailPage() {
   const paidTotal = payments.reduce((s, p) => s + p.amount, 0)
   const pending = invoice.total - paidTotal
 
+  const gravado18 = invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado - Math.max(0, invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado - (invoice.isv_18_amount > 0 ? invoice.isv_18_amount / 0.18 : 0))
+  const isv15 = invoice.tax_amount - invoice.isv_18_amount
+  const gravado15 = isv15 > 0 ? isv15 / 0.15 : (invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado)
+
+  const pdfData: InvoicePdfData = {
+    invoice_number: invoice.invoice_number || '',
+    invoice_type: invoice.invoice_type,
+    status: invoice.status,
+    issue_date: invoice.issue_date || '',
+    due_date: invoice.due_date,
+    currency: invoice.currency,
+    exchange_rate: invoice.exchange_rate,
+    notes: invoice.notes,
+    cliente_nombre: invoice.cliente_nombre,
+    cliente_rtn: invoice.cliente_rtn,
+    cliente_direccion: invoice.cliente_direccion,
+    cliente_email: invoice.cliente_email,
+    items: items.map((it) => ({ description: it.description, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, isv_rate: 15 })),
+    subtotal: invoice.subtotal,
+    tax_amount: invoice.tax_amount,
+    total: invoice.total,
+    total_lps: invoice.total_lps,
+    importe_exento: invoice.importe_exento || 0,
+    importe_exonerado: invoice.importe_exonerado || 0,
+    isv_15_amount: isv15,
+    isv_18_amount: invoice.isv_18_amount || 0,
+    gravado_15: gravado15,
+    gravado_18: invoice.isv_18_amount > 0 ? invoice.isv_18_amount / 0.18 : 0,
+    es_exonerado: invoice.es_exonerado || false,
+    orden_compra_exenta: invoice.orden_compra_exenta,
+    no_constancia_exonerado: invoice.no_constancia_exonerado,
+    no_registro_sag: invoice.no_registro_sag,
+    cai: invoice.cai,
+    rango_desde: invoice.rango_desde,
+    rango_hasta: invoice.rango_hasta,
+    fecha_limite_emision: invoice.fecha_limite_emision,
+    lugar_emision: invoice.lugar_emision,
+    company_legal_name: companySetting?.legal_name || 'SARI EXPRESS S DE R.L. DE C.V.',
+    company_trade_name: companySetting?.trade_name || null,
+    company_rtn: companySetting?.rtn || null,
+    company_address: companySetting?.address || null,
+    company_phone: companySetting?.phone || null,
+    company_email: companySetting?.email || null,
+    company_invoice_footer: companySetting?.invoice_footer_note || null,
+  }
+
   return (
     <div className="space-y-6">
       <Breadcrumbs
@@ -225,6 +299,21 @@ export default function InvoiceDetailPage() {
               {flow.label}
             </button>
           )}
+          <PDFDownloadLink
+            document={<InvoicePdf data={pdfData} />}
+            fileName={`${invoice.invoice_type}-${invoice.invoice_number || id}.pdf`}
+          >
+            {({ loading: pdfLoading }) => (
+              <button
+                type="button"
+                className={secondaryButtonClass}
+                disabled={pdfLoading}
+              >
+                <Download className="h-4 w-4" />
+                {pdfLoading ? 'Generando...' : 'Descargar PDF'}
+              </button>
+            )}
+          </PDFDownloadLink>
           {!['Pagada', 'Anulada'].includes(invoice.status) && (
             <button
               type="button"
