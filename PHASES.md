@@ -6,144 +6,6 @@ Leer este archivo al inicio de cada nueva sesión para recuperar contexto.
 
 ---
 
-## Fases completadas
-
-### Fase 1 — Componentes UI reutilizables
-**Estado:** ✅ Completado | Commit: `8b557b7`
-
-- `EmptyState` — estado vacío con icono, título, descripción y acción opcional
-- `TableSkeleton` — skeleton animado para tablas en carga
-- `ConfirmDialog` — modal de confirmación (reemplaza window.confirm)
-- `Breadcrumbs` — navegación contextual en páginas de detalle
-- `ui-classes.ts` — agregados `fieldClassSm` y `tableHeaderClass`
-
-### Fase 2 — UX Audit: loading states, empty states, breadcrumbs
-**Estado:** ✅ Completado | Commits: `8b557b7`, `5d5d5de`
-
-Páginas actualizadas con TableSkeleton + EmptyState:
-- `clientes/page.tsx`, `operations/shipping-instructions/page.tsx`
-- `alerts/page.tsx`, `cost-validation/page.tsx`, `dashboard/page.tsx`
-- `operations/bookings/page.tsx`, `operations/dashboard/page.tsx`
-- `admin/users/page.tsx`, `historico/page.tsx`
-
-Breadcrumbs añadidos en: clientes, invoicing, shipping-instructions, quotations (ver/editar).
-
-### Fase 3 — Landing page ForwardersLanding
-**Estado:** ✅ Completado | Commit: `8b557b7`
-
-- Mobile hamburger nav, formulario de contacto → tabla `leads`
-- Hero en español, tabla de comparación 9 filas, 5 tarjetas de features, footer
-
-### Fase 4 — Base de datos: Miami + Rol Cliente
-**Estado:** ✅ Completado
-
-Tablas: `miami_packages`, `miami_manifests`, `miami_pre_alerts`, `client_addresses`,
-`miami_incidencias`, `client_notifications`, `client_pickup_requests`.
-Bucket `miami-package-photos` creado en Supabase. RLS + RPCs `next_warehouse_number()` / `next_manifest_number()`.
-
-### Fase 5 — Módulo Bodega Miami (para rol Operaciones/Admin)
-**Estado:** ✅ Completado | Commit: `1fd68dc`
-
-- `/miami` — Dashboard métricas del día
-- `/miami/ingreso` — Ingreso individual con auto-focus para scanner
-- `/miami/manifiestos` — Lista + `/[id]` detalle con scan en lote y asignación por cliente
-
-### Fase 6 — Portal Cliente: Auth + Layout + Perfil
-**Estado:** ✅ Completado | Commit: `ebb60cd`
-
-Portal en `/portal/`: login sin branding, layout rol=Cliente, dashboard con stats,
-perfil completo, dirección Miami con CRUD.
-
-### Fase 7 — Portal Cliente: Paquetería + Pre-alertas + Incidencias
-**Estado:** ✅ Completado | Commit: `4c8eb56`
-
-`/portal/paquetes`, `/portal/pre-alertas`, `/portal/incidencias` — lista + formularios.
-
-### Fase 8 — Portal Cliente: Inicio + Funcionalidades extra
-**Estado:** ✅ Completado | Commit: `cf8fba8`
-
-Calculadora FT³/CBM, contacto con oficinas, material restringido, T&C, nosotros, pickup CRUD.
-
-### Fase 9 — Notificaciones in-app
-**Estado:** ✅ Completado | Commit: `caffe7a`
-
-Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en ingreso y manifiestos.
-
-### Fase 10 — Integración + Auto-match + Pulido
-**Estado:** ✅ Completado | Commit: `f51ce5a`
-
-- Trigger auto-match pre-alertas al ingresar paquete
-- Admin: modal "Vincular a cliente" para profiles.cliente_id
-- Portal: paginación server-side (PAGE_SIZE=20) con "Cargar más"
-
-> **SQL ejecutado en Supabase:**
-> `sql/20260618_phase10_auto_match.sql` — trigger auto-match
-
----
-
-### Fase 11 — ERP Core: Mejoras globales + módulos nuevos
-**Estado:** ✅ Completado | Commits: `9179691` → `0331550` (13 commits, pushed `2026-06-19`)
-
-#### 11-A: Cotizaciones y Dashboard comercial
-- `reqClass` helper aplicado a 4 campos requeridos en nueva cotización
-- Dashboard: filtro de fecha con presets (mes / trimestre / año / todo)
-- Dashboard: tabla de pipeline por vendedor (Total, Pipeline, Ganadas, Perdidas, % Cierre)
-- Dashboard: embudo de conversión visual (5 etapas, % de conversión entre etapas)
-
-#### 11-B: Clientes
-- Nuevos campos: `contacto_2`, `telefono_2`, `limite_credito`, `moneda_credito`, `dias_credito`
-- SQL: `sql/20260619_add_clientes_extended_fields.sql` ✅ ejecutado
-- Vista y edición de cliente actualizadas con sección "Crédito"
-
-#### 11-C: Operaciones — Aviso de Llegada + BL
-- Fix: `port_of_loading` y `port_of_discharge` siempre null → resuelto agregando `origen`/`destino` al join de cotización
-- HBL auto-numeración: `SARI-HBL-YYYYMMDD-NNN` generado en `saveBL`
-- Aviso de Llegada PDF: tabla de contenedores FCL insertada
-- SQL: `sql/20260618_create_bills_of_lading.sql` ✅ ejecutado
-
-#### 11-D: Pricing
-- Fix: cotizaciones terrestres mostraban "Ocean Freight" en lugar de "Flete Terrestre"
-- `getFreightDescription` ahora detecta `tipo_transporte = 'terrestre'` vía `normalizeText`
-
-#### 11-E: Dashboard Financiero (rebuild completo)
-- Filtro de fecha con presets + inputs personalizados
-- 4 KPI cards: Revenue, GP cotizado (+ %), GP real, Pérdidas detectadas
-- BarChart mensual Revenue vs GP + LineChart GP% mensual
-- Top 8 clientes (BarChart horizontal) + Revenue por tipo de servicio (barras de progreso)
-- Tabla de pérdidas reales (GP real < 0)
-- Botón exportar CSV, `PageSkeleton` durante carga, dark mode completo
-
-#### 11-F: Módulo Facturación
-- SQL: `sql/20260619_create_invoices.sql` ✅ ejecutado
-  - Tablas: `invoices`, `invoice_items`, `invoice_payments` con RLS
-- `/invoicing` — lista con KPIs (por cobrar / cobrado / vencido), filtros tipo/estado/búsqueda
-- `/invoicing/new` — crear proforma o factura con líneas, ISV 15%, auto-número `SARI-FAC/PRO-YYYYMM-NNN`
-- `/invoicing/[id]` — detalle con flujo de estados, modal de pago, historial de pagos
-- Sidebar: "Facturación" bajo grupo Finanzas (Admin + Contabilidad + Finanzas)
-
-#### 11-G: Agentes — Tarifas por ruta
-- SQL: `sql/20260619_create_agent_route_rates.sql` ✅ ejecutado
-  - Tabla `agent_route_rates`: origen, destino, carrier, service_type, base_rate, transit_time, transshipment, free_days, vigencia
-- Detalle del agente (`/agents/[id]`): sección "Tarifas por ruta" con agregar/editar inline/eliminar
-- Página de lista de agentes: PageSkeleton + header con etiqueta "Catálogos"
-
-#### 11-H: Integración tarifas → Pricing Comparison
-- Al seleccionar un agente en pricing-comparison, se cargan sus `agent_route_rates`
-- Panel "Tarifas guardadas del agente" filtra por tipo de servicio de la cotización
-- Click en una tarifa auto-rellena: ocean_freight, transit_time, transshipment, free_days, valid_until, carrier
-- Tarifas vencidas marcadas con ⚠
-
-#### 11-I: Configuración de empresa + fix permisos
-- SQL: `sql/20260619_create_company_settings.sql` ✅ ejecutado
-  - Tabla `company_settings`: datos legales, RTN, dirección, contacto, logo_url, ISV, nota pie
-  - Fila inicial pre-cargada con datos de Sari Express
-- `/settings/company` — todos los roles pueden ver; solo Admin puede editar
-- Sidebar: "Config. Empresa" bajo grupo Administración
-- **Bug fix:** rol `Finanzas` no estaba en `permissions.ts` → usuarios con ese rol quedaban bloqueados
-- `SETTINGS_READ_PATHS` — permite que todas las rutas `/settings/*` sean visibles por cualquier rol autenticado
-
----
-
 ## Roadmap visual
 
 | Fase | Contenido | Estado |
@@ -163,260 +25,22 @@ Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en i
 | 13 | BL: enmiendas + envío draft al cliente | ✅ |
 | 14 | Usuarios: invitaciones + onboarding | ✅ |
 | 15 | Calidad de código: tipos centralizados, error boundaries | ✅ |
-| 16 | Retenciones ISV (agentes de retención SAR) | 🔲 |
+| 16 | Retenciones ISV (agentes de retención SAR) | 🔲 PENDIENTE |
 | 17 | Proveedores + Cuentas por Pagar | ✅ |
 | 18 | Reportes exportables PDF/CSV + Pagos a Proveedores | ✅ |
-| 19 | Cotizaciones: mejoras tabla + alertas expiración | 🔲 |
-| 20 | AWB + Carta Porte + Políticas en documentos | 🔲 |
-| 21 | Miami: tipos de carga + inventario + estados + lista de embarque | 🔲 |
-| 22 | Garantías navieras | 🔲 |
-| 23 | Notificaciones operacionales automáticas | 🔲 |
-| 24 | Tutorial de onboarding por perfil + plantillas de correo | 🔲 |
-| 25 | Facturación: recibos + cierres + facturas de proveedores | 🔲 |
-| 26 | Portal cliente: rastreo + estatus BL Entregado | 🔲 |
-| 27 | Generar CxP desde cotización aprobada | 🔲 |
+| 19 | Cotizaciones: # containers + vencimiento + quitar Incoterm/ojo | ✅ |
+| 20 | AWB + Carta Porte + Políticas en documentos | 🔲 PENDIENTE |
+| 21 | Miami: tipos de carga + inventario + estados + lista de embarque | ✅ |
+| 22 | Garantías Navieras | ✅ |
+| 23 | Notificaciones operacionales automáticas | 🔲 PENDIENTE |
+| 24 | Tutorial de onboarding por perfil + plantillas de correo | 🔲 PENDIENTE |
+| 25 | Facturación: recibos + cierres + documentos de proveedores | 🔲 PENDIENTE |
+| 26 | Portal cliente: rastreo de carga + tipo de carga | ✅ |
+| 27 | Generar CxP desde cotización Ganada | ✅ |
 
 ---
 
-## Fase 12 — Facturación SAR Honduras (cumplimiento fiscal)
-**Estado:** ✅ Completado | Commits: `14e04a5` → `b032c96`
-
-### Entregado
-- SQL ejecutados: `cai_ranges`, ALTER `invoices` (campos SAR), ALTER `company_settings` (`lugar_emision_defecto`, `exchange_rate_usd_hnl`), constraint NC/ND, `parent_invoice_id`, `motivo`
-- `/settings/cai` — gestión de rangos CAI con card de estado, barra de uso, historial
-- `/invoicing/new` — herencia CAI automática, número SAR `NNN-NNN-NN-NNNNNNNN`, ISV por línea (15%/18%/Exento), exonerado (OCE/constancia/SAG), tipo de cambio desde `company_settings`
-- `invoice-pdf.tsx` — PDF SAR-compliant: totales desglosados, total en letras, pie CAI, Original/Copia
-- Botón "Descargar PDF" en detalle de factura
-- **Notas de Crédito y Débito** — vinculadas a factura original con `parent_invoice_id` + `motivo`; botones NC/ND en detalle; balance efectivo; PDF NC/ND referencia factura padre
-- **Validaciones SAR**: RTN del cliente obligatorio en documentos fiscales; tipo de cambio requerido en facturas USD; aviso visual rojo en panel de cliente sin RTN
-
-### Pendiente para futuro (no bloqueante)
-- XML SAR (autoimpresor usa PDF; SAR aún en transición gradual 2025-2026)
-- Retenciones ISV para agentes de retención → **Phase 16**
-
----
-
-## Fase 13 — Bill of Lading: enmiendas + envío de draft
-**Estado:** ✅ Completado
-
-### Entregado
-- SQL: `sql/20260619_bl_amendments.sql` — tablas `bl_amendments` + `bl_draft_sends` con RLS por rol (`Admin`, `Operaciones`)
-- **Historial de enmiendas**: auto-detección de campos modificados (`TRACKED_FIELDS`) al guardar; diff `antes → después` guardado en `changed_fields` jsonb; nota opcional por el usuario; sección de historial al final de la página BL
-- **Modal "Enviar Draft al Cliente"**: botón violeta visible en status `HBL Draft` / `Pendiente Aprobación Cliente`; email precompuesto con datos del BL; `mailto:` link; copiar al portapapeles; botón "Registrar envío" inserta en `bl_draft_sends`
-- **Historial de envíos**: sección con todos los envíos registrados (destinatario + fecha)
-- `savedFormRef` — snapshot del formulario al cargar; actualizado después de cada save para calcular diff incremental
-- `TRACKED_FIELDS` — constante con 20 campos clave a monitorear
-
-
----
-
-## Fase 14 — Usuarios: invitaciones + onboarding
-**Estado:** ✅ Completado
-
-### Entregado
-- **API route** `POST /api/admin/invite` — usa `SUPABASE_SERVICE_ROLE_KEY` para llamar `supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo: '/onboarding', data: { rol } })`
-- **Modal "Invitar usuario"** en `/admin/users` — botón en el header, dialog con email + rol, nota sobre la variable de entorno; el API valida Bearer token y perfil Admin activo antes de usar service role
-- **Página `/onboarding`** — para usuarios invitados: escucha `onAuthStateChange`, pre-muestra el rol asignado, pide nombre y apellido, upserta profile con `status='Aprobado'` (auto-aprobado porque el Admin los invitó), redirige al dashboard
-- El flujo self-registration existente (`/register` → `status='Pendiente'` → aprobación manual) se mantiene sin cambios
-
-### Variables de entorno requeridas (`.env.local`)
-- `SUPABASE_SERVICE_ROLE_KEY` — obtenla en Supabase Dashboard → Settings → API → service_role (secret)
-- `NEXT_PUBLIC_SITE_URL` — URL base de la app (default: `http://localhost:3000`)
-
-### También en Supabase Dashboard
-- **Authentication → URL Configuration → Redirect URLs** — agregar `http://localhost:3000/onboarding` (y la URL de producción cuando aplique)
-
----
-
-## Fase 15 — Calidad de código
-**Estado:** ✅ Completado
-
-### Entregado
-- **`src/types/index.ts`** — tipos centralizados: `Profile`, `UserRole`, `UserStatus`. Disponibles para código nuevo con `import type { Profile } from '@/src/types'`
-- **`src/components/ui/error-boundary.tsx`** — React error boundary (class component) con UI de error + botón "Reintentar". Envuelve el `<main>` del protected layout
-- **`useUser.ts`** — tipado de `user` como `User | null` (Supabase); `profile` como `Profile | any` para backward compatibility con portal pages que no tienen guards estrictos
-- **Console cleanup** — eliminados 19 `console.error` / `console.log` en 8 archivos: redundantes cuando ya hay toast.error, o reemplazados por comentario inline cuando el error es no-fatal
-- **Bug fix bonus** — `portal/notificaciones` y `portal/pickup`: añadido `if (!user) return` en funciones de datos (eran accesos sin guard a `user.id`)
-- Migración a `@supabase/ssr` diferida — riesgo alto sin infraestructura de tests; sigue en backlog
-
----
-
-## Fase 17 — Proveedores + Cuentas por Pagar
-**Estado:** ✅ Completado
-
-### Entregado
-- SQL: `sql/20260619_phase17_suppliers_ap.sql` — tablas `proveedores`, `cuentas_pagar`, `pagos_proveedor`
-- RLS endurecido por rol (`Admin`, `Finanzas`, `Contabilidad`); se eliminó el `authenticated_full_access`
-- `/suppliers` — lista con filtros, KPIs, estados activo/inactivo y enlace a detalle
-- `/suppliers/new` — alta de proveedor con tipo, RTN, contacto, moneda, términos de pago y vinculación opcional a `agents`
-- `/suppliers/[id]` — detalle/edición de proveedor + creación de cuentas por pagar vinculables a cotizaciones aprobadas
-- `/accounts-payable` — lista de cuentas por pagar con filtros por moneda/estado, vencidas y pagado del mes basado en pagos reales
-- `/accounts-payable/[id]` — detalle, registro de pagos, saldo, estado automático y anulación
-- Sidebar: sección "Compras" con Proveedores y Cuentas por Pagar para roles financieros/admin
-- Permisos: `/suppliers` y `/accounts-payable` habilitados para `Admin`, `Finanzas`, `Contabilidad`
-- Hardening adicional: `POST /api/admin/invite` ahora exige Bearer token y perfil Admin activo antes de usar service role
-- Validaciones: no se permiten pagos mayores al saldo pendiente; errores de update de estado ya no se ignoran
-
-### Pendiente para siguiente fase
-- Reportes exportables PDF/CSV con filtros comerciales, cargas, facturación, cuentas por cobrar y cuentas por pagar → **Fase 18**
-- Botón directo desde cotización aprobada / shipment para crear cuenta por pagar prellenada
-
----
-
-## Fase 18 — Reportes exportables PDF/CSV
-**Estado:** ✅ Completado
-
-### Entregado
-- `/reports` — módulo central de reportes con tabs por Comercial, Cargas, Facturación, Cuentas por cobrar, Cuentas por pagar y Vencidas
-- Filtros comunes: rango de fechas, cliente/proveedor, vendedor, servicio, estado y moneda
-- Exportación CSV para todas las filas filtradas
-- Exportación PDF con plantilla uniforme Sari Express ERP y KPIs del reporte
-- Permisos: Admin ve todo; Ventas/Pricing ven Comercial; Operaciones ve Cargas; Finanzas/Contabilidad ven reportes financieros
-- Sidebar: acceso "Reportes" dentro del grupo Comercial para roles autorizados
-
----
-
-## Fase 18-B — Mejoras a Reportes (sesión 2026-06-19)
-**Estado:** ✅ Completado (sin commit separado)
-
-### Entregado
-- **Botón imprimir corregido**: ahora usa `pdf().toBlob()` + `window.open()` — genera el PDF al momento del click con los filtros activos (el bug anterior generaba PDF vacío con `usePDF`)
-- **GP total + Margen promedio en Comercial**: fila de totales muestra Venta / GP / Margen%; 4 KPI cards en pantalla
-- **Totales multi-columna**: arquitectura `totalColumnsConfig` permite múltiples columnas en la fila de totales según el tipo de reporte
-- **Facturación ampliado**: columnas Ciudad, Segmento, Vendedor (via join `invoices → clientes → profiles`)
-- **Nuevo tab "Pagos a Proveedores"**: por tipo/proveedor/período, con totales y exportación CSV/PDF
-- **Días con unidad**: "45 días" en lugar de solo `45` en CxC y Vencidas
-- **PDF mejorado**: header con brand Sari Express (nombre + RTN + acento naranja), filtros como chips, fila de totales al pie, footer con nombre del reporte + rango de fechas, límite subido a 500 filas
-
-### Decisiones
-- `pdf().toBlob()` es la forma correcta de generar PDFs bajo demanda en react-pdf cuando los datos cambian por filtros; `usePDF` hook tiene lag de sincronización
-- Los filtros en "Todos" se omiten del resumen en el PDF (sin ruido)
-
----
-
-## Fase 19 — Cotizaciones: mejoras tabla + alertas de expiración
-**Estado:** 🔲 Pendiente
-
-### Scope
-- Columna **# Contenedores** en la tabla de cotizaciones (suma de `quotation_containers`)
-- Columna **Fecha de expiración** de la cotización (de la tarifa seleccionada `agent_quotes.valid_until`)
-- Color **rojo** cuando expirada, **naranja** cuando vence en ≤ 7 días
-- Badge de alerta en la fila
-
----
-
-## Fase 20 — AWB + Carta Porte + Políticas en documentos
-**Estado:** 🔲 Pendiente
-
-### Scope
-- **AWB (Air Waybill)**: documento BL para embarques aéreos consolidados. En el módulo de BL (`/bl/[blId]`), cuando el tipo de servicio es Aéreo, el tipo de documento debe ser AWB en vez de HBL
-- **Carta Porte**: documento para embarques terrestres
-- Lógica: `bl_type` se determina por `quote_type` / `tipo_transporte` de la cotización padre
-- **Políticas**: sección de condiciones generales al pie de los documentos BL, AWB, Carta Porte (configurable desde `company_settings`)
-- PDF de AWB con formato IATA simplificado
-
----
-
-## Fase 21 — Miami: tipos de carga + inventario + estados + lista de embarque
-**Estado:** 🔲 Pendiente
-
-### Auditoría del estado actual
-| Función | Estado |
-|---|---|
-| Dashboard bodega (`/miami`) | ✅ |
-| Ingreso individual con scanner (`/miami/ingreso`) | ✅ |
-| Manifiestos — lista + detalle + scan en lote (`/miami/manifiestos`) | ✅ |
-| Diferenciación Paquetería vs Carga Consolidada (LCL/Aéreo) | 🔲 |
-| Entrada General (recepción masiva sin asignar cliente aún) | 🔲 Parcial: manifiestos permiten asignación diferida, pero no hay flujo explícito |
-| Inventario (qué está en bodega ahora) | 🔲 |
-| Estatus de carga completos ("Recibido en Miami", "En Tránsito", etc.) | 🔲 |
-| Lista de embarque (cargas a despachar a Honduras) | 🔲 |
-| AWB en ingreso (guías aéreas) | 🔲 → ver Fase 20 |
-
-### Scope
-- Campo `tipo_carga` en `miami_packages`: `Paquetería` | `LCL` | `Aéreo Consolidado`
-- Estatus de carga: `Recibido en Miami` → `En Consolidación` → `En Tránsito` → `Llegado Honduras` → `Entregado`
-- Módulo **Inventario** (`/miami/inventario`): vista de todo lo que está en bodega con filtros por estado/cliente/tipo
-- Módulo **Lista de Embarque** (`/miami/embarques`): operador selecciona paquetes/manifiestos para un despacho a Honduras, genera PDF de lista
-
----
-
-## Fase 22 — Garantías Navieras
-**Estado:** 🔲 Pendiente
-
-### Scope
-- Tabla `garantias_navieras`: booking_id, naviera, monto, moneda, fecha_deposito, fecha_vencimiento_contenedor, fecha_recuperacion, status (`Depositada` | `Recuperada` | `Vencida`)
-- Módulo `/operations/garantias`: lista por naviera, alertas de vencimiento, historial
-- Al arribar un embarque FCL, opción de registrar garantía directamente desde el booking
-- Notificación automática cuando se acerca la fecha límite de devolución del contenedor
-
----
-
-## Fase 23 — Notificaciones operacionales automáticas
-**Estado:** 🔲 Pendiente
-
-### Scope
-- **Cambio en cotización con SI activo**: cuando Pricing edita una cotización que ya tiene una Shipping Instruction, se envía notificación in-app a rol Operaciones con qué campo cambió y en qué cotización
-- Trigger DB o lógica en `saveCotizacion()` que detecte si existe SI vinculado
-- **Notificación de expiración de tarifas**: cuando `agent_quotes.valid_until` vence y la cotización sigue en estado Pendiente, notificar a Pricing
-
----
-
-## Fase 24 — Tutorial de onboarding por perfil + plantillas de correo
-**Estado:** 🔲 Pendiente
-
-### Scope
-**Tutorial de onboarding:**
-- Al primer login (flag `tutorial_completed = false` en `profiles`), mostrar tour interactivo por los módulos del rol
-- Tour con pasos: resaltar elementos de UI, descripción, botón "Siguiente"
-- Botón "Ver tutorial de nuevo" en perfil del usuario
-- Tours diferenciados por rol: Ventas ve cotizaciones, Operaciones ve shipping instructions, etc.
-
-**Plantillas de correo:**
-- Al generar una cotización, botón "Enviar por correo" con plantilla prellenada (datos del cliente, resumen de tarifas, PDF adjunto)
-- Plantillas configurables desde `company_settings`
-- Implementación: `mailto:` con cuerpo prellenado (como el draft BL) — sin servidor de email externo por ahora
-
----
-
-## Fase 25 — Facturación completa: recibos + cierres + documentos de proveedores
-**Estado:** 🔲 Pendiente
-
-### Scope
-- **Recibos de pago**: al registrar un pago en una factura, generar PDF de recibo con datos del cliente, monto, fecha, método de pago, firma
-- **Cierres de período**: resumen de facturas emitidas/cobradas en un mes, exportable
-- **Facturas de proveedores**: en el módulo `/suppliers/[id]`, permitir subir PDF de factura del proveedor (Storage bucket `proveedor-docs`) vinculado a la cuenta por pagar
-- **ND/NC de proveedores**: registrar notas de débito y crédito recibidas de proveedores, vinculadas a la cuenta por pagar
-
----
-
-## Fase 26 — Portal cliente: rastreo + estatus BL Entregado
-**Estado:** 🔲 Pendiente
-
-### Scope
-- **Rastreo de carga**: en `/portal/paquetes/[id]`, mostrar timeline de estatus con fechas (Recibido en Miami → En Tránsito → Llegado Honduras → Entregado)
-- **Estatus "BL Entregado"** en verde: para embarques consolidados, cuando el BL llega a estatus `Emitido` o `Liberado`, mostrar badge verde "BL Entregado" en el portal del cliente
-- **AWB en portal**: para aéreos, mostrar el número de guía aérea en el tracking
-
----
-
-## Fase 27 — Generar CxP desde cotización aprobada
-**Estado:** 🔲 Pendiente
-
-### Scope
-Cierra el ciclo comercial → financiero:
-- En `/quotations/[id]` (cotización con status `Aprobada` o `Convertida a Shipment`), botón **"Generar Cuenta por Pagar"**
-- Abre modal con formulario prellenado:
-  - Proveedor → agente/carrier de la tarifa seleccionada (`agent_quotes`)
-  - Descripción → `"Flete - {numero_cotizacion}"`
-  - Monto → `agent_quotes.exw_cost` u otro costo del agente
-  - Cotización vinculada → automático
-- Al guardar, inserta en `cuentas_pagar` con `quotation_id` ya enlazado
-- Requiere que exista el proveedor en la tabla `proveedores` (con opción de crearlo desde el modal)
-
----
-
-## SQL pendiente de ejecutar en Supabase
+## SQL ejecutados en Supabase
 
 | Archivo | Estado |
 |---------|--------|
@@ -424,8 +48,332 @@ Cierra el ciclo comercial → financiero:
 | `sql/20260619_bl_amendments.sql` | ✅ Ejecutado |
 | `sql/20260619_phase17_suppliers_ap.sql` | ✅ Ejecutado |
 | `sql/20260619_audit_harden_remaining_rls.sql` | ✅ Ejecutado |
+| `sql/20260619_fix_client_rates_delete_policy.sql` | ✅ Ejecutado |
+| `sql/20260619_phase22_garantias_navieras.sql` | ✅ Ejecutado |
+| `sql/20260619_phase21_miami_cargo.sql` | ✅ Ejecutado |
+| `sql/20260619_phase26_portal_tracking.sql` | ✅ Ejecutado |
 
 ---
+
+## Fases completadas (historial)
+
+### Fases 1–18
+*(Ver commits históricos — todo completado y pusheado)*
+
+---
+
+### Fase 19 — Cotizaciones: mejoras tabla + alertas de expiración
+**Estado:** ✅ Completado | Commit: sesión 2026-06-19 | Archivo: `src/app/(protected)/historico/page.tsx`
+
+#### Entregado
+- **Columna "# Unid."**: muestra suma de `quotation_containers.quantity` para FCL/FTL (label "X cont.") y suma de `quotation_cargo_lines.quantity` para LCL/Aéreo (label "X bts"); `—` si vacío
+- **Columna "Vence"**: toma `valid_until` de la tarifa `is_selected = true` de `agent_quotes`. Badge con color:
+  - Rojo: vencida (< hoy)
+  - Naranja: vence en ≤ 7 días
+  - Gris: vigente
+- **Columna "Incoterm" eliminada** de la tabla del histórico
+- **Columna "Detalle" + icono ojo eliminados** de la tabla del histórico
+- Query ampliada para incluir `agent_quotes(valid_until, is_selected)`, `quotation_containers(quantity)`, `quotation_cargo_lines(quantity)`
+- `TableSkeleton cols={7}` actualizado a la nueva cantidad de columnas
+- Funciones helper: `isFclFtl()`, `getUnitCount()`, `getExpiryDisplay()`
+
+#### Decisiones técnicas
+- Solo tarifa `is_selected = true` se usa para calcular el vencimiento
+- Los bultos para LCL/Aéreo se sacan de `quotation_cargo_lines.quantity`, no de `container_qty`
+
+---
+
+### Fix Bug — Ventas no podía guardar tarifas de cliente
+**Estado:** ✅ Resuelto | SQL: `sql/20260619_fix_client_rates_delete_policy.sql`
+
+**Causa raíz:** La política RLS `client_rates_delete_policy` solo permitía DELETE a `is_admin()`. Supabase bloqueaba silenciosamente el DELETE del rol Ventas, y luego el INSERT fallaba con 409 duplicate key (constraint única sigue ahí).
+
+**Fix:** Cambiar la policy a `is_approved_active_user()` para que cualquier usuario autenticado y activo pueda borrar y re-insertar sus propias tarifas.
+
+```sql
+drop policy if exists "client_rates_delete_policy" on public.client_rates;
+create policy "client_rates_delete_policy"
+on public.client_rates
+for delete to authenticated
+using (public.is_approved_active_user());
+```
+
+---
+
+### Fase 21 — Miami: tipos de carga + inventario + lista de embarque
+**Estado:** ✅ Completado | Commit: `feat: phase 21 - miami cargo types, inventory and dispatch list`
+
+#### SQL ejecutado
+`sql/20260619_phase21_miami_cargo.sql` — agrega a `miami_packages`:
+- `tipo_carga TEXT DEFAULT 'Paquetería' CHECK ('Paquetería' | 'LCL' | 'Aéreo Consolidado')`
+- `cargo_status TEXT DEFAULT 'Recibido en Miami' CHECK ('Recibido en Miami' | 'En Consolidación' | 'En Tránsito' | 'Llegado Honduras' | 'Entregado')`
+
+#### Páginas
+- `/miami/ingreso` — agregado selector de Tipo de Carga; al insertar setea `cargo_status = 'Recibido en Miami'`
+- `/miami/inventario` — vista de todo el inventario con:
+  - 5 KPI cards por cargo_status (clickeables como filtro rápido)
+  - Filtros: search (tracking/WH/cliente), cargo_status, tipo_carga
+  - Botón "→ [siguiente estado]" por fila para avanzar el status
+- `/miami/embarques` — lista de despacho con:
+  - Solo muestra `cargo_status IN ('Recibido en Miami', 'En Consolidación')`
+  - Checkbox multi-select por fila + select all
+  - Botón "Marcar En Tránsito" (bulk update)
+  - Botón "Imprimir lista" → HTML/CSS generado en JS, abre ventana y hace print()
+  - Filtro por tipo_carga
+
+#### Navegación
+- Sidebar: "Inventario" (Database icon) y "Lista de Embarque" (Route icon) bajo "Miami Bodega"
+- `permissions.ts`: Operaciones tiene acceso a `/miami/inventario` y `/miami/embarques`
+
+#### Patrones clave
+- `as unknown as Pkg[]` — cast necesario porque Supabase tipea el join como array, no coincide con el tipo local
+- `EmptyState icon={<Plane className="h-6 w-6" />}` — el prop `icon` acepta `ReactNode` (JSX), NO componente
+
+---
+
+### Fase 22 — Garantías Navieras
+**Estado:** ✅ Completado | Commit: `feat: phase 22 - garantias navieras module`
+
+#### SQL ejecutado
+`sql/20260619_phase22_garantias_navieras.sql` — tabla `garantias_navieras`:
+- Campos: `booking_id`, `naviera`, `contenedor`, `bl_number`, `monto`, `moneda`, `fecha_deposito`, `fecha_vencimiento_libre`, `fecha_recuperacion`, `status CHECK ('Depositada' | 'Recuperada' | 'Vencida')`, `notas`, `created_by`
+- RLS: `is_approved_active_user()` para SELECT/INSERT/UPDATE/DELETE
+
+#### Página `/operations/garantias`
+- KPI cards: total depositado USD, alertas ≤14 días, recuperadas
+- Formulario inline de alta: booking selector, naviera, contenedor, BL, monto, moneda, fechas
+- Componente `VencimientoBadge`: rojo (vencida), naranja (≤7 días), amarillo (≤14 días)
+- Filtros: chips Activas/Todas/Depositada/Recuperada/Vencida + dropdown naviera
+- Botón "Marcar recuperada" → update status + fecha_recuperacion = today
+
+#### Navegación
+- Sidebar: "Garantías Navieras" (ShieldAlert icon) bajo "Operaciones"
+- `permissions.ts`: Operaciones tiene acceso a `/operations/garantias`
+
+---
+
+### Fase 26 — Portal cliente: rastreo de carga + tipo de carga
+**Estado:** ✅ Completado | Commit: `feat: phase 26 - portal tracking timeline + cargo status dates`
+
+#### SQL ejecutado
+`sql/20260619_phase26_portal_tracking.sql` — agrega a `miami_packages`:
+- `cargo_status_updated_at TIMESTAMPTZ DEFAULT now()` — registra cuándo cambió el cargo_status
+
+#### Cambios en páginas internas
+- `/miami/inventario` — al avanzar estado incluye `cargo_status_updated_at: new Date().toISOString()`
+- `/miami/embarques` — al marcar "En Tránsito" incluye `cargo_status_updated_at`
+
+#### Portal `/portal/paquetes/[id]`
+- **Badge tipo de carga** en el header del paquete (Paquetería / LCL / Aéreo Consolidado) con colores:
+  - Paquetería: gris
+  - LCL: azul
+  - Aéreo Consolidado: púrpura
+- **Stepper de rastreo** "Seguimiento del envío":
+  - 5 pasos: Recibido en Miami → En Consolidación → En Tránsito a Honduras → Llegado a Honduras → Entregado
+  - Pasos completados: check verde; paso actual: check azul + badge "ACTUAL"; futuros: círculo gris
+  - Fechas: paso 0 muestra `received_at`; paso actual muestra `cargo_status_updated_at`
+  - Línea vertical conectora entre pasos (posicionada con `absolute`)
+- **Label adaptivo**: para Aéreo Consolidado, el label "Carrier" cambia a "AWB / Carrier"
+- El stepper solo aparece si `cargo_status` tiene valor (no rompe paquetes legacy sin el campo)
+
+---
+
+### Fase 27 — Generar CxP desde cotización Ganada
+**Estado:** ✅ Completado | Commit: sesión 2026-06-19 | Archivo: `src/app/(protected)/quotations/[id]/page.tsx`
+
+#### Entregado
+- Botón **"Generar CxP"** visible en el menú "..." de cotizaciones con `status = 'Ganada'` para roles `Admin`, `Finanzas`, `Contabilidad`
+- Handler `handleGenerarCxP`:
+  1. Valida que haya tarifa seleccionada (`agent_quotes.is_selected = true`)
+  2. Busca el proveedor via `proveedores.agente_id = selectedAgent.agent_id`
+  3. Si no hay proveedor vinculado: toast.error descriptivo con instrucciones
+  4. Calcula vencimiento = fecha hoy + `proveedores.terminos_pago` días
+  5. Inserta en `cuentas_pagar` con: proveedor_id, quotation_id, descripción "Flete - {numero}", monto, moneda, fechas, notas
+  6. Toast de éxito con nombre del proveedor
+
+#### Decisiones técnicas
+- Monto = `agent_quotes.costo` (campo correcto para costo del agente, no `exw_cost`)
+- Link agente → proveedor: `agent_quotes.agent_id → agents.id → proveedores.agente_id` (buscar proveedor con `.eq('agente_id', selectedAgent.agent_id)`)
+- Solo disponible en status `Ganada` (no en Aprobada ni Convertida — el usuario prefirió ser más restrictivo)
+
+---
+
+## Fases pendientes — detalle completo
+
+### Fase 16 — Retenciones ISV (mayor riesgo)
+**Estado:** 🔲 PENDIENTE — **Hacer de ÚLTIMA** (riesgo de romper facturación existente)
+
+#### Contexto
+En Honduras, los "agentes de retención" del ISV (ISV retenido) aplican cuando el comprador es un agente de retención autorizado por la SAR. En ese caso, el comprador retiene el ISV y lo paga directamente al fisco.
+
+#### Scope
+- Campo `es_agente_retencion BOOLEAN` en tabla `clientes`
+- En `/invoicing/new`: si el cliente es agente de retención, mostrar sección de retención
+  - El ISV NO se cobra al cliente (se retiene en origen)
+  - La factura muestra: Subtotal, ISV retenido (no cobrado), Total a pagar = Subtotal
+  - Se genera un "Constancia de Retención" adicional
+- Tablas afectadas: `invoices` (agregar `isv_retenido`, `tiene_retencion`), `invoice_items`
+- PDF: línea de ISV retenido visible pero tachada o en gris con leyenda "Retenido por [RTN cliente]"
+- Reportes financieros: separar ISV cobrado vs ISV retenido en dashboard financiero
+
+#### Riesgo
+- Toca el core de facturación SAR que ya está funcionando
+- Hacer DESPUÉS de Fases 23, 24, 25
+
+---
+
+### Fase 20 — AWB + Carta Porte + Políticas en documentos
+**Estado:** 🔲 PENDIENTE
+
+#### Contexto
+El módulo BL actual genera HBLs para embarques marítimos. Faltan los documentos equivalentes para Aéreo y Terrestre.
+
+#### Scope
+- **AWB (Air Waybill)**: cuando el embarque es Aéreo Consolidado, el BL debe ser tipo AWB con formato IATA simplificado
+  - Lógica: si `quote_type` o `tipo_transporte` = aéreo → `bl_type = 'AWB'`
+  - Nuevo PDF `awb-pdf.tsx` con campos IATA básicos
+- **Carta Porte**: para terrestre/FTL
+  - Campo adicional: placa del camión, operador, ruta
+  - PDF `carta-porte-pdf.tsx`
+- **Políticas / Condiciones generales**: texto de condiciones al pie de HBL, AWB y Carta Porte
+  - Almacenar en `company_settings.condiciones_bl` y `condiciones_awb`
+  - Admin puede editar desde `/settings/company`
+- No tocar la lógica de BL existente (HBL marítimo sigue igual)
+
+---
+
+### Fase 23 — Notificaciones operacionales automáticas
+**Estado:** 🔲 PENDIENTE
+
+#### Scope
+**Cambio en cotización con SI activo:**
+- En `saveCotizacion()`, después de guardar, verificar si existe Shipping Instruction vinculada (`shipping_instructions.quotation_id = id`)
+- Si existe → `supabase.from('notifications').insert(...)` para todos los usuarios con rol Operaciones
+- Mensaje: "La cotización {numero} (con SI activa) fue modificada: campo X cambió de A a B"
+- Usar la función `notifyClientPackageAssigned` como referencia de patrón de inserción de notificación
+- Tabla `notifications`: `user_id`, `title`, `body`, `href`, `is_read`
+
+**Expiración de tarifas:**
+- Cron o consulta periódica: `agent_quotes WHERE valid_until = today - 1 AND quotation.status = 'Cotizada'`
+- Notificar a rol Pricing con link a la cotización
+
+#### Archivos clave
+- `src/app/(protected)/quotations/[id]/page.tsx` — función `handleSave` es donde agregar el check
+- `src/lib/client-notifications.ts` — ver patrón de inserción de notificaciones
+- `src/lib/permissions.ts` — para obtener todos los user_ids con rol Operaciones (necesita query a `profiles`)
+
+---
+
+### Fase 24 — Tutorial de onboarding por perfil + plantillas de correo
+**Estado:** 🔲 PENDIENTE
+
+#### Scope
+**Tutorial de onboarding:**
+- Agregar campo `tutorial_completed BOOLEAN DEFAULT false` en `profiles` via SQL
+- Al primer login (detectado en el layout protegido), mostrar overlay/modal de bienvenida
+- Pasos diferenciados por rol:
+  - Ventas: Nueva cotización → Histórico → Clientes
+  - Operaciones: Shipping Instructions → Bookings → Garantías → Miami
+  - Finanzas: Facturación → Cuentas por Pagar → Dashboard Financiero
+- Botón "Siguiente" avanza el paso, "Saltar" marca `tutorial_completed = true`
+- Botón "Ver tutorial de nuevo" en `/profile`
+- Implementación: componente overlay ligero sin librería externa (evitar paquetes nuevos)
+
+**Plantillas de correo (envío de cotización):**
+- En `/quotations/[id]`, agregar botón "Enviar por correo"
+- Abre modal con:
+  - Para: email del cliente (prellenado)
+  - CC: usuario actual
+  - Asunto: "Cotización {número} - Sari Express"
+  - Cuerpo: plantilla prellenada con resumen de servicio, tarifa seleccionada, validez
+  - Botón "Copiar texto" + link `mailto:` para abrir cliente de correo
+- Sin servidor de email externo por ahora (igual que el draft BL)
+- Texto de plantilla configurable desde `company_settings.plantilla_cotizacion`
+
+---
+
+### Fase 25 — Facturación completa: recibos + cierres + documentos de proveedores
+**Estado:** 🔲 PENDIENTE
+
+#### Scope
+**Recibos de pago:**
+- Al registrar un pago en `/invoicing/[id]`, botón "Imprimir recibo"
+- PDF `recibo-pago-pdf.tsx`: Sari Express datos, cliente, factura referenciada, monto pagado, fecha, método de pago, firma
+- Sin tabla nueva — el recibo se genera on-demand desde `invoice_payments`
+
+**Cierres de período:**
+- Botón "Cierre del mes" en `/invoicing` (solo Admin/Finanzas)
+- Genera resumen: total facturado, total cobrado, total pendiente, total vencido del período
+- Exportable como PDF — similar al patrón de reportes existente
+
+**Documentos de proveedores:**
+- En `/suppliers/[id]`, sección "Documentos recibidos"
+- Subir PDF de factura del proveedor → Storage bucket `proveedor-docs` (crear si no existe)
+- Vincular documento a `cuentas_pagar.id` (campo `documento_url TEXT` en la tabla)
+- SQL: `ALTER TABLE cuentas_pagar ADD COLUMN IF NOT EXISTS documento_url TEXT;`
+- Preview del PDF inline (link + icono)
+
+**ND/NC de proveedores:**
+- En `/accounts-payable/[id]`, botón "Registrar NC/ND proveedor"
+- Inserta en `cuentas_pagar` con tipo `NC` o `ND` y `parent_ap_id` referenciando la CxP original
+- Ajusta el saldo de la CxP padre al calcular el total real
+
+---
+
+## Notas de arquitectura importantes
+
+### Patrón Supabase join → array cast
+Cuando un query de Supabase incluye join con `select('*, tabla_relacionada(campo)')`, el resultado tipado por TypeScript puede no coincidir con el tipo local definido. Usar:
+```ts
+setData((data || []) as unknown as MiTipo[])
+```
+
+### Separación de campos en miami_packages
+- `status`: asignación al cliente (`Sin asignar` / `Asignado` / `Entregado` / `Con incidencia`) — tiene CHECK constraint, NO modificar
+- `cargo_status`: recorrido físico (`Recibido en Miami` → `En Consolidación` → `En Tránsito` → `Llegado Honduras` → `Entregado`) — campo nuevo sin impacto en lógica existente
+
+### Link agente → proveedor para CxP
+```
+agent_quotes.agent_id → agents.id → proveedores.agente_id
+```
+Para buscar el proveedor a partir de una tarifa seleccionada:
+```ts
+supabase.from('proveedores').select('*').eq('agente_id', selectedAgent.agent_id).maybeSingle()
+```
+
+### EmptyState icon prop
+El componente acepta `icon?: ReactNode` — pasar JSX, no referencia al componente:
+```tsx
+// ✅ Correcto
+<EmptyState icon={<Plane className="h-6 w-6" />} ... />
+
+// ❌ Incorrecto
+<EmptyState icon={Plane} ... />
+```
+
+### RLS — patrón de política permisiva
+Para acciones que deben funcionar para todos los usuarios autenticados activos:
+```sql
+using (public.is_approved_active_user())
+```
+Evitar `is_admin()` en políticas de DELETE cuando el rol normal necesita editar (causó bug client_rates).
+
+---
+
+## Stack del proyecto
+
+- Next.js 16 + App Router
+- TypeScript strict (`npx tsc --noEmit` requerido antes de cada commit)
+- TailwindCSS 4
+- Supabase (PostgreSQL + Auth + RLS + Storage + Realtime)
+- Sonner (toasts)
+- Lucide React (iconos)
+- Recharts 3.8.1 (gráficas: BarChart, LineChart)
+- React-PDF (PDFs del lado del cliente)
+- Migraciones SQL en `/sql/`
+- UI classes centralizadas en `src/lib/ui-classes.ts`
+- Componentes reutilizables en `src/components/ui/`
+- Landing page en `src/components/marketing/ForwardersLanding.tsx`
 
 ## Decisiones técnicas confirmadas
 
@@ -445,20 +393,6 @@ Cierra el ciclo comercial → financiero:
 - **Facturación SAR:** ISV 15% estándar, ISV 18% para casos especiales, exonerados con OCE/constancia/SAG
 - **Tarifas de agentes:** `agent_route_rates` por ruta/carrier/servicio; se sugieren automáticamente en pricing-comparison
 - **company_settings:** una sola fila, Admin la edita desde `/settings/company`
-
----
-
-## Stack del proyecto
-
-- Next.js 16 + App Router
-- TypeScript strict (`npx tsc --noEmit` requerido antes de cada commit)
-- TailwindCSS 4
-- Supabase (PostgreSQL + Auth + RLS + Storage + Realtime)
-- Sonner (toasts)
-- Lucide React (iconos)
-- Recharts 3.8.1 (gráficas: BarChart, LineChart)
-- React-PDF (PDFs del lado del cliente)
-- Migraciones SQL en `/sql/`
-- UI classes centralizadas en `src/lib/ui-classes.ts`
-- Componentes reutilizables en `src/components/ui/`
-- Landing page en `src/components/marketing/ForwardersLanding.tsx`
+- **Retenciones ISV:** dejar para ÚLTIMO (Fase 16) — mayor riesgo de romper facturación existente
+- **Monto CxP desde cotización:** usar `agent_quotes.costo`, NO `exw_cost`
+- **cargo_status vs status en miami_packages:** campos independientes — uno para ciclo físico, otro para asignación al cliente
