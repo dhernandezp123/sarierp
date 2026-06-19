@@ -76,7 +76,7 @@ Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en i
 - Admin: modal "Vincular a cliente" para profiles.cliente_id
 - Portal: paginación server-side (PAGE_SIZE=20) con "Cargar más"
 
-> **SQL pendiente de ejecutar en Supabase:**
+> **SQL ejecutado en Supabase:**
 > `sql/20260618_phase10_auto_match.sql` — trigger auto-match
 
 ---
@@ -160,125 +160,97 @@ Supabase Realtime en portal: campana, badge, lista con mark read. Integrado en i
 | 10 | Integración + Auto-match + Pulido | ✅ |
 | 11 | ERP Core: mejoras globales + módulos nuevos | ✅ |
 | 12 | Facturación SAR Honduras (cumplimiento fiscal) | ✅ |
-| 13 | BL: flujo completo (email draft, enmiendas, PDF HBL) | 🔲 |
-| 14 | Usuarios: invitaciones + onboarding | 🔲 |
-| 15 | Calidad de código: tipos centralizados, error boundaries | 🔲 |
+| 13 | BL: enmiendas + envío draft al cliente | ✅ |
+| 14 | Usuarios: invitaciones + onboarding | ✅ |
+| 15 | Calidad de código: tipos centralizados, error boundaries | ✅ |
+| 16 | Retenciones ISV (agentes de retención SAR) | 🔲 |
+| 17 | Proveedores + Cuentas por Pagar | ✅ |
+| 18 | Reportes exportables PDF/CSV | 🔲 |
 
 ---
 
 ## Fase 12 — Facturación SAR Honduras (cumplimiento fiscal)
-**Estado:** ✅ Completado | Commits: `14e04a5` → `70147a7`
+**Estado:** ✅ Completado | Commits: `14e04a5` → `b032c96`
 
-### Contexto
-El módulo `/invoicing` tiene estructura base pero NO cumple los requisitos del
-Art. 10 y 11 del Reglamento del SAR Honduras para facturas de autoimpresor.
+### Entregado
+- SQL ejecutados: `cai_ranges`, ALTER `invoices` (campos SAR), ALTER `company_settings` (`lugar_emision_defecto`, `exchange_rate_usd_hnl`), constraint NC/ND, `parent_invoice_id`, `motivo`
+- `/settings/cai` — gestión de rangos CAI con card de estado, barra de uso, historial
+- `/invoicing/new` — herencia CAI automática, número SAR `NNN-NNN-NN-NNNNNNNN`, ISV por línea (15%/18%/Exento), exonerado (OCE/constancia/SAG), tipo de cambio desde `company_settings`
+- `invoice-pdf.tsx` — PDF SAR-compliant: totales desglosados, total en letras, pie CAI, Original/Copia
+- Botón "Descargar PDF" en detalle de factura
+- **Notas de Crédito y Débito** — vinculadas a factura original con `parent_invoice_id` + `motivo`; botones NC/ND en detalle; balance efectivo; PDF NC/ND referencia factura padre
+- **Validaciones SAR**: RTN del cliente obligatorio en documentos fiscales; tipo de cambio requerido en facturas USD; aviso visual rojo en panel de cliente sin RTN
 
-### Lo que ya existe ✅
-- `company_settings`: `legal_name`, `trade_name`, `rtn`, `address`, `phone`, `email` → cubre datos del EMISOR (Art. 10)
-- Módulo `/invoicing`: lista, nueva factura, detalle con pagos, flujo de estados
-- ISV 15% calculado automáticamente en líneas
-- Datos del cliente: nombre, RTN, dirección, email
-
-### Gaps a implementar ❌
-
-#### 1. Nueva tabla `cai_ranges`
-```sql
-id, cai text, rango_desde text, rango_hasta text,
-fecha_limite_emision date, lugar_emision text,
-is_active boolean, created_at, created_by
-```
-Un CAI cubre N facturas consecutivas. El sistema usa el rango activo al crear cada factura.
-Formato número SAR: `NNN-NNN-NN-NNNNNNNN` (16 dígitos, ej. `000-001-01-00000001`).
-
-#### 2. Campos nuevos en tabla `invoices`
-```
-cai, rango_desde, rango_hasta, fecha_limite_emision (heredados del rango activo)
-lugar_emision text (heredado / editable)
-es_exonerado boolean default false
-orden_compra_exenta text nullable
-no_constancia_exonerado text nullable
-no_registro_sag text nullable
-isv_18_rate numeric default 0
-isv_18_amount numeric default 0
-importe_exento numeric default 0
-importe_exonerado numeric default 0
-```
-
-#### 3. Cambio en formato de número de factura
-- Actual: `SARI-FAC-202506-001`
-- SAR requiere: `NNN-NNN-NN-NNNNNNNN` dentro del rango autorizado
-- Las Proformas conservan el formato actual (no son documentos fiscales)
-
-#### 4. Formulario nueva factura — campos adicionales
-- CAI se auto-hereda del rango activo (solo lectura)
-- Rango autorizado y fecha límite visibles (solo lectura)
-- Toggle "Cliente exonerado" → campos OCE, constancia, SAG
-- Selector de tasa ISV por línea: 15% / 18% / Exento
-
-#### 5. Página `/settings/cai` — administración de rangos CAI
-- CRUD de rangos CAI, marcar activo
-- Alerta cuando el rango esté cerca de agotarse o fecha límite próxima
-
-#### 6. PDF de Factura SAR-compliant (`src/components/pdf/invoice-pdf.tsx`)
-Cabecera: logo + razón social + RTN + nombre comercial + dirección + tel + email (de `company_settings`).
-Número en formato SAR, fecha de emisión, modo DEMO si aplica.
-Datos del cliente: nombre/razón social, RTN, dirección.
-Cuerpo: líneas con descripción, qty, precio, ISV %, importe.
-Totales SAR: OCE, constancia exoneración, SAG, descuento, importe exento, importe exonerado, importe gravado 15% y 18%, ISV 15% y ISV 18%, envío, **TOTAL en letras**.
-Pie SAR: rango autorizado, fecha vencimiento CAI, CAI completo, lugar de emisión.
-"Original: Cliente / Copia: Emisor".
-
-#### 7. Campos adicionales en `company_settings`
-```
-lugar_emision_defecto text  — punto de emisión por defecto
-exchange_rate_usd_hnl numeric  — tasa USD→HNL vigente (ej. 25.30), Admin la actualiza
-```
-El formulario de nueva factura lee esta tasa como valor por defecto.
-Cada factura guarda la tasa usada en el momento de emisión (`exchange_rate` ya existe).
-
-### Orden de implementación
-1. SQL: `sql/20260619_phase12_sar_invoicing.sql` — tabla `cai_ranges` + ALTER `invoices` + ALTER `company_settings`
-2. `/settings/cai` — CRUD de rangos CAI con alerta de agotamiento
-3. Actualizar nueva factura: herencia CAI + campos exonerados + ISV por línea
-4. PDF `invoice-pdf.tsx` SAR-compliant
-5. Botón "Imprimir / Descargar PDF" en `/invoicing/[id]`
+### Pendiente para futuro (no bloqueante)
+- XML SAR (autoimpresor usa PDF; SAR aún en transición gradual 2025-2026)
+- Retenciones ISV para agentes de retención → **Phase 16**
 
 ---
 
-## Fase 13 — Bill of Lading: flujo completo
-**Estado:** 🔲 Pendiente
+## Fase 13 — Bill of Lading: enmiendas + envío de draft
+**Estado:** ✅ Completado
 
-### Lo que ya existe ✅
-- Tabla `bills_of_lading` (`sql/20260618_create_bills_of_lading.sql`) ✅ ejecutado
-- Página `/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]` — formulario BL
-- HBL auto-numeración `SARI-HBL-YYYYMMDD-NNN`
-- Flujo de estados: MBL Draft → MBL Validado → HBL Draft → Pendiente Aprobación → Aprobado → Emitido → Liberado
+### Entregado
+- SQL: `sql/20260619_bl_amendments.sql` — tablas `bl_amendments` + `bl_draft_sends` con RLS por rol (`Admin`, `Operaciones`)
+- **Historial de enmiendas**: auto-detección de campos modificados (`TRACKED_FIELDS`) al guardar; diff `antes → después` guardado en `changed_fields` jsonb; nota opcional por el usuario; sección de historial al final de la página BL
+- **Modal "Enviar Draft al Cliente"**: botón violeta visible en status `HBL Draft` / `Pendiente Aprobación Cliente`; email precompuesto con datos del BL; `mailto:` link; copiar al portapapeles; botón "Registrar envío" inserta en `bl_draft_sends`
+- **Historial de envíos**: sección con todos los envíos registrados (destinatario + fecha)
+- `savedFormRef` — snapshot del formulario al cargar; actualizado después de cada save para calcular diff incremental
+- `TRACKED_FIELDS` — constante con 20 campos clave a monitorear
 
-### Pendiente ❌
-- Envío de HBL Draft por email al cliente (desde el sistema)
-- Flujo de enmiendas (BL Amendment): registrar cambio + nueva versión
-- PDF de HBL oficial (`src/components/pdf/house-bl-pdf.tsx`)
-- Botón "Descargar PDF" en estado "Emitido"
 
 ---
 
 ## Fase 14 — Usuarios: invitaciones + onboarding
-**Estado:** 🔲 Pendiente
+**Estado:** ✅ Completado
 
-- Admin puede invitar usuarios por email (Supabase Auth `inviteUserByEmail`)
-- Formulario de registro post-invitación (nombre, apellido, rol solicitado)
-- Aprobación por Admin en `/admin/users`
-- Email de bienvenida automático al aprobar
+### Entregado
+- **API route** `POST /api/admin/invite` — usa `SUPABASE_SERVICE_ROLE_KEY` para llamar `supabaseAdmin.auth.admin.inviteUserByEmail(email, { redirectTo: '/onboarding', data: { rol } })`
+- **Modal "Invitar usuario"** en `/admin/users` — botón en el header, dialog con email + rol, nota sobre la variable de entorno; el API valida Bearer token y perfil Admin activo antes de usar service role
+- **Página `/onboarding`** — para usuarios invitados: escucha `onAuthStateChange`, pre-muestra el rol asignado, pide nombre y apellido, upserta profile con `status='Aprobado'` (auto-aprobado porque el Admin los invitó), redirige al dashboard
+- El flujo self-registration existente (`/register` → `status='Pendiente'` → aprobación manual) se mantiene sin cambios
+
+### Variables de entorno requeridas (`.env.local`)
+- `SUPABASE_SERVICE_ROLE_KEY` — obtenla en Supabase Dashboard → Settings → API → service_role (secret)
+- `NEXT_PUBLIC_SITE_URL` — URL base de la app (default: `http://localhost:3000`)
+
+### También en Supabase Dashboard
+- **Authentication → URL Configuration → Redirect URLs** — agregar `http://localhost:3000/onboarding` (y la URL de producción cuando aplique)
 
 ---
 
 ## Fase 15 — Calidad de código
-**Estado:** 🔲 Pendiente
+**Estado:** ✅ Completado
 
-- Centralizar tipos TypeScript reutilizables en `src/types/`
-- Migrar Supabase client a `@supabase/ssr` (cookies en vez de localStorage)
-- Error boundaries en layouts para evitar blank screens
-- Eliminar `console.error` / `console.log` restantes en el codebase
+### Entregado
+- **`src/types/index.ts`** — tipos centralizados: `Profile`, `UserRole`, `UserStatus`. Disponibles para código nuevo con `import type { Profile } from '@/src/types'`
+- **`src/components/ui/error-boundary.tsx`** — React error boundary (class component) con UI de error + botón "Reintentar". Envuelve el `<main>` del protected layout
+- **`useUser.ts`** — tipado de `user` como `User | null` (Supabase); `profile` como `Profile | any` para backward compatibility con portal pages que no tienen guards estrictos
+- **Console cleanup** — eliminados 19 `console.error` / `console.log` en 8 archivos: redundantes cuando ya hay toast.error, o reemplazados por comentario inline cuando el error es no-fatal
+- **Bug fix bonus** — `portal/notificaciones` y `portal/pickup`: añadido `if (!user) return` en funciones de datos (eran accesos sin guard a `user.id`)
+- Migración a `@supabase/ssr` diferida — riesgo alto sin infraestructura de tests; sigue en backlog
+
+---
+
+## Fase 17 — Proveedores + Cuentas por Pagar
+**Estado:** ✅ Completado
+
+### Entregado
+- SQL: `sql/20260619_phase17_suppliers_ap.sql` — tablas `proveedores`, `cuentas_pagar`, `pagos_proveedor`
+- RLS endurecido por rol (`Admin`, `Finanzas`, `Contabilidad`); se eliminó el `authenticated_full_access`
+- `/suppliers` — lista con filtros, KPIs, estados activo/inactivo y enlace a detalle
+- `/suppliers/new` — alta de proveedor con tipo, RTN, contacto, moneda, términos de pago y vinculación opcional a `agents`
+- `/suppliers/[id]` — detalle/edición de proveedor + creación de cuentas por pagar vinculables a cotizaciones aprobadas
+- `/accounts-payable` — lista de cuentas por pagar con filtros por moneda/estado, vencidas y pagado del mes basado en pagos reales
+- `/accounts-payable/[id]` — detalle, registro de pagos, saldo, estado automático y anulación
+- Sidebar: sección "Compras" con Proveedores y Cuentas por Pagar para roles financieros/admin
+- Permisos: `/suppliers` y `/accounts-payable` habilitados para `Admin`, `Finanzas`, `Contabilidad`
+- Hardening adicional: `POST /api/admin/invite` ahora exige Bearer token y perfil Admin activo antes de usar service role
+- Validaciones: no se permiten pagos mayores al saldo pendiente; errores de update de estado ya no se ignoran
+
+### Pendiente para siguiente fase
+- Reportes exportables PDF/CSV con filtros comerciales, cargas, facturación, cuentas por cobrar y cuentas por pagar → **Fase 18**
+- Botón directo desde cotización aprobada / shipment para crear cuenta por pagar prellenada
 
 ---
 
@@ -287,6 +259,8 @@ Cada factura guarda la tasa usada en el momento de emisión (`exchange_rate` ya 
 | Archivo | Estado |
 |---------|--------|
 | Todos (Fases 1-12) | ✅ Ejecutados |
+| `sql/20260619_bl_amendments.sql` | ✅ Ejecutado |
+| `sql/20260619_phase17_suppliers_ap.sql` | ✅ Ejecutado |
 
 ---
 

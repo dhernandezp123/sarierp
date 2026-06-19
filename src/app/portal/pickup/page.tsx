@@ -46,6 +46,7 @@ export default function PickupPage() {
   }, [user])
 
   const loadRequests = async () => {
+    if (!user) return
     setLoading(true)
     const { data } = await supabase
       .from('client_pickup_requests')
@@ -58,6 +59,7 @@ export default function PickupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) return
     if (!form.pickup_address.trim()) { toast.error('La dirección de recogida es requerida'); return }
     setSaving(true)
     try {

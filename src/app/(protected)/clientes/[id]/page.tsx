@@ -267,10 +267,7 @@ export default function ClienteProfilePage() {
       .in('rate_code', destinationRateCodes)
 
     if (deleteDestinationError) {
-      console.error('Error deleting destination client rates:', deleteDestinationError)
-      toast.error(
-        deleteDestinationError.message || 'No se pudieron guardar las tarifas'
-      )
+      toast.error(deleteDestinationError.message || 'No se pudieron guardar las tarifas')
       setSavingRates(false)
       return
     }
@@ -283,7 +280,6 @@ export default function ClienteProfilePage() {
       .in('rate_code', globalRateCodes)
 
     if (deleteGlobalError) {
-      console.error('Error deleting global client rates:', deleteGlobalError)
       toast.error(deleteGlobalError.message || 'No se pudieron guardar las tarifas')
       setSavingRates(false)
       return
@@ -294,10 +290,7 @@ export default function ClienteProfilePage() {
       .insert(destinationRows)
 
     if (insertDestinationError) {
-      console.error('Error inserting destination client rates:', insertDestinationError)
-      toast.error(
-        insertDestinationError.message || 'No se pudieron guardar las tarifas'
-      )
+      toast.error(insertDestinationError.message || 'No se pudieron guardar las tarifas')
       setSavingRates(false)
       return
     }
@@ -307,7 +300,6 @@ export default function ClienteProfilePage() {
       .insert(globalRows)
 
     if (insertGlobalError) {
-      console.error('Error inserting global client rates:', insertGlobalError)
       toast.error(insertGlobalError.message || 'No se pudieron guardar las tarifas')
       setSavingRates(false)
       return

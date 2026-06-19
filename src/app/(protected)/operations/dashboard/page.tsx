@@ -344,17 +344,12 @@ export default function OperationsDashboardPage() {
         .select('quotation_id, quantity')
 
     if (bookingsError) {
-      console.error('Error loading operations dashboard bookings:', bookingsError)
       setBookings([])
     } else {
       setBookings((bookingsData || []) as BookingRow[])
     }
 
     if (quotationContainersError) {
-      console.error(
-        'Error loading operations dashboard quotation containers:',
-        quotationContainersError
-      )
       setQuotationTotals({})
     } else {
       const totals = ((quotationContainersData || []) as QuotationContainerRow[])

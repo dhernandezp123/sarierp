@@ -45,6 +45,7 @@ export default function NotificacionesPage() {
   }, [user])
 
   const loadNotifications = async () => {
+    if (!user) return
     setLoading(true)
     const { data } = await supabase
       .from('client_notifications')
@@ -67,6 +68,7 @@ export default function NotificacionesPage() {
   }
 
   const markAllRead = async () => {
+    if (!user) return
     const unread = notifications.filter(n => !n.read_at)
     if (unread.length === 0) return
     setMarking(true)

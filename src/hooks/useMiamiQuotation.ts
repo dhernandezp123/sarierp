@@ -111,7 +111,6 @@ export function useMiamiQuotation({
       .eq('is_active', true)
 
     if (error) {
-      console.error('Error cargando surcharges:', error)
       setSurchargeRules([])
       return
     }

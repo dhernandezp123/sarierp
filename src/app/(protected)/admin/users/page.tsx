@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Search, Link2 } from 'lucide-react'
+import { Mail, Search, Link2, UserPlus } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import AdminGuard from '@/src/components/auth/AdminGuard'
 import { createActivityLog } from '@/src/lib/activity-logger'
@@ -32,7 +32,7 @@ type Profile = {
   clientes: Cliente | null
 }
 
-const roles = ['Admin', 'Ventas', 'Pricing', 'Contabilidad', 'Operaciones', 'Cliente']
+const roles = ['Admin', 'Ventas', 'Pricing', 'Contabilidad', 'Finanzas', 'Operaciones', 'Cliente']
 
 const getRolBadgeClass = (rol: string) => {
   switch (rol) {
@@ -44,6 +44,8 @@ const getRolBadgeClass = (rol: string) => {
       return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
     case 'Contabilidad':
       return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+    case 'Finanzas':
+      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
     case 'Operaciones':
       return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
     case 'Cliente':
@@ -77,6 +79,12 @@ export default function AdminUsersPage() {
   const [changeReason, setChangeReason] = useState('')
   const [savingRole, setSavingRole] = useState(false)
 
+  // Invite dialog
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRol, setInviteRol] = useState('Ventas')
+  const [inviteSending, setInviteSending] = useState(false)
+
   // Link to cliente dialog
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkTarget, setLinkTarget] = useState<Profile | null>(null)
@@ -93,7 +101,6 @@ export default function AdminUsersPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error cargando usuarios:', error)
       toast.error(error.message)
     }
 
@@ -294,6 +301,42 @@ export default function AdminUsersPage() {
     fetchUsers()
   }
 
+  const sendInvite = async () => {
+    if (!inviteEmail.trim()) {
+      toast.error('Ingresa un correo electrónico')
+      return
+    }
+    setInviteSending(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        toast.error('Tu sesion expiro. Vuelve a iniciar sesion.')
+        return
+      }
+
+      const res = await fetch('/api/admin/invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), rol: inviteRol }),
+      })
+      const body = await res.json() as { error?: string; userId?: string }
+      if (!res.ok) {
+        toast.error(body.error || 'No se pudo enviar la invitación')
+        return
+      }
+      toast.success(`Invitación enviada a ${inviteEmail}`)
+      setInviteDialogOpen(false)
+      setInviteEmail('')
+      setInviteRol('Ventas')
+      fetchUsers()
+    } finally {
+      setInviteSending(false)
+    }
+  }
+
   const openRoleDialog = (user: Profile) => {
     setSelectedUser(user)
     setNewRole(user.rol)
@@ -336,12 +379,22 @@ export default function AdminUsersPage() {
             </p>
           </div>
 
-          <Link
-            href="/dashboard"
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            ← Dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setInviteDialogOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            >
+              <UserPlus className="h-4 w-4" />
+              Invitar usuario
+            </button>
+            <Link
+              href="/dashboard"
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              ← Dashboard
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
@@ -547,6 +600,80 @@ export default function AdminUsersPage() {
           )}
         </div>
       </div>
+
+      {/* Invite dialog */}
+      <Dialog open={inviteDialogOpen} onOpenChange={(open) => { setInviteDialogOpen(open); if (!open) { setInviteEmail(''); setInviteRol('Ventas') } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invitar nuevo usuario</DialogTitle>
+            <DialogDescription>
+              Se enviará un correo con un enlace de activación. El usuario completará su nombre al aceptar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                Correo electrónico <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="usuario@ejemplo.com"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                Rol asignado <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={inviteRol}
+                onChange={(e) => setInviteRol(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+              >
+                {roles.filter((r) => r !== 'Cliente').map((role) => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-slate-400">
+                El usuario quedará activo al aceptar la invitación. No requiere aprobación adicional.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+              <div className="flex items-start gap-2">
+                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  Supabase enviará el email de invitación. Asegúrate de que <strong>SUPABASE_SERVICE_ROLE_KEY</strong> esté configurada en <code>.env.local</code>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setInviteDialogOpen(false); setInviteEmail(''); setInviteRol('Ventas') }}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                disabled={inviteSending || !inviteEmail.trim()}
+                onClick={sendInvite}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              >
+                <Mail className="h-4 w-4" />
+                {inviteSending ? 'Enviando...' : 'Enviar invitación'}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Role change dialog */}
       <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>

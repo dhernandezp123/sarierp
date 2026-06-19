@@ -867,8 +867,8 @@ export default function NewQuotationPage() {
       resetContainerLineForm()
 
       await fetchCatalogs()
-    } catch (err) {
-      console.error(err)
+    } catch {
+      // silently continue — fetchCatalogs shows its own toasts
     } finally {
       setLoading(false)
     }

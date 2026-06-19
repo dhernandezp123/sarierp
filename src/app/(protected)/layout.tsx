@@ -2,6 +2,7 @@
 
 import Sidebar from '@/src/components/layout/sidebar'
 import Topbar from '@/src/components/layout/topbar'
+import { ErrorBoundary } from '@/src/components/ui/error-boundary'
 import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath } from '@/src/lib/permissions'
 import { usePathname, useRouter } from 'next/navigation'
@@ -46,7 +47,9 @@ export default function ProtectedLayout({
         <Topbar />
 
         <main className="flex-1 overflow-y-auto p-6">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
 
         <footer className="border-t border-slate-200 bg-[#F5F7FA] px-6 py-3 text-center text-xs text-slate-500">

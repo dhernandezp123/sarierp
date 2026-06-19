@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 
 export default function CostValidationDetailPage() {
   const { profile, loading: userLoading } = useUser()
@@ -34,6 +35,8 @@ export default function CostValidationDetailPage() {
   const [invoiceItems, setInvoiceItems] = useState<any[]>([])
   const [taxRates, setTaxRates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const [confirmValidateOpen, setConfirmValidateOpen] = useState(false)
   const [invoiceForm, setInvoiceForm] = useState({
     supplier: '',
     invoice_number: '',
@@ -341,12 +344,6 @@ export default function CostValidationDetailPage() {
   }
 
   const deleteInvoiceItem = async (id: string) => {
-    const confirmed = confirm(
-      '¿Eliminar este costo real proveedor?'
-    )
-
-    if (!confirmed) return
-
     const { error } = await supabase
       .from('provider_invoice_items')
       .delete()
@@ -361,12 +358,6 @@ export default function CostValidationDetailPage() {
   }
 
   const markAsFinanciallyValidated = async () => {
-    const confirmed = confirm(
-      '¿Marcar esta cotización como financieramente validada?'
-    )
-
-    if (!confirmed) return
-
     const { error } = await supabase
       .from('quotations')
       .update({
@@ -422,7 +413,7 @@ export default function CostValidationDetailPage() {
             {canEditCostValidation && (
               <button
                 type="button"
-                onClick={markAsFinanciallyValidated}
+                onClick={() => setConfirmValidateOpen(true)}
                 className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
               >
                 Marcar como Validado
@@ -764,7 +755,7 @@ export default function CostValidationDetailPage() {
                           {canEditCostValidation && (
                             <button
                               type="button"
-                              onClick={() => deleteInvoiceItem(item.id)}
+                              onClick={() => setDeleteTargetId(item.id)}
                               className="rounded-lg border border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
                             >
                               Eliminar
@@ -857,6 +848,28 @@ export default function CostValidationDetailPage() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={deleteTargetId !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}
+        title="Eliminar costo real"
+        description="Esta accion eliminara este costo real de proveedor."
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={() => {
+          if (deleteTargetId) void deleteInvoiceItem(deleteTargetId)
+          setDeleteTargetId(null)
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmValidateOpen}
+        onOpenChange={setConfirmValidateOpen}
+        title="Marcar como validado"
+        description="Esta cotizacion quedara marcada como financieramente validada."
+        confirmLabel="Marcar como validado"
+        onConfirm={() => { void markAsFinanciallyValidated() }}
+      />
+
     </>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { Download, FileText, Plus, Trash2, Upload } from 'lucide-react'
+import { Clock, Download, FileText, History, Mail, Plus, Send, Trash2, Upload, X } from 'lucide-react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
@@ -106,6 +106,15 @@ const defaultForm: BLForm = {
   draft_file_name: '',
 }
 
+const TRACKED_FIELDS: (keyof BLForm)[] = [
+  'bl_number', 'release_type', 'freight_terms', 'bl_date',
+  'carrier', 'vessel_name', 'voyage', 'etd', 'eta',
+  'consignee', 'consignee_address', 'consignee_email',
+  'shipper', 'notify_party', 'port_of_loading', 'port_of_discharge',
+  'description_of_goods', 'gross_weight_kg', 'measurement_cbm',
+  'special_instructions',
+]
+
 const STATUS_FLOW: Record<string, { next: string; label: string; color: string } | null> = {
   'MBL Draft': { next: 'MBL Validado', label: 'Validar MBL', color: 'bg-emerald-600 hover:bg-emerald-700' },
   'MBL Validado': null,
@@ -145,6 +154,23 @@ type BLContainer = {
   gross_weight_kg: string
   measurement_cbm: string
   notes: string
+}
+
+type Amendment = {
+  id: string
+  amendment_number: number
+  notes: string | null
+  changed_fields: Record<string, string> | null
+  status_before: string | null
+  status_after: string | null
+  created_at: string
+}
+
+type DraftSend = {
+  id: string
+  sent_to: string
+  sent_at: string
+  notes: string | null
 }
 
 function formToHBLData(form: BLForm): HBLData {
@@ -225,7 +251,13 @@ export default function BLPage() {
   const [uploadingDraft, setUploadingDraft] = useState(false)
   const [containers, setContainers] = useState<BLContainer[]>([])
   const [savingContainers, setSavingContainers] = useState(false)
+  const [amendments, setAmendments] = useState<Amendment[]>([])
+  const [draftSends, setDraftSends] = useState<DraftSend[]>([])
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [amendmentNote, setAmendmentNote] = useState('')
+  const [sendingDraft, setSendingDraft] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const savedFormRef = useRef<BLForm | null>(null)
 
   const set = (field: keyof BLForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const value = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value
@@ -285,7 +317,7 @@ export default function BLPage() {
         }))
       )
 
-      setForm({
+      const loadedForm: BLForm = {
         bl_type: blData.bl_type as 'MBL' | 'HBL',
         parent_bl_id: blData.parent_bl_id || null,
         bl_number: blData.bl_number || '',
@@ -329,7 +361,17 @@ export default function BLPage() {
         printed_at_destination: blData.printed_at_destination ?? true,
         draft_file_url: blData.draft_file_url || '',
         draft_file_name: blData.draft_file_name || '',
-      })
+      }
+      setForm(loadedForm)
+      savedFormRef.current = loadedForm
+
+      // Load amendment history
+      const [{ data: amendData }, { data: sendData }] = await Promise.all([
+        supabase.from('bl_amendments').select('*').eq('bl_id', blId).order('amendment_number', { ascending: true }),
+        supabase.from('bl_draft_sends').select('*').eq('bl_id', blId).order('sent_at', { ascending: false }),
+      ])
+      setAmendments((amendData || []) as Amendment[])
+      setDraftSends((sendData || []) as DraftSend[])
 
       setLoading(false)
       return
@@ -541,6 +583,68 @@ export default function BLPage() {
       description: `${form.bl_type} actualizado`,
       metadata: { status: form.status, booking_id: bookingId },
     })
+
+    // Log amendment
+    await logAmendment(form)
+  }
+
+  const logAmendment = async (currentForm: BLForm) => {
+    const before = savedFormRef.current
+    const changed: Record<string, string> = {}
+    if (before) {
+      for (const field of TRACKED_FIELDS) {
+        const prev = String(before[field] ?? '')
+        const next = String(currentForm[field] ?? '')
+        if (prev !== next) changed[field] = `${prev || '(vacío)'} → ${next || '(vacío)'}`
+      }
+    }
+    if (Object.keys(changed).length === 0 && !amendmentNote.trim()) {
+      savedFormRef.current = currentForm
+      return
+    }
+    const nextNum = amendments.length + 1
+    const { data: inserted } = await supabase
+      .from('bl_amendments')
+      .insert({
+        bl_id: blId,
+        amendment_number: nextNum,
+        notes: amendmentNote.trim() || null,
+        changed_fields: Object.keys(changed).length > 0 ? changed : null,
+        status_before: before?.status || null,
+        status_after: currentForm.status || null,
+        created_by: user?.id || null,
+      })
+      .select('*')
+      .single()
+    if (inserted) {
+      setAmendments((prev) => [...prev, inserted as Amendment])
+    }
+    savedFormRef.current = currentForm
+    setAmendmentNote('')
+  }
+
+  const logDraftSend = async () => {
+    if (!form.consignee_email) {
+      toast.error('El consignatario no tiene email registrado')
+      return
+    }
+    setSendingDraft(true)
+    const { data: inserted } = await supabase
+      .from('bl_draft_sends')
+      .insert({
+        bl_id: blId,
+        sent_to: form.consignee_email,
+        sent_by: user?.id || null,
+        notes: `Draft enviado para ${form.bl_number || 'BL sin número'}`,
+      })
+      .select('*')
+      .single()
+    if (inserted) {
+      setDraftSends((prev) => [inserted as DraftSend, ...prev])
+      toast.success(`Envío registrado a ${form.consignee_email}`)
+    }
+    setSendingDraft(false)
+    setShowEmailModal(false)
   }
 
   const saveContainers = async () => {
@@ -669,9 +773,104 @@ export default function BLPage() {
 
   const transition = isNew ? null : STATUS_FLOW[form.status]
   const blLabel = form.bl_type === 'MBL' ? 'Master BL' : 'House BL'
+  const canSendDraft = !isNew && form.bl_type === 'HBL' && ['HBL Draft', 'Pendiente Aprobación Cliente'].includes(form.status)
+
+  const fmtDate = (d: string) =>
+    d ? new Date(d + 'T00:00:00').toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
+
+  const emailSubject = `Revisión Draft HBL — ${form.bl_number || 'Pendiente'}`
+  const emailBody = [
+    `Estimado/a ${form.consignee || 'cliente'},`,
+    '',
+    'Adjunto encontrará el borrador del House Bill of Lading para su revisión y aprobación.',
+    '',
+    `BL #:              ${form.bl_number || 'Pendiente'}`,
+    `Puerto de Carga:   ${form.port_of_loading || '-'}`,
+    `Puerto de Descarga:${form.port_of_discharge || '-'}`,
+    `Buque / Viaje:     ${[form.vessel_name, form.voyage].filter(Boolean).join(' / ') || '-'}`,
+    `ETD:               ${fmtDate(form.etd)}`,
+    '',
+    'Por favor revise la información y confírmenos su aprobación, o notifíquenos si requiere algún ajuste.',
+    '',
+    'Saludos,',
+    'Sari Express — Operaciones',
+  ].join('\n')
+
+  const mailtoLink = form.consignee_email
+    ? `mailto:${form.consignee_email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
+    : ''
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
+
+      {/* Email Draft Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className={`${cardClass} w-full max-w-2xl`}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Enviar Draft al Cliente</h2>
+              <button type="button" onClick={() => setShowEmailModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mb-3 space-y-1 rounded-lg bg-blue-50 p-3 text-sm dark:bg-blue-950/30">
+              <p className="font-medium text-blue-800 dark:text-blue-300">Para: <span className="font-normal">{form.consignee_email || '(sin email)'}</span></p>
+              <p className="font-medium text-blue-800 dark:text-blue-300">Asunto: <span className="font-normal">{emailSubject}</span></p>
+            </div>
+
+            <textarea
+              readOnly
+              rows={16}
+              value={emailBody}
+              className="mb-4 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+            />
+
+            <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+              Recuerda adjuntar el PDF del draft al correo electrónico.
+            </p>
+
+            <div className="flex flex-wrap gap-3">
+              {mailtoLink && (
+                <a
+                  href={mailtoLink}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  <Mail className="h-4 w-4" />
+                  Abrir en correo
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(emailBody)
+                  toast.success('Mensaje copiado')
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                Copiar mensaje
+              </button>
+              <button
+                type="button"
+                onClick={logDraftSend}
+                disabled={sendingDraft || !form.consignee_email}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+                {sendingDraft ? 'Registrando...' : 'Registrar envío'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowEmailModal(false)}
+                className="ml-auto rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -1055,6 +1254,21 @@ export default function BLPage() {
         </SectionCard>
       )}
 
+      {/* Nota de enmienda (solo en edición) */}
+      {!isNew && (
+        <section className={cardClass}>
+          <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+            Nota de este cambio <span className="text-slate-400">(opcional — queda registrada en el historial)</span>
+          </label>
+          <input
+            value={amendmentNote}
+            onChange={(e) => setAmendmentNote(e.target.value)}
+            className={fieldClass}
+            placeholder="Ej: Corrección de peso, cambio de consignatario..."
+          />
+        </section>
+      )}
+
       {/* Acciones */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-3">
@@ -1066,6 +1280,17 @@ export default function BLPage() {
           >
             {saving ? 'Guardando...' : isNew ? `Crear ${blLabel}` : 'Guardar'}
           </button>
+
+          {canSendDraft && (
+            <button
+              type="button"
+              onClick={() => setShowEmailModal(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+            >
+              <Mail className="h-4 w-4" />
+              Enviar Draft al Cliente
+            </button>
+          )}
         </div>
 
         {!isNew && transition && (
@@ -1094,6 +1319,65 @@ export default function BLPage() {
           </PDFDownloadLink>
         )}
       </div>
+
+      {/* Historial de enmiendas y envíos */}
+      {!isNew && (amendments.length > 0 || draftSends.length > 0) && (
+        <section className={cardClass}>
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-white">
+            <History className="h-5 w-5 text-slate-400" />
+            Historial
+          </h2>
+
+          {amendments.length > 0 && (
+            <div className="mb-6">
+              <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Enmiendas</h3>
+              <div className="space-y-3">
+                {amendments.map((a) => (
+                  <div key={a.id} className="rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>Enmienda #{a.amendment_number}</span>
+                      <span>·</span>
+                      <span>{new Date(a.created_at).toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    {a.notes && (
+                      <p className="mt-1 font-medium text-slate-800 dark:text-slate-200">{a.notes}</p>
+                    )}
+                    {a.changed_fields && Object.keys(a.changed_fields).length > 0 && (
+                      <ul className="mt-2 space-y-0.5 text-xs text-slate-600 dark:text-slate-400">
+                        {Object.entries(a.changed_fields).map(([field, change]) => (
+                          <li key={field}>
+                            <span className="font-medium">{field}:</span> {change}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {draftSends.length > 0 && (
+            <div>
+              <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Envíos de Draft</h3>
+              <div className="space-y-2">
+                {draftSends.map((s) => (
+                  <div key={s.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
+                    <Send className="h-4 w-4 flex-shrink-0 text-violet-500" />
+                    <div>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{s.sent_to}</span>
+                      <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+                        {new Date(s.sent_at).toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }

@@ -68,7 +68,6 @@ export default function RegisterPage() {
       })
 
     if (profileError) {
-      console.error('PROFILE UPSERT ERROR:', profileError)
       setLoading(false)
       toast.error('No se pudo crear el perfil', {
         description: profileError.message,

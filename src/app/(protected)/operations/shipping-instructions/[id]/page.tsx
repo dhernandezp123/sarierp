@@ -483,7 +483,7 @@ export default function RoutingDetailPage() {
           .eq('quotation_id', quotationId)
 
         if (quotationContainersError) {
-          console.error('Error loading quotation containers:', quotationContainersError)
+          // non-fatal: containers section just won't render
         }
 
         const quotationContainerTotal = (quotationContainersData || []).reduce(
@@ -534,7 +534,6 @@ export default function RoutingDetailPage() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      console.error('Error loading bookings:', error)
       toast.error('No se pudieron cargar los bookings asociados')
       return
     }
@@ -567,7 +566,7 @@ export default function RoutingDetailPage() {
       .order('event_date', { ascending: false })
 
     if (shippingEventsError) {
-      console.error('Error loading shipping instruction events:', shippingEventsError)
+      // timeline continues with available data
     }
 
     timelineEvents.push(
@@ -609,7 +608,7 @@ export default function RoutingDetailPage() {
         .order('created_at', { ascending: false })
 
       if (activityLogsError) {
-        console.error('Error loading operational activity logs:', activityLogsError)
+        // timeline continues without activity logs
       }
 
       const activityTimelineEvents = (activityLogsData || []).map((log: any) => {
@@ -666,10 +665,6 @@ export default function RoutingDetailPage() {
           created_by: user.id,
         })
 
-      if (error) {
-        console.error('Error creating operational event:', error)
-      }
-
       if (metadata) {
         await createActivityLog({
           module: 'operations_timeline',
@@ -680,8 +675,8 @@ export default function RoutingDetailPage() {
           metadata,
         })
       }
-    } catch (error) {
-      console.error('Error creating operational event:', error)
+    } catch {
+      // event creation failure is non-fatal
     }
   }
 
@@ -746,7 +741,6 @@ export default function RoutingDetailPage() {
     setSaving(false)
 
     if (error) {
-      console.error('Error saving routing:', error)
       toast.error(error.message || 'No se pudieron guardar las Shipping Instructions')
       return
     }

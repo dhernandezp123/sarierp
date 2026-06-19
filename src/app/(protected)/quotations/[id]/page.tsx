@@ -380,7 +380,6 @@ export default function QuotationDetailPage() {
       .single()
 
     if (quoteError) {
-      console.error('Quotation detail error:', quoteError)
       toast.error('Error cargando cotización', {
         description: quoteError.message,
       })
@@ -552,10 +551,7 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', quotationId)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Error cargando quotation_change_logs:', error)
-      return
-    }
+    if (error) return
 
     setChangeLogs((data || []) as QuotationChangeLog[])
   }

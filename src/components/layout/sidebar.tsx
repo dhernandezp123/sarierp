@@ -24,6 +24,8 @@ import {
   ClipboardList,
   Warehouse,
   ShieldCheck,
+  ShoppingBag,
+  CreditCard,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -156,6 +158,19 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
     },
   ]
 
+  const purchaseItems = [
+    {
+      label: 'Proveedores',
+      href: '/suppliers',
+      icon: ShoppingBag,
+    },
+    {
+      label: 'Cuentas por Pagar',
+      href: '/accounts-payable',
+      icon: CreditCard,
+    },
+  ]
+
   const operationsItems = [
     {
       label: 'Dashboard Operativo',
@@ -224,6 +239,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   const visibleOperationsItems = filterVisibleItems(operationsItems)
   const visibleMiamiItems = filterVisibleItems(miamiItems)
   const visibleAdminItems = filterVisibleItems(adminItems)
+  const visiblePurchaseItems = filterVisibleItems(purchaseItems)
   const displayName = profile?.nombre
     ? `${profile.nombre} ${profile.apellido || ''}`.trim()
     : 'Usuario'
@@ -315,6 +331,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
       {(visibleCostItems.length > 0 ||
         visibleFinancialItems.length > 0 ||
+        visiblePurchaseItems.length > 0 ||
         visibleOperationsItems.length > 0) && (
         <div className="mt-8 px-4">
           {visibleCostItems.length > 0 && (
@@ -343,6 +360,21 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
               <nav className="space-y-1">
                 {visibleFinancialItems.map(renderItem)}
+              </nav>
+            </>
+          )}
+
+          {visiblePurchaseItems.length > 0 && (
+            <>
+              <div className="mb-2 mt-6 flex items-center gap-2 px-3">
+                <span className="h-px flex-1 bg-white/10" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  Compras
+                </p>
+              </div>
+
+              <nav className="space-y-1">
+                {visiblePurchaseItems.map(renderItem)}
               </nav>
             </>
           )}
