@@ -7,6 +7,7 @@ import { Package, LogOut, User, Bell, Home } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { useClientNotifications } from '@/src/hooks/useClientNotifications'
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useUser()
@@ -30,6 +31,8 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     await supabase.auth.signOut()
     router.replace('/portal/login')
   }
+
+  const { unreadCount } = useClientNotifications(profile?.id)
 
   if (loading || !user || !profile || profile.rol !== 'Cliente') return null
 
@@ -72,6 +75,19 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           </nav>
 
           <div className="flex items-center gap-1">
+            {/* Bell with unread badge */}
+            <Link
+              href="/portal/notificaciones"
+              className="relative flex h-9 w-9 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              title="Notificaciones"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
             <Link
               href="/portal/perfil"
               className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -109,6 +125,24 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               </Link>
             )
           })}
+          <Link
+            href="/portal/notificaciones"
+            className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium transition ${
+              pathname === '/portal/notificaciones'
+                ? 'text-blue-600 dark:text-blue-400'
+                : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            <span className="relative">
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-[8px] font-bold text-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </span>
+            Avisos
+          </Link>
           <Link
             href="/portal/perfil"
             className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium transition ${

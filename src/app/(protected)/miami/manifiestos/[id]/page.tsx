@@ -6,6 +6,7 @@ import { ScanLine, X, Search, CheckCircle2, Lock, Package } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { notifyClientPackageAssigned } from '@/src/lib/client-notifications'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
@@ -168,6 +169,18 @@ export default function ManifiestoDetailPage() {
         assigned_by: user?.id ?? null,
       }).eq('id', assignPackageId)
       if (error) throw error
+
+      // Find tracking number for notification
+      const pkg = packages.find(p => p.id === assignPackageId)
+      if (pkg) {
+        await notifyClientPackageAssigned({
+          clienteId:       selectedClient.id,
+          packageId:       assignPackageId,
+          trackingNumber:  pkg.tracking_number,
+          warehouseNumber: whData,
+        })
+      }
+
       toast.success(`Asignado a ${selectedClient.nombre} — WH: ${whData}`)
       setAssignPackageId(null)
       setSelectedClient(null)

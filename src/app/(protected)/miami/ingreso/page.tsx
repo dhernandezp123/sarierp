@@ -6,6 +6,7 @@ import { ScanLine, X, Search, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { notifyClientPackageAssigned } from '@/src/lib/client-notifications'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 
@@ -106,6 +107,14 @@ export default function MiamiIngresoPage() {
           assigned_at: new Date().toISOString(),
           assigned_by: user?.id ?? null,
         }).eq('id', pkg.id)
+
+        // Notify client portal
+        await notifyClientPackageAssigned({
+          clienteId:       selectedClient.id,
+          packageId:       pkg.id,
+          trackingNumber:  form.tracking_number.trim().toUpperCase(),
+          warehouseNumber: whData,
+        })
       }
 
       toast.success('Paquete ingresado correctamente')
