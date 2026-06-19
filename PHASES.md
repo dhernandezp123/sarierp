@@ -49,178 +49,111 @@ Breadcrumbs añadidos en:
 - 5 tarjetas de features (añadido "Documentos y PDFs")
 - Footer actualizado
 
----
-
-## Fases pendientes
-
 ### Fase 4 — Base de datos: Miami + Rol Cliente
-**Estado:** 🔲 Pendiente — siguiente a implementar
+**Estado:** ✅ Completado
 
-Scope:
-- Nueva tabla `miami_packages`:
-  - tracking_number, carrier, weight_lbs, weight_kg, length_in, width_in, height_in,
-    ft3 (calculado), cbm (calculado), description, photos (text[]), status, warehouse_number,
-    cliente_id (nullable hasta asignar), manifest_id (nullable si es ingreso individual),
-    received_at, received_by (profile_id), assigned_at, assigned_by, notes
-- Nueva tabla `miami_manifests`:
-  - manifest_number (formato: MAN-20250618-001, fecha + correlativo del día),
-    status (Abierto / Cerrado), received_by, created_at, closed_at, total_packages, notes
-- Nueva tabla `miami_pre_alerts`:
-  - cliente_id, tracking_number, carrier, description, expected_date,
-    status (Pendiente / Recibido / Cancelado), created_at
-- Nueva tabla `client_addresses` (dirección Miami de entrega):
-  - cliente_id, nombre_completo, company_name, address_line, suite, city, state, zip,
-    phone, is_active
-- Nueva tabla `miami_incidencias`:
-  - package_id, cliente_id, tipo (Dañado / Incompleto / No reconozco / Otro),
-    descripcion, fotos (text[]), status (Abierta / En revisión / Resuelta), created_at
-- Nueva tabla `client_notifications`:
-  - profile_id, title, body, type, entity_id, entity_type, read_at, created_at
-- Formato número de warehouse: `SPS-NNNNN` (ej. SPS-00001, secuencial global)
-- Formato número de manifiesto: `MAN-YYYYMMDD-NNN` (ej. MAN-20250618-001)
-- Nuevo rol `Cliente` en tabla `profiles`
-- Campo `cliente_id uuid` en `profiles` (nullable) → vincula usuario portal a ficha cliente
-- Supabase Storage bucket `miami-package-photos`
-- RLS: cliente solo ve sus propios paquetes, pre-alertas, incidencias y notificaciones
-- Archivos SQL en `/sql/`
-
----
+Tablas creadas:
+- `miami_packages` — tracking, carrier, peso, dims, status, warehouse_number, cliente_id, manifest_id
+- `miami_manifests` — manifest_number (MAN-YYYYMMDD-NNN), status, received_by
+- `miami_pre_alerts` — cliente_id, tracking_number, carrier, status, matched_package_id
+- `client_addresses` — dirección Miami formato casillero
+- `miami_incidencias` — package_id, tipo, descripcion, fotos, status
+- `client_notifications` — profile_id, title, body, type, entity_type, entity_id, read_at
+- `client_pickup_requests` — cliente_id, address, pickup_date, status, notes
+- Bucket `miami-package-photos` en Supabase Storage
+- RLS: cliente ve solo sus propios datos via `current_user_cliente_id()` function
+- RPCs: `next_warehouse_number()` → `SPS-NNNNN`, `next_manifest_number()` → `MAN-YYYYMMDD-NNN`
 
 ### Fase 5 — Módulo Bodega Miami (para rol Operaciones/Admin)
-**Estado:** 🔲 Pendiente
+**Estado:** ✅ Completado | Commit: `1fd68dc`
 
-Ruta base: `/miami/`
-Acceso: Admin, Operaciones
-
-Sub-páginas:
-- `/miami` — Dashboard: paquetes sin asignar, manifiestos abiertos, métricas del día
-- `/miami/ingreso` — Ingreso individual (tracking + carrier + peso + dims + foto + cliente opcional)
-- `/miami/manifiestos` — Lista de manifiestos
-- `/miami/manifiestos/[id]` — Detalle de manifiesto: tabla de paquetes + asignación a clientes
-- `/miami/manifiestos/nuevo` — Crear manifiesto + escanear paquetes en lote
-- `/miami/paquetes` — Todos los paquetes con filtros (sin asignar, por cliente, por fecha)
-- `/miami/paquetes/[id]` — Detalle individual
-
-Lógica clave:
-- Ingreso individual: puede asignar al cliente al momento o dejarlo sin asignar
-- Ingreso por lote: crea manifiesto → agrega paquetes sin asignar → cierra manifiesto
-- Asignación posterior: en detalle del manifiesto o del paquete, buscar cliente por nombre
-- Número WH (SPS-NNNNN) se genera al momento de asignar al cliente (no al ingresar)
-- Auto-calcula FT3 = (L × W × H) / 1728, CBM = (L_cm × W_cm × H_cm) / 1000000
-- Fotos: upload desde archivo local (cámara externa); futuro: cámara dedicada con cubicaje automático
-
----
+Páginas implementadas:
+- `/miami` — Dashboard con métricas del día
+- `/miami/ingreso` — Ingreso individual con auto-focus para scanner, asignación a cliente
+- `/miami/manifiestos` — Lista de manifiestos con filtros
+- `/miami/manifiestos/[id]` — Detalle: scan en lote, tabla de paquetes, asignación por cliente, cierre de manifiesto
+- Sidebar actualizado con sección Miami Bodega
+- Permisos: rutas `/miami` accesibles para Admin y Operaciones
 
 ### Fase 6 — Portal Cliente: Auth + Layout + Perfil
-**Estado:** 🔲 Pendiente
+**Estado:** ✅ Completado | Commit: `ebb60cd`
 
-Ruta base: `/portal/`
-Rol: `Cliente` en Supabase Auth / profiles
-
-Sub-páginas:
-- `/portal/login` — Login exclusivo clientes (separado del login del ERP)
-- `/portal` — Inicio (ver Fase 8)
-- `/portal/perfil` — Editar datos personales
-- `/portal/perfil/direccion-miami` — Mi dirección de entrega Miami (formato casillero)
-- Formato dirección Miami:
-  ```
-  [Nombre Cliente]
-  C/O Sari Express
-  [Dirección bodega Miami]
-  Casillero: SPS-XXXXX
-  Miami, FL XXXXX, USA
-  ```
-- Sección de configuración con placeholders:
-  - "Activación biométrica" → "Próximamente en app móvil"
-  - "Buscar actualizaciones" → "Próximamente en app móvil"
-  - "Tutoriales de uso" → placeholder
-  - "Restablecer tutoriales" → placeholder
-  - Versión de la app en el footer
-  - Botón rojo "Cerrar Sesión"
-- Admin puede crear cuentas de portal desde el panel `/admin/users`
-
----
+- `src/app/portal/layout.tsx` — Shell del portal, guard rol=Cliente, top nav + mobile tabs
+- `src/app/portal/login/page.tsx` — Login sin branding Sari Express
+- `src/app/portal/page.tsx` — Dashboard con stats, paquetes, pre-alertas, banner dirección
+- `src/app/portal/perfil/page.tsx` — Perfil completo con todas las secciones
+- `src/app/portal/perfil/direccion-miami/page.tsx` — CRUD dirección Miami, copy-to-clipboard
 
 ### Fase 7 — Portal Cliente: Paquetería + Pre-alertas + Incidencias
-**Estado:** 🔲 Pendiente
+**Estado:** ✅ Completado | Commit: `4c8eb56`
 
-Sub-páginas:
-- `/portal/paquetes` — Lista de paquetes asignados al cliente
-- `/portal/paquetes/[id]` — Detalle: tracking, peso, dims, fotos, estado, historial, WH#
-- `/portal/pre-alertas` — Lista de pre-alertas registradas
-- `/portal/pre-alertas/nueva` — Registrar pre-alerta (tracking + carrier + descripción + fecha estimada)
-- `/portal/incidencias` — Lista de incidencias activas ("Gestiona tus paquetes con incidencias")
-- `/portal/incidencias/nueva` — Reportar problema: tipo, descripción, fotos, paquete afectado
-
----
+- `src/app/portal/paquetes/page.tsx` — Lista con búsqueda y filtros de estado
+- `src/app/portal/paquetes/[id]/page.tsx` — Detalle con fotos (signed URLs), historial incidencias
+- `src/app/portal/pre-alertas/page.tsx` — Lista con filtros, link a paquete matcheado
+- `src/app/portal/pre-alertas/nueva/page.tsx` — Formulario registro pre-alerta
+- `src/app/portal/incidencias/page.tsx` — Lista de incidencias activas
+- `src/app/portal/incidencias/nueva/page.tsx` — Reporte con preselect via ?packageId=
 
 ### Fase 8 — Portal Cliente: Inicio + Funcionalidades extra
-**Estado:** 🔲 Pendiente
+**Estado:** ✅ Completado | Commit: `cf8fba8`
 
-Pantalla de Inicio `/portal`:
-- Resumen: paquetes en bodega, pre-alertas pendientes, incidencias activas
-- Calculadora FT3 / CBM (largo × ancho × alto, conversión en tiempo real)
-- Bookings FCL (shipping instructions del cliente filtradas)
-- Solicitudes de Pickup (formulario básico: dirección de origen, fecha, descripción)
-- Contáctanos: dirección SPS + TGU con horarios + botón Google Maps / Waze
+- `sql/20260618_phase8_pickup_requests.sql` — tabla `client_pickup_requests` con RLS
+- `src/app/portal/calculadora/page.tsx` — Calculadora FT³/CBM/dim-weight (in/cm toggle)
+- `src/app/portal/contacto/page.tsx` — Oficinas Miami + TGU, horarios, Maps + Waze
+- `src/app/portal/info/restringidos/page.tsx` — 6 categorías de material restringido
+- `src/app/portal/info/terminos/page.tsx` — 10 secciones T&C
+- `src/app/portal/info/nosotros/page.tsx` — Sobre nosotros con stats y valores
+- `src/app/portal/pickup/page.tsx` — CRUD solicitudes de pickup
+- `src/app/portal/perfil/page.tsx` — Reescritura completa: cuenta, dirección, herramientas, info, contraseña, cierre
 
-Sección informativa:
-- Materiales Restringidos (lista estática, editable por Admin)
-- Términos y Condiciones (contenido estático)
-- Sobre Nosotros (contenido estático)
+### Fase 9 — Notificaciones in-app
+**Estado:** ✅ Completado | Commit: `caffe7a`
 
----
-
-### Fase 9 — Notificaciones
-**Estado:** 🔲 Pendiente
-
-In-app (Fase 9a):
-- Tabla `client_notifications` (creada en Fase 4)
-- Campana en header del portal con badge de no leídas
-- Marcar como leído individual o todo
-- Trigger: al asignar paquete → crear notificación in-app al cliente
-
-Email automático (Fase 9b):
-- Al asignar paquete → enviar email con detalle (tracking, WH#, peso, dims)
-- Proveedor: Supabase Edge Function + Resend (o SendGrid)
-- Confirmar proveedor de email antes de implementar
-
-WhatsApp / SMS (Fase 9c — FUTURO):
-- No hay cuenta Twilio ni WhatsApp Business API actualmente
-- Dejar estructura lista (campo `whatsapp_number` en perfil cliente)
-- Implementar cuando se contrate el servicio
-
-Push notifications (Fase 9d — FUTURO):
-- Para la app móvil futura
-- Dejar tabla `push_tokens` lista en BD
-
----
+- `src/lib/client-notifications.ts` — `notifyClientPackageAssigned()` (diferente de notifications.ts que es para ERP staff)
+- `src/hooks/useClientNotifications.ts` — Supabase Realtime subscription, devuelve unreadCount
+- `src/app/portal/notificaciones/page.tsx` — Lista, mark individual/all read, navega a entidad
+- `src/app/portal/layout.tsx` — Integración campana + badge en top nav y mobile tab
+- `src/app/(protected)/miami/ingreso/page.tsx` — Llama `notifyClientPackageAssigned` en asignación inmediata
+- `src/app/(protected)/miami/manifiestos/[id]/page.tsx` — Llama `notifyClientPackageAssigned` en handleAssign
 
 ### Fase 10 — Integración + Auto-match + Pulido
-**Estado:** 🔲 Pendiente
+**Estado:** ✅ Completado (pendiente de commit)
 
-- Auto-match: al ingresar paquete, si existe pre-alerta con ese tracking → asignar automáticamente al cliente
-- Vinculación Admin→Portal: crear cuenta de portal para un cliente existente desde `/admin/users`
-- Paginación en listas largas (paquetes, pre-alertas, notificaciones)
-- Prueba de flujo completo: bodega ingresa → cliente recibe notificación → cliente ve paquete
-- Pulido visual y consistencia con el resto del ERP
+- `sql/20260618_phase10_auto_match.sql` — Trigger BEFORE INSERT en `miami_packages`:
+  si el tracking coincide con una `miami_pre_alerts` pendiente, asigna automáticamente
+  al cliente (sets cliente_id, warehouse_number, status='Asignado'), cierra la pre-alerta
+  y envía notificación in-app al portal
+- `src/app/(protected)/miami/ingreso/page.tsx` — Detecta auto-match: si pkg.status='Asignado'
+  y no hubo asignación explícita → toast especial con WH#
+- `src/app/(protected)/admin/users/page.tsx` — Agrega rol 'Cliente' (cyan badge),
+  join con clientes, modal "Vincular a cliente" para linkear profiles.cliente_id
+- `src/app/portal/paquetes/page.tsx` — Paginación server-side (PAGE_SIZE=20) con "Cargar más"
+
+---
+
+## Pendiente técnico
+
+- **Push a GitHub:** commits `cf8fba8` (Fase 8), `caffe7a` (Fase 9), y Fase 10 pendientes de push
+  → Ejecutar: `git push origin main`
+- **SQL migrations ejecutar en Supabase:**
+  - `sql/20260618_phase10_auto_match.sql` — trigger auto-match pre-alertas
 
 ---
 
 ## Roadmap visual
 
-| Fase | Contenido | Est. sesiones | Estado |
-|------|-----------|---------------|--------|
-| 1 | Componentes UI reutilizables | 1 | ✅ |
-| 2 | UX Audit general | 2 | ✅ |
-| 3 | Landing page | 1 | ✅ |
-| 4 | BD: Miami + Rol Cliente | 1 | 🔲 |
-| 5 | Módulo Bodega Miami (operativo) | 2 | 🔲 |
-| 6 | Portal Cliente: Auth + Perfil | 1-2 | 🔲 |
-| 7 | Portal Cliente: Paquetería + Pre-alertas | 1-2 | 🔲 |
-| 8 | Portal Cliente: Inicio + Extras | 1-2 | 🔲 |
-| 9 | Notificaciones (in-app + email) | 1 | 🔲 |
-| 10 | Integración + Auto-match + Pulido | 1 | 🔲 |
+| Fase | Contenido | Estado |
+|------|-----------|--------|
+| 1 | Componentes UI reutilizables | ✅ |
+| 2 | UX Audit general | ✅ |
+| 3 | Landing page | ✅ |
+| 4 | BD: Miami + Rol Cliente | ✅ |
+| 5 | Módulo Bodega Miami (operativo) | ✅ |
+| 6 | Portal Cliente: Auth + Perfil | ✅ |
+| 7 | Portal Cliente: Paquetería + Pre-alertas | ✅ |
+| 8 | Portal Cliente: Inicio + Extras | ✅ |
+| 9 | Notificaciones (in-app) | ✅ |
+| 10 | Integración + Auto-match + Pulido | ✅ |
 
 ---
 
@@ -229,14 +162,15 @@ Push notifications (Fase 9d — FUTURO):
 - **Ingreso de trackings:** combinación escáner de barras + tipeo manual
 - **Tipo de lote:** ambos (carga mezclada de varios clientes Y múltiples paquetes de un cliente)
 - **Datos por paquete:** tracking, carrier, peso, dimensiones, fotos, descripción
-- **Match cliente:** búsqueda manual por nombre/empresa (+ auto-match via pre-alerta en Fase 10)
+- **Match cliente:** búsqueda manual por nombre/empresa + auto-match via pre-alerta (trigger DB)
 - **Número WH:** `SPS-NNNNN` — secuencial global, generado al asignar al cliente
 - **Número manifiesto:** `MAN-YYYYMMDD-NNN`
 - **Portal cliente:** misma app Next.js, rol `Cliente` en Supabase, ruta `/portal/`
-- **Notificaciones:** in-app + email (ahora) · WhatsApp/SMS + Push (futuro, sin API aún)
-- **Fotos:** upload desde archivo local (cámara externa USB/SD); futuro: cámara dedicada con cubicaje automático live
+- **Notificaciones:** in-app (Supabase Realtime) implementado · email/WhatsApp/Push futuro
+- **Fotos:** upload desde archivo local (cámara externa USB/SD); futuro: cámara dedicada
 - **Biométrico / Actualizaciones:** placeholders en web, reales en la app móvil futura
-- **WhatsApp Business API / Twilio:** no disponible aún, se deja estructura lista
+- **Branding en portal:** "Mi Paquetería" — sin nombre "Sari" en páginas públicas/marketing
+- **client-notifications.ts:** archivo separado de notifications.ts (ERP staff usa tabla diferente)
 
 ---
 

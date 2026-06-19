@@ -93,7 +93,7 @@ export default function MiamiIngresoPage() {
           status:          'Sin asignar',
           cliente_id:      assignClient && selectedClient ? selectedClient.id : null,
         })
-        .select('id')
+        .select('id, status, warehouse_number, cliente_id')
         .single()
 
       if (error) throw error
@@ -115,9 +115,13 @@ export default function MiamiIngresoPage() {
           trackingNumber:  form.tracking_number.trim().toUpperCase(),
           warehouseNumber: whData,
         })
+        toast.success('Paquete ingresado y asignado al cliente')
+      } else if (pkg?.status === 'Asignado') {
+        // DB trigger auto-matched a pending pre-alert
+        toast.success(`✓ Auto-asignado por pre-alerta · WH: ${pkg.warehouse_number}`, { duration: 6000 })
+      } else {
+        toast.success('Paquete ingresado correctamente')
       }
-
-      toast.success('Paquete ingresado correctamente')
 
       // Reset form, keep carrier
       setForm(prev => ({ ...prev, tracking_number: '', weight_lbs: '', length_in: '', width_in: '', height_in: '', description: '', notes: '' }))

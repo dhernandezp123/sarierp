@@ -17,6 +17,7 @@ type PackageRow = {
 }
 
 const STATUS_FILTERS = ['Todos', 'Asignado', 'Entregado', 'Con incidencia', 'Sin asignar']
+const PAGE_SIZE = 20
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   'Sin asignar':    { label: 'Pendiente',    color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
@@ -30,24 +31,38 @@ export default function PortalPaquetesPage() {
   const router = useRouter()
   const [packages, setPackages] = useState<PackageRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [search, setSearch] = useState('')
 
   useEffect(() => {
     if (!profile?.cliente_id) return
-    loadPackages()
+    loadPackages(true)
   }, [profile?.cliente_id])
 
-  const loadPackages = async () => {
-    setLoading(true)
+  const loadPackages = async (reset: boolean) => {
+    if (reset) setLoading(true)
+    else setLoadingMore(true)
+
+    const from = reset ? 0 : packages.length
     const { data } = await supabase
       .from('miami_packages')
       .select('id, tracking_number, carrier, warehouse_number, weight_lbs, status, received_at')
       .eq('cliente_id', profile.cliente_id)
       .order('received_at', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1)
 
-    setPackages((data ?? []) as PackageRow[])
-    setLoading(false)
+    const rows = (data ?? []) as PackageRow[]
+    setHasMore(rows.length === PAGE_SIZE)
+
+    if (reset) {
+      setPackages(rows)
+      setLoading(false)
+    } else {
+      setPackages(prev => [...prev, ...rows])
+      setLoadingMore(false)
+    }
   }
 
   const filtered = packages.filter(p => {
@@ -145,9 +160,22 @@ export default function PortalPaquetesPage() {
           </div>
         )}
 
+        {!loading && filtered.length > 0 && hasMore && !search.trim() && statusFilter === 'Todos' && (
+          <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => loadPackages(false)}
+              disabled={loadingMore}
+              className="w-full rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {loadingMore ? 'Cargando...' : 'Cargar más paquetes'}
+            </button>
+          </div>
+        )}
+
         {!loading && filtered.length > 0 && (
           <div className="border-t border-slate-100 px-5 py-2.5 dark:border-slate-800">
-            <p className="text-xs text-slate-400">{filtered.length} de {packages.length} paquetes</p>
+            <p className="text-xs text-slate-400">{filtered.length} paquetes cargados</p>
           </div>
         )}
       </div>
