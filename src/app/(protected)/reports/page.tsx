@@ -8,6 +8,7 @@ import {
   Download,
   FileDown,
   Filter,
+  Printer,
   RefreshCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -19,6 +20,7 @@ import { EmptyState } from '@/src/components/ui/EmptyState'
 import { ReportPdf, type ReportPdfColumn, type ReportPdfData, type ReportPdfRow } from '@/src/components/pdf/report-pdf'
 
 type ReportId = 'commercial' | 'operations' | 'billing' | 'receivable' | 'payable' | 'overdue'
+type DatePreset = 'month' | 'quarter' | 'year' | 'all' | 'custom'
 
 type Join<T> = T | T[] | null
 
@@ -194,14 +196,37 @@ function exportCSV(rows: ReportRow[], columns: ReportPdfColumn[], filename: stri
   URL.revokeObjectURL(url)
 }
 
-function applyPreset(setDateFrom: (v: string) => void, setDateTo: (v: string) => void, preset: 'month' | 'quarter' | 'year' | 'all') {
+function presetRange(preset: Exclude<DatePreset, 'custom'>) {
   const now = new Date()
   const to = now.toISOString().slice(0, 10)
-  if (preset === 'month') setDateFrom(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10))
-  if (preset === 'quarter') setDateFrom(new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10))
-  if (preset === 'year') setDateFrom(`${now.getFullYear()}-01-01`)
-  if (preset === 'all') setDateFrom('')
-  setDateTo(preset === 'all' ? '' : to)
+
+  if (preset === 'month') {
+    return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10), to }
+  }
+  if (preset === 'quarter') {
+    return { from: new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10), to }
+  }
+  if (preset === 'year') {
+    return { from: `${now.getFullYear()}-01-01`, to }
+  }
+
+  return { from: '', to: '' }
+}
+
+function resolveDatePreset(dateFrom: string, dateTo: string): DatePreset {
+  const presets: Exclude<DatePreset, 'custom'>[] = ['month', 'quarter', 'year', 'all']
+  const match = presets.find((preset) => {
+    const range = presetRange(preset)
+    return range.from === dateFrom && range.to === dateTo
+  })
+
+  return match || 'custom'
+}
+
+function applyPreset(setDateFrom: (v: string) => void, setDateTo: (v: string) => void, preset: Exclude<DatePreset, 'custom'>) {
+  const range = presetRange(preset)
+  setDateFrom(range.from)
+  setDateTo(range.to)
 }
 
 export default function ReportsPage() {
@@ -649,6 +674,14 @@ export default function ReportsPage() {
 
   const totalAmount = rows.reduce((sum, row) => sum + Number(row.__amount || 0), 0)
   const currencyLabel = currencyFilter === ALL ? (rows[0]?.__currency || 'USD') : currencyFilter
+  const activeDatePreset = resolveDatePreset(dateFrom, dateTo)
+  const activeFilterCount = [clientFilter, sellerFilter, serviceFilter, statusFilter, currencyFilter].filter((value) => value !== ALL).length + (activeDatePreset === 'custom' ? 1 : 0)
+  const presetButtonClass = (preset: Exclude<DatePreset, 'custom'>) =>
+    `rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+      activeDatePreset === preset
+        ? 'border-blue-600 bg-blue-600 text-white shadow-sm dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+        : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+    }`
   const pdfData: ReportPdfData = {
     title: `Reporte ${reportConfig.label}`,
     subtitle: reportConfig.scope,
@@ -683,8 +716,34 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="report-print-root space-y-5">
+      <style>{`
+        @media print {
+          aside, header, footer, .report-print-hidden {
+            display: none !important;
+          }
+          main {
+            padding: 0 !important;
+            overflow: visible !important;
+          }
+          body {
+            background: #ffffff !important;
+          }
+          .report-print-root {
+            color: #0f172a !important;
+          }
+          .report-print-section {
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: none !important;
+            break-inside: avoid;
+          }
+          .report-print-table {
+            overflow: visible !important;
+          }
+        }
+      `}</style>
+
+      <div className="report-print-hidden flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
             Reporterias
@@ -707,6 +766,14 @@ export default function ReportsPage() {
             <Download className="h-4 w-4" />
             CSV
           </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className={secondaryButtonClass}
+          >
+            <Printer className="h-4 w-4" />
+            Imprimir
+          </button>
           <PDFDownloadLink
             document={<ReportPdf data={pdfData} />}
             fileName={`reporte-${activeReport}.pdf`}
@@ -722,7 +789,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="report-print-hidden flex gap-2 overflow-x-auto pb-1">
         {availableReports.map((report) => (
           <button
             key={report.id}
@@ -739,10 +806,15 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      <section className={cardClass}>
+      <section className={`${cardClass} report-print-hidden`}>
         <div className="mb-4 flex items-center gap-2">
           <Filter className="h-4 w-4 text-slate-400" />
           <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Filtros</h2>
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+              {activeFilterCount} activo{activeFilterCount !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
         <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
           <div>
@@ -779,18 +851,23 @@ export default function ReportsPage() {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'month')} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300">
+          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'month')} className={presetButtonClass('month')} aria-pressed={activeDatePreset === 'month'}>
             Mes
           </button>
-          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'quarter')} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300">
+          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'quarter')} className={presetButtonClass('quarter')} aria-pressed={activeDatePreset === 'quarter'}>
             Trimestre
           </button>
-          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'year')} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300">
+          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'year')} className={presetButtonClass('year')} aria-pressed={activeDatePreset === 'year'}>
             Año
           </button>
-          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'all')} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300">
+          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'all')} className={presetButtonClass('all')} aria-pressed={activeDatePreset === 'all'}>
             Todo
           </button>
+          {activeDatePreset === 'custom' && (
+            <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+              Personalizado
+            </span>
+          )}
           <div className="ml-auto flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-slate-400" />
             <select value={currencyFilter} onChange={(e) => setCurrencyFilter(e.target.value)} className={`${fieldClass} h-10 w-28`}>
@@ -800,7 +877,7 @@ export default function ReportsPage() {
         </div>
       </section>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="report-print-section grid gap-3 md:grid-cols-3">
         {pdfData.metrics.map((metric) => (
           <div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
             <p className="text-xs text-slate-500 dark:text-slate-400">{metric.label}</p>
@@ -809,7 +886,7 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      <section className={cardClass}>
+      <section className={`${cardClass} report-print-section`}>
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{reportConfig.label}</h2>
@@ -823,7 +900,7 @@ export default function ReportsPage() {
         {rows.length === 0 ? (
           <EmptyState icon={<BarChart3 className="h-6 w-6" />} title="Sin datos" description="Ajusta los filtros para ver resultados." />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="report-print-table overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500 dark:border-slate-700 dark:text-slate-400">
