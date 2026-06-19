@@ -52,6 +52,7 @@ type Invoice = {
   // NC/ND fields
   parent_invoice_id: string | null
   motivo: string | null
+  parent_invoice?: { invoice_number: string | null } | null
 }
 
 type LinkedNote = {
@@ -154,7 +155,7 @@ export default function InvoiceDetailPage() {
   const fetchAll = async () => {
     setLoading(true)
     const [invRes, itemsRes, paymentsRes, settingsRes, notesRes] = await Promise.all([
-      supabase.from('invoices').select('*').eq('id', id).single(),
+      supabase.from('invoices').select('*, parent_invoice:parent_invoice_id(invoice_number)').eq('id', id).single(),
       supabase.from('invoice_items').select('*').eq('invoice_id', id).order('sort_order'),
       supabase.from('invoice_payments').select('*').eq('invoice_id', id).order('payment_date', { ascending: false }),
       supabase.from('company_settings').select('legal_name, trade_name, rtn, address, phone, email, invoice_footer_note').limit(1).single(),
@@ -234,7 +235,7 @@ export default function InvoiceDetailPage() {
 
   const pdfData: InvoicePdfData = {
     invoice_number: invoice.invoice_number || '',
-    invoice_type: invoice.invoice_type,
+    invoice_type: invoice.invoice_type as 'Factura' | 'Proforma' | 'Nota de Crédito' | 'Nota de Débito',
     status: invoice.status,
     issue_date: invoice.issue_date || '',
     due_date: invoice.due_date,
@@ -260,6 +261,8 @@ export default function InvoiceDetailPage() {
     orden_compra_exenta: invoice.orden_compra_exenta,
     no_constancia_exonerado: invoice.no_constancia_exonerado,
     no_registro_sag: invoice.no_registro_sag,
+    parent_invoice_number: invoice.parent_invoice?.invoice_number ?? null,
+    motivo: invoice.motivo ?? null,
     cai: invoice.cai,
     rango_desde: invoice.rango_desde,
     rango_hasta: invoice.rango_hasta,

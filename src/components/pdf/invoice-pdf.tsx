@@ -20,7 +20,7 @@ export type InvoicePdfItem = {
 export type InvoicePdfData = {
   // Document
   invoice_number: string
-  invoice_type: 'Factura' | 'Proforma'
+  invoice_type: 'Factura' | 'Proforma' | 'Nota de Crédito' | 'Nota de Débito'
   status: string
   issue_date: string
   due_date: string | null
@@ -54,6 +54,10 @@ export type InvoicePdfData = {
   orden_compra_exenta: string | null
   no_constancia_exonerado: string | null
   no_registro_sag: string | null
+
+  // NC / ND
+  parent_invoice_number: string | null
+  motivo: string | null
 
   // CAI (solo Factura)
   cai: string | null
@@ -234,6 +238,21 @@ export function InvoicePdf({ data }: { data: InvoicePdfData }) {
             {data.due_date && <Text style={s.docDate}>Vence: {fmtDate(data.due_date)}</Text>}
           </View>
         </View>
+
+        {/* ── Referencia factura original (NC/ND) ────────────────────── */}
+        {data.parent_invoice_number && (
+          <View style={{ marginBottom: 10, padding: '6 10', backgroundColor: '#eff6ff', border: '1 solid #bfdbfe', borderRadius: 3 }}>
+            <Text style={{ fontSize: 8.5, color: '#1e40af', fontWeight: 700 }}>
+              {data.invoice_type === 'Nota de Crédito' ? 'NOTA DE CRÉDITO emitida contra:' : 'NOTA DE DÉBITO emitida contra:'}
+              {'  '}<Text style={{ fontFamily: 'Helvetica-Bold' }}>{data.parent_invoice_number}</Text>
+            </Text>
+            {data.motivo && (
+              <Text style={{ fontSize: 8, color: '#374151', marginTop: 3, fontStyle: 'italic' }}>
+                Motivo: {data.motivo}
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* ── Parties ────────────────────────────────────────────────── */}
         <View style={s.partiesRow}>
