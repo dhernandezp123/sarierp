@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
-import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { ReportPdf, type ReportPdfColumn, type ReportPdfData, type ReportPdfRow } from '@/src/components/pdf/report-pdf'
@@ -125,6 +125,7 @@ const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[]
 
 const STATUS_OPTIONS = ['Todos', 'Pendiente de Fijar Precios', 'Pricing Aprobado', 'Enviada al Cliente', 'Ganada', 'Perdida', 'Pendiente', 'Parcialmente Pagada', 'Pagada', 'Vencida', 'Enviada', 'Aprobada', 'Anulada']
 const ALL = 'Todos'
+const actionIconButtonClass = 'flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800'
 
 function resolveJoin<T>(value: Join<T> | undefined): T | null {
   if (!value) return null
@@ -754,35 +755,38 @@ export default function ReportsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={loadReports} className={secondaryButtonClass}>
+          <button type="button" onClick={loadReports} title="Actualizar" className={actionIconButtonClass}>
             <RefreshCcw className="h-4 w-4" />
-            Actualizar
+            <span className="sr-only">Actualizar</span>
           </button>
           <button
             type="button"
             onClick={() => exportCSV(rows, columns, `reporte-${activeReport}.csv`)}
-            className={secondaryButtonClass}
+            title="Exportar CSV"
+            className={actionIconButtonClass}
           >
             <Download className="h-4 w-4" />
-            CSV
+            <span className="sr-only">Exportar CSV</span>
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className={secondaryButtonClass}
+            title="Imprimir"
+            className={actionIconButtonClass}
           >
             <Printer className="h-4 w-4" />
-            Imprimir
+            <span className="sr-only">Imprimir</span>
           </button>
           <PDFDownloadLink
             document={<ReportPdf data={pdfData} />}
             fileName={`reporte-${activeReport}.pdf`}
-            className={primaryButtonClass}
+            title="Descargar PDF"
+            className={actionIconButtonClass}
           >
             {({ loading: pdfLoading }) => (
               <>
                 <FileDown className="h-4 w-4" />
-                {pdfLoading ? 'Generando...' : 'PDF'}
+                <span className="sr-only">{pdfLoading ? 'Generando PDF...' : 'Descargar PDF'}</span>
               </>
             )}
           </PDFDownloadLink>
