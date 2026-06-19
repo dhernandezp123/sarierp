@@ -5,9 +5,14 @@ export type UserRole =
   | 'Operaciones'
   | 'Contabilidad'
   | 'Finanzas'
+  | 'Cliente'
 
 export const rolePermissions: Record<UserRole, string[]> = {
   Admin: ['*'],
+
+  Cliente: [
+    '/portal',
+  ],
 
   Ventas: [
     '/dashboard',
@@ -38,6 +43,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/operations/bookings',
     '/operations/shipping-instructions',
     '/historico',
+    '/miami',
   ],
 
   Contabilidad: [

@@ -20,6 +20,9 @@ import {
   Route,
   Bell,
   Receipt,
+  Package,
+  ClipboardList,
+  Warehouse,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -170,6 +173,24 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
     },
   ]
 
+  const miamiItems = [
+    {
+      label: 'Dashboard Bodega',
+      href: '/miami',
+      icon: Warehouse,
+    },
+    {
+      label: 'Ingreso Individual',
+      href: '/miami/ingreso',
+      icon: Package,
+    },
+    {
+      label: 'Manifiestos',
+      href: '/miami/manifiestos',
+      icon: ClipboardList,
+    },
+  ]
+
   const adminItems = [
     {
       label: 'Usuarios',
@@ -195,6 +216,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   const visibleCostItems = filterVisibleItems(costItems)
   const visibleFinancialItems = filterVisibleItems(financialItems)
   const visibleOperationsItems = filterVisibleItems(operationsItems)
+  const visibleMiamiItems = filterVisibleItems(miamiItems)
   const visibleAdminItems = filterVisibleItems(adminItems)
   const displayName = profile?.nombre
     ? `${profile.nombre} ${profile.apellido || ''}`.trim()
@@ -333,6 +355,21 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
               </nav>
             </>
           )}
+        </div>
+      )}
+
+      {visibleMiamiItems.length > 0 && (
+        <div className="mt-8 px-4">
+          <div className="mb-2 flex items-center gap-2 px-3">
+            <span className="h-px flex-1 bg-white/10" />
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+              Miami Bodega
+            </p>
+          </div>
+
+          <nav className="space-y-1">
+            {visibleMiamiItems.map(renderItem)}
+          </nav>
         </div>
       )}
 
