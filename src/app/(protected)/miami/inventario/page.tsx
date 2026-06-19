@@ -83,7 +83,7 @@ export default function InventarioPage() {
     setUpdatingId(pkg.id)
     const { error } = await supabase
       .from('miami_packages')
-      .update({ cargo_status: next })
+      .update({ cargo_status: next, cargo_status_updated_at: new Date().toISOString() })
       .eq('id', pkg.id)
     setUpdatingId(null)
     if (error) { toast.error(error.message); return }

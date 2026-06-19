@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, Package, AlertTriangle, ExternalLink } from 'lucide-react'
+import { ChevronLeft, AlertTriangle, ExternalLink, CheckCircle2, Circle } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type PackageDetail = {
   id: string
@@ -22,6 +24,9 @@ type PackageDetail = {
   description: string | null
   photos: string[] | null
   status: string
+  tipo_carga: string | null
+  cargo_status: string | null
+  cargo_status_updated_at: string | null
   received_at: string
   assigned_at: string | null
   notes: string | null
@@ -36,12 +41,45 @@ type Incidencia = {
   created_at: string
 }
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const CARGO_STEPS = [
+  'Recibido en Miami',
+  'En Consolidación',
+  'En Tránsito',
+  'Llegado Honduras',
+  'Entregado',
+] as const
+
+type CargoStep = typeof CARGO_STEPS[number]
+
+const CARGO_STEP_LABELS: Record<CargoStep, string> = {
+  'Recibido en Miami':  'Recibido en Miami',
+  'En Consolidación':   'En Consolidación',
+  'En Tránsito':        'En Tránsito a Honduras',
+  'Llegado Honduras':   'Llegado a Honduras',
+  'Entregado':          'Entregado',
+}
+
 const statusConfig: Record<string, { label: string; color: string }> = {
   'Sin asignar':    { label: 'Pendiente de asignar', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
   'Asignado':       { label: 'En bodega Miami',       color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
   'Entregado':      { label: 'Entregado',             color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
   'Con incidencia': { label: 'Con incidencia',        color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
 }
+
+const TIPO_CARGA_COLOR: Record<string, string> = {
+  'Paquetería':         'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  'LCL':                'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  'Aéreo Consolidado':  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString('es-HN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PortalPaqueteDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -109,6 +147,10 @@ export default function PortalPaqueteDetailPage() {
 
   const cfg = statusConfig[pkg.status] ?? { label: pkg.status, color: 'bg-slate-100 text-slate-600' }
   const hasDims = pkg.length_in && pkg.width_in && pkg.height_in
+  const tipoCargaColor = TIPO_CARGA_COLOR[pkg.tipo_carga ?? ''] ?? TIPO_CARGA_COLOR['Paquetería']
+  const currentStepIdx = pkg.cargo_status
+    ? CARGO_STEPS.indexOf(pkg.cargo_status as CargoStep)
+    : -1
 
   return (
     <div className="space-y-5">
@@ -130,16 +172,74 @@ export default function PortalPaqueteDetailPage() {
                 {pkg.warehouse_number}
               </span>
             )}
+            {pkg.tipo_carga && (
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${tipoCargaColor}`}>
+                {pkg.tipo_carga}
+              </span>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Cargo status timeline */}
+      {currentStepIdx >= 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Seguimiento del envío
+          </h2>
+          <div className="relative">
+            <div className="absolute left-[9px] top-4 bottom-4 w-px bg-slate-200 dark:bg-slate-700" />
+            <ol className="space-y-5">
+              {CARGO_STEPS.map((step, idx) => {
+                const done    = idx <= currentStepIdx
+                const current = idx === currentStepIdx
+
+                let dateLabel: string | null = null
+                if (idx === 0) dateLabel = fmtDate(pkg.received_at)
+                else if (current && pkg.cargo_status_updated_at) dateLabel = fmtDate(pkg.cargo_status_updated_at)
+
+                return (
+                  <li key={step} className="relative flex items-start gap-4 pl-7">
+                    <span className="absolute left-0 top-0.5 z-10 bg-white dark:bg-slate-900">
+                      {done ? (
+                        <CheckCircle2 className={`h-[18px] w-[18px] ${current ? 'text-blue-600 dark:text-blue-400' : 'text-emerald-500'}`} />
+                      ) : (
+                        <Circle className="h-[18px] w-[18px] text-slate-300 dark:text-slate-600" />
+                      )}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium leading-tight ${
+                        done
+                          ? current
+                            ? 'text-blue-700 dark:text-blue-300'
+                            : 'text-slate-800 dark:text-slate-200'
+                          : 'text-slate-400 dark:text-slate-600'
+                      }`}>
+                        {CARGO_STEP_LABELS[step]}
+                        {current && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                            ACTUAL
+                          </span>
+                        )}
+                      </p>
+                      {dateLabel && (
+                        <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{dateLabel}</p>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
+        </div>
+      )}
 
       {/* Main info */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="mb-3 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Información del paquete</h2>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-          <InfoRow label="Carrier" value={pkg.carrier ?? '—'} />
-          <InfoRow label="Recibido" value={new Date(pkg.received_at).toLocaleDateString('es-HN', { day: '2-digit', month: 'short', year: 'numeric' })} />
+          <InfoRow label={pkg.tipo_carga === 'Aéreo Consolidado' ? 'AWB / Carrier' : 'Carrier'} value={pkg.carrier ?? '—'} />
+          <InfoRow label="Recibido" value={fmtDate(pkg.received_at)} />
           <InfoRow label="Peso" value={pkg.weight_lbs ? `${pkg.weight_lbs} lbs${pkg.weight_kg ? ` / ${pkg.weight_kg} kg` : ''}` : '—'} />
           <InfoRow label="Descripción" value={pkg.description ?? '—'} />
           {hasDims && (
@@ -149,7 +249,7 @@ export default function PortalPaqueteDetailPage() {
             </>
           )}
           {pkg.assigned_at && (
-            <InfoRow label="Asignado" value={new Date(pkg.assigned_at).toLocaleDateString('es-HN', { day: '2-digit', month: 'short', year: 'numeric' })} />
+            <InfoRow label="Asignado" value={fmtDate(pkg.assigned_at)} />
           )}
         </div>
       </div>

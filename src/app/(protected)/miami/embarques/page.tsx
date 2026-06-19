@@ -73,7 +73,7 @@ export default function EmbarquesPage() {
     setDispatching(true)
     const { error } = await supabase
       .from('miami_packages')
-      .update({ cargo_status: 'En Tránsito' })
+      .update({ cargo_status: 'En Tránsito', cargo_status_updated_at: new Date().toISOString() })
       .in('id', Array.from(selected))
     setDispatching(false)
     if (error) { toast.error(error.message); return }
