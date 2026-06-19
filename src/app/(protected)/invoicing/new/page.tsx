@@ -319,6 +319,21 @@ export default function NewInvoicePage() {
       toast.error('El motivo es requerido para notas de crédito / débito')
       return
     }
+    // SAR: RTN obligatorio en documentos fiscales (compra > L.100, que aplica a todos los servicios de forwarding)
+    if (isFiscal && !selectedCliente?.rtn) {
+      toast.error(
+        'SAR requiere RTN del cliente en documentos fiscales. Actualiza el perfil del cliente antes de emitir.',
+        { duration: 6000 }
+      )
+      setSaving(false)
+      return
+    }
+    // SAR: tipo de cambio requerido cuando factura es en USD (total en HNL es obligatorio)
+    if (isFiscal && currency === 'USD' && (!exchangeRate || parseFloat(exchangeRate) <= 0)) {
+      toast.error('El tipo de cambio es requerido por SAR para facturas en USD (total en HNL obligatorio)')
+      setSaving(false)
+      return
+    }
     if (isFiscal && esExonerado && !ordenCompraExenta) {
       toast.error('Ingresa el número de Orden de Compra Exenta')
       return
@@ -574,11 +589,13 @@ export default function NewInvoicePage() {
                 </select>
               </div>
 
-              {/* Tipo de cambio */}
+              {/* Tipo de cambio — requerido por SAR para facturas en USD */}
               {currency === 'USD' && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Tipo de cambio (HNL/USD)
+                    {isFiscal && <span className="ml-1 text-red-500">*</span>}
+                    {isFiscal && <span className="ml-1 text-xs font-normal text-slate-400">— SAR exige total en HNL</span>}
                   </label>
                   <input
                     type="number"
@@ -586,7 +603,7 @@ export default function NewInvoicePage() {
                     onChange={(e) => setExchangeRate(e.target.value)}
                     min="1"
                     step="0.0001"
-                    className={fieldClass}
+                    className={`${fieldClass} ${submitted && isFiscal && (!exchangeRate || parseFloat(exchangeRate) <= 0) ? 'border-red-400' : ''}`}
                   />
                 </div>
               )}
@@ -852,10 +869,22 @@ export default function NewInvoicePage() {
           </section>
 
           {selectedCliente && (
-            <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700/60 dark:bg-slate-900/50">
+            <section className={`rounded-2xl border p-4 ${
+              isFiscal && !selectedCliente.rtn
+                ? 'border-rose-200 bg-rose-50 dark:border-rose-800/50 dark:bg-rose-950/20'
+                : 'border-slate-200 bg-slate-50 dark:border-slate-700/60 dark:bg-slate-900/50'
+            }`}>
               <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Datos del cliente</p>
               <p className="font-semibold text-slate-900 dark:text-white">{selectedCliente.nombre}</p>
-              {selectedCliente.rtn && <p className="text-xs text-slate-500">RTN: {selectedCliente.rtn}</p>}
+              {selectedCliente.rtn
+                ? <p className="text-xs text-slate-500">RTN: {selectedCliente.rtn}</p>
+                : isFiscal && (
+                  <p className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                    ⚠ Sin RTN — requerido por SAR para documentos fiscales.{' '}
+                    <a href={`/clientes/${selectedCliente.id}`} className="underline">Actualizar cliente →</a>
+                  </p>
+                )
+              }
               {selectedCliente.direccion && <p className="mt-1 text-xs text-slate-500">{selectedCliente.direccion}</p>}
               {selectedCliente.email && <p className="text-xs text-slate-500">{selectedCliente.email}</p>}
             </section>
