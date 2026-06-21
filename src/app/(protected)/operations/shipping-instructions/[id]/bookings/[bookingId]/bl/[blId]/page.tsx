@@ -10,6 +10,8 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import HouseBLPdf, { type HBLData } from '@/src/components/pdf/house-bl-pdf'
+import AWBPdf, { type AWBData } from '@/src/components/pdf/awb-pdf'
+import CartaPortePdf, { type CartaPorteData } from '@/src/components/pdf/carta-porte-pdf'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
@@ -58,6 +60,8 @@ type BLForm = {
   printed_at_destination: boolean
   draft_file_url: string
   draft_file_name: string
+  placa_camion: string
+  nombre_operador: string
 }
 
 const defaultForm: BLForm = {
@@ -104,6 +108,8 @@ const defaultForm: BLForm = {
   printed_at_destination: true,
   draft_file_url: '',
   draft_file_name: '',
+  placa_camion: '',
+  nombre_operador: '',
 }
 
 const TRACKED_FIELDS: (keyof BLForm)[] = [
@@ -173,7 +179,7 @@ type DraftSend = {
   notes: string | null
 }
 
-function formToHBLData(form: BLForm): HBLData {
+function formToHBLData(form: BLForm, condiciones: string | null): HBLData {
   return {
     bl_number: form.bl_number || null,
     bl_date: form.bl_date || null,
@@ -212,6 +218,68 @@ function formToHBLData(form: BLForm): HBLData {
     measurement_cbm: form.measurement_cbm ? Number(form.measurement_cbm) : null,
     special_instructions: form.special_instructions || null,
     printed_at_destination: form.printed_at_destination,
+    condiciones,
+  }
+}
+
+function formToAWBData(form: BLForm, condiciones: string | null): AWBData {
+  return {
+    awb_number: form.bl_number || null,
+    awb_date: form.bl_date || null,
+    issue_date: form.issue_date || null,
+    shipper: form.shipper || null,
+    shipper_address: form.shipper_address || null,
+    consignee: form.consignee || null,
+    consignee_address: form.consignee_address || null,
+    consignee_tax_id: form.consignee_tax_id || null,
+    consignee_contact: form.consignee_contact || null,
+    consignee_email: form.consignee_email || null,
+    notify_party: form.notify_party || null,
+    notify_party_address: form.notify_party_address || null,
+    airport_of_departure: form.port_of_loading || null,
+    airport_of_destination: form.port_of_discharge || null,
+    place_of_delivery: form.place_of_delivery || null,
+    airline: form.carrier || null,
+    flight_number: form.voyage || null,
+    etd: form.etd || null,
+    eta: form.eta || null,
+    description_of_goods: form.description_of_goods || null,
+    marks_and_numbers: form.marks_and_numbers || null,
+    number_of_packages: form.number_of_packages ? Number(form.number_of_packages) : null,
+    package_type: form.package_type || null,
+    gross_weight_kg: form.gross_weight_kg ? Number(form.gross_weight_kg) : null,
+    measurement_cbm: form.measurement_cbm ? Number(form.measurement_cbm) : null,
+    special_instructions: form.special_instructions || null,
+    condiciones,
+  }
+}
+
+function formToCartaPorteData(form: BLForm, condiciones: string | null): CartaPorteData {
+  return {
+    numero: form.bl_number || null,
+    fecha: form.bl_date || null,
+    issue_date: form.issue_date || null,
+    shipper: form.shipper || null,
+    shipper_address: form.shipper_address || null,
+    consignee: form.consignee || null,
+    consignee_address: form.consignee_address || null,
+    consignee_tax_id: form.consignee_tax_id || null,
+    consignee_contact: form.consignee_contact || null,
+    consignee_email: form.consignee_email || null,
+    origin: form.port_of_loading || form.place_of_receipt || null,
+    destination: form.port_of_discharge || null,
+    place_of_delivery: form.place_of_delivery || null,
+    carrier: form.carrier || null,
+    placa_camion: form.placa_camion || null,
+    nombre_operador: form.nombre_operador || null,
+    description_of_goods: form.description_of_goods || null,
+    marks_and_numbers: form.marks_and_numbers || null,
+    number_of_packages: form.number_of_packages ? Number(form.number_of_packages) : null,
+    package_type: form.package_type || null,
+    gross_weight_kg: form.gross_weight_kg ? Number(form.gross_weight_kg) : null,
+    measurement_cbm: form.measurement_cbm ? Number(form.measurement_cbm) : null,
+    special_instructions: form.special_instructions || null,
+    condiciones,
   }
 }
 
@@ -245,6 +313,10 @@ export default function BLPage() {
   const parentBlIdParam = searchParams.get('parentBlId') || null
 
   const [form, setForm] = useState<BLForm>({ ...defaultForm, bl_type: typeParam, parent_bl_id: parentBlIdParam, status: typeParam === 'HBL' ? 'HBL Draft' : 'MBL Draft' })
+  const [tipoTransporte, setTipoTransporte] = useState<string>('')
+  const [condicionesBL, setCondicionesBL] = useState<string | null>(null)
+  const [condicionesAWB, setCondicionesAWB] = useState<string | null>(null)
+  const [condicionesCP, setCondicionesCP] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
@@ -268,20 +340,38 @@ export default function BLPage() {
     setLoading(true)
 
     // Load booking + SI for pre-fill
-    const { data: bookingData } = await supabase
-      .from('bookings')
-      .select(`
-        id, booking_number, carrier, vessel_name, voyage, etd, eta, freight_terms, release_type,
-        shipping_instruction:shipping_instructions (
-          id, routing_number, supplier_name, supplier_contact, supplier_email, origin_address, destination_address,
-          quotation:quotations (
-            id, incoterm, origin_port, destination_port,
-            cliente:clientes (nombre, direccion, ciudad, pais, rtn, contacto, email_1)
+    const [{ data: bookingData }, { data: settingsData }] = await Promise.all([
+      supabase
+        .from('bookings')
+        .select(`
+          id, booking_number, carrier, vessel_name, voyage, etd, eta, freight_terms, release_type,
+          shipping_instruction:shipping_instructions (
+            id, routing_number, supplier_name, supplier_contact, supplier_email, origin_address, destination_address,
+            quotation:quotations (
+              id, incoterm, origin_port, destination_port, tipo_transporte,
+              cliente:clientes (nombre, direccion, ciudad, pais, rtn, contacto, email_1)
+            )
           )
-        )
-      `)
-      .eq('id', bookingId)
-      .single()
+        `)
+        .eq('id', bookingId)
+        .single(),
+      supabase
+        .from('company_settings')
+        .select('condiciones_bl, condiciones_awb, condiciones_carta_porte')
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    if (settingsData) {
+      setCondicionesBL((settingsData as any).condiciones_bl ?? null)
+      setCondicionesAWB((settingsData as any).condiciones_awb ?? null)
+      setCondicionesCP((settingsData as any).condiciones_carta_porte ?? null)
+    }
+
+    // Extract tipo_transporte from quotation
+    const siForType = Array.isArray(bookingData?.shipping_instruction) ? bookingData.shipping_instruction[0] : bookingData?.shipping_instruction
+    const quotationForType = Array.isArray(siForType?.quotation) ? siForType.quotation[0] : siForType?.quotation
+    setTipoTransporte((quotationForType as any)?.tipo_transporte ?? '')
 
     if (!isNew) {
       // Load existing BL
@@ -361,6 +451,8 @@ export default function BLPage() {
         printed_at_destination: blData.printed_at_destination ?? true,
         draft_file_url: blData.draft_file_url || '',
         draft_file_name: blData.draft_file_name || '',
+        placa_camion: blData.placa_camion || '',
+        nombre_operador: blData.nombre_operador || '',
       }
       setForm(loadedForm)
       savedFormRef.current = loadedForm
@@ -522,6 +614,8 @@ export default function BLPage() {
       printed_at_destination: form.printed_at_destination,
       draft_file_url: form.draft_file_url || null,
       draft_file_name: form.draft_file_name || null,
+      placa_camion: form.placa_camion || null,
+      nombre_operador: form.nombre_operador || null,
       updated_at: new Date().toISOString(),
     }
 
@@ -772,7 +866,13 @@ export default function BLPage() {
   if (loading) return <PageSkeleton cards={2} rows={4} />
 
   const transition = isNew ? null : STATUS_FLOW[form.status]
-  const blLabel = form.bl_type === 'MBL' ? 'Master BL' : 'House BL'
+  const blLabel = form.bl_type === 'MBL'
+    ? 'Master BL'
+    : tipoTransporte === 'Aéreo'
+      ? 'AWB'
+      : tipoTransporte === 'Terrestre'
+        ? 'Carta Porte'
+        : 'House BL'
   const canSendDraft = !isNew && form.bl_type === 'HBL' && ['HBL Draft', 'Pendiente Aprobación Cliente'].includes(form.status)
 
   const fmtDate = (d: string) =>
@@ -1051,17 +1151,43 @@ export default function BLPage() {
         </Field>
       </SectionCard>
 
-      {/* Buque */}
-      <SectionCard title="Buque / Vuelo" cols={2}>
-        <Field label="Carrier / Aerolínea">
+      {/* Buque / Vuelo / Transporte */}
+      <SectionCard
+        title={
+          tipoTransporte === 'Aéreo' ? 'Vuelo' :
+          tipoTransporte === 'Terrestre' ? 'Transporte Terrestre' :
+          'Buque / Vuelo'
+        }
+        cols={2}
+      >
+        <Field label={tipoTransporte === 'Terrestre' ? 'Transportista' : 'Carrier / Aerolínea'}>
           <input value={form.carrier} onChange={set('carrier')} className={fieldClass} />
         </Field>
-        <Field label="Nombre del Buque / Vuelo">
-          <input value={form.vessel_name} onChange={set('vessel_name')} className={fieldClass} />
-        </Field>
-        <Field label="Voyage / Número de vuelo">
-          <input value={form.voyage} onChange={set('voyage')} className={fieldClass} />
-        </Field>
+        {tipoTransporte === 'Terrestre' ? (
+          <>
+            <Field label="Placa del Camión">
+              <input value={form.placa_camion} onChange={set('placa_camion')} className={fieldClass} placeholder="Ej. HN-1234" />
+            </Field>
+            <Field label="Nombre del Operador">
+              <input value={form.nombre_operador} onChange={set('nombre_operador')} className={fieldClass} placeholder="Nombre completo del conductor" />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label={tipoTransporte === 'Aéreo' ? 'Número de vuelo' : 'Nombre del Buque'}>
+              <input
+                value={tipoTransporte === 'Aéreo' ? form.voyage : form.vessel_name}
+                onChange={tipoTransporte === 'Aéreo' ? set('voyage') : set('vessel_name')}
+                className={fieldClass}
+              />
+            </Field>
+            {tipoTransporte !== 'Aéreo' && (
+              <Field label="Voyage">
+                <input value={form.voyage} onChange={set('voyage')} className={fieldClass} />
+              </Field>
+            )}
+          </>
+        )}
         <Field label="ETD">
           <input type="date" value={form.etd} onChange={set('etd')} className={fieldClass} />
         </Field>
@@ -1304,9 +1430,37 @@ export default function BLPage() {
           </button>
         )}
 
-        {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && (
+        {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte === 'Aéreo' && (
           <PDFDownloadLink
-            document={<HouseBLPdf bl={formToHBLData(form)} />}
+            document={<AWBPdf awb={formToAWBData(form, condicionesAWB)} />}
+            fileName={`AWB-${form.bl_number || blId}.pdf`}
+            className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+          >
+            {({ loading: pdfLoading }) => (
+              <>
+                <Download className="h-4 w-4" />
+                {pdfLoading ? 'Generando...' : 'Descargar AWB PDF'}
+              </>
+            )}
+          </PDFDownloadLink>
+        )}
+        {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte === 'Terrestre' && (
+          <PDFDownloadLink
+            document={<CartaPortePdf cp={formToCartaPorteData(form, condicionesCP)} />}
+            fileName={`CartaPorte-${form.bl_number || blId}.pdf`}
+            className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+          >
+            {({ loading: pdfLoading }) => (
+              <>
+                <Download className="h-4 w-4" />
+                {pdfLoading ? 'Generando...' : 'Descargar Carta Porte PDF'}
+              </>
+            )}
+          </PDFDownloadLink>
+        )}
+        {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte !== 'Aéreo' && tipoTransporte !== 'Terrestre' && (
+          <PDFDownloadLink
+            document={<HouseBLPdf bl={formToHBLData(form, condicionesBL)} />}
             fileName={`HBL-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
           >

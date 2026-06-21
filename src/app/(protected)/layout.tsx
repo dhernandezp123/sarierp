@@ -3,6 +3,7 @@
 import Sidebar from '@/src/components/layout/sidebar'
 import Topbar from '@/src/components/layout/topbar'
 import { ErrorBoundary } from '@/src/components/ui/error-boundary'
+import OnboardingTutorial from '@/src/components/onboarding/OnboardingTutorial'
 import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath } from '@/src/lib/permissions'
 import { usePathname, useRouter } from 'next/navigation'
@@ -51,6 +52,8 @@ export default function ProtectedLayout({
             {children}
           </ErrorBoundary>
         </main>
+
+        <OnboardingTutorial />
 
         <footer className="border-t border-slate-200 bg-[#F5F7FA] px-6 py-3 text-center text-xs text-slate-500">
           Sistema desarrollado por{' '}

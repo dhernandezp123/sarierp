@@ -29,14 +29,15 @@ Leer este archivo al inicio de cada nueva sesión para recuperar contexto.
 | 17 | Proveedores + Cuentas por Pagar | ✅ |
 | 18 | Reportes exportables PDF/CSV + Pagos a Proveedores | ✅ |
 | 19 | Cotizaciones: # containers + vencimiento + quitar Incoterm/ojo | ✅ |
-| 20 | AWB + Carta Porte + Políticas en documentos | 🔲 PENDIENTE |
+| 20 | AWB + Carta Porte + Políticas en documentos | ✅ |
 | 21 | Miami: tipos de carga + inventario + estados + lista de embarque | ✅ |
 | 22 | Garantías Navieras | ✅ |
-| 23 | Notificaciones operacionales automáticas | 🔲 PENDIENTE |
-| 24 | Tutorial de onboarding por perfil + plantillas de correo | 🔲 PENDIENTE |
-| 25 | Facturación: recibos + cierres + documentos de proveedores | 🔲 PENDIENTE |
+| 23 | Notificaciones operacionales automáticas | ✅ |
+| 24 | Tutorial de onboarding por perfil + plantillas de correo | ✅ |
+| 25 | Facturación: recibos + cierres + documentos de proveedores | ✅ |
 | 26 | Portal cliente: rastreo de carga + tipo de carga | ✅ |
 | 27 | Generar CxP desde cotización Ganada | ✅ |
+| 28 | Estado de cuenta por cliente (PDF desde Facturación) | ✅ |
 
 ---
 
@@ -52,6 +53,12 @@ Leer este archivo al inicio de cada nueva sesión para recuperar contexto.
 | `sql/20260619_phase22_garantias_navieras.sql` | ✅ Ejecutado |
 | `sql/20260619_phase21_miami_cargo.sql` | ✅ Ejecutado |
 | `sql/20260619_phase26_portal_tracking.sql` | ✅ Ejecutado |
+| `sql/20260621_phase20_awb_carta_porte.sql` | ✅ Ejecutado |
+| `sql/20260621_phase23_notifications.sql` | ✅ Ejecutado |
+| `sql/20260621_phase24_onboarding.sql` | ✅ Ejecutado |
+| `sql/20260621_phase25_invoicing.sql` | ✅ Ejecutado |
+| `sql/20260621_fix_phases20_25.sql` | ✅ Ejecutado |
+| `sql/20260621_fix_phase23_expiry_cron.sql` | ✅ Ejecutado |
 
 ---
 
@@ -223,100 +230,171 @@ En Honduras, los "agentes de retención" del ISV (ISV retenido) aplican cuando e
 ---
 
 ### Fase 20 — AWB + Carta Porte + Políticas en documentos
-**Estado:** 🔲 PENDIENTE
+**Estado:** ✅ Completado | Commit: sesión 2026-06-21 | SQL: `sql/20260621_phase20_awb_carta_porte.sql`
 
-#### Contexto
-El módulo BL actual genera HBLs para embarques marítimos. Faltan los documentos equivalentes para Aéreo y Terrestre.
+#### SQL ejecutado
+`sql/20260621_phase20_awb_carta_porte.sql`:
+- `company_settings`: agrega `condiciones_bl`, `condiciones_awb`, `condiciones_carta_porte TEXT`
+- `bills_of_lading`: agrega `placa_camion`, `nombre_operador TEXT`
 
-#### Scope
-- **AWB (Air Waybill)**: cuando el embarque es Aéreo Consolidado, el BL debe ser tipo AWB con formato IATA simplificado
-  - Lógica: si `quote_type` o `tipo_transporte` = aéreo → `bl_type = 'AWB'`
-  - Nuevo PDF `awb-pdf.tsx` con campos IATA básicos
-- **Carta Porte**: para terrestre/FTL
-  - Campo adicional: placa del camión, operador, ruta
-  - PDF `carta-porte-pdf.tsx`
-- **Políticas / Condiciones generales**: texto de condiciones al pie de HBL, AWB y Carta Porte
-  - Almacenar en `company_settings.condiciones_bl` y `condiciones_awb`
-  - Admin puede editar desde `/settings/company`
-- No tocar la lógica de BL existente (HBL marítimo sigue igual)
+#### PDF Nuevos
+- `src/components/pdf/awb-pdf.tsx` — Air Waybill con campos IATA: aeropuerto salida/destino, aerolínea, número de vuelo, cargo, condiciones
+- `src/components/pdf/carta-porte-pdf.tsx` — Carta Porte con: transportista, placa, operador, ruta, cargo, condiciones; 3 bloques de firma
+
+#### BL Page (`src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`)
+- Query ampliada: trae `tipo_transporte` desde `quotations` vía booking → SI → quotation
+- Carga `company_settings.condiciones_*` en `loadData`
+- Sección "Buque/Vuelo" ahora es condicional:
+  - `Aéreo`: muestra "Vuelo", "Flight No." (sin voyage)
+  - `Terrestre`: muestra "Transporte Terrestre", campos Placa + Operador (sin vessel/voyage)
+  - Marítimo/default: sin cambio
+- Botón PDF al emitir HBL:
+  - `tipo_transporte = 'Aéreo'` → Descargar AWB PDF
+  - `tipo_transporte = 'Terrestre'` → Descargar Carta Porte PDF
+  - Marítimo o sin tipo → Descargar HBL PDF (comportamiento anterior)
+
+#### Settings (`src/app/(protected)/settings/company/page.tsx`)
+- Nueva sección "Condiciones en documentos de transporte": 3 textareas para HBL, AWB, Carta Porte
+- Solo Admin puede editar
+
+#### Decisiones técnicas
+- `tipo_transporte` se lee de la cotización vinculada al booking (no se almacena en `bills_of_lading`)
+- Los campos de AWB reusan campos existentes del BL form: `carrier` → aerolínea, `vessel_name` → vuelo, `port_of_loading` → aeropuerto salida, `port_of_discharge` → aeropuerto destino
+- `placa_camion` y `nombre_operador` se guardan en `bills_of_lading` vía SQL migration
 
 ---
 
 ### Fase 23 — Notificaciones operacionales automáticas
-**Estado:** 🔲 PENDIENTE
+**Estado:** ✅ Completado | Commit: sesión 2026-06-21 | SQL: `sql/20260621_phase23_notifications.sql`
 
-#### Scope
-**Cambio en cotización con SI activo:**
-- En `saveCotizacion()`, después de guardar, verificar si existe Shipping Instruction vinculada (`shipping_instructions.quotation_id = id`)
-- Si existe → `supabase.from('notifications').insert(...)` para todos los usuarios con rol Operaciones
-- Mensaje: "La cotización {numero} (con SI activa) fue modificada: campo X cambió de A a B"
-- Usar la función `notifyClientPackageAssigned` como referencia de patrón de inserción de notificación
-- Tabla `notifications`: `user_id`, `title`, `body`, `href`, `is_read`
+#### SQL ejecutado
+`sql/20260621_phase23_notifications.sql`:
+- `agent_quotes`: agrega `expiry_notified_at TIMESTAMPTZ` para deduplicar notificaciones
 
-**Expiración de tarifas:**
-- Cron o consulta periódica: `agent_quotes WHERE valid_until = today - 1 AND quotation.status = 'Cotizada'`
-- Notificar a rol Pricing con link a la cotización
+#### Entregado
 
-#### Archivos clave
-- `src/app/(protected)/quotations/[id]/page.tsx` — función `handleSave` es donde agregar el check
-- `src/lib/client-notifications.ts` — ver patrón de inserción de notificaciones
-- `src/lib/permissions.ts` — para obtener todos los user_ids con rol Operaciones (necesita query a `profiles`)
+**1. Cotización modificada con SI activa** (`src/app/(protected)/quotations/[id]/edit/page.tsx`)
+- En `handleSave`, después del save exitoso: verifica si existe `shipping_instructions.quotation_id = quotationId`
+- Si existe SI, obtiene todos los `profiles` con `rol = 'Operaciones'`
+- Inserta notificación para cada uno via `createNotification()` (ya importado en esa página)
+- Mensaje: "La cotización {numero} (SI: {routing_number}) fue modificada."
+
+**2. Expiración de tarifas seleccionadas** (`src/lib/tarifa-expiry-check.ts`)
+- Función `checkAndNotifyExpiredTarifas()`:
+  - Busca `agent_quotes` donde `valid_until < hoy` AND `is_selected = true` AND `expiry_notified_at IS NULL`
+  - Filtra a cotizaciones con `status = 'Cotizada'`
+  - Notifica a todos los usuarios con `rol = 'Pricing'`
+  - Marca `expiry_notified_at = now()` para evitar duplicados
+- Se llama desde `/alerts` page en `useEffect` solo para roles `Pricing` y `Admin`
+
+#### Decisión técnica
+- Deduplicación por `expiry_notified_at` en lugar de cron server-side — cero infraestructura extra
+- El check ocurre al abrir `/alerts` (página que ambos roles visitan regularmente)
 
 ---
 
 ### Fase 24 — Tutorial de onboarding por perfil + plantillas de correo
-**Estado:** 🔲 PENDIENTE
+**Estado:** ✅ Completado | Commit: sesión 2026-06-21 | SQL: `sql/20260621_phase24_onboarding.sql`
 
-#### Scope
-**Tutorial de onboarding:**
-- Agregar campo `tutorial_completed BOOLEAN DEFAULT false` en `profiles` via SQL
-- Al primer login (detectado en el layout protegido), mostrar overlay/modal de bienvenida
-- Pasos diferenciados por rol:
-  - Ventas: Nueva cotización → Histórico → Clientes
-  - Operaciones: Shipping Instructions → Bookings → Garantías → Miami
-  - Finanzas: Facturación → Cuentas por Pagar → Dashboard Financiero
-- Botón "Siguiente" avanza el paso, "Saltar" marca `tutorial_completed = true`
-- Botón "Ver tutorial de nuevo" en `/profile`
-- Implementación: componente overlay ligero sin librería externa (evitar paquetes nuevos)
+#### SQL ejecutado
+`sql/20260621_phase24_onboarding.sql`:
+- `profiles`: agrega `tutorial_completed BOOLEAN DEFAULT false`
+- `company_settings`: agrega `plantilla_cotizacion TEXT`
 
-**Plantillas de correo (envío de cotización):**
-- En `/quotations/[id]`, agregar botón "Enviar por correo"
-- Abre modal con:
-  - Para: email del cliente (prellenado)
-  - CC: usuario actual
+#### Entregado
+
+**1. Tutorial de onboarding** (`src/components/onboarding/OnboardingTutorial.tsx`)
+- Overlay fullscreen con backdrop blur, modal centrado
+- Pasos por rol:
+  - **Ventas** (3): Nueva Cotización → Histórico → Clientes
+  - **Pricing** (3): Comparar Tarifas → Agentes → Cotizaciones
+  - **Operaciones** (4): Shipping Instructions → Bookings → Garantías → Miami
+  - **Finanzas / Contabilidad** (3): Facturación → CxP → Dashboard Financiero
+  - **Admin** (3): Dashboard → Usuarios → Configuración
+- Barra de progreso, botones Anterior / Siguiente / Finalizar / Saltar
+- Cada paso tiene link directo a la sección
+- Al Finalizar o Saltar: marca `tutorial_completed = true` en DB → no vuelve a aparecer
+- Inyectado en el layout protegido (`src/app/(protected)/layout.tsx`)
+
+**2. "Ver tutorial de nuevo"** (`src/app/(protected)/profile/page.tsx`)
+- Botón en el header de la página de perfil
+- Actualiza `tutorial_completed = false` en DB + `window.location.reload()` → tutorial re-aparece
+
+**3. Modal de correo para cotizaciones** (`src/app/(protected)/quotations/[id]/page.tsx`)
+- Icono Mail junto a PDF y Print en la barra de acciones
+- Abre un modal con:
+  - Para: `contact_email` o `clientes.email_1` (prellenado)
+  - CC: email del usuario activo
   - Asunto: "Cotización {número} - Sari Express"
-  - Cuerpo: plantilla prellenada con resumen de servicio, tarifa seleccionada, validez
-  - Botón "Copiar texto" + link `mailto:` para abrir cliente de correo
-- Sin servidor de email externo por ahora (igual que el draft BL)
-- Texto de plantilla configurable desde `company_settings.plantilla_cotizacion`
+  - Cuerpo: datos del servicio + tarifa seleccionada (carrier, tránsito, ETD, costo, validez) + `plantilla_cotizacion`
+  - Botón "Abrir en correo" → link `mailto:` con subject + body precargados
+  - Botón "Copiar mensaje" → clipboard API
+- `plantilla_cotizacion` se carga lazy desde `company_settings` al abrir el modal
+
+**4. Settings** (`src/app/(protected)/settings/company/page.tsx`)
+- Nueva sección "Plantilla de correo — Cotizaciones" con textarea para el texto de cierre
 
 ---
 
 ### Fase 25 — Facturación completa: recibos + cierres + documentos de proveedores
-**Estado:** 🔲 PENDIENTE
+**Estado:** ✅ Completado | Commit: sesión 2026-06-21 | SQL: `sql/20260621_phase25_invoicing.sql`
 
-#### Scope
-**Recibos de pago:**
-- Al registrar un pago en `/invoicing/[id]`, botón "Imprimir recibo"
-- PDF `recibo-pago-pdf.tsx`: Sari Express datos, cliente, factura referenciada, monto pagado, fecha, método de pago, firma
-- Sin tabla nueva — el recibo se genera on-demand desde `invoice_payments`
+#### SQL ejecutado
+`sql/20260621_phase25_invoicing.sql`:
+- `cuentas_pagar`: agrega `tipo TEXT DEFAULT 'AP'`, `parent_ap_id UUID REFERENCES cuentas_pagar(id)`, `documento_url TEXT`
+- Storage: crea bucket `proveedor-docs` (público)
 
-**Cierres de período:**
-- Botón "Cierre del mes" en `/invoicing` (solo Admin/Finanzas)
-- Genera resumen: total facturado, total cobrado, total pendiente, total vencido del período
-- Exportable como PDF — similar al patrón de reportes existente
+#### Entregado
 
-**Documentos de proveedores:**
-- En `/suppliers/[id]`, sección "Documentos recibidos"
-- Subir PDF de factura del proveedor → Storage bucket `proveedor-docs` (crear si no existe)
-- Vincular documento a `cuentas_pagar.id` (campo `documento_url TEXT` en la tabla)
-- SQL: `ALTER TABLE cuentas_pagar ADD COLUMN IF NOT EXISTS documento_url TEXT;`
-- Preview del PDF inline (link + icono)
+**1. Recibos de pago** (`src/components/pdf/recibo-pago-pdf.tsx`)
+- PDF A5 con: datos empresa (legal_name, RTN, dirección, tel), datos cliente, número de factura, monto en verde, fecha/método/referencia/notas, dos líneas de firma
+- Botón con ícono `Printer` en cada fila de pagos en `/invoicing/[id]` → `PDFDownloadLink` descarga el recibo en PDF directamente
+- Datos tomados de `companySetting` + `invoice` + `Payment` sin queries adicionales (ya cargados en la página)
 
-**ND/NC de proveedores:**
-- En `/accounts-payable/[id]`, botón "Registrar NC/ND proveedor"
-- Inserta en `cuentas_pagar` con tipo `NC` o `ND` y `parent_ap_id` referenciando la CxP original
-- Ajusta el saldo de la CxP padre al calcular el total real
+**2. Cierre del mes** (`/invoicing/page.tsx`)
+- Botón "Cierre del mes" en header, visible solo para roles `Admin` y `Finanzas`
+- Modal con selector mes/año (2024–2027)
+- Calcula 4 KPIs del período desde el estado local `invoices`: facturado, cobrado, por cobrar, vencido
+- Botón "Imprimir" → `window.open()` con HTML inline generado en JS + `window.print()` automático
+
+**3. Documentos de proveedores** (`/suppliers/[id]/page.tsx`)
+- Columna "Doc." agregada a la tabla de CxP
+- Sin documento: ícono `Upload` (label oculto con `input[type=file]`) → upload a bucket `proveedor-docs` → guarda URL en `cuentas_pagar.documento_url`
+- Con documento: ícono `ExternalLink` → abre el archivo en nueva pestaña
+- `CuentaPagar` type extendido con `documento_url: string | null`
+- Select query ampliado para incluir `documento_url`
+
+**4. NC/ND de proveedores** (`/accounts-payable/[id]/page.tsx`)
+- Botón "NC / ND" en el header de la sección de pagos (siempre visible)
+- Modal: tipo (NC / ND), descripción, monto, fecha
+- Inserta en `cuentas_pagar` con `tipo`, `parent_ap_id = id del AP actual`, `proveedor_id` del padre, `status = 'Pendiente'`
+- El registro NC/ND aparece en la lista de CxP del proveedor correspondiente
+
+#### Decisiones técnicas
+- Recibo PDF: usa `makeReceiptData()` calculado fuera del JSX (antes del `return`) para que `PDFDownloadLink` tenga acceso a `companySetting` e `invoice`
+- Cierre: no usa react-pdf, usa `window.open()` con HTML/CSS vanilla para evitar un componente PDF adicional de bajo valor
+- Documentos: bucket `proveedor-docs` privado; acceso mediante URL firmada para roles financieros
+
+#### Correcciones posteriores a auditoría
+- Migración compensatoria: `sql/20260621_fix_phases20_25.sql` (pendiente de ejecutar)
+- `proveedor-docs` pasa a privado, limitado a PDF de 10 MB y roles financieros
+- Los documentos se abren con URL firmada y se almacenan por ruta, no como URL pública
+- NC/ND ajustan el saldo real de la CxP padre
+- El cierre usa pagos reales, fechas de pago, vencimientos calculados y totales separados por moneda
+
+---
+
+### Fase 28 — Estado de cuenta por cliente
+**Estado:** ✅ Completado | Sin SQL nuevo
+
+- Disponible para Admin, Finanzas y Contabilidad desde `/invoicing`
+- Calcula cada cuenta abierta como `Factura - NC emitidas + ND emitidas - pagos`
+- Excluye proformas, documentos anulados, notas en borrador y saldos pagados
+- Determina vencimiento por `due_date`, sin depender del estado almacenado
+- Mantiene USD, HNL y otras monedas separadas en modal, PDF y correo
+- PDF muestra monto original, NC/ND, pagos y saldo; evita cortar filas y agrega paginación
+- Permite descargar el PDF y preparar un correo al cliente; el archivo se adjunta manualmente
+- Los estados de cuenta no requieren bloques de firma
 
 ---
 

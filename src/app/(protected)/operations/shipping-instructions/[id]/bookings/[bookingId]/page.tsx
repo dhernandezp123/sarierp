@@ -43,6 +43,8 @@ type QuotationJoin = {
   preferred_carrier: string | null
   origen: string | null
   destino: string | null
+  tipo_transporte: string | null
+  quote_type: string | null
   cliente: ClienteJoin | ClienteJoin[] | null
 }
 
@@ -414,6 +416,8 @@ export default function RoutingBookingChildPage() {
           preferred_carrier,
           origen,
           destino,
+          tipo_transporte,
+          quote_type,
           cliente:clientes (
             nombre,
             direccion,
@@ -931,6 +935,15 @@ export default function RoutingBookingChildPage() {
 
   const quotation = resolveJoin(routing.quotation)
   const client = quotation ? resolveJoin(quotation.cliente) : null
+  const normalizedTransport = `${quotation?.tipo_transporte || ''} ${quotation?.quote_type || ''}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+  const houseDocumentLabel = normalizedTransport.includes('aereo')
+    ? 'AWB'
+    : normalizedTransport.includes('terrestre') || normalizedTransport.includes('ftl')
+      ? 'Carta Porte'
+      : 'HBL'
   const consigneeName = client?.nombre || ''
   const consigneeTaxId = client?.rtn || ''
   const consigneeAddress = clientAddress(client)
@@ -1717,7 +1730,7 @@ export default function RoutingBookingChildPage() {
                             }
                             className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
                           >
-                            + Crear HBL
+                            + Crear {houseDocumentLabel}
                           </button>
                         )}
                         <button

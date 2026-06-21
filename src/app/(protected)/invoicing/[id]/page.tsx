@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, Trash2, Download, MinusCircle, PlusCircle, Link as LinkIcon } from 'lucide-react'
+import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, Trash2, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { supabase } from '../../../../lib/supabase/client'
@@ -11,6 +11,7 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { InvoicePdf, type InvoicePdfData } from '@/src/components/pdf/invoice-pdf'
+import { ReciboPagoPdf, type ReciboPagoData } from '@/src/components/pdf/recibo-pago-pdf'
 
 type Invoice = {
   id: string
@@ -197,10 +198,22 @@ export default function InvoiceDetailPage() {
 
   const savePayment = async () => {
     if (!invoice || !payAmount || !payDate) { toast.error('Monto y fecha son requeridos'); return }
+    const amount = Number(payAmount)
+    const currentPaid = payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
+    const currentPending = Math.max(0, Number(invoice.total) - currentPaid)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Ingresa un monto de pago válido')
+      return
+    }
+    if (amount > currentPending) {
+      toast.error('El pago no puede superar el saldo pendiente')
+      return
+    }
+
     setSavingPayment(true)
     const { error } = await supabase.from('invoice_payments').insert({
       invoice_id: invoice.id,
-      amount: parseFloat(payAmount),
+      amount,
       currency: invoice.currency,
       payment_date: payDate,
       payment_method: payMethod || null,
@@ -209,6 +222,18 @@ export default function InvoiceDetailPage() {
       created_by: user?.id || null,
     })
     if (error) { toast.error(error.message); setSavingPayment(false); return }
+
+    if (currentPaid + amount >= Number(invoice.total)) {
+      const { error: statusError } = await supabase
+        .from('invoices')
+        .update({ status: 'Pagada', paid_date: payDate })
+        .eq('id', invoice.id)
+
+      if (statusError) {
+        toast.warning('El pago se registró, pero no se pudo actualizar el estado de la factura')
+      }
+    }
+
     toast.success('Pago registrado')
     setShowPaymentModal(false)
     setPayAmount(''); setPayMethod(''); setPayRef(''); setPayNotes('')
@@ -217,13 +242,43 @@ export default function InvoiceDetailPage() {
   }
 
   const deletePayment = async (payId: string) => {
+    const deletedPayment = payments.find((payment) => payment.id === payId)
     const { error } = await supabase.from('invoice_payments').delete().eq('id', payId)
     if (error) { toast.error(error.message); return }
+
+    const remainingPaid = payments.reduce(
+      (sum, payment) => sum + (payment.id === payId ? 0 : Number(payment.amount)),
+      0
+    )
+    if (deletedPayment && invoice?.status === 'Pagada' && remainingPaid < Number(invoice.total)) {
+      await supabase
+        .from('invoices')
+        .update({ status: 'Aprobada', paid_date: null })
+        .eq('id', invoice.id)
+    }
+
     toast.success('Pago eliminado')
     fetchAll()
   }
 
   if (loading || !invoice) return <PageSkeleton cards={2} rows={4} />
+
+  const makeReceiptData = (p: Payment): ReciboPagoData => ({
+    empresa: companySetting?.legal_name || companySetting?.trade_name || 'Sari Express',
+    empresa_rtn: companySetting?.rtn ?? null,
+    empresa_dir: companySetting?.address ?? null,
+    empresa_tel: companySetting?.phone ?? null,
+    factura_numero: invoice.invoice_number,
+    factura_tipo: invoice.invoice_type,
+    cliente_nombre: invoice.cliente_nombre,
+    cliente_rtn: invoice.cliente_rtn,
+    monto: p.amount,
+    currency: p.currency,
+    fecha_pago: p.payment_date,
+    metodo: p.payment_method,
+    referencia: p.reference,
+    notas: p.notes,
+  })
 
   const flow = STATUS_FLOW[invoice.status]
   const paidTotal = payments.reduce((s, p) => s + p.amount, 0)
@@ -462,13 +517,30 @@ export default function InvoiceDetailPage() {
                           {p.currency} {p.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            onClick={() => deletePayment(p.id)}
-                            className="ml-2 rounded p-1 text-slate-400 hover:text-rose-500"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          <div className="flex items-center">
+                            <PDFDownloadLink
+                              document={<ReciboPagoPdf data={makeReceiptData(p)} />}
+                              fileName={`recibo-${invoice.invoice_number || 'pago'}-${p.payment_date}.pdf`}
+                            >
+                              {({ loading: pdfLoading }) => (
+                                <button
+                                  type="button"
+                                  title="Descargar recibo"
+                                  className="rounded p-1 text-slate-400 hover:text-blue-500"
+                                  disabled={pdfLoading}
+                                >
+                                  <Printer className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </PDFDownloadLink>
+                            <button
+                              type="button"
+                              onClick={() => deletePayment(p.id)}
+                              className="rounded p-1 text-slate-400 hover:text-rose-500"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

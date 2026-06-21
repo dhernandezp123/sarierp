@@ -207,13 +207,33 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-          Mi perfil
-        </h1>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Administra tu información visible dentro del ERP.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+            Mi perfil
+          </h1>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            Administra tu información visible dentro del ERP.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            if (!profile) return
+            const { error } = await supabase
+              .from('profiles')
+              .update({ tutorial_completed: false })
+              .eq('id', profile.id)
+            if (error) {
+              toast.error('No se pudo reiniciar el tutorial')
+              return
+            }
+            window.location.reload()
+          }}
+          className="flex-shrink-0 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          Ver tutorial de nuevo
+        </button>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">

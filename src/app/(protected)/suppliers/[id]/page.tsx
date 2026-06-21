@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, AlertCircle, Clock } from 'lucide-react'
+import { Plus, AlertCircle, Clock, Upload, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
@@ -36,6 +36,7 @@ type CuentaPagar = {
   fecha_factura: string | null
   fecha_vencimiento: string | null
   status: string
+  documento_url: string | null
   quotations: { quotation_number: string | null } | null
   pagos_proveedor?: { monto: number }[]
 }
@@ -78,6 +79,7 @@ export default function SupplierDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showCPForm, setShowCPForm] = useState(false)
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null)
 
   const [cpForm, setCpForm] = useState({
     descripcion: '',
@@ -98,7 +100,7 @@ export default function SupplierDetailPage() {
     const [{ data: prov }, { data: cp }, { data: quotations }] = await Promise.all([
       supabase.from('proveedores').select('*, agents(id, name)').eq('id', id).single(),
       supabase.from('cuentas_pagar')
-        .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, quotations(quotation_number), pagos_proveedor(monto)')
+        .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, documento_url, quotations(quotation_number), pagos_proveedor(monto)')
         .eq('proveedor_id', id)
         .order('created_at', { ascending: false }),
       supabase.from('quotations')
@@ -207,6 +209,68 @@ export default function SupplierDetailPage() {
       notas: '',
     })
     load()
+  }
+
+  const uploadDocumento = async (cuentaId: string, file: File) => {
+    if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Solo se permiten archivos PDF')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('El PDF no puede superar 10 MB')
+      return
+    }
+
+    setUploadingDocId(cuentaId)
+    const currentDocument = cuentas.find((cuenta) => cuenta.id === cuentaId)?.documento_url || null
+    const path = `${id}/${cuentaId}/${crypto.randomUUID()}.pdf`
+    const { error: upErr } = await supabase.storage
+      .from('proveedor-docs')
+      .upload(path, file, { contentType: 'application/pdf', upsert: false })
+    if (upErr) { toast.error(upErr.message); setUploadingDocId(null); return }
+
+    const { error: dbErr } = await supabase
+      .from('cuentas_pagar')
+      .update({ documento_url: path })
+      .eq('id', cuentaId)
+
+    if (dbErr) {
+      await supabase.storage.from('proveedor-docs').remove([path])
+      toast.error(dbErr.message)
+      setUploadingDocId(null)
+      return
+    }
+
+    if (currentDocument && !currentDocument.startsWith('http')) {
+      await supabase.storage.from('proveedor-docs').remove([currentDocument])
+    }
+
+    toast.success('Documento subido')
+    setUploadingDocId(null)
+    load()
+  }
+
+  const openDocumento = async (documentPath: string) => {
+    const legacyMarker = '/storage/v1/object/public/proveedor-docs/'
+    const normalizedPath = documentPath.includes(legacyMarker)
+      ? decodeURIComponent(documentPath.split(legacyMarker)[1] || '')
+      : documentPath
+
+    if (!normalizedPath) {
+      toast.error('La ruta del documento no es válida')
+      return
+    }
+
+    const { data, error } = await supabase.storage
+      .from('proveedor-docs')
+      .createSignedUrl(normalizedPath, 60)
+
+    if (error || !data?.signedUrl) {
+      toast.error(error?.message || 'No se pudo abrir el documento')
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
   }
 
   if (loading) return <PageSkeleton cards={2} rows={4} />
@@ -404,7 +468,7 @@ export default function SupplierDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700">
-                  {['Descripcion', 'Factura', 'Monto', 'Vencimiento', 'Estado', ''].map((h) => (
+                  {['Descripcion', 'Factura', 'Monto', 'Vencimiento', 'Estado', 'Doc.', ''].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                   ))}
                 </tr>
@@ -430,6 +494,36 @@ export default function SupplierDetailPage() {
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_COLOR[overdue && c.status === 'Pendiente' ? 'Vencida' : c.status] ?? ''}`}>
                           {overdue && c.status === 'Pendiente' ? 'Vencida' : c.status}
                         </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          {c.documento_url && (
+                            <button
+                              type="button"
+                              onClick={() => c.documento_url && openDocumento(c.documento_url)}
+                              title="Ver documento"
+                              className="text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <label
+                            className={`cursor-pointer ${uploadingDocId === c.id ? 'opacity-40' : ''}`}
+                            title={c.documento_url ? 'Reemplazar documento' : 'Subir documento'}
+                          >
+                            {uploadingDocId === c.id
+                              ? <span className="text-[10px] text-slate-400">...</span>
+                              : <Upload className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" />
+                            }
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="application/pdf,.pdf"
+                              disabled={uploadingDocId !== null}
+                              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDocumento(c.id, f) }}
+                            />
+                          </label>
+                        </div>
                       </td>
                       <td className="px-3 py-2.5">
                         <Link href={`/accounts-payable/${c.id}`}

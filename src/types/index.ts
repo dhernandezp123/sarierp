@@ -27,4 +27,5 @@ export type Profile = {
   avatar_url?: string | null
   created_at: string
   updated_at?: string
+  tutorial_completed?: boolean | null
 }

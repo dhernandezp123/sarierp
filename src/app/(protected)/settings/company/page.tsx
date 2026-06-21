@@ -27,6 +27,10 @@ type CompanySettings = {
   invoice_footer_note: string | null
   lugar_emision_defecto: string | null
   exchange_rate_usd_hnl: number | null
+  condiciones_bl: string | null
+  condiciones_awb: string | null
+  condiciones_carta_porte: string | null
+  plantilla_cotizacion: string | null
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -63,6 +67,10 @@ export default function CompanySettingsPage() {
     invoice_footer_note: '',
     lugar_emision_defecto: '',
     exchange_rate_usd_hnl: 25.30,
+    condiciones_bl: '',
+    condiciones_awb: '',
+    condiciones_carta_porte: '',
+    plantilla_cotizacion: '',
   })
 
   const isAdmin = profile?.rol === 'Admin'
@@ -102,6 +110,10 @@ export default function CompanySettingsPage() {
         invoice_footer_note: data.invoice_footer_note ?? '',
         lugar_emision_defecto: data.lugar_emision_defecto ?? '',
         exchange_rate_usd_hnl: data.exchange_rate_usd_hnl ?? 25.30,
+        condiciones_bl: (data as any).condiciones_bl ?? '',
+        condiciones_awb: (data as any).condiciones_awb ?? '',
+        condiciones_carta_porte: (data as any).condiciones_carta_porte ?? '',
+        plantilla_cotizacion: (data as any).plantilla_cotizacion ?? '',
       })
     }
     setLoading(false)
@@ -376,6 +388,68 @@ export default function CompanySettingsPage() {
           </div>
         </section>
       </div>
+
+      {/* Plantilla de correo para cotizaciones */}
+      <section className={cardClass}>
+        <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
+          Plantilla de correo — Cotizaciones
+        </h2>
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          Texto de cierre que aparece al final del correo de cotización. El sistema incluye automáticamente los datos del servicio y la tarifa.
+        </p>
+        <Field label="Texto de cierre del correo">
+          <textarea
+            value={form.plantilla_cotizacion ?? ''}
+            onChange={(e) => set('plantilla_cotizacion', e.target.value)}
+            disabled={!isAdmin}
+            rows={4}
+            placeholder={'Saludos cordiales,\nSari Express — Equipo Comercial\noperaciones@sariexpress.com'}
+            className={`${fieldClass} resize-none disabled:opacity-60`}
+          />
+        </Field>
+      </section>
+
+      {/* Condiciones en documentos */}
+      <section className={cardClass}>
+        <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
+          Condiciones en documentos de transporte
+        </h2>
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          Texto que aparece al pie de cada tipo de documento. Dejar vacío para omitir la sección.
+        </p>
+        <div className="space-y-4">
+          <Field label="Condiciones — House Bill of Lading (HBL)">
+            <textarea
+              value={form.condiciones_bl ?? ''}
+              onChange={(e) => set('condiciones_bl', e.target.value)}
+              disabled={!isAdmin}
+              rows={4}
+              placeholder="Texto de términos y condiciones para el HBL marítimo..."
+              className={`${fieldClass} resize-none disabled:opacity-60`}
+            />
+          </Field>
+          <Field label="Condiciones — Air Waybill (AWB)">
+            <textarea
+              value={form.condiciones_awb ?? ''}
+              onChange={(e) => set('condiciones_awb', e.target.value)}
+              disabled={!isAdmin}
+              rows={4}
+              placeholder="Texto de términos y condiciones para el AWB aéreo..."
+              className={`${fieldClass} resize-none disabled:opacity-60`}
+            />
+          </Field>
+          <Field label="Condiciones — Carta Porte">
+            <textarea
+              value={form.condiciones_carta_porte ?? ''}
+              onChange={(e) => set('condiciones_carta_porte', e.target.value)}
+              disabled={!isAdmin}
+              rows={4}
+              placeholder="Texto de términos y condiciones para la Carta Porte terrestre..."
+              className={`${fieldClass} resize-none disabled:opacity-60`}
+            />
+          </Field>
+        </div>
+      </section>
 
       {isAdmin && (
         <div className="flex justify-end">

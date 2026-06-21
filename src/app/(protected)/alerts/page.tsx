@@ -14,6 +14,7 @@ import {
   type SystemAlertCategory,
   type SystemAlertSeverity,
 } from '@/src/lib/alerts'
+import { checkAndNotifyExpiredTarifas } from '@/src/lib/tarifa-expiry-check'
 
 type CategoryFilter = 'Todas' | SystemAlertCategory
 type SeverityFilter = 'Todas' | SystemAlertSeverity
@@ -70,6 +71,14 @@ export default function AlertsPage() {
   }
 
   useEffect(() => { loadAlerts() }, [profile, user, userLoading])
+
+  useEffect(() => {
+    if (profile?.rol === 'Pricing' || profile?.rol === 'Admin') {
+      void checkAndNotifyExpiredTarifas().catch(() => {
+        toast.error('No se pudieron procesar las alertas de tarifas vencidas')
+      })
+    }
+  }, [profile?.rol])
 
   const summary = useMemo(() => ({
     Comercial: alerts.filter((a) => a.category === 'Comercial').length,

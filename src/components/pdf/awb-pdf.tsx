@@ -8,14 +8,9 @@ import {
   View,
 } from '@react-pdf/renderer'
 
-export type HBLData = {
-  bl_number: string | null
-  bl_date: string | null
-  release_type: string | null
-  originals_count: number | null
-  copies_count: number | null
-  freight_terms: string | null
-  hbl_freight_visibility: string | null
+export type AWBData = {
+  awb_number: string | null
+  awb_date: string | null
   issue_date: string | null
   shipper: string | null
   shipper_address: string | null
@@ -26,16 +21,11 @@ export type HBLData = {
   consignee_email: string | null
   notify_party: string | null
   notify_party_address: string | null
-  notify_party_tax_id: string | null
-  notify_party_contact: string | null
-  notify_party_email: string | null
-  place_of_receipt: string | null
-  port_of_loading: string | null
-  port_of_discharge: string | null
+  airport_of_departure: string | null
+  airport_of_destination: string | null
   place_of_delivery: string | null
-  carrier: string | null
-  vessel_name: string | null
-  voyage: string | null
+  airline: string | null
+  flight_number: string | null
   etd: string | null
   eta: string | null
   description_of_goods: string | null
@@ -45,7 +35,6 @@ export type HBLData = {
   gross_weight_kg: number | null
   measurement_cbm: number | null
   special_instructions: string | null
-  printed_at_destination: boolean | null
   condiciones: string | null
 }
 
@@ -90,20 +79,18 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#4b5563',
   },
-  blNumber: {
+  docNumber: {
     marginTop: 4,
     fontSize: 11,
     fontWeight: 700,
     color: BRAND_NAVY,
   },
-  // Two-column layout
   twoCols: {
     flexDirection: 'row',
     gap: 5,
     marginBottom: 5,
   },
   col: { flex: 1 },
-  // Section box
   sectionBox: {
     border: '1 solid #d1d5db',
     marginBottom: 5,
@@ -128,7 +115,6 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 1.4,
   },
-  // Data rows
   dataRow: {
     flexDirection: 'row',
     borderTop: '1 solid #e5e7eb',
@@ -144,7 +130,6 @@ const styles = StyleSheet.create({
     padding: '3 6',
     lineHeight: 1.3,
   },
-  // Cargo table
   cargoTable: {
     border: '1 solid #d1d5db',
     marginBottom: 5,
@@ -169,7 +154,22 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 1.4,
   },
-  // Signature block
+  conditionsBox: {
+    border: '1 solid #d1d5db',
+    marginBottom: 5,
+    padding: '5 7',
+  },
+  conditionsTitle: {
+    fontSize: 7.5,
+    fontWeight: 700,
+    color: BRAND_NAVY,
+    marginBottom: 3,
+  },
+  conditionsText: {
+    fontSize: 7,
+    color: '#6b7280',
+    lineHeight: 1.4,
+  },
   sigBlock: {
     flexDirection: 'row',
     gap: 10,
@@ -193,23 +193,6 @@ const styles = StyleSheet.create({
     fontSize: 7.5,
     color: '#374151',
   },
-  conditionsBox: {
-    border: '1 solid #d1d5db',
-    marginBottom: 5,
-    padding: '5 7',
-  },
-  conditionsTitle: {
-    fontSize: 7.5,
-    fontWeight: 700,
-    color: BRAND_NAVY,
-    marginBottom: 3,
-  },
-  conditionsText: {
-    fontSize: 7,
-    color: '#6b7280',
-    lineHeight: 1.4,
-  },
-  // Footer
   footer: {
     position: 'absolute',
     bottom: 14,
@@ -274,9 +257,7 @@ function DataRow({ label, value: val }: { label: string; value: string }) {
   )
 }
 
-export default function HouseBLPdf({ bl }: { bl: HBLData }) {
-  const issuePlace = bl.printed_at_destination ? v(bl.port_of_discharge) : 'San Pedro Sula, Honduras'
-
+export default function AWBPdf({ awb }: { awb: AWBData }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -284,106 +265,97 @@ export default function HouseBLPdf({ bl }: { bl: HBLData }) {
         <View style={styles.header}>
           <Image src="/logo/sari-logo.png" style={styles.logo} />
           <View style={styles.titleBlock}>
-            <Text style={styles.docTitle}>HOUSE BILL OF LADING</Text>
+            <Text style={styles.docTitle}>AIR WAYBILL</Text>
             <Text style={styles.docSubtitle}>{SARI_LEGAL_NAME} · RTN {SARI_RTN}</Text>
             <Text style={styles.docSubtitle}>{SARI_ADDRESS}</Text>
-            {bl.bl_number && (
-              <Text style={styles.blNumber}>HBL# {bl.bl_number}</Text>
+            {awb.awb_number && (
+              <Text style={styles.docNumber}>AWB# {awb.awb_number}</Text>
             )}
           </View>
         </View>
 
-        {/* Parties row */}
+        {/* Parties */}
         <View style={styles.twoCols}>
           <View style={styles.col}>
             <PartySection
               title="SHIPPER / EXPORTER"
-              name={bl.shipper}
-              address={bl.shipper_address}
+              name={awb.shipper}
+              address={awb.shipper_address}
             />
           </View>
           <View style={styles.col}>
             <PartySection
               title="CONSIGNEE"
-              name={bl.consignee}
-              address={bl.consignee_address}
-              taxId={bl.consignee_tax_id}
-              contact={bl.consignee_contact}
-              email={bl.consignee_email}
+              name={awb.consignee}
+              address={awb.consignee_address}
+              taxId={awb.consignee_tax_id}
+              contact={awb.consignee_contact}
+              email={awb.consignee_email}
             />
           </View>
         </View>
 
-        <PartySection
-          title="NOTIFY PARTY"
-          name={bl.notify_party}
-          address={bl.notify_party_address}
-          taxId={bl.notify_party_tax_id}
-          contact={bl.notify_party_contact}
-          email={bl.notify_party_email}
-        />
+        {awb.notify_party && (
+          <PartySection
+            title="NOTIFY PARTY"
+            name={awb.notify_party}
+            address={awb.notify_party_address}
+          />
+        )}
 
-        {/* Route and vessel */}
+        {/* Route & Flight */}
         <View style={styles.sectionBox}>
-          <Text style={styles.sectionTitle}>ROUTE &amp; VESSEL</Text>
+          <Text style={styles.sectionTitle}>ROUTE &amp; FLIGHT</Text>
           <View style={styles.twoCols}>
             <View style={[styles.col, { border: 0 }]}>
-              <DataRow label="Place of Receipt" value={v(bl.place_of_receipt)} />
-              <DataRow label="Port of Loading" value={v(bl.port_of_loading)} />
-              <DataRow label="Port of Discharge" value={v(bl.port_of_discharge)} />
-              <DataRow label="Place of Delivery" value={v(bl.place_of_delivery)} />
+              <DataRow label="Airport of Departure" value={v(awb.airport_of_departure)} />
+              <DataRow label="Airport of Destination" value={v(awb.airport_of_destination)} />
+              <DataRow label="Place of Delivery" value={v(awb.place_of_delivery)} />
             </View>
             <View style={styles.col}>
-              <DataRow label="Carrier" value={v(bl.carrier)} />
-              <DataRow label="Vessel / Flight" value={v(bl.vessel_name)} />
-              <DataRow label="Voyage / Flt No." value={v(bl.voyage)} />
-              <DataRow label="ETD" value={dateV(bl.etd)} />
-              <DataRow label="ETA" value={dateV(bl.eta)} />
+              <DataRow label="Airline / Carrier" value={v(awb.airline)} />
+              <DataRow label="Flight No." value={v(awb.flight_number)} />
+              <DataRow label="ETD" value={dateV(awb.etd)} />
+              <DataRow label="ETA" value={dateV(awb.eta)} />
             </View>
           </View>
         </View>
 
-        {/* Cargo table */}
+        {/* Cargo */}
         <View style={styles.cargoTable}>
           <View style={styles.cargoHeader}>
             <Text style={[styles.cargoHeaderCell, { flex: 1.5 }]}>MARKS &amp; NUMBERS</Text>
             <Text style={styles.cargoHeaderCell}>QTY / TYPE</Text>
             <Text style={[styles.cargoHeaderCell, { flex: 3 }]}>DESCRIPTION OF GOODS</Text>
             <Text style={styles.cargoHeaderCell}>GROSS WT (KG)</Text>
-            <Text style={styles.cargoHeaderCell}>MEAS. (CBM)</Text>
+            <Text style={styles.cargoHeaderCell}>VOL (CBM)</Text>
           </View>
           <View style={styles.cargoRow}>
-            <Text style={[styles.cargoCell, { flex: 1.5 }]}>{v(bl.marks_and_numbers)}</Text>
+            <Text style={[styles.cargoCell, { flex: 1.5 }]}>{v(awb.marks_and_numbers)}</Text>
             <Text style={styles.cargoCell}>
-              {bl.number_of_packages ? `${bl.number_of_packages} ${v(bl.package_type)}` : v(bl.package_type)}
+              {awb.number_of_packages ? `${awb.number_of_packages} ${v(awb.package_type)}` : v(awb.package_type)}
             </Text>
-            <Text style={[styles.cargoCell, { flex: 3 }]}>{v(bl.description_of_goods)}</Text>
-            <Text style={styles.cargoCell}>{v(bl.gross_weight_kg)}</Text>
-            <Text style={styles.cargoCell}>{v(bl.measurement_cbm)}</Text>
+            <Text style={[styles.cargoCell, { flex: 3 }]}>{v(awb.description_of_goods)}</Text>
+            <Text style={styles.cargoCell}>{v(awb.gross_weight_kg)}</Text>
+            <Text style={styles.cargoCell}>{v(awb.measurement_cbm)}</Text>
           </View>
         </View>
 
-        {/* Terms */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionTitle}>TERMS &amp; CONDITIONS</Text>
-          <View style={[styles.twoCols, { padding: '4 0' }]}>
-            <DataRow label="Freight Terms" value={v(bl.freight_terms)} />
-            <DataRow label="Freight Visibility" value={v(bl.hbl_freight_visibility)} />
+        {/* Special Instructions */}
+        {awb.special_instructions && (
+          <View style={[styles.sectionBox, { padding: '4 7' }]}>
+            <Text style={{ fontSize: 7.5, fontWeight: 700, color: BRAND_NAVY, marginBottom: 2 }}>
+              SPECIAL INSTRUCTIONS
+            </Text>
+            <Text style={{ fontSize: 8, lineHeight: 1.4 }}>{awb.special_instructions}</Text>
           </View>
-          <DataRow label="Release Type" value={v(bl.release_type)} />
-          <DataRow
-            label="Originals / Copies"
-            value={`${bl.originals_count ?? 3} Original(s) / ${bl.copies_count ?? 3} Copy(ies)`}
-          />
-          {bl.special_instructions ? (
-            <DataRow label="Special Instructions" value={bl.special_instructions} />
-          ) : null}
-        </View>
+        )}
 
-        {bl.condiciones && (
-          <View style={styles.conditionsBox} wrap={false}>
-            <Text style={styles.conditionsTitle}>GENERAL TERMS &amp; CONDITIONS</Text>
-            <Text style={styles.conditionsText}>{bl.condiciones}</Text>
+        {/* Conditions */}
+        {awb.condiciones && (
+          <View style={styles.conditionsBox}>
+            <Text style={styles.conditionsTitle}>TÉRMINOS Y CONDICIONES / TERMS &amp; CONDITIONS</Text>
+            <Text style={styles.conditionsText}>{awb.condiciones}</Text>
           </View>
         )}
 
@@ -391,15 +363,17 @@ export default function HouseBLPdf({ bl }: { bl: HBLData }) {
         <View style={styles.sigBlock}>
           <View style={styles.sigBox}>
             <Text style={styles.sigLabel}>
-              Place and Date of Issue: {issuePlace}, {dateV(bl.issue_date || bl.bl_date)}
+              Lugar y Fecha de Emisión / Place and Date of Issue: San Pedro Sula, Honduras,{' '}
+              {dateV(awb.issue_date || awb.awb_date)}
             </Text>
-            <Text style={styles.sigLine}>Signature &amp; Stamp — As Agent for the Carrier</Text>
+            <Text style={styles.sigLine}>Firma y Sello — As Agent for the Carrier</Text>
             <Text style={[styles.sigLine, { marginTop: 4, fontWeight: 700 }]}>{SARI_LEGAL_NAME}</Text>
           </View>
           <View style={styles.sigBox}>
             <Text style={styles.sigLabel}>
-              Original BL: {bl.originals_count ?? 3} — One of which being accomplished, the others to stand void.
+              Firma del Remitente / Shipper&apos;s Signature
             </Text>
+            <Text style={[styles.sigLine, { marginTop: 20 }]}>Firma: ___________________________</Text>
           </View>
         </View>
 

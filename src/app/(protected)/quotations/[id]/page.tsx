@@ -8,12 +8,14 @@ import {
   Copy,
   CreditCard,
   Download,
+  Mail,
   MoreHorizontal,
   Pencil,
   Printer,
   RefreshCw,
   Route,
   Scale,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -343,6 +345,8 @@ export default function QuotationDetailPage() {
   const [repricingDialogOpen, setRepricingDialogOpen] = useState(false)
   const [repricingReason, setRepricingReason] = useState('')
   const [reopeningRepricing, setReopeningRepricing] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [plantillaCotizacion, setPlantillaCotizacion] = useState<string | null>(null)
   const [repricingImpact, setRepricingImpact] = useState({
     hasShippingInstruction: false,
     bookingsCount: 0,
@@ -1352,8 +1356,102 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   )
 
+  const clienteEmail = quotation?.contact_email || quotation?.clientes?.email_1 || ''
+  const clienteNombre = quotation?.contact_name || quotation?.clientes?.nombre || 'cliente'
+  const emailSubjectQ = `Cotización ${quotation?.quotation_number || ''} - Sari Express`
+  const commercialTotal = pricingTotals.total || Number(quotation?.total_sale || 0)
+  const emailBodyQ = [
+    `Estimado/a ${clienteNombre},`,
+    '',
+    'Le presentamos nuestra cotización de servicios logísticos:',
+    '',
+    `Cotización #:   ${quotation?.quotation_number || '—'}`,
+    `Servicio:       ${quotation?.incoterm || ''} ${quotation?.quote_type || ''}`.trim(),
+    `Origen:         ${originPort}`,
+    `Destino:        ${destinationPort}`,
+    `Commodity:      ${quotation?.commodity || '—'}`,
+    '',
+    ...(selectedAgent ? [
+      'TARIFA SELECCIONADA',
+      `Carrier:        ${carrierLabel}`,
+      `Tránsito:       ${transitDays ? `${transitDays} días` : '—'}`,
+      `ETD estimado:   ${etdLabel}`,
+      ...(commercialTotal > 0 ? [`Tarifa comercial: USD ${commercialTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
+      `Tarifa válida hasta: ${formatDisplayDate(selectedAgent.valid_until || quotation?.valid_until)}`,
+      '',
+    ] : []),
+    plantillaCotizacion || 'Saludos cordiales,\nSari Express — Equipo Comercial',
+  ].join('\n')
+
+  const mailtoLinkQ = clienteEmail
+    ? `mailto:${clienteEmail}?cc=${encodeURIComponent(profile?.email || '')}&subject=${encodeURIComponent(emailSubjectQ)}&body=${encodeURIComponent(emailBodyQ)}`
+    : ''
+
   return (
   <>
+    {showEmailModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-[#0b1220]">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Enviar Cotización por Correo</h2>
+            <button type="button" onClick={() => setShowEmailModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="mb-3 space-y-1 rounded-xl bg-blue-50 p-3 text-sm dark:bg-blue-950/30">
+            <p className="font-medium text-blue-800 dark:text-blue-300">
+              Para: <span className="font-normal">{clienteEmail || '(sin email registrado)'}</span>
+            </p>
+            {profile?.email && (
+              <p className="font-medium text-blue-800 dark:text-blue-300">
+                CC: <span className="font-normal">{profile.email}</span>
+              </p>
+            )}
+            <p className="font-medium text-blue-800 dark:text-blue-300">
+              Asunto: <span className="font-normal">{emailSubjectQ}</span>
+            </p>
+          </div>
+
+          <textarea
+            readOnly
+            rows={18}
+            value={emailBodyQ}
+            className="mb-4 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          />
+
+          <div className="flex flex-wrap gap-3">
+            {mailtoLinkQ && (
+              <a
+                href={mailtoLinkQ}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                <Mail className="h-4 w-4" />
+                Abrir en correo
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(emailBodyQ)
+                toast.success('Mensaje copiado al portapapeles')
+              }}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              Copiar mensaje
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowEmailModal(false)}
+              className="ml-auto rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <div className="space-y-6 !font-sans [&_*]:!font-sans">
       <Breadcrumbs
         items={[
@@ -1449,6 +1547,26 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           >
             <Printer className="h-4 w-4" />
             <span className="sr-only">Imprimir cotización</span>
+          </button>
+
+          <button
+            type="button"
+            title="Enviar cotización por correo"
+            onClick={async () => {
+              if (!plantillaCotizacion) {
+                const { data } = await supabase
+                  .from('company_settings')
+                  .select('plantilla_cotizacion')
+                  .limit(1)
+                  .maybeSingle()
+                setPlantillaCotizacion((data as any)?.plantilla_cotizacion ?? '')
+              }
+              setShowEmailModal(true)
+            }}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <Mail className="h-4 w-4" />
+            <span className="sr-only">Enviar por correo</span>
           </button>
 
           {(canManagePricing ||

@@ -22,12 +22,13 @@ export async function createNotification({
   message,
   type = 'info',
 }: NotificationPayload) {
-  await supabase.from('notifications').insert({
+  const { error } = await supabase.from('notifications').insert({
     user_id: userId,
     title,
     message: message || null,
     type,
   })
+  return { error }
 }
 
 export async function fetchCurrentUserNotifications(limit = 10) {

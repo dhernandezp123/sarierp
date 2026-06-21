@@ -883,6 +883,45 @@ export default function EditQuotationPage() {
         }
       }
 
+      // Notify Operaciones if there is an active Shipping Instruction for this quotation
+      const { data: siLinked } = await supabase
+        .from('shipping_instructions')
+        .select('id, routing_number, shipment_status')
+        .eq('quotation_id', quotationId)
+        .not('shipment_status', 'in', '("Finalizado","Cancelada")')
+        .limit(1)
+        .maybeSingle()
+
+      if (siLinked) {
+        const { data: opUsers } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('rol', 'Operaciones')
+          .eq('is_active', true)
+          .eq('status', 'Aprobado')
+
+        if (opUsers && opUsers.length > 0) {
+          const siLabel = siLinked.routing_number || siLinked.id
+          try {
+            const notificationResults = await Promise.all(
+              opUsers.map((u) =>
+                createNotification({
+                  userId: u.id,
+                  title: 'Cotización modificada con SI activa',
+                  message: `La cotización ${quotationNumber || quotationId} (SI: ${siLabel}) fue modificada.`,
+                  type: 'warning',
+                })
+              )
+            )
+            if (notificationResults.some((result) => result.error)) {
+              throw new Error('No se pudieron crear todas las notificaciones')
+            }
+          } catch {
+            toast.warning('Los cambios se guardaron, pero no se pudo notificar a Operaciones')
+          }
+        }
+      }
+
       toast.success('Cambios guardados correctamente')
 
       if (!saveIsMiamiFlow && formData.status === 'Borrador') {
