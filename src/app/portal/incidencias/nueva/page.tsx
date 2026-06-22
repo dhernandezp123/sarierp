@@ -38,16 +38,11 @@ export default function NuevaIncidenciaPage() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!profile?.cliente_id) return
-    loadPackages()
-  }, [profile?.cliente_id])
-
-  const loadPackages = async () => {
+  const loadPackages = async (clientId: string) => {
     const { data } = await supabase
       .from('miami_packages')
       .select('id, tracking_number, warehouse_number, carrier, status')
-      .eq('cliente_id', profile.cliente_id)
+      .eq('cliente_id', clientId)
       .neq('status', 'Entregado')
       .order('received_at', { ascending: false })
 
@@ -61,6 +56,13 @@ export default function NuevaIncidenciaPage() {
     setLoading(false)
   }
 
+  useEffect(() => {
+    const clientId = profile?.cliente_id
+    if (!clientId) return
+    const timeout = window.setTimeout(() => void loadPackages(clientId), 0)
+    return () => window.clearTimeout(timeout)
+  }, [profile?.cliente_id])
+
   const filteredPkgs = pkgSearch.trim()
     ? packages.filter(p =>
         p.tracking_number.toLowerCase().includes(pkgSearch.toLowerCase()) ||
@@ -70,6 +72,7 @@ export default function NuevaIncidenciaPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!profile?.cliente_id) { toast.error('No se encontró el cliente asociado'); return }
     if (!selectedPkg) { toast.error('Selecciona un paquete'); return }
     if (!tipo)         { toast.error('Selecciona el tipo de problema'); return }
     if (!descripcion.trim()) { toast.error('Describe el problema'); return }
@@ -94,8 +97,8 @@ export default function NuevaIncidenciaPage() {
 
       toast.success('Incidencia reportada. Te contactaremos pronto.')
       router.replace('/portal/incidencias')
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al reportar')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al reportar')
     } finally {
       setSaving(false)
     }

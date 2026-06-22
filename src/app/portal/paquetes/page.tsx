@@ -36,12 +36,7 @@ export default function PortalPaquetesPage() {
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    if (!profile?.cliente_id) return
-    loadPackages(true)
-  }, [profile?.cliente_id])
-
-  const loadPackages = async (reset: boolean) => {
+  const loadPackages = async (clientId: string, reset: boolean) => {
     if (reset) setLoading(true)
     else setLoadingMore(true)
 
@@ -49,7 +44,7 @@ export default function PortalPaquetesPage() {
     const { data } = await supabase
       .from('miami_packages')
       .select('id, tracking_number, carrier, warehouse_number, weight_lbs, status, received_at')
-      .eq('cliente_id', profile.cliente_id)
+      .eq('cliente_id', clientId)
       .order('received_at', { ascending: false })
       .range(from, from + PAGE_SIZE - 1)
 
@@ -64,6 +59,13 @@ export default function PortalPaquetesPage() {
       setLoadingMore(false)
     }
   }
+
+  useEffect(() => {
+    const clientId = profile?.cliente_id
+    if (!clientId) return
+    const timeout = window.setTimeout(() => void loadPackages(clientId, true), 0)
+    return () => window.clearTimeout(timeout)
+  }, [profile?.cliente_id])
 
   const filtered = packages.filter(p => {
     const matchStatus = statusFilter === 'Todos' || p.status === statusFilter
@@ -164,7 +166,7 @@ export default function PortalPaquetesPage() {
           <div className="border-t border-slate-100 p-4 dark:border-slate-800">
             <button
               type="button"
-              onClick={() => loadPackages(false)}
+              onClick={() => profile?.cliente_id && loadPackages(profile.cliente_id, false)}
               disabled={loadingMore}
               className="w-full rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >

@@ -39,7 +39,7 @@ Fecha: 22/06/2026
 | 0 | Baseline, backup y auditoría real de esquema/RLS | Completado |
 | 1 | Seguridad, RLS y escalamiento de usuarios | Completado |
 | 2 | Migraciones y constraints de integridad | Completado |
-| 3 | Autenticación SSR, sesión y permisos | Pendiente |
+| 3 | Autenticación SSR, sesión y permisos | En progreso |
 | 4 | Facturación, CAI, CxC, CxP y pagos | Pendiente |
 | 5 | Transacciones de cotización, pricing y operaciones | Pendiente |
 | 6 | Miami: embarques persistentes e historial | Pendiente |
@@ -60,7 +60,7 @@ Fecha: 22/06/2026
 | SEC-002 | RLS de `client_rates` puede exponer o permitir modificar tarifas privadas | Crítica | Completado |
 | SEC-003 | `garantias_navieras` tiene RLS activo pero ninguna política; queda bloqueada para usuarios autenticados | Alta | Completado |
 | SEC-004 | Verificar posible escalamiento mediante onboarding, metadata y escritura de `profiles` | Crítica | Completado |
-| SEC-005 | Protección de rutas solo del lado cliente; proxy no usa sesión SSR real | Alta | Pendiente |
+| SEC-005 | Protección de rutas solo del lado cliente; proxy no usa sesión SSR real | Alta | En validación |
 | SEC-006 | Cliente puede intentar acceder a Settings/CAI por excepción global de permisos | Alta | Completado |
 | SEC-007 | Políticas de `notifications` y `profiles` no están completamente versionadas | Alta | Completado |
 | SEC-008 | Auditar funciones `SECURITY DEFINER`, grants y `search_path` | Alta | Completado |
@@ -116,8 +116,8 @@ Fecha: 22/06/2026
 | BUG-001 | Reporte Pagos a Proveedores tiene código inalcanzable | Alta | Pendiente |
 | BUG-002 | Notificaciones de tarifa vencida filtran estado legacy `Cotizada` | Alta | Pendiente |
 | BUG-003 | Proveedores busca cotizaciones legacy `Aprobada` | Alta | Pendiente |
-| BUG-004 | `/profile` no está autorizado para roles no Admin | Alta | Pendiente |
-| BUG-005 | Tutorial Admin enlaza `/users` en vez de `/admin/users` | Media | Pendiente |
+| BUG-004 | `/profile` no está autorizado para roles no Admin | Alta | Completado |
+| BUG-005 | Tutorial Admin enlaza `/users` en vez de `/admin/users` | Media | Completado |
 | BUG-006 | Sidebar cuenta notificaciones que nunca se marcan como leídas | Alta | Pendiente |
 | BUG-007 | Tres sistemas de notificación están desconectados | Alta | Pendiente |
 
@@ -501,3 +501,51 @@ Agregar una entrada por fix:
   - Si un agente tiene más de un proveedor activo vinculado, el RPC lo bloquea
     con un error explícito hasta corregir el catálogo.
 - Commit: `5bc4e71`
+
+### 2026-06-22 — FASE-3 — Sesión SSR y protección de rutas
+
+- Estado: En validación; protección anónima comprobada, pendiente de prueba manual
+  con sesiones reales de personal y Cliente antes de cerrar SEC-005.
+- Código:
+  - `src/proxy.ts`
+  - `src/lib/supabase/client.ts`
+  - `src/lib/supabase/server.ts`
+  - `src/app/(protected)/layout.tsx`
+  - `src/components/layout/protected-shell.tsx`
+  - `src/hooks/useUser.tsx`
+  - `src/app/portal/layout.tsx`
+  - Páginas del portal ajustadas para identidad nullable segura.
+  - `src/lib/permissions.ts`
+  - `src/components/onboarding/OnboardingTutorial.tsx`
+- Dependencias:
+  - Se agregó `@supabase/ssr` 0.12.0.
+  - Se eliminó `@supabase/auth-helpers-nextjs`.
+  - `@supabase/supabase-js` resolvió a 2.108.2, compatible con el peer de SSR.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK, 58 rutas; las rutas ERP ahora son dinámicas por sesión.
+  - ESLint de los archivos modificados: cero errores, siete advertencias legacy.
+  - `npm run lint`: deuda global reducida a 268 errores y 89 advertencias.
+  - `npm audit --omit=dev`: dos vulnerabilidades moderadas heredadas de PostCSS
+    dentro de Next; no se ejecutó `--force` porque propone un downgrade rompedor.
+  - HTTP local sin sesión:
+    - `/login`, `/portal/login` y `/politicas`: 200.
+    - `/dashboard` y `/miami/inventario`: 307 a `/login`.
+    - `/portal`: 307 a `/portal/login`.
+- Cambios:
+  - Las sesiones pasan de `localStorage` a cookies gestionadas por Supabase SSR.
+  - Proxy valida claims, refresca cookies y bloquea rutas privadas antes del render.
+  - El layout ERP vuelve a comprobar usuario y perfil aprobado/activo en servidor.
+  - Cliente no puede renderizar el ERP interno y se redirige a `/portal`.
+  - `useUser` comparte una sola carga de identidad por árbol, evitando decenas de
+    consultas duplicadas por página.
+  - `/portal/login` deja de quedar bloqueado por el layout autenticado del portal.
+  - Perfil queda disponible para todos los roles internos y el tutorial Admin usa
+    `/admin/users`.
+- Riesgos pendientes:
+  - Los usuarios con una sesión legacy en `localStorage` deberán iniciar sesión de
+    nuevo para crear la cookie SSR.
+  - Probar login/logout y expiración con Admin, rol interno y Cliente reales.
+  - La autorización fina de rutas sigue complementada por RLS y el guard de rol;
+    se revisará la estrategia de permisos de servidor antes de cerrar la fase.
+- Commit: pendiente.

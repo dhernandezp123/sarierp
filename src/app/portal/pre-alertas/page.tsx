@@ -32,22 +32,24 @@ export default function PortalPreAlertasPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('Todos')
 
-  useEffect(() => {
-    if (!profile?.cliente_id) return
-    loadAlerts()
-  }, [profile?.cliente_id])
-
-  const loadAlerts = async () => {
+  const loadAlerts = async (clientId: string) => {
     setLoading(true)
     const { data } = await supabase
       .from('miami_pre_alerts')
       .select('id, tracking_number, carrier, description, expected_date, status, created_at, matched_package_id')
-      .eq('cliente_id', profile.cliente_id)
+      .eq('cliente_id', clientId)
       .order('created_at', { ascending: false })
 
     setAlerts((data ?? []) as PreAlert[])
     setLoading(false)
   }
+
+  useEffect(() => {
+    const clientId = profile?.cliente_id
+    if (!clientId) return
+    const timeout = window.setTimeout(() => void loadAlerts(clientId), 0)
+    return () => window.clearTimeout(timeout)
+  }, [profile?.cliente_id])
 
   const filtered = statusFilter === 'Todos' ? alerts : alerts.filter(a => a.status === statusFilter)
 

@@ -173,7 +173,7 @@ const STEPS_BY_ROLE: Record<string, TutorialStep[]> = {
       icon: <Users className="h-8 w-8" />,
       title: 'Usuarios',
       description: 'Invita y administra usuarios por rol. Aprueba accesos y asigna permisos.',
-      href: '/users',
+      href: '/admin/users',
       linkLabel: 'Ver usuarios',
     },
     {

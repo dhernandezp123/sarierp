@@ -33,17 +33,12 @@ export default function PortalIncidenciasPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('Todos')
 
-  useEffect(() => {
-    if (!profile?.cliente_id) return
-    loadIncidencias()
-  }, [profile?.cliente_id])
-
-  const loadIncidencias = async () => {
+  const loadIncidencias = async (clientId: string) => {
     setLoading(true)
     const { data } = await supabase
       .from('miami_incidencias')
       .select('id, tipo, descripcion, status, resolucion, created_at, package_id')
-      .eq('cliente_id', profile.cliente_id)
+      .eq('cliente_id', clientId)
       .order('created_at', { ascending: false })
 
     const incs = (data ?? []) as Incidencia[]
@@ -62,6 +57,13 @@ export default function PortalIncidenciasPage() {
     setIncidencias(incs)
     setLoading(false)
   }
+
+  useEffect(() => {
+    const clientId = profile?.cliente_id
+    if (!clientId) return
+    const timeout = window.setTimeout(() => void loadIncidencias(clientId), 0)
+    return () => window.clearTimeout(timeout)
+  }, [profile?.cliente_id])
 
   const filtered = statusFilter === 'Todos' ? incidencias : incidencias.filter(i => i.status === statusFilter)
 

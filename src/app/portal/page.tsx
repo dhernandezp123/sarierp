@@ -38,12 +38,7 @@ export default function PortalDashboard() {
   const [hasAddress, setHasAddress] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!profile?.cliente_id) return
-    loadData()
-  }, [profile?.cliente_id])
-
-  const loadData = async () => {
+  const loadData = async (clientId: string) => {
     setLoading(true)
     const [
       { data: pkgs },
@@ -53,20 +48,20 @@ export default function PortalDashboard() {
       supabase
         .from('miami_packages')
         .select('id, tracking_number, carrier, warehouse_number, status, received_at')
-        .eq('cliente_id', profile.cliente_id)
+        .eq('cliente_id', clientId)
         .order('received_at', { ascending: false })
         .limit(5),
       supabase
         .from('miami_pre_alerts')
         .select('id, tracking_number, carrier, description, expected_date')
-        .eq('cliente_id', profile.cliente_id)
+        .eq('cliente_id', clientId)
         .eq('status', 'Pendiente')
         .order('created_at', { ascending: false })
         .limit(5),
       supabase
         .from('client_addresses')
         .select('id')
-        .eq('cliente_id', profile.cliente_id)
+        .eq('cliente_id', clientId)
         .eq('is_active', true)
         .limit(1),
     ])
@@ -76,6 +71,13 @@ export default function PortalDashboard() {
     setHasAddress((addr ?? []).length > 0)
     setLoading(false)
   }
+
+  useEffect(() => {
+    const clientId = profile?.cliente_id
+    if (!clientId) return
+    const timeout = window.setTimeout(() => void loadData(clientId), 0)
+    return () => window.clearTimeout(timeout)
+  }, [profile?.cliente_id])
 
   const inBodega = packages.filter(p => p.status === 'Asignado').length
 

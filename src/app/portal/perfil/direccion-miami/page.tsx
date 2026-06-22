@@ -41,16 +41,11 @@ export default function DireccionMiamiPage() {
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
-    if (!profile?.cliente_id) return
-    loadAddress()
-  }, [profile?.cliente_id])
-
-  const loadAddress = async () => {
+  const loadAddress = async (clientId: string) => {
     const { data } = await supabase
       .from('client_addresses')
       .select('*')
-      .eq('cliente_id', profile.cliente_id)
+      .eq('cliente_id', clientId)
       .eq('is_active', true)
       .maybeSingle()
 
@@ -72,8 +67,16 @@ export default function DireccionMiamiPage() {
     setLoading(false)
   }
 
+  useEffect(() => {
+    const clientId = profile?.cliente_id
+    if (!clientId) return
+    const timeout = window.setTimeout(() => void loadAddress(clientId), 0)
+    return () => window.clearTimeout(timeout)
+  }, [profile?.cliente_id])
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!profile?.cliente_id) { toast.error('No se encontró el cliente asociado'); return }
     if (!address.nombre_completo.trim()) { toast.error('El nombre es requerido'); return }
     if (!address.address_line.trim())   { toast.error('La dirección es requerida'); return }
     if (!address.zip.trim())            { toast.error('El ZIP es requerido'); return }
@@ -105,8 +108,8 @@ export default function DireccionMiamiPage() {
       }
 
       toast.success('Dirección guardada')
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al guardar')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setSaving(false)
     }

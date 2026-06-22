@@ -6,15 +6,16 @@ import { useRouter, usePathname } from 'next/navigation'
 import { Package, LogOut, User, Bell, Home } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
-import { useUser } from '@/src/hooks/useUser'
+import { UserProvider, useUser } from '@/src/hooks/useUser'
 import { useClientNotifications } from '@/src/hooks/useClientNotifications'
 
-export default function PortalLayout({ children }: { children: React.ReactNode }) {
+function PortalShell({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useUser()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
+    if (pathname === '/portal/login') return
     if (loading) return
     if (!user || !profile) { router.replace('/portal/login'); return }
     if (profile.rol !== 'Cliente') {
@@ -25,7 +26,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     if (profile.status !== 'Aprobado' || !profile.is_active) {
       router.replace('/portal/login')
     }
-  }, [loading, user, profile, router])
+  }, [loading, pathname, user, profile, router])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -34,6 +35,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
   const { unreadCount } = useClientNotifications(profile?.id)
 
+  if (pathname === '/portal/login') return children
   if (loading || !user || !profile || profile.rol !== 'Cliente') return null
 
   const navItems = [
@@ -161,5 +163,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {children}
       </main>
     </div>
+  )
+}
+
+export default function PortalLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <UserProvider>
+      <PortalShell>{children}</PortalShell>
+    </UserProvider>
   )
 }

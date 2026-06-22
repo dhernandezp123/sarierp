@@ -1,21 +1,57 @@
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// NOTE: This app uses @supabase/supabase-js directly (localStorage sessions),
-// not @supabase/ssr (cookie sessions). The proxy only refreshes the
-// session token on each request to keep it alive — it does NOT gate access.
-// Route protection is handled client-side in src/app/(protected)/layout.tsx.
-//
-// To add true server-side gating, migrate supabase/client.ts to use
-// createBrowserClient from @supabase/ssr (FASE 4 task).
+const PUBLIC_ROUTES = new Set([
+  '/',
+  '/init',
+  '/login',
+  '/register',
+  '/onboarding',
+  '/politicas',
+  '/portal/login',
+])
+
 export async function proxy(req: NextRequest) {
-  const res = NextResponse.next()
-  const supabase = createMiddlewareClient({ req, res })
-  await supabase.auth.getSession()
-  return res
+  let response = NextResponse.next({ request: req })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value))
+          response = NextResponse.next({ request: req })
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
+        },
+      },
+    }
+  )
+
+  const { data } = await supabase.auth.getClaims()
+  const isAuthenticated = Boolean(data?.claims?.sub)
+  const pathname = req.nextUrl.pathname
+  const isPublicRoute = PUBLIC_ROUTES.has(pathname)
+
+  if (!isAuthenticated && !isPublicRoute) {
+    const loginPath = pathname.startsWith('/portal') ? '/portal/login' : '/login'
+    const loginUrl = req.nextUrl.clone()
+    loginUrl.pathname = loginPath
+    loginUrl.search = ''
+    return NextResponse.redirect(loginUrl)
+  }
+
+  return response
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api).*)'],
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }

@@ -90,19 +90,14 @@ export default function PortalPaqueteDetailPage() {
   const [photoUrls, setPhotoUrls] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (!profile?.cliente_id) return
-    loadData()
-  }, [id, profile?.cliente_id])
-
-  const loadData = async () => {
+  const loadData = async (clientId: string) => {
     setLoading(true)
     const [{ data: pkgData, error }, { data: incData }] = await Promise.all([
       supabase
         .from('miami_packages')
         .select('*')
         .eq('id', id)
-        .eq('cliente_id', profile.cliente_id)
+        .eq('cliente_id', clientId)
         .single(),
       supabase
         .from('miami_incidencias')
@@ -135,6 +130,13 @@ export default function PortalPaqueteDetailPage() {
 
     setLoading(false)
   }
+
+  useEffect(() => {
+    const clientId = profile?.cliente_id
+    if (!clientId) return
+    const timeout = window.setTimeout(() => void loadData(clientId), 0)
+    return () => window.clearTimeout(timeout)
+  }, [id, profile?.cliente_id])
 
   if (loading) return (
     <div className="space-y-4">

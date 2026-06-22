@@ -95,6 +95,10 @@ export function getDefaultPathForRole(role: string | null | undefined) {
 export function canAccessPath(role: string | null | undefined, path: string) {
   if (!role) return false
 
+  if (path === '/profile' && role !== 'Cliente') {
+    return true
+  }
+
   if (
     role === 'Ventas' &&
     path.startsWith('/operations/shipping-instructions/') &&
