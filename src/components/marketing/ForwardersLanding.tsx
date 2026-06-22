@@ -20,7 +20,6 @@ import {
   FileText,
   FolderOpen,
   Globe2,
-  LockKeyhole,
   Mail,
   Menu,
   MessageCircle,
@@ -58,15 +57,6 @@ const navigation = [
   { label: 'Funcionalidades', href: '#funcionalidades' },
   { label: 'Workflow', href: '#workflow' },
   { label: 'Contacto', href: '#demo' },
-]
-
-const dashboardModules = [
-  'Clientes',
-  'Nueva Cotización',
-  'Pricing',
-  'Operaciones',
-  'Documentos',
-  'Actividad',
 ]
 
 const benefits = [
@@ -280,6 +270,9 @@ function SectionHeading({
 }
 
 function DashboardMockup() {
+  const barHeights = [52, 68, 61, 78, 85, 94]
+  const barMonths = ['E', 'F', 'M', 'A', 'M', 'J']
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 40, scale: 0.97 }}
@@ -292,14 +285,14 @@ function DashboardMockup() {
       <div className="absolute -inset-4 -z-10 rounded-3xl bg-[#0038BD]/10 blur-2xl" />
 
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl shadow-[#0038BD]/12 ring-1 ring-slate-900/5">
-        {/* Barra superior */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-5 py-3.5">
+        {/* Chrome del navegador */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-5 py-3">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
             <span className="h-2.5 w-2.5 rounded-full bg-[#EF8E01]/80" />
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
             <span className="ml-3 hidden rounded-md border border-slate-200 bg-white px-3 py-1 font-mono text-[11px] text-slate-400 sm:block">
-              app.forwarders-erp.dher.com/dashboard
+              app.forwarderserp.com/dashboard
             </span>
           </div>
           <span className="rounded-full border border-[#0038BD]/20 bg-[#0038BD]/6 px-3 py-1 text-[11px] font-semibold text-[#0038BD]">
@@ -307,102 +300,163 @@ function DashboardMockup() {
           </span>
         </div>
 
-        <div className="grid lg:grid-cols-[200px_1fr]">
+        <div className="grid lg:grid-cols-[196px_1fr]">
           {/* Sidebar */}
-          <aside className="hidden border-r border-slate-100 bg-slate-50/60 p-5 lg:block">
-            <div className="mb-6 flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0038BD] text-white">
-                <Globe2 size={17} />
+          <aside className="hidden border-r border-slate-100 bg-slate-50/60 lg:flex lg:flex-col lg:p-4">
+            <div className="mb-5 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0038BD] text-white">
+                <Globe2 size={15} />
               </div>
               <div>
-                <p className="text-xs font-semibold text-[#07111F]">Forwarders ERP</p>
-                <p className="text-[10px] text-slate-400">by DHer</p>
+                <p className="text-[11px] font-semibold text-[#07111F]">Forwarders ERP</p>
+                <p className="text-[9px] text-slate-400">by DHer</p>
               </div>
             </div>
-            <div className="space-y-1">
-              {dashboardModules.map((module, i) => (
+
+            <div className="space-y-0.5 flex-1">
+              {[
+                { label: 'Dashboard', active: true },
+                { label: 'Clientes' },
+                { label: 'Cotizaciones' },
+                { label: 'Pricing' },
+                { label: 'Operaciones' },
+                { label: 'Miami Bodega' },
+                { label: 'Facturación' },
+                { label: 'Proveedores' },
+                { label: 'Reportes' },
+                { label: 'Configuración' },
+              ].map(({ label, active }) => (
                 <div
-                  key={module}
-                  className={`rounded-lg px-3 py-2 text-xs ${
-                    i === 2
+                  key={label}
+                  className={`rounded-lg px-3 py-1.5 text-[11px] ${
+                    active
                       ? 'bg-white font-semibold text-[#07111F] shadow-sm ring-1 ring-slate-200'
                       : 'text-slate-400'
                   }`}
                 >
-                  {module}
+                  {label}
                 </div>
               ))}
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-100">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0038BD]/10">
+                <span className="text-[9px] font-bold text-[#0038BD]">AL</span>
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[10px] font-semibold text-[#07111F]">Ana López</p>
+                <p className="text-[9px] text-slate-400">Ventas · Admin</p>
+              </div>
             </div>
           </aside>
 
           {/* Contenido principal */}
-          <div className="bg-white p-5">
-            <div className="grid gap-3 sm:grid-cols-4">
-              {[
-                ['Cotizaciones activas', '87', '+12%'],
-                ['Clientes atendidos', '42', 'Este mes'],
-                ['Opciones comparadas', '126', 'Pricing'],
-                ['Operaciones visibles', '34', 'Equipo'],
-              ].map(([label, value, badge]) => (
-                <div
-                  key={label}
-                  className="rounded-xl border border-slate-100 bg-slate-50 p-3.5"
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                    {label}
-                  </p>
-                  <div className="mt-2.5 flex items-end justify-between">
-                    <p className="text-lg font-bold text-[#07111F]">{value}</p>
-                    <span className="rounded-full bg-[#EF8E01]/10 px-2 py-0.5 text-[10px] font-semibold text-[#B86900]">
-                      {badge}
-                    </span>
-                  </div>
+          <div className="bg-white">
+            {/* Header interno */}
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+              <div>
+                <p className="text-[10px] text-slate-400">Bienvenido de vuelta, Ana</p>
+                <p className="text-sm font-semibold text-[#07111F]">Dashboard</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100">
+                  <span className="text-[9px] font-bold text-slate-500">3</span>
                 </div>
-              ))}
+                <div className="h-7 w-7 rounded-full bg-[#0038BD]/10 flex items-center justify-center">
+                  <span className="text-[9px] font-bold text-[#0038BD]">AL</span>
+                </div>
+              </div>
             </div>
 
-            <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-xl border border-slate-100 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[#07111F]">
-                    Comparativo de pricing
-                  </p>
-                  <span className="rounded-full bg-[#0038BD]/8 px-2.5 py-1 text-[11px] font-semibold text-[#0038BD]">
-                    3 opciones
-                  </span>
-                </div>
-                <div className="mt-3 space-y-2">
-                  {[
-                    ['MIA → SPS LCL', 'Cliente A', 'Lista'],
-                    ['SHA → PCR FCL', 'Cliente B', 'En revisión'],
-                    ['MAD → TGU AIR', 'Cliente C', 'Lista'],
-                  ].map(([lane, customer, status]) => (
-                    <div
-                      key={lane}
-                      className="grid grid-cols-[1fr_80px_68px] items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
-                    >
-                      <span className="font-medium text-[#07111F]">{lane}</span>
-                      <span className="text-slate-400">{customer}</span>
-                      <span className="font-semibold text-[#EF8E01]">{status}</span>
+            <div className="p-4">
+              {/* KPI cards */}
+              <div className="grid gap-2.5 sm:grid-cols-4">
+                {[
+                  { label: 'Cotizaciones activas', value: '87', badge: '+12%', accent: true },
+                  { label: 'Clientes atendidos', value: '42', badge: 'Este mes', accent: false },
+                  { label: 'Opciones comparadas', value: '126', badge: 'Pricing', accent: false },
+                  { label: 'Operaciones visibles', value: '34', badge: 'Equipo', accent: false },
+                ].map(({ label, value, badge, accent }) => (
+                  <div
+                    key={label}
+                    className={`rounded-xl border p-3 ${accent ? 'border-[#0038BD]/20 bg-[#0038BD]/4' : 'border-slate-100 bg-slate-50'}`}
+                  >
+                    <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                      {label}
+                    </p>
+                    <div className="mt-2 flex items-end justify-between">
+                      <p className={`text-xl font-bold ${accent ? 'text-[#0038BD]' : 'text-[#07111F]'}`}>{value}</p>
+                      <span className="rounded-full bg-[#EF8E01]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#B86900]">
+                        {badge}
+                      </span>
                     </div>
-                  ))}
+                  </div>
+                ))}
+              </div>
+
+              {/* Fila media: gráfica + pricing */}
+              <div className="mt-3 grid gap-3 xl:grid-cols-[1.3fr_0.7fr]">
+                {/* Gráfica de barras */}
+                <div className="rounded-xl border border-slate-100 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-[#07111F]">Cotizaciones por mes</p>
+                    <span className="text-[9px] text-slate-400">Últimos 6 meses</span>
+                  </div>
+                  <div className="mt-3 flex items-end gap-1.5" style={{ height: 64 }}>
+                    {barHeights.map((h, i) => (
+                      <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                        <div
+                          className={`w-full rounded-t ${i === 5 ? 'bg-[#0038BD]' : 'bg-[#0038BD]/25'}`}
+                          style={{ height: h }}
+                        />
+                        <span className="text-[8px] text-slate-300">{barMonths[i]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actividad reciente */}
+                <div className="rounded-xl border border-[#0038BD]/15 bg-[#0038BD]/5 p-4">
+                  <p className="text-[11px] font-semibold text-[#07111F]">Actividad reciente</p>
+                  <div className="mt-2.5 space-y-2.5">
+                    {[
+                      'Nueva cotización LCL ingresada',
+                      'Pricing enviado a revisión',
+                      'Booking actualizado',
+                      'Factura de proveedor adjuntada',
+                    ].map((item) => (
+                      <div key={item} className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
+                          <Check size={10} className="text-[#EF8E01]" />
+                        </span>
+                        <span className="text-[10px] text-slate-600">{item}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-[#0038BD]/15 bg-[#0038BD]/5 p-4">
-                <p className="text-xs font-semibold text-[#07111F]">Actividad reciente</p>
-                <div className="mt-3 space-y-3">
+              {/* Tabla de embarques activos */}
+              <div className="mt-3 overflow-hidden rounded-xl border border-slate-100">
+                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-2.5">
+                  <p className="text-[11px] font-semibold text-[#07111F]">Embarques activos</p>
+                  <span className="text-[10px] font-semibold text-[#0038BD]">Ver todos →</span>
+                </div>
+                <div className="divide-y divide-slate-50/80">
                   {[
-                    'Nueva cotización LCL ingresada',
-                    'Pricing enviado a revisión',
-                    'Booking actualizado',
-                    'Factura de proveedor adjuntada',
-                  ].map((item) => (
-                    <div key={item} className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white shadow-sm">
-                        <Check size={12} className="text-[#EF8E01]" />
-                      </span>
-                      <span className="text-xs text-slate-600">{item}</span>
+                    { id: 'SPS-00241', route: 'MIA → SPS LCL', client: 'Importadora Caribe', status: 'En tránsito', color: '#EF8E01' },
+                    { id: 'SPS-00239', route: 'SHA → PCR FCL', client: 'Grupo Exporta', status: 'Booking', color: '#0038BD' },
+                    { id: 'SPS-00238', route: 'MAD → TGU AIR', client: 'Logística Central', status: 'Facturado', color: '#16a34a' },
+                    { id: 'SPS-00235', route: 'MIA → SPS LCL', client: 'Distribuidora Norte', status: 'Entregado', color: '#64748b' },
+                  ].map(({ id, route, client, status, color }) => (
+                    <div
+                      key={id}
+                      className="grid grid-cols-[72px_1fr_1fr_80px] items-center gap-2 px-4 py-2 hover:bg-slate-50"
+                    >
+                      <span className="font-mono text-[10px] text-slate-400">{id}</span>
+                      <span className="text-[11px] font-medium text-[#07111F]">{route}</span>
+                      <span className="text-[10px] text-slate-400">{client}</span>
+                      <span className="text-[10px] font-semibold" style={{ color }}>{status}</span>
                     </div>
                   ))}
                 </div>
