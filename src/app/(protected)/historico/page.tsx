@@ -12,7 +12,6 @@ import {
   fieldClass,
   cardClass,
   compactCardClass,
-  primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
 
@@ -24,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '../../../components/ui/table'
+import { Pagination } from '@/src/components/ui/Pagination'
 
 const statusFilterOptions = [
   { label: 'Todos', value: 'Todos' },
@@ -192,6 +192,8 @@ export default function HistoricoPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
 
   const fetchQuotations = async () => {
     // Temporal: Ventas tambien ve todo.
@@ -256,6 +258,11 @@ export default function HistoricoPage() {
     return matchesStatus && matchesDateFrom && matchesDateTo && matchesSearch
   })
 
+  const paginatedQuotations = filteredQuotations.slice(
+    (page - 1) * pageSize,
+    page * pageSize
+  )
+
   const wonQuotationsCount = filteredQuotations.filter(
     (quote) => quote.status === 'Ganada'
   ).length
@@ -290,12 +297,12 @@ export default function HistoricoPage() {
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setStatusFilter(option.value)}
+                  onClick={() => { setStatusFilter(option.value); setPage(1) }}
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
                     statusFilter === option.value
-                      ? `${primaryButtonClass} rounded-full px-3 py-1.5 text-xs`
-                      : `${secondaryButtonClass} rounded-full px-3 py-1.5 text-xs`
+                      ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                      : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
                   )}
                 >
                   {option.label}
@@ -306,7 +313,7 @@ export default function HistoricoPage() {
             <div className="min-w-[320px] flex-1">
               <input
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setPage(1) }}
               placeholder="Buscar cotización, cliente, origen, destino..."
                 className={`${fieldClass} h-11 w-full md:w-[300px]`}
               />
@@ -316,14 +323,14 @@ export default function HistoricoPage() {
               <input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
                 className={`${fieldClass} h-11 w-full md:w-[170px]`}
               />
 
               <input
                 type="date"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
                 className={`${fieldClass} h-11 w-full md:w-[170px]`}
               />
             </div>
@@ -336,6 +343,7 @@ export default function HistoricoPage() {
                   setDateFrom('')
                   setDateTo('')
                   setSearchTerm('')
+                  setPage(1)
                 }}
                 className={secondaryButtonClass}
               >
@@ -345,7 +353,7 @@ export default function HistoricoPage() {
           </div>
 
           <p className="mt-4 text-sm text-gray-500">
-            Mostrando {filteredQuotations.length} de {quotations.length} cotizaciones
+            {filteredQuotations.length} cotizaciones
           </p>
         </div>
 
@@ -407,6 +415,7 @@ export default function HistoricoPage() {
 
           ) : (
 
+            <>
             <Table>
 
               <TableHeader className="sticky top-0 z-10 bg-slate-950 text-white">
@@ -455,7 +464,7 @@ export default function HistoricoPage() {
 
               <TableBody>
 
-                {filteredQuotations.map((quote) => (
+                {paginatedQuotations.map((quote) => (
 
                   <TableRow
                     key={quote.id}
@@ -531,6 +540,15 @@ export default function HistoricoPage() {
               </TableBody>
 
             </Table>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={filteredQuotations.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+            </>
 
           )}
 

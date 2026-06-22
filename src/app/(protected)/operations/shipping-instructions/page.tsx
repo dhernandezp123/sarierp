@@ -13,6 +13,7 @@ import {
 } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
+import { Pagination } from '@/src/components/ui/Pagination'
 import { Route } from 'lucide-react'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -109,6 +110,8 @@ export default function RoutingInboxPage() {
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [assignFilter, setAssignFilter] = useState('Todos')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
 
   const loadRouting = async () => {
     if (userLoading) return
@@ -171,6 +174,8 @@ export default function RoutingInboxPage() {
     return matchesSearch && matchesStatus && matchesAssign
   })
 
+  const paginatedRouting = filtered.slice((page - 1) * pageSize, page * pageSize)
+
   return (
     <div className="space-y-6">
 
@@ -196,13 +201,13 @@ export default function RoutingInboxPage() {
       <div className="grid gap-3 lg:grid-cols-3">
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
           placeholder="Buscar RT, cotización, cliente o agente..."
           className={fieldClass}
         />
         <select
           value={assignFilter}
-          onChange={(e) => setAssignFilter(e.target.value)}
+          onChange={(e) => { setAssignFilter(e.target.value); setPage(1) }}
           className={fieldClass}
         >
           <option value="Todos">Toda la asignación</option>
@@ -211,7 +216,7 @@ export default function RoutingInboxPage() {
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
           className={fieldClass}
         >
           <option value="Todos">Todos los estados</option>
@@ -258,7 +263,7 @@ export default function RoutingInboxPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((item) => {
+                {paginatedRouting.map((item) => {
                   const status  = resolveStatus(item)
                   const badge   = getStatusBadge(status)
                   const assigned = item.assigned_user
@@ -321,11 +326,13 @@ export default function RoutingInboxPage() {
               </tbody>
             </table>
 
-            <div className="border-t border-slate-100 px-4 py-2.5 dark:border-slate-800">
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                Mostrando {filtered.length} de {routingList.length} instrucciones
-              </p>
-            </div>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </div>

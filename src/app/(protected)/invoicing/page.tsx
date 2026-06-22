@@ -8,7 +8,8 @@ import { PDFDownloadLink } from '@react-pdf/renderer'
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
-import { primaryButtonClass, cardClass } from '@/src/lib/ui-classes'
+import { primaryButtonClass, cardClass, filterSelectClass, fieldClassSm } from '@/src/lib/ui-classes'
+import { Pagination } from '@/src/components/ui/Pagination'
 import { EstadoCuentaPdf, type EstadoCuentaData, type EstadoCuentaItem } from '@/src/components/pdf/estado-cuenta-pdf'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
@@ -80,6 +81,8 @@ export default function InvoicingPage() {
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | InvoiceType>('all')
   const [filterStatus, setFilterStatus] = useState('all')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [showCierre, setShowCierre] = useState(false)
   const today = new Date()
   const [cierreMes, setCierreMes] = useState(today.getMonth() + 1)
@@ -122,6 +125,8 @@ export default function InvoicingPage() {
     }
     return true
   })
+
+  const paginatedInvoices = filtered.slice((page - 1) * pageSize, page * pageSize)
 
   const totals = {
     pendiente: invoices.filter((i) => ['Enviada', 'Aprobada'].includes(i.status)).reduce((s, i) => s + i.total, 0),
@@ -393,7 +398,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                 <select
                   value={cierreMes}
                   onChange={(e) => setCierreMes(Number(e.target.value))}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  className={fieldClassSm}
                 >
                   {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                 </select>
@@ -403,7 +408,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                 <select
                   value={cierreAnio}
                   onChange={(e) => setCierreAnio(Number(e.target.value))}
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  className={fieldClassSm}
                 >
                   {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
@@ -478,7 +483,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                     setEcPdfData(null)
                     if (e.target.value) buildEcPdf(e.target.value)
                   }}
-                  className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  className={fieldClassSm}
                 >
                   <option value="">— Seleccionar cliente —</option>
                   {ecClientes.map((c) => (
@@ -582,14 +587,14 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
             type="text"
             placeholder="Buscar por número o cliente..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           />
         </div>
         <select
           value={filterType}
-          onChange={(e) => setFilterType(e.target.value as typeof filterType)}
-          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          onChange={(e) => { setFilterType(e.target.value as typeof filterType); setPage(1) }}
+          className={filterSelectClass}
         >
           <option value="all">Todos los tipos</option>
           <option value="Proforma">Proforma</option>
@@ -599,8 +604,8 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         </select>
         <select
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          onChange={(e) => { setFilterStatus(e.target.value); setPage(1) }}
+          className={filterSelectClass}
         >
           <option value="all">Todos los estados</option>
           {Object.keys(STATUS_CONFIG).map((s) => (
@@ -608,6 +613,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
           ))}
         </select>
         <span className="ml-auto text-xs text-slate-400">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</span>
+
       </div>
 
       {/* Table */}
@@ -644,7 +650,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((inv) => {
+                {paginatedInvoices.map((inv) => {
                   const sc = STATUS_CONFIG[inv.status] || STATUS_CONFIG['Borrador']
                   const isOverdue = inv.status === 'Enviada' && inv.due_date && inv.due_date < new Date().toISOString().slice(0, 10)
                   return (
@@ -690,6 +696,13 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                 })}
               </tbody>
             </table>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         </div>
       )}

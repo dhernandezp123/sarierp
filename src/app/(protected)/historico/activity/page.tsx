@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/src/lib/supabase/client'
+import { filterSelectClass } from '@/src/lib/ui-classes'
 
 type ActivityLog = {
   id: string
@@ -91,7 +92,7 @@ export default function ActivityCenterPage() {
         <select
           value={moduleFilter}
           onChange={(e) => setModuleFilter(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          className={filterSelectClass}
         >
           {modules.map((module) => (
             <option key={module} value={module}>

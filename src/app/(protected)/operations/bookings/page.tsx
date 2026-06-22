@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { operationStatuses } from '@/src/lib/operation-status'
 import { supabase } from '@/src/lib/supabase/client'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { filterSelectClass } from '@/src/lib/ui-classes'
+import { Pagination } from '@/src/components/ui/Pagination'
 
 type BookingItem = {
   id: string
@@ -99,6 +101,8 @@ export default function OperationsBookingsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [etaFilter, setEtaFilter] = useState('Todos')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
 
   const loadItems = async () => {
     setLoading(true)
@@ -229,6 +233,8 @@ export default function OperationsBookingsPage() {
     return matchesSearch && matchesStatus && matchesEta
   })
 
+  const paginatedItems = filteredItems.slice((page - 1) * pageSize, page * pageSize)
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -265,15 +271,15 @@ export default function OperationsBookingsPage() {
       <div className="mt-6 grid gap-3 lg:grid-cols-3">
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
           placeholder="Buscar RT, referencia, booking, cliente o carrier..."
-          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          className={filterSelectClass}
         />
 
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+          className={filterSelectClass}
         >
           <option value="Todos">Todos los estados</option>
           {operationStatuses.map((status) => (
@@ -285,8 +291,8 @@ export default function OperationsBookingsPage() {
 
         <select
           value={etaFilter}
-          onChange={(e) => setEtaFilter(e.target.value)}
-          className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          onChange={(e) => { setEtaFilter(e.target.value); setPage(1) }}
+          className={filterSelectClass}
         >
           <option value="Todos">Todas las ETA</option>
           <option value="Sin ETA">Sin ETA</option>
@@ -318,7 +324,7 @@ export default function OperationsBookingsPage() {
             </thead>
 
             <tbody>
-              {filteredItems.map((item) => {
+              {paginatedItems.map((item) => {
                 const assigned =
                   item.assigned_user?.nombre || item.assigned_user?.apellido
                     ? `${item.assigned_user?.nombre || ''} ${
@@ -382,6 +388,13 @@ export default function OperationsBookingsPage() {
               })}
             </tbody>
           </table>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={filteredItems.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </div>
       </div>
     </div>

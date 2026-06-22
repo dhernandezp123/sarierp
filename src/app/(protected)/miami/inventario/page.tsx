@@ -7,6 +7,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
+import { Pagination } from '@/src/components/ui/Pagination'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,8 @@ export default function InventarioPage() {
   const [search, setSearch]     = useState('')
   const [filterCargo, setFilterCargo]   = useState<string>('En bodega')
   const [filterTipo, setFilterTipo]     = useState<string>('Todos')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
   const [updatingId, setUpdatingId]     = useState<string | null>(null)
 
   useEffect(() => { load() }, [])
@@ -71,7 +74,6 @@ export default function InventarioPage() {
       .from('miami_packages')
       .select('id, tracking_number, carrier, tipo_carga, cargo_status, status, weight_lbs, warehouse_number, received_at, clientes(nombre)')
       .order('received_at', { ascending: false })
-      .limit(500)
     if (error) toast.error('Error al cargar inventario')
     setPackages((data || []) as unknown as Pkg[])
     setLoading(false)
@@ -117,6 +119,8 @@ export default function InventarioPage() {
     return matchSearch && matchCargo && matchTipo
   })
 
+  const paginatedPackages = filtered.slice((page - 1) * pageSize, page * pageSize)
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
@@ -138,7 +142,7 @@ export default function InventarioPage() {
           <button
             key={s}
             type="button"
-            onClick={() => setFilterCargo(s)}
+            onClick={() => { setFilterCargo(s); setPage(1) }}
             className={`rounded-2xl border p-3 text-left transition ${
               filterCargo === s
                 ? 'border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-950/30'
@@ -158,7 +162,7 @@ export default function InventarioPage() {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
               placeholder="Tracking, WH, cliente..."
               className={`${fieldClass} pl-9`}
             />
@@ -168,7 +172,7 @@ export default function InventarioPage() {
               <button
                 key={s}
                 type="button"
-                onClick={() => setFilterCargo(s)}
+                onClick={() => { setFilterCargo(s); setPage(1) }}
                 className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
                   filterCargo === s
                     ? 'border-blue-600 bg-blue-600 text-white'
@@ -179,7 +183,7 @@ export default function InventarioPage() {
               </button>
             ))}
           </div>
-          <select value={filterTipo} onChange={(e) => setFilterTipo(e.target.value)} className={`${fieldClass} w-auto`}>
+          <select value={filterTipo} onChange={(e) => { setFilterTipo(e.target.value); setPage(1) }} className={`${fieldClass} w-auto`}>
             <option value="Todos">Todos los tipos</option>
             <option>Paquetería</option>
             <option>LCL</option>
@@ -208,7 +212,7 @@ export default function InventarioPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => {
+                {paginatedPackages.map((p) => {
                   const cs = (p.cargo_status || 'Recibido en Miami') as CargoStatus
                   const next = nextStatus(cs)
                   return (
@@ -256,6 +260,13 @@ export default function InventarioPage() {
                 })}
               </tbody>
             </table>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </div>

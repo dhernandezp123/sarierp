@@ -8,6 +8,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
+import { Pagination } from '@/src/components/ui/Pagination'
 
 type CuentaPagar = {
   id: string
@@ -57,6 +58,8 @@ export default function AccountsPayablePage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('Pendientes')
   const [monedaFilter, setMonedaFilter] = useState('USD')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
 
   const fetch = async () => {
     setLoading(true)
@@ -85,6 +88,8 @@ export default function AccountsPayablePage() {
       c.status === statusFilter
     return matchSearch && matchMon && matchStatus
   })
+
+  const paginatedCuentas = filtered.slice((page - 1) * pageSize, page * pageSize)
 
   const inUSD = cuentas.filter((c) => c.moneda === monedaFilter)
   const totalPendiente = inUSD.filter((c) => ['Pendiente', 'Parcialmente Pagada'].includes(c.status)).reduce((s, c) => s + saldoCuenta(c), 0)
@@ -116,7 +121,7 @@ export default function AccountsPayablePage() {
       {/* Moneda selector */}
       <div className="flex gap-2">
         {['USD', 'HNL'].map((m) => (
-          <button key={m} type="button" onClick={() => setMonedaFilter(m)}
+          <button key={m} type="button" onClick={() => { setMonedaFilter(m); setPage(1) }}
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${monedaFilter === m ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300'}`}>
             {m}
           </button>
@@ -150,10 +155,10 @@ export default function AccountsPayablePage() {
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar proveedor, descripción..."
+          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} placeholder="Buscar proveedor, descripción..."
             className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-4 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`${fieldClass} w-44`}>
+        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} className={`${fieldClass} w-44`}>
           <option value="Pendientes">Pendientes</option>
           <option value="Vencidas">Vencidas</option>
           <option value="Pagada">Pagadas</option>
@@ -178,7 +183,7 @@ export default function AccountsPayablePage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => {
+                {paginatedCuentas.map((c) => {
                   const overdue = isOverdue(c)
                   const dias = overdue ? diasVencido(c.fecha_vencimiento) : 0
                   const displayStatus = overdue && c.status === 'Pendiente' ? 'Vencida' : c.status
@@ -213,9 +218,13 @@ export default function AccountsPayablePage() {
                 })}
               </tbody>
             </table>
-            <div className="border-t border-slate-100 px-4 py-2 dark:border-slate-800">
-              <p className="text-xs text-slate-400">{filtered.length} cuentas · {monedaFilter}</p>
-            </div>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           </div>
         )}
       </div>

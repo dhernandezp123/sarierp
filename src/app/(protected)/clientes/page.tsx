@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase/client'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
+import { filterSelectClass } from '@/src/lib/ui-classes'
 import { Users } from 'lucide-react'
 
 const getTipoBadgeClass = (tipo?: string | null) => {
@@ -128,7 +129,7 @@ export default function ClientesPage() {
               <select
                 value={tipoFilter}
                 onChange={(e) => setTipoFilter(e.target.value)}
-                className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-950"
+                className={filterSelectClass}
               >
                 <option value="Todos">Todos los tipos</option>
                 {tipoOptions.map((tipo) => (
@@ -141,7 +142,7 @@ export default function ClientesPage() {
               <select
                 value={condicionFilter}
                 onChange={(e) => setCondicionFilter(e.target.value)}
-                className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:ring-blue-950"
+                className={filterSelectClass}
               >
                 <option value="Todos">Todas las condiciones</option>
                 {condicionOptions.map((condicion) => (

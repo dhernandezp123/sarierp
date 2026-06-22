@@ -24,3 +24,6 @@ export const fieldClassSm =
 
 export const tableHeaderClass =
   'bg-slate-900 dark:bg-[#081120]'
+
+export const filterSelectClass =
+  'h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-950'
