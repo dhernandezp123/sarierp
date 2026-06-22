@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const INVITABLE_ROLES = ['Admin', 'Ventas', 'Pricing', 'Operaciones', 'Contabilidad', 'Finanzas'] as const
+const INVITABLE_ROLES = [
+  'Admin',
+  'Ventas',
+  'Pricing',
+  'Operaciones',
+  'Contabilidad',
+  'Finanzas',
+  'Cliente',
+] as const
 
 export async function POST(request: Request) {
   try {
@@ -65,6 +73,29 @@ export async function POST(request: Request) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    const { error: invitedProfileError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        email: email.trim().toLowerCase(),
+        rol,
+        status: 'Aprobado',
+        is_active: true,
+        approved_at: new Date().toISOString(),
+        approved_by: authData.user.id,
+      })
+      .eq('id', data.user.id)
+
+    if (invitedProfileError) {
+      return NextResponse.json(
+        {
+          error:
+            'La invitación fue enviada, pero no se pudo preparar el perfil: '
+            + invitedProfileError.message,
+        },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ userId: data.user.id })

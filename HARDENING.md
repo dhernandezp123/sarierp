@@ -67,6 +67,7 @@ Fecha: 22/06/2026
 | SEC-009 | Políticas `USING/WITH CHECK (true)` permiten acceso total autenticado en agentes, catálogos, historial, validación de costos y borradores BL | Crítica | Completado |
 | SEC-010 | Las 55 tablas y funciones públicas conservan grants `ALL` para `anon`; RLS reduce el impacto pero amplía innecesariamente la superficie | Alta | Completado |
 | SEC-011 | Cinco funciones `SECURITY DEFINER` no fijan `search_path`: `auto_match_pre_alert`, `generate_quotation_number`, `handle_new_quotation_status_history`, `handle_new_user` y `prevent_role_change_by_non_admin` | Crítica | Completado |
+| SEC-012 | Invitaciones ignoran el rol elegido y onboarding intenta autoaprobar/cambiar rol contra RLS | Crítica | Completado |
 
 ### Integridad y finanzas
 
@@ -549,3 +550,24 @@ Agregar una entrada por fix:
   - La autorización fina de rutas sigue complementada por RLS y el guard de rol;
     se revisará la estrategia de permisos de servidor antes de cerrar la fase.
 - Commit: `b833e8f`
+
+### 2026-06-22 — SEC-012 — Invitaciones y onboarding autorizados
+
+- Estado: Completado en código; el envío real de correo depende de la
+  configuración SMTP/redirect URL de Supabase.
+- Código:
+  - `src/app/api/admin/invite/route.ts`
+  - `src/app/onboarding/page.tsx`
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - ESLint de ambos archivos: cero errores y cero advertencias.
+  - `npm run build`: OK, 58 rutas.
+- Cambios:
+  - El backend Admin asigna y aprueba el rol seleccionado después de invitar.
+  - Las invitaciones ahora admiten también Cliente, coherente con el selector UI.
+  - Onboarding solo actualiza nombre, apellido y correo; ya no intenta escalar rol,
+    estado ni actividad desde una sesión no administrativa.
+- Riesgos pendientes:
+  - Probar entrega de invitación y callback con `NEXT_PUBLIC_SITE_URL` del ambiente.
+  - Un Cliente invitado debe vincularse a un registro de cliente para ver datos.
+- Commit: pendiente.

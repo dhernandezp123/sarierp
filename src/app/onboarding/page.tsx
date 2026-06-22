@@ -63,17 +63,14 @@ export default function OnboardingPage() {
 
     setSaving(true)
 
-    const rol = (authUser.user_metadata?.rol as string | undefined) || 'Ventas'
-
-    const { error } = await supabase.from('profiles').upsert({
-      id: authUser.id,
-      nombre: nombre.trim(),
-      apellido: apellido.trim(),
-      email: authUser.email,
-      rol,
-      status: 'Aprobado',
-      is_active: true,
-    })
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        nombre: nombre.trim(),
+        apellido: apellido.trim(),
+        email: authUser.email,
+      })
+      .eq('id', authUser.id)
 
     if (error) {
       toast.error(error.message)
