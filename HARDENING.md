@@ -440,4 +440,4 @@ Agregar una entrada por fix:
 - Producción:
   - Migración aplicada y registrada como `20260622223000`.
   - `supabase db push --linked --dry-run`: remoto al día.
-- Commit: pendiente.
+- Commit: `c1cb17a`
