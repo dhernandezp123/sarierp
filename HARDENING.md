@@ -93,9 +93,9 @@ Fecha: 22/06/2026
 | FLOW-003 | Operaciones `delete + insert` pueden perder contenedores, carga, BL o pricing | Crítica | Pendiente |
 | FLOW-004 | Creación de cotización y tablas hijas no tiene rollback | Alta | Pendiente |
 | FLOW-005 | Repricing puede actualizar SI y bookings parcialmente | Alta | Pendiente |
-| FLOW-006 | No existe constraint de una tarifa seleccionada por cotización | Alta | Pendiente |
-| FLOW-007 | No existe protección suficiente contra SI/CxP/proveedor duplicados | Alta | Pendiente |
-| FLOW-008 | Numeración de manifiestos basada en `COUNT` es concurrente | Alta | En validación |
+| FLOW-006 | No existe constraint de una tarifa seleccionada por cotización | Alta | Completado |
+| FLOW-007 | No existe protección suficiente contra SI/CxP/proveedor duplicados | Alta | En progreso |
+| FLOW-008 | Numeración de manifiestos basada en `COUNT` es concurrente | Alta | Completado |
 | FLOW-009 | Código muerto en duplicación de cotización | Baja | Pendiente |
 
 ### Miami y tracking
@@ -106,7 +106,7 @@ Fecha: 22/06/2026
 | MIA-002 | Paquetes no conservan historial completo de milestones | Alta | Pendiente |
 | MIA-003 | Falta vincular paquetes con vuelo, camión, contenedor o despacho | Alta | Pendiente |
 | MIA-004 | Falta POD, reversos controlados y auditoría por evento | Media | Pendiente |
-| MIA-005 | Agregar CHECK de `tipo_carga` y `cargo_status` al esquema real | Alta | En validación |
+| MIA-005 | Agregar CHECK de `tipo_carga` y `cargo_status` al esquema real | Alta | Completado |
 | MIA-006 | Revisar unicidad y tratamiento de tracking duplicado | Media | Pendiente |
 
 ### Bugs funcionales
@@ -441,3 +441,32 @@ Agregar una entrada por fix:
   - Migración aplicada y registrada como `20260622223000`.
   - `supabase db push --linked --dry-run`: remoto al día.
 - Commit: `c1cb17a`
+
+### 2026-06-22 — FASE-2 — Constraints validados y unicidad operativa
+
+- Estado: Completado para FLOW-006, FLOW-008 y MIA-005; FLOW-007 continúa
+  en progreso por la generación idempotente de CxP pendiente.
+- SQL:
+  - `supabase/migrations/20260622231500_phase2_validate_integrity.sql`
+- Pruebas:
+  - Preflight remoto: ocho verificaciones con cero grupos en conflicto.
+  - `supabase/tests/phase2_validated_integrity.sql`: OK, con rollback.
+  - `supabase db reset --local`: OK.
+  - `supabase db lint --local --level error`: OK, sin errores.
+  - `npx tsc --noEmit`: OK.
+- Cambios:
+  - Se validaron los cuatro constraints de tipo, estado y cantidades de Miami.
+  - Solo puede existir una tarifa activa seleccionada por cotización.
+  - Solo puede existir una Shipping Instruction activa por cotización.
+  - Una factura AP no anulada no puede repetir su número para el mismo proveedor;
+    la comparación ignora mayúsculas y espacios exteriores.
+- Decisiones de dominio:
+  - No se hizo único el tracking: varias piezas pueden compartir referencia.
+  - No se hizo única la combinación proveedor/factura en líneas de costo real:
+    una factura puede contener varios conceptos legítimos.
+- Producción:
+  - Migración aplicada y registrada como `20260622231500`.
+- Riesgo pendiente:
+  - La creación automática de CxP desde una cotización necesita una clave de
+    idempotencia/RPC transaccional para distinguir duplicados de costos legítimos.
+- Commit: pendiente.
