@@ -548,4 +548,4 @@ Agregar una entrada por fix:
   - Probar login/logout y expiración con Admin, rol interno y Cliente reales.
   - La autorización fina de rutas sigue complementada por RLS y el guard de rol;
     se revisará la estrategia de permisos de servidor antes de cerrar la fase.
-- Commit: pendiente.
+- Commit: `b833e8f`
