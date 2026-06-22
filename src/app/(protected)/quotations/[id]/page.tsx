@@ -801,52 +801,34 @@ export default function QuotationDetailPage() {
 
     setGenerandoCxP(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { toast.error('No se pudo validar el usuario'); return }
-
-      const { data: proveedor, error: provError } = await supabase
-        .from('proveedores')
-        .select('id, nombre, moneda, terminos_pago')
-        .eq('agente_id', selectedAgent.agent_id)
-        .maybeSingle()
-
-      if (provError) {
-        toast.error('Error al buscar proveedor: ' + provError.message)
-        return
-      }
-
-      if (!proveedor) {
-        toast.error(
-          `El agente "${selectedAgent.agente_nombre}" no tiene un proveedor vinculado. ` +
-          'Ve a Proveedores → edita o crea el proveedor y vincula el agente.'
-        )
-        return
-      }
-
-      const monto = Number(selectedAgent.costo || 0)
-      const moneda = selectedAgent.moneda || proveedor.moneda || 'USD'
-      const today = new Date().toISOString().split('T')[0]
-      const terminos = Number(proveedor.terminos_pago ?? 30)
-      const vencimiento = new Date(Date.now() + terminos * 86400000).toISOString().split('T')[0]
-
-      const { error: insertError } = await supabase.from('cuentas_pagar').insert({
-        proveedor_id: proveedor.id,
-        quotation_id: quotation.id,
-        descripcion: `Flete - ${quotation.quotation_number}`,
-        monto,
-        moneda,
-        fecha_factura: today,
-        fecha_vencimiento: vencimiento,
-        notas: `Generado desde cotización ${quotation.quotation_number}`,
-        created_by: user.id,
+      const { data, error } = await supabase.rpc('create_freight_account_payable', {
+        p_quotation_id: quotation.id,
       })
 
-      if (insertError) {
-        toast.error('Error al crear la cuenta por pagar: ' + insertError.message)
+      if (error) {
+        toast.error('Error al crear la cuenta por pagar: ' + error.message)
         return
       }
 
-      toast.success(`Cuenta por pagar creada para ${proveedor.nombre}. Ve a Cuentas por Pagar para registrar el pago.`)
+      const result = Array.isArray(data)
+        ? (data[0] as {
+            account_payable_id: string
+            was_created: boolean
+            provider_name: string
+          } | undefined)
+        : undefined
+
+      if (!result) {
+        toast.error('Supabase no devolvió la cuenta por pagar generada.')
+        return
+      }
+
+      if (result.was_created) {
+        toast.success(`Cuenta por pagar creada para ${result.provider_name}. Ve a Cuentas por Pagar para registrar el pago.`)
+      } else {
+        toast.info(`La cuenta por pagar para ${result.provider_name} ya había sido generada.`)
+      }
+
       setOpenMoreMenu(false)
     } finally {
       setGenerandoCxP(false)

@@ -38,7 +38,7 @@ Fecha: 22/06/2026
 |---|---|---|
 | 0 | Baseline, backup y auditoría real de esquema/RLS | Completado |
 | 1 | Seguridad, RLS y escalamiento de usuarios | Completado |
-| 2 | Migraciones y constraints de integridad | En progreso |
+| 2 | Migraciones y constraints de integridad | Completado |
 | 3 | Autenticación SSR, sesión y permisos | Pendiente |
 | 4 | Facturación, CAI, CxC, CxP y pagos | Pendiente |
 | 5 | Transacciones de cotización, pricing y operaciones | Pendiente |
@@ -79,7 +79,7 @@ Fecha: 22/06/2026
 | FIN-005 | Pagos pueden eliminarse físicamente sin reverso ni auditoría suficiente | Alta | Pendiente |
 | FIN-006 | Cuentas por cobrar ignora pagos parciales, NC y ND en reportes | Alta | Pendiente |
 | FIN-007 | Facturas vencidas no actualizan estado automáticamente | Alta | Pendiente |
-| FIN-008 | CxP puede generarse varias veces desde la misma cotización | Alta | Pendiente |
+| FIN-008 | CxP puede generarse varias veces desde la misma cotización | Alta | Completado |
 | FIN-009 | Falta segregación creador/aprobador/pagador | Media | Pendiente |
 | FIN-010 | Validar tratamiento de ISV en costo real y GP con Contabilidad | Media | Pendiente |
 | FIN-011 | Implementar fase pendiente de retenciones ISV después del hardening | Media | Pendiente |
@@ -94,7 +94,7 @@ Fecha: 22/06/2026
 | FLOW-004 | Creación de cotización y tablas hijas no tiene rollback | Alta | Pendiente |
 | FLOW-005 | Repricing puede actualizar SI y bookings parcialmente | Alta | Pendiente |
 | FLOW-006 | No existe constraint de una tarifa seleccionada por cotización | Alta | Completado |
-| FLOW-007 | No existe protección suficiente contra SI/CxP/proveedor duplicados | Alta | En progreso |
+| FLOW-007 | No existe protección suficiente contra SI/CxP/proveedor duplicados | Alta | Completado |
 | FLOW-008 | Numeración de manifiestos basada en `COUNT` es concurrente | Alta | Completado |
 | FLOW-009 | Código muerto en duplicación de cotización | Baja | Pendiente |
 
@@ -107,7 +107,7 @@ Fecha: 22/06/2026
 | MIA-003 | Falta vincular paquetes con vuelo, camión, contenedor o despacho | Alta | Pendiente |
 | MIA-004 | Falta POD, reversos controlados y auditoría por evento | Media | Pendiente |
 | MIA-005 | Agregar CHECK de `tipo_carga` y `cargo_status` al esquema real | Alta | Completado |
-| MIA-006 | Revisar unicidad y tratamiento de tracking duplicado | Media | Pendiente |
+| MIA-006 | Revisar unicidad y tratamiento de tracking duplicado | Media | Completado |
 
 ### Bugs funcionales
 
@@ -470,3 +470,34 @@ Agregar una entrada por fix:
   - La creación automática de CxP desde una cotización necesita una clave de
     idempotencia/RPC transaccional para distinguir duplicados de costos legítimos.
 - Commit: `0d114b2`
+
+### 2026-06-22 — FASE-2 — CxP de flete idempotente
+
+- Estado: Completado; cierra FIN-008 y FLOW-007 y completa la Fase 2.
+- Código:
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+- SQL:
+  - `supabase/migrations/20260622234500_phase2_idempotent_freight_payable.sql`
+- Pruebas:
+  - `supabase/tests/phase2_idempotent_freight_payable.sql`: OK, con rollback.
+  - Dos llamadas consecutivas retornan el mismo ID y solo una crea la CxP.
+  - `supabase db reset --local`: OK.
+  - `supabase db lint --local --level error`: OK, sin errores.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK, 58 páginas estáticas.
+  - ESLint del archivo modificado conserva deuda previa: 10 errores y 11
+    advertencias; el bloque nuevo no introduce `any` ni efectos adicionales.
+- Cambios:
+  - La CxP automática se crea mediante un RPC transaccional autorizado solo para
+    Admin, Finanzas y Contabilidad.
+  - Una clave de generación por cotización evita duplicados por doble clic,
+    reintentos o solicitudes concurrentes sin bloquear otros costos legítimos.
+  - El RPC valida cotización Ganada, tarifa seleccionada, costo positivo y un
+    único proveedor activo vinculado al agente.
+  - La UI informa si creó la CxP o si ya existía.
+- Producción:
+  - Migración aplicada y registrada como `20260622234500`.
+- Riesgos pendientes:
+  - Si un agente tiene más de un proveedor activo vinculado, el RPC lo bloquea
+    con un error explícito hasta corregir el catálogo.
+- Commit: pendiente.
