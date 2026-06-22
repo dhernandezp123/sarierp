@@ -1,4 +1,4 @@
-q# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
 /node_modules
@@ -19,6 +19,9 @@ q# See https://help.github.com/articles/ignoring-files/ for more about ignoring 
 
 # production
 /build
+
+# local database backups (may contain production data)
+/backups/
 
 # misc
 .DS_Store

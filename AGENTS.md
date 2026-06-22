@@ -46,6 +46,24 @@ npx tsc --noEmit
 
 al finalizar cambios.
 
+### Registro de hardening
+
+Todo fix relacionado con seguridad, integridad de datos, flujos, reportes,
+UX, calidad o ambiente Trial debe registrarse en `HARDENING.md` en el mismo
+commit del cambio.
+
+El registro debe incluir:
+
+* ID del hallazgo
+* Estado
+* Archivos y SQL modificados
+* Validaciones ejecutadas
+* Riesgos o trabajo pendiente
+* Hash del commit cuando esté disponible
+
+No marcar un hallazgo como completado si falta ejecutar SQL, verificar RLS,
+probar el flujo o documentar una acción manual.
+
 ---
 
 ## Arquitectura

@@ -1,0 +1,3 @@
+-- Seed local intencionalmente vacío.
+-- La Fase 11 agregará un dataset ficticio y aislado para el ambiente Trial.
+-- Nunca copiar datos reales de producción a este archivo.
