@@ -22,11 +22,11 @@ export async function createNotification({
   message,
   type = 'info',
 }: NotificationPayload) {
-  const { error } = await supabase.from('notifications').insert({
-    user_id: userId,
-    title,
-    message: message || null,
-    type,
+  const { error } = await supabase.rpc('create_internal_notification', {
+    p_user_id: userId,
+    p_title: title,
+    p_message: message || null,
+    p_type: type,
   })
   return { error }
 }

@@ -5,7 +5,7 @@ import Topbar from '@/src/components/layout/topbar'
 import { ErrorBoundary } from '@/src/components/ui/error-boundary'
 import OnboardingTutorial from '@/src/components/onboarding/OnboardingTutorial'
 import { useUser } from '@/src/hooks/useUser'
-import { canAccessPath } from '@/src/lib/permissions'
+import { canAccessPath, getDefaultPathForRole } from '@/src/lib/permissions'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { toast } from 'sonner'
@@ -32,7 +32,7 @@ export default function ProtectedLayout({
 
     if (!canAccessPath(profile.rol, pathname)) {
       toast.error('No tienes permisos para acceder a esta sección')
-      router.replace('/dashboard')
+      router.replace(getDefaultPathForRole(profile.rol))
     }
   }, [loading, pathname, profile, router, user])
 

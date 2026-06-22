@@ -22,6 +22,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/reports',
     '/operations/shipping-instructions',
     '/historico',
+    '/settings/company',
   ],
 
   Pricing: [
@@ -34,6 +35,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/catalogs',
     '/reports',
     '/historico',
+    '/settings/company',
   ],
 
   Operaciones: [
@@ -50,6 +52,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/miami',
     '/miami/inventario',
     '/miami/embarques',
+    '/settings/company',
   ],
 
   Contabilidad: [
@@ -62,6 +65,8 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/accounts-payable',
     '/reports',
     '/historico',
+    '/settings/company',
+    '/settings/cai',
   ],
 
   Finanzas: [
@@ -74,16 +79,21 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/accounts-payable',
     '/reports',
     '/historico',
+    '/settings/company',
+    '/settings/cai',
   ],
 }
 
-export const SETTINGS_READ_PATHS = ['/settings/company', '/settings/cai']
+function matchesPath(path: string, allowedPath: string) {
+  return path === allowedPath || path.startsWith(`${allowedPath}/`)
+}
+
+export function getDefaultPathForRole(role: string | null | undefined) {
+  return role === 'Cliente' ? '/portal' : '/dashboard'
+}
 
 export function canAccessPath(role: string | null | undefined, path: string) {
   if (!role) return false
-
-  // Settings pages are readable by all authenticated roles (edit guarded inside the page)
-  if (SETTINGS_READ_PATHS.some((p) => path.startsWith(p))) return true
 
   if (
     role === 'Ventas' &&
@@ -105,5 +115,5 @@ export function canAccessPath(role: string | null | undefined, path: string) {
   if (!permissions) return false
   if (permissions.includes('*')) return true
 
-  return permissions.some((allowedPath) => path.startsWith(allowedPath))
+  return permissions.some((allowedPath) => matchesPath(path, allowedPath))
 }
