@@ -256,7 +256,7 @@ Agregar una entrada por fix:
   - Jurisdicción/ciudad o cláusula arbitral, política real de backups/retención,
     SLA ofrecido y confirmación de correos/dominio.
   - Revisión y aprobación por abogado hondureño.
-- Commit: pendiente
+- Commit: `5f263b9`
 
 ### 2026-06-22 — FASE-1 — Settings, perfiles y notificaciones
 
