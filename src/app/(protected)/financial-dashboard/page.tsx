@@ -104,6 +104,7 @@ export default function FinancialDashboardPage() {
   const today = new Date()
   const [dateFrom, setDateFrom] = useState(`${today.getFullYear()}-01-01`)
   const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10))
+  const [activePreset, setActivePreset] = useState<'month' | 'quarter' | 'year' | 'all' | 'custom'>('year')
 
   const [loading, setLoading] = useState(true)
   const [quotations, setQuotations] = useState<QuotationRow[]>([])
@@ -111,6 +112,7 @@ export default function FinancialDashboardPage() {
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([])
 
   const applyPreset = (preset: 'month' | 'quarter' | 'year' | 'all') => {
+    setActivePreset(preset)
     const now = new Date()
     const to = now.toISOString().slice(0, 10)
     if (preset === 'month') {
@@ -360,23 +362,33 @@ export default function FinancialDashboardPage() {
             key={preset}
             type="button"
             onClick={() => applyPreset(preset)}
-            className="rounded-full px-3 py-1 text-xs font-semibold transition bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            aria-pressed={activePreset === preset}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              activePreset === preset
+                ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+            }`}
           >
             {label}
           </button>
         ))}
+        {activePreset === 'custom' && (
+          <span className="rounded-full border border-blue-600 bg-blue-600 px-3 py-1 text-xs font-semibold text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950">
+            Personalizado
+          </span>
+        )}
         <span className="ml-2 text-xs text-slate-400">o personalizado:</span>
         <input
           type="date"
           value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
+          onChange={(e) => { setDateFrom(e.target.value); setActivePreset('custom') }}
           className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white"
         />
         <span className="text-xs text-slate-400">—</span>
         <input
           type="date"
           value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
+          onChange={(e) => { setDateTo(e.target.value); setActivePreset('custom') }}
           className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900 dark:text-white"
         />
         <span className="ml-auto text-xs text-slate-400">

@@ -205,6 +205,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       label: 'Dashboard Bodega',
       href: '/miami',
       icon: Warehouse,
+      exact: true,
     },
     {
       label: 'Ingreso Individual',
@@ -267,7 +268,9 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
   const renderItem = (item: any) => {
     const Icon = item.icon
-    const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+    const isActive = item.exact
+      ? pathname === item.href
+      : pathname === item.href || pathname.startsWith(item.href + '/')
     const isAlerts = item.href === '/alerts'
     const showBadge = isAlerts && unreadCount > 0
 

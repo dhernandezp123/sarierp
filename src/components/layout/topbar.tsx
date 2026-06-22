@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { Bell, Home, Moon, Sun, Plus, FileText, Users, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
@@ -24,11 +25,34 @@ const QUICK_ACTIONS = [
   },
 ]
 
+const seenAlertsStorageKey = (userId: string) => `sari:seen-high-alerts:${userId}`
+
+function readSeenAlertIds(userId: string) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(seenAlertsStorageKey(userId)) || '[]')
+    return Array.isArray(stored)
+      ? stored.filter((id): id is string => typeof id === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
+
+function saveSeenAlertIds(userId: string, ids: Set<string>) {
+  try {
+    localStorage.setItem(seenAlertsStorageKey(userId), JSON.stringify(Array.from(ids)))
+  } catch {
+    // The badge still works for the current session if storage is unavailable.
+  }
+}
+
 export default function Topbar() {
   const { theme, setTheme } = useTheme()
   const { user, profile, loading: userLoading } = useUser()
+  const pathname = usePathname()
 
   const [alerts, setAlerts] = useState<SystemAlert[]>([])
+  const [seenHighAlertIds, setSeenHighAlertIds] = useState<Set<string>>(new Set())
   const [alertsOpen, setAlertsOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
 
@@ -41,19 +65,29 @@ export default function Topbar() {
 
       if (!user) {
         setAlerts([])
+        setSeenHighAlertIds(new Set())
         return
       }
 
       try {
         const data = await getSystemAlerts(supabase, profile, user)
+        const activeHighAlertIds = new Set(
+          data.filter((alert) => alert.severity === 'Alta').map((alert) => alert.id)
+        )
+        const retainedSeenIds = new Set(
+          readSeenAlertIds(user.id).filter((id) => activeHighAlertIds.has(id))
+        )
+
         setAlerts(data)
+        setSeenHighAlertIds(retainedSeenIds)
+        saveSeenAlertIds(user.id, retainedSeenIds)
       } catch {
         setAlerts([])
       }
     }
 
     fetchAlerts()
-  }, [profile, user, userLoading])
+  }, [pathname, profile, user, userLoading])
 
   // Cierra dropdowns al clic fuera
   useEffect(() => {
@@ -75,7 +109,22 @@ export default function Topbar() {
     ? `${profile.nombre} ${profile.apellido || ''}`.trim()
     : 'Usuario'
 
-  const highAlertCount = alerts.filter((a) => a.severity === 'Alta').length
+  const newHighAlertCount = alerts.filter(
+    (alert) => alert.severity === 'Alta' && !seenHighAlertIds.has(alert.id)
+  ).length
+
+  const toggleAlerts = () => {
+    const willOpen = !alertsOpen
+    setAlertsOpen(willOpen)
+    if (!willOpen || !user) return
+
+    const nextSeenIds = new Set(seenHighAlertIds)
+    alerts.forEach((alert) => {
+      if (alert.severity === 'Alta') nextSeenIds.add(alert.id)
+    })
+    setSeenHighAlertIds(nextSeenIds)
+    saveSeenAlertIds(user.id, nextSeenIds)
+  }
 
   const visibleActions = QUICK_ACTIONS.filter((action) =>
     !profile?.rol || action.roles.includes(profile.rol)
@@ -164,15 +213,15 @@ export default function Topbar() {
         <div ref={alertsRef} className="relative">
           <button
             type="button"
-            onClick={() => setAlertsOpen((o) => !o)}
-            title="Alertas"
+            onClick={toggleAlerts}
+            title={newHighAlertCount > 0 ? `${newHighAlertCount} alertas nuevas` : 'Alertas'}
             className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <Bell className="h-4 w-4" />
 
-            {highAlertCount > 0 && (
+            {newHighAlertCount > 0 && (
               <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                {highAlertCount > 9 ? '9+' : highAlertCount}
+                {newHighAlertCount > 9 ? '9+' : newHighAlertCount}
               </span>
             )}
           </button>
@@ -181,7 +230,7 @@ export default function Topbar() {
             <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-[#0b1220]">
               <div className="border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Alertas
+                  Alertas activas
                 </p>
               </div>
 
