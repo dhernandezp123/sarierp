@@ -570,4 +570,4 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - Probar entrega de invitación y callback con `NEXT_PUBLIC_SITE_URL` del ambiente.
   - Un Cliente invitado debe vincularse a un registro de cliente para ver datos.
-- Commit: pendiente.
+- Commit: `80e7e5f`
