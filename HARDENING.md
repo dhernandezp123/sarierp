@@ -469,4 +469,4 @@ Agregar una entrada por fix:
 - Riesgo pendiente:
   - La creación automática de CxP desde una cotización necesita una clave de
     idempotencia/RPC transaccional para distinguir duplicados de costos legítimos.
-- Commit: pendiente.
+- Commit: `0d114b2`
