@@ -1304,9 +1304,16 @@ export function ForwardersLanding() {
             <p>
               &copy; 2026 Forwarders ERP by DHer. Todos los derechos reservados.
             </p>
-            <p>
-              Honduras & Centroam&eacute;rica
-            </p>
+            <div className="flex items-center gap-4">
+              <Link
+                href="/politicas"
+                className="transition hover:text-slate-300"
+              >
+                Términos y Privacidad
+              </Link>
+              <span className="text-slate-600">·</span>
+              <span>Honduras &amp; Centroam&eacute;rica</span>
+            </div>
           </div>
         </div>
       </footer>

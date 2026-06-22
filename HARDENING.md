@@ -37,7 +37,7 @@ Fecha: 22/06/2026
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 | Baseline, backup y auditoría real de esquema/RLS | Completado |
-| 1 | Seguridad, RLS y escalamiento de usuarios | En progreso |
+| 1 | Seguridad, RLS y escalamiento de usuarios | Completado |
 | 2 | Migraciones y constraints de integridad | Pendiente |
 | 3 | Autenticación SSR, sesión y permisos | Pendiente |
 | 4 | Facturación, CAI, CxC, CxP y pagos | Pendiente |
@@ -61,8 +61,8 @@ Fecha: 22/06/2026
 | SEC-003 | `garantias_navieras` tiene RLS activo pero ninguna política; queda bloqueada para usuarios autenticados | Alta | Completado |
 | SEC-004 | Verificar posible escalamiento mediante onboarding, metadata y escritura de `profiles` | Crítica | Completado |
 | SEC-005 | Protección de rutas solo del lado cliente; proxy no usa sesión SSR real | Alta | Pendiente |
-| SEC-006 | Cliente puede intentar acceder a Settings/CAI por excepción global de permisos | Alta | Pendiente |
-| SEC-007 | Políticas de `notifications` y `profiles` no están completamente versionadas | Alta | Pendiente |
+| SEC-006 | Cliente puede intentar acceder a Settings/CAI por excepción global de permisos | Alta | Completado |
+| SEC-007 | Políticas de `notifications` y `profiles` no están completamente versionadas | Alta | Completado |
 | SEC-008 | Auditar funciones `SECURITY DEFINER`, grants y `search_path` | Alta | Completado |
 | SEC-009 | Políticas `USING/WITH CHECK (true)` permiten acceso total autenticado en agentes, catálogos, historial, validación de costos y borradores BL | Crítica | Completado |
 | SEC-010 | Las 55 tablas y funciones públicas conservan grants `ALL` para `anon`; RLS reduce el impacto pero amplía innecesariamente la superficie | Alta | Completado |
@@ -160,6 +160,15 @@ Fecha: 22/06/2026
 | QA-008 | `AGENTS.md`, `PHASES.md`, estados y código están desalineados | Alta | Pendiente |
 | QA-009 | Auditoría npm mantiene dos vulnerabilidades moderadas sin fix | Media | Pendiente |
 
+### Legal y privacidad
+
+| ID | Hallazgo | Prioridad | Estado |
+|---|---|---|---|
+| LEG-001 | La página pública no identifica todavía denominación legal, RTN/ID y domicilio contractual de DHer | Crítica | Bloqueado por datos del titular |
+| LEG-002 | SLA, respaldos, retención, exportación y eliminación deben reflejar capacidades y planes realmente ofrecidos | Alta | Pendiente de definición comercial |
+| LEG-003 | Términos, privacidad, tratamiento de datos y limitación de responsabilidad requieren revisión de abogado hondureño | Alta | En validación jurídica |
+| LEG-004 | Falta registrar versión y aceptación expresa de términos por organización/usuario | Alta | Pendiente |
+
 ## Ambiente Trial
 
 El Trial se implementará después de completar las fases 0–10.
@@ -225,6 +234,60 @@ Agregar una entrada por fix:
 - Se añadió a `AGENTS.md` la obligación de mantener esta bitácora.
 - Supabase Pro queda pendiente de evaluación en Fase 11.
 - Commit: `f591015`
+
+### 2026-06-22 — LEGAL — Términos de uso y privacidad
+
+- Estado: En validación jurídica; no marcar como versión contractual final.
+- Código:
+  - `src/app/politicas/page.tsx`
+  - `src/components/marketing/ForwardersLanding.tsx`
+- Validaciones:
+  - ESLint: cero errores; una advertencia previa de `<img>` en la landing.
+  - `npm run build`: OK, 58 páginas estáticas.
+  - `npx tsc --noEmit`: OK.
+- Cambios:
+  - Se separaron alcance contractual, privacidad, subprocesadores, cookies,
+    retención, documentos logísticos, propiedad intelectual, confidencialidad,
+    responsabilidad, terminación, Trial y ley aplicable.
+  - Se eliminaron promesas absolutas de disponibilidad, seguridad, retención y
+    respuesta que no estaban ligadas a un SLA o contrato.
+- Pendiente del titular:
+  - Denominación legal, RTN/identificación y domicilio de DHer.
+  - Jurisdicción/ciudad o cláusula arbitral, política real de backups/retención,
+    SLA ofrecido y confirmación de correos/dominio.
+  - Revisión y aprobación por abogado hondureño.
+- Commit: pendiente
+
+### 2026-06-22 — FASE-1 — Settings, perfiles y notificaciones
+
+- Estado: Completado y aplicado en remoto.
+- Código:
+  - `src/lib/permissions.ts`
+  - `src/app/(protected)/layout.tsx`
+  - `src/lib/notifications.ts`
+- SQL:
+  - `supabase/migrations/20260622210000_phase1_notifications_profiles.sql`
+- Pruebas:
+  - `supabase/tests/phase1_notifications_profiles.sql`
+  - `supabase db reset --local`: OK.
+  - Suites RLS de Fase 1: OK, con rollback.
+  - `supabase db lint --local --level error`: OK.
+  - `npm run build`: OK, 58 páginas estáticas.
+  - `npx tsc --noEmit`: OK.
+  - ESLint de archivos TypeScript modificados: OK.
+- Cambios:
+  - Settings Empresa queda disponible al personal interno; CAI solo a
+    Admin/Contabilidad/Finanzas; Cliente vuelve al portal sin bucle.
+  - Matching de rutas exige segmento completo y evita prefijos accidentales.
+  - Directorio de perfiles excluye Cliente y pendientes para roles no Admin.
+  - Notificaciones internas se crean mediante RPC autorizada y el usuario solo
+    puede cambiar `is_read`.
+  - Notificaciones de portal permiten inserción de Admin/Operaciones y Cliente
+    solo puede cambiar `read_at`.
+- Producción:
+  - Migración aplicada y registrada como `20260622210000`.
+  - Historial local/remoto alineado y `db push --dry-run` sin pendientes.
+- Commit: `f8e209e`
 
 ### 2026-06-22 — UI — Filtros, navegación y alertas
 
@@ -320,7 +383,7 @@ Agregar una entrada por fix:
 
 ### 2026-06-22 — FASE-1 — Hardening inicial de RLS y perfiles
 
-- Estado: Completado y aplicado en remoto; la Fase 1 continúa con SEC-006/007.
+- Estado: Completado y aplicado en remoto; SEC-005 continúa en Fase 3 (SSR).
 - SQL:
   - `supabase/migrations/20260622190000_phase1_rls_hardening.sql`
 - Pruebas:
