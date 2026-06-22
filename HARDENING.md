@@ -224,7 +224,38 @@ Agregar una entrada por fix:
 - Se registraron los hallazgos iniciales de la auditoría integral.
 - Se añadió a `AGENTS.md` la obligación de mantener esta bitácora.
 - Supabase Pro queda pendiente de evaluación en Fase 11.
-- Commit: pendiente
+- Commit: `f591015`
+
+### 2026-06-22 — UI — Filtros, navegación y alertas
+
+- Estado: Completado
+- Código:
+  - `src/app/(protected)/dashboard/page.tsx`
+  - `src/app/(protected)/financial-dashboard/page.tsx`
+  - `src/components/layout/sidebar.tsx`
+  - `src/components/layout/topbar.tsx`
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK.
+- Cambios:
+  - Presets activos azules y estado personalizado en ambos dashboards.
+  - Match exacto de Dashboard Bodega para no activarlo en Manifiestos.
+  - Badge superior basado en alertas altas nuevas, persistido por usuario.
+- Commit: `0a0038d`
+
+### 2026-06-22 — NEXT-001 — Convención Proxy
+
+- Estado: Completado
+- Código:
+  - `src/proxy.ts`
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; Next reconoce `Proxy (Middleware)`.
+- Cambio:
+  - Se migró `middleware.ts` a la convención `proxy.ts` de Next.js 16.
+- Riesgo pendiente:
+  - SEC-005: todavía requiere migrar la sesión a SSR real.
+- Commit: `4d3a5c7`
 
 ### 2026-06-22 — FASE-0 — Baseline reproducible y auditoría real
 
@@ -261,7 +292,7 @@ Agregar una entrada por fix:
   - 38 funciones son `SECURITY DEFINER`; cinco no fijan `search_path`.
 - Próximo paso:
   - Fase 1: corregir RLS, funciones privilegiadas, grants y escalamiento de rol.
-- Commit: pendiente
+- Commit: `f591015`
 
 ### 2026-06-22 — FASE-1 — Hardening inicial de RLS y perfiles
 
@@ -288,4 +319,4 @@ Agregar una entrada por fix:
   - `anon`: únicamente `USAGE` del esquema e `INSERT` sobre `leads`.
   - El warning posterior de caché `pg-delta` no afectó la migración; se desactivó
     el motor experimental local para usar `migra` de forma estable.
-- Commit: pendiente
+- Commit: `f591015`
