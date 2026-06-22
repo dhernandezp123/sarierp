@@ -257,6 +257,30 @@ Agregar una entrada por fix:
   - SEC-005: todavía requiere migrar la sesión a SSR real.
 - Commit: `4d3a5c7`
 
+### 2026-06-22 — UX — Landing de freight forwarders
+
+- Estado: Completado
+- Código:
+  - `src/components/marketing/ForwardersLanding.tsx`
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK.
+  - ESLint del archivo: cero errores, una advertencia por imagen externa.
+- Commit: `897a1d0`
+
+### 2026-06-22 — UX — Paginación y filtros reutilizables
+
+- Estado: Completado
+- Código:
+  - `src/components/ui/Pagination.tsx`
+  - `src/lib/ui-classes.ts`
+  - Listados de CxP, clientes, histórico, facturación, inventario y operaciones.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK.
+  - Reinicio de página movido a eventos de filtro para evitar renders en cascada.
+- Commit: `b995bd9`
+
 ### 2026-06-22 — FASE-0 — Baseline reproducible y auditoría real
 
 - Estado: Completado
