@@ -38,7 +38,7 @@ Fecha: 22/06/2026
 |---|---|---|
 | 0 | Baseline, backup y auditoría real de esquema/RLS | Completado |
 | 1 | Seguridad, RLS y escalamiento de usuarios | Completado |
-| 2 | Migraciones y constraints de integridad | Pendiente |
+| 2 | Migraciones y constraints de integridad | En progreso |
 | 3 | Autenticación SSR, sesión y permisos | Pendiente |
 | 4 | Facturación, CAI, CxC, CxP y pagos | Pendiente |
 | 5 | Transacciones de cotización, pricing y operaciones | Pendiente |
@@ -95,7 +95,7 @@ Fecha: 22/06/2026
 | FLOW-005 | Repricing puede actualizar SI y bookings parcialmente | Alta | Pendiente |
 | FLOW-006 | No existe constraint de una tarifa seleccionada por cotización | Alta | Pendiente |
 | FLOW-007 | No existe protección suficiente contra SI/CxP/proveedor duplicados | Alta | Pendiente |
-| FLOW-008 | Numeración de manifiestos basada en `COUNT` es concurrente | Alta | Pendiente |
+| FLOW-008 | Numeración de manifiestos basada en `COUNT` es concurrente | Alta | En validación |
 | FLOW-009 | Código muerto en duplicación de cotización | Baja | Pendiente |
 
 ### Miami y tracking
@@ -106,7 +106,7 @@ Fecha: 22/06/2026
 | MIA-002 | Paquetes no conservan historial completo de milestones | Alta | Pendiente |
 | MIA-003 | Falta vincular paquetes con vuelo, camión, contenedor o despacho | Alta | Pendiente |
 | MIA-004 | Falta POD, reversos controlados y auditoría por evento | Media | Pendiente |
-| MIA-005 | Agregar CHECK de `tipo_carga` y `cargo_status` al esquema real | Alta | Pendiente |
+| MIA-005 | Agregar CHECK de `tipo_carga` y `cargo_status` al esquema real | Alta | En validación |
 | MIA-006 | Revisar unicidad y tratamiento de tracking duplicado | Media | Pendiente |
 
 ### Bugs funcionales
@@ -407,3 +407,37 @@ Agregar una entrada por fix:
   - El warning posterior de caché `pg-delta` no afectó la migración; se desactivó
     el motor experimental local para usar `migra` de forma estable.
 - Commit: `f591015`
+
+### 2026-06-22 — FASE-2 — Integridad inicial de Miami
+
+- Estado: En validación; aplicado en remoto, pendiente de auditar y limpiar datos legacy.
+- SQL:
+  - `supabase/migrations/20260622223000_phase2_miami_integrity.sql`
+  - `supabase/preflight/phase2_integrity_audit.sql`
+- Pruebas:
+  - `supabase/tests/phase2_miami_integrity.sql`
+  - `supabase db reset --local`: OK.
+  - Prueba transaccional con rollback: OK.
+  - `supabase db lint --local --level error`: OK, sin errores.
+  - `npm run build`: OK, 58 páginas estáticas.
+  - `npx tsc --noEmit`: OK.
+  - `npm run lint`: deuda global preexistente, 277 errores y 93 advertencias;
+    los archivos de esta entrega son SQL y documentación.
+- Cambios:
+  - La numeración de manifiestos deja de depender de `COUNT` y usa una secuencia
+    global protegida, segura ante solicitudes concurrentes.
+  - El RPC de numeración queda restringido a Admin y Operaciones.
+  - Se agregan constraints `NOT VALID` para tipo de carga, estado, medidas no
+    negativas y total de paquetes no negativo; protegen escrituras nuevas sin
+    bloquear todavía por datos legacy.
+  - El preflight audita duplicados y valores inválidos antes de imponer o validar
+    constraints adicionales sobre pricing, SI, CxP, tracking y Miami.
+- Riesgos pendientes:
+  - Ejecutar el preflight contra remoto y limpiar cualquier fila reportada.
+  - Validar los constraints después de la limpieza.
+  - Los números de secuencia pueden tener saltos; esto es esperado y evita
+    reutilizar identificadores tras errores o transacciones revertidas.
+- Producción:
+  - Migración aplicada y registrada como `20260622223000`.
+  - `supabase db push --linked --dry-run`: remoto al día.
+- Commit: pendiente.
