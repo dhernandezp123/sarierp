@@ -500,4 +500,4 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - Si un agente tiene más de un proveedor activo vinculado, el RPC lo bloquea
     con un error explícito hasta corregir el catálogo.
-- Commit: pendiente.
+- Commit: `5bc4e71`
