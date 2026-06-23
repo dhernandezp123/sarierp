@@ -609,4 +609,4 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - Verificar política real de confirmación de correo y SMTP en Supabase Auth.
   - Probar manualmente solicitud, vínculo, aprobación y primer login Cliente.
-- Commit: pendiente.
+- Commit: `1f7531f`
