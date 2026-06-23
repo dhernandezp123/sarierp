@@ -391,7 +391,7 @@ export default function EditQuotationPage() {
             quote_type: 'LCL',
           }
         : {}),
-      ...(serviceProduct === 'miami_air'
+      ...(serviceProduct === 'miami_air' || serviceProduct === 'other_origin_air'
         ? {
             tipo_transporte: 'Aéreo',
             quote_type: 'Consolidado',

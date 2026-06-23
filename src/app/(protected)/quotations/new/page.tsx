@@ -441,12 +441,16 @@ export default function NewQuotationPage() {
         ? serviceProduct === 'miami_air'
           ? 'Aéreo'
           : 'Marítima'
-        : prev.tipo_transporte,
+        : serviceProduct === 'other_origin_air'
+          ? 'Aéreo'
+          : prev.tipo_transporte,
       quote_type: isMiamiProduct
         ? serviceProduct === 'miami_air'
           ? 'Consolidado'
           : 'LCL'
-        : prev.quote_type,
+        : serviceProduct === 'other_origin_air'
+          ? 'Consolidado'
+          : prev.quote_type,
       origen: isMiamiProduct ? prev.origen || 'Miami, FL' : prev.origen,
       puerto_origen: isMiamiProduct
         ? prev.puerto_origen || 'Miami'

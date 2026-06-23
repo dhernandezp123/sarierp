@@ -28,6 +28,7 @@ const SERVICE_LABELS: Record<string, string> = {
   miami_air:         'Aéreo Miami',
   other_origin_fcl:  'FCL',
   other_origin_lcl:  'LCL Internacional',
+  other_origin_air:  'Aéreo Consolidado',
   usa_ltl_ftl:       'Terrestre USA',
   courier:           'Courier',
 }
@@ -37,6 +38,7 @@ const SERVICE_ICON: Record<string, React.ReactNode> = {
   miami_air:         <Plane className="h-4 w-4" />,
   other_origin_fcl:  <Ship className="h-4 w-4" />,
   other_origin_lcl:  <Ship className="h-4 w-4" />,
+  other_origin_air:  <Plane className="h-4 w-4" />,
   usa_ltl_ftl:       <Truck className="h-4 w-4" />,
   courier:           <Package className="h-4 w-4" />,
 }
@@ -46,6 +48,7 @@ const SERVICE_COLOR: Record<string, string> = {
   miami_air:         'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300',
   other_origin_fcl:  'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300',
   other_origin_lcl:  'bg-teal-100 text-teal-600 dark:bg-teal-900/40 dark:text-teal-300',
+  other_origin_air:  'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300',
   usa_ltl_ftl:       'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300',
   courier:           'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300',
 }
@@ -75,7 +78,7 @@ function matchesFilter(sp: string | null | undefined, filter: Filter): boolean {
   if (filter === 'Todos') return true
   if (filter === 'FCL') return sp === 'other_origin_fcl'
   if (filter === 'LCL') return sp === 'miami_lcl' || sp === 'other_origin_lcl'
-  if (filter === 'Aéreo') return sp === 'miami_air'
+  if (filter === 'Aéreo') return sp === 'miami_air' || sp === 'other_origin_air'
   if (filter === 'Terrestre') return sp === 'usa_ltl_ftl'
   return true
 }

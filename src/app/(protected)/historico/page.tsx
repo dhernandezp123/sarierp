@@ -124,7 +124,8 @@ const getQuoteTypeLabel = (
   const value = (type || service || '').toLowerCase()
 
   if (value === 'miami_lcl') return 'Miami Consolidado'
-  if (value === 'miami_air') return 'Aéreo Consolidado'
+  if (value === 'miami_air') return 'Aéreo Miami'
+  if (value === 'other_origin_air') return 'Aéreo Consolidado'
   if (value === 'other_origin_lcl') return 'LCL'
   if (value === 'fcl') return 'FCL'
   if (value === 'consolidado') return 'Consolidado'

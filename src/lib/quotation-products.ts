@@ -31,6 +31,11 @@ export const serviceProducts = [
     appliesClientRates: false,
   },
   {
+    value: 'other_origin_air',
+    label: 'Aéreo Consolidado',
+    appliesClientRates: false,
+  },
+  {
     value: 'usa_ltl_ftl',
     label: 'LTL / FTL USA',
     appliesClientRates: false,
