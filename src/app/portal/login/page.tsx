@@ -91,6 +91,14 @@ export default function PortalLoginPage() {
             >
               {loading ? 'Ingresando...' : 'Ingresar'}
             </button>
+            <div className="text-center">
+              <Link
+                href="/portal/forgot-password"
+                className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           </form>
         </div>
 

@@ -11,6 +11,9 @@ const PUBLIC_ROUTES = new Set([
   '/politicas',
   '/portal/login',
   '/portal/register',
+  '/portal/forgot-password',
+  '/portal/reset-password',
+  '/auth/callback',
 ])
 
 export async function proxy(req: NextRequest) {

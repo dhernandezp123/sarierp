@@ -13,8 +13,12 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useUser()
   const router = useRouter()
   const pathname = usePathname()
-  const isPublicPortalPath =
-    pathname === '/portal/login' || pathname === '/portal/register'
+  const isPublicPortalPath = [
+    '/portal/login',
+    '/portal/register',
+    '/portal/forgot-password',
+    '/portal/reset-password',
+  ].includes(pathname)
 
   useEffect(() => {
     if (isPublicPortalPath) return

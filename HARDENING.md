@@ -70,6 +70,7 @@ Fecha: 22/06/2026
 | SEC-012 | Invitaciones ignoran el rol elegido y onboarding intenta autoaprobar/cambiar rol contra RLS | Crítica | Completado |
 | SEC-013 | Portal no permite solicitar Cliente y el alta pública no distingue acceso interno de acceso cliente | Alta | Completado |
 | SEC-014 | Invitado aprobado no puede iniciar sesión porque onboarding no establece contraseña | Alta | Completado |
+| SEC-015 | Portal no ofrece recuperación segura de contraseña ni callback PKCE | Alta | Completado |
 
 ### Integridad y finanzas
 
@@ -637,3 +638,30 @@ Agregar una entrada por fix:
   - El invitado existente debe abrir su correo de invitación y completar
     onboarding para establecer contraseña; aprobarlo no genera una contraseña.
 - Commit: `37da8d4`
+
+### 2026-06-23 — SEC-015 — Recuperación de contraseña Cliente
+
+- Estado: Completado en código; pendiente verificar entrega real del correo.
+- Código:
+  - `src/app/portal/forgot-password/page.tsx`
+  - `src/app/portal/reset-password/page.tsx`
+  - `src/app/auth/callback/route.ts`
+  - `src/app/portal/login/page.tsx`
+  - `src/app/portal/layout.tsx`
+  - `src/proxy.ts`
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - ESLint de archivos modificados: cero errores y cero advertencias.
+  - `npm run build`: OK, 62 rutas.
+  - Se corrigió el requisito Next 16 de `Suspense` para `useSearchParams`.
+- Cambios:
+  - Portal Login incorpora “¿Olvidaste tu contraseña?”.
+  - El formulario envía un correo sin revelar si la cuenta existe.
+  - `/auth/callback` intercambia el código PKCE por una sesión SSR y solo acepta
+    destinos internos bajo `/portal/`.
+  - La sesión temporal permite establecer y confirmar una contraseña nueva;
+    después se cierra y vuelve al login.
+- Acción manual:
+  - Autorizar `/auth/callback` para localhost y producción en Supabase Auth URL
+    Configuration y probar un correo real.
+- Commit: pendiente.
