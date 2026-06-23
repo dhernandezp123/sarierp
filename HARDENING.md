@@ -69,6 +69,7 @@ Fecha: 22/06/2026
 | SEC-011 | Cinco funciones `SECURITY DEFINER` no fijan `search_path`: `auto_match_pre_alert`, `generate_quotation_number`, `handle_new_quotation_status_history`, `handle_new_user` y `prevent_role_change_by_non_admin` | Crítica | Completado |
 | SEC-012 | Invitaciones ignoran el rol elegido y onboarding intenta autoaprobar/cambiar rol contra RLS | Crítica | Completado |
 | SEC-013 | Portal no permite solicitar Cliente y el alta pública no distingue acceso interno de acceso cliente | Alta | Completado |
+| SEC-014 | Invitado aprobado no puede iniciar sesión porque onboarding no establece contraseña | Alta | Completado |
 
 ### Integridad y finanzas
 
@@ -610,3 +611,29 @@ Agregar una entrada por fix:
   - Verificar política real de confirmación de correo y SMTP en Supabase Auth.
   - Probar manualmente solicitud, vínculo, aprobación y primer login Cliente.
 - Commit: `1f7531f`
+
+### 2026-06-23 — SEC-014 — Contraseña de invitado y caché de perfiles
+
+- Estado: Completado y aplicado en remoto.
+- Código:
+  - `src/app/onboarding/page.tsx`
+- SQL:
+  - `supabase/migrations/20260623001500_phase3_profile_schema_cache.sql`
+- Validaciones:
+  - Migración local: OK; columnas ya existentes confirmadas.
+  - `supabase db lint --local --level error`: OK.
+  - `npx tsc --noEmit`: OK.
+  - ESLint de onboarding: cero errores y cero advertencias.
+  - `npm run build`: OK, 59 rutas.
+- Cambios:
+  - Onboarding exige crear y confirmar una contraseña de al menos 8 caracteres
+    antes de completar el perfil invitado.
+  - Se fuerza `pgrst reload schema` para que la API reconozca inmediatamente
+    `registration_company` y `registration_phone`.
+- Producción:
+  - Migración aplicada como `20260623001500`; ambas columnas ya existían, lo que
+    confirmó que el error observado era caché de PostgREST.
+- Acción manual:
+  - El invitado existente debe abrir su correo de invitación y completar
+    onboarding para establecer contraseña; aprobarlo no genera una contraseña.
+- Commit: pendiente.

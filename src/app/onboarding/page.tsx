@@ -14,6 +14,8 @@ export default function OnboardingPage() {
   const [checking, setChecking] = useState(true)
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -59,9 +61,29 @@ export default function OnboardingPage() {
       return
     }
 
+    if (password.length < 8) {
+      toast.error('La contraseña debe tener al menos 8 caracteres')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      toast.error('Las contraseñas no coinciden')
+      return
+    }
+
     if (!authUser) return
 
     setSaving(true)
+
+    const { error: passwordError } = await supabase.auth.updateUser({ password })
+
+    if (passwordError) {
+      toast.error('No se pudo establecer la contraseña', {
+        description: passwordError.message,
+      })
+      setSaving(false)
+      return
+    }
 
     const { error } = await supabase
       .from('profiles')
@@ -147,6 +169,26 @@ export default function OnboardingPage() {
               />
 
               <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Crear contraseña (mínimo 8 caracteres)"
+                autoComplete="new-password"
+                required
+                className="h-14 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-white placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
+              />
+
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirmar contraseña"
+                autoComplete="new-password"
+                required
+                className="h-14 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-white placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
+              />
+
+              <input
                 value={apellido}
                 onChange={(e) => setApellido(e.target.value)}
                 placeholder="Apellido"
@@ -160,7 +202,7 @@ export default function OnboardingPage() {
                 disabled={saving}
                 className="h-14 w-full rounded-xl bg-yellow-400 font-semibold text-slate-950 shadow-lg shadow-yellow-500/20 transition-all duration-200 hover:scale-[1.01] hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {saving ? 'Guardando...' : 'Ingresar al ERP'}
+                {saving ? 'Guardando...' : 'Guardar y continuar'}
               </button>
             </form>
 
