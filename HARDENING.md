@@ -742,4 +742,4 @@ Agregar una entrada por fix:
   - Los tipos y rangos reales deben coincidir con la autorización vigente de SAR
     y ser confirmados por Contabilidad; este hardening no sustituye revisión
     fiscal/legal.
-- Commit: pendiente.
+- Commit: `0b5b7e3`
