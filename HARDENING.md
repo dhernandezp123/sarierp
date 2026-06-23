@@ -664,4 +664,4 @@ Agregar una entrada por fix:
 - Acción manual:
   - Autorizar `/auth/callback` para localhost y producción en Supabase Auth URL
     Configuration y probar un correo real.
-- Commit: pendiente.
+- Commit: `7d87b1f`
