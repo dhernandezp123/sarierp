@@ -783,4 +783,4 @@ Agregar una entrada por fix:
 - Riesgo residual:
   - Los constraints de monto positivo y moneda válida protegen escrituras nuevas
     como `NOT VALID`; su validación histórica se hará junto al cierre de CxC.
-- Commit: pendiente.
+- Commit: `c0c89a6`
