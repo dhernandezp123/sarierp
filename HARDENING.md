@@ -76,9 +76,9 @@ Fecha: 22/06/2026
 
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
-| FIN-001 | Se permiten documentos fiscales sin CAI activo | Crítica | Pendiente |
-| FIN-002 | Numeración CAI se calcula en cliente y es vulnerable a concurrencia | Crítica | Pendiente |
-| FIN-003 | Activación de CAI no es atómica y no garantiza uno solo | Crítica | Pendiente |
+| FIN-001 | Se permiten documentos fiscales sin CAI activo | Crítica | Completado |
+| FIN-002 | Numeración CAI se calcula en cliente y es vulnerable a concurrencia | Crítica | Completado |
+| FIN-003 | Activación de CAI no es atómica y no garantiza uno solo | Crítica | Completado |
 | FIN-004 | Pago y cambio de estado se guardan en operaciones separadas | Alta | Pendiente |
 | FIN-005 | Pagos pueden eliminarse físicamente sin reverso ni auditoría suficiente | Alta | Pendiente |
 | FIN-006 | Cuentas por cobrar ignora pagos parciales, NC y ND en reportes | Alta | Pendiente |
@@ -683,11 +683,12 @@ Agregar una entrada por fix:
 
 ### 2026-06-23 — FASE-4 — Preflight financiero y fiscal
 
-- Estado: En validación; pendiente ejecutar contra remoto.
+- Estado: Completado; auditoría local y remota sin conflictos.
 - SQL:
   - `supabase/preflight/phase4_finance_audit.sql`
 - Validaciones:
   - Ejecución contra base local reconstruida: OK, 11 verificaciones.
+  - Ejecución manual contra Supabase remoto: OK, 11/11 conteos en cero.
   - El script es de solo lectura y devuelve únicamente conteos agregados.
 - Alcance:
   - Rangos CAI activos, formato, orden y vencimiento.
@@ -698,3 +699,47 @@ Agregar una entrada por fix:
   - Con los conteos remotos, implementar activación CAI atómica, correlativo fiscal
     transaccional y creación conjunta de factura/líneas.
 - Commit: `839df3e`
+
+### 2026-06-23 — FASE-4 — CAI y creación fiscal atómica
+
+- Estado: Completado; código y migración aplicados en remoto.
+- Hallazgos: FIN-001, FIN-002 y FIN-003.
+- Archivos:
+  - `supabase/migrations/20260623010000_phase4_cai_atomic.sql`
+  - `supabase/tests/phase4_cai_atomic.sql`
+  - `src/app/(protected)/settings/cai/page.tsx`
+  - `src/app/(protected)/invoicing/new/page.tsx`
+- Cambios:
+  - Rangos CAI separados por Factura, Nota de Crédito y Nota de Débito.
+  - Activación transaccional con un solo rango activo por tipo documental.
+  - Correlativo CAI persistente y bloqueado en base de datos para evitar
+    duplicados concurrentes.
+  - Factura, líneas, impuestos y avance del correlativo se guardan en una sola
+    transacción mediante `create_invoice_with_items`.
+  - Proformas usan una secuencia independiente y segura ante concurrencia.
+  - La UI ya no calcula números fiscales ni guarda encabezado y líneas por
+    separado.
+- Validaciones ejecutadas:
+  - Preflight remoto: 11/11 verificaciones con cero conflictos.
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido a las dos páginas modificadas: OK, sin errores.
+  - `npm run build`: OK, 62 páginas generadas.
+  - `supabase db reset --local`: OK con todas las migraciones.
+  - `supabase/tests/phase4_cai_atomic.sql`: OK; correlativos consecutivos,
+    impuestos, atomicidad, permisos y rollback verificados.
+  - `supabase db lint --local --level error`: OK, sin errores.
+  - `supabase db push --linked --dry-run`: remoto al día después del despliegue.
+- Incidencias detectadas durante pruebas:
+  - La primera prueba local detectó una referencia inválida a `clientes.email`;
+    se corrigió a `clientes.email_1`. La transacción abortó antes de insertar
+    documentos. La segunda ejecución confirmó los correlativos `00000101` y
+    `00000102`, y detectó una columna ambigua únicamente en la aserción del test;
+    se calificó como `invoice_items.tax_amount`; la tercera ejecución pasó.
+- Producción:
+  - Migración aplicada y registrada como `20260623010000`.
+  - No quedan migraciones locales pendientes contra remoto.
+- Riesgo residual:
+  - Los tipos y rangos reales deben coincidir con la autorización vigente de SAR
+    y ser confirmados por Contabilidad; este hardening no sustituye revisión
+    fiscal/legal.
+- Commit: pendiente.

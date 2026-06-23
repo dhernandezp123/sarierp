@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, CheckCircle2, AlertTriangle, Trash2, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
@@ -15,6 +15,10 @@ type CaiRange = {
   rango_hasta: string
   fecha_limite_emision: string
   lugar_emision: string | null
+  document_type: FiscalDocumentType
+  range_start: number
+  range_end: number
+  next_number: number
   is_active: boolean
   created_at: string
 }
@@ -36,14 +40,17 @@ function isExpired(fecha: string | null): boolean {
   return fecha < new Date().toISOString().slice(0, 10)
 }
 
-function parseSarNumber(n: string): number {
-  return parseInt(n.replace(/-/g, '').slice(-8), 10) || 0
-}
+type FiscalDocumentType = 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
-function getRangeUsedPct(active: CaiRange, used: number): number {
-  const desde = parseSarNumber(active.rango_desde)
-  const hasta = parseSarNumber(active.rango_hasta)
-  const total = hasta - desde + 1
+const FISCAL_DOCUMENT_TYPES: FiscalDocumentType[] = [
+  'Factura',
+  'Nota de Crédito',
+  'Nota de Débito',
+]
+
+function getRangeUsedPct(active: CaiRange): number {
+  const total = active.range_end - active.range_start + 1
+  const used = Math.max(0, active.next_number - active.range_start)
   return total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0
 }
 
@@ -53,6 +60,7 @@ const emptyForm = {
   rango_hasta: '',
   fecha_limite_emision: '',
   lugar_emision: '',
+  document_type: 'Factura' as FiscalDocumentType,
 }
 
 export default function CaiSettingsPage() {
@@ -61,25 +69,26 @@ export default function CaiSettingsPage() {
 
   const [loading, setLoading] = useState(true)
   const [ranges, setRanges] = useState<CaiRange[]>([])
-  const [usedCount, setUsedCount] = useState(0)
+  const [selectedStatusType, setSelectedStatusType] = useState<FiscalDocumentType>('Factura')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [activating, setActivating] = useState<string | null>(null)
 
-  useEffect(() => { fetchAll() }, [])
-
-  const fetchAll = async () => {
-    setLoading(true)
-    const [rangesRes, countRes] = await Promise.all([
-      supabase.from('cai_ranges').select('*').order('created_at', { ascending: false }),
-      supabase.from('invoices').select('id', { count: 'exact', head: true }).not('cai', 'is', null).eq('invoice_type', 'Factura'),
-    ])
+  const fetchAll = useCallback(async () => {
+    const rangesRes = await supabase
+      .from('cai_ranges')
+      .select('*')
+      .order('created_at', { ascending: false })
     if (rangesRes.error) toast.error('Error al cargar rangos CAI')
     setRanges((rangesRes.data || []) as CaiRange[])
-    setUsedCount(countRes.count || 0)
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => { void fetchAll() }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [fetchAll])
 
   const handleSave = async () => {
     if (!form.cai || !form.rango_desde || !form.rango_hasta || !form.fecha_limite_emision) {
@@ -93,6 +102,7 @@ export default function CaiSettingsPage() {
       rango_hasta: form.rango_hasta.trim(),
       fecha_limite_emision: form.fecha_limite_emision,
       lugar_emision: form.lugar_emision.trim() || null,
+      document_type: form.document_type,
       is_active: false,
     })
     setSaving(false)
@@ -105,9 +115,7 @@ export default function CaiSettingsPage() {
 
   const activateRange = async (id: string) => {
     setActivating(id)
-    // Desactivar todos primero
-    await supabase.from('cai_ranges').update({ is_active: false }).neq('id', 'none')
-    const { error } = await supabase.from('cai_ranges').update({ is_active: true }).eq('id', id)
+    const { error } = await supabase.rpc('activate_cai_range', { p_range_id: id })
     setActivating(null)
     if (error) { toast.error(error.message); return }
     toast.success('Rango CAI activado')
@@ -122,8 +130,13 @@ export default function CaiSettingsPage() {
     fetchAll()
   }
 
-  const activeRange = ranges.find((r) => r.is_active)
-  const pct = activeRange ? getRangeUsedPct(activeRange, usedCount) : 0
+  const activeRange = ranges.find(
+    (range) => range.is_active && range.document_type === selectedStatusType
+  )
+  const usedCount = activeRange
+    ? Math.max(0, activeRange.next_number - activeRange.range_start)
+    : 0
+  const pct = activeRange ? getRangeUsedPct(activeRange) : 0
   const nearExpiry = activeRange && isNearExpiry(activeRange.fecha_limite_emision)
   const expired = activeRange && isExpired(activeRange.fecha_limite_emision)
   const nearLimit = pct >= 80
@@ -155,6 +168,23 @@ export default function CaiSettingsPage() {
         )}
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {FISCAL_DOCUMENT_TYPES.map((type) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => setSelectedStatusType(type)}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+              selectedStatusType === type
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+            }`}
+          >
+            {type}
+          </button>
+        ))}
+      </div>
+
       {/* Status del rango activo */}
       {activeRange ? (
         <div className={`rounded-2xl border p-5 ${
@@ -173,7 +203,7 @@ export default function CaiSettingsPage() {
               )}
               <div>
                 <p className="text-sm font-bold text-slate-900 dark:text-white">
-                  {expired ? 'Rango CAI vencido' : nearExpiry || nearLimit ? 'Alerta de rango CAI' : 'Rango CAI activo'}
+                  {expired ? `Rango ${selectedStatusType} vencido` : nearExpiry || nearLimit ? `Alerta de ${selectedStatusType}` : `Rango ${selectedStatusType} activo`}
                 </p>
                 <p className="mt-0.5 font-mono text-xs text-slate-600 dark:text-slate-400">
                   CAI: {activeRange.cai}
@@ -228,7 +258,7 @@ export default function CaiSettingsPage() {
             <div>
               <p className="text-sm font-bold text-slate-900 dark:text-white">Sin rango CAI activo</p>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                No puedes emitir facturas SAR sin un rango CAI activo. Registra uno y actívalo.
+                No puedes emitir {selectedStatusType.toLowerCase()} sin un rango CAI activo para ese documento.
               </p>
             </div>
           </div>
@@ -240,6 +270,23 @@ export default function CaiSettingsPage() {
         <section className={cardClass}>
           <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Nuevo rango CAI</h2>
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Tipo de documento fiscal <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={form.document_type}
+                onChange={(e) => setForm((previous) => ({
+                  ...previous,
+                  document_type: e.target.value as FiscalDocumentType,
+                }))}
+                className={fieldClass}
+              >
+                {FISCAL_DOCUMENT_TYPES.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
             <div className="sm:col-span-2">
               <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 CAI <span className="text-red-500">*</span>
@@ -319,6 +366,7 @@ export default function CaiSettingsPage() {
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
                 <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="pb-3 pr-4">Tipo</th>
                   <th className="pb-3 pr-4">CAI</th>
                   <th className="pb-3 pr-4">Rango</th>
                   <th className="pb-3 pr-4">Fecha límite</th>
@@ -332,6 +380,9 @@ export default function CaiSettingsPage() {
                   const exp = isExpired(r.fecha_limite_emision)
                   return (
                     <tr key={r.id} className="border-b border-slate-100 dark:border-slate-800">
+                      <td className="py-3 pr-4 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        {r.document_type}
+                      </td>
                       <td className="py-3 pr-4 font-mono text-xs text-slate-700 dark:text-slate-300">
                         {r.cai}
                       </td>

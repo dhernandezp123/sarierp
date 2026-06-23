@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
-import { useUser } from '../../../../hooks/useUser'
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -46,6 +45,7 @@ type CaiRange = {
   rango_hasta: string
   fecha_limite_emision: string
   lugar_emision: string | null
+  document_type: Exclude<InvoiceType, 'Proforma'>
 }
 
 type ParentInvoice = {
@@ -99,7 +99,6 @@ const IS_NOTE: Record<InvoiceType, boolean> = {
 export default function NewInvoicePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user } = useUser()
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -128,18 +127,24 @@ export default function NewInvoicePage() {
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [quotations, setQuotations] = useState<Quotation[]>([])
-  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
+  const selectedCliente: Cliente | null = parentInvoice?.cliente_id
+    ? {
+        id: parentInvoice.cliente_id,
+        nombre: parentInvoice.cliente_nombre || '',
+        rtn: parentInvoice.cliente_rtn,
+        direccion: parentInvoice.cliente_direccion,
+        email: parentInvoice.cliente_email,
+      }
+    : clientes.find((client) => client.id === clienteId) || null
 
   useEffect(() => {
     const init = async () => {
-      const [clientesRes, caiRes, settingsRes] = await Promise.all([
-        supabase.from('clientes').select('id, nombre, rtn, direccion, email').order('nombre'),
-        supabase.from('cai_ranges').select('*').eq('is_active', true).limit(1).single(),
+      const [clientesRes, settingsRes] = await Promise.all([
+        supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1').order('nombre'),
         supabase.from('company_settings').select('exchange_rate_usd_hnl').limit(1).single(),
       ])
 
       setClientes((clientesRes.data || []) as Cliente[])
-      if (caiRes.data) setActiveCai(caiRes.data as CaiRange)
       if (settingsRes.data?.exchange_rate_usd_hnl) {
         setExchangeRate(String(settingsRes.data.exchange_rate_usd_hnl))
       }
@@ -160,13 +165,6 @@ export default function NewInvoicePage() {
           setCurrency(parent.currency)
           if (parent.cliente_id) {
             setClienteId(parent.cliente_id)
-            setSelectedCliente({
-              id: parent.cliente_id,
-              nombre: parent.cliente_nombre || '',
-              rtn: parent.cliente_rtn,
-              direccion: parent.cliente_direccion,
-              email: parent.cliente_email,
-            })
           }
 
           // Pre-fill items from parent
@@ -198,9 +196,30 @@ export default function NewInvoicePage() {
   }, [parentId, docType])
 
   useEffect(() => {
+    const timeout = window.setTimeout(async () => {
+      if (!IS_FISCAL[invoiceType]) {
+        setActiveCai(null)
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('cai_ranges')
+        .select('*')
+        .eq('document_type', invoiceType)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (error) {
+        toast.error('Error al cargar el rango CAI', { description: error.message })
+      }
+      setActiveCai((data as CaiRange | null) ?? null)
+    }, 0)
+
+    return () => window.clearTimeout(timeout)
+  }, [invoiceType])
+
+  useEffect(() => {
     if (!clienteId || parentId) return
-    const c = clientes.find((x) => x.id === clienteId) || null
-    setSelectedCliente(c)
     supabase
       .from('quotations')
       .select('id, quotation_number, clientes(nombre), total_sale')
@@ -209,7 +228,7 @@ export default function NewInvoicePage() {
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .then(({ data }) => setQuotations((data || []) as Quotation[]))
-  }, [clienteId, clientes, parentId])
+  }, [clienteId, parentId])
 
   const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
     setItems((prev) =>
@@ -240,71 +259,6 @@ export default function NewInvoicePage() {
   const total = subtotal + taxAmount
   const totalLps = currency === 'USD' ? total * (parseFloat(exchangeRate) || 1) : total
 
-  const generateNumber = async (type: InvoiceType): Promise<string> => {
-    if (type === 'Proforma') {
-      const now = new Date()
-      const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
-      const prefix = `SARI-PRO-${ym}-`
-      const { data } = await supabase
-        .from('invoices')
-        .select('invoice_number')
-        .eq('invoice_type', 'Proforma')
-        .like('invoice_number', `${prefix}%`)
-        .order('invoice_number', { ascending: false })
-        .limit(1)
-      const last = data?.[0]?.invoice_number?.replace(prefix, '')
-      const seq = last ? parseInt(last, 10) + 1 : 1
-      return `${prefix}${String(seq).padStart(3, '0')}`
-    }
-
-    // All fiscal types: Factura, Nota de Crédito, Nota de Débito
-    if (activeCai) {
-      const lastDash = activeCai.rango_desde.lastIndexOf('-')
-      const prefix = activeCai.rango_desde.substring(0, lastDash + 1)
-      const startNum = parseInt(activeCai.rango_desde.substring(lastDash + 1), 10)
-      const endNum = parseInt(activeCai.rango_hasta.substring(lastDash + 1), 10)
-      const digits = activeCai.rango_desde.length - lastDash - 1
-
-      // Find last used across ALL fiscal docs in this CAI
-      const { data } = await supabase
-        .from('invoices')
-        .select('invoice_number')
-        .eq('cai', activeCai.cai)
-        .order('invoice_number', { ascending: false })
-        .limit(1)
-
-      let nextNum: number
-      if (data?.[0]?.invoice_number) {
-        const lastDashUsed = data[0].invoice_number.lastIndexOf('-')
-        nextNum = parseInt(data[0].invoice_number.substring(lastDashUsed + 1), 10) + 1
-      } else {
-        nextNum = startNum
-      }
-
-      if (nextNum > endNum) {
-        throw new Error('El rango CAI está agotado. Registra un nuevo rango antes de emitir documentos fiscales.')
-      }
-
-      return `${prefix}${String(nextNum).padStart(digits, '0')}`
-    }
-
-    // Fallback internal numbering
-    const now = new Date()
-    const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
-    const internalType = type === 'Nota de Crédito' ? 'NC' : type === 'Nota de Débito' ? 'ND' : 'FAC'
-    const prefix = `SARI-${internalType}-${ym}-`
-    const { data } = await supabase
-      .from('invoices')
-      .select('invoice_number')
-      .eq('invoice_type', type)
-      .like('invoice_number', `${prefix}%`)
-      .order('invoice_number', { ascending: false })
-      .limit(1)
-    const last = data?.[0]?.invoice_number?.replace(prefix, '')
-    const seq = last ? parseInt(last, 10) + 1 : 1
-    return `${prefix}${String(seq).padStart(3, '0')}`
-  }
-
   const handleSave = async () => {
     setSubmitted(true)
     if (!clienteId || !issueDate || items.length === 0) {
@@ -328,6 +282,14 @@ export default function NewInvoicePage() {
       setSaving(false)
       return
     }
+    if (isFiscal && !activeCai) {
+      toast.error(`No hay un rango CAI activo para ${invoiceType}.`)
+      return
+    }
+    if (isFiscal && activeCai && activeCai.fecha_limite_emision < issueDate) {
+      toast.error('El rango CAI está vencido para la fecha de emisión seleccionada.')
+      return
+    }
     // SAR: tipo de cambio requerido cuando factura es en USD (total en HNL es obligatorio)
     if (isFiscal && currency === 'USD' && (!exchangeRate || parseFloat(exchangeRate) <= 0)) {
       toast.error('El tipo de cambio es requerido por SAR para facturas en USD (total en HNL obligatorio)')
@@ -341,86 +303,42 @@ export default function NewInvoicePage() {
 
     setSaving(true)
 
-    let invoiceNumber: string
-    try {
-      invoiceNumber = await generateNumber(invoiceType)
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al generar número')
-      setSaving(false)
-      return
-    }
-
-    const { data: invoice, error: invError } = await supabase
-      .from('invoices')
-      .insert({
-        invoice_number: invoiceNumber,
+    const { data, error } = await supabase.rpc('create_invoice_with_items', {
+      p_invoice: {
         invoice_type: invoiceType,
-        status: 'Borrador',
         quotation_id: quotationId || null,
-        cliente_id: clienteId || null,
-        cliente_nombre: selectedCliente?.nombre || null,
-        cliente_rtn: selectedCliente?.rtn || null,
-        cliente_direccion: selectedCliente?.direccion || null,
-        cliente_email: selectedCliente?.email || null,
+        cliente_id: clienteId,
         issue_date: issueDate,
         due_date: dueDate || null,
-        subtotal,
-        tax_rate: 15,
-        tax_amount: taxAmount,
-        total,
         currency,
         exchange_rate: parseFloat(exchangeRate) || 1,
-        total_lps: currency === 'USD' ? totalLps : null,
         notes: notes || null,
         motivo: IS_NOTE[invoiceType] ? motivo : null,
         parent_invoice_id: parentId || null,
-        created_by: user?.id || null,
-        // SAR fields (solo documentos fiscales)
-        ...(isFiscal && activeCai ? {
-          cai: activeCai.cai,
-          rango_desde: activeCai.rango_desde,
-          rango_hasta: activeCai.rango_hasta,
-          fecha_limite_emision: activeCai.fecha_limite_emision,
-          lugar_emision: activeCai.lugar_emision || null,
-        } : {}),
-        ...(isFiscal ? {
-          es_exonerado: esExonerado,
-          orden_compra_exenta: esExonerado ? ordenCompraExenta || null : null,
-          no_constancia_exonerado: esExonerado ? noConstanciaExonerado || null : null,
-          no_registro_sag: esExonerado ? noRegistroSag || null : null,
-          isv_18_rate: importeGravado18 > 0 ? 18 : 0,
-          isv_18_amount: isv18Amount,
-          importe_exento: importeExento,
-          importe_exonerado: 0,
-        } : {}),
-      })
-      .select('id')
-      .single()
+        es_exonerado: esExonerado,
+        orden_compra_exenta: esExonerado ? ordenCompraExenta || null : null,
+        no_constancia_exonerado: esExonerado ? noConstanciaExonerado || null : null,
+        no_registro_sag: esExonerado ? noRegistroSag || null : null,
+      },
+      p_items: items.map((item, index) => ({
+        description: item.description.trim(),
+        quantity: parseFloat(item.quantity) || 0,
+        unit_price: parseFloat(item.unit_price) || 0,
+        isv_rate: item.isv_rate,
+        sort_order: index,
+      })),
+    })
 
-    if (invError || !invoice) {
-      toast.error('Error al crear el documento')
+    const invoice = (data as { invoice_id: string; invoice_number: string }[] | null)?.[0]
+
+    if (error || !invoice) {
+      toast.error(error?.message || 'Error al crear el documento')
       setSaving(false)
       return
     }
 
-    const lineItems = items.map((it, i) => ({
-      invoice_id: invoice.id,
-      description: it.description,
-      quantity: parseFloat(it.quantity) || 1,
-      unit_price: parseFloat(it.unit_price) || 0,
-      amount: it.amount,
-      sort_order: i,
-    }))
-
-    const { error: itemsError } = await supabase.from('invoice_items').insert(lineItems)
-    if (itemsError) {
-      toast.error('Error al guardar líneas del documento')
-      setSaving(false)
-      return
-    }
-
-    toast.success(`${invoiceType} ${invoiceNumber} creada`)
-    router.push(`/invoicing/${invoice.id}`)
+    toast.success(`${invoiceType} ${invoice.invoice_number} creada`)
+    router.push(`/invoicing/${invoice.invoice_id}`)
   }
 
   const isNote = IS_NOTE[invoiceType]
@@ -457,7 +375,7 @@ export default function NewInvoicePage() {
       {isFiscal && !activeCai && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>No hay un rango CAI activo. El documento se numerará en formato interno. <a href="/settings/cai" className="underline font-semibold">Registrar rango CAI →</a></span>
+          <span>No hay un rango CAI activo para {invoiceType}. No se puede emitir este documento. <a href="/settings/cai" className="underline font-semibold">Registrar rango CAI →</a></span>
         </div>
       )}
 
