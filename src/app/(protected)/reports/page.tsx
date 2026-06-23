@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PDFDownloadLink, pdf } from '@react-pdf/renderer'
 import {
   BarChart3,
@@ -92,6 +92,24 @@ type InvoiceRow = {
     tipo_cliente: string | null
     vendedor_profile: Join<{ nombre: string | null; apellido: string | null }>
   }>
+}
+
+type ReceivableRow = {
+  invoice_id: string
+  invoice_number: string | null
+  cliente_id: string | null
+  cliente_nombre: string | null
+  issue_date: string | null
+  due_date: string | null
+  currency: string
+  original_total: number | string
+  credit_notes: number | string
+  debit_notes: number | string
+  adjusted_total: number | string
+  paid_total: number | string
+  balance: number | string
+  receivable_status: string
+  days_overdue: number
 }
 
 type ProveedorPaymentRow = {
@@ -266,6 +284,7 @@ export default function ReportsPage() {
   const [instructions, setInstructions] = useState<ShippingInstructionRow[]>([])
   const [bookings, setBookings] = useState<BookingRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
+  const [receivables, setReceivables] = useState<ReceivableRow[]>([])
   const [payables, setPayables] = useState<PayableRow[]>([])
   const [proveedorPayments, setProveedorPayments] = useState<ProveedorPaymentRow[]>([])
 
@@ -277,11 +296,12 @@ export default function ReportsPage() {
   useEffect(() => {
     if (userLoading) return
     if (availableReports.length > 0 && !availableReports.some((r) => r.id === activeReport)) {
-      setActiveReport(availableReports[0].id)
+      const timeout = window.setTimeout(() => setActiveReport(availableReports[0].id), 0)
+      return () => window.clearTimeout(timeout)
     }
   }, [activeReport, availableReports, userLoading])
 
-  const loadReports = async () => {
+  const loadReports = useCallback(async () => {
     if (!role) return
     setLoading(true)
 
@@ -292,6 +312,16 @@ export default function ReportsPage() {
     const tasks: PromiseLike<void>[] = []
 
     if (wantsCommercial) {
+      tasks.push(
+        supabase
+          .from('invoice_receivables')
+          .select('*')
+          .order('due_date', { ascending: true, nullsFirst: false })
+          .then(({ data, error }) => {
+            if (error) toast.error('No se pudieron cargar cuentas por cobrar')
+            setReceivables((data || []) as ReceivableRow[])
+          })
+      )
       tasks.push(
         supabase
           .from('quotations')
@@ -422,12 +452,13 @@ export default function ReportsPage() {
 
     await Promise.all(tasks)
     setLoading(false)
-  }
+  }, [role])
 
   useEffect(() => {
     if (userLoading) return
-    loadReports()
-  }, [userLoading, role])
+    const timeout = window.setTimeout(() => { void loadReports() }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [loadReports, userLoading])
 
   const reportConfig = REPORTS.find((report) => report.id === activeReport) || REPORTS[0]
 
@@ -544,22 +575,25 @@ export default function ReportsPage() {
     }
 
     if (activeReport === 'receivable') {
-      return invoices
-        .filter((invoice) => ['Enviada', 'Aprobada', 'Vencida'].includes(invoice.status))
-        .map((invoice) => ({
-          __key: invoice.id,
-          __date: invoice.due_date || invoice.issue_date || '',
-          __client: invoice.cliente_nombre || 'Sin cliente',
-          __status: invoice.status,
-          __currency: invoice.currency,
-          __amount: Number(invoice.total || 0),
-          numero: invoice.invoice_number || '-',
-          cliente: invoice.cliente_nombre || 'Sin cliente',
-          emision: fmtDate(invoice.issue_date),
-          vencimiento: fmtDate(invoice.due_date),
-          dias: invoice.due_date && daysOverdue(invoice.due_date) > 0 ? `${daysOverdue(invoice.due_date)} días` : '-',
-          estado: invoice.status,
-          saldo: fmtMoney(Number(invoice.total || 0), invoice.currency),
+      return receivables
+        .filter((receivable) => Number(receivable.balance) > 0)
+        .map((receivable) => ({
+          __key: receivable.invoice_id,
+          __date: receivable.due_date || receivable.issue_date || '',
+          __client: receivable.cliente_nombre || 'Sin cliente',
+          __status: receivable.receivable_status,
+          __currency: receivable.currency,
+          __amount: Number(receivable.balance),
+          numero: receivable.invoice_number || '-',
+          cliente: receivable.cliente_nombre || 'Sin cliente',
+          emision: fmtDate(receivable.issue_date),
+          vencimiento: fmtDate(receivable.due_date),
+          dias: receivable.days_overdue > 0 ? `${receivable.days_overdue} días` : '-',
+          estado: receivable.receivable_status,
+          factura: fmtMoney(Number(receivable.original_total), receivable.currency),
+          notas: fmtMoney(Number(receivable.debit_notes) - Number(receivable.credit_notes), receivable.currency),
+          pagado: fmtMoney(Number(receivable.paid_total), receivable.currency),
+          saldo: fmtMoney(Number(receivable.balance), receivable.currency),
         }))
     }
 
@@ -588,22 +622,22 @@ export default function ReportsPage() {
     }
 
     return [
-      ...invoices
-        .filter((invoice) => ['Enviada', 'Aprobada', 'Vencida'].includes(invoice.status) && daysOverdue(invoice.due_date) > 0)
-        .map((invoice) => ({
-          __key: `ar-${invoice.id}`,
-          __date: invoice.due_date || '',
-          __client: invoice.cliente_nombre || 'Sin cliente',
-          __status: invoice.status,
-          __currency: invoice.currency,
-          __amount: Number(invoice.total || 0),
+      ...receivables
+        .filter((receivable) => Number(receivable.balance) > 0 && receivable.days_overdue > 0)
+        .map((receivable) => ({
+          __key: `ar-${receivable.invoice_id}`,
+          __date: receivable.due_date || '',
+          __client: receivable.cliente_nombre || 'Sin cliente',
+          __status: receivable.receivable_status,
+          __currency: receivable.currency,
+          __amount: Number(receivable.balance),
           tipo: 'Por cobrar',
-          tercero: invoice.cliente_nombre || 'Sin cliente',
-          documento: invoice.invoice_number || '-',
-          vencimiento: fmtDate(invoice.due_date),
-          dias: `${daysOverdue(invoice.due_date)} días`,
-          estado: invoice.status,
-          monto: fmtMoney(Number(invoice.total || 0), invoice.currency),
+          tercero: receivable.cliente_nombre || 'Sin cliente',
+          documento: receivable.invoice_number || '-',
+          vencimiento: fmtDate(receivable.due_date),
+          dias: `${receivable.days_overdue} días`,
+          estado: receivable.receivable_status,
+          monto: fmtMoney(Number(receivable.balance), receivable.currency),
         })),
       ...payables
         .filter((payable) => ['Pendiente', 'Parcialmente Pagada', 'Vencida'].includes(payable.status) && daysOverdue(payable.fecha_vencimiento) > 0)
@@ -654,7 +688,7 @@ export default function ReportsPage() {
     }
 
     return []
-  }, [activeReport, bookings, instructions, invoices, payables, proveedorPayments, quotations])
+  }, [activeReport, bookings, instructions, invoices, payables, proveedorPayments, quotations, receivables])
 
   const rows = useMemo(() => {
     return baseRows.filter((row) => {
@@ -711,13 +745,15 @@ export default function ReportsPage() {
     }
     if (activeReport === 'receivable') {
       return [
-        { key: 'numero', label: 'Factura', width: '16%' },
-        { key: 'cliente', label: 'Cliente', width: '28%' },
-        { key: 'emision', label: 'Emision', width: '11%' },
-        { key: 'vencimiento', label: 'Vence', width: '11%' },
-        { key: 'dias', label: 'Dias', width: '8%', align: 'right' },
-        { key: 'estado', label: 'Estado', width: '12%' },
-        { key: 'saldo', label: 'Saldo', width: '14%', align: 'right' },
+        { key: 'numero', label: 'Factura', width: '12%' },
+        { key: 'cliente', label: 'Cliente', width: '18%' },
+        { key: 'vencimiento', label: 'Vence', width: '9%' },
+        { key: 'dias', label: 'Días', width: '7%', align: 'right' },
+        { key: 'estado', label: 'Estado', width: '11%' },
+        { key: 'factura', label: 'Factura', width: '11%', align: 'right' },
+        { key: 'notas', label: 'NC/ND', width: '10%', align: 'right' },
+        { key: 'pagado', label: 'Pagado', width: '10%', align: 'right' },
+        { key: 'saldo', label: 'Saldo', width: '12%', align: 'right' },
       ]
     }
     if (activeReport === 'payable') {

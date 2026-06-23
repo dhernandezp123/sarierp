@@ -37,6 +37,14 @@ type Invoice = {
   }> | null
 }
 
+type ReceivableSummary = {
+  invoice_id: string
+  balance: number
+  paid_total: number
+  receivable_status: string
+  days_overdue: number
+}
+
 type EcCompanySettings = {
   legal_name: string | null
   trade_name: string | null
@@ -59,6 +67,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   Aprobada: { label: 'Aprobada', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300', icon: <CheckCircle2 className="h-3 w-3" /> },
   'Parcialmente Pagada': { label: 'Parcialmente pagada', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300', icon: <DollarSign className="h-3 w-3" /> },
   Pagada: { label: 'Pagada', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', icon: <CheckCircle2 className="h-3 w-3" /> },
+  Saldada: { label: 'Saldada', color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300', icon: <CheckCircle2 className="h-3 w-3" /> },
   Vencida: { label: 'Vencida', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300', icon: <AlertCircle className="h-3 w-3" /> },
   Anulada: { label: 'Anulada', color: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500 line-through', icon: <XCircle className="h-3 w-3" /> },
 }
@@ -80,6 +89,7 @@ export default function InvoicingPage() {
   const { profile } = useUser()
   const [loading, setLoading] = useState(true)
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [receivables, setReceivables] = useState<ReceivableSummary[]>([])
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | InvoiceType>('all')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -99,14 +109,29 @@ export default function InvoicingPage() {
 
   async function fetchInvoices() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date, status)')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
+    const [invoicesResult, receivablesResult] = await Promise.all([
+      supabase
+        .from('invoices')
+        .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date, status)')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('invoice_receivables')
+        .select('invoice_id, balance, paid_total, receivable_status, days_overdue'),
+    ])
 
-    if (error) { toast.error('Error al cargar facturas'); setLoading(false); return }
-    setInvoices((data || []) as Invoice[])
+    if (invoicesResult.error || receivablesResult.error) {
+      toast.error('Error al cargar facturas y saldos')
+      setLoading(false)
+      return
+    }
+    const receivableRows = (receivablesResult.data || []) as ReceivableSummary[]
+    const statuses = new Map(receivableRows.map((row) => [row.invoice_id, row.receivable_status]))
+    setInvoices(((invoicesResult.data || []) as Invoice[]).map((invoice) => ({
+      ...invoice,
+      status: statuses.get(invoice.id) || invoice.status,
+    })))
+    setReceivables(receivableRows)
     setLoading(false)
   }
 
@@ -131,9 +156,11 @@ export default function InvoicingPage() {
   const paginatedInvoices = filtered.slice((page - 1) * pageSize, page * pageSize)
 
   const totals = {
-    pendiente: invoices.filter((i) => ['Enviada', 'Aprobada', 'Parcialmente Pagada'].includes(i.status)).reduce((s, i) => s + i.total, 0),
-    pagado: invoices.filter((i) => i.status === 'Pagada').reduce((s, i) => s + i.total, 0),
-    vencido: invoices.filter((i) => i.status === 'Vencida').reduce((s, i) => s + i.total, 0),
+    pendiente: receivables.reduce((sum, row) => sum + Number(row.balance || 0), 0),
+    pagado: receivables.reduce((sum, row) => sum + Number(row.paid_total || 0), 0),
+    vencido: receivables
+      .filter((row) => row.days_overdue > 0)
+      .reduce((sum, row) => sum + Number(row.balance || 0), 0),
   }
 
   const computeCierre = () => {

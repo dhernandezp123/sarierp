@@ -99,12 +99,21 @@ type Payment = {
   reversal_reason: string | null
 }
 
+type ReceivableSummary = {
+  adjusted_total: number
+  paid_total: number
+  balance: number
+  receivable_status: string
+  days_overdue: number
+}
+
 const STATUS_FLOW: Record<string, { next: string; label: string; icon: React.ReactNode } | null> = {
   Borrador: { next: 'Enviada', label: 'Marcar como enviada', icon: <Send className="h-4 w-4" /> },
   Enviada: { next: 'Aprobada', label: 'Registrar aprobación', icon: <CheckCircle2 className="h-4 w-4" /> },
   Aprobada: { next: 'Pagada', label: 'Registrar pago', icon: <DollarSign className="h-4 w-4" /> },
   'Parcialmente Pagada': { next: 'Pagada', label: 'Registrar pago', icon: <DollarSign className="h-4 w-4" /> },
   Pagada: null,
+  Saldada: null,
   Vencida: { next: 'Pagada', label: 'Registrar pago', icon: <DollarSign className="h-4 w-4" /> },
   Anulada: null,
 }
@@ -115,6 +124,7 @@ const STATUS_COLOR: Record<string, string> = {
   Aprobada: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
   'Parcialmente Pagada': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
   Pagada: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  Saldada: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
   Vencida: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
   Anulada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500',
 }
@@ -143,6 +153,7 @@ export default function InvoiceDetailPage() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [linkedNotes, setLinkedNotes] = useState<LinkedNote[]>([])
   const [companySetting, setCompanySetting] = useState<CompanySettings | null>(null)
+  const [receivable, setReceivable] = useState<ReceivableSummary | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [cancelling, setCancelling] = useState(false)
 
@@ -160,19 +171,25 @@ export default function InvoiceDetailPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [invRes, itemsRes, paymentsRes, settingsRes, notesRes] = await Promise.all([
+    const [invRes, itemsRes, paymentsRes, settingsRes, notesRes, receivableRes] = await Promise.all([
       supabase.from('invoices').select('*, parent_invoice:parent_invoice_id(invoice_number)').eq('id', id).single(),
       supabase.from('invoice_items').select('*').eq('invoice_id', id).order('sort_order'),
       supabase.from('invoice_payments').select('*').eq('invoice_id', id).order('payment_date', { ascending: false }),
       supabase.from('company_settings').select('legal_name, trade_name, rtn, address, phone, email, invoice_footer_note').limit(1).single(),
       supabase.from('invoices').select('id, invoice_number, invoice_type, status, total, currency, issue_date, motivo').eq('parent_invoice_id', id).order('created_at'),
+      supabase.from('invoice_receivables').select('adjusted_total, paid_total, balance, receivable_status, days_overdue').eq('invoice_id', id).maybeSingle(),
     ])
 
     if (invRes.error) { toast.error('Factura no encontrada'); router.push('/invoicing'); return }
-    setInvoice(invRes.data as Invoice)
+    const receivableData = (receivableRes.data as ReceivableSummary | null) ?? null
+    setInvoice({
+      ...(invRes.data as Invoice),
+      status: receivableData?.receivable_status || invRes.data.status,
+    })
     setItems((itemsRes.data || []) as InvoiceItem[])
     setPayments((paymentsRes.data || []) as Payment[])
     setLinkedNotes((notesRes.data || []) as LinkedNote[])
+    setReceivable(receivableData)
     if (!settingsRes.error) setCompanySetting(settingsRes.data as CompanySettings)
     setLoading(false)
   }, [id, router])
@@ -287,7 +304,7 @@ export default function InvoiceDetailPage() {
   const flow = STATUS_FLOW[invoice.status]
   const activePayments = payments.filter((payment) => payment.status === 'Aplicado')
   const paidTotal = activePayments.reduce((sum, payment) => sum + Number(payment.amount), 0)
-  const pending = invoice.total - paidTotal
+  const pending = receivable?.balance ?? (invoice.total - paidTotal)
 
   const isv15 = invoice.tax_amount - invoice.isv_18_amount
   const gravado15 = isv15 > 0 ? isv15 / 0.15 : (invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado)
