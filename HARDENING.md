@@ -79,8 +79,8 @@ Fecha: 22/06/2026
 | FIN-001 | Se permiten documentos fiscales sin CAI activo | Crítica | Completado |
 | FIN-002 | Numeración CAI se calcula en cliente y es vulnerable a concurrencia | Crítica | Completado |
 | FIN-003 | Activación de CAI no es atómica y no garantiza uno solo | Crítica | Completado |
-| FIN-004 | Pago y cambio de estado se guardan en operaciones separadas | Alta | Pendiente |
-| FIN-005 | Pagos pueden eliminarse físicamente sin reverso ni auditoría suficiente | Alta | Pendiente |
+| FIN-004 | Pago y cambio de estado se guardan en operaciones separadas | Alta | En validación |
+| FIN-005 | Pagos pueden eliminarse físicamente sin reverso ni auditoría suficiente | Alta | En validación |
 | FIN-006 | Cuentas por cobrar ignora pagos parciales, NC y ND en reportes | Alta | Pendiente |
 | FIN-007 | Facturas vencidas no actualizan estado automáticamente | Alta | Pendiente |
 | FIN-008 | CxP puede generarse varias veces desde la misma cotización | Alta | Completado |
@@ -743,3 +743,44 @@ Agregar una entrada por fix:
     y ser confirmados por Contabilidad; este hardening no sustituye revisión
     fiscal/legal.
 - Commit: `0b5b7e3`
+
+### 2026-06-23 — FASE-4 — Pagos atómicos y reversos auditables
+
+- Estado: En validación manual; migración aplicada en remoto y pruebas
+  automatizadas completadas.
+- Hallazgos: FIN-004 y FIN-005.
+- Archivos:
+  - `supabase/migrations/20260623014500_phase4_payment_atomic.sql`
+  - `supabase/tests/phase4_payment_atomic.sql`
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `src/app/(protected)/invoicing/page.tsx`
+- Cambios:
+  - Registro de pago, cálculo de saldo, estado y fecha de pago se ejecutan en una
+    sola transacción mediante `register_invoice_payment`.
+  - Se incorpora el estado `Parcialmente Pagada` para representar cobros reales.
+  - Los pagos dejan de eliminarse: `reverse_invoice_payment` conserva el
+    movimiento, usuario, fecha y motivo del reverso.
+  - Escrituras directas sobre `invoice_payments` quedan revocadas para usuarios
+    autenticados; solo los RPC autorizados pueden registrar o revertir.
+  - Se bloquean sobrepagos, monedas distintas, fechas futuras, pagos por Ventas,
+    anulación con pagos aplicados y estado Pagada con saldo pendiente.
+  - CxC, cierre mensual y estado de cuenta excluyen pagos reversados.
+  - Registro y reverso generan eventos en `activity_logs`.
+- Validaciones ejecutadas:
+  - `supabase db reset --local`: OK con todas las migraciones.
+  - `supabase/tests/phase4_payment_atomic.sql`: OK; pago parcial/total, bloqueo
+    de sobrepago/anulación/DELETE, reverso, permisos, auditoría y rollback.
+  - `supabase db lint --local --level error`: OK, sin errores.
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido a las dos páginas modificadas: OK, sin errores.
+  - `npm run build`: OK, 62 páginas generadas.
+  - Migración remota aplicada como `20260623014500`.
+- Validación manual pendiente:
+  - Registrar un pago parcial y completar el saldo desde una factura aprobada.
+  - Reversar uno de los pagos indicando motivo y confirmar que permanece visible,
+    deja de sumar y recalcula estado/saldo.
+  - Confirmar que no se puede anular una factura con pagos aplicados.
+- Riesgo residual:
+  - Los constraints de monto positivo y moneda válida protegen escrituras nuevas
+    como `NOT VALID`; su validación histórica se hará junto al cierre de CxC.
+- Commit: pendiente.

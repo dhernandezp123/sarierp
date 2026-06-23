@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, Trash2, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
+import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { supabase } from '../../../../lib/supabase/client'
-import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
@@ -94,14 +93,19 @@ type Payment = {
   payment_method: string | null
   reference: string | null
   notes: string | null
+  status: 'Aplicado' | 'Reversado'
+  reversed_at: string | null
+  reversed_by: string | null
+  reversal_reason: string | null
 }
 
 const STATUS_FLOW: Record<string, { next: string; label: string; icon: React.ReactNode } | null> = {
   Borrador: { next: 'Enviada', label: 'Marcar como enviada', icon: <Send className="h-4 w-4" /> },
   Enviada: { next: 'Aprobada', label: 'Registrar aprobación', icon: <CheckCircle2 className="h-4 w-4" /> },
   Aprobada: { next: 'Pagada', label: 'Registrar pago', icon: <DollarSign className="h-4 w-4" /> },
+  'Parcialmente Pagada': { next: 'Pagada', label: 'Registrar pago', icon: <DollarSign className="h-4 w-4" /> },
   Pagada: null,
-  Vencida: null,
+  Vencida: { next: 'Pagada', label: 'Registrar pago', icon: <DollarSign className="h-4 w-4" /> },
   Anulada: null,
 }
 
@@ -109,6 +113,7 @@ const STATUS_COLOR: Record<string, string> = {
   Borrador: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
   Enviada: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   Aprobada: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  'Parcialmente Pagada': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
   Pagada: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   Vencida: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
   Anulada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500',
@@ -132,7 +137,6 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { user } = useUser()
   const [loading, setLoading] = useState(true)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [items, setItems] = useState<InvoiceItem[]>([])
@@ -150,10 +154,11 @@ export default function InvoiceDetailPage() {
   const [payRef, setPayRef] = useState('')
   const [payNotes, setPayNotes] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
+  const [paymentToReverse, setPaymentToReverse] = useState<Payment | null>(null)
+  const [reversalReason, setReversalReason] = useState('')
+  const [reversingPayment, setReversingPayment] = useState(false)
 
-  useEffect(() => { fetchAll() }, [id])
-
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true)
     const [invRes, itemsRes, paymentsRes, settingsRes, notesRes] = await Promise.all([
       supabase.from('invoices').select('*, parent_invoice:parent_invoice_id(invoice_number)').eq('id', id).single(),
@@ -170,7 +175,12 @@ export default function InvoiceDetailPage() {
     setLinkedNotes((notesRes.data || []) as LinkedNote[])
     if (!settingsRes.error) setCompanySetting(settingsRes.data as CompanySettings)
     setLoading(false)
-  }
+  }, [id, router])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => { void fetchAll() }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [fetchAll])
 
   const advanceStatus = async () => {
     if (!invoice) return
@@ -199,7 +209,9 @@ export default function InvoiceDetailPage() {
   const savePayment = async () => {
     if (!invoice || !payAmount || !payDate) { toast.error('Monto y fecha son requeridos'); return }
     const amount = Number(payAmount)
-    const currentPaid = payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
+    const currentPaid = payments
+      .filter((payment) => payment.status === 'Aplicado')
+      .reduce((sum, payment) => sum + Number(payment.amount), 0)
     const currentPending = Math.max(0, Number(invoice.total) - currentPaid)
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error('Ingresa un monto de pago válido')
@@ -211,28 +223,16 @@ export default function InvoiceDetailPage() {
     }
 
     setSavingPayment(true)
-    const { error } = await supabase.from('invoice_payments').insert({
-      invoice_id: invoice.id,
-      amount,
-      currency: invoice.currency,
-      payment_date: payDate,
-      payment_method: payMethod || null,
-      reference: payRef || null,
-      notes: payNotes || null,
-      created_by: user?.id || null,
+    const { error } = await supabase.rpc('register_invoice_payment', {
+      p_invoice_id: invoice.id,
+      p_amount: amount,
+      p_currency: invoice.currency,
+      p_payment_date: payDate,
+      p_payment_method: payMethod || null,
+      p_reference: payRef || null,
+      p_notes: payNotes || null,
     })
     if (error) { toast.error(error.message); setSavingPayment(false); return }
-
-    if (currentPaid + amount >= Number(invoice.total)) {
-      const { error: statusError } = await supabase
-        .from('invoices')
-        .update({ status: 'Pagada', paid_date: payDate })
-        .eq('id', invoice.id)
-
-      if (statusError) {
-        toast.warning('El pago se registró, pero no se pudo actualizar el estado de la factura')
-      }
-    }
 
     toast.success('Pago registrado')
     setShowPaymentModal(false)
@@ -241,24 +241,28 @@ export default function InvoiceDetailPage() {
     setSavingPayment(false)
   }
 
-  const deletePayment = async (payId: string) => {
-    const deletedPayment = payments.find((payment) => payment.id === payId)
-    const { error } = await supabase.from('invoice_payments').delete().eq('id', payId)
-    if (error) { toast.error(error.message); return }
-
-    const remainingPaid = payments.reduce(
-      (sum, payment) => sum + (payment.id === payId ? 0 : Number(payment.amount)),
-      0
-    )
-    if (deletedPayment && invoice?.status === 'Pagada' && remainingPaid < Number(invoice.total)) {
-      await supabase
-        .from('invoices')
-        .update({ status: 'Aprobada', paid_date: null })
-        .eq('id', invoice.id)
+  const reversePayment = async () => {
+    if (!paymentToReverse || !reversalReason.trim()) {
+      toast.error('Indica el motivo del reverso')
+      return
     }
 
-    toast.success('Pago eliminado')
-    fetchAll()
+    setReversingPayment(true)
+    const { error } = await supabase.rpc('reverse_invoice_payment', {
+      p_payment_id: paymentToReverse.id,
+      p_reason: reversalReason.trim(),
+    })
+    if (error) {
+      toast.error(error.message)
+      setReversingPayment(false)
+      return
+    }
+
+    toast.success('Pago reversado; el movimiento permanece en el historial')
+    setPaymentToReverse(null)
+    setReversalReason('')
+    await fetchAll()
+    setReversingPayment(false)
   }
 
   if (loading || !invoice) return <PageSkeleton cards={2} rows={4} />
@@ -281,10 +285,10 @@ export default function InvoiceDetailPage() {
   })
 
   const flow = STATUS_FLOW[invoice.status]
-  const paidTotal = payments.reduce((s, p) => s + p.amount, 0)
+  const activePayments = payments.filter((payment) => payment.status === 'Aplicado')
+  const paidTotal = activePayments.reduce((sum, payment) => sum + Number(payment.amount), 0)
   const pending = invoice.total - paidTotal
 
-  const gravado18 = invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado - Math.max(0, invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado - (invoice.isv_18_amount > 0 ? invoice.isv_18_amount / 0.18 : 0))
   const isv15 = invoice.tax_amount - invoice.isv_18_amount
   const gravado15 = isv15 > 0 ? isv15 / 0.15 : (invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado)
 
@@ -481,7 +485,8 @@ export default function InvoiceDetailPage() {
           <section className={cardClass}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">Pagos registrados</h2>
-              {!['Anulada'].includes(invoice.status) && (
+              {['Aprobada', 'Parcialmente Pagada', 'Vencida'].includes(invoice.status)
+                && ['Factura', 'Proforma'].includes(invoice.invoice_type) && (
                 <button
                   type="button"
                   onClick={() => setShowPaymentModal(true)}
@@ -509,37 +514,49 @@ export default function InvoiceDetailPage() {
                   </thead>
                   <tbody>
                     {payments.map((p) => (
-                      <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800">
+                      <tr key={p.id} className={`border-b border-slate-100 dark:border-slate-800 ${p.status === 'Reversado' ? 'opacity-60' : ''}`}>
                         <td className="py-2.5 pr-4">{formatDate(p.payment_date)}</td>
                         <td className="pr-4 text-slate-600 dark:text-slate-400">{p.payment_method || '—'}</td>
-                        <td className="pr-4 text-slate-600 dark:text-slate-400">{p.reference || '—'}</td>
-                        <td className="text-right font-semibold text-emerald-700 dark:text-emerald-400">
-                          {p.currency} {p.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        <td className="pr-4 text-slate-600 dark:text-slate-400">
+                          <div>{p.reference || '—'}</div>
+                          {p.status === 'Reversado' && (
+                            <div className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                              Reversado: {p.reversal_reason}
+                            </div>
+                          )}
+                        </td>
+                        <td className={`text-right font-semibold ${p.status === 'Reversado' ? 'text-slate-500 line-through' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                          {p.currency} {Number(p.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
                         <td>
                           <div className="flex items-center">
-                            <PDFDownloadLink
-                              document={<ReciboPagoPdf data={makeReceiptData(p)} />}
-                              fileName={`recibo-${invoice.invoice_number || 'pago'}-${p.payment_date}.pdf`}
-                            >
-                              {({ loading: pdfLoading }) => (
+                            {p.status === 'Aplicado' && (
+                              <>
+                                <PDFDownloadLink
+                                  document={<ReciboPagoPdf data={makeReceiptData(p)} />}
+                                  fileName={`recibo-${invoice.invoice_number || 'pago'}-${p.payment_date}.pdf`}
+                                >
+                                  {({ loading: pdfLoading }) => (
+                                    <button
+                                      type="button"
+                                      title="Descargar recibo"
+                                      className="rounded p-1 text-slate-400 hover:text-blue-500"
+                                      disabled={pdfLoading}
+                                    >
+                                      <Printer className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </PDFDownloadLink>
                                 <button
                                   type="button"
-                                  title="Descargar recibo"
-                                  className="rounded p-1 text-slate-400 hover:text-blue-500"
-                                  disabled={pdfLoading}
+                                  onClick={() => setPaymentToReverse(p)}
+                                  title="Reversar pago"
+                                  className="rounded p-1 text-slate-400 hover:text-amber-600"
                                 >
-                                  <Printer className="h-3.5 w-3.5" />
+                                  <RotateCcw className="h-3.5 w-3.5" />
                                 </button>
-                              )}
-                            </PDFDownloadLink>
-                            <button
-                              type="button"
-                              onClick={() => deletePayment(p.id)}
-                              className="rounded p-1 text-slate-400 hover:text-rose-500"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -707,6 +724,7 @@ export default function InvoiceDetailPage() {
                   onChange={(e) => setPayAmount(e.target.value)}
                   placeholder={`Ej. ${invoice.total.toFixed(2)}`}
                   min="0"
+                  max={Math.max(0, pending)}
                   step="0.01"
                   className={fieldClass}
                 />
@@ -719,6 +737,7 @@ export default function InvoiceDetailPage() {
                   type="date"
                   value={payDate}
                   onChange={(e) => setPayDate(e.target.value)}
+                  max={new Date().toISOString().slice(0, 10)}
                   className={fieldClass}
                 />
               </div>
@@ -772,6 +791,55 @@ export default function InvoiceDetailPage() {
                 className={primaryButtonClass}
               >
                 {savingPayment ? 'Guardando...' : 'Registrar pago'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {paymentToReverse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-[#0b1220]">
+            <div className="border-b border-slate-200 p-5 dark:border-slate-700">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Reversar pago</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                El movimiento no se eliminará y quedará visible en el historial.
+              </p>
+            </div>
+            <div className="space-y-4 p-5">
+              <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+                <span className="text-slate-500">Monto:</span>{' '}
+                <strong>{paymentToReverse.currency} {Number(paymentToReverse.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  Motivo del reverso <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={reversalReason}
+                  onChange={(event) => setReversalReason(event.target.value)}
+                  rows={3}
+                  placeholder="Ej. transferencia aplicada a la factura incorrecta"
+                  className={`${fieldClass} resize-none`}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-200 p-5 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => { setPaymentToReverse(null); setReversalReason('') }}
+                disabled={reversingPayment}
+                className={secondaryButtonClass}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={reversePayment}
+                disabled={reversingPayment || !reversalReason.trim()}
+                className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {reversingPayment ? 'Reversando...' : 'Confirmar reverso'}
               </button>
             </div>
           </div>

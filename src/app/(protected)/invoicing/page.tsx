@@ -33,6 +33,7 @@ type Invoice = {
     amount: number
     currency: string
     payment_date: string
+    status: 'Aplicado' | 'Reversado'
   }> | null
 }
 
@@ -56,6 +57,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   Borrador: { label: 'Borrador', color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300', icon: <FileText className="h-3 w-3" /> },
   Enviada: { label: 'Enviada', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', icon: <Clock className="h-3 w-3" /> },
   Aprobada: { label: 'Aprobada', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300', icon: <CheckCircle2 className="h-3 w-3" /> },
+  'Parcialmente Pagada': { label: 'Parcialmente pagada', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300', icon: <DollarSign className="h-3 w-3" /> },
   Pagada: { label: 'Pagada', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', icon: <CheckCircle2 className="h-3 w-3" /> },
   Vencida: { label: 'Vencida', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300', icon: <AlertCircle className="h-3 w-3" /> },
   Anulada: { label: 'Anulada', color: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500 line-through', icon: <XCircle className="h-3 w-3" /> },
@@ -99,7 +101,7 @@ export default function InvoicingPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('invoices')
-      .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date)')
+      .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date, status)')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
 
@@ -129,7 +131,7 @@ export default function InvoicingPage() {
   const paginatedInvoices = filtered.slice((page - 1) * pageSize, page * pageSize)
 
   const totals = {
-    pendiente: invoices.filter((i) => ['Enviada', 'Aprobada'].includes(i.status)).reduce((s, i) => s + i.total, 0),
+    pendiente: invoices.filter((i) => ['Enviada', 'Aprobada', 'Parcialmente Pagada'].includes(i.status)).reduce((s, i) => s + i.total, 0),
     pagado: invoices.filter((i) => i.status === 'Pagada').reduce((s, i) => s + i.total, 0),
     vencido: invoices.filter((i) => i.status === 'Vencida').reduce((s, i) => s + i.total, 0),
   }
@@ -159,6 +161,7 @@ export default function InvoicingPage() {
 
     activeInvoices.forEach((invoice) => {
       for (const payment of invoice.invoice_payments || []) {
+        if (payment.status !== 'Aplicado') continue
         if (!inPeriod(payment.payment_date)) continue
         ensureCurrency(payment.currency || invoice.currency || 'USD').cobrado += Number(payment.amount || 0)
       }
@@ -177,7 +180,7 @@ export default function InvoicingPage() {
           .filter((note) => note.invoice_type === 'Nota de Débito')
           .reduce((sum, note) => sum + Number(note.total || 0), 0)
         const paid = (invoice.invoice_payments || []).reduce(
-          (sum, payment) => sum + Number(payment.amount || 0),
+          (sum, payment) => sum + (payment.status === 'Aplicado' ? Number(payment.amount || 0) : 0),
           0
         )
         const balance = Math.max(0, Number(invoice.total || 0) - creditNotes + debitNotes - paid)
@@ -263,7 +266,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
     const cliente = ecClientes.find((c) => c.id === clienteId)
     if (!cliente) return
     const clientDocuments = invoices.filter((invoice) => invoice.cliente_id === clienteId && invoice.status !== 'Anulada')
-    const issuedStatuses = new Set(['Enviada', 'Aprobada', 'Pagada', 'Vencida'])
+    const issuedStatuses = new Set(['Enviada', 'Aprobada', 'Parcialmente Pagada', 'Pagada', 'Vencida'])
     const todayString = new Date().toISOString().split('T')[0]
     const items: EstadoCuentaItem[] = clientDocuments
       .filter((invoice) => invoice.invoice_type === 'Factura' && issuedStatuses.has(invoice.status))
@@ -277,7 +280,10 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         const notasDebito = linkedNotes
           .filter((note) => note.invoice_type === 'Nota de Débito')
           .reduce((sum, note) => sum + Number(note.total || 0), 0)
-        const pagado = (invoice.invoice_payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+        const pagado = (invoice.invoice_payments || []).reduce(
+          (sum, payment) => sum + (payment.status === 'Aplicado' ? Number(payment.amount || 0) : 0),
+          0
+        )
         const totalAjustado = Math.max(0, Number(invoice.total || 0) - notasCredito + notasDebito)
         const saldo = Math.max(0, totalAjustado - pagado)
         const vencida = Boolean(invoice.due_date && invoice.due_date.split('T')[0] < todayString && saldo > 0)
