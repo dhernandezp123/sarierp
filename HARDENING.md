@@ -39,7 +39,7 @@ Fecha: 22/06/2026
 | 0 | Baseline, backup y auditoría real de esquema/RLS | Completado |
 | 1 | Seguridad, RLS y escalamiento de usuarios | Completado |
 | 2 | Migraciones y constraints de integridad | Completado |
-| 3 | Autenticación SSR, sesión y permisos | En progreso |
+| 3 | Autenticación SSR, sesión y permisos | Completado |
 | 4 | Facturación, CAI, CxC, CxP y pagos | Pendiente |
 | 5 | Transacciones de cotización, pricing y operaciones | Pendiente |
 | 6 | Miami: embarques persistentes e historial | Pendiente |
@@ -60,7 +60,7 @@ Fecha: 22/06/2026
 | SEC-002 | RLS de `client_rates` puede exponer o permitir modificar tarifas privadas | Crítica | Completado |
 | SEC-003 | `garantias_navieras` tiene RLS activo pero ninguna política; queda bloqueada para usuarios autenticados | Alta | Completado |
 | SEC-004 | Verificar posible escalamiento mediante onboarding, metadata y escritura de `profiles` | Crítica | Completado |
-| SEC-005 | Protección de rutas solo del lado cliente; proxy no usa sesión SSR real | Alta | En validación |
+| SEC-005 | Protección de rutas solo del lado cliente; proxy no usa sesión SSR real | Alta | Completado |
 | SEC-006 | Cliente puede intentar acceder a Settings/CAI por excepción global de permisos | Alta | Completado |
 | SEC-007 | Políticas de `notifications` y `profiles` no están completamente versionadas | Alta | Completado |
 | SEC-008 | Auditar funciones `SECURITY DEFINER`, grants y `search_path` | Alta | Completado |
@@ -665,3 +665,18 @@ Agregar una entrada por fix:
   - Autorizar `/auth/callback` para localhost y producción en Supabase Auth URL
     Configuration y probar un correo real.
 - Commit: `7d87b1f`
+
+### 2026-06-23 — FASE-3 — Cierre de autenticación y portal Cliente
+
+- Estado: Completado con validación manual del titular.
+- Validación manual:
+  - Admin inicia sesión y accede a Dashboard/Profile.
+  - Logout invalida acceso y `/dashboard` redirige a `/login`.
+  - Registro, vínculo, aprobación y acceso Cliente funcionan correctamente.
+  - Recuperación de contraseña Cliente envía enlace y permite restablecer acceso.
+- Resultado:
+  - SEC-005 queda cerrado; sesión SSR, cookies, proxy, perfil activo, permisos y
+    portal Cliente fueron comprobados de extremo a extremo.
+- Próximo paso:
+  - Fase 4: CAI, numeración fiscal, facturación, CxC, CxP y pagos.
+- Commit: pendiente.
