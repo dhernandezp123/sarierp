@@ -29,6 +29,8 @@ type Profile = {
   is_active: boolean
   approved_at: string | null
   cliente_id: string | null
+  registration_company: string | null
+  registration_phone: string | null
   clientes: Cliente | null
 }
 
@@ -97,7 +99,7 @@ export default function AdminUsersPage() {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, nombre, apellido, email, rol, status, is_active, approved_at, cliente_id, clientes!cliente_id(id, nombre, codigo_cliente)')
+      .select('id, nombre, apellido, email, rol, status, is_active, approved_at, cliente_id, registration_company, registration_phone, clientes!cliente_id(id, nombre, codigo_cliente)')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -112,14 +114,15 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
-    fetchUsers()
+    const timeout = window.setTimeout(() => void fetchUsers(), 0)
+    return () => window.clearTimeout(timeout)
   }, [])
 
   // Debounced cliente search for link dialog
   useEffect(() => {
     if (!linkDialogOpen || clienteSearch.trim().length < 2) {
-      setClienteResults([])
-      return
+      const timeout = window.setTimeout(() => setClienteResults([]), 0)
+      return () => window.clearTimeout(timeout)
     }
     const t = setTimeout(async () => {
       const { data } = await supabase
@@ -134,6 +137,12 @@ export default function AdminUsersPage() {
   }, [clienteSearch, linkDialogOpen])
 
   const approveUser = async (id: string) => {
+    const targetUser = users.find((user) => user.id === id)
+    if (targetUser?.rol === 'Cliente' && !targetUser.cliente_id) {
+      toast.error('Vincula este usuario a un cliente antes de aprobarlo.')
+      return
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -497,6 +506,12 @@ export default function AdminUsersPage() {
                               <p className="text-xs text-slate-400 dark:text-slate-500">
                                 {user.email || 'Sin email'}
                               </p>
+                              {user.registration_company && (
+                                <p className="text-[11px] text-blue-600 dark:text-blue-400">
+                                  {user.registration_company}
+                                  {user.registration_phone ? ` · ${user.registration_phone}` : ''}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -634,12 +649,14 @@ export default function AdminUsersPage() {
                 onChange={(e) => setInviteRol(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
               >
-                {roles.filter((r) => r !== 'Cliente').map((role) => (
+                {roles.map((role) => (
                   <option key={role} value={role}>{role}</option>
                 ))}
               </select>
               <p className="mt-1.5 text-xs text-slate-400">
-                El usuario quedará activo al aceptar la invitación. No requiere aprobación adicional.
+                {inviteRol === 'Cliente'
+                  ? 'El cliente deberá vincularse a su empresa antes de aprobar el acceso.'
+                  : 'El usuario interno quedará activo al aceptar la invitación.'}
               </p>
             </div>
 

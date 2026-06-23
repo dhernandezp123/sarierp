@@ -10,6 +10,7 @@ const PUBLIC_ROUTES = new Set([
   '/onboarding',
   '/politicas',
   '/portal/login',
+  '/portal/register',
 ])
 
 export async function proxy(req: NextRequest) {

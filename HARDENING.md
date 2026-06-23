@@ -68,6 +68,7 @@ Fecha: 22/06/2026
 | SEC-010 | Las 55 tablas y funciones públicas conservan grants `ALL` para `anon`; RLS reduce el impacto pero amplía innecesariamente la superficie | Alta | Completado |
 | SEC-011 | Cinco funciones `SECURITY DEFINER` no fijan `search_path`: `auto_match_pre_alert`, `generate_quotation_number`, `handle_new_quotation_status_history`, `handle_new_user` y `prevent_role_change_by_non_admin` | Crítica | Completado |
 | SEC-012 | Invitaciones ignoran el rol elegido y onboarding intenta autoaprobar/cambiar rol contra RLS | Crítica | Completado |
+| SEC-013 | Portal no permite solicitar Cliente y el alta pública no distingue acceso interno de acceso cliente | Alta | Completado |
 
 ### Integridad y finanzas
 
@@ -571,3 +572,41 @@ Agregar una entrada por fix:
   - Probar entrega de invitación y callback con `NEXT_PUBLIC_SITE_URL` del ambiente.
   - Un Cliente invitado debe vincularse a un registro de cliente para ver datos.
 - Commit: `80e7e5f`
+
+### 2026-06-22 — SEC-013 — Registro e invitación de clientes
+
+- Estado: Completado y aplicado en remoto.
+- Código:
+  - `src/app/portal/register/page.tsx`
+  - `src/app/portal/login/page.tsx`
+  - `src/app/portal/layout.tsx`
+  - `src/app/(protected)/admin/users/page.tsx`
+  - `src/app/api/admin/invite/route.ts`
+  - `src/app/onboarding/page.tsx`
+  - `src/proxy.ts`
+- SQL:
+  - `supabase/migrations/20260622235900_phase3_client_registration.sql`
+- Pruebas:
+  - `supabase/tests/phase3_client_registration.sql`: OK, con rollback.
+  - Solicitud Cliente crea perfil `Cliente/Pendiente`, sin aprobación ni vínculo.
+  - Metadata que solicita Admin se degrada a `Ventas/Pendiente`.
+  - `supabase db reset --local`: OK.
+  - `supabase db lint --local --level error`: OK.
+  - `npx tsc --noEmit`: OK.
+  - ESLint de archivos modificados: cero errores y cero advertencias.
+  - `npm run build`: OK, 59 rutas.
+- Cambios:
+  - Portal Login ofrece “Solicitar cuenta” y `/portal/register` recopila persona,
+    empresa, teléfono, correo y contraseña.
+  - El registro público solo puede pedir Cliente y siempre queda Pendiente.
+  - Admin ve empresa/teléfono, vincula el perfil a `clientes` y solo entonces
+    puede aprobarlo.
+  - “Invitar usuario” incluye Cliente; las invitaciones Cliente también quedan
+    pendientes de vínculo, mientras los roles internos conservan alta directa.
+  - Onboarding respeta rol/estado asignados por Admin y nunca se autoaprueba.
+- Producción:
+  - Migración aplicada y registrada como `20260622235900`.
+- Riesgos pendientes:
+  - Verificar política real de confirmación de correo y SMTP en Supabase Auth.
+  - Probar manualmente solicitud, vínculo, aprobación y primer login Cliente.
+- Commit: pendiente.

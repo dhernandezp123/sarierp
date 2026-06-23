@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Package } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
@@ -95,6 +96,15 @@ export default function PortalLoginPage() {
 
         <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-600">
           ¿Problemas para ingresar? Contacta a tu agente de carga.
+        </p>
+        <p className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
+          ¿Aún no tienes acceso?{' '}
+          <Link
+            href="/portal/register"
+            className="font-semibold text-blue-600 hover:underline dark:text-blue-400"
+          >
+            Solicitar cuenta
+          </Link>
         </p>
       </div>
     </div>

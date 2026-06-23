@@ -80,10 +80,10 @@ export async function POST(request: Request) {
       .update({
         email: email.trim().toLowerCase(),
         rol,
-        status: 'Aprobado',
+        status: rol === 'Cliente' ? 'Pendiente' : 'Aprobado',
         is_active: true,
-        approved_at: new Date().toISOString(),
-        approved_by: authData.user.id,
+        approved_at: rol === 'Cliente' ? null : new Date().toISOString(),
+        approved_by: rol === 'Cliente' ? null : authData.user.id,
       })
       .eq('id', data.user.id)
 

@@ -13,9 +13,11 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useUser()
   const router = useRouter()
   const pathname = usePathname()
+  const isPublicPortalPath =
+    pathname === '/portal/login' || pathname === '/portal/register'
 
   useEffect(() => {
-    if (pathname === '/portal/login') return
+    if (isPublicPortalPath) return
     if (loading) return
     if (!user || !profile) { router.replace('/portal/login'); return }
     if (profile.rol !== 'Cliente') {
@@ -26,7 +28,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
     if (profile.status !== 'Aprobado' || !profile.is_active) {
       router.replace('/portal/login')
     }
-  }, [loading, pathname, user, profile, router])
+  }, [isPublicPortalPath, loading, user, profile, router])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -35,7 +37,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
 
   const { unreadCount } = useClientNotifications(profile?.id)
 
-  if (pathname === '/portal/login') return children
+  if (isPublicPortalPath) return children
   if (loading || !user || !profile || profile.rol !== 'Cliente') return null
 
   const navItems = [

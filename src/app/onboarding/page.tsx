@@ -25,12 +25,12 @@ export default function OnboardingPage() {
           // Check if profile already completed
           const { data: profile } = await supabase
             .from('profiles')
-            .select('nombre, apellido, status')
+            .select('nombre, apellido, status, rol')
             .eq('id', session.user.id)
             .single()
 
           if (profile?.nombre && profile?.apellido && profile?.status === 'Aprobado') {
-            router.push('/dashboard')
+            router.push(profile.rol === 'Cliente' ? '/portal' : '/dashboard')
             return
           }
 
@@ -78,8 +78,23 @@ export default function OnboardingPage() {
       return
     }
 
-    toast.success('¡Perfil configurado! Bienvenido al ERP.')
-    router.push('/dashboard')
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('rol, status')
+      .eq('id', authUser.id)
+      .single()
+
+    if (profile?.status === 'Aprobado') {
+      toast.success('¡Perfil configurado! Bienvenido.')
+      router.push(profile.rol === 'Cliente' ? '/portal' : '/dashboard')
+      return
+    }
+
+    await supabase.auth.signOut()
+    toast.success('Perfil completado', {
+      description: 'Tu cuenta de cliente aún debe ser vinculada y aprobada.',
+    })
+    router.push('/portal/login')
   }
 
   if (checking) {
