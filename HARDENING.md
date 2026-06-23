@@ -71,6 +71,7 @@ Fecha: 22/06/2026
 | SEC-013 | Portal no permite solicitar Cliente y el alta pública no distingue acceso interno de acceso cliente | Alta | Completado |
 | SEC-014 | Invitado aprobado no puede iniciar sesión porque onboarding no establece contraseña | Alta | Completado |
 | SEC-015 | Portal no ofrece recuperación segura de contraseña ni callback PKCE | Alta | Completado |
+| SEC-016 | Portal de envíos abre tablas internas y puede exponer notas/contactos operativos | Crítica | En validación |
 
 ### Integridad y finanzas
 
@@ -81,8 +82,8 @@ Fecha: 22/06/2026
 | FIN-003 | Activación de CAI no es atómica y no garantiza uno solo | Crítica | Completado |
 | FIN-004 | Pago y cambio de estado se guardan en operaciones separadas | Alta | En validación |
 | FIN-005 | Pagos pueden eliminarse físicamente sin reverso ni auditoría suficiente | Alta | En validación |
-| FIN-006 | Cuentas por cobrar ignora pagos parciales, NC y ND en reportes | Alta | Pendiente |
-| FIN-007 | Facturas vencidas no actualizan estado automáticamente | Alta | Pendiente |
+| FIN-006 | Cuentas por cobrar ignora pagos parciales, NC y ND en reportes | Alta | En validación |
+| FIN-007 | Facturas vencidas no actualizan estado automáticamente | Alta | En validación |
 | FIN-008 | CxP puede generarse varias veces desde la misma cotización | Alta | Completado |
 | FIN-009 | Falta segregación creador/aprobador/pagador | Media | Pendiente |
 | FIN-010 | Validar tratamiento de ISV en costo real y GP con Contabilidad | Media | Pendiente |
@@ -101,6 +102,7 @@ Fecha: 22/06/2026
 | FLOW-007 | No existe protección suficiente contra SI/CxP/proveedor duplicados | Alta | Completado |
 | FLOW-008 | Numeración de manifiestos basada en `COUNT` es concurrente | Alta | Completado |
 | FLOW-009 | Código muerto en duplicación de cotización | Baja | Pendiente |
+| FLOW-010 | `pricing_items_delete_policy` solo permite Admin; DELETE silencioso acumula pricing Miami en cada guardado | Crítica | En validación |
 
 ### Miami y tracking
 
@@ -784,3 +786,103 @@ Agregar una entrada por fix:
   - Los constraints de monto positivo y moneda válida protegen escrituras nuevas
     como `NOT VALID`; su validación histórica se hará junto al cierre de CxC.
 - Commit: `c0c89a6`
+
+---
+
+### 2026-06-23 — FLOW-010 — Fix acumulación de pricing items en flujo Miami
+
+- Estado: En validación; migración corregida y pendiente de aplicar en remoto.
+- Hallazgo: FLOW-010.
+- Causa raíz: `pricing_items_delete_policy` solo permitía `is_admin()` para DELETE.
+  El flujo de guardado Miami en `quotations/[id]/edit` ejecuta DELETE + INSERT para
+  reemplazar los pricing items. El DELETE devolvía éxito sin error (Supabase no
+  retorna error cuando RLS filtra todas las filas), pero no borraba nada. Cada
+  guardado acumulaba un set adicional de items en lugar de reemplazarlos.
+- Archivos SQL:
+  - `supabase/migrations/20260623030000_fix_pricing_items_delete_rls.sql`
+- Cambio:
+  - Se reemplaza la política exclusiva de Admin por una matriz explícita para
+    Admin, Pricing, Ventas y Operaciones con acceso a la cotización.
+  - Contabilidad y Cliente permanecen sin permiso de eliminación.
+  - Sigue el mismo patrón de `quotation_cargo_lines_delete_policy` y
+    `quotation_containers_delete_policy`.
+  - No hay cambios de código TypeScript; el error era exclusivamente de RLS.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK, sin errores.
+  - `supabase/tests/phase5_pricing_delete_rls.sql`: OK con cinco roles y rollback.
+- Validación manual pendiente:
+  - Abrir una cotización Miami LCL con pricing existente.
+  - Guardar desde `/edit` con un monto de pickup distinto.
+  - Verificar que el "Detalle de Servicios" en el PDF muestra exactamente un set
+    de items (no acumulación).
+  - Guardar por segunda vez y confirmar que el set se reemplaza, no se duplica.
+- Riesgo residual:
+  - La auditoría `supabase/tests/cleanup_duplicate_pricing_items.sql` es de solo
+    lectura. No se eliminarán supuestos duplicados sin revisión y respaldo por
+    Pricing/Contabilidad.
+- Commit: pendiente
+
+### 2026-06-23 — FASE-4 — CxC ajustada y vencimientos automáticos
+
+- Estado: En validación; pruebas locales completadas y despliegue remoto pendiente.
+- Hallazgos: FIN-006 y FIN-007.
+- Archivos:
+  - `supabase/migrations/20260623021500_phase4_receivables.sql`
+  - `supabase/tests/phase4_receivables.sql`
+  - `src/app/(protected)/invoicing/page.tsx`
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `src/app/(protected)/reports/page.tsx`
+- Cambios:
+  - `invoice_receivables` centraliza factura menos NC, más ND, menos pagos
+    aplicados y excluye pagos reversados.
+  - Facturación, detalle, CxC, vencidas y estado de cuenta consumen el saldo
+    ajustado en lugar del total bruto.
+  - Se agrega estado `Saldada` para facturas compensadas totalmente por NC.
+  - Notas nuevas deben pertenecer al mismo cliente y moneda de la factura.
+  - Registro/reverso de pagos usa el total ajustado para bloquear sobrepagos.
+  - `refresh_invoice_receivable_statuses` y una tarea diaria `pg_cron` a las
+    00:05 UTC sincronizan estados vencidos.
+- Validaciones ejecutadas:
+  - `supabase db reset --local`: OK con todas las migraciones locales presentes.
+  - `supabase/tests/phase4_receivables.sql`: OK; NC/ND, pago parcial/final,
+    sobrepago, moneda, vencimiento, cron y rollback.
+  - `supabase db lint --local --level error`: OK, sin errores.
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido a las tres páginas modificadas: OK, sin errores.
+  - `npm run build`: OK, 63 páginas generadas.
+- Riesgos o trabajo pendiente:
+  - No se aplicó SQL remoto porque existen migraciones ajenas no publicadas con
+    versiones anterior y posterior a esta migración; se requiere confirmar el
+    alcance conjunto antes de `supabase db push`.
+  - Validar manualmente Reportes > Cuentas por cobrar y Vencidas con datos reales.
+- Commit: pendiente.
+
+### 2026-06-23 — PORTAL — Envíos freight con exposición segura
+
+- Estado: En validación; implementación y pruebas locales completadas, remoto pendiente.
+- Hallazgo: SEC-016.
+- Archivos:
+  - `supabase/migrations/20260623020000_phase5_portal_shipments.sql`
+  - `supabase/tests/phase5_portal_shipments.sql`
+  - `src/app/portal/layout.tsx`
+  - `src/app/portal/page.tsx`
+  - `src/app/portal/envios/page.tsx`
+  - `src/app/portal/envios/[id]/page.tsx`
+- Cambios:
+  - El portal incorpora listado, detalle, ruta, hitos, fechas, transporte y
+    referencias documentales de los envíos freight del cliente.
+  - Se descartaron políticas SELECT directas sobre `quotations` y
+    `shipping_instructions`; RLS de filas no protege columnas internas.
+  - `get_client_shipments` verifica rol Cliente y vínculo `cliente_id`, y devuelve
+    únicamente campos comerciales permitidos.
+  - Los contadores usan conteos reales y las fechas evitan desfase UTC/Honduras.
+- Validaciones ejecutadas:
+  - `supabase/tests/phase5_portal_shipments.sql`: OK; aislamiento entre dos
+    clientes, acceso directo bloqueado, columnas internas ausentes y rollback.
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido a Portal, Facturación y Reportes: OK, sin advertencias.
+  - `supabase db lint --local --level error`: OK, sin errores.
+  - `npm run build`: OK, 63 páginas generadas.
+- Validación manual pendiente:
+  - Confirmar listado y detalle con un Cliente que tenga una SI vinculada.
+- Commit: pendiente.
