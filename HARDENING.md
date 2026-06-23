@@ -697,4 +697,4 @@ Agregar una entrada por fix:
 - Próximo paso:
   - Con los conteos remotos, implementar activación CAI atómica, correlativo fiscal
     transaccional y creación conjunta de factura/líneas.
-- Commit: pendiente.
+- Commit: `839df3e`
