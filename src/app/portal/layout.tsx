@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
-import { Package, LogOut, User, Bell, Home } from 'lucide-react'
+import { Package, LogOut, User, Bell, Home, Ship } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { UserProvider, useUser } from '@/src/hooks/useUser'
@@ -46,7 +46,8 @@ function PortalShell({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: '/portal', label: 'Inicio', icon: Home },
-    { href: '/portal/paquetes', label: 'Paquetes', icon: Package },
+    { href: '/portal/envios', label: 'Envíos', icon: Ship },
+    { href: '/portal/paquetes', label: 'Paquetería', icon: Package },
     { href: '/portal/pre-alertas', label: 'Pre-alertas', icon: Bell },
   ]
 
@@ -57,14 +58,16 @@ function PortalShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <Link href="/portal" className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600">
-              <Package className="h-4 w-4 text-white" />
+              <Ship className="h-4 w-4 text-white" />
             </div>
-            <span className="font-semibold text-slate-900 dark:text-white">Mi Paquetería</span>
+            <span className="font-semibold text-slate-900 dark:text-white">Mi Carga</span>
           </Link>
 
           <nav className="hidden items-center gap-1 sm:flex">
             {navItems.map(item => {
-              const active = pathname === item.href
+              const active = item.href === '/portal'
+                ? pathname === '/portal'
+                : pathname.startsWith(item.href)
               return (
                 <Link
                   key={item.href}
@@ -117,7 +120,9 @@ function PortalShell({ children }: { children: React.ReactNode }) {
         {/* Mobile bottom nav */}
         <nav className="flex border-t border-slate-100 sm:hidden dark:border-slate-800">
           {navItems.map(item => {
-            const active = pathname === item.href
+            const active = item.href === '/portal'
+              ? pathname === '/portal'
+              : pathname.startsWith(item.href)
             return (
               <Link
                 key={item.href}
