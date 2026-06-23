@@ -636,4 +636,4 @@ Agregar una entrada por fix:
 - Acción manual:
   - El invitado existente debe abrir su correo de invitación y completar
     onboarding para establecer contraseña; aprobarlo no genera una contraseña.
-- Commit: pendiente.
+- Commit: `37da8d4`
