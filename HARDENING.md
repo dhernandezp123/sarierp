@@ -40,7 +40,7 @@ Fecha: 22/06/2026
 | 1 | Seguridad, RLS y escalamiento de usuarios | Completado |
 | 2 | Migraciones y constraints de integridad | Completado |
 | 3 | Autenticación SSR, sesión y permisos | Completado |
-| 4 | Facturación, CAI, CxC, CxP y pagos | Pendiente |
+| 4 | Facturación, CAI, CxC, CxP y pagos | En progreso |
 | 5 | Transacciones de cotización, pricing y operaciones | Pendiente |
 | 6 | Miami: embarques persistentes e historial | Pendiente |
 | 7 | Estados, alertas y notificaciones | Pendiente |
@@ -679,4 +679,22 @@ Agregar una entrada por fix:
     portal Cliente fueron comprobados de extremo a extremo.
 - Próximo paso:
   - Fase 4: CAI, numeración fiscal, facturación, CxC, CxP y pagos.
+- Commit: `aee39c9`
+
+### 2026-06-23 — FASE-4 — Preflight financiero y fiscal
+
+- Estado: En validación; pendiente ejecutar contra remoto.
+- SQL:
+  - `supabase/preflight/phase4_finance_audit.sql`
+- Validaciones:
+  - Ejecución contra base local reconstruida: OK, 11 verificaciones.
+  - El script es de solo lectura y devuelve únicamente conteos agregados.
+- Alcance:
+  - Rangos CAI activos, formato, orden y vencimiento.
+  - Documentos fiscales sin CAI o fuera del rango estampado.
+  - Facturas sin líneas o con subtotal inconsistente.
+  - Pagos en moneda distinta, sobrepagos y pagos sobre facturas anuladas.
+- Próximo paso:
+  - Con los conteos remotos, implementar activación CAI atómica, correlativo fiscal
+    transaccional y creación conjunta de factura/líneas.
 - Commit: pendiente.
