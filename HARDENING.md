@@ -900,4 +900,4 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - Mantener SEC-016, FIN-006/007 y FLOW-010 en validación hasta probar sus flujos
     de interfaz con datos reales.
-- Commit: pendiente.
+- Commit: `5c6196a`
