@@ -791,7 +791,7 @@ Agregar una entrada por fix:
 
 ### 2026-06-23 — FLOW-010 — Fix acumulación de pricing items en flujo Miami
 
-- Estado: En validación; migración corregida y pendiente de aplicar en remoto.
+- Estado: En validación manual; migración aplicada en remoto.
 - Hallazgo: FLOW-010.
 - Causa raíz: `pricing_items_delete_policy` solo permitía `is_admin()` para DELETE.
   El flujo de guardado Miami en `quotations/[id]/edit` ejecuta DELETE + INSERT para
@@ -810,6 +810,7 @@ Agregar una entrada por fix:
 - Validaciones ejecutadas:
   - `npx tsc --noEmit`: OK, sin errores.
   - `supabase/tests/phase5_pricing_delete_rls.sql`: OK con cinco roles y rollback.
+  - Migración remota aplicada y registrada como `20260623030000`.
 - Validación manual pendiente:
   - Abrir una cotización Miami LCL con pricing existente.
   - Guardar desde `/edit` con un monto de pickup distinto.
@@ -820,11 +821,11 @@ Agregar una entrada por fix:
   - La auditoría `supabase/tests/cleanup_duplicate_pricing_items.sql` es de solo
     lectura. No se eliminarán supuestos duplicados sin revisión y respaldo por
     Pricing/Contabilidad.
-- Commit: pendiente
+- Commit: `2f44573`
 
 ### 2026-06-23 — FASE-4 — CxC ajustada y vencimientos automáticos
 
-- Estado: En validación; pruebas locales completadas y despliegue remoto pendiente.
+- Estado: En validación manual; migración aplicada en remoto.
 - Hallazgos: FIN-006 y FIN-007.
 - Archivos:
   - `supabase/migrations/20260623021500_phase4_receivables.sql`
@@ -850,16 +851,14 @@ Agregar una entrada por fix:
   - `npx tsc --noEmit`: OK.
   - ESLint dirigido a las tres páginas modificadas: OK, sin errores.
   - `npm run build`: OK, 63 páginas generadas.
+  - Migración remota aplicada y registrada como `20260623021500`.
 - Riesgos o trabajo pendiente:
-  - No se aplicó SQL remoto porque existen migraciones ajenas no publicadas con
-    versiones anterior y posterior a esta migración; se requiere confirmar el
-    alcance conjunto antes de `supabase db push`.
   - Validar manualmente Reportes > Cuentas por cobrar y Vencidas con datos reales.
-- Commit: pendiente.
+- Commit: `546fbb2`
 
 ### 2026-06-23 — PORTAL — Envíos freight con exposición segura
 
-- Estado: En validación; implementación y pruebas locales completadas, remoto pendiente.
+- Estado: En validación manual; migración aplicada en remoto.
 - Hallazgo: SEC-016.
 - Archivos:
   - `supabase/migrations/20260623020000_phase5_portal_shipments.sql`
@@ -883,6 +882,22 @@ Agregar una entrada por fix:
   - ESLint dirigido a Portal, Facturación y Reportes: OK, sin advertencias.
   - `supabase db lint --local --level error`: OK, sin errores.
   - `npm run build`: OK, 63 páginas generadas.
+  - Migración remota aplicada y registrada como `20260623020000`.
 - Validación manual pendiente:
   - Confirmar listado y detalle con un Cliente que tenga una SI vinculada.
+- Commit: `ec786fc`
+
+### 2026-06-24 — Sincronización del historial remoto
+
+- Estado: Completado.
+- Acción manual:
+  - Se registraron como aplicadas las migraciones `20260623020000`,
+    `20260623021500`, `20260623030000` y `20260623040000` después de su ejecución
+    satisfactoria en Supabase SQL Editor.
+- Validación:
+  - `supabase migration list --linked`: Local y Remote coinciden en todas las
+    versiones hasta `20260623040000`.
+- Riesgos pendientes:
+  - Mantener SEC-016, FIN-006/007 y FLOW-010 en validación hasta probar sus flujos
+    de interfaz con datos reales.
 - Commit: pendiente.
