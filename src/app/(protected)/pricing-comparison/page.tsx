@@ -957,54 +957,6 @@ function PricingComparisonContent() {
 
     if (reason === null) return
 
-    await supabase
-      .from('pricing_items')
-      .delete()
-      .eq('quotation_id', selectedQuote.id)
-
-    await supabase
-      .from('agent_quotes')
-      .update({ is_selected: false })
-      .eq('quotation_id', selectedQuote.id)
-
-    const { error } = await supabase
-      .from('agent_quotes')
-      .update({ is_selected: true })
-      .eq('id', agentQuoteId)
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-
-    const updatedQuoteFields = {
-      valid_until:
-        selectedAgentQuote.valid_until || selectedQuote.valid_until || null,
-      preferred_carrier:
-        selectedAgentQuote.carrier || selectedQuote.preferred_carrier || null,
-      transit_time:
-        selectedAgentQuote.transit_time || selectedQuote.transit_time || null,
-      transshipment:
-        selectedAgentQuote.transshipment || selectedQuote.transshipment || null,
-    }
-
-    const { error: quotationUpdateError } = await supabase
-      .from('quotations')
-      .update(updatedQuoteFields)
-      .eq('id', selectedQuote.id)
-
-    if (quotationUpdateError) {
-      toast.error(quotationUpdateError.message)
-      return
-    }
-
-    setSelectedQuote({
-      ...selectedQuote,
-      ...updatedQuoteFields,
-    })
-
-    await fetchQuotations()
-
     const currency = selectedAgentQuote.moneda || 'USD'
     const supplier = selectedAgentQuote.agente_nombre || ''
     const containersQty =
@@ -1147,17 +1099,39 @@ function PricingComparisonContent() {
       ...exwLines,
     ]
 
-    const { error: pricingError } = await supabase
-      .from('pricing_items')
-      .insert(pricingLines)
+    const { data: selectionData, error: pricingError } = await supabase.rpc(
+      'select_agent_quote_and_replace_pricing',
+      {
+        p_quotation_id: selectedQuote.id,
+        p_agent_quote_id: agentQuoteId,
+        p_pricing_lines: pricingLines,
+        p_reason: reason,
+      }
+    )
 
     if (pricingError) {
       toast.error(pricingError.message)
       return
     }
 
+    const selection = (selectionData as Array<{
+      valid_until: string | null
+      preferred_carrier: string | null
+      transit_time: string | null
+      transshipment: string | null
+    }> | null)?.[0]
+
+    setSelectedQuote({
+      ...selectedQuote,
+      valid_until: selection?.valid_until || selectedQuote.valid_until || null,
+      preferred_carrier: selection?.preferred_carrier || selectedQuote.preferred_carrier || null,
+      transit_time: selection?.transit_time || selectedQuote.transit_time || null,
+      transshipment: selection?.transshipment || selectedQuote.transshipment || null,
+    })
+
     toast.success('Tarifa seleccionada')
 
+    await fetchQuotations()
     await fetchAgentQuotes(selectedQuote.id)
     await fetchPricingItems(selectedQuote.id)
   }

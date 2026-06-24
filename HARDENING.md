@@ -93,8 +93,8 @@ Fecha: 22/06/2026
 
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
-| FLOW-001 | Estados legacy y actuales de cotización no coinciden | Crítica | Pendiente |
-| FLOW-002 | Selección de tarifa y regeneración de pricing no son atómicas | Crítica | Pendiente |
+| FLOW-001 | Estados legacy y actuales de cotización no coinciden | Crítica | En validación |
+| FLOW-002 | Selección de tarifa y regeneración de pricing no son atómicas | Crítica | En validación |
 | FLOW-003 | Operaciones `delete + insert` pueden perder contenedores, carga, BL o pricing | Crítica | Pendiente |
 | FLOW-004 | Creación de cotización y tablas hijas no tiene rollback | Alta | Pendiente |
 | FLOW-005 | Repricing puede actualizar SI y bookings parcialmente | Alta | Pendiente |
@@ -901,3 +901,41 @@ Agregar una entrada por fix:
   - Mantener SEC-016, FIN-006/007 y FLOW-010 en validación hasta probar sus flujos
     de interfaz con datos reales.
 - Commit: `5c6196a`
+
+### 2026-06-24 — FASE-5 — Selección atómica de tarifa de agente
+
+- Estado: En validación manual; migración aplicada en remoto.
+- Hallazgos: FLOW-001 y FLOW-002.
+- Archivos:
+  - `supabase/migrations/20260624010000_phase5_atomic_agent_selection.sql`
+  - `supabase/tests/phase5_atomic_agent_selection.sql`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/lib/tarifa-expiry-check.ts`
+- Cambios:
+  - La selección de tarifa, deselección anterior, reemplazo de pricing y
+    sincronización comercial se ejecutan en una sola transacción mediante RPC.
+  - El RPC valida rol Pricing/Admin, pertenencia de la tarifa, motivo y valores
+    no negativos antes de modificar datos, y registra el evento en
+    `activity_logs`.
+  - Las alertas de vencimiento usan los estados vigentes del flujo en lugar del
+    estado legacy `Cotizada`.
+  - El proceso global de vencimientos deja de ser ejecutable por `anon` y
+    `authenticated`; queda reservado a `service_role` y tareas internas.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+  - `supabase db reset --local --yes`: OK desde baseline hasta
+    `20260624010000`.
+  - `supabase/tests/phase5_atomic_agent_selection.sql`: OK; selección única,
+    reemplazo total, sincronización, rollback ante línea inválida y permisos.
+  - `supabase db lint --local --level error`: OK, sin errores.
+  - `npm run build`: OK, 63 páginas generadas.
+  - Migración remota aplicada y registrada como `20260624010000`.
+  - `supabase migration list --linked`: historial local/remoto alineado.
+  - `supabase db push --linked --dry-run`: remoto actualizado, sin pendientes.
+  - ESLint dirigido: conserva 31 errores y 5 advertencias preexistentes del
+    archivo histórico de Pricing; el cambio no agrega nuevos usos de `any`.
+- Riesgos o trabajo pendiente:
+  - Probar manualmente el cambio de tarifa en Pricing Comparison con dos
+    alternativas y confirmar el motivo, totales y refresco visual.
+- Commit: pendiente.

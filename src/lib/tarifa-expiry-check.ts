@@ -29,10 +29,17 @@ export async function checkAndNotifyExpiredTarifas() {
   if (expiredError) throw expiredError
   if (!expiredQuotes || expiredQuotes.length === 0) return
 
-  // Filter to only quotations still in 'Cotizada' status
+  const activeQuotationStatuses = new Set([
+    'Pendiente de Fijar Precios',
+    'Pricing Aprobado',
+    'Enviada al Cliente',
+    'Ganada',
+  ])
+
+  // Only quotations that remain active in the current workflow.
   const relevant = (expiredQuotes as ExpiredQuoteRow[]).filter((aq) => {
     const q = Array.isArray(aq.quotations) ? aq.quotations[0] : aq.quotations
-    return q?.status === 'Cotizada'
+    return Boolean(q?.status && activeQuotationStatuses.has(q.status))
   })
 
   if (relevant.length === 0) return
