@@ -12,6 +12,7 @@ import {
   FileText,
   History,
   ActivitySquare,
+  CalendarClock,
   Scale,
   DollarSign,
   BarChart3,
@@ -105,6 +106,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       label: 'Alertas',
       href: '/alerts',
       icon: Bell,
+    },
+    {
+      label: 'Actividades',
+      href: '/ventas',
+      icon: CalendarClock,
     },
     {
       label: 'Clientes',
