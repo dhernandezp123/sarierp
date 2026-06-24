@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Activity,
   BarChart3,
+  Bell,
   Calculator,
   Check,
   ChevronRight,
@@ -20,15 +21,18 @@ import {
   FileText,
   FolderOpen,
   Globe2,
+  Lock,
   Mail,
   Menu,
   MessageCircle,
+  Package,
   Plane,
   Printer,
   Route,
   Scale,
   ShieldCheck,
   Ship,
+  Smartphone,
   Sparkles,
   Tags,
   Users,
@@ -56,6 +60,7 @@ const navigation = [
   { label: 'Beneficios', href: '#beneficios' },
   { label: 'Funcionalidades', href: '#funcionalidades' },
   { label: 'Workflow', href: '#workflow' },
+  { label: 'Portal Cliente', href: '#portal' },
   { label: 'Contacto', href: '#demo' },
 ]
 
@@ -198,6 +203,11 @@ const comparison = [
     item: 'Seguimiento operativo',
     generic: 'Mensajes aislados',
     product: 'Actividad visible para el equipo',
+  },
+  {
+    item: 'Portal del cliente',
+    generic: 'Correos y llamadas de estado',
+    product: 'Visibilidad self-service en tiempo real',
   },
 ]
 
@@ -461,6 +471,79 @@ function DashboardMockup() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function ClientPortalMockup() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 30 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true, margin: '-100px' }}
+      transition={{ duration: 0.7, ease: 'easeOut' }}
+      className="relative mx-auto max-w-sm"
+    >
+      <div className="absolute -inset-4 -z-10 rounded-3xl bg-[#0038BD]/10 blur-2xl" />
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-[#0038BD]/10 ring-1 ring-slate-900/5">
+        {/* Header del portal */}
+        <div className="flex items-center justify-between bg-[#07111F] px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#EF8E01]">
+              <Globe2 size={12} className="text-white" />
+            </span>
+            <span className="text-xs font-semibold text-white">Mi Portal</span>
+          </div>
+          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+            Activo
+          </span>
+        </div>
+
+        {/* Saludo */}
+        <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3">
+          <p className="text-[10px] text-slate-400">Bienvenido,</p>
+          <p className="text-sm font-bold text-[#07111F]">Importadora Caribe S.A.</p>
+        </div>
+
+        {/* Embarques */}
+        <div className="p-4">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Mis embarques
+          </p>
+          <div className="space-y-2.5">
+            {[
+              { id: 'MIA-0241', desc: 'Miami → San Pedro Sula', status: 'En tránsito', dotColor: 'bg-[#EF8E01]', textColor: 'text-[#B86900]', bg: 'border-[#EF8E01]/15 bg-[#EF8E01]/5' },
+              { id: 'SHA-0239', desc: 'Shanghai → Puerto Cortés', status: 'Booking', dotColor: 'bg-blue-500', textColor: 'text-blue-600', bg: 'border-blue-100 bg-blue-50/50' },
+              { id: 'MIA-0235', desc: 'Miami → San Pedro Sula', status: 'Entregado', dotColor: 'bg-emerald-500', textColor: 'text-emerald-600', bg: 'border-emerald-100 bg-emerald-50/50' },
+            ].map((s) => (
+              <div
+                key={s.id}
+                className={`flex items-center justify-between rounded-xl border p-3 ${s.bg}`}
+              >
+                <div>
+                  <p className="font-mono text-[10px] text-slate-400">{s.id}</p>
+                  <p className="text-xs font-semibold text-[#07111F]">{s.desc}</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${s.dotColor}`} />
+                  <span className={`text-[11px] font-semibold ${s.textColor}`}>{s.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Notificación */}
+        <div className="mx-4 mb-4 rounded-xl border border-[#0038BD]/15 bg-[#0038BD]/5 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <Bell size={13} className="mt-0.5 shrink-0 text-[#0038BD]" />
+            <div>
+              <p className="text-xs font-semibold text-[#07111F]">Nuevo documento disponible</p>
+              <p className="text-[11px] text-slate-500">Bill of Lading MIA-0241 listo para descargar</p>
             </div>
           </div>
         </div>
@@ -1115,6 +1198,66 @@ export function ForwardersLanding() {
         </div>
       </section>
 
+      {/* ── Portal del Cliente ───────────────────────────────────────────── */}
+      <section id="portal" className="relative overflow-hidden bg-[#F0F2F5] px-5 py-20 sm:px-8">
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(0,56,189,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(0,56,189,0.03)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_center,white,transparent_80%)]" />
+        <div className="relative z-10 mx-auto max-w-7xl">
+          <div className="grid gap-16 lg:grid-cols-2 lg:items-center">
+            <motion.div
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: '-100px' }}
+              variants={stagger}
+            >
+              <motion.div
+                variants={fadeUp}
+                className="mb-4 inline-flex items-center gap-2 rounded-full bg-[#0038BD]/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.25em] text-[#0038BD]"
+              >
+                <Smartphone size={13} />
+                Portal del Cliente
+              </motion.div>
+
+              <motion.h2
+                variants={fadeUp}
+                className="mt-2 text-4xl font-extrabold leading-[1.15] tracking-tight text-[#07111F] sm:text-5xl"
+              >
+                Tus clientes con visibilidad propia.
+              </motion.h2>
+
+              <motion.p
+                variants={fadeUp}
+                className="mt-6 text-lg leading-relaxed text-slate-500"
+              >
+                Cada importador accede a su propio portal para rastrear embarques,
+                descargar documentos y recibir alertas — sin necesidad de llamar
+                o escribirte por WhatsApp.
+              </motion.p>
+
+              <motion.ul variants={stagger} className="mt-8 space-y-4">
+                {[
+                  { icon: Package, title: 'Tracking en tiempo real', desc: 'Tus clientes ven el estado de cada embarque desde su portal privado.' },
+                  { icon: Bell, title: 'Alertas y notificaciones', desc: 'Documentos nuevos, actualizaciones de estado y avisos automáticos.' },
+                  { icon: Lock, title: 'Acceso seguro por invitación', desc: 'Registro controlado con onboarding propio y recuperación de contraseña.' },
+                  { icon: Eye, title: 'Sin intermediarios', desc: 'El cliente no necesita llamar para saber dónde está su carga.' },
+                ].map(({ icon: Icon, title, desc }) => (
+                  <motion.li key={title} variants={fadeUp} className="flex items-start gap-4">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#0038BD] shadow-sm ring-1 ring-slate-200">
+                      <Icon size={18} strokeWidth={2} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#07111F]">{title}</p>
+                      <p className="mt-0.5 text-sm leading-relaxed text-slate-500">{desc}</p>
+                    </div>
+                  </motion.li>
+                ))}
+              </motion.ul>
+            </motion.div>
+
+            <ClientPortalMockup />
+          </div>
+        </div>
+      </section>
+
       {/* ── Comparativa ──────────────────────────────────────────────────── */}
       <section className="bg-white px-5 py-20 sm:px-8">
         <div className="mx-auto max-w-5xl">
@@ -1278,6 +1421,7 @@ export function ForwardersLanding() {
                   { label: 'Beneficios', href: '#beneficios' },
                   { label: 'Funcionalidades', href: '#funcionalidades' },
                   { label: 'Workflow', href: '#workflow' },
+                  { label: 'Portal Cliente', href: '#portal' },
                   { label: 'Contacto', href: '#demo' },
                 ].map((link) => (
                   <a

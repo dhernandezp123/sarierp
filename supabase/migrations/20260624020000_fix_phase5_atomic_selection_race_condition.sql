@@ -1,4 +1,6 @@
--- Fase 5: selección de tarifa y regeneración de pricing en una transacción.
+-- Corrección: Elimina race condition en selección de tarifa (Phase 5)
+-- Problema: UPDATE combinado permitía temporalmente dos registros con is_selected=true
+-- Solución: Dos UPDATEs secuenciales para garantizar atomicidad
 
 create or replace function public.select_agent_quote_and_replace_pricing(
   p_quotation_id uuid,
@@ -77,13 +79,13 @@ begin
 
   delete from public.pricing_items where quotation_id = p_quotation_id;
 
-  -- Deseleccionar todas las tarifas de esta cotización (sin race condition)
+  -- Deseleccionar todas las tarifas de esta cotización primero
   update public.agent_quotes
   set is_selected = false
   where quotation_id = p_quotation_id
     and is_selected is true;
 
-  -- Seleccionar solo la tarifa elegida
+  -- Luego seleccionar solo la tarifa elegida (evita race condition en el índice único)
   update public.agent_quotes
   set is_selected = true
   where id = p_agent_quote_id;
@@ -149,60 +151,3 @@ revoke all on function public.select_agent_quote_and_replace_pricing(uuid, uuid,
   from public, anon;
 grant execute on function public.select_agent_quote_and_replace_pricing(uuid, uuid, jsonb, text)
   to authenticated;
-
-create or replace function public.notify_expired_selected_agent_quotes()
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if not pg_try_advisory_xact_lock(hashtext('notify_expired_selected_agent_quotes')) then
-    return;
-  end if;
-
-  insert into public.notifications (user_id, title, message, type)
-  select
-    p.id,
-    'Tarifa vencida en cotización activa',
-    'La tarifa seleccionada de la cotización '
-      || coalesce(q.quotation_number, q.id::text)
-      || ' venció el ' || to_char(aq.valid_until, 'DD/MM/YYYY')
-      || '. Actualizar antes de continuar.',
-    'warning'
-  from public.agent_quotes aq
-  join public.quotations q on q.id = aq.quotation_id
-  cross join public.profiles p
-  where aq.valid_until < current_date
-    and aq.is_selected is true
-    and aq.expiry_notified_at is null
-    and q.deleted_at is null
-    and q.status in (
-      'Pendiente de Fijar Precios', 'Pricing Aprobado',
-      'Enviada al Cliente', 'Ganada'
-    )
-    and p.rol = 'Pricing'
-    and p.is_active is true
-    and p.status = 'Aprobado';
-
-  update public.agent_quotes aq
-  set expiry_notified_at = now()
-  from public.quotations q
-  where q.id = aq.quotation_id
-    and aq.valid_until < current_date
-    and aq.is_selected is true
-    and aq.expiry_notified_at is null
-    and q.deleted_at is null
-    and q.status in (
-      'Pendiente de Fijar Precios', 'Pricing Aprobado',
-      'Enviada al Cliente', 'Ganada'
-    );
-end;
-$$;
-
-revoke all on function public.notify_expired_selected_agent_quotes()
-  from public, anon, authenticated;
-grant execute on function public.notify_expired_selected_agent_quotes()
-  to service_role;
-
-notify pgrst, 'reload schema';

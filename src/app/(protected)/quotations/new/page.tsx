@@ -598,6 +598,11 @@ export default function NewQuotationPage() {
       return
     }
 
+    if (!formData.incoterm) {
+      toast.error('Debes seleccionar el Incoterm')
+      return
+    }
+
     const submitIsMiamiFlow = usesClientRates(formData.service_product)
 
     if (formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
@@ -632,6 +637,11 @@ export default function NewQuotationPage() {
 
       if (requiresCargoLines && cargoLines.length === 0) {
         toast.error('Agrega al menos una línea de carga')
+        return
+      }
+
+      if (!formData.commodity) {
+        toast.error('Debes ingresar la mercancía / descripción')
         return
       }
     }
@@ -1179,13 +1189,13 @@ export default function NewQuotationPage() {
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Incoterm
+                Incoterm <span className="text-red-400">*</span>
               </label>
               <select
                 name="incoterm"
                 value={formData.incoterm}
                 onChange={handleChange}
-                className={fieldClass}
+                className={`${fieldClass} ${reqClass(formData.incoterm)}`}
               >
                 <option value="">Seleccionar Incoterm</option>
                 <option value="EXW">EXW</option>
@@ -2139,14 +2149,14 @@ export default function NewQuotationPage() {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Mercancía / Commodity
+                  Mercancía / Commodity <span className="text-red-400">*</span>
                 </label>
                 <input
                   name="commodity"
                   placeholder="Descripción de la mercancía"
                   value={formData.commodity}
                   onChange={handleChange}
-                  className={fieldClass}
+                  className={`${fieldClass} ${reqClass(formData.commodity)}`}
                 />
               </div>
 

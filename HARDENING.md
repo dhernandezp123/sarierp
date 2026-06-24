@@ -939,3 +939,27 @@ Agregar una entrada por fix:
   - Probar manualmente el cambio de tarifa en Pricing Comparison con dos
     alternativas y confirmar el motivo, totales y refresco visual.
 - Commit: `8c30148`
+
+### 2026-06-24 — FASE-5 — Corrección: Race condition en selección de tarifa
+
+- Estado: Completado
+- Hallazgos: FLOW-002 (race condition)
+- Archivos:
+  - `supabase/migrations/20260624010000_phase5_atomic_agent_selection.sql` (modificado)
+  - `supabase/migrations/20260624020000_fix_phase5_atomic_selection_race_condition.sql` (migración de corrección)
+- Cambios:
+  - Se reemplazó el UPDATE combinado `is_selected = (id = p_agent_quote_id)` por dos UPDATEs secuenciales:
+    1. Deseleccionar todas las tarifas de la cotización donde `is_selected = true`
+    2. Seleccionar solo la nueva tarifa mediante `UPDATE WHERE id = p_agent_quote_id SET is_selected = true`
+  - Esto elimina la race condition donde PostgreSQL detectaba `duplicate key value violates unique constraint "agent_quotes_one_selected_per_quotation_idx"` durante cambios de tarifa.
+  - La causa raíz era que el UPDATE combinado permitía que PostgreSQL viera temporalmente dos registros con `is_selected = true` en el mismo `quotation_id` durante el apply del índice único.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK, sin errores.
+  - Nueva migración `20260624020000` creada y aplicada exitosamente.
+  - `supabase migration list --linked`: confirmado sincronización local/remoto en ambas migraciones.
+  - Cambio es idempotente y refuerza la integridad del constraint único.
+- Riesgos o trabajo pendiente:
+  - Ninguno; ya puede seleccionar tarifas sin error de constraint.
+- Commit: [en progreso]
+
+

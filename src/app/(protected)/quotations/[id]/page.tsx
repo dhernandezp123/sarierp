@@ -68,6 +68,10 @@ const getServiceProductLabel = (value?: string | null) => {
       return 'Marítimo FCL'
     case 'other_origin_lcl':
       return 'Marítimo LCL'
+    case 'other_origin_air':
+      return 'Aéreo Consolidado'
+    case 'usa_ltl_ftl':
+      return 'LTL / FTL USA'
     case 'courier':
       return 'Courier'
     default:
@@ -1342,26 +1346,56 @@ const combinedTimeline: CommercialTimelineEvent[] = [
   const clienteNombre = quotation?.contact_name || quotation?.clientes?.nombre || 'cliente'
   const emailSubjectQ = `Cotización ${quotation?.quotation_number || ''} - Sari Express`
   const commercialTotal = pricingTotals.total || Number(quotation?.total_sale || 0)
+
+  const containerEmailSummary =
+    (quoteType === 'FCL' || quoteType === 'FTL') && quotationContainers.length > 0
+      ? quotationContainers
+          .map((c: any) => `${c.quantity}x ${c.container_type_name || c.container_type || ''}`)
+          .join(', ')
+      : null
+
+  const carrierEmailLabel =
+    transportType === 'Terrestre'
+      ? 'Transportista'
+      : transportType === 'Aéreo'
+        ? 'Aerolínea'
+        : 'Carrier'
+
+  const isMiamiEmailFlow =
+    quotation?.service_product === 'miami_lcl' || quotation?.service_product === 'miami_air'
+
   const emailBodyQ = [
-    `Estimado/a ${clienteNombre},`,
+    `Buen día ${clienteNombre},`,
     '',
-    'Le presentamos nuestra cotización de servicios logísticos:',
+    'Espero que se encuentre bien.',
+    `En adjunto encontrarán nuestra cotización para el movimiento de su carga con origen ${originPort} y destino ${destinationPort}.`,
     '',
     `Cotización #:   ${quotation?.quotation_number || '—'}`,
-    `Servicio:       ${quotation?.incoterm || ''} ${quotation?.quote_type || ''}`.trim(),
+    `Servicio:       ${serviceProductLabel !== 'N/A' ? serviceProductLabel : quotation?.quote_type || '—'}`,
+    `Incoterm:       ${quotation?.incoterm || '—'}`,
     `Origen:         ${originPort}`,
     `Destino:        ${destinationPort}`,
     `Commodity:      ${quotation?.commodity || '—'}`,
+    ...(containerEmailSummary ? [`Contenedores:   ${containerEmailSummary}`] : []),
     '',
     ...(selectedAgent ? [
       'TARIFA SELECCIONADA',
-      `Carrier:        ${carrierLabel}`,
+      `${carrierEmailLabel}:${' '.repeat(Math.max(1, 16 - carrierEmailLabel.length - 1))}${carrierLabel}`,
       `Tránsito:       ${transitDays ? `${transitDays} días` : '—'}`,
       `ETD estimado:   ${etdLabel}`,
+      ...(freeDays ? [`Días libres:    ${freeDays} días`] : []),
       ...(commercialTotal > 0 ? [`Tarifa comercial: USD ${commercialTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
       `Tarifa válida hasta: ${formatDisplayDate(selectedAgent.valid_until || quotation?.valid_until)}`,
       '',
     ] : []),
+    ...(!selectedAgent && isMiamiEmailFlow && commercialTotal > 0 ? [
+      'TARIFA',
+      `Tarifa comercial: USD ${commercialTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      `Válida hasta:    ${formatDisplayDate(quotation?.valid_until)}`,
+      '',
+    ] : []),
+    'Quedamos atentos a su confirmación y a cualquier consulta adicional.',
+    '',
     plantillaCotizacion || 'Saludos cordiales,\nSari Express — Equipo Comercial',
   ].join('\n')
 

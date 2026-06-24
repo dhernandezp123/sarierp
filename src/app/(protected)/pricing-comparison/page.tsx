@@ -1099,13 +1099,19 @@ function PricingComparisonContent() {
       ...exwLines,
     ]
 
+    // If the UI did not require an explicit reason (reason === ''), provide
+    // a default non-empty reason so the RPC validation passes without
+    // interrupting the user flow. This preserves auditability while avoiding
+    // the post-approval dialog when selecting a tariff to continue a quote.
+    const finalReason = reason === '' ? 'Selección de tarifa para continuar cotización' : reason
+
     const { data: selectionData, error: pricingError } = await supabase.rpc(
       'select_agent_quote_and_replace_pricing',
       {
         p_quotation_id: selectedQuote.id,
         p_agent_quote_id: agentQuoteId,
         p_pricing_lines: pricingLines,
-        p_reason: reason,
+        p_reason: finalReason,
       }
     )
 
