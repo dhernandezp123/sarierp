@@ -938,4 +938,4 @@ Agregar una entrada por fix:
 - Riesgos o trabajo pendiente:
   - Probar manualmente el cambio de tarifa en Pricing Comparison con dos
     alternativas y confirmar el motivo, totales y refresco visual.
-- Commit: pendiente.
+- Commit: `8c30148`
