@@ -54,6 +54,8 @@ export type MiamiPricingItemInput = {
   lclByLbs: number
   minimumApplied: number
   airEstimated: number
+  airChargeableKg: number
+  airMinimumApplied: number
   bunkerRule?: SurchargeRule | null
   bunkerAmount: number
   pickupAmount: number
@@ -72,6 +74,8 @@ export function buildMiamiPricingItems({
   lclByLbs,
   minimumApplied,
   airEstimated,
+  airChargeableKg,
+  airMinimumApplied,
   bunkerRule,
   bunkerAmount,
   pickupAmount,
@@ -241,6 +245,10 @@ export function buildMiamiPricingItems({
   }
 
   if (serviceProduct === 'miami_air') {
+    const airNotes = airMinimumApplied > 0
+      ? `Mínimo aéreo aplicado USD ${airMinimumApplied.toFixed(2)} (${airChargeableKg.toFixed(2)} kg facturable).`
+      : `Cálculo automático: ${airChargeableKg.toFixed(2)} KG x tarifa cliente.`
+
     const items = [
       {
         quotation_id: quotationId,
@@ -256,7 +264,7 @@ export function buildMiamiPricingItems({
         currency: 'USD',
         taxable: false,
         supplier: 'Sari Express',
-        notes: 'Cálculo automático: KG x tarifa cliente.',
+        notes: airNotes,
         created_by: createdBy,
       },
     ]

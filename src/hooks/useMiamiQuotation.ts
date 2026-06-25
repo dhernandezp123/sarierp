@@ -159,7 +159,24 @@ export function useMiamiQuotation({
     serviceProduct === 'miami_lcl' || serviceProduct === 'miami_air'
   const canUseMiamiCalculator = isMiamiFlow && !!clienteId && clientRates.length > 0
 
-  const airEstimated = Number(miamiCalc.kg || 0) * miamiAirKgRate
+  const AIR_MIN_SMALL = 270   // < 22 kg  (< ~50 lbs)
+  const AIR_MIN_LARGE = 375   // 22–40 kg (~50–90 lbs)
+  const AIR_KG_THRESHOLD_SMALL = 22
+  const AIR_KG_THRESHOLD_LARGE = 40
+
+  const airChargeableKg = Number(miamiCalc.kg || 0)
+  const airCalculated   = airChargeableKg * miamiAirKgRate
+
+  let airEstimated       = airCalculated
+  let airMinimumApplied  = 0
+
+  if (airChargeableKg > 0 && airChargeableKg < AIR_KG_THRESHOLD_SMALL) {
+    airEstimated      = Math.max(airCalculated, AIR_MIN_SMALL)
+    airMinimumApplied = AIR_MIN_SMALL
+  } else if (airChargeableKg >= AIR_KG_THRESHOLD_SMALL && airChargeableKg <= AIR_KG_THRESHOLD_LARGE) {
+    airEstimated      = Math.max(airCalculated, AIR_MIN_LARGE)
+    airMinimumApplied = AIR_MIN_LARGE
+  }
 
   const pickupRate =
     getClientRateAmount('recolectas_internas') ||
@@ -201,6 +218,8 @@ export function useMiamiQuotation({
       lclByLbs,
       minimumApplied: miamiLclResult.minimumApplied,
       airEstimated,
+      airChargeableKg,
+      airMinimumApplied,
       bunkerRule,
       bunkerAmount,
       pickupAmount,
@@ -426,6 +445,8 @@ export function useMiamiQuotation({
     isMiamiFlow,
     canUseMiamiCalculator,
     airEstimated,
+    airChargeableKg,
+    airMinimumApplied,
     pickupRate,
     bunkerRule,
     bunkerAmount,
