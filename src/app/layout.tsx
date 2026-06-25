@@ -18,6 +18,14 @@ export const metadata: Metadata = {
   title: "Forwarders ERP by DHer",
   description:
     "ERP para freight forwarders: cotizaciones, pricing, operaciones, documentos y margenes en una sola plataforma.",
+  icons: {
+    icon: [
+      { url: '/brand/app-icon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/brand/app-icon-16.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: { url: '/brand/app-icon-1024.png' },
+    shortcut: '/brand/app-icon-32.png',
+  },
 };
 
 export default function RootLayout({

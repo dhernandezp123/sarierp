@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { canAccessPath } from '@/src/lib/permissions'
@@ -327,8 +328,14 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
           href="/dashboard"
           className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-lg shadow-slate-950/10 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.09]"
         >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#EF8E01] to-[#0038BD] text-white shadow-lg shadow-[#0038BD]/20">
-            <LayoutDashboard size={19} />
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl overflow-hidden">
+            <Image
+              src="/brand/isotipo-blanco.png"
+              alt="Forwarders ERP"
+              width={44}
+              height={44}
+              className="h-11 w-11 object-contain"
+            />
           </span>
 
           <span className="min-w-0">

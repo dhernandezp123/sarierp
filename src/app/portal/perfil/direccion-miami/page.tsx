@@ -2,17 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { MapPin, Copy, CheckCircle2, ChevronLeft } from 'lucide-react'
+import { MapPin, Copy, CheckCircle2, ChevronLeft, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 
-type Address = {
-  id?: string
-  nombre_completo: string
-  company_name: string
+type MiamiAddress = {
+  consignee: string
   address_line: string
-  suite: string
+  suite_prefix: string
   city: string
   state: string
   zip: string
@@ -20,121 +18,88 @@ type Address = {
   phone: string
 }
 
-const EMPTY: Address = {
-  nombre_completo: '',
-  company_name: '',
-  address_line: '',
-  suite: '',
-  city: 'Miami',
-  state: 'FL',
-  zip: '',
-  country: 'USA',
-  phone: '',
-}
-
 export default function DireccionMiamiPage() {
   const { profile } = useUser()
   const router = useRouter()
-  const [address, setAddress] = useState<Address>(EMPTY)
-  const [hasAddress, setHasAddress] = useState(false)
+  const [address, setAddress] = useState<MiamiAddress | null>(null)
+  const [codigoCliente, setCodigoCliente] = useState<string | null>(null)
+  const [clienteNombre, setClienteNombre] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const loadAddress = async (clientId: string) => {
-    const { data } = await supabase
-      .from('client_addresses')
-      .select('*')
-      .eq('cliente_id', clientId)
-      .eq('is_active', true)
-      .maybeSingle()
+  useEffect(() => {
+    if (!profile) return
+    void loadData()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.cliente_id])
 
-    if (data) {
+  const loadData = async () => {
+    const [settingsResult, clienteResult] = await Promise.all([
+      supabase
+        .from('company_settings')
+        .select('miami_consignee, miami_address_line, miami_suite_prefix, miami_city, miami_state, miami_zip, miami_country, miami_phone')
+        .limit(1)
+        .maybeSingle(),
+      profile?.cliente_id
+        ? supabase
+            .from('clientes')
+            .select('codigo_cliente, nombre')
+            .eq('id', profile.cliente_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ])
+
+    if (settingsResult.data) {
+      const d = settingsResult.data as any
       setAddress({
-        id: data.id,
-        nombre_completo: data.nombre_completo ?? '',
-        company_name:    data.company_name ?? '',
-        address_line:    data.address_line ?? '',
-        suite:           data.suite ?? '',
-        city:            data.city ?? 'Miami',
-        state:           data.state ?? 'FL',
-        zip:             data.zip ?? '',
-        country:         data.country ?? 'USA',
-        phone:           data.phone ?? '',
+        consignee:    d.miami_consignee    ?? '',
+        address_line: d.miami_address_line ?? '',
+        suite_prefix: d.miami_suite_prefix ?? '',
+        city:         d.miami_city         ?? 'Miami',
+        state:        d.miami_state        ?? 'FL',
+        zip:          d.miami_zip          ?? '',
+        country:      d.miami_country      ?? 'USA',
+        phone:        d.miami_phone        ?? '',
       })
-      setHasAddress(true)
     }
+
+    if (clienteResult.data) {
+      setCodigoCliente((clienteResult.data as any).codigo_cliente ?? null)
+      setClienteNombre((clienteResult.data as any).nombre ?? null)
+    }
+
     setLoading(false)
   }
 
-  useEffect(() => {
-    const clientId = profile?.cliente_id
-    if (!clientId) return
-    const timeout = window.setTimeout(() => void loadAddress(clientId), 0)
-    return () => window.clearTimeout(timeout)
-  }, [profile?.cliente_id])
+  const buildLines = (): string[] => {
+    if (!address) return []
+    const suite = address.suite_prefix
+      ? `${address.suite_prefix}${codigoCliente ?? ''}`
+      : (codigoCliente ?? '')
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!profile?.cliente_id) { toast.error('No se encontró el cliente asociado'); return }
-    if (!address.nombre_completo.trim()) { toast.error('El nombre es requerido'); return }
-    if (!address.address_line.trim())   { toast.error('La dirección es requerida'); return }
-    if (!address.zip.trim())            { toast.error('El ZIP es requerido'); return }
-
-    setSaving(true)
-    try {
-      const payload = {
-        cliente_id:      profile.cliente_id,
-        nombre_completo: address.nombre_completo.trim(),
-        company_name:    address.company_name.trim() || null,
-        address_line:    address.address_line.trim(),
-        suite:           address.suite.trim() || null,
-        city:            address.city.trim() || 'Miami',
-        state:           address.state.trim() || 'FL',
-        zip:             address.zip.trim(),
-        country:         address.country.trim() || 'USA',
-        phone:           address.phone.trim() || null,
-        is_active:       true,
-      }
-
-      if (hasAddress && address.id) {
-        const { error } = await supabase.from('client_addresses').update(payload).eq('id', address.id)
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase.from('client_addresses').insert(payload).select('id').single()
-        if (error) throw error
-        setAddress(prev => ({ ...prev, id: data.id }))
-        setHasAddress(true)
-      }
-
-      toast.success('Dirección guardada')
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
+    return [
+      clienteNombre,
+      address.consignee || null,
+      suite
+        ? `${address.address_line} ${suite}`.trim()
+        : address.address_line,
+      `${address.city}, ${address.state} ${address.zip}`.trim(),
+      address.country,
+      address.phone ? `Tel: ${address.phone}` : null,
+    ].filter((l): l is string => !!l && l.trim() !== '')
   }
 
   const copyAddress = () => {
-    const lines = [
-      address.nombre_completo,
-      address.company_name || null,
-      address.suite ? `${address.address_line} Suite ${address.suite}` : address.address_line,
-      `${address.city}, ${address.state} ${address.zip}`,
-      address.country,
-      address.phone ? `Tel: ${address.phone}` : null,
-    ].filter(Boolean).join('\n')
-
-    navigator.clipboard.writeText(lines)
+    const text = buildLines().join('\n')
+    if (!text) return
+    navigator.clipboard.writeText(text)
     setCopied(true)
     toast.success('Dirección copiada al portapapeles')
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const set = (key: keyof Address) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setAddress(prev => ({ ...prev, [key]: e.target.value }))
-
-  const fieldClass = 'h-10 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-950'
+  const lines = buildLines()
+  const isReady = address && address.address_line
 
   if (loading) return (
     <div className="space-y-4">
@@ -161,13 +126,15 @@ export default function DireccionMiamiPage() {
         </div>
       </div>
 
-      {/* Address preview card */}
-      {hasAddress && address.address_line && (
+      {/* Address card */}
+      {isReady ? (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900/40 dark:bg-blue-950/20">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Tu dirección de consignación</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+                Tu dirección de consignación
+              </p>
             </div>
             <button
               type="button"
@@ -180,117 +147,37 @@ export default function DireccionMiamiPage() {
               }
             </button>
           </div>
+
           <div className="select-all rounded-xl bg-white/60 px-4 py-3 font-mono text-sm leading-relaxed text-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
-            <p className="font-semibold">{address.nombre_completo}</p>
-            {address.company_name && <p>{address.company_name}</p>}
-            <p>{address.suite ? `${address.address_line} Suite ${address.suite}` : address.address_line}</p>
-            <p>{address.city}, {address.state} {address.zip}</p>
-            <p>{address.country}</p>
-            {address.phone && <p>Tel: {address.phone}</p>}
+            {lines.map((line, i) => (
+              <p key={i} className={i === 0 ? 'font-semibold' : ''}>{line}</p>
+            ))}
           </div>
-          <p className="mt-2 text-xs text-blue-500 dark:text-blue-400">
-            Toca el recuadro blanco para seleccionar todo el texto, o usa el botón Copiar.
+
+          {codigoCliente && (
+            <p className="mt-2 text-xs text-blue-500 dark:text-blue-400">
+              Tu código de cliente es <span className="font-semibold">{codigoCliente}</span>. Aparece en la dirección como identificador de suite.
+            </p>
+          )}
+
+          <p className="mt-1 text-xs text-blue-400 dark:text-blue-500">
+            Toca el recuadro para seleccionar todo el texto, o usa el botón Copiar.
           </p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-800/40 dark:bg-amber-950/20">
+          <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Dirección no disponible aún</p>
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              Nuestro equipo está configurando tu dirección de recepción en Miami. Contáctanos si necesitas esta información con urgencia.
+            </p>
+          </div>
         </div>
       )}
 
-      {/* Edit form */}
-      <form onSubmit={handleSave} className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="mb-4 font-semibold text-slate-900 dark:text-white">
-          {hasAddress ? 'Editar dirección' : 'Agregar dirección'}
-        </h2>
-
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-              Nombre completo <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={address.nombre_completo}
-              onChange={set('nombre_completo')}
-              placeholder="Nombre que aparecerá en el paquete"
-              required
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-              Empresa (opcional)
-            </label>
-            <input
-              value={address.company_name}
-              onChange={set('company_name')}
-              placeholder="Nombre de empresa si aplica"
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-              Dirección <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={address.address_line}
-              onChange={set('address_line')}
-              placeholder="8350 NW 52nd Terrace"
-              required
-              className={fieldClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-              Suite / Apto / Referencia
-            </label>
-            <input
-              value={address.suite}
-              onChange={set('suite')}
-              placeholder="Suite 101"
-              className={fieldClass}
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Ciudad</label>
-              <input value={address.city} onChange={set('city')} className={fieldClass} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Estado</label>
-              <input value={address.state} onChange={set('state')} className={fieldClass} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                ZIP <span className="text-red-500">*</span>
-              </label>
-              <input value={address.zip} onChange={set('zip')} placeholder="33166" required className={fieldClass} />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Teléfono</label>
-            <input
-              value={address.phone}
-              onChange={set('phone')}
-              placeholder="+1 (305) 000-0000"
-              type="tel"
-              className={fieldClass}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? 'Guardando...' : hasAddress ? 'Actualizar dirección' : 'Guardar dirección'}
-          </button>
-        </div>
-      </form>
-
       <p className="text-center text-xs text-slate-400 dark:text-slate-600">
-        Comunica esta dirección a tus proveedores para recibir tus paquetes en Miami.
+        Esta dirección es administrada por Sari Express. Úsala para indicar a tus proveedores dónde enviar tus paquetes.
       </p>
     </div>
   )

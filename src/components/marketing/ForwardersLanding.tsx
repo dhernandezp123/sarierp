@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { motion } from 'framer-motion'
 import type { Variants } from 'framer-motion'
 import { useState } from 'react'
@@ -585,10 +586,14 @@ export function ForwardersLanding() {
 
         {/* Nav */}
         <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EF8E01] text-white shadow-sm">
-              <Globe2 size={18} />
-            </span>
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image
+              src="/brand/isotipo-color.png"
+              alt="Forwarders ERP"
+              width={36}
+              height={36}
+              className="h-9 w-9 object-contain"
+            />
             <span>
               <span className="block text-sm font-bold text-[#07111F]">Forwarders ERP</span>
               <span className="block text-[10px] text-slate-400">by DHer</span>
@@ -1392,17 +1397,13 @@ export function ForwardersLanding() {
           <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
             <div className="max-w-md">
               <div className="flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#EF8E01] to-[#0038BD] text-white shadow-lg shadow-[#0038BD]/20">
-                  <Globe2 size={20} />
-                </span>
-                <span>
-                  <span className="block text-sm font-bold text-white">
-                    Forwarders ERP by DHer
-                  </span>
-                  <span className="mt-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#EF8E01]">
-                    Plataforma de Gestión Logística
-                  </span>
-                </span>
+                <Image
+                  src="/brand/lockup-h-blanco.png"
+                  alt="Forwarders ERP"
+                  width={200}
+                  height={48}
+                  className="h-12 w-auto object-contain"
+                />
               </div>
 
               <p className="mt-4 text-sm leading-7 text-slate-400">

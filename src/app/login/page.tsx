@@ -87,8 +87,8 @@ export default function LoginPage() {
           <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             <div className="mb-10 text-center">
               <Image
-                src="/logo/sari-logo.png"
-                alt="Sari Express"
+                src="/brand/lockup-h-blanco.png"
+                alt="Forwarders ERP"
                 width={256}
                 height={140}
                 priority

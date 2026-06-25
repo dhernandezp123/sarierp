@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter, usePathname } from 'next/navigation'
 import { Package, LogOut, User, Bell, Home, Ship } from 'lucide-react'
 import { toast } from 'sonner'
@@ -56,10 +57,14 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       {/* Top nav */}
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-sm dark:border-slate-800 dark:bg-[#020817]/95">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <Link href="/portal" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600">
-              <Ship className="h-4 w-4 text-white" />
-            </div>
+          <Link href="/portal" className="flex items-center gap-2">
+            <Image
+              src="/brand/isotipo-color.png"
+              alt="Forwarders ERP"
+              width={32}
+              height={32}
+              className="h-8 w-8 object-contain"
+            />
             <span className="font-semibold text-slate-900 dark:text-white">Mi Carga</span>
           </Link>
 

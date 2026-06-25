@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Building2, Save } from 'lucide-react'
+import { Building2, MapPin, Save } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -31,6 +31,14 @@ type CompanySettings = {
   condiciones_awb: string | null
   condiciones_carta_porte: string | null
   plantilla_cotizacion: string | null
+  miami_consignee: string | null
+  miami_address_line: string | null
+  miami_suite_prefix: string | null
+  miami_city: string | null
+  miami_state: string | null
+  miami_zip: string | null
+  miami_country: string | null
+  miami_phone: string | null
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -71,6 +79,14 @@ export default function CompanySettingsPage() {
     condiciones_awb: '',
     condiciones_carta_porte: '',
     plantilla_cotizacion: '',
+    miami_consignee: '',
+    miami_address_line: '',
+    miami_suite_prefix: '',
+    miami_city: 'Miami',
+    miami_state: 'FL',
+    miami_zip: '',
+    miami_country: 'USA',
+    miami_phone: '',
   })
 
   const isAdmin = profile?.rol === 'Admin'
@@ -114,6 +130,14 @@ export default function CompanySettingsPage() {
         condiciones_awb: (data as any).condiciones_awb ?? '',
         condiciones_carta_porte: (data as any).condiciones_carta_porte ?? '',
         plantilla_cotizacion: (data as any).plantilla_cotizacion ?? '',
+        miami_consignee: (data as any).miami_consignee ?? '',
+        miami_address_line: (data as any).miami_address_line ?? '',
+        miami_suite_prefix: (data as any).miami_suite_prefix ?? '',
+        miami_city: (data as any).miami_city ?? 'Miami',
+        miami_state: (data as any).miami_state ?? 'FL',
+        miami_zip: (data as any).miami_zip ?? '',
+        miami_country: (data as any).miami_country ?? 'USA',
+        miami_phone: (data as any).miami_phone ?? '',
       })
     }
     setLoading(false)
@@ -388,6 +412,112 @@ export default function CompanySettingsPage() {
           </div>
         </section>
       </div>
+
+      {/* Dirección de recepción en Miami */}
+      <section className={cardClass}>
+        <div className="mb-1 flex items-center gap-2">
+          <MapPin className="h-5 w-5 text-slate-400" />
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">Dirección de recepción en Miami</h2>
+        </div>
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          Esta dirección se muestra en el portal del cliente en "Mis direcciones". El código del cliente se agrega automáticamente como identificador de suite.
+        </p>
+        <div className="space-y-4">
+          <Field label="Nombre del consignatario">
+            <input
+              value={form.miami_consignee ?? ''}
+              onChange={(e) => set('miami_consignee', e.target.value)}
+              disabled={!isAdmin}
+              placeholder="Ej. SARI EXPRESS"
+              className={`${fieldClass} disabled:opacity-60`}
+            />
+          </Field>
+          <Field label="Dirección">
+            <input
+              value={form.miami_address_line ?? ''}
+              onChange={(e) => set('miami_address_line', e.target.value)}
+              disabled={!isAdmin}
+              placeholder="Ej. 5000 NW 74th Ave"
+              className={`${fieldClass} disabled:opacity-60`}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Prefijo de suite (antes del código de cliente)">
+              <input
+                value={form.miami_suite_prefix ?? ''}
+                onChange={(e) => set('miami_suite_prefix', e.target.value)}
+                disabled={!isAdmin}
+                placeholder="Ej. Suite  ó  Ste.  ó  #"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+            <Field label="Teléfono">
+              <input
+                value={form.miami_phone ?? ''}
+                onChange={(e) => set('miami_phone', e.target.value)}
+                disabled={!isAdmin}
+                placeholder="+1 (305) 000-0000"
+                type="tel"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Ciudad">
+              <input
+                value={form.miami_city ?? ''}
+                onChange={(e) => set('miami_city', e.target.value)}
+                disabled={!isAdmin}
+                placeholder="Miami"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+            <Field label="Estado">
+              <input
+                value={form.miami_state ?? ''}
+                onChange={(e) => set('miami_state', e.target.value)}
+                disabled={!isAdmin}
+                placeholder="FL"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+            <Field label="ZIP">
+              <input
+                value={form.miami_zip ?? ''}
+                onChange={(e) => set('miami_zip', e.target.value)}
+                disabled={!isAdmin}
+                placeholder="33166"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+          </div>
+          <Field label="País">
+            <input
+              value={form.miami_country ?? ''}
+              onChange={(e) => set('miami_country', e.target.value)}
+              disabled={!isAdmin}
+              placeholder="USA"
+              className={`${fieldClass} disabled:opacity-60`}
+            />
+          </Field>
+          {form.miami_address_line && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">Vista previa (cliente con código SE-001)</p>
+              <div className="font-mono text-sm leading-relaxed text-blue-900 dark:text-blue-100">
+                {form.miami_consignee && <p>{form.miami_consignee}</p>}
+                <p>
+                  {form.miami_address_line}
+                  {(form.miami_suite_prefix || form.miami_address_line) && ' '}
+                  {form.miami_suite_prefix ?? ''}SE-001
+                </p>
+                <p>{form.miami_city}, {form.miami_state} {form.miami_zip}</p>
+                <p>{form.miami_country}</p>
+                {form.miami_phone && <p>Tel: {form.miami_phone}</p>}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Plantilla de correo para cotizaciones */}
       <section className={cardClass}>
