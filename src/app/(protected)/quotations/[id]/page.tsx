@@ -845,6 +845,7 @@ export default function QuotationDetailPage() {
     setDuplicating(true)
     router.push(`/quotations/new?duplicateFrom=${quotation.id}`)
     return
+    /*
 
     try {
       const isMiami =
@@ -939,6 +940,7 @@ export default function QuotationDetailPage() {
     } finally {
       setDuplicating(false)
     }
+    */
   }
 
   const createRoutingInstruction = async () => {

@@ -309,7 +309,7 @@ export default function RoutingOrderPDF({
             label2="Transit days" val2={value(selectedAgent?.transit_time || selectedAgent?.transit || routing?.transit_time || routing?.transit)}
           />
           <DualInfoRow
-            label1="Transshipment" val1={value(selectedAgent?.transshipment || selectedAgent?.transbordo || routing?.transshipment)}
+            label1="Transshipment" val1={value(selectedAgent?.transshipment || selectedAgent?.transbordo || quote?.transshipment || routing?.transshipment)}
           />
         </Section>
 

@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { Download, ExternalLink, Plus, Printer } from 'lucide-react'
+import { Download, ExternalLink, Plus, Printer, RefreshCw } from 'lucide-react'
 import {
   PDFDownloadLink,
   pdf,
@@ -416,6 +416,7 @@ export default function RoutingDetailPage() {
   const [finalizing, setFinalizing] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [creatingBooking, setCreatingBooking] = useState(false)
+  const [refreshingPricingData, setRefreshingPricingData] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
@@ -505,6 +506,42 @@ export default function RoutingDetailPage() {
     }
 
     setLoading(false)
+  }
+
+  const syncRoutingFromPricing = async () => {
+    if (!routing?.id || !routing.quotation_id || refreshingPricingData) return
+
+    setRefreshingPricingData(true)
+
+    try {
+      const { data, error } = await supabase.rpc(
+        'sync_shipping_instruction_from_selected_agent_quote',
+        {
+          p_shipping_instruction_id: routing.id,
+          p_reason: 'Actualizacion manual desde Shipping Instruction',
+        }
+      )
+
+      if (error) {
+        toast.error(error.message || 'No se pudo sincronizar la Shipping Instruction')
+        return
+      }
+
+      const updatedBookings =
+        (data as Array<{ updated_bookings?: number }> | null)?.[0]?.updated_bookings ?? 0
+
+      toast.success(
+        updatedBookings > 0
+          ? `Informacion sincronizada desde Pricing (${updatedBookings} booking${updatedBookings === 1 ? '' : 's'} actualizado${updatedBookings === 1 ? '' : 's'})`
+          : 'Informacion sincronizada desde Pricing'
+      )
+
+      await loadRouting()
+      await loadBookings()
+      return
+    } finally {
+      setRefreshingPricingData(false)
+    }
   }
 
   const loadBookings = async () => {
@@ -1446,6 +1483,18 @@ export default function RoutingDetailPage() {
                 Imprimir SI
               </button>
             </>
+          )}
+
+          {canManageRouting && !isRoutingCancelled && (
+            <button
+              type="button"
+              onClick={syncRoutingFromPricing}
+              disabled={refreshingPricingData}
+              className="flex h-9 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshingPricingData ? 'animate-spin' : ''}`} />
+              {refreshingPricingData ? 'Sincronizando...' : 'Actualizar desde Pricing'}
+            </button>
           )}
 
           {canManageRouting && !isRoutingCancelled && (

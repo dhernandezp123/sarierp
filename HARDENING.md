@@ -41,8 +41,8 @@ Fecha: 22/06/2026
 | 2 | Migraciones y constraints de integridad | Completado |
 | 3 | Autenticación SSR, sesión y permisos | Completado |
 | 4 | Facturación, CAI, CxC, CxP y pagos | En progreso |
-| 5 | Transacciones de cotización, pricing y operaciones | Pendiente |
-| 6 | Miami: embarques persistentes e historial | Pendiente |
+| 5 | Transacciones de cotización, pricing y operaciones | En progreso |
+| 6 | Miami: embarques persistentes e historial | En progreso |
 | 7 | Estados, alertas y notificaciones | Pendiente |
 | 8 | Reportes, dashboards, monedas, GP y fechas | Pendiente |
 | 9 | UX, responsive y protección de formularios | Pendiente |
@@ -95,23 +95,23 @@ Fecha: 22/06/2026
 |---|---|---|---|
 | FLOW-001 | Estados legacy y actuales de cotización no coinciden | Crítica | En validación |
 | FLOW-002 | Selección de tarifa y regeneración de pricing no son atómicas | Crítica | En validación |
-| FLOW-003 | Operaciones `delete + insert` pueden perder contenedores, carga, BL o pricing | Crítica | Pendiente |
-| FLOW-004 | Creación de cotización y tablas hijas no tiene rollback | Alta | Pendiente |
-| FLOW-005 | Repricing puede actualizar SI y bookings parcialmente | Alta | Pendiente |
+| FLOW-003 | Operaciones `delete + insert` pueden perder contenedores, carga, BL o pricing | Crítica | En validación |
+| FLOW-004 | Creación de cotización y tablas hijas no tiene rollback | Alta | En validación |
+| FLOW-005 | Repricing puede actualizar SI y bookings parcialmente | Alta | En validación |
 | FLOW-006 | No existe constraint de una tarifa seleccionada por cotización | Alta | Completado |
 | FLOW-007 | No existe protección suficiente contra SI/CxP/proveedor duplicados | Alta | Completado |
 | FLOW-008 | Numeración de manifiestos basada en `COUNT` es concurrente | Alta | Completado |
-| FLOW-009 | Código muerto en duplicación de cotización | Baja | Pendiente |
+| FLOW-009 | Código muerto en duplicación de cotización | Baja | En validación |
 | FLOW-010 | `pricing_items_delete_policy` solo permite Admin; DELETE silencioso acumula pricing Miami en cada guardado | Crítica | En validación |
 
 ### Miami y tracking
 
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
-| MIA-001 | Lista de embarque no crea un embarque/consolidación persistente | Alta | Pendiente |
-| MIA-002 | Paquetes no conservan historial completo de milestones | Alta | Pendiente |
-| MIA-003 | Falta vincular paquetes con vuelo, camión, contenedor o despacho | Alta | Pendiente |
-| MIA-004 | Falta POD, reversos controlados y auditoría por evento | Media | Pendiente |
+| MIA-001 | Lista de embarque no crea un embarque/consolidación persistente | Alta | En validación |
+| MIA-002 | Paquetes no conservan historial completo de milestones | Alta | En validación |
+| MIA-003 | Falta vincular paquetes con vuelo, camión, contenedor o despacho | Alta | En validación |
+| MIA-004 | Falta POD, reversos controlados y auditoría por evento | Media | En validación |
 | MIA-005 | Agregar CHECK de `tipo_carga` y `cargo_status` al esquema real | Alta | Completado |
 | MIA-006 | Revisar unicidad y tratamiento de tracking duplicado | Media | Completado |
 
@@ -120,8 +120,8 @@ Fecha: 22/06/2026
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
 | BUG-001 | Reporte Pagos a Proveedores tiene código inalcanzable | Alta | Pendiente |
-| BUG-002 | Notificaciones de tarifa vencida filtran estado legacy `Cotizada` | Alta | Pendiente |
-| BUG-003 | Proveedores busca cotizaciones legacy `Aprobada` | Alta | Pendiente |
+| BUG-002 | Notificaciones de tarifa vencida filtran estado legacy `Cotizada` | Alta | En validación |
+| BUG-003 | Proveedores busca cotizaciones legacy `Aprobada` | Alta | En validación |
 | BUG-004 | `/profile` no está autorizado para roles no Admin | Alta | Completado |
 | BUG-005 | Tutorial Admin enlaza `/users` en vez de `/admin/users` | Media | Completado |
 | BUG-006 | Sidebar cuenta notificaciones que nunca se marcan como leídas | Alta | Pendiente |
@@ -962,4 +962,150 @@ Agregar una entrada por fix:
   - Ninguno; ya puede seleccionar tarifas sin error de constraint.
 - Commit: [en progreso]
 
+### 2026-06-27 — FASE-5 — Sincronización operacional tras cambio de tarifa aceptada
 
+- Estado: En validación manual.
+- Hallazgos: FLOW-002, FLOW-003, FLOW-004, FLOW-005 y FLOW-009.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/app/(protected)/suppliers/[id]/page.tsx`
+  - `src/components/pdf/shipping-instruction-order-pdf.tsx`
+- SQL:
+  - `supabase/migrations/20260627010000_phase5_atomic_operational_repricing.sql`
+    agrega RPC transaccional para sincronizar Shipping Instruction y bookings
+    editables desde la tarifa seleccionada.
+  - `supabase/migrations/20260627020000_phase5_atomic_quotation_children_replace.sql`
+    agrega RPC transaccional para reemplazar contenedores, carga suelta y cargos
+    Miami sin riesgo de `delete + insert` parcial.
+  - `supabase/migrations/20260627030000_phase5_atomic_quotation_create.sql`
+    agrega RPC transaccional para crear cotización con contenedores, carga suelta
+    y cargos Miami en una sola operación.
+  - `supabase/migrations/20260627040000_phase5_atomic_operations_container_replace.sql`
+    agrega RPCs transaccionales para reemplazar contenedores de Booking y BL.
+  - `supabase/migrations/20260624030000_sales_activities.sql` ajustada para
+    recrear policies de forma idempotente si el remoto quedó parcialmente aplicado.
+  - Sin migración nueva para selección de tarifa; depende de `20260624010000_phase5_atomic_agent_selection.sql`
+    y `20260624020000_fix_phase5_atomic_selection_race_condition.sql`.
+- Cambios:
+  - Pricing Comparison prepara y sincroniza agente, contacto, email, carrier, ETD,
+    tránsito y días libres hacia la Shipping Instruction afectada.
+  - Shipping Instruction permite actualizar datos operativos desde la tarifa
+    seleccionada en Pricing cuando una tarifa aceptada debe reemplazarse por
+    cancelación o falta de espacio del agente.
+  - El Routing Order PDF toma `transshipment` desde la cotización cuando no está
+    presente en la ruta.
+  - La sincronización operacional desde Pricing/Shipping Instruction deja de hacer
+    updates secuenciales desde el cliente y pasa por
+    `sync_shipping_instruction_from_selected_agent_quote`.
+  - La edición de cotizaciones reemplaza tablas hijas mediante
+    `replace_quotation_child_lines`, evitando que una falla de insert deje
+    contenedores, carga o pricing eliminados.
+  - La creación de cotizaciones usa `create_quotation_with_child_lines` para
+    evitar encabezados creados sin contenedores, carga o pricing automático.
+  - Operaciones reemplaza contenedores de Booking/BL mediante
+    `replace_booking_containers` y `replace_bl_containers`, evitando deletes
+    silenciosos bloqueados por RLS y reemplazos parciales.
+  - La acción de duplicar cotización usa únicamente
+    `/quotations/new?duplicateFrom=...`; el flujo viejo de inserción directa
+    queda fuera de ejecución.
+  - Proveedores lista cotizaciones `Ganada` para asociar CxP manual, en lugar
+    del estado legacy `Aprobada`.
+  - Las notificaciones de tarifa vencida ya usan estados vigentes del flujo en
+    código y SQL de Fase 5.
+  - La migración de actividades comerciales ahora elimina policies existentes
+    antes de recrearlas para permitir reintentar `supabase db push`.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Validación manual pendiente:
+  - Con una cotización ya aprobada, seleccionar una nueva tarifa de agente con
+    motivo documentado.
+  - Confirmar que queda una sola tarifa `is_selected = true`.
+  - Confirmar que la Shipping Instruction y bookings no confirmados reflejan el
+    nuevo agente/carrier/ETD/tránsito/días libres.
+  - Confirmar que bookings con número confirmado, carrier booking o MBL no se
+    sobrescriben silenciosamente.
+  - Editar una cotización FCL cambiando contenedores y confirmar reemplazo
+    correcto.
+  - Editar una cotización LCL/Miami cambiando líneas de carga y confirmar que no
+    se pierden líneas si una validación falla.
+  - Crear una cotización FCL con múltiples contenedores y confirmar encabezado e
+    hijos.
+  - Crear una cotización Miami/LCL con líneas de carga y confirmar pricing
+    automático.
+  - Guardar contenedores de un Booking con rol Operaciones y confirmar reemplazo.
+  - Guardar contenedores de un BL con rol Operaciones y confirmar reemplazo.
+  - En Proveedores, confirmar que el selector de cotización muestra cotizaciones
+    `Ganada`.
+  - Ejecutar o verificar la notificación de tarifas vencidas con estados vigentes.
+- Riesgos o trabajo pendiente:
+  - Si la migración `20260624020000` no está aplicada en Supabase remoto, el cambio
+    de tarifa puede seguir fallando por el índice único de tarifa seleccionada.
+- Commit: pendiente.
+
+### 2026-06-27 — FASE-6 — Embarques Miami persistentes e historial inicial
+
+- Estado: En validación manual; migraciones aplicadas en Supabase remoto.
+- Hallazgos: MIA-001, MIA-002, MIA-003 y MIA-004.
+- Código:
+  - `src/app/(protected)/miami/embarques/page.tsx`
+- SQL:
+  - `supabase/migrations/20260627050000_phase6_miami_persistent_shipments.sql`
+  - `supabase/migrations/20260627060000_phase6_miami_status_events.sql`
+  - `supabase/migrations/20260627070000_phase6_miami_status_reversals.sql`
+- Cambios:
+  - Agrega `miami_shipments` para conservar cada lista de embarque/despacho Miami
+    como entidad persistente.
+  - Agrega `miami_shipment_packages` para vincular paquetes a un despacho único.
+  - Agrega `miami_package_events` para registrar el primer milestone de despacho
+    por paquete y permitir historial posterior.
+  - Agrega `next_miami_shipment_number()` y `create_miami_shipment(...)` con RLS
+    y validación de rol Operaciones/Admin.
+  - La pantalla de Lista de Embarque deja de actualizar paquetes directamente y
+    pasa por el RPC transaccional; también muestra embarques recientes.
+  - La Lista de Embarque captura modo de transporte (`Aereo`, `Maritimo`,
+    `Terrestre` o `Courier`) y lo persiste en el despacho.
+  - Inventario avanza estados de paquetes mediante
+    `advance_miami_package_status`, dejando evento y cambio de estado en una
+    sola transacción.
+  - Inventario permite consultar el historial operativo de movimientos por
+    paquete desde la misma tabla.
+  - Inventario permite reversar un estado Miami con motivo obligatorio mediante
+    `reverse_miami_package_status`, conservando auditoría en eventos y
+    `activity_logs`.
+  - El portal del cliente muestra el historial real de movimientos desde
+    `miami_package_events`.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Validación manual pendiente:
+  - En `/miami/embarques`, seleccionar paquetes en bodega y crear despacho.
+  - Confirmar que se crea un registro en `miami_shipments`.
+  - Confirmar que cada paquete queda vinculado en `miami_shipment_packages`.
+  - Confirmar que cada paquete recibe evento `dispatch` en `miami_package_events`.
+  - Confirmar que paquetes ya despachados no pueden volver a entrar en otro
+    embarque.
+  - Confirmar que el modo de transporte seleccionado queda guardado en
+    `miami_shipments.transport_mode`.
+  - Desde Inventario, avanzar un paquete y confirmar que aparece un evento
+    `status_change` en `miami_package_events`.
+  - Desde Inventario, abrir `Historial` en ese paquete y confirmar que lista los
+    eventos.
+  - Ejecutar `npx supabase db push --linked` para aplicar
+    `20260627070000_phase6_miami_status_reversals.sql`.
+  - Desde Inventario, reversar un estado con motivo y confirmar evento
+    `status_reverse`.
+  - Desde el portal cliente, abrir el paquete y confirmar que el historial de
+    movimientos muestra despacho y cambios de estado.
+- Riesgos o trabajo pendiente:
+  - MIA-002 queda parcial: ya existe tabla de eventos para despacho, avance y
+    reverso, pero faltan eventos específicos de incidencias.
+  - MIA-003 queda parcial: ya existe vínculo con despacho y modo de transporte,
+    pero faltan campos específicos para vuelo, camión o contenedor.
+  - MIA-004 queda parcial: reversos y auditoría quedan cubiertos; POD/documento
+    de entrega queda pendiente de estructura de archivos.
+- Commit: pendiente.

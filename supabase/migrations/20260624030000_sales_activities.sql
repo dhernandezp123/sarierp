@@ -54,6 +54,10 @@ CREATE INDEX IF NOT EXISTS sales_activities_etapa_idx       ON sales_activities 
 -- RLS
 ALTER TABLE sales_activities ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "sales_activities_select" ON sales_activities;
+DROP POLICY IF EXISTS "sales_activities_insert" ON sales_activities;
+DROP POLICY IF EXISTS "sales_activities_update" ON sales_activities;
+
 -- Admin y Ventas ven todo; el resto solo sus propias actividades
 CREATE POLICY "sales_activities_select" ON sales_activities
   FOR SELECT USING (

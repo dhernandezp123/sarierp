@@ -745,28 +745,24 @@ export default function BLPage() {
     if (isNew) return
     setSavingContainers(true)
 
-    // Delete existing and re-insert
-    await supabase.from('bl_containers').delete().eq('bl_id', blId)
-
     const rows = containers.filter((c) => c.container_number || c.container_type)
-    if (rows.length > 0) {
-      const { error } = await supabase.from('bl_containers').insert(
-        rows.map((c) => ({
-          bl_id: blId,
-          container_number: c.container_number || null,
-          seal_number: c.seal_number || null,
-          container_type: c.container_type || null,
-          quantity: c.quantity ? Number(c.quantity) : 1,
-          gross_weight_kg: c.gross_weight_kg ? Number(c.gross_weight_kg) : null,
-          measurement_cbm: c.measurement_cbm ? Number(c.measurement_cbm) : null,
-          notes: c.notes || null,
-        }))
-      )
-      if (error) {
-        toast.error(error.message)
-        setSavingContainers(false)
-        return
-      }
+    const { error } = await supabase.rpc('replace_bl_containers', {
+      p_bl_id: blId,
+      p_containers: rows.map((c) => ({
+        container_number: c.container_number || null,
+        seal_number: c.seal_number || null,
+        container_type: c.container_type || null,
+        quantity: c.quantity ? Number(c.quantity) : 1,
+        gross_weight_kg: c.gross_weight_kg ? Number(c.gross_weight_kg) : null,
+        measurement_cbm: c.measurement_cbm ? Number(c.measurement_cbm) : null,
+        notes: c.notes || null,
+      })),
+    })
+
+    if (error) {
+      toast.error(error.message)
+      setSavingContainers(false)
+      return
     }
 
     setSavingContainers(false)

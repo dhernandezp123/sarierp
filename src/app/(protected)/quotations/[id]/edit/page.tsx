@@ -773,7 +773,57 @@ export default function EditQuotationPage() {
         return
       }
 
-      if (saveRequiresContainerLines) {
+      const shouldReplaceContainers =
+        saveRequiresContainerLines || saveRequiresLooseCargo
+      const shouldReplaceCargo =
+        saveRequiresContainerLines || saveRequiresLooseCargo
+      const containerRows = saveRequiresContainerLines
+        ? containerLines.map((line) => ({
+            container_type_id: line.container_type_id,
+            container_type_name: line.container_type_name,
+            quantity: Number(line.quantity || 1),
+            notes: line.notes || null,
+          }))
+        : []
+      const cargoRows = saveRequiresLooseCargo
+        ? cargoLines.map((line) => ({
+            package_type: line.packageType,
+            quantity: Number(line.quantity || 0),
+            length: Number(line.length || 0),
+            width: Number(line.width || 0),
+            height: Number(line.height || 0),
+            dimension_unit: line.dimensionUnit,
+            weight_lbs: getLineUnitWeightLbs(line),
+            ft3: calculateLineFt3(line),
+            cbm: calculateLineCbm(line),
+          }))
+        : []
+
+      if (shouldReplaceContainers || shouldReplaceCargo || saveIsMiamiFlow) {
+        const { error: childLinesError } = await supabase.rpc(
+          'replace_quotation_child_lines',
+          {
+            p_quotation_id: quotationId,
+            p_replace_containers: shouldReplaceContainers,
+            p_container_lines: containerRows,
+            p_replace_cargo: shouldReplaceCargo,
+            p_cargo_lines: cargoRows,
+            p_replace_pricing: saveIsMiamiFlow,
+            p_pricing_items: saveIsMiamiFlow ? miamiPricingItems : [],
+          }
+        )
+
+        if (childLinesError) {
+          toast.error(childLinesError.message)
+          return
+        }
+
+        if (saveIsMiamiFlow) {
+          setPricingItems(miamiPricingItems as PricingItem[])
+        }
+      }
+
+      if (Boolean(false) && saveRequiresContainerLines) {
         const { error: cargoDeleteError } = await supabase
           .from('quotation_cargo_lines')
           .delete()
@@ -812,7 +862,7 @@ export default function EditQuotationPage() {
         }
       }
 
-      if (saveRequiresLooseCargo) {
+      if (Boolean(false) && saveRequiresLooseCargo) {
         const { error: containerDeleteError } = await supabase
           .from('quotation_containers')
           .delete()
@@ -856,7 +906,7 @@ export default function EditQuotationPage() {
         }
       }
 
-      if (saveIsMiamiFlow) {
+      if (Boolean(false) && saveIsMiamiFlow) {
         const { error: pricingDeleteError } = await supabase
           .from('pricing_items')
           .delete()

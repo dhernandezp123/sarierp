@@ -668,95 +668,141 @@ export default function NewQuotationPage() {
     try {
       setLoading(true)
 
-      const { data: quotation, error } = await supabase.from('quotations').insert([
+      const quotationId = crypto.randomUUID()
+      const quotationPayload = {
+        id: quotationId,
+        cliente_id: formData.cliente_id,
+
+        trade_direction: formData.trade_direction,
+        service_product: formData.service_product || null,
+        quote_type: formData.quote_type,
+        valid_until: validUntil,
+
+        contact_name: formData.contact_name,
+        contact_email: formData.contact_email,
+        contact_phone: formData.contact_phone,
+
+        preferred_carrier: formData.preferred_carrier,
+        transit_time: formData.transit_time || null,
+        target_rate: Number(formData.target_rate),
+        commercial_value: Number(formData.commercial_value),
+
+        incoterm: formData.incoterm,
+        tipo_transporte: formData.tipo_transporte,
+
+        origen: formData.origen,
+        destino: formData.destino,
+        puerto_origen: formData.puerto_origen,
+        puerto_destino: formData.puerto_destino,
+        pickup_address: formData.pickup_address,
+        delivery_address: formData.delivery_address,
+
+        container_type: formData.container_type,
+        container_qty: Number(formData.container_qty || 0),
+        package_type: formData.package_type,
+        package_details: formData.package_details,
+        peso_kg: submitIsMiamiFlow || requiresCargoLines
+          ? totalCargoKg > 0
+            ? totalCargoKg
+            : null
+          : Number(formData.peso_kg),
+        peso_lbs:
+          submitIsMiamiFlow || requiresCargoLines
+            ? totalCargoWeight > 0
+              ? totalCargoWeight
+              : null
+            : null,
+        gross_weight: Number(formData.gross_weight),
+        volumen_cbm: submitIsMiamiFlow || requiresCargoLines
+          ? totalCargoCbm > 0
+            ? totalCargoCbm
+            : null
+          : Number(formData.volumen_cbm),
+        volumen_ft3:
+          submitIsMiamiFlow || requiresCargoLines
+            ? totalCargoFt3 > 0
+              ? totalCargoFt3
+              : null
+            : null,
+        cantidad_bultos:
+          submitIsMiamiFlow || requiresCargoLines
+            ? cargoLines.reduce(
+                (sum, line) => sum + Number(line.quantity || 0),
+                0
+              )
+            : Number(formData.cantidad_bultos),
+        commodity: formData.commodity,
+
+        requires_insurance: formData.requires_insurance,
+        fob_value: Number(formData.fob_value),
+        freight_value: Number(formData.freight_value),
+        insurance_markup_percentage: Number(
+          formData.insurance_markup_percentage
+        ),
+        insurance_rate: Number(formData.insurance_rate),
+        insurance_cost: Number(formData.insurance_cost),
+
+        pricing_notes: formData.pricing_notes || null,
+        observaciones: formData.observaciones || null,
+        client_notes: submitIsMiamiFlow ? formData.client_notes || null : null,
+        duplicated_from: duplicateSource?.id || null,
+        status: initialStatus,
+      }
+
+      const containerRows = requiresContainerLines
+        ? containerLines.map((line) => ({
+            container_type_id: line.container_type_id,
+            container_type_name: line.container_type_name,
+            quantity: line.quantity,
+            notes: line.notes,
+          }))
+        : []
+
+      const cargoRows = (submitIsMiamiFlow || requiresCargoLines ? cargoLines : [])
+        .filter((line) => {
+          return (
+            Number(line.quantity || 0) > 0 &&
+            hasLineVolume(line)
+          )
+        })
+        .map((line) => ({
+          quantity: Number(line.quantity || 1),
+          package_type: line.packageType,
+          length: Number(line.length || 0),
+          width: Number(line.width || 0),
+          height: Number(line.height || 0),
+          dimension_unit: line.dimensionUnit,
+          weight_lbs: getLineUnitWeightLbs(line),
+          ft3: calculateLineFt3(line),
+          cbm: calculateLineCbm(line),
+        }))
+
+      const autoItems = miami.buildMiamiPricingItems(quotationId)
+
+      const { data: quotationResult, error } = await supabase.rpc(
+        'create_quotation_with_child_lines',
         {
-          cliente_id: formData.cliente_id,
+          p_quotation_data: quotationPayload,
+          p_container_lines: containerRows,
+          p_cargo_lines: cargoRows,
+          p_pricing_items: autoItems,
+        }
+      )
 
-          trade_direction: formData.trade_direction,
-          service_product: formData.service_product || null,
-          quote_type: formData.quote_type,
-          valid_until: validUntil,
-
-          contact_name: formData.contact_name,
-          contact_email: formData.contact_email,
-          contact_phone: formData.contact_phone,
-
-          preferred_carrier: formData.preferred_carrier,
-          transit_time: formData.transit_time || null,
-          target_rate: Number(formData.target_rate),
-          commercial_value: Number(formData.commercial_value),
-
-          incoterm: formData.incoterm,
-          tipo_transporte: formData.tipo_transporte,
-
-          origen: formData.origen,
-          destino: formData.destino,
-          puerto_origen: formData.puerto_origen,
-          puerto_destino: formData.puerto_destino,
-          pickup_address: formData.pickup_address,
-          delivery_address: formData.delivery_address,
-
-          container_type: formData.container_type,
-          container_qty: Number(formData.container_qty || 0),
-          package_type: formData.package_type,
-          package_details: formData.package_details,
-          peso_kg: submitIsMiamiFlow || requiresCargoLines
-            ? totalCargoKg > 0
-              ? totalCargoKg
-              : null
-            : Number(formData.peso_kg),
-          peso_lbs:
-            submitIsMiamiFlow || requiresCargoLines
-              ? totalCargoWeight > 0
-                ? totalCargoWeight
-                : null
-              : null,
-          gross_weight: Number(formData.gross_weight),
-          volumen_cbm: submitIsMiamiFlow || requiresCargoLines
-            ? totalCargoCbm > 0
-              ? totalCargoCbm
-              : null
-            : Number(formData.volumen_cbm),
-          volumen_ft3:
-            submitIsMiamiFlow || requiresCargoLines
-              ? totalCargoFt3 > 0
-                ? totalCargoFt3
-                : null
-              : null,
-          cantidad_bultos:
-            submitIsMiamiFlow || requiresCargoLines
-              ? cargoLines.reduce(
-                  (sum, line) => sum + Number(line.quantity || 0),
-                  0
-                )
-              : Number(formData.cantidad_bultos),
-          commodity: formData.commodity,
-
-          requires_insurance: formData.requires_insurance,
-          fob_value: Number(formData.fob_value),
-          freight_value: Number(formData.freight_value),
-          insurance_markup_percentage: Number(
-            formData.insurance_markup_percentage
-          ),
-          insurance_rate: Number(formData.insurance_rate),
-          insurance_cost: Number(formData.insurance_cost),
-
-          pricing_notes: formData.pricing_notes || null,
-          observaciones: formData.observaciones || null,
-          client_notes: submitIsMiamiFlow ? formData.client_notes || null : null,
-          duplicated_from: duplicateSource?.id || null,
-          status: initialStatus,
-          created_by: profile?.id,
-          created_at: new Date().toISOString(),
-        },
-      ]).select('id, quotation_number').single()
+      const quotation =
+        (quotationResult as Array<{ id: string; quotation_number: string | null }> | null)?.[0] || null
 
       if (error) {
         toast.error(error.message)
         return
       }
 
-      if (requiresContainerLines && containerLines.length > 0) {
+      if (!quotation) {
+        toast.error('No se pudo crear la cotización')
+        return
+      }
+
+      if (Boolean(false) && requiresContainerLines && containerLines.length > 0) {
         const rows = containerLines.map((line) => ({
           quotation_id: quotation.id,
           container_type_id: line.container_type_id,
@@ -777,9 +823,7 @@ export default function NewQuotationPage() {
         }
       }
 
-      const autoItems = miami.buildMiamiPricingItems(quotation.id)
-
-      if (autoItems.length > 0) {
+      if (Boolean(false) && autoItems.length > 0) {
         const { error: pricingItemsError } = await supabase
           .from('pricing_items')
           .insert(autoItems)
@@ -792,27 +836,7 @@ export default function NewQuotationPage() {
         }
       }
 
-      const cargoRows = (submitIsMiamiFlow || requiresCargoLines ? cargoLines : [])
-        .filter((line) => {
-          return (
-            Number(line.quantity || 0) > 0 &&
-            hasLineVolume(line)
-          )
-        })
-        .map((line) => ({
-          quotation_id: quotation.id,
-          quantity: Number(line.quantity || 1),
-          package_type: line.packageType,
-          length: Number(line.length || 0),
-          width: Number(line.width || 0),
-          height: Number(line.height || 0),
-          dimension_unit: line.dimensionUnit,
-          weight_lbs: getLineUnitWeightLbs(line),
-          ft3: calculateLineFt3(line),
-          cbm: calculateLineCbm(line),
-        }))
-
-      if (cargoRows.length > 0) {
+      if (Boolean(false) && cargoRows.length > 0) {
         const { error: cargoLinesError } = await supabase
           .from('quotation_cargo_lines')
           .insert(cargoRows)

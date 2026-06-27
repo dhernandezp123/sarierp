@@ -105,7 +105,7 @@ export default function SupplierDetailPage() {
         .order('created_at', { ascending: false }),
       supabase.from('quotations')
         .select('id, quotation_number, clientes(nombre)')
-        .eq('status', 'Aprobada')
+        .eq('status', 'Ganada')
         .order('created_at', { ascending: false })
         .limit(80),
     ])

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Plane, Ship, CheckSquare, Square, SendHorizonal } from 'lucide-react'
+import { Plane, Ship, CheckSquare, Square, SendHorizonal, PackageCheck } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
@@ -22,6 +22,16 @@ type Pkg = {
   clientes?: { nombre: string | null; codigo_cliente: string | null } | null
 }
 
+type ShipmentRow = {
+  id: string
+  shipment_number: string
+  transport_mode: string | null
+  status: string
+  total_packages: number
+  total_weight_lbs: number
+  dispatched_at: string
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const fmtDate = (d: string) =>
@@ -35,20 +45,33 @@ export default function EmbarquesPage() {
   const [selected, setSelected]     = useState<Set<string>>(new Set())
   const [dispatching, setDispatching] = useState(false)
   const [filterTipo, setFilterTipo] = useState('Todos')
+  const [shipments, setShipments] = useState<ShipmentRow[]>([])
+  const [transportMode, setTransportMode] = useState('Maritimo')
 
   useEffect(() => { load() }, [])
 
   const load = async () => {
     setLoading(true)
     // Only show packages that are ready to dispatch (in bodega, not yet in transit)
-    const { data, error } = await supabase
+    const packagesQuery = supabase
       .from('miami_packages')
       .select('id, tracking_number, carrier, tipo_carga, cargo_status, weight_lbs, warehouse_number, received_at, clientes(nombre, codigo_cliente)')
       .in('cargo_status', ['Recibido en Miami', 'En Consolidación'])
       .order('received_at', { ascending: true })
       .limit(500)
+    const shipmentsQuery = supabase
+      .from('miami_shipments')
+      .select('id, shipment_number, transport_mode, status, total_packages, total_weight_lbs, dispatched_at')
+      .order('dispatched_at', { ascending: false })
+      .limit(10)
+    const [{ data, error }, { data: shipmentData, error: shipmentError }] = await Promise.all([
+      packagesQuery,
+      shipmentsQuery,
+    ])
     if (error) toast.error('Error al cargar paquetes')
+    if (shipmentError) toast.error('Error al cargar embarques Miami')
     setPackages((data || []) as unknown as Pkg[])
+    setShipments((shipmentData || []) as ShipmentRow[])
     setLoading(false)
     setSelected(new Set())
   }
@@ -71,12 +94,20 @@ export default function EmbarquesPage() {
   const dispatchSelected = async () => {
     if (selected.size === 0) { toast.info('Selecciona al menos un paquete'); return }
     setDispatching(true)
-    const { error } = await supabase
-      .from('miami_packages')
-      .update({ cargo_status: 'En Tránsito', cargo_status_updated_at: new Date().toISOString() })
-      .in('id', Array.from(selected))
+    const { data, error } = await supabase.rpc('create_miami_shipment', {
+      p_package_ids: Array.from(selected),
+      p_transport_mode: transportMode,
+      p_notes: null,
+    })
     setDispatching(false)
     if (error) { toast.error(error.message); return }
+    const result = Array.isArray(data) ? data[0] : null
+    const shipmentNumber = result?.shipment_number ? ` (${result.shipment_number})` : ''
+    if (shipmentNumber) {
+      toast.success(`${selected.size} paquete${selected.size !== 1 ? 's' : ''} despachado${selected.size !== 1 ? 's' : ''}${shipmentNumber}`)
+      load()
+      return
+    }
     toast.success(`${selected.size} paquete${selected.size !== 1 ? 's' : ''} marcado${selected.size !== 1 ? 's' : ''} En Tránsito`)
     load()
   }
@@ -157,6 +188,16 @@ export default function EmbarquesPage() {
             <span className="text-sm text-slate-500 dark:text-slate-400">
               {selected.size} seleccionado{selected.size !== 1 ? 's' : ''} · {totalWeightSelected.toFixed(1)} lbs
             </span>
+            <select
+              value={transportMode}
+              onChange={(event) => setTransportMode(event.target.value)}
+              className={`${fieldClass} h-9 w-32 py-1 text-xs`}
+            >
+              <option value="Maritimo">Maritimo</option>
+              <option value="Aereo">Aereo</option>
+              <option value="Terrestre">Terrestre</option>
+              <option value="Courier">Courier</option>
+            </select>
             <button type="button" onClick={printList} className={secondaryButtonClass}>
               Imprimir lista
             </button>
@@ -164,6 +205,61 @@ export default function EmbarquesPage() {
               <SendHorizonal className="h-4 w-4" />
               {dispatching ? 'Despachando...' : 'Marcar En Tránsito'}
             </button>
+          </div>
+        )}
+      </div>
+
+      <div className={`${cardClass} p-0`}>
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div>
+            <h2 className="font-semibold text-slate-900 dark:text-white">Embarques recientes</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Despachos Miami persistentes creados desde esta lista.
+            </p>
+          </div>
+          <PackageCheck className="h-5 w-5 text-slate-400" />
+        </div>
+        {shipments.length === 0 ? (
+          <div className="px-5 py-5 text-sm text-slate-500 dark:text-slate-400">
+            Aun no hay embarques Miami creados.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-900/60">
+                  {['Embarque', 'Modo', 'Estado', 'Paquetes', 'Peso', 'Fecha'].map((h) => (
+                    <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {shipments.map((shipment) => (
+                  <tr key={shipment.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {shipment.shipment_number}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                      {shipment.transport_mode || 'Pendiente'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        {shipment.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{shipment.total_packages}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
+                      {Number(shipment.total_weight_lbs || 0).toFixed(1)} lbs
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                      {fmtDate(shipment.dispatched_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

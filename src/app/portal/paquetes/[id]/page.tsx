@@ -41,6 +41,16 @@ type Incidencia = {
   created_at: string
 }
 
+type PackageEvent = {
+  id: string
+  event_type: string
+  old_status: string | null
+  new_status: string | null
+  notes: string | null
+  created_at: string
+  metadata: Record<string, unknown> | null
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const CARGO_STEPS = [
@@ -87,12 +97,13 @@ export default function PortalPaqueteDetailPage() {
   const { profile } = useUser()
   const [pkg, setPkg] = useState<PackageDetail | null>(null)
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
+  const [events, setEvents] = useState<PackageEvent[]>([])
   const [photoUrls, setPhotoUrls] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   const loadData = async (clientId: string) => {
     setLoading(true)
-    const [{ data: pkgData, error }, { data: incData }] = await Promise.all([
+    const [{ data: pkgData, error }, { data: incData }, { data: eventData }] = await Promise.all([
       supabase
         .from('miami_packages')
         .select('*')
@@ -102,6 +113,11 @@ export default function PortalPaqueteDetailPage() {
       supabase
         .from('miami_incidencias')
         .select('id, tipo, descripcion, status, resolucion, created_at')
+        .eq('package_id', id)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('miami_package_events')
+        .select('id, event_type, old_status, new_status, notes, created_at, metadata')
         .eq('package_id', id)
         .order('created_at', { ascending: false }),
     ])
@@ -114,6 +130,7 @@ export default function PortalPaqueteDetailPage() {
 
     setPkg(pkgData as PackageDetail)
     setIncidencias((incData ?? []) as Incidencia[])
+    setEvents((eventData ?? []) as PackageEvent[])
 
     // Generate signed URLs for photos
     if (pkgData.photos && pkgData.photos.length > 0) {
@@ -232,6 +249,49 @@ export default function PortalPaqueteDetailPage() {
                 )
               })}
             </ol>
+          </div>
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Historial de movimientos
+          </h2>
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {events.map((event) => {
+              const shipmentNumber =
+                typeof event.metadata?.shipment_number === 'string'
+                  ? event.metadata.shipment_number
+                  : null
+              return (
+                <div key={event.id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {event.new_status || event.event_type}
+                      </p>
+                      {event.old_status && event.new_status && (
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          {event.old_status} &gt; {event.new_status}
+                        </p>
+                      )}
+                      {shipmentNumber && (
+                        <p className="mt-0.5 font-mono text-xs text-blue-600 dark:text-blue-300">
+                          {shipmentNumber}
+                        </p>
+                      )}
+                      {event.notes && (
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{event.notes}</p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                      {fmtDate(event.created_at)}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

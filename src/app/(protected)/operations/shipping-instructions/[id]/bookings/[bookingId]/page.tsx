@@ -721,37 +721,23 @@ export default function RoutingBookingChildPage() {
 
     setSavingContainers(true)
 
-    const { error: deleteError } = await supabase
-      .from('booking_containers')
-      .delete()
-      .eq('booking_id', booking.id)
-      .select('id')
-
-    if (deleteError) {
-      setSavingContainers(false)
-      toast.error('No se pudieron reemplazar los contenedores del booking')
-      return
-    }
-
     const rowsToInsert = containerRows
       .map((row) => ({
-        booking_id: booking.id,
         container_type: row.container_type.trim(),
         quantity: Number(row.quantity || 0),
         notes: row.notes.trim() || null,
       }))
       .filter((row) => row.container_type && row.quantity > 0)
 
-    if (rowsToInsert.length > 0) {
-      const { error: insertError } = await supabase
-        .from('booking_containers')
-        .insert(rowsToInsert)
+    const { error: replaceError } = await supabase.rpc('replace_booking_containers', {
+      p_booking_id: booking.id,
+      p_containers: rowsToInsert,
+    })
 
-      if (insertError) {
-        setSavingContainers(false)
-        toast.error('No se pudieron guardar los contenedores del booking')
-        return
-      }
+    if (replaceError) {
+      setSavingContainers(false)
+      toast.error(replaceError.message || 'No se pudieron guardar los contenedores del booking')
+      return
     }
 
     setSavingContainers(false)

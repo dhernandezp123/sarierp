@@ -148,6 +148,9 @@ type OperationalImpact = {
   changes: OperationalImpactChange[]
   newValues: {
     carrier: string | null
+    agentName: string | null
+    agentContact: string | null
+    agentEmail: string | null
     etd: string | null
     transitDays: number | null
     freeDays: number | string | null
@@ -1684,7 +1687,9 @@ function PricingComparisonContent() {
 
     const { data: shippingInstructions, error: siError } = await supabase
       .from('shipping_instructions')
-      .select('id, routing_number, carrier, etd, free_days, estimated_transit_days')
+      .select(
+        'id, routing_number, carrier, agent_name, agent_contact, agent_email, etd, free_days, estimated_transit_days'
+      )
       .eq('quotation_id', selectedQuote.id)
 
     if (siError) {
@@ -1731,6 +1736,26 @@ function PricingComparisonContent() {
 
     const shippingInstruction = shippingInstructions?.[0] || null
     const carrier = selectedAgentQuote?.carrier || selectedQuote.preferred_carrier || null
+    const agentName = firstFilledValue(
+      selectedAgentQuote?.agent_name,
+      selectedAgentQuote?.agente_nombre,
+      selectedAgentQuote?.agent,
+      selectedQuote.agent_name,
+      selectedQuote.agente_nombre,
+      null
+    )
+    const agentContact = firstFilledValue(
+      selectedAgentQuote?.agent_contact,
+      selectedAgentQuote?.contact,
+      selectedQuote.agent_contact,
+      null
+    )
+    const agentEmail = firstFilledValue(
+      selectedAgentQuote?.agent_email,
+      selectedAgentQuote?.email,
+      selectedQuote.agent_email,
+      null
+    )
     const etd = selectedAgentQuote?.etd || selectedQuote.etd || null
     const transitDays = toOptionalNumber(
       firstFilledValue(
@@ -1752,6 +1777,12 @@ function PricingComparisonContent() {
 
     const previousCarrier =
       shippingInstruction?.carrier || selectedQuote.preferred_carrier || null
+    const previousAgentName =
+      shippingInstruction?.agent_name || selectedQuote.agent_name || null
+    const previousAgentContact =
+      shippingInstruction?.agent_contact || selectedQuote.agent_contact || null
+    const previousAgentEmail =
+      shippingInstruction?.agent_email || selectedQuote.agent_email || null
     const previousEtd = shippingInstruction?.etd || selectedQuote.etd || null
     const previousTransit = firstFilledValue(
       shippingInstruction?.estimated_transit_days,
@@ -1773,6 +1804,21 @@ function PricingComparisonContent() {
       bookings,
       confirmedBookings: bookings.filter(hasConfirmedBookingData),
       changes: [
+        {
+          label: 'Agente',
+          previousValue: displayOperationalValue(previousAgentName),
+          newValue: displayOperationalValue(agentName),
+        },
+        {
+          label: 'Contacto',
+          previousValue: displayOperationalValue(previousAgentContact),
+          newValue: displayOperationalValue(agentContact),
+        },
+        {
+          label: 'Email',
+          previousValue: displayOperationalValue(previousAgentEmail),
+          newValue: displayOperationalValue(agentEmail),
+        },
         {
           label: 'Carrier',
           previousValue: displayOperationalValue(previousCarrier),
@@ -1801,6 +1847,18 @@ function PricingComparisonContent() {
       ],
       newValues: {
         carrier,
+        agentName:
+          agentName === null || agentName === undefined
+            ? null
+            : String(agentName),
+        agentContact:
+          agentContact === null || agentContact === undefined
+            ? null
+            : String(agentContact),
+        agentEmail:
+          agentEmail === null || agentEmail === undefined
+            ? null
+            : String(agentEmail),
         etd,
         transitDays,
         freeDays,
@@ -1812,46 +1870,16 @@ function PricingComparisonContent() {
   const syncOperationalRepricing = async (impact: OperationalImpact) => {
     if (!impact.hasShippingInstruction) return
 
-    const routingPayload = {
-      carrier: impact.newValues.carrier,
-      etd: impact.newValues.etd,
-      free_days:
-        impact.newValues.freeDays === null || impact.newValues.freeDays === undefined
-          ? null
-          : String(impact.newValues.freeDays),
-    }
+    for (const shippingInstructionId of impact.shippingInstructionIds) {
+      const { error } = await supabase.rpc(
+        'sync_shipping_instruction_from_selected_agent_quote',
+        {
+          p_shipping_instruction_id: shippingInstructionId,
+          p_reason: 'Repricing desde Pricing Comparison',
+        }
+      )
 
-    const { error: routingError } = await supabase
-      .from('shipping_instructions')
-      .update(routingPayload)
-      .in('id', impact.shippingInstructionIds)
-
-    if (routingError) throw routingError
-
-    const editableBookings = impact.bookings.filter(
-      (booking) => !hasConfirmedBookingData(booking)
-    )
-    const freeDaysNumber = toOptionalNumber(impact.newValues.freeDays)
-
-    for (const booking of editableBookings) {
-      const eta =
-        !booking.actual_eta && impact.newValues.etd && impact.newValues.transitDays !== null
-          ? addDaysToDate(impact.newValues.etd, impact.newValues.transitDays)
-          : booking.eta || null
-
-      const { error: bookingError } = await supabase
-        .from('bookings')
-        .update({
-          carrier: impact.newValues.carrier,
-          etd: impact.newValues.etd,
-          estimated_transit_days: impact.newValues.transitDays,
-          free_days: freeDaysNumber,
-          eta,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', booking.id)
-
-      if (bookingError) throw bookingError
+      if (error) throw error
     }
   }
 

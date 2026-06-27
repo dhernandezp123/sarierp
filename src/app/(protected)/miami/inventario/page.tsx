@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Package, Search } from 'lucide-react'
+import { History, Package, Search, X } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
@@ -22,6 +22,16 @@ type Pkg = {
   warehouse_number: string | null
   received_at: string
   clientes?: { nombre: string | null } | null
+}
+
+type PackageEvent = {
+  id: string
+  event_type: string
+  old_status: string | null
+  new_status: string | null
+  notes: string | null
+  created_at: string
+  metadata: Record<string, unknown> | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -54,6 +64,13 @@ const nextStatus = (current: CargoStatus | string | null): CargoStatus | null =>
   return CARGO_STATUSES[idx + 1]
 }
 
+const previousStatus = (current: CargoStatus | string | null): CargoStatus | null => {
+  if (!current) return null
+  const idx = CARGO_STATUSES.indexOf(current as CargoStatus)
+  if (idx <= 0) return null
+  return CARGO_STATUSES[idx - 1]
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InventarioPage() {
@@ -65,6 +82,12 @@ export default function InventarioPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [updatingId, setUpdatingId]     = useState<string | null>(null)
+  const [historyPackage, setHistoryPackage] = useState<Pkg | null>(null)
+  const [historyEvents, setHistoryEvents] = useState<PackageEvent[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [reversePackage, setReversePackage] = useState<Pkg | null>(null)
+  const [reverseReason, setReverseReason] = useState('')
+  const [reversing, setReversing] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -83,13 +106,47 @@ export default function InventarioPage() {
     const next = nextStatus(pkg.cargo_status)
     if (!next) return
     setUpdatingId(pkg.id)
-    const { error } = await supabase
-      .from('miami_packages')
-      .update({ cargo_status: next, cargo_status_updated_at: new Date().toISOString() })
-      .eq('id', pkg.id)
+    const { error } = await supabase.rpc('advance_miami_package_status', {
+      p_package_id: pkg.id,
+      p_next_status: next,
+      p_notes: null,
+    })
     setUpdatingId(null)
     if (error) { toast.error(error.message); return }
     toast.success(`Estado actualizado: ${next}`)
+    load()
+  }
+
+  const openHistory = async (pkg: Pkg) => {
+    setHistoryPackage(pkg)
+    setHistoryEvents([])
+    setHistoryLoading(true)
+    const { data, error } = await supabase
+      .from('miami_package_events')
+      .select('id, event_type, old_status, new_status, notes, created_at, metadata')
+      .eq('package_id', pkg.id)
+      .order('created_at', { ascending: false })
+    setHistoryLoading(false)
+    if (error) { toast.error(error.message); return }
+    setHistoryEvents((data || []) as PackageEvent[])
+  }
+
+  const reverseStatus = async () => {
+    if (!reversePackage) return
+    if (!reverseReason.trim()) {
+      toast.error('Indica el motivo del reverso')
+      return
+    }
+    setReversing(true)
+    const { error } = await supabase.rpc('reverse_miami_package_status', {
+      p_package_id: reversePackage.id,
+      p_reason: reverseReason.trim(),
+    })
+    setReversing(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Estado reversado; el movimiento queda en historial')
+    setReversePackage(null)
+    setReverseReason('')
     load()
   }
 
@@ -204,7 +261,7 @@ export default function InventarioPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-900 dark:bg-[#081120]">
-                  {['WH #', 'Tracking', 'Cliente', 'Tipo', 'Peso', 'Recibido', 'Estado', 'Avanzar'].map((h) => (
+                  {['WH #', 'Tracking', 'Cliente', 'Tipo', 'Peso', 'Recibido', 'Estado', 'Avanzar', 'Historial'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-300 whitespace-nowrap">
                       {h}
                     </th>
@@ -215,6 +272,7 @@ export default function InventarioPage() {
                 {paginatedPackages.map((p) => {
                   const cs = (p.cargo_status || 'Recibido en Miami') as CargoStatus
                   const next = nextStatus(cs)
+                  const previous = previousStatus(cs)
                   return (
                     <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/20">
                       <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700 dark:text-slate-200">
@@ -244,16 +302,37 @@ export default function InventarioPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {next && (
-                          <button
-                            type="button"
-                            disabled={updatingId === p.id}
-                            onClick={() => advanceStatus(p)}
-                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                          >
-                            {updatingId === p.id ? '...' : `→ ${next}`}
-                          </button>
-                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          {next && (
+                            <button
+                              type="button"
+                              disabled={updatingId === p.id}
+                              onClick={() => advanceStatus(p)}
+                              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >
+                              {updatingId === p.id ? '...' : `-> ${next}`}
+                            </button>
+                          )}
+                          {previous && (
+                            <button
+                              type="button"
+                              onClick={() => { setReversePackage(p); setReverseReason('') }}
+                              className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                            >
+                              Reversar
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => openHistory(p)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          <History className="h-3.5 w-3.5" />
+                          Ver
+                        </button>
                       </td>
                     </tr>
                   )
@@ -270,6 +349,139 @@ export default function InventarioPage() {
           </div>
         )}
       </div>
+
+      {historyPackage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-[#0b1220]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
+                  Historial Miami
+                </p>
+                <h2 className="mt-1 font-mono text-base font-semibold text-slate-900 dark:text-white">
+                  {historyPackage.tracking_number}
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  {historyPackage.warehouse_number || 'Sin WH'} · {historyPackage.cargo_status || 'Sin estado'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryPackage(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto px-5 py-4">
+              {historyLoading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, index) => (
+                    <div key={index} className="h-16 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+                  ))}
+                </div>
+              ) : historyEvents.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  Sin eventos registrados para este paquete.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {historyEvents.map((event) => {
+                    const shipmentNumber =
+                      typeof event.metadata?.shipment_number === 'string'
+                        ? event.metadata.shipment_number
+                        : null
+                    return (
+                      <div key={event.id} className="py-3 first:pt-0 last:pb-0">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                              {event.new_status || event.event_type}
+                            </p>
+                            {event.old_status && event.new_status && (
+                              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                {event.old_status} &gt; {event.new_status}
+                              </p>
+                            )}
+                            {shipmentNumber && (
+                              <p className="mt-0.5 font-mono text-xs text-blue-600 dark:text-blue-300">
+                                {shipmentNumber}
+                              </p>
+                            )}
+                            {event.notes && (
+                              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{event.notes}</p>
+                            )}
+                          </div>
+                          <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                            {fmtDate(event.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reversePackage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-800 dark:bg-[#0b1220]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-300">
+                  Reverso de estado
+                </p>
+                <h2 className="mt-1 font-mono text-base font-semibold text-slate-900 dark:text-white">
+                  {reversePackage.tracking_number}
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  {reversePackage.cargo_status || 'Sin estado'} &gt; {previousStatus(reversePackage.cargo_status) || 'Anterior'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setReversePackage(null); setReverseReason('') }}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <label className="mt-5 block text-xs font-medium text-slate-500 dark:text-slate-400">
+              Motivo del reverso <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={reverseReason}
+              onChange={(event) => setReverseReason(event.target.value)}
+              rows={3}
+              className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-amber-400 dark:focus:ring-amber-950"
+              placeholder="Ej. Corrección por escaneo accidental, paquete no salió en este despacho..."
+            />
+
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => { setReversePackage(null); setReverseReason('') }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={reverseStatus}
+                disabled={reversing || !reverseReason.trim()}
+                className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {reversing ? 'Reversando...' : 'Confirmar reverso'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
