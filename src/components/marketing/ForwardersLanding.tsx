@@ -1,10 +1,11 @@
 'use client'
 
+import { BrandIntro } from '@/src/components/brandintro'
 import Link from 'next/link'
 import Image from 'next/image'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion'
 import type { Variants } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
@@ -560,9 +561,23 @@ export function ForwardersLanding() {
   const [form, setForm] = useState({ nombre: '', empresa: '', email: '', telefono: '' })
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [emailError, setEmailError] = useState('')
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setEmailError('Ingresa un correo válido.')
+      return
+    }
+    setEmailError('')
     setSubmitting(true)
     const { error } = await supabase.from('leads').insert([form])
     setSubmitting(false)
@@ -575,17 +590,19 @@ export function ForwardersLanding() {
   }
 
   return (
+    <MotionConfig reducedMotion="user">
     <main className="min-h-screen overflow-x-hidden bg-[#F7F8FA] text-[#07111F]">
+      <BrandIntro />
 
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="relative isolate overflow-hidden bg-white">
-        {/* Gradiente ambiental */}
-        <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[700px] w-[900px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,rgba(0,56,189,0.07),transparent_68%)]" />
-        <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(rgba(0,56,189,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(0,56,189,0.025)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:radial-gradient(ellipse_at_center,white,transparent_75%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-px bg-slate-200" />
-
-        {/* Nav */}
-        <nav className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
+      {/* ── Header sticky ──────────────────────────────────────────────── */}
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          scrolled
+            ? 'border-b border-slate-200/70 bg-white/80 shadow-sm shadow-slate-900/[0.03] backdrop-blur-xl'
+            : 'border-b border-transparent bg-transparent'
+        }`}
+      >
+        <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
               src="/brand/isotipo-color.png"
@@ -616,7 +633,7 @@ export function ForwardersLanding() {
           <div className="flex items-center gap-2.5">
             <a
               href="#demo"
-              className="hidden rounded-full bg-[#EF8E01] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#db8000] sm:inline-flex"
+              className="hidden rounded-full bg-[#0038BD] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#0038BD]/20 transition hover:bg-[#002fa8] sm:inline-flex"
             >
               Solicitar Demo
             </a>
@@ -638,7 +655,7 @@ export function ForwardersLanding() {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="relative z-10 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur-xl lg:hidden">
+          <div className="border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur-xl lg:hidden">
             <div className="mx-auto flex max-w-7xl flex-col gap-1">
               {navigation.map((item) => (
                 <a
@@ -653,16 +670,24 @@ export function ForwardersLanding() {
               <a
                 href="#demo"
                 onClick={() => setMobileMenuOpen(false)}
-                className="mt-2 rounded-full bg-[#EF8E01] px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-[#db8000]"
+                className="mt-2 rounded-full bg-[#0038BD] px-4 py-3 text-center text-sm font-bold text-white transition hover:bg-[#002fa8]"
               >
                 Solicitar Demo
               </a>
             </div>
           </div>
         )}
+      </header>
+
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <section className="relative isolate overflow-hidden bg-white">
+        {/* Gradiente ambiental */}
+        <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[700px] w-[900px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,rgba(0,56,189,0.07),transparent_68%)]" />
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(rgba(0,56,189,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(0,56,189,0.025)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:radial-gradient(ellipse_at_center,white,transparent_75%)]" />
+        <div className="absolute inset-x-0 bottom-0 h-px bg-slate-200" />
 
         {/* Hero copy */}
-        <div className="relative z-10 mx-auto max-w-7xl px-5 pb-20 pt-12 text-center sm:px-8 lg:pb-24">
+        <div className="relative z-10 mx-auto max-w-7xl px-5 pb-20 pt-8 text-center sm:px-8 lg:pb-24">
           <motion.div
             initial="hidden"
             animate="visible"
@@ -1272,26 +1297,28 @@ export function ForwardersLanding() {
             description="Forwarders ERP by DHer resuelve procesos comerciales y operativos que los ERP tradicionales no modelan de forma nativa."
           />
           <div className="mt-12 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
-            <div className="grid grid-cols-[1fr_0.8fr_1.1fr] bg-[#07111F] px-5 py-4 text-xs font-bold uppercase tracking-wider text-white sm:px-6">
-              <span>Necesidad</span>
-              <span>Proceso tradicional</span>
-              <span>Forwarders ERP by DHer</span>
-            </div>
-            {comparison.map((row, i) => (
-              <div
-                key={row.item}
-                className={`grid grid-cols-[1fr_0.8fr_1.1fr] items-center border-t border-slate-100 px-5 py-4 text-sm sm:px-6 ${
-                  i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'
-                }`}
-              >
-                <span className="font-medium text-[#07111F]">{row.item}</span>
-                <span className="text-slate-400">{row.generic}</span>
-                <span className="flex items-center gap-2 font-semibold text-[#0038BD]">
-                  <Check size={14} className="shrink-0 text-[#EF8E01]" />
-                  {row.product}
-                </span>
-              </div>
-            ))}
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="bg-[#07111F] text-xs font-bold uppercase tracking-wider text-white">
+                  <th className="px-5 py-4 font-bold sm:px-6">Necesidad</th>
+                  <th className="px-5 py-4 font-bold sm:px-6">Proceso tradicional</th>
+                  <th className="px-5 py-4 font-bold sm:px-6">Forwarders ERP by DHer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparison.map((row, i) => (
+                  <tr key={row.item} className={`border-t border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                    <th scope="row" className="px-5 py-4 font-medium text-[#07111F] sm:px-6">{row.item}</th>
+                    <td className="px-5 py-4 text-slate-500 sm:px-6">{row.generic}</td>
+                    <td className="px-5 py-4 sm:px-6">
+                      <span className="flex items-center gap-2 font-semibold text-[#0038BD]">
+                        <Check size={14} className="shrink-0 text-[#EF8E01]" />{row.product}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -1358,9 +1385,14 @@ export function ForwardersLanding() {
                   placeholder="Correo electrónico"
                   required
                   value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#EF8E01]/50 focus:ring-1 focus:ring-[#EF8E01]/30"
+                  onChange={(e) => { setForm((f) => ({ ...f, email: e.target.value })); if (emailError) setEmailError('') }}
+                  className={`rounded-xl border bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:ring-1 ${
+                    emailError
+                      ? 'border-red-400/60 focus:border-red-400 focus:ring-red-400/30'
+                      : 'border-white/10 focus:border-[#EF8E01]/50 focus:ring-[#EF8E01]/30'
+                  }`}
                 />
+                {emailError && <p className="-mt-1 text-xs text-red-300">{emailError}</p>}
                 <input
                   type="tel"
                   placeholder="Teléfono (opcional)"
@@ -1368,14 +1400,20 @@ export function ForwardersLanding() {
                   onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
                   className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-[#EF8E01]/50 focus:ring-1 focus:ring-[#EF8E01]/30"
                 />
+                <p className="text-center text-xs font-medium text-slate-300">
+                  Te contactamos en menos de 24h · Sin compromiso
+                </p>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="mt-1 inline-flex h-12 items-center justify-center rounded-xl bg-[#EF8E01] px-6 text-sm font-bold text-white shadow-lg shadow-[#EF8E01]/20 transition hover:bg-[#db8000] disabled:opacity-60"
+                  className="inline-flex h-12 items-center justify-center rounded-xl bg-[#0038BD] px-6 text-sm font-bold text-white shadow-lg shadow-[#0038BD]/25 transition hover:bg-[#002fa8] disabled:opacity-60"
                 >
                   {submitting ? 'Enviando...' : 'Solicitar Demo'}
                   {!submitting && <ArrowRight className="ml-2" size={16} />}
                 </button>
+                <p className="text-center text-[11px] text-slate-500">
+                  No compartimos tus datos con terceros.
+                </p>
                 <p className="text-center text-xs text-slate-500">
                   O escríbenos a{' '}
                   <a href="mailto:contacto@dher.dev" className="text-[#EF8E01] hover:underline">
@@ -1463,5 +1501,6 @@ export function ForwardersLanding() {
         </div>
       </footer>
     </main>
+    </MotionConfig>
   )
 }
