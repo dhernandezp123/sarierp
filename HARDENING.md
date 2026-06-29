@@ -1047,6 +1047,56 @@ Agregar una entrada por fix:
     de tarifa puede seguir fallando por el índice único de tarifa seleccionada.
 - Commit: pendiente.
 
+### 2026-06-29 - FLOW-003 - RPC de hijos de cotizacion sin ambiguedad
+
+- Estado: En validacion manual; SQL aplicado en remoto.
+- Hallazgo: FLOW-003.
+- Causa raiz: `replace_quotation_child_lines` retorna una columna llamada
+  `quotation_id` y dentro del cuerpo usaba `where quotation_id = p_quotation_id`
+  sin alias de tabla. En PL/pgSQL eso vuelve ambigua la referencia entre columna
+  real y variable de salida, provocando el error al guardar desde
+  `/quotations/[id]/edit`.
+- SQL:
+  - `supabase/migrations/20260629090000_fix_replace_quotation_child_lines_ambiguous_id.sql`
+- Codigo:
+  - Sin cambios TypeScript; el formulario ya llama al RPC correcto.
+- Cambio:
+  - Se recrea el RPC calificando los deletes como `qc.quotation_id`,
+    `qcl.quotation_id` y `pi.quotation_id`.
+  - El `return query` ahora expone aliases explicitos para evitar nuevas
+    colisiones con variables de salida.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - Editar una cotizacion FCL/LCL/Miami desde `/quotations/[id]/edit` y guardar.
+  - Confirmar que contenedores, carga suelta y pricing Miami se reemplazan sin
+    error y sin duplicados.
+- Riesgos pendientes:
+  - No marcar como completado hasta aplicar SQL remoto y probar el flujo.
+- Commit: hash pendiente
+
+### 2026-06-29 - UX-009 - Compatibilidad de scroll suave en Next 16
+
+- Estado: Completado.
+- Hallazgo: UX-009.
+- Causa raiz: Next.js 16 ya no sobrescribe por defecto `scroll-behavior: smooth`
+  durante transiciones SPA. Como `globals.css` define smooth scrolling en
+  `html`, Next mostraba el aviso `missing-data-scroll-behavior`.
+- Codigo:
+  - `src/app/layout.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Se agrego `data-scroll-behavior="smooth"` al elemento raiz `<html>` para que
+    Next desactive temporalmente el smooth scroll durante cambios de ruta.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS:
+  - No aplica RLS. Verificar navegacion entre rutas sin warning en consola.
+- Riesgos pendientes:
+  - Ninguno.
+- Commit: hash pendiente
+
 ### 2026-06-27 — FASE-6 — Embarques Miami persistentes e historial inicial
 
 - Estado: En validación manual; migraciones aplicadas en Supabase remoto.
