@@ -29,10 +29,10 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen overflow-hidden bg-[#F5F7FA] text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
       <Sidebar role={profile.rol} />
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="min-w-0 flex-1 overflow-y-auto p-6">
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
 

@@ -1097,6 +1097,73 @@ Agregar una entrada por fix:
   - Ninguno.
 - Commit: hash pendiente
 
+### 2026-06-29 - UX-010 - Cargos adicionales de origen en Miami automatico
+
+- Estado: En validacion manual.
+- Hallazgo: UX-010.
+- Causa raiz: El flujo rapido Miami Consolidado permitia agregar cargos
+  adicionales de destino, pero no cargos de origen seleccionados desde las
+  tarifas activas del perfil del cliente.
+- Codigo:
+  - `src/components/quotations/MiamiQuotationSection.tsx`
+  - `src/hooks/useMiamiQuotation.ts`
+  - `src/lib/miami-pricing-items.ts`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Se agrego la seccion `Cargos adicionales en origen` para Miami LCL y Miami
+    Aereo.
+  - El selector usa tarifas activas del cliente en categoria `Otros Cargos`,
+    excluyendo fletes, minimos, pickup y cargos automaticos ya controlados por el
+    flujo Miami.
+  - Al seleccionar una tarifa se precargan descripcion y monto; el monto e ISV
+    quedan editables para la cotizacion puntual.
+  - Los cargos seleccionados se guardan como `pricing_items` con
+    `item_type = origin_charge`.
+  - Miami Aereo permite marcar `Agregar Documentos/Manejo`; el monto se toma de
+    la tarifa activa `documentos_manejo` del perfil del cliente y se guarda como
+    cargo de origen.
+  - Se normalizaron valores de inputs y checkboxes nuevos para evitar cambios de
+    uncontrolled a controlled durante hidratacion/Fast Refresh.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - En `/quotations/new`, seleccionar cliente con tarifas Miami activas.
+  - Probar Miami Consolidado Aereo y Miami Consolidado Maritimo LCL.
+  - En Miami Aereo, marcar `Agregar Documentos/Manejo` y confirmar que precarga
+    la tarifa del cliente.
+  - Agregar un cargo adicional de origen, crear/previsualizar la cotizacion y
+    confirmar que aparece en el PDF y en pricing items como cargo de origen.
+- Riesgos pendientes:
+  - Confirmar con datos reales si algun cargo del catalogo de cliente debe
+    mostrarse tambien como destino o mantenerse reservado para reglas
+    automaticas.
+- Commit: hash pendiente
+
+### 2026-06-29 - UX-011 - Sidebar sin encogimiento en paginas anchas
+
+- Estado: Completado.
+- Hallazgo: UX-011.
+- Causa raiz: El layout protegido usa flex horizontal y el sidebar no tenia
+  `shrink-0`. En paginas con tablas/filtros anchos, como Historico/Cotizaciones,
+  el contenido principal podia forzar que el sidebar se encogiera.
+- Codigo:
+  - `src/components/layout/sidebar.tsx`
+  - `src/components/layout/protected-shell.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Se fijo el sidebar como columna no encogible con `shrink-0`.
+  - Se agrego `min-w-0` a la columna principal y al `main` para que el overflow
+    se maneje dentro del area de contenido.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS:
+  - No aplica RLS. Revisar `/historico` y paginas con tablas anchas.
+- Riesgos pendientes:
+  - Ninguno.
+- Commit: hash pendiente
+
 ### 2026-06-27 — FASE-6 — Embarques Miami persistentes e historial inicial
 
 - Estado: En validación manual; migraciones aplicadas en Supabase remoto.

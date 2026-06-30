@@ -319,7 +319,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   }
 
   return (
-    <aside className="relative flex h-full min-h-screen w-64 flex-col overflow-hidden border-r border-white/10 bg-[#07111F] text-white shadow-2xl shadow-slate-950/20">
+    <aside className="relative flex h-full min-h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#07111F] text-white shadow-2xl shadow-slate-950/20">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,56,189,0.24),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(239,142,1,0.16),transparent_32%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:28px_28px] opacity-40 [mask-image:linear-gradient(to_bottom,white,transparent_88%)]" />
 

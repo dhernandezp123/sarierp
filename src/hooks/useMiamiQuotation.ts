@@ -11,6 +11,7 @@ import {
   type ClientRate,
   type DestinationCharge,
   type MiamiOptions,
+  type OriginCharge,
   type SurchargeRule,
 } from '@/src/lib/miami-pricing-items'
 
@@ -52,12 +53,14 @@ export function useMiamiQuotation({
     'none'
   )
   const [manualPickupAmount, setManualPickupAmount] = useState(0)
+  const [originCharges, setOriginCharges] = useState<OriginCharge[]>([])
   const [destinationCharges, setDestinationCharges] = useState<
     DestinationCharge[]
   >([])
   const [miamiOptions, setMiamiOptions] = useState<MiamiOptions>({
     applyStandardCharges: true,
     taxStandardDestinationCharges: false,
+    includeAirDocumentsHandling: false,
     isImo: false,
     isHazmat: false,
     includeImoCertificate: false,
@@ -125,6 +128,36 @@ export function useMiamiQuotation({
 
   const getClientRate = (code: string) =>
     clientRates.find((item) => item.rate_code === code)
+
+  const automaticRateCodes = new Set([
+    'small_maritimo_min_lcl_1000_lbs_45_ft3',
+    'minimo_maritimo_2mil_lbs_90_ft3',
+    'lcl_maritimo_sps_ft3',
+    'lcl_maritimo_sps_lbs',
+    'consolidado_aereo_kg',
+    'delivery_miami',
+    'recolectas_internas',
+    'documentos_manejo',
+    'desconsolidar',
+    'bl',
+    'sed',
+    'hazmat_imo_charge_line',
+    'declaracion_imo',
+    'certificado_imo',
+  ])
+
+  const originChargeRates = clientRates.filter((rate) => {
+    const amount = Number(rate.amount || 0)
+    const category = (rate.category || '').toLowerCase()
+
+    return (
+      amount > 0 &&
+      category === 'otros cargos' &&
+      !automaticRateCodes.has(rate.rate_code)
+    )
+  })
+
+  const airDocumentsHandlingRate = getClientRate('documentos_manejo')
 
   const miamiLclFt3Rate = getClientRateAmount('lcl_maritimo_sps_ft3')
   const miamiLclLbsRate = getClientRateAmount('lcl_maritimo_sps_lbs')
@@ -211,6 +244,7 @@ export function useMiamiQuotation({
       quotationId,
       serviceProduct,
       clientRates,
+      originCharges,
       destinationCharges,
       miamiOptions,
       lclEstimated,
@@ -294,6 +328,7 @@ export function useMiamiQuotation({
     }
 
     const nextDestinationCharges: DestinationCharge[] = []
+    const nextOriginCharges: OriginCharge[] = []
     let nextPickupMode: 'none' | 'standard' | 'manual' = 'none'
     let nextManualPickupAmount = 0
     let hasStandardCharge = false
@@ -320,6 +355,14 @@ export function useMiamiQuotation({
         }
 
         if (standardCodes.has(rateCode)) {
+          if (
+            serviceProduct === 'miami_air' &&
+            rateCode === 'documentos_manejo'
+          ) {
+            nextMiamiOptions.includeAirDocumentsHandling = true
+            return
+          }
+
           hasStandardCharge = true
           if (item.taxable && (rateCode === 'documentos_manejo' || rateCode === 'desconsolidar')) {
             hasTaxableStandardDestinationCharge = true
@@ -335,6 +378,18 @@ export function useMiamiQuotation({
         if (rateCode.startsWith('destination_charge:')) {
           nextDestinationCharges.push({
             id: item.id || crypto.randomUUID(),
+            description,
+            amount: String(amount),
+            taxable: Boolean(item.taxable),
+          })
+          return
+        }
+
+        if (rateCode.startsWith('origin_charge:')) {
+          const [, sourceRateCode = ''] = rateCode.split(':')
+          nextOriginCharges.push({
+            id: item.id || crypto.randomUUID(),
+            rateCode: sourceRateCode,
             description,
             amount: String(amount),
             taxable: Boolean(item.taxable),
@@ -359,6 +414,33 @@ export function useMiamiQuotation({
       ) {
         nextPickupMode = 'manual'
         nextManualPickupAmount = amount
+        return
+      }
+
+      if (itemType === 'origin_charge') {
+        const documentsHandlingLabel =
+          getClientRate('documentos_manejo')?.rate_label?.toLowerCase()
+
+        if (
+          serviceProduct === 'miami_air' &&
+          documentsHandlingLabel &&
+          normalizedDescription === documentsHandlingLabel
+        ) {
+          nextMiamiOptions.includeAirDocumentsHandling = true
+          return
+        }
+
+        const matchingOriginRate = originChargeRates.find(
+          (rate) => rate.rate_label.toLowerCase() === normalizedDescription
+        )
+
+        nextOriginCharges.push({
+          id: item.id || crypto.randomUUID(),
+          rateCode: matchingOriginRate?.rate_code || '',
+          description,
+          amount: String(amount),
+          taxable: Boolean(item.taxable),
+        })
         return
       }
 
@@ -399,9 +481,12 @@ export function useMiamiQuotation({
 
     setPickupMode(nextPickupMode)
     setManualPickupAmount(nextManualPickupAmount)
+    setOriginCharges(nextOriginCharges)
     setDestinationCharges(nextDestinationCharges)
     setMiamiOptions({
       ...nextMiamiOptions,
+      includeAirDocumentsHandling:
+        nextMiamiOptions.includeAirDocumentsHandling || false,
       applyStandardCharges: hasStandardCharge,
       taxStandardDestinationCharges:
         hasTaxableStandardDestinationCharge ||
@@ -417,6 +502,7 @@ export function useMiamiQuotation({
     hydratedPricingItemsKey,
     miamiOptions,
     getClientRate,
+    originChargeRates,
   ])
 
   return {
@@ -428,6 +514,10 @@ export function useMiamiQuotation({
     setPickupMode,
     manualPickupAmount,
     setManualPickupAmount,
+    originCharges,
+    setOriginCharges,
+    originChargeRates,
+    airDocumentsHandlingRate,
     destinationCharges,
     setDestinationCharges,
     miamiOptions,

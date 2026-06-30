@@ -35,9 +35,18 @@ export type DestinationCharge = {
   taxable: boolean
 }
 
+export type OriginCharge = {
+  id: string
+  rateCode: string
+  description: string
+  amount: string
+  taxable: boolean
+}
+
 export type MiamiOptions = {
   applyStandardCharges: boolean
   taxStandardDestinationCharges: boolean
+  includeAirDocumentsHandling: boolean
   isImo: boolean
   isHazmat: boolean
   includeImoCertificate: boolean
@@ -47,6 +56,7 @@ export type MiamiPricingItemInput = {
   quotationId: string
   serviceProduct: string
   clientRates: ClientRate[]
+  originCharges: OriginCharge[]
   destinationCharges: DestinationCharge[]
   miamiOptions: MiamiOptions
   lclEstimated: number
@@ -67,6 +77,7 @@ export function buildMiamiPricingItems({
   quotationId,
   serviceProduct,
   clientRates,
+  originCharges,
   destinationCharges,
   miamiOptions,
   lclEstimated,
@@ -86,6 +97,36 @@ export function buildMiamiPricingItems({
 
   const getClientRate = (code: string) =>
     clientRates.find((item) => item.rate_code === code)
+
+  const originItems = originCharges
+    .filter((charge) => Number(charge.amount || 0) > 0)
+    .map((charge) => {
+      const amount = Number(charge.amount || 0)
+      const taxAmount = charge.taxable ? amount * 0.15 : 0
+      const sourceRate = getClientRate(charge.rateCode)
+      const description =
+        charge.description || sourceRate?.rate_label || 'Cargo en origen'
+
+      return {
+        quotation_id: quotationId,
+        rate_code: `origin_charge:${charge.rateCode}:${charge.id}`,
+        description,
+        item_type: 'origin_charge',
+        quantity: 1,
+        cost_amount: 0,
+        sale_amount: amount,
+        currency: sourceRate?.currency || 'USD',
+        taxable: charge.taxable,
+        tax_rate: charge.taxable ? 15 : 0,
+        tax_amount: taxAmount,
+        total_amount: amount + taxAmount,
+        supplier: 'Sari Express',
+        created_by: createdBy || null,
+        notes: charge.taxable
+          ? 'Cargo adicional en origen gravable con ISV 15%.'
+          : 'Cargo adicional en origen.',
+      }
+    })
 
   const destinationItems = destinationCharges
     .filter((charge) => Number(charge.amount || 0) > 0)
@@ -241,7 +282,7 @@ export function buildMiamiPricingItems({
       })
     })
 
-    return [...items, ...destinationItems]
+    return [...items, ...originItems, ...destinationItems]
   }
 
   if (serviceProduct === 'miami_air') {
@@ -289,7 +330,32 @@ export function buildMiamiPricingItems({
       })
     }
 
-    return [...items, ...destinationItems]
+    if (miamiOptions.includeAirDocumentsHandling) {
+      const documentsHandlingRate = getClientRate('documentos_manejo')
+      const amount = Number(documentsHandlingRate?.amount || 0)
+
+      if (documentsHandlingRate && amount > 0) {
+        items.push({
+          quotation_id: quotationId,
+          rate_code: 'documentos_manejo',
+          description: documentsHandlingRate.rate_label,
+          item_type: 'origin_charge',
+          quantity: 1,
+          cost_amount: 0,
+          sale_amount: amount,
+          currency: documentsHandlingRate.currency || 'USD',
+          taxable: false,
+          supplier: 'Sari Express',
+          tax_rate: 0,
+          tax_amount: 0,
+          total_amount: amount,
+          created_by: createdBy || null,
+          notes: 'Cargo de origen aplicado desde tarifa activa del cliente.',
+        })
+      }
+    }
+
+    return [...items, ...originItems, ...destinationItems]
   }
 
   return []
