@@ -313,14 +313,6 @@ export function FclAgentComparisonTable({
 
   const rows: Row[] = [
     {
-      label: 'Agente',
-      getValue: (quote) => (
-        <span className="font-semibold text-slate-900 dark:text-white">
-          {getAgentQuoteProviderName(quote)}
-        </span>
-      ),
-    },
-    {
       label: 'Naviera / Carrier',
       getValue: (quote) =>
         showCarrierInput && quote.carrier ? (

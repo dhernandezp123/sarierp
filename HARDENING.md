@@ -1074,6 +1074,8 @@ Agregar una entrada por fix:
     Cancellation Fee.
   - Se agrego `Guardar tabla` para persistir los ajustes FCL en `localStorage`
     por cotizacion; al alternar Cards/Tabla los valores ya no se pierden.
+  - Se elimino la fila duplicada `Agente`, porque el agente ya aparece como
+    encabezado de cada columna.
 - Validaciones ejecutadas:
   - `npx tsc --noEmit`: OK.
 - Verificacion manual/RLS pendiente:
