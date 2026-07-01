@@ -1097,7 +1097,7 @@ Agregar una entrada por fix:
     combobox) no marcan el formulario sucio por sí solos; la mayoría de la
     captura es tipeo y selects nativos, que sí lo hacen.
   - El autosave (borradores) sigue pendiente dentro de UX-003.
-- Commit: hash pendiente
+- Commit: `f7eb997`
 
 ### 2026-07-01 — UX-001 — Navegación móvil del ERP interno
 
