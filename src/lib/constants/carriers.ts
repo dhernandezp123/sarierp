@@ -67,6 +67,14 @@ export const CARRIERS: Carrier[] = [
     useTailwind: false,
   },
   {
+    code: "OOCL",
+    name: "OOCL",
+    type: "ocean",
+    bg: "#E30613",     // Rojo OOCL
+    text: "#FFFFFF",
+    useTailwind: false,
+  },
+  {
     code: "ONE",
     name: "Ocean Network Express",
     type: "ocean",

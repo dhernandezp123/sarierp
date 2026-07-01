@@ -1090,6 +1090,27 @@ Agregar una entrada por fix:
     guardada.
 - Commit: hash pendiente
 
+### 2026-07-01 - UX-013 - OOCL en catalogo de navieras
+
+- Estado: En validacion.
+- Hallazgo: UX-013.
+- Causa raiz: OOCL no estaba disponible en el catalogo compartido de carriers,
+  por lo que no aparecia en comboboxes ni badges de navieras.
+- Codigo:
+  - `src/lib/constants/carriers.ts`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Se agrego OOCL como carrier tipo `ocean`.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - No aplica RLS ni migraciones.
+  - Confirmar que OOCL aparece en los selectores de carrier/naviera maritima.
+- Riesgos pendientes:
+  - Ninguno.
+- Commit: hash pendiente
+
 ### 2026-06-29 - FLOW-003 - RPC de hijos de cotizacion sin ambiguedad
 
 - Estado: En validacion manual; SQL aplicado en remoto.
