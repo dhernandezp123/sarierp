@@ -20,6 +20,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { toDateInputValue } from '@/src/lib/format'
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -103,7 +104,7 @@ export default function FinancialDashboardPage() {
 
   const today = new Date()
   const [dateFrom, setDateFrom] = useState(`${today.getFullYear()}-01-01`)
-  const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10))
+  const [dateTo, setDateTo] = useState(toDateInputValue(today))
   const [activePreset, setActivePreset] = useState<'month' | 'quarter' | 'year' | 'all' | 'custom'>('year')
 
   const [loading, setLoading] = useState(true)
@@ -114,12 +115,12 @@ export default function FinancialDashboardPage() {
   const applyPreset = (preset: 'month' | 'quarter' | 'year' | 'all') => {
     setActivePreset(preset)
     const now = new Date()
-    const to = now.toISOString().slice(0, 10)
+    const to = toDateInputValue(now)
     if (preset === 'month') {
-      setDateFrom(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10))
+      setDateFrom(toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)))
       setDateTo(to)
     } else if (preset === 'quarter') {
-      setDateFrom(new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10))
+      setDateFrom(toDateInputValue(new Date(now.getFullYear(), now.getMonth() - 2, 1)))
       setDateTo(to)
     } else if (preset === 'year') {
       setDateFrom(`${now.getFullYear()}-01-01`)

@@ -336,7 +336,7 @@ export default function PortalDashboard() {
                 </div>
                 {a.expected_date && (
                   <p className="ml-3 shrink-0 text-xs text-amber-600 dark:text-amber-400">
-                    Est. {new Date(a.expected_date).toLocaleDateString('es-HN', { day: '2-digit', month: 'short' })}
+                    Est. {fmt(a.expected_date)}
                   </p>
                 )}
               </div>

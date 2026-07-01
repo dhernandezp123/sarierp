@@ -1,5 +1,7 @@
 import { supabase } from '@/src/lib/supabase/client'
 
+export const NOTIFICATIONS_READ_EVENT = 'sari:notifications-read'
+
 type NotificationPayload = {
   userId: string
   title: string
@@ -53,10 +55,13 @@ export async function markCurrentUserNotificationsAsRead() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) return
+  if (!user) return { error: new Error('No hay sesión activa') }
 
-  await supabase
+  const { error } = await supabase
     .from('notifications')
     .update({ is_read: true })
     .eq('user_id', user.id)
+    .eq('is_read', false)
+
+  return { error }
 }

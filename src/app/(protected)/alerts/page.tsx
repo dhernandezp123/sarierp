@@ -15,6 +15,7 @@ import {
   type SystemAlertSeverity,
 } from '@/src/lib/alerts'
 import { checkAndNotifyExpiredTarifas } from '@/src/lib/tarifa-expiry-check'
+import { markCurrentUserNotificationsAsRead, NOTIFICATIONS_READ_EVENT } from '@/src/lib/notifications'
 
 type CategoryFilter = 'Todas' | SystemAlertCategory
 type SeverityFilter = 'Todas' | SystemAlertSeverity
@@ -79,6 +80,19 @@ export default function AlertsPage() {
       })
     }
   }, [profile?.rol])
+
+  useEffect(() => {
+    if (userLoading || !user) return
+    void markCurrentUserNotificationsAsRead()
+      .then(({ error }) => {
+        // Solo poner el badge en cero si la base confirmó el update;
+        // ante error el conteo real se recalcula en la próxima navegación.
+        if (!error) window.dispatchEvent(new Event(NOTIFICATIONS_READ_EVENT))
+      })
+      .catch(() => {
+        // El badge se recalculará en la próxima navegación.
+      })
+  }, [user, userLoading])
 
   const summary = useMemo(() => ({
     Comercial: alerts.filter((a) => a.category === 'Comercial').length,

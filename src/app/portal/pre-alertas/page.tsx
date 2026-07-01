@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, Plus, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { formatDateShort } from '@/src/lib/format'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 
@@ -141,7 +142,7 @@ export default function PortalPreAlertasPage() {
                       <span>Creada {new Date(a.created_at).toLocaleDateString('es-HN', { day: '2-digit', month: 'short' })}</span>
                       {a.expected_date && (
                         <span className="text-amber-500">
-                          Est. {new Date(a.expected_date).toLocaleDateString('es-HN', { day: '2-digit', month: 'short' })}
+                          Est. {formatDateShort(a.expected_date)}
                         </span>
                       )}
                     </div>

@@ -119,12 +119,12 @@ Fecha: 22/06/2026
 
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
-| BUG-001 | Reporte Pagos a Proveedores tiene código inalcanzable | Alta | Pendiente |
+| BUG-001 | Reporte Pagos a Proveedores tiene código inalcanzable | Alta | En validación |
 | BUG-002 | Notificaciones de tarifa vencida filtran estado legacy `Cotizada` | Alta | En validación |
 | BUG-003 | Proveedores busca cotizaciones legacy `Aprobada` | Alta | En validación |
 | BUG-004 | `/profile` no está autorizado para roles no Admin | Alta | Completado |
 | BUG-005 | Tutorial Admin enlaza `/users` en vez de `/admin/users` | Media | Completado |
-| BUG-006 | Sidebar cuenta notificaciones que nunca se marcan como leídas | Alta | Pendiente |
+| BUG-006 | Sidebar cuenta notificaciones que nunca se marcan como leídas | Alta | En validación |
 | BUG-007 | Tres sistemas de notificación están desconectados | Alta | Pendiente |
 
 ### Reportes y fechas
@@ -135,9 +135,9 @@ Fecha: 22/06/2026
 | REP-002 | Dashboard financiero llama Revenue a venta cotizada, no facturada | Alta | Pendiente |
 | REP-003 | GP real mezcla operaciones con y sin costos reales completos | Alta | Pendiente |
 | REP-004 | Filtros usan fecha de creación en lugar de fecha de negocio | Media | Pendiente |
-| REP-005 | Uso de UTC puede adelantar fechas un día en Guatemala | Alta | Pendiente |
-| REP-006 | Fechas `DATE` pueden mostrarse como el día anterior | Alta | Pendiente |
-| REP-007 | Crear helper único de fecha, moneda y tipo de cambio | Alta | Pendiente |
+| REP-005 | Uso de UTC puede adelantar fechas un día en Guatemala | Alta | En progreso |
+| REP-006 | Fechas `DATE` pueden mostrarse como el día anterior | Alta | En progreso |
+| REP-007 | Crear helper único de fecha, moneda y tipo de cambio | Alta | En progreso |
 
 ### UX y documentación
 
@@ -148,7 +148,7 @@ Fecha: 22/06/2026
 | UX-003 | Formularios largos no tienen autosave ni guard de cambios | Alta | Pendiente |
 | UX-004 | Filtros activos mantienen estilos inconsistentes | Media | Pendiente |
 | UX-005 | Branding del sidebar difiere de configuraciones anteriores | Baja | Pendiente |
-| UX-006 | Documento raíz usa `lang="en"` en una aplicación española | Baja | Pendiente |
+| UX-006 | Documento raíz usa `lang="en"` en una aplicación española | Baja | Completado |
 | UX-007 | Revisar campos operativos del PDF por modalidad | Alta | Pendiente |
 | UX-008 | Mejorar errores, loaders, navegación y accesibilidad | Media | Pendiente |
 
@@ -161,7 +161,7 @@ Fecha: 22/06/2026
 | QA-003 | No existe CI como puerta de calidad | Alta | Pendiente |
 | QA-004 | Páginas críticas superan 1,000–4,900 líneas | Alta | Pendiente |
 | QA-005 | Uso extendido de `any` y casts inseguros | Alta | Pendiente |
-| QA-006 | README continúa siendo el de `create-next-app` | Media | Pendiente |
+| QA-006 | README continúa siendo el de `create-next-app` | Media | Completado |
 | QA-007 | No existe un runner formal de migraciones | Crítica | Pendiente |
 | QA-008 | `AGENTS.md`, `PHASES.md`, estados y código están desalineados | Alta | Pendiente |
 | QA-009 | Auditoría npm mantiene dos vulnerabilidades moderadas sin fix | Media | Pendiente |
@@ -1046,6 +1046,139 @@ Agregar una entrada por fix:
   - Si la migración `20260624020000` no está aplicada en Supabase remoto, el cambio
     de tarifa puede seguir fallando por el índice único de tarifa seleccionada.
 - Commit: pendiente.
+
+### 2026-07-01 — BUG-001 — Reporte Pagos a Proveedores inalcanzable
+
+- Estado: En validación manual.
+- Hallazgo: BUG-001.
+- Causa raíz: en `reports/page.tsx` el `return` del reporte de vencidas
+  (`overdue`) no estaba condicionado por `activeReport`, por lo que los bloques
+  de filas y columnas de `supplier_payments` eran código inalcanzable. El
+  reporte Pagos a Proveedores mostraba siempre los datos de Vencidas. La
+  consulta a `pagos_proveedor` sí se ejecutaba correctamente.
+- Código:
+  - `src/app/(protected)/reports/page.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - El branch de vencidas queda dentro de `if (activeReport === 'overdue')`
+    tanto en `baseRows` como en `columns`, habilitando los bloques de
+    `supplier_payments` ya existentes.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint del archivo: sin errores nuevos.
+  - `npm run build`: OK, 65 páginas.
+- Verificación manual/RLS pendiente:
+  - Con rol Admin/Finanzas/Contabilidad, abrir Reportes > Pagos a Proveedores y
+    confirmar columnas de proveedor, período, método y monto.
+  - Confirmar que Reportes > Vencidas sigue mostrando CxC y CxP vencidas.
+- Riesgos pendientes:
+  - Ninguno adicional; el fix no cambia consultas ni permisos.
+- Commit: hash pendiente
+
+### 2026-07-01 — BUG-006 — Notificaciones del sidebar se marcan leídas
+
+- Estado: En validación manual.
+- Hallazgo: BUG-006.
+- Causa raíz: el helper `markCurrentUserNotificationsAsRead` existía pero
+  ningún componente lo llamaba, y el sidebar contaba `is_read = false` una sola
+  vez al montar. El badge de Alertas crecía indefinidamente.
+- Código:
+  - `src/lib/notifications.ts`
+  - `src/app/(protected)/alerts/page.tsx`
+  - `src/components/layout/sidebar.tsx`
+- SQL:
+  - No aplica; la política RLS de Fase 1 ya permite al usuario actualizar
+    `is_read` de sus propias notificaciones.
+- Cambio:
+  - Al abrir `/alerts`, las notificaciones del usuario se marcan leídas y se
+    emite el evento `sari:notifications-read`.
+  - El sidebar recalcula el conteo en cada cambio de ruta y escucha el evento
+    para poner el badge en cero de inmediato.
+  - El update de lectura filtra `is_read = false` para no reescribir filas ya
+    leídas.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint: sin errores nuevos en los archivos tocados.
+  - `npm run build`: OK, 65 páginas.
+- Verificación manual/RLS pendiente:
+  - Generar una notificación interna, confirmar el badge, entrar a `/alerts` y
+    confirmar que el badge desaparece y no reaparece al navegar.
+- Riesgos pendientes:
+  - BUG-007 (tres sistemas de notificación desconectados) sigue pendiente; este
+    fix solo cubre `notifications` internas del badge de Alertas.
+- Commit: hash pendiente
+
+### 2026-07-01 — REP-005/REP-006/REP-007 — Helper de formato y fechas locales
+
+- Estado: En progreso; corregidos los casos detectados en reportes, dashboards
+  y portal. Queda auditoría del resto de módulos y el tipo de cambio.
+- Hallazgos: REP-005, REP-006 y REP-007.
+- Causa raíz:
+  - `new Date('YYYY-MM-DD')` interpreta columnas `DATE` como medianoche UTC y
+    en Honduras (UTC-6) muestra el día anterior.
+  - `new Date(año, mes, 1).toISOString().slice(0, 10)` devuelve siempre el
+    último día del mes anterior, por lo que el preset "Este mes" de dashboards
+    y reportes incluía datos del mes previo; `toISOString()` para "hoy"
+    devuelve mañana después de las 18:00 hora local.
+- Código:
+  - `src/lib/format.ts` (nuevo): `parseDateValue`, `formatDate`,
+    `formatDateShort`, `formatDateTime`, `toDateInputValue` y `formatMoney`.
+  - `src/app/(protected)/reports/page.tsx`
+  - `src/app/(protected)/dashboard/page.tsx`
+  - `src/app/(protected)/financial-dashboard/page.tsx`
+  - `src/app/portal/page.tsx`
+  - `src/app/portal/pre-alertas/page.tsx`
+  - `src/app/portal/pickup/page.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Presets e iniciales de rango de fecha usan `toDateInputValue` (zona local).
+  - `expected_date` y `scheduled_date` del portal se formatean sin desfase.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint de los archivos nuevos: cero errores.
+  - `npm run build`: OK, 65 páginas.
+- Verificación manual pendiente:
+  - Confirmar el preset "Este mes" en Dashboard, Dashboard Financiero y
+    Reportes: `from` debe ser el día 1 del mes actual.
+- Riesgos o trabajo pendiente:
+  - Quedan usos de `toISOString().slice(0, 10)` en facturación, CAI, agentes,
+    pricing-comparison y operaciones por auditar caso por caso.
+  - REP-007 queda parcial: falta centralizar tipo de cambio y migrar los
+    formateadores locales duplicados al helper.
+- Commit: hash pendiente
+
+### 2026-07-01 — UX-006 — Idioma del documento raíz
+
+- Estado: Completado.
+- Hallazgo: UX-006.
+- Código:
+  - `src/app/layout.tsx`
+- Cambio:
+  - `<html lang="en">` pasa a `lang="es"`.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK, 65 páginas.
+- Riesgos pendientes:
+  - Ninguno.
+- Commit: hash pendiente
+
+### 2026-07-01 — QA-006 — README del proyecto
+
+- Estado: Completado.
+- Hallazgo: QA-006.
+- Código:
+  - `README.md`
+- Cambio:
+  - Se reemplazó el README de `create-next-app` por documentación real: stack,
+    variables de entorno, comandos de desarrollo y validación, flujo de
+    migraciones Supabase, estructura de carpetas y convenciones del ERP.
+- Validaciones ejecutadas:
+  - `npm run build`: OK (sin impacto en código).
+- Riesgos pendientes:
+  - Ninguno.
+- Commit: hash pendiente
 
 ### 2026-07-01 - UX-012 - Vista tabla FCL en comparativo de pricing
 

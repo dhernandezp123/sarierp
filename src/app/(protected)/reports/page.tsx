@@ -12,6 +12,7 @@ import {
   RefreshCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { toDateInputValue } from '@/src/lib/format'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
@@ -235,13 +236,13 @@ function exportCSV(rows: ReportRow[], columns: ReportPdfColumn[], filename: stri
 
 function presetRange(preset: Exclude<DatePreset, 'custom'>) {
   const now = new Date()
-  const to = now.toISOString().slice(0, 10)
+  const to = toDateInputValue(now)
 
   if (preset === 'month') {
-    return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10), to }
+    return { from: toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)), to }
   }
   if (preset === 'quarter') {
-    return { from: new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10), to }
+    return { from: toDateInputValue(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to }
   }
   if (preset === 'year') {
     return { from: `${now.getFullYear()}-01-01`, to }
@@ -271,8 +272,8 @@ export default function ReportsPage() {
   const role = profile?.rol || ''
   const today = new Date()
   const [activeReport, setActiveReport] = useState<ReportId>('commercial')
-  const [dateFrom, setDateFrom] = useState(new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10))
-  const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10))
+  const [dateFrom, setDateFrom] = useState(toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)))
+  const [dateTo, setDateTo] = useState(toDateInputValue(today))
   const [clientFilter, setClientFilter] = useState(ALL)
   const [sellerFilter, setSellerFilter] = useState(ALL)
   const [serviceFilter, setServiceFilter] = useState(ALL)
@@ -621,7 +622,8 @@ export default function ReportsPage() {
       })
     }
 
-    return [
+    if (activeReport === 'overdue') {
+      return [
       ...receivables
         .filter((receivable) => Number(receivable.balance) > 0 && receivable.days_overdue > 0)
         .map((receivable) => ({
@@ -660,7 +662,8 @@ export default function ReportsPage() {
             monto: fmtMoney(balance, payable.moneda),
           }
         }),
-    ]
+      ]
+    }
 
     if (activeReport === 'supplier_payments') {
       return proveedorPayments.map((pago) => {
@@ -768,15 +771,17 @@ export default function ReportsPage() {
         { key: 'saldo', label: 'Saldo', width: '7%', align: 'right' },
       ]
     }
-    return [
-      { key: 'tipo', label: 'Tipo', width: '13%' },
-      { key: 'tercero', label: 'Cliente / Proveedor', width: '27%' },
-      { key: 'documento', label: 'Documento', width: '20%' },
-      { key: 'vencimiento', label: 'Vence', width: '11%' },
-      { key: 'dias', label: 'Días', width: '8%', align: 'right' },
-      { key: 'estado', label: 'Estado', width: '10%' },
-      { key: 'monto', label: 'Monto', width: '11%', align: 'right' },
-    ]
+    if (activeReport === 'overdue') {
+      return [
+        { key: 'tipo', label: 'Tipo', width: '13%' },
+        { key: 'tercero', label: 'Cliente / Proveedor', width: '27%' },
+        { key: 'documento', label: 'Documento', width: '20%' },
+        { key: 'vencimiento', label: 'Vence', width: '11%' },
+        { key: 'dias', label: 'Días', width: '8%', align: 'right' },
+        { key: 'estado', label: 'Estado', width: '10%' },
+        { key: 'monto', label: 'Monto', width: '11%', align: 'right' },
+      ]
+    }
     if (activeReport === 'supplier_payments') {
       return [
         { key: 'tipo', label: 'Tipo Proveedor', width: '12%' },

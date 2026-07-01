@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { toDateInputValue } from '@/src/lib/format'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   fieldClass,
@@ -233,9 +234,9 @@ export default function DashboardPage() {
 
   // Date range filter — defaults to current month
   const today = new Date()
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
+  const firstOfMonth = toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1))
   const [dateFrom, setDateFrom] = useState(firstOfMonth)
-  const [dateTo, setDateTo] = useState(today.toISOString().slice(0, 10))
+  const [dateTo, setDateTo] = useState(toDateInputValue(today))
   const [activePreset, setActivePreset] = useState<'month' | 'quarter' | 'year' | 'all' | 'custom'>('month')
 
   const filteredQuotations = useMemo(() => {
@@ -251,12 +252,12 @@ export default function DashboardPage() {
   const applyPreset = (preset: 'month' | 'quarter' | 'year' | 'all') => {
     setActivePreset(preset)
     const now = new Date()
-    const to = now.toISOString().slice(0, 10)
+    const to = toDateInputValue(now)
     if (preset === 'month') {
-      setDateFrom(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10))
+      setDateFrom(toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)))
       setDateTo(to)
     } else if (preset === 'quarter') {
-      setDateFrom(new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString().slice(0, 10))
+      setDateFrom(toDateInputValue(new Date(now.getFullYear(), now.getMonth() - 2, 1)))
       setDateTo(to)
     } else if (preset === 'year') {
       setDateFrom(`${now.getFullYear()}-01-01`)

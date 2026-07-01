@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Truck, Plus, Clock } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatDateShort } from '@/src/lib/format'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 
@@ -203,7 +204,7 @@ export default function PickupPage() {
                     <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
                       <Clock className="h-3 w-3" />
                       {r.scheduled_date
-                        ? new Date(r.scheduled_date).toLocaleDateString('es-HN', { day: '2-digit', month: 'short', year: 'numeric' })
+                        ? formatDateShort(r.scheduled_date, { year: true })
                         : `Creada ${new Date(r.created_at).toLocaleDateString('es-HN', { day: '2-digit', month: 'short' })}`
                       }
                     </div>

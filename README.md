@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sari Express ERP
 
-## Getting Started
+ERP logístico para freight forwarders desarrollado para Sari Express: cotizaciones, pricing, operaciones, facturación fiscal (CAI Honduras), cuentas por cobrar/pagar, consolidación Miami y portal de clientes.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router, sesión SSR con cookies)
+- TypeScript
+- TailwindCSS
+- Supabase (Postgres, Auth, RLS, migraciones versionadas)
+- Sonner (toasts) y Lucide React (iconos)
+
+## Requisitos
+
+- Node.js 20+
+- Cuenta y proyecto de Supabase (o stack local con `npx supabase start`, requiere Docker)
+- Variables de entorno en `.env.local`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...   # solo para rutas API administrativas
+NEXT_PUBLIC_SITE_URL=...        # callbacks de invitación y recuperación
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Desarrollo
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Abrir [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+## Validaciones obligatorias antes de commitear
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npx tsc --noEmit
+npm run lint
+npm run build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Base de datos
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Las migraciones viven en `supabase/migrations/` y deben ser versionadas e idempotentes. Pruebas SQL en `supabase/tests/` y auditorías de solo lectura en `supabase/preflight/`.
 
-## Deploy on Vercel
+```bash
+npx supabase db reset --local        # reconstruir base local
+npx supabase db lint --local --level error
+npx supabase db push --linked --dry-run   # verificar pendientes contra remoto
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Estructura principal
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/app/(protected)/` — ERP interno (dashboard, cotizaciones, pricing, operaciones, facturación, reportes, Miami)
+- `src/app/portal/` — portal de clientes (envíos, paquetes, pre-alertas, pickup)
+- `src/components/pdf/` — PDFs comerciales y operativos
+- `src/lib/` — helpers compartidos (permisos, notificaciones, formato de fecha/moneda)
+- `src/proxy.ts` — protección de rutas con sesión SSR (convención proxy de Next 16)
+
+## Documentación del proyecto
+
+- `AGENTS.md` — arquitectura, convenciones y reglas de trabajo
+- `HARDENING.md` — registro versionado de hallazgos y correcciones de seguridad, integridad y calidad
+
+## Convenciones clave
+
+- Moneda: `USD 5,865.00` · Fechas: `DD/MM/YYYY` (helpers en `src/lib/format.ts`)
+- No usar `alert()` ni `window.confirm()`; usar Sonner o modal custom
+- Todo fix de seguridad/integridad se registra en `HARDENING.md` en el mismo commit

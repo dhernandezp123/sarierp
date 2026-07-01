@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { canAccessPath } from '@/src/lib/permissions'
+import { NOTIFICATIONS_READ_EVENT } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   LayoutDashboard,
@@ -67,26 +68,47 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
       if (!user) return
 
-      const [profileResult, notifResult] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('nombre, apellido, email, rol, avatar_url')
-          .eq('id', user.id)
-          .single(),
-        supabase
-          .from('notifications')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .eq('is_read', false),
-      ])
+      const profileResult = await supabase
+        .from('profiles')
+        .select('nombre, apellido, email, rol, avatar_url')
+        .eq('id', user.id)
+        .single()
 
       setProfile(profileResult.data)
       setCurrentRole(profileResult.data?.rol ?? profileRole ?? null)
-      setUnreadCount(notifResult.count ?? 0)
     }
 
     fetchRole()
   }, [profileRole])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const refreshUnreadCount = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user || cancelled) return
+
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false)
+
+      if (!cancelled) setUnreadCount(count ?? 0)
+    }
+
+    void refreshUnreadCount()
+
+    const onNotificationsRead = () => setUnreadCount(0)
+    window.addEventListener(NOTIFICATIONS_READ_EVENT, onNotificationsRead)
+    return () => {
+      cancelled = true
+      window.removeEventListener(NOTIFICATIONS_READ_EVENT, onNotificationsRead)
+    }
+  }, [pathname])
 
   const isAdmin = currentRole === 'Admin'
   const isSales = currentRole === 'Ventas'
