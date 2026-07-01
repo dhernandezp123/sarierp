@@ -1069,7 +1069,7 @@ Agregar una entrada por fix:
   - `npm run build`: OK (cambio solo de clases CSS).
 - Riesgos pendientes:
   - Ninguno.
-- Commit: hash pendiente
+- Commit: `ef00647`
 
 ### 2026-07-01 — UX-003 — Guard de cambios sin guardar en formularios críticos
 
