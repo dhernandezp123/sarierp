@@ -143,7 +143,7 @@ Fecha: 22/06/2026
 
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
-| UX-001 | ERP interno no tiene sidebar/navegación móvil | Alta | Pendiente |
+| UX-001 | ERP interno no tiene sidebar/navegación móvil | Alta | En validación |
 | UX-002 | Eliminaciones sensibles no piden confirmación | Alta | En validación |
 | UX-003 | Formularios largos no tienen autosave ni guard de cambios | Alta | Pendiente |
 | UX-004 | Filtros activos mantienen estilos inconsistentes | Media | Pendiente |
@@ -164,7 +164,7 @@ Fecha: 22/06/2026
 | QA-006 | README continúa siendo el de `create-next-app` | Media | Completado |
 | QA-007 | No existe un runner formal de migraciones | Crítica | Pendiente |
 | QA-008 | `AGENTS.md`, `PHASES.md`, estados y código están desalineados | Alta | Pendiente |
-| QA-009 | Auditoría npm mantiene dos vulnerabilidades moderadas sin fix | Media | Pendiente |
+| QA-009 | Auditoría npm mantiene dos vulnerabilidades moderadas sin fix | Media | Completado |
 
 ### Legal y privacidad
 
@@ -1046,6 +1046,58 @@ Agregar una entrada por fix:
   - Si la migración `20260624020000` no está aplicada en Supabase remoto, el cambio
     de tarifa puede seguir fallando por el índice único de tarifa seleccionada.
 - Commit: pendiente.
+
+### 2026-07-01 — UX-001 — Navegación móvil del ERP interno
+
+- Estado: En validación manual.
+- Hallazgo: UX-001.
+- Causa raíz: el layout protegido renderizaba el sidebar fijo de 256 px en
+  todas las resoluciones; en móvil ocupaba la pantalla o quedaba inutilizable
+  y no existía otra forma de navegar.
+- Código:
+  - `src/components/layout/protected-shell.tsx`
+  - `src/components/layout/topbar.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - En pantallas menores a `lg` el sidebar se oculta y el Topbar muestra un
+    botón hamburguesa que abre el mismo Sidebar como drawer con backdrop.
+  - El drawer se cierra al navegar (patrón de ajuste de estado en render,
+    compatible con la regla `react-hooks/set-state-in-effect`) o al tocar el
+    fondo.
+  - El título del Topbar se oculta en pantallas muy pequeñas y el padding del
+    contenido baja a `p-4` en móvil.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint de ambos archivos: cero errores.
+  - `npm run build`: OK, 65 páginas.
+- Verificación manual pendiente:
+  - Abrir el ERP en un viewport móvil (DevTools o teléfono), navegar con el
+    drawer y confirmar que se cierra al elegir una sección.
+- Riesgos pendientes:
+  - Las tablas anchas de algunos módulos siguen requiriendo scroll horizontal
+    en móvil; eso queda dentro de UX-008.
+- Commit: hash pendiente
+
+### 2026-07-01 — QA-009 — npm audit sin vulnerabilidades
+
+- Estado: Completado.
+- Hallazgo: QA-009.
+- Causa raíz: Next.js 16.2.6 fija PostCSS 8.4.31, afectado por
+  GHSA-qx2v-qp2m-jg93 (XSS en salida de stringify). El `npm audit fix --force`
+  oficial proponía degradar Next a 9.3.3, lo cual es inviable.
+- Código/configuración:
+  - `package.json`: override `next > postcss: ^8.5.10`.
+  - `package-lock.json`: PostCSS de Next resuelto a 8.5.14 (deduplicado con la
+    versión que ya usaba Tailwind).
+- Validaciones ejecutadas:
+  - `npm audit`: 0 vulnerabilidades.
+  - `npm run build`: OK, 65 páginas, sin cambios de comportamiento CSS.
+  - `npx tsc --noEmit`: OK.
+- Riesgos pendientes:
+  - Al actualizar Next en el futuro, revisar si ya incluye PostCSS >= 8.5.10 y
+    retirar el override para volver a la versión que Next fija oficialmente.
+- Commit: hash pendiente
 
 ### 2026-07-01 — REP-001 — Totales de reportes agrupados por moneda
 

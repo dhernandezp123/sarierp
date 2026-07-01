@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Home, Moon, Sun, Plus, FileText, Users, X } from 'lucide-react'
+import { Bell, Home, Menu, Moon, Sun, Plus, FileText, Users, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useUser } from '@/src/hooks/useUser'
 import { getSystemAlerts, type SystemAlert } from '@/src/lib/alerts'
@@ -46,7 +46,7 @@ function saveSeenAlertIds(userId: string, ids: Set<string>) {
   }
 }
 
-export default function Topbar() {
+export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const { theme, setTheme } = useTheme()
   const { user, profile, loading: userLoading } = useUser()
   const pathname = usePathname()
@@ -131,8 +131,19 @@ export default function Topbar() {
   )
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-6 backdrop-blur dark:border-slate-700/60 dark:bg-[#081120]/90">
+    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6 dark:border-slate-700/60 dark:bg-[#081120]/90">
       <div className="flex items-center gap-3">
+        {onOpenMobileNav && (
+          <button
+            type="button"
+            onClick={onOpenMobileNav}
+            title="Abrir menú"
+            className="rounded-xl p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 lg:hidden dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
+
         <Link
           href="/dashboard"
           title="Ir al inicio"
@@ -141,7 +152,7 @@ export default function Topbar() {
           <Home className="h-5 w-5" />
         </Link>
 
-        <div>
+        <div className="hidden sm:block">
           <p className="text-sm font-semibold text-slate-900 dark:text-white">
             Sari Express ERP
           </p>
