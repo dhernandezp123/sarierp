@@ -205,6 +205,11 @@ export default function FinancialDashboardPage() {
     let totalRevenue = 0
     let totalCostCotizado = 0
     let totalCostReal = 0
+    // REP-003: GP real solo se calcula sobre operaciones que ya tienen costos
+    // reales facturados; mezclar venta total con costos parciales lo infla.
+    let revenueWithRealCost = 0
+    let costCotizadoWithReal = 0
+    let opsWithRealCost = 0
     const losses: { quotation: string; client: string; realGP: number; variance: number }[] = []
     const byClient: Record<string, { cliente: string; revenue: number; gpCotizado: number }> = {}
     const byMonth: Record<string, { ym: string; revenue: number; gpCotizado: number; count: number }> = {}
@@ -226,7 +231,12 @@ export default function FinancialDashboardPage() {
 
       totalRevenue += revenue
       totalCostCotizado += piCost
-      if (realCost > 0) totalCostReal += realCost
+      if (realCost > 0) {
+        totalCostReal += realCost
+        revenueWithRealCost += revenue
+        costCotizadoWithReal += piCost
+        opsWithRealCost += 1
+      }
 
       const clientName = resolveCliente(q.clientes)
       byClient[clientName] = byClient[clientName] || { cliente: clientName, revenue: 0, gpCotizado: 0 }
@@ -258,13 +268,13 @@ export default function FinancialDashboardPage() {
 
     const gpCotizado = totalRevenue - totalCostCotizado
     const gpPct = totalRevenue > 0 ? (gpCotizado / totalRevenue) * 100 : 0
-    const gpReal = totalCostReal > 0 ? totalRevenue - totalCostReal : null
+    const gpReal = totalCostReal > 0 ? revenueWithRealCost - totalCostReal : null
 
     const monthlyTrend = Object.values(byMonth)
       .sort((a, b) => a.ym.localeCompare(b.ym))
       .map((m) => ({
         mes: monthLabel(m.ym),
-        Revenue: Math.round(m.revenue),
+        Venta: Math.round(m.revenue),
         'GP Cotizado': Math.round(m.gpCotizado),
         'GP%': m.revenue > 0 ? Number(((m.gpCotizado / m.revenue) * 100).toFixed(1)) : 0,
       }))
@@ -274,20 +284,21 @@ export default function FinancialDashboardPage() {
       .slice(0, 8)
       .map((c) => ({
         cliente: c.cliente.length > 18 ? c.cliente.slice(0, 16) + '…' : c.cliente,
-        Revenue: Math.round(c.revenue),
+        Venta: Math.round(c.revenue),
         'GP Cotizado': Math.round(c.gpCotizado),
       }))
 
     const byTypeSorted = Object.values(byType)
       .sort((a, b) => b.revenue - a.revenue)
-      .map((t) => ({ tipo: t.tipo, Revenue: Math.round(t.revenue), count: t.count }))
+      .map((t) => ({ tipo: t.tipo, Venta: Math.round(t.revenue), count: t.count }))
 
     return {
       totalRevenue,
       gpCotizado,
       gpPct,
       gpReal,
-      variance: totalCostReal > 0 ? totalCostReal - totalCostCotizado : null,
+      variance: totalCostReal > 0 ? totalCostReal - costCotizadoWithReal : null,
+      opsWithRealCost,
       losses: losses.sort((a, b) => a.realGP - b.realGP),
       monthlyTrend,
       topClients,
@@ -319,7 +330,7 @@ export default function FinancialDashboardPage() {
             Dashboard Financiero
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Análisis consolidado de cotizaciones ganadas.
+            Análisis de venta cotizada sobre cotizaciones ganadas; la facturación real vive en Facturación y Reportes.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -336,7 +347,7 @@ export default function FinancialDashboardPage() {
               exportCSV(
                 analytics.topClients.map((c) => ({
                   Cliente: c.cliente,
-                  Revenue: c.Revenue,
+                  'Venta Cotizada': c.Venta,
                   'GP Cotizado': c['GP Cotizado'],
                 })),
                 'financiero-clientes.csv'
@@ -400,8 +411,9 @@ export default function FinancialDashboardPage() {
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
-          label="Revenue total"
+          label="Venta cotizada (Ganadas)"
           value={formatUSD(analytics.totalRevenue)}
+          sub="No es facturación"
           icon={<TrendingUp className="h-5 w-5" />}
           color="blue"
         />
@@ -415,6 +427,7 @@ export default function FinancialDashboardPage() {
         <KpiCard
           label="GP real"
           value={analytics.gpReal !== null ? formatUSD(analytics.gpReal) : 'Sin facturas aún'}
+          sub={analytics.gpReal !== null ? `${analytics.opsWithRealCost} de ${analytics.totalQuotations} ops con costos reales` : undefined}
           icon={<TrendingDown className="h-5 w-5" />}
           color={analytics.gpReal === null ? 'slate' : analytics.gpReal >= 0 ? 'green' : 'red'}
         />
@@ -429,7 +442,7 @@ export default function FinancialDashboardPage() {
 
       {/* Charts row 1 */}
       <div className="grid gap-6 xl:grid-cols-2">
-        <ChartPanel title="Revenue mensual" description="Ingresos y GP cotizado por mes.">
+        <ChartPanel title="Venta cotizada mensual" description="Venta ganada y GP cotizado por mes.">
           {analytics.monthlyTrend.length === 0 ? (
             <EmptyChart />
           ) : (
@@ -439,7 +452,7 @@ export default function FinancialDashboardPage() {
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v) => formatUSD(Number(v))} />
-                <Bar dataKey="Revenue" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="Venta" fill="#3b82f6" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="GP Cotizado" fill="#10b981" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -472,7 +485,7 @@ export default function FinancialDashboardPage() {
 
       {/* Charts row 2 */}
       <div className="grid gap-6 xl:grid-cols-2">
-        <ChartPanel title="Top clientes por revenue" description="Clientes con mayor facturación en el período.">
+        <ChartPanel title="Top clientes por venta cotizada" description="Clientes con mayor venta ganada en el período.">
           {analytics.topClients.length === 0 ? (
             <EmptyChart />
           ) : (
@@ -482,20 +495,20 @@ export default function FinancialDashboardPage() {
                 <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <YAxis type="category" dataKey="cliente" width={110} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v) => formatUSD(Number(v))} />
-                <Bar dataKey="Revenue" fill="#3b82f6" radius={[0, 3, 3, 0]} />
+                <Bar dataKey="Venta" fill="#3b82f6" radius={[0, 3, 3, 0]} />
                 <Bar dataKey="GP Cotizado" fill="#10b981" radius={[0, 3, 3, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </ChartPanel>
 
-        <ChartPanel title="Revenue por tipo de servicio">
+        <ChartPanel title="Venta cotizada por tipo de servicio">
           {analytics.byTypeSorted.length === 0 ? (
             <EmptyChart />
           ) : (
             <div className="space-y-3 pt-2">
               {analytics.byTypeSorted.map((t) => {
-                const pct = analytics.totalRevenue > 0 ? (t.Revenue / analytics.totalRevenue) * 100 : 0
+                const pct = analytics.totalRevenue > 0 ? (t.Venta / analytics.totalRevenue) * 100 : 0
                 return (
                   <div key={t.tipo}>
                     <div className="mb-1 flex items-center justify-between text-sm">
@@ -503,7 +516,7 @@ export default function FinancialDashboardPage() {
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-slate-400">{t.count} op.</span>
                         <span className="font-semibold text-slate-900 dark:text-white">
-                          {formatUSD(t.Revenue)}
+                          {formatUSD(t.Venta)}
                         </span>
                         <span className="w-10 text-right text-xs text-slate-500">
                           {pct.toFixed(0)}%

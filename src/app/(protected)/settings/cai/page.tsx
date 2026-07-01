@@ -6,6 +6,7 @@ import { Plus, CheckCircle2, AlertTriangle, Trash2, ShieldCheck } from 'lucide-r
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 
 type CaiRange = {
@@ -129,6 +130,8 @@ export default function CaiSettingsPage() {
     toast.success('Rango eliminado')
     fetchAll()
   }
+
+  const [rangePendingDelete, setRangePendingDelete] = useState<CaiRange | null>(null)
 
   const activeRange = ranges.find(
     (range) => range.is_active && range.document_type === selectedStatusType
@@ -422,7 +425,7 @@ export default function CaiSettingsPage() {
                             {!r.is_active && (
                               <button
                                 type="button"
-                                onClick={() => deleteRange(r.id, r.is_active)}
+                                onClick={() => setRangePendingDelete(r)}
                                 className="rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:border-slate-700"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -439,6 +442,19 @@ export default function CaiSettingsPage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={rangePendingDelete !== null}
+        onOpenChange={(open) => { if (!open) setRangePendingDelete(null) }}
+        title="Eliminar rango CAI"
+        description={rangePendingDelete ? `Se eliminará el rango ${rangePendingDelete.cai} (${rangePendingDelete.rango_desde} – ${rangePendingDelete.rango_hasta}). Esta acción no se puede deshacer.` : undefined}
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={() => {
+          if (rangePendingDelete) void deleteRange(rangePendingDelete.id, rangePendingDelete.is_active)
+          setRangePendingDelete(null)
+        }}
+      />
     </div>
   )
 }

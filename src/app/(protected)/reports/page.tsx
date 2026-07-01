@@ -807,10 +807,35 @@ export default function ReportsPage() {
     }
   }, [baseRows])
 
-  const totalAmount = rows.reduce((sum, row) => sum + Number(row.__amount || 0), 0)
-  const totalGp = rows.reduce((sum, row) => sum + Number(row.__gp || 0), 0)
-  const avgMargen = totalAmount > 0 ? (totalGp / totalAmount) * 100 : 0
-  const currencyLabel = currencyFilter === ALL ? (rows[0]?.__currency || 'USD') : currencyFilter
+  // REP-001: los totales se agrupan por moneda; nunca sumar USD y HNL juntos.
+  const totalsByCurrency = useMemo(() => {
+    const acc = new Map<string, { amount: number; gp: number }>()
+    rows.forEach((row) => {
+      const currency = row.__currency || 'USD'
+      const entry = acc.get(currency) ?? { amount: 0, gp: 0 }
+      entry.amount += Number(row.__amount || 0)
+      entry.gp += Number(row.__gp || 0)
+      acc.set(currency, entry)
+    })
+    return acc
+  }, [rows])
+
+  const fmtTotalsByCurrency = (key: 'amount' | 'gp') => {
+    if (totalsByCurrency.size === 0) {
+      return fmtMoney(0, currencyFilter === ALL ? 'USD' : currencyFilter)
+    }
+    return Array.from(totalsByCurrency.entries())
+      .map(([currency, totals]) => fmtMoney(totals[key], currency))
+      .join(' · ')
+  }
+
+  // El margen promedio solo es representativo cuando hay una sola moneda.
+  const singleCurrencyTotals = totalsByCurrency.size === 1
+    ? Array.from(totalsByCurrency.values())[0]
+    : null
+  const avgMargen = singleCurrencyTotals && singleCurrencyTotals.amount > 0
+    ? (singleCurrencyTotals.gp / singleCurrencyTotals.amount) * 100
+    : 0
   const activeDatePreset = resolveDatePreset(dateFrom, dateTo)
   const activeFilterCount = [clientFilter, sellerFilter, serviceFilter, statusFilter, currencyFilter].filter((value) => value !== ALL).length + (activeDatePreset === 'custom' ? 1 : 0)
   const presetButtonClass = (preset: Exclude<DatePreset, 'custom'>) =>
@@ -837,11 +862,11 @@ export default function ReportsPage() {
   if (activeTotalColumns.length > 0) {
     columns.forEach((col, idx) => {
       if (col.key === 'gp') {
-        pdfTotals[col.key] = fmtMoney(totalGp, currencyLabel)
+        pdfTotals[col.key] = fmtTotalsByCurrency('gp')
       } else if (col.key === 'margen') {
-        pdfTotals[col.key] = rows.length > 0 ? `${avgMargen.toFixed(1)}% prom.` : '-'
+        pdfTotals[col.key] = rows.length > 0 && singleCurrencyTotals ? `${avgMargen.toFixed(1)}% prom.` : '-'
       } else if (activeTotalColumns.includes(col.key)) {
-        pdfTotals[col.key] = fmtMoney(totalAmount, currencyLabel)
+        pdfTotals[col.key] = fmtTotalsByCurrency('amount')
       } else if (idx === 0) {
         pdfTotals[col.key] = `${rows.length} registros`
       } else {
@@ -868,13 +893,13 @@ export default function ReportsPage() {
     metrics: activeReport === 'commercial'
       ? [
           { label: 'Cotizaciones', value: String(rows.length) },
-          { label: 'Venta total', value: fmtMoney(totalAmount, currencyLabel) },
-          { label: 'GP total', value: fmtMoney(totalGp, currencyLabel) },
-          { label: 'Margen promedio', value: rows.length > 0 ? `${avgMargen.toFixed(1)}%` : '-' },
+          { label: 'Venta total', value: fmtTotalsByCurrency('amount') },
+          { label: 'GP total', value: fmtTotalsByCurrency('gp') },
+          { label: 'Margen promedio', value: rows.length > 0 && singleCurrencyTotals ? `${avgMargen.toFixed(1)}%` : '-' },
         ]
       : [
           { label: 'Registros', value: String(rows.length) },
-          { label: 'Monto total', value: fmtMoney(totalAmount, currencyLabel) },
+          { label: 'Monto total', value: fmtTotalsByCurrency('amount') },
           { label: 'Período', value: dateRangeLabel },
         ],
     columns,

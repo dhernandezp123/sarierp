@@ -131,9 +131,9 @@ Fecha: 22/06/2026
 
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
-| REP-001 | Reportes pueden sumar USD y HNL y etiquetar con una sola moneda | Crítica | Pendiente |
-| REP-002 | Dashboard financiero llama Revenue a venta cotizada, no facturada | Alta | Pendiente |
-| REP-003 | GP real mezcla operaciones con y sin costos reales completos | Alta | Pendiente |
+| REP-001 | Reportes pueden sumar USD y HNL y etiquetar con una sola moneda | Crítica | En validación |
+| REP-002 | Dashboard financiero llama Revenue a venta cotizada, no facturada | Alta | En validación |
+| REP-003 | GP real mezcla operaciones con y sin costos reales completos | Alta | En validación |
 | REP-004 | Filtros usan fecha de creación en lugar de fecha de negocio | Media | Pendiente |
 | REP-005 | Uso de UTC puede adelantar fechas un día en Guatemala | Alta | En progreso |
 | REP-006 | Fechas `DATE` pueden mostrarse como el día anterior | Alta | En progreso |
@@ -144,7 +144,7 @@ Fecha: 22/06/2026
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
 | UX-001 | ERP interno no tiene sidebar/navegación móvil | Alta | Pendiente |
-| UX-002 | Eliminaciones sensibles no piden confirmación | Alta | Pendiente |
+| UX-002 | Eliminaciones sensibles no piden confirmación | Alta | En validación |
 | UX-003 | Formularios largos no tienen autosave ni guard de cambios | Alta | Pendiente |
 | UX-004 | Filtros activos mantienen estilos inconsistentes | Media | Pendiente |
 | UX-005 | Branding del sidebar difiere de configuraciones anteriores | Baja | Pendiente |
@@ -1046,6 +1046,96 @@ Agregar una entrada por fix:
   - Si la migración `20260624020000` no está aplicada en Supabase remoto, el cambio
     de tarifa puede seguir fallando por el índice único de tarifa seleccionada.
 - Commit: pendiente.
+
+### 2026-07-01 — REP-001 — Totales de reportes agrupados por moneda
+
+- Estado: En validación manual.
+- Hallazgo: REP-001.
+- Causa raíz: `totalAmount` sumaba `__amount` de todas las filas sin importar
+  `__currency`, y el total se etiquetaba con la moneda de la primera fila o el
+  filtro. Un reporte con facturas USD y HNL mostraba una suma sin sentido.
+- Código:
+  - `src/app/(protected)/reports/page.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Los totales (tfoot, métricas y PDF) se agrupan por moneda y se muestran
+    como `USD 5,000.00 · HNL 12,000.00` cuando hay más de una.
+  - El margen promedio solo se calcula cuando hay una sola moneda; con mezcla
+    muestra `-` en lugar de un porcentaje engañoso.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint del archivo: sin errores.
+  - `npm run build`: OK, 65 páginas.
+- Verificación manual pendiente:
+  - Reportes > Facturación/CxC con documentos en USD y HNL: confirmar totales
+    separados por moneda en pantalla y PDF.
+- Riesgos pendientes:
+  - No hay conversión por tipo de cambio (parte de REP-007); los totales se
+    presentan por moneda, no consolidados.
+- Commit: hash pendiente
+
+### 2026-07-01 — REP-002/REP-003 — Venta cotizada y GP real comparable
+
+- Estado: En validación manual.
+- Hallazgos: REP-002 y REP-003.
+- Causa raíz:
+  - El dashboard financiero llamaba "Revenue" al `total_sale` de cotizaciones
+    Ganadas, que es venta cotizada y no facturación.
+  - "GP real" restaba los costos reales de algunas operaciones al revenue de
+    todas, inflando el resultado; la varianza comparaba costo real parcial
+    contra costo cotizado total.
+- Código:
+  - `src/app/(protected)/financial-dashboard/page.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - KPI y charts renombrados a "Venta cotizada (Ganadas)" / "Venta", con
+    subtítulo "No es facturación" y descripción que remite a Facturación.
+  - GP real ahora es `venta de operaciones con costos reales - costos reales`
+    y muestra la cobertura (`X de Y ops con costos reales`).
+  - La varianza compara costo real contra costo cotizado solo de esas mismas
+    operaciones.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint: sin errores nuevos (deuda previa de hoisting documentada en QA-001).
+  - `npm run build`: OK, 65 páginas.
+- Verificación manual pendiente:
+  - Con una operación con costos reales y otra sin ellos, confirmar que GP real
+    solo considera la primera y que la cobertura se muestra en el KPI.
+- Riesgos pendientes:
+  - El cierre definitivo de REP-002 (KPI de facturación real emitida) queda
+    para cuando Reportes consuma `invoices` en este dashboard.
+- Commit: hash pendiente
+
+### 2026-07-01 — UX-002 — Confirmación en eliminaciones sensibles
+
+- Estado: En validación manual.
+- Hallazgo: UX-002.
+- Causa raíz: los botones de eliminar rango CAI y tarifa de agente ejecutaban
+  el DELETE con un solo clic. El resto de eliminaciones sensibles auditadas
+  (tarifas de agente en Pricing Comparison, items de costo real, documentos de
+  booking, tareas del dashboard) ya usaban modal o motivo obligatorio.
+- Código:
+  - `src/app/(protected)/settings/cai/page.tsx`
+  - `src/app/(protected)/agents/[id]/page.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Ambas eliminaciones pasan por el `ConfirmDialog` existente con acción
+    destructiva marcada en rojo; el rango CAI muestra CAI y rango a eliminar.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint: sin errores nuevos.
+  - `npm run build`: OK, 65 páginas.
+- Verificación manual pendiente:
+  - Intentar eliminar un rango CAI inactivo y una tarifa de agente: debe
+    aparecer el modal y solo borrar al confirmar.
+- Riesgos pendientes:
+  - Los deletes tipo replace dentro de flujos de guardado (client_rates,
+    cargo lines) no piden confirmación porque son parte del guardado; su
+    atomicidad se maneja en FLOW-003/FLOW-004.
+- Commit: hash pendiente
 
 ### 2026-07-01 — BUG-001 — Reporte Pagos a Proveedores inalcanzable
 

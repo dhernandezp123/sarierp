@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Plus, Trash2, ChevronLeft, Pencil, Check, X } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -192,6 +193,8 @@ export default function AgentDetailPage() {
     toast.success('Tarifa eliminada')
     setRates((prev) => prev.filter((r) => r.id !== rateId))
   }
+
+  const [ratePendingDelete, setRatePendingDelete] = useState<string | null>(null)
 
   const setField = <K extends keyof Agent>(key: K, value: Agent[K]) =>
     setFormData((prev) => prev ? { ...prev, [key]: value } : prev)
@@ -635,7 +638,7 @@ export default function AgentDetailPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => deleteRate(rate.id)}
+                            onClick={() => setRatePendingDelete(rate.id)}
                             className="rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:border-slate-700 dark:hover:bg-rose-950/30"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -650,6 +653,19 @@ export default function AgentDetailPage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={ratePendingDelete !== null}
+        onOpenChange={(open) => { if (!open) setRatePendingDelete(null) }}
+        title="Eliminar tarifa del agente"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={() => {
+          if (ratePendingDelete) void deleteRate(ratePendingDelete)
+          setRatePendingDelete(null)
+        }}
+      />
     </div>
   )
 }
