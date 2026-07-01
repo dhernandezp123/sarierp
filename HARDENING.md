@@ -1074,7 +1074,7 @@ Agregar una entrada por fix:
   - Confirmar que Reportes > Vencidas sigue mostrando CxC y CxP vencidas.
 - Riesgos pendientes:
   - Ninguno adicional; el fix no cambia consultas ni permisos.
-- Commit: hash pendiente
+- Commit: `3c1c535`
 
 ### 2026-07-01 — BUG-006 — Notificaciones del sidebar se marcan leídas
 
@@ -1107,7 +1107,7 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - BUG-007 (tres sistemas de notificación desconectados) sigue pendiente; este
     fix solo cubre `notifications` internas del badge de Alertas.
-- Commit: hash pendiente
+- Commit: `3c1c535`
 
 ### 2026-07-01 — REP-005/REP-006/REP-007 — Helper de formato y fechas locales
 
@@ -1147,7 +1147,7 @@ Agregar una entrada por fix:
     pricing-comparison y operaciones por auditar caso por caso.
   - REP-007 queda parcial: falta centralizar tipo de cambio y migrar los
     formateadores locales duplicados al helper.
-- Commit: hash pendiente
+- Commit: `3c1c535`
 
 ### 2026-07-01 — UX-006 — Idioma del documento raíz
 
@@ -1162,7 +1162,7 @@ Agregar una entrada por fix:
   - `npm run build`: OK, 65 páginas.
 - Riesgos pendientes:
   - Ninguno.
-- Commit: hash pendiente
+- Commit: `3c1c535`
 
 ### 2026-07-01 — QA-006 — README del proyecto
 
@@ -1178,7 +1178,7 @@ Agregar una entrada por fix:
   - `npm run build`: OK (sin impacto en código).
 - Riesgos pendientes:
   - Ninguno.
-- Commit: hash pendiente
+- Commit: `3c1c535`
 
 ### 2026-07-01 - UX-012 - Vista tabla FCL en comparativo de pricing
 
