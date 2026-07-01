@@ -1073,7 +1073,7 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - No hay conversión por tipo de cambio (parte de REP-007); los totales se
     presentan por moneda, no consolidados.
-- Commit: hash pendiente
+- Commit: `55c0761`
 
 ### 2026-07-01 — REP-002/REP-003 — Venta cotizada y GP real comparable
 
@@ -1106,7 +1106,7 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - El cierre definitivo de REP-002 (KPI de facturación real emitida) queda
     para cuando Reportes consuma `invoices` en este dashboard.
-- Commit: hash pendiente
+- Commit: `55c0761`
 
 ### 2026-07-01 — UX-002 — Confirmación en eliminaciones sensibles
 
@@ -1135,7 +1135,7 @@ Agregar una entrada por fix:
   - Los deletes tipo replace dentro de flujos de guardado (client_rates,
     cargo lines) no piden confirmación porque son parte del guardado; su
     atomicidad se maneja en FLOW-003/FLOW-004.
-- Commit: hash pendiente
+- Commit: `55c0761`
 
 ### 2026-07-01 — BUG-001 — Reporte Pagos a Proveedores inalcanzable
 
