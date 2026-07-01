@@ -145,7 +145,7 @@ Fecha: 22/06/2026
 |---|---|---|---|
 | UX-001 | ERP interno no tiene sidebar/navegación móvil | Alta | En validación |
 | UX-002 | Eliminaciones sensibles no piden confirmación | Alta | En validación |
-| UX-003 | Formularios largos no tienen autosave ni guard de cambios | Alta | Pendiente |
+| UX-003 | Formularios largos no tienen autosave ni guard de cambios | Alta | En validación |
 | UX-004 | Filtros activos mantienen estilos inconsistentes | Media | Pendiente |
 | UX-005 | Branding del sidebar difiere de configuraciones anteriores | Baja | Pendiente |
 | UX-006 | Documento raíz usa `lang="en"` en una aplicación española | Baja | Completado |
@@ -1046,6 +1046,58 @@ Agregar una entrada por fix:
   - Si la migración `20260624020000` no está aplicada en Supabase remoto, el cambio
     de tarifa puede seguir fallando por el índice único de tarifa seleccionada.
 - Commit: pendiente.
+
+### 2026-07-01 — UX-003 — Guard de cambios sin guardar en formularios críticos
+
+- Estado: En validación manual; cubre el guard de navegación. El autosave
+  queda como mejora posterior.
+- Hallazgo: UX-003.
+- Causa raíz: los formularios largos (cotización nueva de 2,300+ líneas,
+  edición, factura fiscal, clientes, proveedores) perdían todo lo capturado al
+  refrescar, cerrar la pestaña o tocar cualquier link del sidebar.
+- Código:
+  - `src/components/ui/UnsavedChangesGuard.tsx` (nuevo): componente
+    auto-contenido que detecta edición vía eventos `input`/`change` del
+    documento; muestra el aviso nativo en refresh/cierre (`beforeunload`) e
+    intercepta clics en links internos con el `ConfirmDialog` existente
+    (sin `window.confirm`, prohibido por AGENTS.md). Exporta `markFormSaved()`
+    para páginas que guardan sin navegar.
+  - Montado en:
+    - `src/app/(protected)/quotations/new/page.tsx` (con `markFormSaved()`
+      tras crear, porque la página permanece y resetea el formulario)
+    - `src/app/(protected)/quotations/[id]/edit/page.tsx`
+    - `src/app/(protected)/invoicing/new/page.tsx`
+    - `src/app/(protected)/clientes/nuevo/page.tsx`
+    - `src/app/(protected)/clientes/[id]/edit/page.tsx`
+    - `src/app/(protected)/suppliers/new/page.tsx`
+- SQL:
+  - No aplica.
+- Decisiones de diseño:
+  - La navegación programática (`router.push` tras guardar o al cancelar) no
+    se intercepta a propósito: los flujos de guardado/cancelación existentes
+    siguen funcionando sin cambios.
+  - La carga inicial de datos (setState) no dispara eventos DOM, por lo que
+    abrir un formulario de edición no lo marca sucio; solo la escritura real
+    del usuario.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint del componente nuevo: cero errores; las páginas montadas conservan
+    deuda previa documentada en QA-001.
+  - `npm run build`: OK, 65 páginas.
+- Verificación manual pendiente:
+  - En `/quotations/new`, escribir en un campo y hacer clic en un link del
+    sidebar: debe aparecer el modal "Cambios sin guardar".
+  - "Seguir editando" debe conservar el formulario; "Salir sin guardar" debe
+    navegar.
+  - Refrescar la pestaña con cambios debe mostrar el aviso del navegador.
+  - Crear una cotización y verificar que después del guardado exitoso ya no
+    aparece el aviso al navegar.
+- Riesgos pendientes:
+  - Controles custom que no emiten eventos `input`/`change` (botones de
+    combobox) no marcan el formulario sucio por sí solos; la mayoría de la
+    captura es tipeo y selects nativos, que sí lo hacen.
+  - El autosave (borradores) sigue pendiente dentro de UX-003.
+- Commit: hash pendiente
 
 ### 2026-07-01 — UX-001 — Navegación móvil del ERP interno
 

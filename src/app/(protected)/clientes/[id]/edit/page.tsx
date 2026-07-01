@@ -9,6 +9,7 @@ import { useUser } from '../../../../../hooks/useUser'
 import { cn } from '../../../../../lib/utils'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import {
   CONDICIONES_PAGO,
   TIPOS_CLIENTE,
@@ -292,6 +293,7 @@ export default function EditarClientePage() {
 
   return (
     <div className="space-y-6">
+      <UnsavedChangesGuard />
       <Breadcrumbs
         items={[
           { label: 'Clientes', href: '/clientes' },

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
+import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -351,6 +352,7 @@ export default function NewInvoicePage() {
 
   return (
     <div className="space-y-6">
+      <UnsavedChangesGuard />
       {/* Header */}
       <div className="flex items-center gap-4">
         <button

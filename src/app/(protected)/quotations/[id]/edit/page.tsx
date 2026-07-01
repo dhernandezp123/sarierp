@@ -10,6 +10,7 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { createNotification } from '@/src/lib/notifications'
+import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import { canTransition } from '@/src/lib/quotation-status'
 import { serviceProducts } from '@/src/lib/quotation-products'
 import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
@@ -1090,6 +1091,7 @@ export default function EditQuotationPage() {
 
   return (
     <>
+      <UnsavedChangesGuard />
       <div className="max-w-6xl space-y-6">
         <Breadcrumbs
           items={[

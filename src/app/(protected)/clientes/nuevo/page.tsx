@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
+import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import { useUser } from '../../../../hooks/useUser'
 import { cn } from '../../../../lib/utils'
 import {
@@ -262,6 +263,7 @@ export default function NuevoClientePage() {
 
   return (
     <div className="space-y-6">
+      <UnsavedChangesGuard />
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">

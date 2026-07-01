@@ -9,6 +9,7 @@ import { useUser } from '../../../../hooks/useUser'
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
+import { UnsavedChangesGuard, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { MiamiQuotationSection } from '@/src/components/quotations/MiamiQuotationSection'
 import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
@@ -903,6 +904,7 @@ export default function NewQuotationPage() {
       setDuplicateSource(null)
       setEditingContainerLineIndex(null)
       resetContainerLineForm()
+      markFormSaved()
 
       await fetchCatalogs()
     } catch {
@@ -1152,6 +1154,7 @@ export default function NewQuotationPage() {
 
   return (
     <>
+      <UnsavedChangesGuard />
       <div className="max-w-6xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
