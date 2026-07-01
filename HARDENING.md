@@ -146,7 +146,7 @@ Fecha: 22/06/2026
 | UX-001 | ERP interno no tiene sidebar/navegación móvil | Alta | En validación |
 | UX-002 | Eliminaciones sensibles no piden confirmación | Alta | En validación |
 | UX-003 | Formularios largos no tienen autosave ni guard de cambios | Alta | En validación |
-| UX-004 | Filtros activos mantienen estilos inconsistentes | Media | Pendiente |
+| UX-004 | Filtros activos mantienen estilos inconsistentes | Media | Completado |
 | UX-005 | Branding del sidebar difiere de configuraciones anteriores | Baja | Pendiente |
 | UX-006 | Documento raíz usa `lang="en"` en una aplicación española | Baja | Completado |
 | UX-007 | Revisar campos operativos del PDF por modalidad | Alta | Pendiente |
@@ -1046,6 +1046,30 @@ Agregar una entrada por fix:
   - Si la migración `20260624020000` no está aplicada en Supabase remoto, el cambio
     de tarifa puede seguir fallando por el índice único de tarifa seleccionada.
 - Commit: pendiente.
+
+### 2026-07-01 — UX-004 — Estilo unificado de filtros activos
+
+- Estado: Completado.
+- Hallazgo: UX-004.
+- Causa raíz: los chips de filtro de Alertas y Manifiestos usaban un estilo
+  activo gris (`bg-slate-800`), distinto del pill azul estándar que ya usan
+  Dashboard, Dashboard Financiero, Reportes, Histórico, Inventario, Embarques,
+  Ingreso y Garantías.
+- Código:
+  - `src/app/(protected)/alerts/page.tsx`
+  - `src/app/(protected)/miami/manifiestos/page.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Los tres grupos de chips adoptan el patrón estándar: activo
+    `border-blue-600 bg-blue-600 text-white` (variante dark incluida) e
+    inactivo con borde slate sobre fondo blanco.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK (cambio solo de clases CSS).
+- Riesgos pendientes:
+  - Ninguno.
+- Commit: hash pendiente
 
 ### 2026-07-01 — UX-003 — Guard de cambios sin guardar en formularios críticos
 

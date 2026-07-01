@@ -176,10 +176,10 @@ export default function AlertsPage() {
             key={cat}
             type="button"
             onClick={() => setCategoryFilter(cat)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
               categoryFilter === cat
-                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
             }`}
           >
             {cat}
@@ -191,10 +191,10 @@ export default function AlertsPage() {
             key={sev}
             type="button"
             onClick={() => setSeverityFilter(sev)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
               severityFilter === sev
-                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
             }`}
           >
             {sev}

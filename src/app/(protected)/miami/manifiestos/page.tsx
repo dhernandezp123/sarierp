@@ -71,10 +71,10 @@ export default function ManifestosPage() {
             key={s}
             type="button"
             onClick={() => setStatusFilter(s)}
-            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
+            className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
               statusFilter === s
-                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                ? 'border-blue-600 bg-blue-600 text-white dark:border-blue-400 dark:bg-blue-400 dark:text-slate-950'
+                : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300'
             }`}
           >
             {s}
