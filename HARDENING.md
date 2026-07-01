@@ -1047,6 +1047,47 @@ Agregar una entrada por fix:
     de tarifa puede seguir fallando por el índice único de tarifa seleccionada.
 - Commit: pendiente.
 
+### 2026-07-01 - UX-012 - Vista tabla FCL en comparativo de pricing
+
+- Estado: En validacion.
+- Hallazgo: UX-012.
+- Causa raiz: El comparativo de tarifas FCL solo tenia vista de cards, lo que
+  dificultaba comparar agentes horizontalmente por concepto.
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Se agrego un switch `Cards` / `Tabla` para cotizaciones FCL.
+  - `Cards` permanece como vista por defecto y conserva la UI existente.
+  - La nueva tabla reutiliza las tarifas ya cargadas y el mismo handler de
+    seleccion de tarifa mediante confirmacion existente.
+  - La tabla resalta mejor costo, tarifa mas rapida y tarifa seleccionada.
+  - MBL y PS se toman como cargos por contenedor y se multiplican por la
+    cantidad real de contenedores de la cotizacion.
+  - Bank Transfer Fee queda fijo en USD 25.
+  - DTHC queda editable por naviera; Entrega Local y Redestino se comparten
+    entre columnas para comparar con el mismo valor.
+  - Los cargos alimentan un total ajustado local en la tabla.
+  - Se retiraron filas no usadas de WR and Stuffing, Demurrage / Dia y
+    Cancellation Fee.
+  - Se agrego `Guardar tabla` para persistir los ajustes FCL en `localStorage`
+    por cotizacion; al alternar Cards/Tabla los valores ya no se pierden.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - No aplica RLS ni migraciones.
+  - Probar `/pricing-comparison` con cotizacion FCL y alternar Cards/Tabla.
+  - Seleccionar una tarifa desde la tabla y confirmar que usa el flujo actual.
+- Riesgos pendientes:
+  - Algunos cargos opcionales solo apareceran si existen como campos en
+    `agent_quotes`; no se agregaron queries ni estructura nueva.
+  - Los cargos editados son comparativos locales de la tabla y se guardan solo
+    en el navegador; no se persisten en Supabase ni cambian la seleccion
+    guardada.
+- Commit: hash pendiente
+
 ### 2026-06-29 - FLOW-003 - RPC de hijos de cotizacion sin ambiguedad
 
 - Estado: En validacion manual; SQL aplicado en remoto.

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FileText, Pencil, Plus, Save, X } from 'lucide-react'
+import { FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 
@@ -22,6 +22,10 @@ import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import { CarrierCombobox } from '@/src/components/ui/CarrierCombobox'
+import {
+  FclAgentComparisonTable,
+  type FclTableChargeOverrides,
+} from '@/src/components/pricing/FclAgentComparisonTable'
 import { cn } from '../../../lib/utils'
 import {
   cardClass,
@@ -132,6 +136,8 @@ type SurchargeRule = {
 
 type AgentQuote = any
 
+type AgentQuotesViewMode = 'cards' | 'table'
+
 type OperationalImpactChange = {
   label: string
   previousValue: string
@@ -226,6 +232,10 @@ function PricingComparisonContent() {
 
   const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<AgentQuote[]>([])
+  const [agentQuotesViewMode, setAgentQuotesViewMode] =
+    useState<AgentQuotesViewMode>('cards')
+  const [fclTableChargeOverrides, setFclTableChargeOverrides] =
+    useState<FclTableChargeOverrides>({})
   const [pricingItems, setPricingItems] = useState<any[]>([])
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [containerRateLines, setContainerRateLines] = useState<any[]>([])
@@ -235,6 +245,43 @@ function PricingComparisonContent() {
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
   const [insuranceTaxable, setInsuranceTaxable] = useState(true)
   const [agentRouteRates, setAgentRouteRates] = useState<any[]>([])
+
+  const fclTableStorageKey = selectedQuote?.id
+    ? `pricing-comparison:fcl-table:${selectedQuote.id}`
+    : null
+
+  useEffect(() => {
+    if (!fclTableStorageKey) {
+      setFclTableChargeOverrides({})
+      return
+    }
+
+    try {
+      const storedTable = window.localStorage.getItem(fclTableStorageKey)
+      setFclTableChargeOverrides(
+        storedTable ? (JSON.parse(storedTable) as FclTableChargeOverrides) : {}
+      )
+    } catch {
+      setFclTableChargeOverrides({})
+    }
+  }, [fclTableStorageKey])
+
+  const saveFclTableOverrides = () => {
+    if (!fclTableStorageKey) {
+      toast.error('Selecciona una cotizacion primero')
+      return
+    }
+
+    try {
+      window.localStorage.setItem(
+        fclTableStorageKey,
+        JSON.stringify(fclTableChargeOverrides)
+      )
+      toast.success('Tabla guardada')
+    } catch {
+      toast.error('No se pudo guardar la tabla en este navegador')
+    }
+  }
 
   const [agentForm, setAgentForm] = useState({
     agent_id: '',
@@ -2615,6 +2662,7 @@ const profitabilityColor =
   }
 
   const showCarrierInput = shouldShowCarrierInput(selectedQuote)
+  const isFclQuote = normalizeText(selectedQuote?.quote_type) === 'fcl'
 
   const getCarrierFilterType = () => {
     if (selectedQuote?.tipo_transporte === 'Marítima') return 'ocean'
@@ -3701,7 +3749,7 @@ const profitabilityColor =
                   ref={agentQuotesSectionRef}
                   className={cn(cardClass, 'p-6')}
                 >
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                         Tarifas de Agentes
@@ -3710,6 +3758,37 @@ const profitabilityColor =
                         Compara opciones por costo, transito, carrier y rentabilidad.
                       </p>
                     </div>
+
+                    {isFclQuote && (
+                      <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
+                        <button
+                          type="button"
+                          onClick={() => setAgentQuotesViewMode('cards')}
+                          className={cn(
+                            'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition',
+                            agentQuotesViewMode === 'cards'
+                              ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white'
+                              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                          )}
+                        >
+                          <LayoutGrid className="h-4 w-4" />
+                          Cards
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAgentQuotesViewMode('table')}
+                          className={cn(
+                            'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold transition',
+                            agentQuotesViewMode === 'table'
+                              ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-white'
+                              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                          )}
+                        >
+                          <Table2 className="h-4 w-4" />
+                          Tabla
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {agentQuotes.length === 0 ? (
@@ -3784,6 +3863,30 @@ const profitabilityColor =
                         </div>
                       )}
 
+                      {isFclQuote && agentQuotesViewMode === 'table' ? (
+                        <FclAgentComparisonTable
+                          agentQuotes={agentQuotes}
+                          selectedQuote={selectedQuote}
+                          chargeOverrides={fclTableChargeOverrides}
+                          bestCostQuoteId={bestCostQuote?.id || null}
+                          fastestQuoteId={fastestQuote?.id || null}
+                          selectedAgentQuoteId={selectedAgentQuote?.id || null}
+                          isPricingActionDisabled={isPricingActionDisabled}
+                          showCarrierInput={showCarrierInput}
+                          getAgentQuoteBaseCost={getAgentQuoteBaseCost}
+                          getAgentQuoteContainersQty={getAgentQuoteContainersQty}
+                          getAgentQuoteProviderName={getAgentQuoteProviderName}
+                          getValidTransitDays={getValidTransitDays}
+                          formatCurrency={formatCurrency}
+                          formatDisplayDate={formatDisplayDate}
+                          onChargeOverridesChange={setFclTableChargeOverrides}
+                          onSaveTable={saveFclTableOverrides}
+                          onSelectQuote={(quote) => {
+                            setSelectedRateForConfirm(quote)
+                            setConfirmSelectRateOpen(true)
+                          }}
+                        />
+                      ) : (
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         {agentQuotes.map((quote) => {
                               const finalSariCost = getAgentQuoteFinalCost(quote)
@@ -4043,6 +4146,7 @@ const profitabilityColor =
                               )
                       })}
                       </div>
+                      )}
                     </>
                   )}
                     </div>
