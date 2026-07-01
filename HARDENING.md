@@ -1077,7 +1077,7 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - Las tablas anchas de algunos módulos siguen requiriendo scroll horizontal
     en móvil; eso queda dentro de UX-008.
-- Commit: hash pendiente
+- Commit: `46a36e3`
 
 ### 2026-07-01 — QA-009 — npm audit sin vulnerabilidades
 
@@ -1097,7 +1097,7 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - Al actualizar Next en el futuro, revisar si ya incluye PostCSS >= 8.5.10 y
     retirar el override para volver a la versión que Next fija oficialmente.
-- Commit: hash pendiente
+- Commit: `46a36e3`
 
 ### 2026-07-01 — REP-001 — Totales de reportes agrupados por moneda
 
