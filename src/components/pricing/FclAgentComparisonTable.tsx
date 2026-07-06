@@ -113,9 +113,10 @@ export function FclAgentComparisonTable({
         firstFilledValue(
           quote.pol,
           quote.port_of_loading,
+          quote.puerto_origen,
           selectedQuote?.pol,
           selectedQuote?.port_of_loading,
-          selectedQuote?.origen
+          selectedQuote?.puerto_origen
         ) || 'N/A'
       )
     }
@@ -124,9 +125,10 @@ export function FclAgentComparisonTable({
       firstFilledValue(
         quote.pod,
         quote.port_of_discharge,
+        quote.puerto_destino,
         selectedQuote?.pod,
         selectedQuote?.port_of_discharge,
-        selectedQuote?.destino
+        selectedQuote?.puerto_destino
       ) || 'N/A'
     )
   }

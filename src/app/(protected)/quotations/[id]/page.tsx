@@ -8,6 +8,7 @@ import {
   Copy,
   CreditCard,
   Download,
+  FileSpreadsheet,
   Mail,
   MoreHorizontal,
   Pencil,
@@ -31,6 +32,7 @@ import {
 } from '@react-pdf/renderer'
 
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
+import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
 import {
   Tabs,
   TabsContent,
@@ -326,6 +328,7 @@ export default function QuotationDetailPage() {
   const router = useRouter()
   const userRole = profile?.rol
   const canManagePricing = ['Admin', 'Pricing'].includes(userRole || '')
+  const canPrintCostDetail = canManagePricing
   const canGenerateSI = ['Admin', 'Ventas'].includes(userRole || '')
   const canEditQuotation = ['Admin', 'Ventas', 'Operaciones'].includes(userRole || '')
   const canGenerateCxP = ['Admin', 'Finanzas', 'Contabilidad'].includes(userRole || '')
@@ -788,6 +791,51 @@ export default function QuotationDetailPage() {
 
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
+  }
+
+  const handlePrintCostDetail = async () => {
+    if (!canPrintCostDetail) {
+      toast.error('No tienes permisos para imprimir el detalle interno de costos.')
+      return
+    }
+
+    if (pricingItems.length === 0) {
+      toast.error(
+        'Esta cotización no tiene items de pricing. Fija los costos en Pricing antes de imprimir el detalle.'
+      )
+      return
+    }
+
+    try {
+      const wonAt =
+        [...statusHistory].reverse().find((status) => status.new_status === 'Ganada')?.created_at ||
+        quotation?.won_at ||
+        quotation?.approved_at ||
+        null
+      const generatedByName = getProfileName(profile, profile?.email || 'Usuario')
+      const generatedAt = new Date().toISOString()
+
+      const blob = await pdf(
+        <CostDetailPDF
+          quotation={quotation}
+          selectedAgent={selectedAgent}
+          pricingItems={pricingItems}
+          wonAt={wonAt}
+          generatedByName={generatedByName}
+          generatedAt={generatedAt}
+        />
+      ).toBlob()
+
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+    } catch (error) {
+      toast.error('No se pudo generar el detalle de costos.', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Intenta nuevamente o revisa los datos de pricing.',
+      })
+    }
   }
 
   const handleGenerarCxP = async () => {
@@ -1627,6 +1675,20 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     >
                       <Copy className="h-4 w-4" />
                       {duplicating ? 'Duplicando...' : 'Duplicar Cotización'}
+                    </button>
+                  )}
+
+                  {canPrintCostDetail && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMoreMenu(false)
+                        handlePrintCostDetail()
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Imprimir Detalle de Costos
                     </button>
                   )}
 

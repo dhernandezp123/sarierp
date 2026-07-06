@@ -1462,6 +1462,72 @@ Agregar una entrada por fix:
   - Ninguno.
 - Commit: hash pendiente
 
+### 2026-07-06 - PDF-001 - Detalle interno de costos PDF endurecido
+
+- Estado: En validacion.
+- Hallazgo: PDF-001.
+- Causa raiz: El detalle interno de costos podia imprimirse desde roles de
+  edicion comercial/operativa y el PDF consolidaba totales como USD aunque las
+  lineas tuvieran moneda propia.
+- Codigo:
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pdf/cost-detail-pdf.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - La accion "Imprimir Detalle de Costos" queda limitada a Admin/Pricing.
+  - El PDF agrupa subtotales y resumen final por moneda.
+  - El calculo del PDF respeta `tax_amount` y `total_amount` persistidos cuando
+    estan disponibles.
+  - La generacion del PDF maneja errores con Sonner.
+  - El PDF se compacto en formato carta vertical para mantenerse imprimible en
+    una pagina y muestra agente, ETD, puertos, fecha de cotizacion, fecha
+    Ganada, validez y usuario/fecha de generacion.
+  - La tabla de costos incluye columna ISV por linea y subtotal para evitar
+    confusiones entre venta sin impuesto y venta total.
+  - Se retiro la informacion legal/contacto debajo del logo para reducir ruido
+    visual y ahorrar altura en impresion.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - No aplica SQL ni RLS nuevo.
+  - Confirmar que Ventas y Operaciones no ven la accion del PDF interno.
+  - Confirmar que Admin/Pricing pueden generar el PDF.
+  - Confirmar PDF con lineas en mas de una moneda: no debe mostrar un total USD
+    mezclado; debe separar subtotales/resumen por moneda.
+  - Confirmar que el PDF del detalle de costos se mantiene en una sola pagina
+    carta vertical para una cotizacion con el volumen normal de lineas.
+- Riesgos pendientes:
+  - La pantalla de resumen de cotizacion sigue mostrando tarjetas financieras en
+    USD como comportamiento previo; este fix solo endurece el PDF interno.
+- Commit: hash pendiente
+
+### 2026-07-03 - UX-014 - POL/POD usan puertos en tabla FCL
+
+- Estado: En validacion.
+- Hallazgo: UX-014.
+- Causa raiz: La vista Tabla del comparativo FCL no consideraba
+  `puerto_origen` ni `puerto_destino` de la cotizacion y terminaba mostrando
+  `origen`/`destino`, que representan paises.
+- Codigo:
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+- SQL:
+  - No aplica.
+- Cambio:
+  - Las filas POL y POD ahora priorizan campos de puerto (`pol`,
+    `port_of_loading`, `puerto_origen`, `pod`, `port_of_discharge`,
+    `puerto_destino`) y muestran `N/A` si no hay puerto disponible.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - No aplica RLS ni migraciones.
+  - Abrir `/pricing-comparison` en una cotizacion FCL con puertos cargados y
+    confirmar que POL/POD muestran puerto de origen y puerto de destino, no
+    paises.
+- Riesgos pendientes:
+  - Ninguno.
+- Commit: hash pendiente
+
 ### 2026-06-29 - FLOW-003 - RPC de hijos de cotizacion sin ambiguedad
 
 - Estado: En validacion manual; SQL aplicado en remoto.
