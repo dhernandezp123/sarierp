@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { createClienteRecord } from '@/src/lib/clientes'
 import { useUser } from '../../../../hooks/useUser'
 import { cn } from '../../../../lib/utils'
 import {
@@ -164,83 +165,46 @@ export default function NuevoClientePage() {
   }
 
   const createCliente = async () => {
-    if (!formData.nombre) {
-      toast.error('El nombre del cliente es obligatorio')
-      return
-    }
-
     setCreating(true)
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    if (userError || !user) {
-      toast.error('No se pudo validar el usuario autenticado.')
-      setCreating(false)
-      return
-    }
-
-    const vendedorAsignado = formData.vendedor_asignado || user.id
-    const clientePayload = {
-      nombre: formData.nombre,
-      contacto: formData.contacto,
-      nit: formData.nit,
-      telefono: formData.telefono,
-      direccion: formData.direccion,
-      ciudad: formData.ciudad,
-      departamento_estado: formData.departamento_estado,
-      pais: formData.pais,
-      email_1: formData.email_1,
-      email_2: formData.email_2,
-      email_3: formData.email_3,
-      observaciones: formData.observaciones,
-      tipo_persona: formData.tipo_persona,
-      condicion_pago: formData.condicion_pago,
-      dias_credito: isCreditPayment(formData.condicion_pago)
-        ? Number(formData.dias_credito || 0)
-        : 0,
-      tipo_cliente: formData.tipo_cliente,
-      vendedor_asignado: vendedorAsignado,
-      origen_frecuente: formData.origen_frecuente,
-      preferred_miami_rate_destination:
-        formData.preferred_miami_rate_destination,
-      asegura_carga: formData.asegura_carga,
-      seguro_porcentaje: formData.asegura_carga
-        ? Number(formData.seguro_porcentaje || 0)
-        : null,
-      notas_tarifas: formData.notas_tarifas,
-    }
-
-    const { error } = await supabase
-      .from('clientes')
-      .insert([clientePayload])
+    const { cliente: createdCliente, error } = await createClienteRecord(
+      supabase,
+      {
+        nombre: formData.nombre,
+        contacto: formData.contacto,
+        nit: formData.nit,
+        telefono: formData.telefono,
+        direccion: formData.direccion,
+        ciudad: formData.ciudad,
+        departamento_estado: formData.departamento_estado,
+        pais: formData.pais,
+        email_1: formData.email_1,
+        email_2: formData.email_2,
+        email_3: formData.email_3,
+        observaciones: formData.observaciones,
+        tipo_persona: formData.tipo_persona,
+        condicion_pago: formData.condicion_pago,
+        dias_credito: isCreditPayment(formData.condicion_pago)
+          ? Number(formData.dias_credito || 0)
+          : 0,
+        tipo_cliente: formData.tipo_cliente,
+        vendedor_asignado: formData.vendedor_asignado,
+        origen_frecuente: formData.origen_frecuente,
+        preferred_miami_rate_destination:
+          formData.preferred_miami_rate_destination,
+        asegura_carga: formData.asegura_carga,
+        seguro_porcentaje: formData.asegura_carga
+          ? Number(formData.seguro_porcentaje || 0)
+          : null,
+        notas_tarifas: formData.notas_tarifas,
+      },
+      profile?.id
+    )
 
     if (error) {
-      toast.error(error.message)
+      toast.error(error)
       setCreating(false)
       return
-    }
-
-    const { data: createdCliente } = await supabase
-      .from('clientes')
-      .select('id, codigo_cliente, nombre')
-      .eq('vendedor_asignado', vendedorAsignado)
-      .eq('nombre', formData.nombre)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (createdCliente) {
-      await supabase.from('cliente_history').insert([
-        {
-          cliente_id: createdCliente.id,
-          changed_by: profile?.id,
-          action: 'Cliente creado',
-          notes: `Cliente ${createdCliente.codigo_cliente} creado`,
-        },
-      ])
     }
 
     toast.success(

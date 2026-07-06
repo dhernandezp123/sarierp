@@ -3,13 +3,16 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Home, Menu, Moon, Sun, Plus, FileText, Users, X } from 'lucide-react'
+import { Bell, Home, Menu, Moon, Sun, Plus, FileText, UserPlus, Users, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useUser } from '@/src/hooks/useUser'
 import { getSystemAlerts, type SystemAlert } from '@/src/lib/alerts'
 import { supabase } from '@/src/lib/supabase/client'
+import NewAgentDialog from '@/src/components/agents/NewAgentDialog'
+import NewClientDialog from '@/src/components/clientes/NewClientDialog'
 
-// Acciones rapidas disponibles segun rol
+// Acciones rapidas disponibles segun rol; con `href` navegan y con
+// `action` abren un modal sin salir de la pagina actual.
 const QUICK_ACTIONS = [
   {
     label: 'Nueva Cotizacion',
@@ -19,11 +22,23 @@ const QUICK_ACTIONS = [
   },
   {
     label: 'Nuevo Cliente',
-    href: '/clientes/nuevo',
+    action: 'new-client',
     icon: Users,
     roles: ['Admin', 'Ventas'],
   },
-]
+  {
+    label: 'Agregar Agente',
+    action: 'new-agent',
+    icon: UserPlus,
+    roles: ['Admin', 'Pricing'],
+  },
+] as Array<{
+  label: string
+  href?: string
+  action?: 'new-agent' | 'new-client'
+  icon: typeof FileText
+  roles: string[]
+}>
 
 const seenAlertsStorageKey = (userId: string) => `sari:seen-high-alerts:${userId}`
 
@@ -55,6 +70,8 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
   const [seenHighAlertIds, setSeenHighAlertIds] = useState<Set<string>>(new Set())
   const [alertsOpen, setAlertsOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false)
+  const [clientDialogOpen, setClientDialogOpen] = useState(false)
 
   const quickRef = useRef<HTMLDivElement>(null)
   const alertsRef = useRef<HTMLDivElement>(null)
@@ -190,13 +207,37 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
 
                 {visibleActions.map((action) => {
                   const Icon = action.icon
+                  const itemClass =
+                    'flex w-full items-center gap-2.5 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'
+
+                  if (action.action) {
+                    const openDialog =
+                      action.action === 'new-agent'
+                        ? setAgentDialogOpen
+                        : setClientDialogOpen
+
+                    return (
+                      <button
+                        key={action.label}
+                        type="button"
+                        onClick={() => {
+                          setQuickOpen(false)
+                          openDialog(true)
+                        }}
+                        className={itemClass}
+                      >
+                        <Icon className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+                        {action.label}
+                      </button>
+                    )
+                  }
 
                   return (
                     <Link
                       key={action.href}
-                      href={action.href}
+                      href={action.href || '/dashboard'}
                       onClick={() => setQuickOpen(false)}
-                      className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className={itemClass}
                     >
                       <Icon className="h-4 w-4 text-slate-400 dark:text-slate-500" />
                       {action.label}
@@ -300,6 +341,9 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
           </div>
         </Link>
       </div>
+
+      <NewAgentDialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen} />
+      <NewClientDialog open={clientDialogOpen} onOpenChange={setClientDialogOpen} />
     </header>
   )
 }

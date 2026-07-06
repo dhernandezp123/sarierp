@@ -1462,6 +1462,151 @@ Agregar una entrada por fix:
   - Ninguno.
 - Commit: hash pendiente
 
+### 2026-07-06 - UX-017 - Plantillas de correo editables (fin del cuerpo hardcodeado)
+
+- Estado: En validacion; migraciones aplicadas en remoto el 2026-07-06 via
+  `supabase db push` (registradas como `20260706200000` y `20260706210000`).
+- Hallazgo: UX-017 (mejora solicitada por el titular).
+- Causa raiz: El cuerpo del correo de cotizacion estaba hardcodeado (~35
+  lineas) en `quotations/[id]/page.tsx`; solo el texto de cierre era
+  configurable en `company_settings.plantilla_cotizacion`.
+- SQL:
+  - `supabase/migrations/20260706200000_email_templates.sql`: tabla
+    `email_templates` (template_key unico, nombre, descripcion, asunto,
+    cuerpo, is_active, updated_by/updated_at). RLS: SELECT para roles
+    internos aprobados mediante `public.is_approved_active_user()`;
+    INSERT/UPDATE/DELETE solo Admin mediante `public.is_admin()`. Semilla
+    `cotizacion_cliente` equivalente al texto que estaba hardcodeado.
+  - `supabase/migrations/20260706210000_email_template_seguimiento.sql`:
+    semilla `seguimiento_cotizacion` (correo de seguimiento de tarifa
+    ofertada que Ventas copia desde el detalle de la cotizacion).
+  - `supabase/migrations/20260706220000_fix_email_templates_encoding_rls.sql`:
+    corrige semillas ya aplicadas con `ON CONFLICT DO UPDATE` para normalizar
+    textos UTF-8 y reemplaza politicas RLS por helpers versionados.
+- Codigo:
+  - `src/lib/email-templates.ts` (nuevo): renderizador de variables
+    `{{...}}` (las lineas cuyos placeholders resuelven todos vacios se
+    eliminan, lo que reemplaza los bloques condicionales del codigo),
+    catalogo de variables por plantilla y respaldo local identico a la
+    semilla para que el correo nunca salga vacio si falta la fila.
+  - `src/app/(protected)/settings/email-templates/page.tsx` (nuevo):
+    seccion "Plantillas de Correo" con editor de asunto/cuerpo, chips de
+    variables disponibles, vista previa con datos de ejemplo, boton
+    "Restaurar original" y guard de cambios sin guardar. Solo Admin edita;
+    otros roles con acceso ven solo lectura.
+  - `src/components/layout/sidebar.tsx`: entrada "Plantillas de Correo" en
+    la seccion admin.
+  - `src/app/(protected)/quotations/[id]/page.tsx`: el modal de correo
+    carga todas las plantillas activas y muestra un selector (chips) para
+    alternar entre ellas (cotizacion, seguimiento y las personalizadas);
+    asunto y cuerpo se renderizan con el mismo mapa de variables.
+    `{{cierre}}` sigue leyendo `company_settings.plantilla_cotizacion` para
+    compatibilidad.
+  - Settings permite a Admin crear plantillas nuevas desde la UI (boton
+    "Nueva"); quedan disponibles en el selector del modal sin tocar codigo
+    ni migraciones. "Restaurar original" solo aparece en plantillas con
+    semilla.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - Migraciones `20260706200000` y `20260706210000` aplicadas en remoto y
+    semilla insertada antes de esta correccion.
+  - Intento manual de `20260706220000` en SQL Editor: fallido por deadlock
+    `40P01`, transaccion abortada; queda pendiente reintento.
+- Verificacion manual/RLS pendiente:
+  - Reintentar `20260706220000_fix_email_templates_encoding_rls.sql` en remoto
+    cuando no haya trafico sobre plantillas/perfiles.
+  - Con Admin, editar la plantilla en `/settings/email-templates`, guardar y
+    confirmar que el modal de correo de una cotizacion refleja el cambio.
+  - Confirmar que la vista previa coincide con el correo generado.
+  - Confirmar el correo de una cotizacion SIN tarifa seleccionada: el bloque
+    de tarifa no debe aparecer (lineas con variables vacias omitidas).
+  - Confirmar el correo de una cotizacion Miami sin tarifa seleccionada pero
+    con total comercial: debe mostrar bloque "TARIFA".
+  - Con un rol no-Admin que acceda a la pagina, confirmar solo lectura, y
+    que un update directo es bloqueado por RLS.
+  - "Restaurar original" recupera la semilla y requiere guardar.
+  - En el modal de correo, alternar entre "Cotizacion al cliente" y
+    "Seguimiento de cotizacion" y confirmar que asunto y cuerpo cambian.
+  - Crear una plantilla nueva desde Settings, guardarla y confirmar que
+    aparece en el selector del modal de la cotizacion.
+- Riesgos pendientes:
+  - Solo existe la plantilla `cotizacion_cliente`; otros correos del sistema
+    (mailto de BL/facturacion) siguen como estan y pueden migrarse al mismo
+    esquema despues.
+  - Un placeholder mal escrito hace que su linea se omita; la vista previa
+    del editor lo hace visible antes de guardar.
+- Commit: hash pendiente
+
+### 2026-07-06 - UX-016 - Accion rapida "Nuevo Cliente" con modal de alta rapida
+
+- Estado: En validacion.
+- Hallazgo: UX-016 (mejora solicitada por el titular; mismo patron de UX-015).
+- Causa raiz: La accion rapida "Nuevo Cliente" navegaba a `/clientes/nuevo`,
+  interrumpiendo el flujo en curso. El formulario completo (6 secciones) no es
+  apto para modal, pero el alta durante una llamada solo necesita los datos
+  esenciales.
+- Codigo:
+  - `src/lib/clientes.ts` (nuevo): `createClienteRecord` extrae la logica de
+    creacion (insert, fallback de vendedor al usuario autenticado, registro en
+    `cliente_history`, retorno del codigo generado) para reutilizarla.
+  - `src/components/clientes/NewClientDialog.tsx` (nuevo): modal de alta
+    rapida con campos esenciales (nombre, RTN, contacto, telefono, email,
+    pais, tipo de empresa, condicion de pago con dias de credito, segmento,
+    vendedor). El toast de exito incluye accion "Completar perfil" que lleva a
+    `/clientes/[id]/edit`.
+  - `src/app/(protected)/clientes/nuevo/page.tsx`: consume el helper
+    compartido; formulario completo sin cambios visuales.
+  - `src/components/layout/topbar.tsx`: "Nuevo Cliente" abre el modal en
+    lugar de navegar (roles Admin y Ventas, sin cambio de roles).
+- SQL:
+  - No aplica; usa inserts existentes sobre `clientes` y `cliente_history`
+    (RLS vigente).
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - Crear cliente desde el modal y confirmar toast con codigo generado y
+    registro en el historial del cliente.
+  - Probar la accion "Completar perfil" del toast.
+  - Confirmar que `/clientes/nuevo` sigue creando con todos los campos y
+    redirige al detalle.
+  - Confirmar condicion de pago a credito: el campo dias de credito aparece y
+    persiste.
+- Riesgos pendientes:
+  - El modal no captura direccion, correos adicionales, seguro ni notas; el
+    perfil queda incompleto hasta editarlo (por diseno, se comunica en el
+    propio modal).
+- Commit: hash pendiente
+
+### 2026-07-06 - UX-015 - Accion rapida "Agregar Agente" con modal
+
+- Estado: En validacion.
+- Hallazgo: UX-015 (mejora solicitada por el titular).
+- Causa raiz: Crear un agente requeria navegar a `/agents`, interrumpiendo el
+  flujo de pricing cuando llega una tarifa de un agente nuevo.
+- Codigo:
+  - `src/components/agents/AgentForm.tsx` (nuevo): formulario de alta de
+    agente extraido de `/agents` para reutilizarse sin duplicar logica.
+  - `src/components/agents/NewAgentDialog.tsx` (nuevo): modal custom (Radix
+    Dialog existente, sin alert/confirm) que envuelve el formulario.
+  - `src/components/layout/topbar.tsx`: accion rapida "Agregar Agente" para
+    roles Admin y Pricing; abre el modal sin cambiar de pagina.
+  - `src/app/(protected)/agents/page.tsx`: consume `AgentForm` compartido.
+- SQL:
+  - No aplica; usa el insert existente sobre `agents` (RLS vigente).
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - Confirmar que Admin y Pricing ven "Agregar Agente" y que Ventas,
+    Operaciones, Finanzas y Contabilidad no.
+  - Crear un agente desde el modal en cualquier pagina y confirmar toast de
+    exito y cierre del modal.
+  - Confirmar que el formulario de `/agents` sigue creando y refrescando la
+    tabla.
+- Riesgos pendientes:
+  - Si el modal se usa estando en `/agents`, la tabla no se refresca sola;
+    el formulario lateral de la pagina si lo hace.
+- Commit: hash pendiente
+
 ### 2026-07-06 - PDF-002 - Seguro en Shipping Instruction no debe marcarse si no fue solicitado
 
 - Estado: En validacion.
@@ -1488,14 +1633,15 @@ Agregar una entrada por fix:
 - Validaciones ejecutadas:
   - `npx tsc --noEmit`: OK.
 - Verificacion manual/RLS pendiente:
-  - Aplicar migracion SQL en Supabase.
+  - Migracion aplicada en remoto el 2026-07-06 via `supabase db push`
+    (registrada como `20260706170000`).
   - Generar SI PDF de una cotizacion sin seguro y confirmar "Insurance: No".
   - Generar SI PDF de una cotizacion con seguro y confirmar "Insurance: Yes".
   - Cambiar selector Insurance en SI y confirmar que el PDF respeta el valor.
   - Ejecutar "Actualizar desde Pricing" y confirmar que no aparece
     `quotation_id is ambiguous`.
 - Riesgos pendientes:
-  - Pendiente aplicar migracion SQL en el ambiente usado.
+  - Ninguno de SQL; queda la verificacion manual del flujo listada arriba.
 - Commit: hash pendiente
 
 ### 2026-07-06 - PDF-001 - Detalle interno de costos PDF endurecido
@@ -1566,7 +1712,9 @@ Agregar una entrada por fix:
 
 ### 2026-06-29 - FLOW-003 - RPC de hijos de cotizacion sin ambiguedad
 
-- Estado: En validacion manual; SQL aplicado en remoto.
+- Estado: En validacion manual; SQL aplicado en remoto (el 2026-07-06 se
+  registro `20260629090000` en el historial de migraciones via
+  `supabase db push`, que no habia quedado registrado).
 - Hallazgo: FLOW-003.
 - Causa raiz: `replace_quotation_child_lines` retorna una columna llamada
   `quotation_id` y dentro del cuerpo usaba `where quotation_id = p_quotation_id`
@@ -1729,8 +1877,8 @@ Agregar una entrada por fix:
     `status_change` en `miami_package_events`.
   - Desde Inventario, abrir `Historial` en ese paquete y confirmar que lista los
     eventos.
-  - Ejecutar `npx supabase db push --linked` para aplicar
-    `20260627070000_phase6_miami_status_reversals.sql`.
+  - `20260627070000_phase6_miami_status_reversals.sql` confirmada en remoto
+    (verificado con `supabase migration list --linked` el 2026-07-06).
   - Desde Inventario, reversar un estado con motivo y confirmar evento
     `status_reverse`.
   - Desde el portal cliente, abrir el paquete y confirmar que el historial de

@@ -34,6 +34,12 @@ import {
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
 import {
+  DEFAULT_EMAIL_TEMPLATES,
+  fetchActiveEmailTemplates,
+  renderEmailTemplate,
+  type EmailTemplate,
+} from '@/src/lib/email-templates'
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -354,6 +360,8 @@ export default function QuotationDetailPage() {
   const [reopeningRepricing, setReopeningRepricing] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [plantillaCotizacion, setPlantillaCotizacion] = useState<string | null>(null)
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([])
+  const [emailTemplateKey, setEmailTemplateKey] = useState('cotizacion_cliente')
   const [repricingImpact, setRepricingImpact] = useState({
     hasShippingInstruction: false,
     bookingsCount: 0,
@@ -1395,7 +1403,6 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
   const clienteEmail = quotation?.contact_email || quotation?.clientes?.email_1 || ''
   const clienteNombre = quotation?.contact_name || quotation?.clientes?.nombre || 'cliente'
-  const emailSubjectQ = `Cotización ${quotation?.quotation_number || ''} - Sari Express`
   const commercialTotal = pricingTotals.total || Number(quotation?.total_sale || 0)
 
   const containerEmailSummary =
@@ -1415,40 +1422,52 @@ const combinedTimeline: CommercialTimelineEvent[] = [
   const isMiamiEmailFlow =
     quotation?.service_product === 'miami_lcl' || quotation?.service_product === 'miami_air'
 
-  const emailBodyQ = [
-    `Buen día ${clienteNombre},`,
-    '',
-    'Espero que se encuentre bien.',
-    `En adjunto encontrarán nuestra cotización para el movimiento de su carga con origen ${originPort} y destino ${destinationPort}.`,
-    '',
-    `Cotización #:   ${quotation?.quotation_number || '—'}`,
-    `Servicio:       ${serviceProductLabel !== 'N/A' ? serviceProductLabel : quotation?.quote_type || '—'}`,
-    `Incoterm:       ${quotation?.incoterm || '—'}`,
-    `Origen:         ${originPort}`,
-    `Destino:        ${destinationPort}`,
-    `Commodity:      ${quotation?.commodity || '—'}`,
-    ...(containerEmailSummary ? [`Contenedores:   ${containerEmailSummary}`] : []),
-    '',
-    ...(selectedAgent ? [
-      'TARIFA SELECCIONADA',
-      `${carrierEmailLabel}:${' '.repeat(Math.max(1, 16 - carrierEmailLabel.length - 1))}${carrierLabel}`,
-      `Tránsito:       ${transitDays ? `${transitDays} días` : '—'}`,
-      `ETD estimado:   ${etdLabel}`,
-      ...(freeDays ? [`Días libres:    ${freeDays} días`] : []),
-      ...(commercialTotal > 0 ? [`Tarifa comercial: USD ${commercialTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`] : []),
-      `Tarifa válida hasta: ${formatDisplayDate(selectedAgent.valid_until || quotation?.valid_until)}`,
-      '',
-    ] : []),
-    ...(!selectedAgent && isMiamiEmailFlow && commercialTotal > 0 ? [
-      'TARIFA',
-      `Tarifa comercial: USD ${commercialTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      `Válida hasta:    ${formatDisplayDate(quotation?.valid_until)}`,
-      '',
-    ] : []),
-    'Quedamos atentos a su confirmación y a cualquier consulta adicional.',
-    '',
-    plantillaCotizacion || 'Saludos cordiales,\nSari Express — Equipo Comercial',
-  ].join('\n')
+  const commercialTotalLabel =
+    commercialTotal > 0
+      ? `USD ${commercialTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : ''
+
+  const showMiamiRate = !selectedAgent && isMiamiEmailFlow && commercialTotal > 0
+
+  const emailVarsQ = {
+    cliente: clienteNombre,
+    numero_cotizacion: quotation?.quotation_number || '—',
+    servicio:
+      serviceProductLabel !== 'N/A'
+        ? serviceProductLabel
+        : quotation?.quote_type || '—',
+    incoterm: quotation?.incoterm || '—',
+    origen: originPort,
+    destino: destinationPort,
+    commodity: quotation?.commodity || '—',
+    contenedores: containerEmailSummary || '',
+    titulo_tarifa: selectedAgent
+      ? 'TARIFA SELECCIONADA'
+      : showMiamiRate
+        ? 'TARIFA'
+        : '',
+    etiqueta_carrier: selectedAgent ? carrierEmailLabel : '',
+    carrier: selectedAgent ? carrierLabel : '',
+    transito: selectedAgent ? (transitDays ? `${transitDays} días` : '—') : '',
+    etd: selectedAgent ? etdLabel : '',
+    dias_libres: selectedAgent && freeDays ? `${freeDays} días` : '',
+    tarifa_comercial:
+      selectedAgent || showMiamiRate ? commercialTotalLabel : '',
+    valida_hasta: selectedAgent
+      ? formatDisplayDate(selectedAgent.valid_until || quotation?.valid_until)
+      : showMiamiRate
+        ? formatDisplayDate(quotation?.valid_until)
+        : '',
+    cierre:
+      plantillaCotizacion || 'Saludos cordiales,\nSari Express — Equipo Comercial',
+  }
+
+  const activeEmailTemplate =
+    emailTemplates.find((t) => t.template_key === emailTemplateKey) ||
+    emailTemplates[0] ||
+    DEFAULT_EMAIL_TEMPLATES.cotizacion_cliente
+  const emailSubjectQ = renderEmailTemplate(activeEmailTemplate.asunto, emailVarsQ)
+  const emailBodyQ = renderEmailTemplate(activeEmailTemplate.cuerpo, emailVarsQ)
 
   const mailtoLinkQ = clienteEmail
     ? `mailto:${clienteEmail}?cc=${encodeURIComponent(profile?.email || '')}&subject=${encodeURIComponent(emailSubjectQ)}&body=${encodeURIComponent(emailBodyQ)}`
@@ -1465,6 +1484,25 @@ const combinedTimeline: CommercialTimelineEvent[] = [
               <X className="h-5 w-5" />
             </button>
           </div>
+
+          {emailTemplates.length > 1 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {emailTemplates.map((template) => (
+                <button
+                  key={template.template_key}
+                  type="button"
+                  onClick={() => setEmailTemplateKey(template.template_key)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    template.template_key === activeEmailTemplate.template_key
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {template.nombre}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="mb-3 space-y-1 rounded-xl bg-blue-50 p-3 text-sm dark:bg-blue-950/30">
             <p className="font-medium text-blue-800 dark:text-blue-300">
@@ -1627,6 +1665,9 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   .limit(1)
                   .maybeSingle()
                 setPlantillaCotizacion((data as any)?.plantilla_cotizacion ?? '')
+              }
+              if (emailTemplates.length === 0) {
+                setEmailTemplates(await fetchActiveEmailTemplates(supabase))
               }
               setShowEmailModal(true)
             }}

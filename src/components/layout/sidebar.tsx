@@ -30,6 +30,7 @@ import {
   ShoppingBag,
   CreditCard,
   ShieldAlert,
+  Mail,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -278,6 +279,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       label: 'Rangos CAI',
       href: '/settings/cai',
       icon: ShieldCheck,
+    },
+    {
+      label: 'Plantillas de Correo',
+      href: '/settings/email-templates',
+      icon: Mail,
     },
   ]
 
