@@ -1465,7 +1465,8 @@ Agregar una entrada por fix:
 ### 2026-07-06 - UX-017 - Plantillas de correo editables (fin del cuerpo hardcodeado)
 
 - Estado: En validacion; migraciones aplicadas en remoto el 2026-07-06 via
-  `supabase db push` (registradas como `20260706200000` y `20260706210000`).
+  `supabase db push` y SQL Editor (registradas como `20260706200000`,
+  `20260706210000` y `20260706220000`).
 - Hallazgo: UX-017 (mejora solicitada por el titular).
 - Causa raiz: El cuerpo del correo de cotizacion estaba hardcodeado (~35
   lineas) en `quotations/[id]/page.tsx`; solo el texto de cierre era
@@ -1511,10 +1512,10 @@ Agregar una entrada por fix:
   - Migraciones `20260706200000` y `20260706210000` aplicadas en remoto y
     semilla insertada antes de esta correccion.
   - Intento manual de `20260706220000` en SQL Editor: fallido por deadlock
-    `40P01`, transaccion abortada; queda pendiente reintento.
+    `40P01`, transaccion abortada.
+  - Reintento manual de `20260706220000` en SQL Editor: OK, "Success. No rows
+    returned".
 - Verificacion manual/RLS pendiente:
-  - Reintentar `20260706220000_fix_email_templates_encoding_rls.sql` en remoto
-    cuando no haya trafico sobre plantillas/perfiles.
   - Con Admin, editar la plantilla en `/settings/email-templates`, guardar y
     confirmar que el modal de correo de una cotizacion refleja el cambio.
   - Confirmar que la vista previa coincide con el correo generado.
