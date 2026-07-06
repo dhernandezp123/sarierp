@@ -1478,11 +1478,23 @@ const combinedTimeline: CommercialTimelineEvent[] = [
     {showEmailModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-[#0b1220]">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">Enviar Cotización por Correo</h2>
-            <button type="button" onClick={() => setShowEmailModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {profile?.rol === 'Admin' && (
+                <Link
+                  href={`/settings/email-templates?template=${encodeURIComponent(activeEmailTemplate.template_key)}`}
+                  title="Editar plantilla de correo"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span className="sr-only">Editar plantilla</span>
+                </Link>
+              )}
+              <button type="button" onClick={() => setShowEmailModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {emailTemplates.length > 1 && (

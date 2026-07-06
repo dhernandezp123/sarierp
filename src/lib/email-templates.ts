@@ -138,6 +138,16 @@ export function renderEmailTemplate(
   return rendered.replace(/\n{3,}/g, '\n\n').trim()
 }
 
+// Versión "esqueleto" para usar la plantilla fuera de una cotización (por
+// ejemplo desde Acciones Rápidas): en lugar de resolver los {{placeholders}}
+// con datos, los convierte en campos visibles a llenar ([CLIENTE],
+// [NUMERO_COTIZACION]) y conserva todas las líneas.
+export function renderEmailTemplateSkeleton(template: string) {
+  return template
+    .replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, name: string) => `[${name.toUpperCase()}]`)
+    .trim()
+}
+
 // Carga la plantilla desde la base; si no existe o está inactiva, usa el
 // respaldo local para que el flujo de correo nunca quede vacío.
 export async function fetchEmailTemplate(

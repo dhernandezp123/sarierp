@@ -1462,6 +1462,39 @@ Agregar una entrada por fix:
   - Ninguno.
 - Commit: hash pendiente
 
+### 2026-07-06 - UX-018 - Plantillas de correo en Acciones Rapidas (copiar sin navegar)
+
+- Estado: En validacion.
+- Hallazgo: UX-018 (mejora solicitada por el titular; extiende UX-017).
+- Causa raiz: Para copiar una plantilla de correo fuera del detalle de una
+  cotizacion habia que navegar a Settings, que ademas es solo de Admin.
+- Codigo:
+  - `src/components/email/EmailTemplatesDialog.tsx` (nuevo): modal que lista
+    las plantillas activas (chips), muestra asunto y cuerpo, y permite
+    "Copiar mensaje" / "Copiar asunto". Fuera de una cotizacion no hay datos
+    para las variables, asi que se renderizan como campos a llenar en
+    corchetes ([CLIENTE], [NUMERO_COTIZACION]) sin omitir lineas. Link
+    "Administrar plantillas" visible solo para Admin.
+  - `src/lib/email-templates.ts`: `renderEmailTemplateSkeleton` convierte
+    `{{variable}}` en `[VARIABLE]` conservando todas las lineas.
+  - `src/components/layout/topbar.tsx`: accion rapida "Plantillas de Correo"
+    para todos los roles internos (la RLS de lectura ya lo permite); abre el
+    modal sin cambiar de pagina.
+- SQL:
+  - No aplica; reutiliza `email_templates` y sus policies de UX-017.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - Abrir la accion rapida desde cualquier pagina, alternar plantillas y
+    copiar mensaje y asunto; confirmar los campos [EN_CORCHETES].
+  - Confirmar que el link "Administrar plantillas" solo aparece a Admin.
+  - Confirmar que un rol interno no-Admin puede ver y copiar plantillas.
+  - Confirmar que una plantilla desactivada en Settings no aparece en el
+    modal de la accion rapida.
+- Riesgos pendientes:
+  - Ninguno; solo lectura sobre datos ya expuestos por RLS.
+- Commit: hash pendiente
+
 ### 2026-07-06 - UX-017 - Plantillas de correo editables (fin del cuerpo hardcodeado)
 
 - Estado: En validacion; migraciones aplicadas en remoto el 2026-07-06 via
@@ -1536,6 +1569,45 @@ Agregar una entrada por fix:
     esquema despues.
   - Un placeholder mal escrito hace que su linea se omita; la vista previa
     del editor lo hace visible antes de guardar.
+- Commit: hash pendiente
+
+### 2026-07-06 - UX-019 - Acceso directo, confirmaciones y supresion en plantillas de correo
+
+- Estado: En validacion.
+- Hallazgo: UX-002 / UX-017 (mejora solicitada por el titular).
+- Causa raiz: Aunque ya existia el editor de plantillas, el modal de correo de
+  cotizacion no daba acceso directo para modificar la plantilla activa. Ademas,
+  cambiar de plantilla, restaurar la original o crear una nueva podia descartar
+  cambios del editor sin una decision explicita.
+- Codigo:
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/app/(protected)/settings/email-templates/page.tsx`
+- SQL:
+  - No aplica; usa la tabla `email_templates` y RLS existente.
+- Cambios:
+  - El modal de correo agrega un boton de edicion visible para Admin que abre
+    `/settings/email-templates` con la plantilla activa seleccionada.
+  - Settings lee `?template=` para abrir directamente la plantilla solicitada.
+  - Settings detecta cambios sin guardar y muestra modales de decision antes de
+    cambiar de plantilla o crear una nueva.
+  - "Restaurar original" ahora pide confirmacion antes de reemplazar el asunto y
+    cuerpo actuales del editor.
+  - Settings agrega "Suprimir" para plantillas personalizadas: marca
+    `is_active = false`, las oculta del editor y del selector de correos, y
+    exige confirmacion antes de aplicar la baja logica.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - Desde una cotizacion, abrir el modal de correo y confirmar que Admin ve el
+    boton de editar plantilla.
+  - Confirmar que el boton abre Settings con la plantilla activa seleccionada.
+  - Editar una plantilla sin guardar e intentar cambiar de plantilla, crear una
+    nueva y restaurar original: debe aparecer el modal de decision.
+  - Crear una plantilla personalizada, suprimirla y confirmar que desaparece de
+    Settings y del selector de correos.
+  - Confirmar que usuarios no Admin no ven el acceso directo de edicion.
+- Riesgos pendientes:
+  - No aplica SQL nuevo; queda la verificacion manual de UI.
 - Commit: hash pendiente
 
 ### 2026-07-06 - UX-016 - Accion rapida "Nuevo Cliente" con modal de alta rapida

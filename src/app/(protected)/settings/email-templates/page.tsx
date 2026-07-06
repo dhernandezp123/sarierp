@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Mail, Plus, RotateCcw, Save } from 'lucide-react'
+import { Mail, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import {
@@ -71,16 +72,23 @@ export default function EmailTemplatesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [creatingTemplate, setCreatingTemplate] = useState(false)
+  const [suppressing, setSuppressing] = useState(false)
   const [form, setForm] = useState({ nombre: '', asunto: '', cuerpo: '' })
+  const [pendingTemplateKey, setPendingTemplateKey] = useState<string | null>(null)
+  const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false)
+  const [confirmCreateOpen, setConfirmCreateOpen] = useState(false)
+  const [confirmSuppressOpen, setConfirmSuppressOpen] = useState(false)
 
   useEffect(() => {
-    fetchTemplates()
+    const params = new URLSearchParams(window.location.search)
+    fetchTemplates(params.get('template') || undefined)
   }, [])
 
   const fetchTemplates = async (keyToSelect?: string) => {
     const { data, error } = await supabase
       .from('email_templates')
       .select('id, template_key, nombre, descripcion, asunto, cuerpo, is_active, updated_at')
+      .eq('is_active', true)
       .order('nombre', { ascending: true })
 
     if (error) {
@@ -103,14 +111,27 @@ export default function EmailTemplatesPage() {
         asunto: nextSelected.asunto,
         cuerpo: nextSelected.cuerpo,
       })
+    } else {
+      setSelectedKey('')
+      setForm({ nombre: '', asunto: '', cuerpo: '' })
     }
 
     setLoading(false)
   }
 
   const selected = templates.find((t) => t.template_key === selectedKey)
+  const selectedIsDefault = Boolean(selected && DEFAULT_EMAIL_TEMPLATES[selected.template_key])
   const variables = getTemplateVariables(selectedKey)
   const previewVars = PREVIEW_VARS[selectedKey] || PREVIEW_VARS.cotizacion_cliente
+  const hasUnsavedChanges = Boolean(
+    selected &&
+      isAdmin &&
+      (
+        form.nombre !== selected.nombre ||
+        form.asunto !== selected.asunto ||
+        form.cuerpo !== selected.cuerpo
+      )
+  )
 
   const preview = useMemo(
     () => ({
@@ -120,7 +141,7 @@ export default function EmailTemplatesPage() {
     [form.asunto, form.cuerpo, previewVars]
   )
 
-  const selectTemplate = (key: string) => {
+  const applyTemplateSelection = (key: string) => {
     const template = templates.find((t) => t.template_key === key)
     if (!template) return
     setSelectedKey(key)
@@ -129,6 +150,15 @@ export default function EmailTemplatesPage() {
       asunto: template.asunto,
       cuerpo: template.cuerpo,
     })
+  }
+
+  const selectTemplate = (key: string) => {
+    if (key === selectedKey) return
+    if (hasUnsavedChanges) {
+      setPendingTemplateKey(key)
+      return
+    }
+    applyTemplateSelection(key)
   }
 
   const handleSave = async () => {
@@ -173,6 +203,14 @@ export default function EmailTemplatesPage() {
     toast.info('Plantilla original restaurada. Guarda para aplicar los cambios.')
   }
 
+  const requestCreateTemplate = () => {
+    if (hasUnsavedChanges) {
+      setConfirmCreateOpen(true)
+      return
+    }
+    void handleCreateTemplate()
+  }
+
   const handleCreateTemplate = async () => {
     setCreatingTemplate(true)
 
@@ -195,6 +233,31 @@ export default function EmailTemplatesPage() {
 
     toast.success('Plantilla creada. Edita el nombre, asunto y cuerpo.')
     fetchTemplates(templateKey)
+  }
+
+  const handleSuppressTemplate = async () => {
+    if (!selected || selectedIsDefault) return
+
+    setSuppressing(true)
+    const nextTemplate = templates.find((template) => template.id !== selected.id)
+    const { error } = await supabase
+      .from('email_templates')
+      .update({
+        is_active: false,
+        updated_by: profile?.id ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', selected.id)
+    setSuppressing(false)
+
+    if (error) {
+      toast.error('Error al suprimir la plantilla: ' + error.message)
+      return
+    }
+
+    toast.success('Plantilla suprimida')
+    markFormSaved()
+    fetchTemplates(nextTemplate?.template_key)
   }
 
   if (loading) return <PageSkeleton cards={1} rows={5} />
@@ -236,7 +299,7 @@ export default function EmailTemplatesPage() {
               {isAdmin && (
                 <button
                   type="button"
-                  onClick={handleCreateTemplate}
+                  onClick={requestCreateTemplate}
                   disabled={creatingTemplate}
                   title="Crear plantilla nueva"
                   className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -368,11 +431,22 @@ export default function EmailTemplatesPage() {
                       {DEFAULT_EMAIL_TEMPLATES[selectedKey] && (
                         <button
                           type="button"
-                          onClick={handleRestore}
+                          onClick={() => setConfirmRestoreOpen(true)}
                           className={secondaryButtonClass}
                         >
                           <RotateCcw className="mr-2 inline h-4 w-4" />
                           Restaurar original
+                        </button>
+                      )}
+                      {!selectedIsDefault && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmSuppressOpen(true)}
+                          disabled={suppressing}
+                          className="rounded-xl border border-red-200 bg-white px-5 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:bg-transparent dark:text-red-300 dark:hover:bg-red-950/30"
+                        >
+                          <Trash2 className="mr-2 inline h-4 w-4" />
+                          {suppressing ? 'Suprimiendo...' : 'Suprimir'}
                         </button>
                       )}
                     </div>
@@ -402,6 +476,50 @@ export default function EmailTemplatesPage() {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={pendingTemplateKey !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingTemplateKey(null)
+        }}
+        title="Cambiar de plantilla"
+        description="Tienes cambios sin guardar. Si cambias de plantilla, esos cambios se perderan."
+        confirmLabel="Cambiar sin guardar"
+        danger
+        onConfirm={() => {
+          if (pendingTemplateKey) applyTemplateSelection(pendingTemplateKey)
+          setPendingTemplateKey(null)
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmRestoreOpen}
+        onOpenChange={setConfirmRestoreOpen}
+        title="Restaurar plantilla original"
+        description="Se reemplazara el asunto y cuerpo actuales en el editor. Aun tendras que guardar para aplicar el cambio."
+        confirmLabel="Restaurar"
+        danger
+        onConfirm={handleRestore}
+      />
+
+      <ConfirmDialog
+        open={confirmCreateOpen}
+        onOpenChange={setConfirmCreateOpen}
+        title="Crear plantilla nueva"
+        description="Tienes cambios sin guardar en la plantilla actual. Crear una nueva plantilla cambiara el editor y descartara esos cambios."
+        confirmLabel="Crear sin guardar"
+        danger
+        onConfirm={() => { void handleCreateTemplate() }}
+      />
+
+      <ConfirmDialog
+        open={confirmSuppressOpen}
+        onOpenChange={setConfirmSuppressOpen}
+        title="Suprimir plantilla"
+        description={`La plantilla "${selected?.nombre || ''}" dejara de aparecer en el selector de correos. No se borrara fisicamente de la base de datos.`}
+        confirmLabel="Suprimir"
+        danger
+        onConfirm={() => { void handleSuppressTemplate() }}
+      />
     </div>
   )
 }

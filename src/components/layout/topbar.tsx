@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Home, Menu, Moon, Sun, Plus, FileText, UserPlus, Users, X } from 'lucide-react'
+import { Bell, Home, Mail, Menu, Moon, Sun, Plus, FileText, UserPlus, Users, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useUser } from '@/src/hooks/useUser'
 import { getSystemAlerts, type SystemAlert } from '@/src/lib/alerts'
 import { supabase } from '@/src/lib/supabase/client'
 import NewAgentDialog from '@/src/components/agents/NewAgentDialog'
 import NewClientDialog from '@/src/components/clientes/NewClientDialog'
+import EmailTemplatesDialog from '@/src/components/email/EmailTemplatesDialog'
 
 // Acciones rapidas disponibles segun rol; con `href` navegan y con
 // `action` abren un modal sin salir de la pagina actual.
@@ -32,10 +33,16 @@ const QUICK_ACTIONS = [
     icon: UserPlus,
     roles: ['Admin', 'Pricing'],
   },
+  {
+    label: 'Plantillas de Correo',
+    action: 'email-templates',
+    icon: Mail,
+    roles: ['Admin', 'Ventas', 'Pricing', 'Operaciones', 'Finanzas', 'Contabilidad'],
+  },
 ] as Array<{
   label: string
   href?: string
-  action?: 'new-agent' | 'new-client'
+  action?: 'new-agent' | 'new-client' | 'email-templates'
   icon: typeof FileText
   roles: string[]
 }>
@@ -72,6 +79,7 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
   const [quickOpen, setQuickOpen] = useState(false)
   const [agentDialogOpen, setAgentDialogOpen] = useState(false)
   const [clientDialogOpen, setClientDialogOpen] = useState(false)
+  const [emailTemplatesOpen, setEmailTemplatesOpen] = useState(false)
 
   const quickRef = useRef<HTMLDivElement>(null)
   const alertsRef = useRef<HTMLDivElement>(null)
@@ -211,10 +219,12 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
                     'flex w-full items-center gap-2.5 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'
 
                   if (action.action) {
-                    const openDialog =
-                      action.action === 'new-agent'
-                        ? setAgentDialogOpen
-                        : setClientDialogOpen
+                    const dialogSetters = {
+                      'new-agent': setAgentDialogOpen,
+                      'new-client': setClientDialogOpen,
+                      'email-templates': setEmailTemplatesOpen,
+                    } as const
+                    const openDialog = dialogSetters[action.action]
 
                     return (
                       <button
@@ -344,6 +354,7 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
 
       <NewAgentDialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen} />
       <NewClientDialog open={clientDialogOpen} onOpenChange={setClientDialogOpen} />
+      <EmailTemplatesDialog open={emailTemplatesOpen} onOpenChange={setEmailTemplatesOpen} />
     </header>
   )
 }
