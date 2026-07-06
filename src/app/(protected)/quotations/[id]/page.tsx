@@ -1093,6 +1093,7 @@ export default function QuotationDetailPage() {
       release_type: 'Express Release',
       hbl_freight_visibility: 'No Freight Charges',
       printed_at_destination: true,
+      insurance_requested: Boolean(quotation.requires_insurance),
       shipment_status: 'Pendiente Validación',
       operational_status: 'Pendiente Validación',
     }

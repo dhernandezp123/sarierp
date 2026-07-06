@@ -123,6 +123,7 @@ type ShippingInstruction = {
   release_type: string | null
   hbl_freight_visibility: string | null
   printed_at_destination: boolean | null
+  insurance_requested: boolean | null
 
   shipper: string | null
   consignee: string | null
@@ -753,6 +754,7 @@ export default function RoutingDetailPage() {
         release_type: routing.release_type,
         hbl_freight_visibility: routing.hbl_freight_visibility,
         printed_at_destination: routing.printed_at_destination,
+        insurance_requested: routing.insurance_requested,
 
         shipper: routing.shipper,
         consignee: routing.consignee,
@@ -1955,6 +1957,26 @@ export default function RoutingDetailPage() {
                 <label className="text-sm text-slate-700 dark:text-slate-300">
                   Printed at destination
                 </label>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Insurance
+                </label>
+
+                <select
+                  value={routing.insurance_requested ? 'Yes' : 'No'}
+                  onChange={(e) =>
+                    setRouting({
+                      ...routing,
+                      insurance_requested: e.target.value === 'Yes',
+                    })
+                  }
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                >
+                  <option value="No">No</option>
+                  <option value="Yes">Yes</option>
+                </select>
               </div>
             </div>
           </section>

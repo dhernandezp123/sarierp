@@ -119,13 +119,49 @@ const value = (input?: string | number | boolean | null) => {
 }
 
 const yesNo = (input?: boolean | string | number | null) => {
-  if (input === true || input === 'true' || input === 'Si' || input === 'Sí') {
+  const normalizedInput =
+    typeof input === 'string'
+      ? input.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      : input
+
+  if (
+    input === true ||
+    input === 1 ||
+    normalizedInput === '1' ||
+    normalizedInput === 'true' ||
+    normalizedInput === 'yes' ||
+    normalizedInput === 'si'
+  ) {
     return 'Yes'
   }
 
-  if (input === false || input === 'false' || input === 0) return 'No'
+  if (
+    input === false ||
+    input === 0 ||
+    normalizedInput === '0' ||
+    normalizedInput === 'false' ||
+    normalizedInput === 'no'
+  ) {
+    return 'No'
+  }
 
   return value(input)
+}
+
+const hasRequestedInsurance = (routing: any, quote: any) => {
+  if (routing?.insurance_requested !== null && routing?.insurance_requested !== undefined) {
+    return yesNo(routing.insurance_requested) === 'Yes'
+  }
+
+  if (quote?.requires_insurance !== null && quote?.requires_insurance !== undefined) {
+    return yesNo(quote.requires_insurance) === 'Yes'
+  }
+
+  if (quote?.insurance !== null && quote?.insurance !== undefined && quote?.insurance !== '') {
+    return yesNo(quote.insurance) === 'Yes'
+  }
+
+  return false
 }
 
 const dateValue = (input?: string | null) => {
@@ -218,10 +254,7 @@ export default function RoutingOrderPDF({
     quote?.direccion_entrega ||
     client?.direccion ||
     'N/A'
-  const insurance =
-    quote?.requires_insurance !== undefined
-      ? yesNo(quote.requires_insurance)
-      : value(quote?.insurance || quote?.insurance_cost)
+  const insurance = hasRequestedInsurance(routing, quote) ? 'Yes' : 'No'
   const customsLocalTransport =
     quote?.customs_local_transport ||
     quote?.customs ||
@@ -249,7 +282,7 @@ export default function RoutingOrderPDF({
 
           <View>
             <Text style={styles.title}>SHIPPING INSTRUCTION</Text>
-            <Text style={styles.subtitle}>Instrucción de Embarque</Text>
+            <Text style={styles.subtitle}>Instruccion de Embarque</Text>
             <Text style={styles.subtitle}>{value(routing?.routing_number)}</Text>
           </View>
         </View>
@@ -317,7 +350,7 @@ export default function RoutingOrderPDF({
           <Text style={styles.noteBox}>{value(remarks)}</Text>
         </Section>
 
-        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  ·  Shipping Instruction ${value(routing?.routing_number)}  ·  Page ${pageNumber} of ${totalPages}`} />
+        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  -  Shipping Instruction ${value(routing?.routing_number)}  -  Page ${pageNumber} of ${totalPages}`} />
       </Page>
 
       <Page size="A4" style={styles.page}>
@@ -362,7 +395,7 @@ export default function RoutingOrderPDF({
           </Text>
         </Section>
 
-        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  ·  Bill of Lading Instructions  ·  Page ${pageNumber} of ${totalPages}`} />
+        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  -  Bill of Lading Instructions  -  Page ${pageNumber} of ${totalPages}`} />
       </Page>
     </Document>
   )

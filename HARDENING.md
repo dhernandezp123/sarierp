@@ -1462,6 +1462,42 @@ Agregar una entrada por fix:
   - Ninguno.
 - Commit: hash pendiente
 
+### 2026-07-06 - PDF-002 - Seguro en Shipping Instruction no debe marcarse si no fue solicitado
+
+- Estado: En validacion.
+- Hallazgo: PDF-002.
+- Causa raiz: El PDF de Shipping Instruction podia caer en campos legacy de
+  seguro cuando `requires_insurance` no llegaba de forma explicita, mostrando
+  "Insurance: Yes" aunque la cotizacion no incluyera seguro.
+- Codigo:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pdf/shipping-instruction-order-pdf.tsx`
+- SQL:
+  - `supabase/migrations/20260706170000_shipping_instruction_insurance_and_sync_rpc.sql`
+- Cambio:
+  - Se agrega `shipping_instructions.insurance_requested` como instruccion
+    operativa independiente de la cotizacion comercial.
+  - Se agrega selector `Insurance` Yes/No en Instrucciones BL de la SI.
+  - El PDF de SI ahora toma "Insurance" desde la SI y solo cae a la cotizacion
+    como compatibilidad si el campo aun no existe en datos antiguos.
+  - Se deja de usar `insurance_cost` como senal de seguro porque puede quedar
+    calculado desde el valor FOB aunque no se haya aplicado seguro de carga.
+  - Se reemplaza el RPC `sync_shipping_instruction_from_selected_agent_quote`
+    calificando columnas con aliases para evitar `quotation_id is ambiguous`.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual/RLS pendiente:
+  - Aplicar migracion SQL en Supabase.
+  - Generar SI PDF de una cotizacion sin seguro y confirmar "Insurance: No".
+  - Generar SI PDF de una cotizacion con seguro y confirmar "Insurance: Yes".
+  - Cambiar selector Insurance en SI y confirmar que el PDF respeta el valor.
+  - Ejecutar "Actualizar desde Pricing" y confirmar que no aparece
+    `quotation_id is ambiguous`.
+- Riesgos pendientes:
+  - Pendiente aplicar migracion SQL en el ambiente usado.
+- Commit: hash pendiente
+
 ### 2026-07-06 - PDF-001 - Detalle interno de costos PDF endurecido
 
 - Estado: En validacion.
