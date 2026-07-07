@@ -137,6 +137,7 @@ type SurchargeRule = {
   label: string
   rate_per_lbs: number | string | null
   rate_per_ft3: number | string | null
+  fixed_amount?: number | string | null
   minimum_amount: number | string | null
   currency: string | null
 }
@@ -369,6 +370,10 @@ function PricingComparisonContent() {
 
   const [editingPricingItemForm, setEditingPricingItemForm] =
     useState<any>(null)
+  const bankTransferFee = Number(
+    surchargeRules.find((rule) => rule.code === 'bank_transfer_fee')
+      ?.fixed_amount || 0
+  )
 
   useEffect(() => {
     fetchQuotations()
@@ -500,17 +505,23 @@ function PricingComparisonContent() {
       return
     }
 
+    const surchargeServiceProduct =
+      quote.service_product ||
+      (normalizeText(quote.quote_type) === 'fcl' ? 'other_origin_fcl' : null)
+
     const { data: ratesData } = await supabase
       .from('client_rates')
       .select('rate_code, rate_label, category, unit, currency, amount, notes, is_active')
       .eq('cliente_id', quote.cliente_id)
       .eq('is_active', true)
 
-    const { data: surchargeData } = await supabase
-      .from('surcharge_rules')
-      .select('code, label, rate_per_lbs, rate_per_ft3, minimum_amount, currency')
-      .eq('service_product', quote.service_product)
-      .eq('is_active', true)
+    const { data: surchargeData } = surchargeServiceProduct
+      ? await supabase
+          .from('surcharge_rules')
+          .select('code, label, rate_per_lbs, rate_per_ft3, fixed_amount, minimum_amount, currency')
+          .eq('service_product', surchargeServiceProduct)
+          .eq('is_active', true)
+      : { data: [] }
 
     setClientRates((ratesData || []) as ClientRate[])
     setSurchargeRules((surchargeData || []) as SurchargeRule[])
@@ -3909,6 +3920,7 @@ const profitabilityColor =
                           getValidTransitDays={getValidTransitDays}
                           formatCurrency={formatCurrency}
                           formatDisplayDate={formatDisplayDate}
+                          bankTransferFee={bankTransferFee}
                           onChargeOverridesChange={setFclTableChargeOverrides}
                           onSaveTable={saveFclTableOverrides}
                           onSelectQuote={(quote) => {

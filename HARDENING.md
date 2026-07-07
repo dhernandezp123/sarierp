@@ -1680,6 +1680,34 @@ Agregar una entrada por fix:
     el formulario lateral de la pagina si lo hace.
 - Commit: hash pendiente
 
+### 2026-07-07 - PRC-010 - Reglas de negocio de Miami Air y FCL desde catalogo
+
+- Estado: En validacion manual; requiere aplicar migracion SQL.
+- Hallazgo: PRC-010 (auditoria de valores hardcodeados).
+- Codigo:
+  - `src/hooks/useMiamiQuotation.ts`
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL:
+  - `supabase/migrations/20260707090000_seed_business_surcharge_rules.sql`
+- Cambios:
+  - Minimos Miami Air (`miami_air_min_small`, `miami_air_min_large`) salen de
+    `surcharge_rules` en vez de constantes React.
+  - Bank Transfer Fee FCL (`bank_transfer_fee`) sale de `surcharge_rules` y se
+    pasa al comparativo FCL como prop.
+  - La migracion inserta defaults actuales: USD 270 hasta 22 KG, USD 375 de
+    22 a 40 KG y Bank Transfer Fee USD 25.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Aplicar migracion SQL en Supabase.
+  - Crear/previsualizar cotizacion Miami Air y confirmar minimos.
+  - Abrir comparativo FCL y confirmar Bank Transfer Fee.
+- Riesgos pendientes:
+  - En ambientes donde no se haya aplicado la migracion, los minimos/fee quedan
+    en 0 porque ya no hay fallback hardcodeado.
+- Commit: hash pendiente
+
 ### 2026-07-07 - UX-022 - Branding configurable en PDFs operativos y reportes
 
 - Estado: En validacion manual.
