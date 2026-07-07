@@ -680,7 +680,7 @@ export default function CostValidationDetailPage() {
                   disabled={!canEditCostValidation}
                 />
 
-                Gravable ISV 15%
+                Gravable con impuesto seleccionado
               </label>
 
               <textarea

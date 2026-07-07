@@ -1680,6 +1680,27 @@ Agregar una entrada por fix:
     el formulario lateral de la pagina si lo hace.
 - Commit: hash pendiente
 
+### 2026-07-07 - FIN-013 - Etiqueta fiscal neutral en validacion de costos
+
+- Estado: En validacion manual.
+- Hallazgo: FIN-013 (auditoria de valores hardcodeados).
+- Codigo:
+  - `src/app/(protected)/cost-validation/[id]/page.tsx`
+- SQL:
+  - No aplica.
+- Cambios:
+  - La etiqueta de costo real deja de decir `Gravable ISV 15%` y ahora refiere
+    al impuesto seleccionado desde `tax_rates`.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - Busqueda de `ISV 15` en `cost-validation/[id]/page.tsx`: OK.
+- Verificacion manual pendiente:
+  - Crear costo real con impuesto seleccionado y confirmar que el calculo sigue
+    usando `tax_percentage_snapshot`.
+- Riesgos pendientes:
+  - Ninguno identificado; no se cambio la logica de calculo.
+- Commit: hash pendiente
+
 ### 2026-07-07 - FIN-012 - Etiquetas Miami usan ISV configurable
 
 - Estado: En validacion manual.
