@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Image,
 } from '@react-pdf/renderer'
+import { calculateTaxAmount, normalizeTaxRatePercent } from '@/src/lib/tax'
 
 function formatCurrency(value: number) {
   return Number(value || 0).toLocaleString('en-US', {
@@ -310,7 +311,7 @@ type CostLine = {
 }
 
 // Mismos cálculos que las tarjetas de resumen en quotations/[id]:
-// ISV 15% sobre venta cuando el item es taxable; GP% sobre venta sin ISV.
+// ISV configurable sobre venta cuando el item es taxable; GP% sobre venta sin ISV.
 type CostTotals = {
   currency: string
   costTotal: number
@@ -323,7 +324,10 @@ const getItemCurrency = (item: any) => item.currency || 'USD'
 
 const almostEqual = (a: number, b: number) => Math.abs(a - b) < 0.02
 
-const getCostLine = (item: any): CostLine => {
+const getCostLine = (
+  item: any,
+  taxRatePercent?: number | string | null
+): CostLine => {
   const qty = Number(item.quantity || 1)
   const safeQty = qty > 0 ? qty : 1
   const saleUnit = Number(item.sale_amount || 0)
@@ -333,7 +337,11 @@ const getCostLine = (item: any): CostLine => {
 
   const computedSaleTotal = safeQty * saleUnit
   const costTotal = safeQty * costUnit
-  const computedTax = item.taxable ? computedSaleTotal * 0.15 : 0
+  const computedTax = calculateTaxAmount(
+    Boolean(item.taxable),
+    computedSaleTotal,
+    taxRatePercent
+  )
   const tax = storedTax > 0 ? storedTax : computedTax
   const saleTotal =
     storedTotal > 0 && almostEqual(storedTotal, computedSaleTotal + tax)
@@ -357,10 +365,13 @@ const getCostLine = (item: any): CostLine => {
   }
 }
 
-const sumLinesByCurrency = (items: any[]) =>
+const sumLinesByCurrency = (
+  items: any[],
+  taxRatePercent?: number | string | null
+) =>
   Array.from(
     items.reduce((acc: Map<string, CostTotals>, item) => {
-      const line = getCostLine(item)
+      const line = getCostLine(item, taxRatePercent)
       const current =
         acc.get(line.currency) ||
         {
@@ -388,6 +399,7 @@ export default function CostDetailPDF({
   wonAt,
   generatedByName,
   generatedAt,
+  taxRatePercent,
 }: {
   quotation: any
   selectedAgent: any
@@ -395,7 +407,9 @@ export default function CostDetailPDF({
   wonAt?: string | null
   generatedByName?: string | null
   generatedAt?: string | null
+  taxRatePercent?: number | string | null
 }) {
+  const normalizedTaxRate = normalizeTaxRatePercent(taxRatePercent)
   const knownGroupedTypes = [
     'freight',
     'origin_charge',
@@ -436,7 +450,7 @@ export default function CostDetailPDF({
     { title: 'OTROS CARGOS', items: otherCharges },
   ].filter((group) => group.items.length > 0)
 
-  const totalsByCurrency = sumLinesByCurrency(pricingItems)
+  const totalsByCurrency = sumLinesByCurrency(pricingItems, normalizedTaxRate)
 
   const customer = quotation.cliente || quotation.clientes
   const quoteDate = quotation.quoted_at || quotation.created_at
@@ -636,7 +650,7 @@ export default function CostDetailPDF({
             </View>
 
             {groups.map((group) => {
-              const groupTotalsByCurrency = sumLinesByCurrency(group.items)
+              const groupTotalsByCurrency = sumLinesByCurrency(group.items, normalizedTaxRate)
 
               return (
                 <View key={group.title}>
@@ -645,7 +659,7 @@ export default function CostDetailPDF({
                   </View>
 
                   {group.items.map((item) => {
-                    const line = getCostLine(item)
+                    const line = getCostLine(item, normalizedTaxRate)
 
                     return (
                       <View key={item.id} style={styles.tableRow}>

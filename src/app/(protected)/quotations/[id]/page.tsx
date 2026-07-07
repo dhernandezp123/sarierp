@@ -45,6 +45,11 @@ import {
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import {
+  DEFAULT_TAX_RATE_PERCENT,
+  calculateTaxAmount,
+  normalizeTaxRatePercent,
+} from '@/src/lib/tax'
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -348,6 +353,7 @@ export default function QuotationDetailPage() {
   const [selectedAgent, setSelectedAgent] = useState<any>(null)
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
+  const [defaultTaxRate, setDefaultTaxRate] = useState(DEFAULT_TAX_RATE_PERCENT)
 
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
@@ -477,7 +483,7 @@ export default function QuotationDetailPage() {
 
     const { data: companyData } = await supabase
       .from('company_settings')
-      .select(COMPANY_BRANDING_SELECT)
+      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate`)
       .limit(1)
       .maybeSingle()
 
@@ -512,6 +518,7 @@ export default function QuotationDetailPage() {
 
     setSelectedAgent(selectedPricing)
     setCompanyBranding(normalizeCompanyBranding(companyData))
+    setDefaultTaxRate(normalizeTaxRatePercent((companyData as any)?.default_tax_rate))
     setAgentQuotes(agentData || [])
     setValidations(validationData || [])
     setLoading(false)
@@ -846,6 +853,7 @@ export default function QuotationDetailPage() {
           wonAt={wonAt}
           generatedByName={generatedByName}
           generatedAt={generatedAt}
+          taxRatePercent={defaultTaxRate}
         />
       ).toBlob()
 
@@ -1264,7 +1272,7 @@ const pricingTotals = pricingItems.reduce(
 
     const subtotal = qty * sale
     const costTotal = qty * cost
-    const tax = item.taxable ? subtotal * 0.15 : 0
+    const tax = calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
     const total = subtotal + tax
     const profit = subtotal - costTotal
 

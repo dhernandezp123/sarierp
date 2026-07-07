@@ -1439,7 +1439,7 @@ Agregar una entrada por fix:
   - Los cargos editados son comparativos locales de la tabla y se guardan solo
     en el navegador; no se persisten en Supabase ni cambian la seleccion
     guardada.
-- Commit: hash pendiente
+- Commit: 2a5f74a
 
 ### 2026-07-01 - UX-013 - OOCL en catalogo de navieras
 
@@ -1679,6 +1679,38 @@ Agregar una entrada por fix:
   - Si el modal se usa estando en `/agents`, la tabla no se refresca sola;
     el formulario lateral de la pagina si lo hace.
 - Commit: hash pendiente
+
+### 2026-07-07 - FIN-011 - ISV configurable en pricing comercial
+
+- Estado: En validacion manual.
+- Hallazgo: FIN-011 (auditoria de valores hardcodeados).
+- Codigo:
+  - `src/lib/tax.ts`
+  - `src/lib/miami-pricing-items.ts`
+  - `src/hooks/useMiamiQuotation.ts`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pdf/cost-detail-pdf.tsx`
+- SQL:
+  - No aplica; se reutiliza `company_settings.default_tax_rate`.
+- Cambios:
+  - Se centraliza calculo de impuesto en `src/lib/tax.ts`.
+  - Miami pricing items, cargos manuales/opcionales, seguro de carga,
+    totales de cotizacion y detalle interno de costos usan
+    `default_tax_rate` de Config. Empresa.
+  - Etiquetas de ISV en Pricing Comparison muestran el porcentaje
+    configurado.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - Busqueda de `0.15`, `tax_rate: 15` e `ISV 15` en los archivos corregidos:
+    OK, sin apariciones.
+- Verificacion manual pendiente:
+  - Cambiar `default_tax_rate` en Config. Empresa y validar cargo gravable
+    manual, cargo Miami gravable, seguro y PDF interno de costos.
+- Riesgos pendientes:
+  - Facturacion conserva calculos fiscales especificos de factura/ISV 15; debe
+    revisarse en un paquete separado para no romper reportes fiscales.
+- Commit: d988749
 
 ### 2026-07-07 - PRC-010 - Reglas de negocio de Miami Air y FCL desde catalogo
 

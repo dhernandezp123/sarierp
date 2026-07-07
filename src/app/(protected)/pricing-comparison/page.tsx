@@ -23,6 +23,11 @@ import {
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import {
+  DEFAULT_TAX_RATE_PERCENT,
+  calculateTaxAmount,
+  normalizeTaxRatePercent,
+} from '@/src/lib/tax'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
@@ -239,6 +244,7 @@ function PricingComparisonContent() {
   const [clientNotes, setClientNotes] = useState('')
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
+  const [defaultTaxRate, setDefaultTaxRate] = useState(DEFAULT_TAX_RATE_PERCENT)
 
   const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<AgentQuote[]>([])
@@ -384,11 +390,12 @@ function PricingComparisonContent() {
   const fetchCompanyBranding = async () => {
     const { data } = await supabase
       .from('company_settings')
-      .select(COMPANY_BRANDING_SELECT)
+      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate`)
       .limit(1)
       .maybeSingle()
 
     setCompanyBranding(normalizeCompanyBranding(data))
+    setDefaultTaxRate(normalizeTaxRatePercent((data as any)?.default_tax_rate))
   }
 
   const fetchQuotations = async () => {
@@ -1289,7 +1296,7 @@ function PricingComparisonContent() {
         sale_amount: Number(pricingForm.sale_amount || 0),
         quantity: quantity,
         taxable: pricingForm.taxable,
-        tax_rate: 15,
+        tax_rate: defaultTaxRate,
         tax_amount: taxAmount,
         total_amount: totalAmount,
         currency: pricingForm.currency,
@@ -1356,7 +1363,11 @@ function PricingComparisonContent() {
 
     if (reason === null) return
 
-    const taxAmount = miamiChargeForm.taxable ? saleAmount * 0.15 : 0
+    const taxAmount = calculateTaxAmount(
+      miamiChargeForm.taxable,
+      saleAmount,
+      defaultTaxRate
+    )
     const totalAmount = saleAmount + taxAmount
 
     try {
@@ -1371,7 +1382,7 @@ function PricingComparisonContent() {
           sale_amount: saleAmount,
           quantity: 1,
           taxable: miamiChargeForm.taxable,
-          tax_rate: 15,
+          tax_rate: defaultTaxRate,
           tax_amount: taxAmount,
           total_amount: totalAmount,
           currency: 'USD',
@@ -1710,7 +1721,7 @@ function PricingComparisonContent() {
     const quantity = Number(editingPricingItemForm.quantity || 1)
     const saleAmount = Number(editingPricingItemForm.sale_amount || 0)
     const subtotal = saleAmount * quantity
-    const taxAmount = item.taxable ? subtotal * 0.15 : 0
+    const taxAmount = calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
     const totalAmount = subtotal + taxAmount
 
     const { error } = await supabase
@@ -2510,7 +2521,7 @@ function PricingComparisonContent() {
 
   const taxAmount =
     pricingForm.taxable
-      ? subtotal * 0.15
+      ? calculateTaxAmount(true, subtotal, defaultTaxRate)
       : 0
 
   const totalAmount = subtotal + taxAmount
@@ -2876,7 +2887,11 @@ const profitabilityColor =
       insuredBaseSale * insuranceMarkupMultiplier * (saleRatePercent / 100)
     const insuranceCost =
       insuredBaseCost * insuranceMarkupMultiplier * (costRatePercent / 100)
-    const insuranceTaxAmount = insuranceTaxable ? insuranceSale * 0.15 : 0
+    const insuranceTaxAmount = calculateTaxAmount(
+      insuranceTaxable,
+      insuranceSale,
+      defaultTaxRate
+    )
     const insuranceTotalAmount = insuranceSale + insuranceTaxAmount
     const notes = [
       `Base full cover venta: FOB USD ${formatCurrency(
@@ -2895,7 +2910,7 @@ const profitabilityColor =
       `Seguro costo: USD ${formatCurrency(
         insuredBaseCost
       )} × 1.10 × 0.27% = USD ${formatCurrency(insuranceCost)}`,
-      `ISV 15% aplicado: ${insuranceTaxable ? 'Sí' : 'No'}`,
+      `ISV ${defaultTaxRate}% aplicado: ${insuranceTaxable ? 'Sí' : 'No'}`,
     ].join('\n')
     const existingInsuranceItem = pricingItems.find(isInsurancePricingItem)
     const pricingItemPayload = {
@@ -2963,7 +2978,7 @@ const profitabilityColor =
     }
 
     const saleAmount = Number(rate.amount || 0)
-    const taxAmount = config.taxable ? saleAmount * 0.15 : 0
+    const taxAmount = calculateTaxAmount(config.taxable, saleAmount, defaultTaxRate)
     const totalAmount = saleAmount + taxAmount
 
     const { error } = await supabase.from('pricing_items').insert([
@@ -2975,7 +2990,7 @@ const profitabilityColor =
         sale_amount: saleAmount,
         quantity: 1,
         taxable: config.taxable,
-        tax_rate: config.taxable ? 15 : 0,
+        tax_rate: config.taxable ? defaultTaxRate : 0,
         tax_amount: taxAmount,
         total_amount: totalAmount,
         currency: rate.currency || 'USD',
@@ -4339,7 +4354,7 @@ const profitabilityColor =
                                 }
                                 className="h-4 w-4 rounded border-slate-300"
                               />
-                              ISV 15%
+                              ISV {defaultTaxRate}%
                             </label>
 
                             <button
@@ -4688,7 +4703,7 @@ const profitabilityColor =
                             }
                             className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
                           />
-                          Aplicar ISV 15% al seguro
+                          Aplicar ISV {defaultTaxRate}% al seguro
                         </label>
 
                         <button
@@ -4797,7 +4812,7 @@ const profitabilityColor =
                           {pricingItems.map((item) => {
                             const qty = Number(item.quantity || 1)
                             const subtotal = qty * Number(item.sale_amount || 0)
-                            const tax = item.taxable ? subtotal * 0.15 : 0
+                            const tax = calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
                             const total = subtotal + tax
                             const currency = item.currency || 'USD'
                             const costSubtotal =
@@ -5263,7 +5278,7 @@ const profitabilityColor =
                   })
                 }
               />
-              Gravable ISV 15%
+              Gravable ISV {defaultTaxRate}%
             </label>
 
             <div>

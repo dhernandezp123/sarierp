@@ -1,4 +1,5 @@
 import { usesClientRates } from '@/src/lib/quotation-products'
+import { calculateTaxAmount, normalizeTaxRatePercent } from '@/src/lib/tax'
 
 export type ClientRate = {
   id?: string
@@ -70,6 +71,7 @@ export type MiamiPricingItemInput = {
   bunkerAmount: number
   pickupAmount: number
   applyStandardCharges: boolean
+  taxRatePercent?: number | string | null
   createdBy?: string | null
 }
 
@@ -91,9 +93,12 @@ export function buildMiamiPricingItems({
   bunkerAmount,
   pickupAmount,
   applyStandardCharges,
+  taxRatePercent,
   createdBy,
 }: MiamiPricingItemInput) {
   if (!usesClientRates(serviceProduct)) return []
+
+  const normalizedTaxRate = normalizeTaxRatePercent(taxRatePercent)
 
   const getClientRate = (code: string) =>
     clientRates.find((item) => item.rate_code === code)
@@ -102,7 +107,7 @@ export function buildMiamiPricingItems({
     .filter((charge) => Number(charge.amount || 0) > 0)
     .map((charge) => {
       const amount = Number(charge.amount || 0)
-      const taxAmount = charge.taxable ? amount * 0.15 : 0
+      const taxAmount = calculateTaxAmount(charge.taxable, amount, normalizedTaxRate)
       const sourceRate = getClientRate(charge.rateCode)
       const description =
         charge.description || sourceRate?.rate_label || 'Cargo en origen'
@@ -117,13 +122,13 @@ export function buildMiamiPricingItems({
         sale_amount: amount,
         currency: sourceRate?.currency || 'USD',
         taxable: charge.taxable,
-        tax_rate: charge.taxable ? 15 : 0,
+        tax_rate: charge.taxable ? normalizedTaxRate : 0,
         tax_amount: taxAmount,
         total_amount: amount + taxAmount,
         supplier: 'Sari Express',
         created_by: createdBy || null,
         notes: charge.taxable
-          ? 'Cargo adicional en origen gravable con ISV 15%.'
+          ? `Cargo adicional en origen gravable con ISV ${normalizedTaxRate}%.`
           : 'Cargo adicional en origen.',
       }
     })
@@ -132,7 +137,7 @@ export function buildMiamiPricingItems({
     .filter((charge) => Number(charge.amount || 0) > 0)
     .map((charge) => {
       const amount = Number(charge.amount || 0)
-      const taxAmount = charge.taxable ? amount * 0.15 : 0
+      const taxAmount = calculateTaxAmount(charge.taxable, amount, normalizedTaxRate)
       const description = charge.description || 'Cargo en destino'
       const normalizedDescription = description.toLowerCase()
       const itemType =
@@ -153,13 +158,13 @@ export function buildMiamiPricingItems({
         sale_amount: amount,
         currency: 'USD',
         taxable: charge.taxable,
-        tax_rate: charge.taxable ? 15 : 0,
+        tax_rate: charge.taxable ? normalizedTaxRate : 0,
         tax_amount: taxAmount,
         total_amount: amount + taxAmount,
         supplier: 'Sari Express',
         created_by: createdBy || null,
         notes: charge.taxable
-          ? 'Cargo en destino gravable con ISV 15%.'
+          ? `Cargo en destino gravable con ISV ${normalizedTaxRate}%.`
           : 'Cargo adicional en destino.',
       }
     })
@@ -256,7 +261,7 @@ export function buildMiamiPricingItems({
       const isTaxable =
         isStandardDestinationCharge &&
         miamiOptions.taxStandardDestinationCharges
-      const taxAmount = isTaxable ? amount * 0.15 : 0
+      const taxAmount = calculateTaxAmount(isTaxable, amount, normalizedTaxRate)
 
       items.push({
         quotation_id: quotationId,
@@ -269,14 +274,14 @@ export function buildMiamiPricingItems({
         quantity: 1,
         cost_amount: 0,
         sale_amount: amount,
-        tax_rate: isTaxable ? 15 : 0,
+        tax_rate: isTaxable ? normalizedTaxRate : 0,
         tax_amount: taxAmount,
         total_amount: amount + taxAmount,
         currency: rate.currency || 'USD',
         taxable: isTaxable,
         supplier: 'Sari Express',
         notes: isTaxable
-          ? 'Cargo estándar en destino gravable con ISV 15%.'
+          ? `Cargo estándar en destino gravable con ISV ${normalizedTaxRate}%.`
           : 'Cargo aplicado automáticamente según configuración Miami LCL.',
         created_by: createdBy,
       })
