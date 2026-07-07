@@ -2510,3 +2510,28 @@ Agregar una entrada por fix:
     indice unico fallara al aplicar la migracion; limpiar esos duplicados antes
     de desplegar.
 - Commit: pendiente.
+
+### 2026-07-07 - QUO-013 - Guardado de cotizaciones Miami conserva estado
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/quotations/new/page.tsx`
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - El boton `Guardar cotizacion` en creacion respeta el estado `Borrador`.
+    En flujo Miami solo se marca `Pricing Aprobado` cuando se usa el boton de
+    crear/aprobar cotizacion, no al guardar draft.
+  - En edicion, `Guardar Cambios` de una cotizacion Miami recalcula totales y
+    cargos, pero ya no cambia `status` ni marca `pricing_approved`.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificacion manual pendiente:
+  - Crear cotizacion Miami con `Guardar cotizacion` y confirmar estado
+    `Borrador`.
+  - Editar una cotizacion Miami en `Borrador` y confirmar que `Guardar Cambios`
+    no la cambia a `Pricing Aprobado`.
+  - Crear cotizacion Miami con el boton de aprobacion y confirmar que sigue
+    quedando en `Pricing Aprobado`.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.

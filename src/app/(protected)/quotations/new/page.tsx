@@ -623,20 +623,20 @@ export default function NewQuotationPage() {
     }
 
     const submitIsMiamiFlow = usesClientRates(formData.service_product)
+    const isDraftSave = status === 'Borrador'
 
-    if (formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
+    if (!isDraftSave && formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
       toast.error('Ingresa FT3 o libras para calcular la tarifa Miami LCL')
       return
     }
 
-    if (formData.service_product === 'miami_air' && miami.airEstimated <= 0) {
+    if (!isDraftSave && formData.service_product === 'miami_air' && miami.airEstimated <= 0) {
       toast.error('Ingresa KG para calcular la tarifa Miami Aéreo')
       return
     }
 
-    const initialStatus = submitIsMiamiFlow
-      ? 'Pricing Aprobado'
-      : 'Pendiente de Fijar Precios'
+    const initialStatus =
+      submitIsMiamiFlow && !isDraftSave ? 'Pricing Aprobado' : status
 
     if (initialStatus === 'Pendiente de Fijar Precios') {
       if (!formData.tipo_transporte) {

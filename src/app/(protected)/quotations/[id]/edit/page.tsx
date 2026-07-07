@@ -752,14 +752,10 @@ export default function EditQuotationPage() {
           : {}),
         ...(saveIsMiamiFlow
           ? {
-              status: 'Pricing Aprobado',
               total_cost: miamiTotalCost,
               total_sale: miamiTotalSale,
               profit_amount: miamiProfit,
               gp_percentage: miamiGpPercentage,
-              pricing_approved: true,
-              pricing_approved_by: profile?.id,
-              pricing_approved_at: new Date().toISOString(),
             }
           : {}),
       }
