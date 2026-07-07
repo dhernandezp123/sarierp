@@ -21,6 +21,7 @@ import {
 import {
   COMPANY_BRANDING_SELECT,
   type CompanyBranding,
+  getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import {
@@ -245,6 +246,7 @@ function PricingComparisonContent() {
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
   const [defaultTaxRate, setDefaultTaxRate] = useState(DEFAULT_TAX_RATE_PERCENT)
+  const defaultSupplierName = getCompanyTradeName(companyBranding)
 
   const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<AgentQuote[]>([])
@@ -366,7 +368,7 @@ function PricingComparisonContent() {
     category: 'freight',
     sale_amount: '',
     taxable: false,
-    supplier: 'Sari Express',
+    supplier: defaultSupplierName,
     notes: '',
   })
   const agentQuotesSectionRef = useRef<HTMLDivElement | null>(null)
@@ -394,7 +396,15 @@ function PricingComparisonContent() {
       .limit(1)
       .maybeSingle()
 
-    setCompanyBranding(normalizeCompanyBranding(data))
+    const normalizedBranding = normalizeCompanyBranding(data)
+    setCompanyBranding(normalizedBranding)
+    setMiamiChargeForm((current) => ({
+      ...current,
+      supplier:
+        current.supplier.trim() && current.supplier !== getCompanyTradeName(null)
+          ? current.supplier
+          : getCompanyTradeName(normalizedBranding),
+    }))
     setDefaultTaxRate(normalizeTaxRatePercent((data as any)?.default_tax_rate))
   }
 
@@ -1334,7 +1344,7 @@ function PricingComparisonContent() {
       category: 'freight',
       sale_amount: '',
       taxable: false,
-      supplier: 'Sari Express',
+      supplier: defaultSupplierName,
       notes: '',
     })
   }
@@ -1386,7 +1396,7 @@ function PricingComparisonContent() {
           tax_amount: taxAmount,
           total_amount: totalAmount,
           currency: 'USD',
-          supplier: miamiChargeForm.supplier.trim() || 'Sari Express',
+          supplier: miamiChargeForm.supplier.trim() || defaultSupplierName,
           notes: miamiChargeForm.notes.trim(),
           created_by: profile?.id,
         },
@@ -2994,7 +3004,7 @@ const profitabilityColor =
         tax_amount: taxAmount,
         total_amount: totalAmount,
         currency: rate.currency || 'USD',
-        supplier: 'Sari Express',
+        supplier: defaultSupplierName,
         notes:
           rate.notes ||
           'Cargo opcional agregado desde tarifas del cliente',

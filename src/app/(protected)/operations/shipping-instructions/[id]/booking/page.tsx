@@ -25,6 +25,12 @@ import {
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  getCompanyNotifyParty,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 // ─── Datos del cliente que vienen en join desde la cotización ─────────────────
 type ClienteJoin = {
@@ -112,10 +118,6 @@ type ShippingInstructionEvent = {
   notes: string | null
   created_at: string
 }
-
-// Notify Party estándar de Sari Express (igual al documento de BL Instructions)
-const SARI_NOTIFY_PARTY =
-  'SARI EXPRESS S DE R.L. DE C.V.,\n BO. LOS ANDES 9 CALLE 12-13 AVE N.E,\n San Pedro Sula, Cortés, Honduras, CP: 21101\n RTN/TAXID: 08019003239182'
 
 const readonlyFieldClass = cn(
   fieldClass,
@@ -250,7 +252,8 @@ function addDaysToDate(dateValue?: string | null, days?: number | null) {
 // ─── Aplica datos de cotización/cliente a los campos vacíos del booking ────────
 function applyQuotationDefaults(
   data: BookingRouting,
-  selectedAgent?: SelectedAgentQuote | null
+  selectedAgent?: SelectedAgentQuote | null,
+  companyBranding?: CompanyBranding | null
 ): BookingRouting {
   const quote  = resolveJoin(data.quotation)
   const client = quote ? resolveJoin(quote.cliente) : null
@@ -297,8 +300,8 @@ function applyQuotationDefaults(
     consignee_contact: data.consignee_contact || client?.contacto  || null,
     consignee_phone:  data.consignee_phone  || client?.telefono  || null,
 
-    // Notify Party: si ya tiene valor respetarlo, si no poner el estándar de Sari Express
-    notify_party: data.notify_party || SARI_NOTIFY_PARTY,
+    // Notify Party: si ya tiene valor respetarlo, si no poner el estandar configurado.
+    notify_party: data.notify_party || getCompanyNotifyParty(companyBranding),
   }
 }
 
@@ -395,6 +398,12 @@ export default function RoutingBookingPage() {
       const quote = resolveJoin(routingData.quotation)
       const quotationId = routingData.quotation_id || quote?.id
       let selectedAgentQuote: SelectedAgentQuote | null = null
+      const { data: companyData } = await supabase
+        .from('company_settings')
+        .select(COMPANY_BRANDING_SELECT)
+        .limit(1)
+        .maybeSingle()
+      const companyBranding = normalizeCompanyBranding(companyData)
 
       if (quotationId) {
         const { data: agentQuoteData } = await supabase
@@ -410,7 +419,7 @@ export default function RoutingBookingPage() {
       setSelectedAgent(selectedAgentQuote)
 
       // Aplica defaults desde la cotización/cliente antes de setear el estado
-      setRouting(applyQuotationDefaults(routingData, selectedAgentQuote))
+      setRouting(applyQuotationDefaults(routingData, selectedAgentQuote, companyBranding))
     }
 
     setLoading(false)

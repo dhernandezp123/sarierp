@@ -6,11 +6,18 @@ import {
   StyleSheet,
   Image,
 } from '@react-pdf/renderer'
+import {
+  type CompanyBranding,
+  getCompanyAddressLines,
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 type RoutingPdfProps = {
   routing: any
   quotation?: any
   cliente?: any
+  company?: CompanyBranding | null
 }
 
 const styles = StyleSheet.create({
@@ -96,12 +103,21 @@ export default function RoutingInstructionsPdf({
   routing,
   quotation,
   cliente,
+  company,
 }: RoutingPdfProps) {
+  const companyBranding = normalizeCompanyBranding(company)
+  const companyName = getCompanyDisplayName(companyBranding)
+  const companyAddress = getCompanyAddressLines(companyBranding).join(', ')
+  const companyTaxText = companyBranding.rtn ? `RTN: ${companyBranding.rtn}.` : ''
+  const operationContacts = [companyBranding.email, companyBranding.phone]
+    .filter(Boolean)
+    .join(' / ')
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Image src="/logo/sari-logo.png" style={styles.logo} />
+          <Image src={companyBranding.logo_url || '/logo/sari-logo.png'} style={styles.logo} />
 
           <View>
             <Text style={styles.title}>ROUTING ORDER</Text>
@@ -202,9 +218,8 @@ export default function RoutingInstructionsPdf({
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>1. Ocean / Master Bill of Lading</Text>
           <Text style={{ padding: 8, lineHeight: 1.45 }}>
-            Consignee must be issued exactly as SARI EXPRESS S DE R.L. DE C.V.,
-            BO. LOS ANDES 9 CALLE 12-13 AVE N.E, San Pedro Sula, Cortes,
-            Honduras, CP: 21101. RTN: 08019003239182.
+            Consignee must be issued exactly as {companyName}
+            {companyAddress ? `, ${companyAddress}.` : '.'} {companyTaxText}
           </Text>
         </View>
 
@@ -220,15 +235,14 @@ export default function RoutingInstructionsPdf({
           <Text style={{ padding: 8, lineHeight: 1.45 }}>
             No freight charges should be stated on the House Bill of Lading.
             Shipper: The Exporter. Consignee: The Importer. Notify Party:
-            SARI EXPRESS S DE R.L. DE C.V.
+            {companyName}.
           </Text>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>4. Operational Information</Text>
           <Text style={{ padding: 8, lineHeight: 1.45 }}>
-            Send operational updates and documents to ventas2sap@sarihn.com and
-            operacionessap@sarihn.com.
+            Send operational updates and documents to {operationContacts || companyName}.
           </Text>
         </View>
       </Page>

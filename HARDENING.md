@@ -1680,6 +1680,41 @@ Agregar una entrada por fix:
     el formulario lateral de la pagina si lo hace.
 - Commit: hash pendiente
 
+### 2026-07-07 - UX-023 - Branding configurable en documentos operativos restantes
+
+- Estado: En validacion manual.
+- Hallazgo: UX-023 (auditoria de valores hardcodeados).
+- Codigo:
+  - `src/lib/company-branding.ts`
+  - `src/lib/miami-pricing-items.ts`
+  - `src/hooks/useMiamiQuotation.ts`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/booking/page.tsx`
+  - `src/app/(protected)/miami/embarques/page.tsx`
+  - `src/components/pdf/shipping-instruction-pdf.tsx`
+  - `src/components/pdf/cost-detail-pdf.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+- SQL:
+  - No aplica; se reutiliza `company_settings`.
+- Cambios:
+  - Notify Party de Booking se genera desde Config. Empresa.
+  - Print de Miami / Embarques usa razon social y nombre comercial configurados.
+  - Routing / Shipping Instruction PDF usa logo, razon social, direccion, RTN y
+    contacto configurados.
+  - Cost Detail PDF usa la razon social configurada en el footer.
+  - Items automaticos y opcionales de Miami usan el nombre comercial configurado
+    como proveedor por defecto.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - Busqueda acotada de hardcodes anteriores en archivos corregidos: OK.
+- Verificacion manual pendiente:
+  - Imprimir lista Miami, generar Routing PDF, crear Booking sin Notify Party y
+    generar Cost Detail PDF con una empresa de prueba en Config. Empresa.
+- Riesgos pendientes:
+  - Textos legales generales de la cotizacion siguen mencionando Sari Express
+    por marca; cambiar eso requiere decision comercial/legal.
+- Commit: hash pendiente
+
 ### 2026-07-07 - FIN-011 - ISV configurable en pricing comercial
 
 - Estado: En validacion manual.

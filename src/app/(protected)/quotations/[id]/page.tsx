@@ -854,6 +854,7 @@ export default function QuotationDetailPage() {
           generatedByName={generatedByName}
           generatedAt={generatedAt}
           taxRatePercent={defaultTaxRate}
+          company={companyBranding}
         />
       ).toBlob()
 

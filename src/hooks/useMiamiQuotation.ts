@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import { usesClientRates } from '@/src/lib/quotation-products'
+import { getCompanyTradeName } from '@/src/lib/company-branding'
 import { DEFAULT_TAX_RATE_PERCENT, normalizeTaxRatePercent } from '@/src/lib/tax'
 import {
   buildMiamiPricingItems as buildMiamiPricingItemsPayload,
@@ -50,6 +51,7 @@ export function useMiamiQuotation({
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
   const [taxRatePercent, setTaxRatePercent] = useState(DEFAULT_TAX_RATE_PERCENT)
+  const [supplierName, setSupplierName] = useState(getCompanyTradeName(null))
   const [showClientRates, setShowClientRates] = useState(false)
   const [pickupMode, setPickupMode] = useState<'none' | 'standard' | 'manual'>(
     'none'
@@ -76,7 +78,7 @@ export function useMiamiQuotation({
   const [hydratedPricingItemsKey, setHydratedPricingItemsKey] = useState('')
 
   useEffect(() => {
-    loadTaxRate()
+    loadCompanyDefaults()
     loadSurchargeRules(serviceProduct)
 
     if (!clienteId || !usesClientRates(serviceProduct)) {
@@ -87,14 +89,15 @@ export function useMiamiQuotation({
     loadClientRates(clienteId)
   }, [clienteId, serviceProduct])
 
-  const loadTaxRate = async () => {
+  const loadCompanyDefaults = async () => {
     const { data } = await supabase
       .from('company_settings')
-      .select('default_tax_rate')
+      .select('legal_name, trade_name, default_tax_rate')
       .limit(1)
       .maybeSingle()
 
     setTaxRatePercent(normalizeTaxRatePercent((data as any)?.default_tax_rate))
+    setSupplierName(getCompanyTradeName(data as any))
   }
 
   const loadClientRates = async (clientId: string) => {
@@ -288,6 +291,7 @@ export function useMiamiQuotation({
       pickupAmount,
       applyStandardCharges,
       taxRatePercent,
+      supplierName,
       createdBy,
     })
 

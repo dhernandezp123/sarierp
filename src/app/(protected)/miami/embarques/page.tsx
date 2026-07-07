@@ -7,6 +7,13 @@ import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
+import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  getCompanyDisplayName,
+  getCompanyTradeName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -47,6 +54,8 @@ export default function EmbarquesPage() {
   const [filterTipo, setFilterTipo] = useState('Todos')
   const [shipments, setShipments] = useState<ShipmentRow[]>([])
   const [transportMode, setTransportMode] = useState('Maritimo')
+  const [companyBranding, setCompanyBranding] =
+    useState<CompanyBranding>(normalizeCompanyBranding(null))
 
   useEffect(() => { load() }, [])
 
@@ -64,14 +73,25 @@ export default function EmbarquesPage() {
       .select('id, shipment_number, transport_mode, status, total_packages, total_weight_lbs, dispatched_at')
       .order('dispatched_at', { ascending: false })
       .limit(10)
-    const [{ data, error }, { data: shipmentData, error: shipmentError }] = await Promise.all([
+    const companyQuery = supabase
+      .from('company_settings')
+      .select(COMPANY_BRANDING_SELECT)
+      .limit(1)
+      .maybeSingle()
+    const [
+      { data, error },
+      { data: shipmentData, error: shipmentError },
+      { data: companyData },
+    ] = await Promise.all([
       packagesQuery,
       shipmentsQuery,
+      companyQuery,
     ])
     if (error) toast.error('Error al cargar paquetes')
     if (shipmentError) toast.error('Error al cargar embarques Miami')
     setPackages((data || []) as unknown as Pkg[])
     setShipments((shipmentData || []) as ShipmentRow[])
+    setCompanyBranding(normalizeCompanyBranding(companyData))
     setLoading(false)
     setSelected(new Set())
   }
@@ -118,6 +138,8 @@ export default function EmbarquesPage() {
 
     const today = new Date().toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' })
     const totalWeight = items.reduce((s, p) => s + Number(p.weight_lbs || 0), 0)
+    const companyName = getCompanyDisplayName(companyBranding)
+    const tradeName = getCompanyTradeName(companyBranding)
 
     const rows = items.map((p, i) => `
       <tr>
@@ -142,12 +164,12 @@ export default function EmbarquesPage() {
       .footer { margin-top: 16px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
       @media print { body { margin: 10mm; } }
     </style></head><body>
-    <h2>SARI EXPRESS S DE R.L. DE C.V.</h2>
+    <h2>${companyName}</h2>
     <p>Lista de Embarque — Miami → Honduras</p>
     <p>Fecha: ${today} &nbsp;|&nbsp; Total paquetes: ${items.length} &nbsp;|&nbsp; Peso total: ${totalWeight.toFixed(2)} lbs</p>
     <table><thead><tr><th>#</th><th>WH #</th><th>Tracking</th><th>Cliente</th><th>Código</th><th>Tipo</th><th>Peso</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <div class="footer">Generado: ${today} — Forwarders ERP</div>
+    <div class="footer">Generado: ${today} — ${tradeName} ERP</div>
     </body></html>`
 
     const win = window.open('', '_blank')

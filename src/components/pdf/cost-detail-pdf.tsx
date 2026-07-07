@@ -6,6 +6,11 @@ import {
   StyleSheet,
   Image,
 } from '@react-pdf/renderer'
+import {
+  type CompanyBranding,
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 import { calculateTaxAmount, normalizeTaxRatePercent } from '@/src/lib/tax'
 
 function formatCurrency(value: number) {
@@ -400,6 +405,7 @@ export default function CostDetailPDF({
   generatedByName,
   generatedAt,
   taxRatePercent,
+  company,
 }: {
   quotation: any
   selectedAgent: any
@@ -408,8 +414,10 @@ export default function CostDetailPDF({
   generatedByName?: string | null
   generatedAt?: string | null
   taxRatePercent?: number | string | null
+  company?: CompanyBranding | null
 }) {
   const normalizedTaxRate = normalizeTaxRatePercent(taxRatePercent)
+  const companyName = getCompanyDisplayName(normalizeCompanyBranding(company))
   const knownGroupedTypes = [
     'freight',
     'origin_charge',
@@ -789,7 +797,7 @@ export default function CostDetailPDF({
         <Text
           style={styles.pageFooter}
           render={({ pageNumber, totalPages }) =>
-            `Sari Express S. de R.L. de C.V. | Documento interno | Página ${pageNumber} de ${totalPages}`
+            `${companyName} | Documento interno | Página ${pageNumber} de ${totalPages}`
           }
           fixed
         />

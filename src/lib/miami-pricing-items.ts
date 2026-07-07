@@ -72,6 +72,7 @@ export type MiamiPricingItemInput = {
   pickupAmount: number
   applyStandardCharges: boolean
   taxRatePercent?: number | string | null
+  supplierName?: string | null
   createdBy?: string | null
 }
 
@@ -94,11 +95,13 @@ export function buildMiamiPricingItems({
   pickupAmount,
   applyStandardCharges,
   taxRatePercent,
+  supplierName,
   createdBy,
 }: MiamiPricingItemInput) {
   if (!usesClientRates(serviceProduct)) return []
 
   const normalizedTaxRate = normalizeTaxRatePercent(taxRatePercent)
+  const defaultSupplier = supplierName?.trim() || 'Sari Express'
 
   const getClientRate = (code: string) =>
     clientRates.find((item) => item.rate_code === code)
@@ -125,7 +128,7 @@ export function buildMiamiPricingItems({
         tax_rate: charge.taxable ? normalizedTaxRate : 0,
         tax_amount: taxAmount,
         total_amount: amount + taxAmount,
-        supplier: 'Sari Express',
+        supplier: defaultSupplier,
         created_by: createdBy || null,
         notes: charge.taxable
           ? `Cargo adicional en origen gravable con ISV ${normalizedTaxRate}%.`
@@ -161,7 +164,7 @@ export function buildMiamiPricingItems({
         tax_rate: charge.taxable ? normalizedTaxRate : 0,
         tax_amount: taxAmount,
         total_amount: amount + taxAmount,
-        supplier: 'Sari Express',
+        supplier: defaultSupplier,
         created_by: createdBy || null,
         notes: charge.taxable
           ? `Cargo en destino gravable con ISV ${normalizedTaxRate}%.`
@@ -184,7 +187,7 @@ export function buildMiamiPricingItems({
         total_amount: lclEstimated,
         currency: 'USD',
         taxable: false,
-        supplier: 'Sari Express',
+        supplier: defaultSupplier,
         notes: `Cálculo automático: FT3 USD ${lclByFt3.toFixed(
           2
         )} vs LBS USD ${lclByLbs.toFixed(
@@ -208,7 +211,7 @@ export function buildMiamiPricingItems({
         total_amount: bunkerAmount,
         currency: bunkerRule.currency || 'USD',
         taxable: false,
-        supplier: 'Sari Express',
+        supplier: defaultSupplier,
         notes: `Cálculo automático: MAX(lbs x ${Number(
           bunkerRule.rate_per_lbs || 0
         ).toFixed(2)}, ft3 x ${Number(
@@ -231,7 +234,7 @@ export function buildMiamiPricingItems({
         sale_amount: pickupAmount,
         currency: 'USD',
         taxable: false,
-        supplier: 'Sari Express',
+        supplier: defaultSupplier,
         tax_rate: 0,
         tax_amount: 0,
         total_amount: pickupAmount,
@@ -279,7 +282,7 @@ export function buildMiamiPricingItems({
         total_amount: amount + taxAmount,
         currency: rate.currency || 'USD',
         taxable: isTaxable,
-        supplier: 'Sari Express',
+        supplier: defaultSupplier,
         notes: isTaxable
           ? `Cargo estándar en destino gravable con ISV ${normalizedTaxRate}%.`
           : 'Cargo aplicado automáticamente según configuración Miami LCL.',
@@ -309,7 +312,7 @@ export function buildMiamiPricingItems({
         total_amount: airEstimated,
         currency: 'USD',
         taxable: false,
-        supplier: 'Sari Express',
+        supplier: defaultSupplier,
         notes: airNotes,
         created_by: createdBy,
       },
@@ -326,7 +329,7 @@ export function buildMiamiPricingItems({
         sale_amount: pickupAmount,
         currency: 'USD',
         taxable: false,
-        supplier: 'Sari Express',
+        supplier: defaultSupplier,
         tax_rate: 0,
         tax_amount: 0,
         total_amount: pickupAmount,
@@ -350,7 +353,7 @@ export function buildMiamiPricingItems({
           sale_amount: amount,
           currency: documentsHandlingRate.currency || 'USD',
           taxable: false,
-          supplier: 'Sari Express',
+          supplier: defaultSupplier,
           tax_rate: 0,
           tax_amount: 0,
           total_amount: amount,

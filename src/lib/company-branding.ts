@@ -97,6 +97,11 @@ export function getCompanyDisplayName(company?: CompanyBranding | null) {
   return normalized.legal_name || normalized.trade_name || 'Sari Express'
 }
 
+export function getCompanyTradeName(company?: CompanyBranding | null) {
+  const normalized = normalizeCompanyBranding(company)
+  return normalized.trade_name || normalized.legal_name || 'Sari Express'
+}
+
 export function getCompanyAddressLines(company?: CompanyBranding | null) {
   const normalized = normalizeCompanyBranding(company)
   const cityLine = [normalized.city, normalized.country].filter(Boolean).join(', ')
@@ -104,4 +109,13 @@ export function getCompanyAddressLines(company?: CompanyBranding | null) {
   return [normalized.address, cityLine].filter(
     (line): line is string => Boolean(line)
   )
+}
+
+export function getCompanyNotifyParty(company?: CompanyBranding | null) {
+  const normalized = normalizeCompanyBranding(company)
+  const name = getCompanyDisplayName(normalized)
+  const addressLines = getCompanyAddressLines(normalized)
+  const taxLine = normalized.rtn ? `RTN/TAXID: ${normalized.rtn}` : null
+
+  return [name, ...addressLines, taxLine].filter(Boolean).join('\n')
 }
