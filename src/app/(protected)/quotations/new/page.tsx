@@ -18,6 +18,11 @@ import {
   tradeDirections,
   usesClientRates,
 } from '@/src/lib/quotation-products'
+import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 import { fieldClass, cardClass } from '@/src/lib/ui-classes'
 
 const formatNumber = (value: number, decimals = 2) =>
@@ -56,6 +61,8 @@ export default function NewQuotationPage() {
 
   const [loading, setLoading] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
+  const [companyBranding, setCompanyBranding] =
+    useState<CompanyBranding>(normalizeCompanyBranding(null))
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
   const [containerTypes, setContainerTypes] = useState<any[]>([])
@@ -149,7 +156,18 @@ export default function NewQuotationPage() {
   useEffect(() => {
     fetchClientes()
     fetchCatalogs()
+    fetchCompanyBranding()
   }, [])
+
+  const fetchCompanyBranding = async () => {
+    const { data } = await supabase
+      .from('company_settings')
+      .select(COMPANY_BRANDING_SELECT)
+      .limit(1)
+      .maybeSingle()
+
+    setCompanyBranding(normalizeCompanyBranding(data))
+  }
 
   useEffect(() => {
     const duplicateFromId = new URLSearchParams(window.location.search).get(
@@ -1145,6 +1163,7 @@ export default function NewQuotationPage() {
         pricingItems={miami.buildMiamiPreviewItems()}
         quotationContainers={[]}
         cargoLines={buildPreviewCargoLines()}
+        company={companyBranding}
       />
     ).toBlob()
 

@@ -1680,6 +1680,94 @@ Agregar una entrada por fix:
     el formulario lateral de la pagina si lo hace.
 - Commit: hash pendiente
 
+### 2026-07-07 - UX-021 - Datos de empresa configurables en contacto y PDF comercial
+
+- Estado: En validacion manual.
+- Hallazgo: UX-021 (auditoria de valores hardcodeados).
+- Codigo:
+  - `src/app/portal/contacto/page.tsx`
+  - `src/components/pdf/quotation-pdf.tsx`
+  - `src/app/(protected)/quotations/new/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/settings/company/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+  - `src/components/pdf/house-bl-pdf.tsx`
+  - `src/components/pdf/awb-pdf.tsx`
+  - `src/components/pdf/carta-porte-pdf.tsx`
+  - `src/lib/company-branding.ts`
+- SQL:
+  - No aplica; se reutiliza `company_settings`.
+- Cambios:
+  - Portal "Contactanos" deja de mostrar telefonos, correos y direcciones
+    placeholder. Lee oficina Honduras y bodega Miami desde Config. Empresa.
+  - PDF comercial de cotizacion usa nombre legal/comercial, RTN, direccion,
+    telefono, correo y logo desde Config. Empresa, con fallback unico.
+  - Nueva utilidad compartida `company-branding` para normalizar branding y
+    evitar fallbacks divergentes.
+  - Config. Empresa expone `logo_url` como "Logo para documentos".
+  - HBL, AWB y Carta Porte usan el mismo branding configurable al descargarse
+    desde la pantalla de BL.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - Busqueda de placeholders criticos (`miami@example`, `info@example`,
+    `Edificio XYZ`, `8350 NW 52nd`, `Casa #1225`): OK, sin apariciones en
+    portal contacto ni PDF comercial.
+- Verificacion manual pendiente:
+  - Actualizar Config. Empresa con direccion, telefono, correo, Miami y logo.
+  - Abrir Portal > Contactanos y confirmar que solo muestra datos reales.
+  - Generar PDF de cotizacion desde Nueva Cotizacion, Detalle y Pricing
+    Comparison para confirmar encabezado/logo.
+  - Generar HBL, AWB y Carta Porte desde Booking/BL para confirmar
+    encabezado/logo.
+- Riesgos pendientes:
+  - Falta extender el mismo helper a Arrival Notice, Shipping Instruction y
+    reportes en un cambio posterior.
+  - Si `logo_url` apunta a un recurso remoto no accesible por React PDF, el
+    fallback local debe usarse manualmente.
+- Commit: hash pendiente
+
+### 2026-07-07 - UX-020 - Bunker Emergency Surcharge editable desde Config. Empresa
+
+- Estado: En validacion manual.
+- Hallazgo: UX-020 (mejora solicitada por el titular).
+- Codigo:
+  - `src/app/(protected)/settings/company/page.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL:
+  - No aplica; la regla ya vive en `surcharge_rules` (fila
+    `bunker_emergency_surcharge`, insertada manualmente, sin seed en el repo).
+    Sus policies RLS existentes cubren la edicion
+    (`can_manage_pricing_catalogs` = Admin/Pricing).
+- Cambios:
+  - Nueva seccion "Bunker Emergency Surcharge — Miami LCL" en Config. Empresa:
+    edita etiqueta (nombre en PDF), tarifa por LBS, tarifa por FT3, minimo y
+    estado activo/inactivo.
+  - Guarda con `upsert` sobre `code`, por lo que crea la fila si no existiera
+    en un ambiente nuevo (service_product `miami_lcl`, calculation_type
+    `max_formula`).
+  - Vista previa en vivo de la formula MAX(lbs x tarifa, ft3 x tarifa, minimo)
+    con un ejemplo de 1,000 lbs / 45 ft3.
+  - El calculo en cotizaciones ya leia de `surcharge_rules`
+    (`useMiamiQuotation.ts`, `pricing-comparison`); no requirio cambios.
+  - Correccion posterior: el guardado de Config. Empresa no pisa la regla con
+    valores por defecto si falla la carga, y no crea una fila en cero en
+    ambientes sin regla hasta que el usuario edite el bloque.
+  - Correccion posterior: el recalculo Miami LCL actualiza el bunker por
+    `rate_code` estable y elimina la linea automatica si el recargo esta
+    desactivado.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Como Admin, editar tarifas del Bunker en Config. Empresa y guardar.
+  - Crear una cotizacion Miami LCL nueva y confirmar que usa las tarifas
+    nuevas.
+  - Desactivar el recargo y confirmar que no se agrega a una cotizacion nueva.
+- Riesgos pendientes:
+  - Verificacion manual pendiente en ambiente con datos reales y policies RLS
+    activas.
+- Commit: hash pendiente
+
 ### 2026-07-06 - PDF-002 - Seguro en Shipping Instruction no debe marcarse si no fue solicitado
 
 - Estado: En validacion.

@@ -13,6 +13,11 @@ import HouseBLPdf, { type HBLData } from '@/src/components/pdf/house-bl-pdf'
 import AWBPdf, { type AWBData } from '@/src/components/pdf/awb-pdf'
 import CartaPortePdf, { type CartaPorteData } from '@/src/components/pdf/carta-porte-pdf'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
 
@@ -317,6 +322,8 @@ export default function BLPage() {
   const [condicionesBL, setCondicionesBL] = useState<string | null>(null)
   const [condicionesAWB, setCondicionesAWB] = useState<string | null>(null)
   const [condicionesCP, setCondicionesCP] = useState<string | null>(null)
+  const [companyBranding, setCompanyBranding] =
+    useState<CompanyBranding>(normalizeCompanyBranding(null))
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
@@ -357,12 +364,13 @@ export default function BLPage() {
         .single(),
       supabase
         .from('company_settings')
-        .select('condiciones_bl, condiciones_awb, condiciones_carta_porte')
+        .select(`${COMPANY_BRANDING_SELECT}, condiciones_bl, condiciones_awb, condiciones_carta_porte`)
         .limit(1)
         .maybeSingle(),
     ])
 
     if (settingsData) {
+      setCompanyBranding(normalizeCompanyBranding(settingsData))
       setCondicionesBL((settingsData as any).condiciones_bl ?? null)
       setCondicionesAWB((settingsData as any).condiciones_awb ?? null)
       setCondicionesCP((settingsData as any).condiciones_carta_porte ?? null)
@@ -1428,7 +1436,7 @@ export default function BLPage() {
 
         {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte === 'Aéreo' && (
           <PDFDownloadLink
-            document={<AWBPdf awb={formToAWBData(form, condicionesAWB)} />}
+            document={<AWBPdf awb={formToAWBData(form, condicionesAWB)} company={companyBranding} />}
             fileName={`AWB-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
           >
@@ -1442,7 +1450,7 @@ export default function BLPage() {
         )}
         {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte === 'Terrestre' && (
           <PDFDownloadLink
-            document={<CartaPortePdf cp={formToCartaPorteData(form, condicionesCP)} />}
+            document={<CartaPortePdf cp={formToCartaPorteData(form, condicionesCP)} company={companyBranding} />}
             fileName={`CartaPorte-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
           >
@@ -1456,7 +1464,7 @@ export default function BLPage() {
         )}
         {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte !== 'Aéreo' && tipoTransporte !== 'Terrestre' && (
           <PDFDownloadLink
-            document={<HouseBLPdf bl={formToHBLData(form, condicionesBL)} />}
+            document={<HouseBLPdf bl={formToHBLData(form, condicionesBL)} company={companyBranding} />}
             fileName={`HBL-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
           >

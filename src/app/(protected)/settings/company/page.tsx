@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Building2, MapPin, Save } from 'lucide-react'
+import { Building2, Fuel, MapPin, Save } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -40,6 +40,16 @@ type CompanySettings = {
   miami_country: string | null
   miami_phone: string | null
 }
+
+type BunkerForm = {
+  label: string
+  rate_per_lbs: number
+  rate_per_ft3: number
+  minimum_amount: number
+  is_active: boolean
+}
+
+const BUNKER_CODE = 'bunker_emergency_surcharge'
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -88,6 +98,16 @@ export default function CompanySettingsPage() {
     miami_country: 'USA',
     miami_phone: '',
   })
+  const [bunker, setBunker] = useState<BunkerForm>({
+    label: 'Bunker Emergency Surcharge',
+    rate_per_lbs: 0,
+    rate_per_ft3: 0,
+    minimum_amount: 0,
+    is_active: true,
+  })
+  const [bunkerLoaded, setBunkerLoaded] = useState(false)
+  const [bunkerExists, setBunkerExists] = useState(false)
+  const [bunkerDirty, setBunkerDirty] = useState(false)
 
   const isAdmin = profile?.rol === 'Admin'
 
@@ -140,14 +160,49 @@ export default function CompanySettingsPage() {
         miami_phone: (data as any).miami_phone ?? '',
       })
     }
+
+    const { data: bunkerData, error: bunkerError } = await supabase
+      .from('surcharge_rules')
+      .select('label, rate_per_lbs, rate_per_ft3, minimum_amount, is_active')
+      .eq('code', BUNKER_CODE)
+      .maybeSingle()
+
+    if (bunkerError) {
+      toast.error('Error al cargar configuracion del Bunker')
+      setLoading(false)
+      return
+    }
+
+    setBunkerLoaded(true)
+    setBunkerExists(Boolean(bunkerData))
+
+    if (bunkerData) {
+      setBunker({
+        label: bunkerData.label ?? 'Bunker Emergency Surcharge',
+        rate_per_lbs: Number(bunkerData.rate_per_lbs) || 0,
+        rate_per_ft3: Number(bunkerData.rate_per_ft3) || 0,
+        minimum_amount: Number(bunkerData.minimum_amount) || 0,
+        is_active: bunkerData.is_active ?? true,
+      })
+    }
+
     setLoading(false)
   }
 
   const set = (key: keyof typeof form, value: string | number | null) =>
     setForm((prev) => ({ ...prev, [key]: value }))
 
+  const setBunkerField = (key: keyof BunkerForm, value: string | number | boolean) => {
+    setBunkerDirty(true)
+    setBunker((prev) => ({ ...prev, [key]: value }))
+  }
+
   const handleSave = async () => {
     if (!isAdmin) { toast.error('Solo el Admin puede modificar esta configuración'); return }
+    if (!bunkerLoaded) {
+      toast.error('No se puede guardar hasta cargar la configuracion del Bunker')
+      return
+    }
     setSaving(true)
 
     const payload = {
@@ -179,8 +234,38 @@ export default function CompanySettingsPage() {
       error = res.error
     }
 
+    if (error) { setSaving(false); toast.error(error.message); return }
+
+    if (bunkerExists || bunkerDirty) {
+      const { error: bunkerError } = await supabase
+        .from('surcharge_rules')
+        .upsert(
+          {
+            code: BUNKER_CODE,
+            label: bunker.label.trim() || 'Bunker Emergency Surcharge',
+            service_product: 'miami_lcl',
+            calculation_type: 'max_formula',
+            rate_per_lbs: Number(bunker.rate_per_lbs) || 0,
+            rate_per_ft3: Number(bunker.rate_per_ft3) || 0,
+            minimum_amount: Number(bunker.minimum_amount) || 0,
+            currency: 'USD',
+            is_active: bunker.is_active,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'code' }
+        )
+
+      if (bunkerError) {
+        setSaving(false)
+        toast.error(`Configuración guardada, pero falló el Bunker: ${bunkerError.message}`)
+        return
+      }
+
+      setBunkerExists(true)
+      setBunkerDirty(false)
+    }
+
     setSaving(false)
-    if (error) { toast.error(error.message); return }
     toast.success('Configuración guardada')
   }
 
@@ -341,6 +426,15 @@ export default function CompanySettingsPage() {
                 onChange={(e) => set('website', e.target.value)}
                 disabled={!isAdmin}
                 placeholder="https://sariexpress.com"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+            <Field label="Logo para documentos">
+              <input
+                value={form.logo_url ?? ''}
+                onChange={(e) => set('logo_url', e.target.value)}
+                disabled={!isAdmin}
+                placeholder="/logo/sari-logo.png"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -516,6 +610,88 @@ export default function CompanySettingsPage() {
               </div>
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Bunker Emergency Surcharge */}
+      <section className={cardClass}>
+        <div className="mb-1 flex items-center gap-2">
+          <Fuel className="h-5 w-5 text-slate-400" />
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">Bunker Emergency Surcharge — Miami LCL</h2>
+        </div>
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          Recargo automático en cotizaciones Miami LCL. Se calcula como MAX(lbs × tarifa LBS, ft3 × tarifa FT3, mínimo). Los cambios aplican a cotizaciones nuevas o recalculadas; las ya cotizadas conservan su monto.
+        </p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Field label="Nombre del recargo (aparece en el PDF)">
+              <input
+                value={bunker.label}
+                onChange={(e) => setBunkerField('label', e.target.value)}
+                disabled={!isAdmin}
+                placeholder="Bunker Emergency Surcharge"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+            <Field label="Estado">
+              <label className="flex h-10 cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={bunker.is_active}
+                  onChange={(e) => setBunkerField('is_active', e.target.checked)}
+                  disabled={!isAdmin}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-60"
+                />
+                Recargo activo (si se desactiva, no se agrega a nuevas cotizaciones)
+              </label>
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <Field label="Tarifa por LBS (USD)">
+              <input
+                type="number"
+                value={bunker.rate_per_lbs}
+                onChange={(e) => setBunkerField('rate_per_lbs', Number(e.target.value))}
+                disabled={!isAdmin}
+                min="0"
+                step="0.0001"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+            <Field label="Tarifa por FT3 (USD)">
+              <input
+                type="number"
+                value={bunker.rate_per_ft3}
+                onChange={(e) => setBunkerField('rate_per_ft3', Number(e.target.value))}
+                disabled={!isAdmin}
+                min="0"
+                step="0.0001"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+            <Field label="Mínimo (USD)">
+              <input
+                type="number"
+                value={bunker.minimum_amount}
+                onChange={(e) => setBunkerField('minimum_amount', Number(e.target.value))}
+                disabled={!isAdmin}
+                min="0"
+                step="0.01"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+            </Field>
+          </div>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-950/30">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Ejemplo (1,000 lbs / 45 ft3)</p>
+            <p className="font-mono text-sm text-amber-900 dark:text-amber-100">
+              MAX(1,000 × {Number(bunker.rate_per_lbs || 0).toFixed(4)}, 45 × {Number(bunker.rate_per_ft3 || 0).toFixed(4)}, {Number(bunker.minimum_amount || 0).toFixed(2)}) = USD{' '}
+              {Math.max(
+                1000 * (Number(bunker.rate_per_lbs) || 0),
+                45 * (Number(bunker.rate_per_ft3) || 0),
+                Number(bunker.minimum_amount) || 0
+              ).toFixed(2)}
+            </p>
+          </div>
         </div>
       </section>
 

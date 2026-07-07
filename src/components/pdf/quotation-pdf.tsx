@@ -6,6 +6,12 @@ import {
   StyleSheet,
   Image,
 } from '@react-pdf/renderer'
+import {
+  type CompanyBranding,
+  getCompanyAddressLines,
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 function formatCurrency(value: number) {
   return value.toLocaleString('en-US', {
@@ -684,6 +690,7 @@ export default function QuotationPDF({
   pricingItems = [],
   quotationContainers = [],
   cargoLines = [],
+  company,
 }: {
   quotation: any
   selectedAgent: any
@@ -700,7 +707,12 @@ export default function QuotationPDF({
     ft3: number | null
     cbm: number | null
   }>
+  company?: Partial<CompanyBranding> | null
 }) {
+  const companyBranding = normalizeCompanyBranding(company)
+  const companyName = getCompanyDisplayName(companyBranding)
+  const companyAddressLines = getCompanyAddressLines(companyBranding)
+  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
   const quoteTitle = getQuoteTitleByProduct(quotation)
   const freightItems = filterItems(pricingItems, ['freight', 'Flete'])
   const knownGroupedTypes = [
@@ -839,19 +851,27 @@ export default function QuotationPDF({
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View>
-            <Image src="/logo/sari-logo.png" style={styles.logo} />
+            <Image src={companyLogo} style={styles.logo} />
 
             <Text style={styles.companyDetails}>
-              SARI EXPRESS S. DE R.L DE C.V
+              {companyName}
             </Text>
 
-            <Text style={styles.companyDetails}>
-              Bo. Los Andes 9 Calle "A" 12-13 Ave. Casa #1225
-            </Text>
+            {companyAddressLines.map((line) => (
+              <Text key={line} style={styles.companyDetails}>
+                {line}
+              </Text>
+            ))}
 
-            <Text style={styles.companyDetails}>
-              San Pedro Sula, Cortés, Honduras | RTN: 08019003239182
-            </Text>
+            {(companyBranding.rtn || companyBranding.phone || companyBranding.email) && (
+              <Text style={styles.companyDetails}>
+                {[
+                  companyBranding.rtn ? `RTN: ${companyBranding.rtn}` : null,
+                  companyBranding.phone,
+                  companyBranding.email,
+                ].filter(Boolean).join(' | ')}
+              </Text>
+            )}
           </View>
 
           <View style={styles.headerRight}>
@@ -1218,7 +1238,7 @@ export default function QuotationPDF({
         <Text
           style={styles.pageFooter}
           render={({ pageNumber, totalPages }) =>
-            `Sari Express S. de R.L. de C.V. | Página ${pageNumber} de ${totalPages}`
+            `${companyName} | Página ${pageNumber} de ${totalPages}`
           }
           fixed
         />
@@ -1245,7 +1265,7 @@ export default function QuotationPDF({
         <Text
           style={styles.pageFooter}
           render={({ pageNumber, totalPages }) =>
-            `Sari Express S. de R.L. de C.V. | Página ${pageNumber} de ${totalPages}`
+            `${companyName} | Página ${pageNumber} de ${totalPages}`
           }
           fixed
         />

@@ -18,6 +18,11 @@ import {
   calculateGrossProfitPercent,
   validatePricingCompleteness,
 } from '@/src/lib/pricing-validation'
+import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
@@ -125,6 +130,8 @@ const optionalClientRateConfig: Record<
   bonded_documentacion_7512: { itemType: 'origin_charge', taxable: false },
 }
 
+const BUNKER_CODE = 'bunker_emergency_surcharge'
+
 type SurchargeRule = {
   code: string
   label: string
@@ -229,6 +236,8 @@ function PricingComparisonContent() {
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
   const [clientNotes, setClientNotes] = useState('')
+  const [companyBranding, setCompanyBranding] =
+    useState<CompanyBranding>(normalizeCompanyBranding(null))
 
   const [agents, setAgents] = useState<any[]>([])
   const [agentQuotes, setAgentQuotes] = useState<AgentQuote[]>([])
@@ -364,7 +373,18 @@ function PricingComparisonContent() {
   useEffect(() => {
     fetchQuotations()
     fetchAgents()
+    fetchCompanyBranding()
   }, [quoteId])
+
+  const fetchCompanyBranding = async () => {
+    const { data } = await supabase
+      .from('company_settings')
+      .select(COMPANY_BRANDING_SELECT)
+      .limit(1)
+      .maybeSingle()
+
+    setCompanyBranding(normalizeCompanyBranding(data))
+  }
 
   const fetchQuotations = async () => {
     const { data, error } = await supabase
@@ -1487,9 +1507,7 @@ function PricingComparisonContent() {
       minimumLarge: getRateAmount('minimo_maritimo_2mil_lbs_90_ft3'),
     })
 
-    const bunkerRule = surchargeRules.find(
-      (rule) => rule.code === 'bunker_emergency_surcharge'
-    )
+    const bunkerRule = surchargeRules.find((rule) => rule.code === BUNKER_CODE)
 
     const bunkerAmount = bunkerRule
       ? Math.max(
@@ -1531,10 +1549,21 @@ function PricingComparisonContent() {
           )}, mínimo ${Number(bunkerRule.minimum_amount || 0)}).`,
         })
         .eq('quotation_id', selectedQuote.id)
-        .eq('description', bunkerRule.label)
+        .eq('rate_code', BUNKER_CODE)
 
       if (bunkerError) {
         toast.error('No se pudo recalcular el Bunker')
+        return
+      }
+    } else {
+      const { error: bunkerDeleteError } = await supabase
+        .from('pricing_items')
+        .delete()
+        .eq('quotation_id', selectedQuote.id)
+        .eq('rate_code', BUNKER_CODE)
+
+      if (bunkerDeleteError) {
+        toast.error('No se pudo quitar el Bunker desactivado')
         return
       }
     }
@@ -2295,6 +2324,7 @@ function PricingComparisonContent() {
           pricingItems={pricingItems}
           quotationContainers={quotationContainers}
           cargoLines={normalizedCargoLines}
+          company={companyBranding}
         />
       ).toBlob()
 

@@ -7,6 +7,12 @@ import {
   Text,
   View,
 } from '@react-pdf/renderer'
+import {
+  type CompanyBranding,
+  getCompanyAddressLines,
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 export type CartaPorteData = {
   numero: string | null
@@ -34,10 +40,6 @@ export type CartaPorteData = {
   special_instructions: string | null
   condiciones: string | null
 }
-
-const SARI_LEGAL_NAME = 'SARI EXPRESS S DE R.L. DE C.V.'
-const SARI_ADDRESS = 'BO. LOS ANDES 9 CALLE 12-13 AVE N.E, San Pedro Sula, Cortes, Honduras, CP: 21101'
-const SARI_RTN = '08019003239182'
 
 const BRAND_RED = '#B91C1C'
 const BRAND_NAVY = '#1e3a5f'
@@ -254,17 +256,32 @@ function DataRow({ label, value: val }: { label: string; value: string }) {
   )
 }
 
-export default function CartaPortePdf({ cp }: { cp: CartaPorteData }) {
+export default function CartaPortePdf({
+  cp,
+  company,
+}: {
+  cp: CartaPorteData
+  company?: Partial<CompanyBranding> | null
+}) {
+  const companyBranding = normalizeCompanyBranding(company)
+  const companyName = getCompanyDisplayName(companyBranding)
+  const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
+  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Image src="/logo/sari-logo.png" style={styles.logo} />
+          <Image src={companyLogo} style={styles.logo} />
           <View style={styles.titleBlock}>
             <Text style={styles.docTitle}>CARTA PORTE</Text>
-            <Text style={styles.docSubtitle}>{SARI_LEGAL_NAME} · RTN {SARI_RTN}</Text>
-            <Text style={styles.docSubtitle}>{SARI_ADDRESS}</Text>
+            <Text style={styles.docSubtitle}>
+              {companyName}
+              {companyBranding.rtn ? ` · RTN ${companyBranding.rtn}` : ''}
+            </Text>
+            {companyAddress && (
+              <Text style={styles.docSubtitle}>{companyAddress}</Text>
+            )}
             {cp.numero && (
               <Text style={styles.docNumber}>CP# {cp.numero}</Text>
             )}
@@ -355,7 +372,7 @@ export default function CartaPortePdf({ cp }: { cp: CartaPorteData }) {
               Emitido por / Issued by: San Pedro Sula, Honduras,{' '}
               {dateV(cp.issue_date || cp.fecha)}
             </Text>
-            <Text style={styles.sigLine}>Firma y Sello — {SARI_LEGAL_NAME}</Text>
+            <Text style={styles.sigLine}>Firma y Sello — {companyName}</Text>
           </View>
           <View style={styles.sigBox}>
             <Text style={styles.sigLabel}>Firma del Remitente / Shipper&apos;s Signature</Text>
@@ -368,7 +385,11 @@ export default function CartaPortePdf({ cp }: { cp: CartaPorteData }) {
         </View>
 
         <Text style={styles.footer}>
-          {SARI_LEGAL_NAME} · RTN {SARI_RTN} · {SARI_ADDRESS}
+          {[
+            companyName,
+            companyBranding.rtn ? `RTN ${companyBranding.rtn}` : null,
+            companyAddress,
+          ].filter(Boolean).join(' · ')}
         </Text>
       </Page>
     </Document>

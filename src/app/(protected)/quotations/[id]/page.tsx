@@ -40,6 +40,11 @@ import {
   type EmailTemplate,
 } from '@/src/lib/email-templates'
 import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -341,6 +346,8 @@ export default function QuotationDetailPage() {
 
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any>(null)
+  const [companyBranding, setCompanyBranding] =
+    useState<CompanyBranding>(normalizeCompanyBranding(null))
 
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
@@ -468,6 +475,12 @@ export default function QuotationDetailPage() {
       .eq('entity_id', id)
       .order('created_at', { ascending: false })
 
+    const { data: companyData } = await supabase
+      .from('company_settings')
+      .select(COMPANY_BRANDING_SELECT)
+      .limit(1)
+      .maybeSingle()
+
     setQuotation(
       quoteData
         ? {
@@ -498,6 +511,7 @@ export default function QuotationDetailPage() {
       .single()
 
     setSelectedAgent(selectedPricing)
+    setCompanyBranding(normalizeCompanyBranding(companyData))
     setAgentQuotes(agentData || [])
     setValidations(validationData || [])
     setLoading(false)
@@ -794,6 +808,7 @@ export default function QuotationDetailPage() {
         pricingItems={pricingItems}
         quotationContainers={quotationContainers}
         cargoLines={cargoLines}
+        company={companyBranding}
       />
     ).toBlob()
 
@@ -1640,6 +1655,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 pricingItems={pricingItems}
                 quotationContainers={quotationContainers}
                 cargoLines={cargoLines}
+                company={companyBranding}
               />
             }
             fileName={`${quotation?.quotation_number || 'cotizacion'}.pdf`}

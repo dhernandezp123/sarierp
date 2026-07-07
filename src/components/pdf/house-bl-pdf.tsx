@@ -7,6 +7,12 @@ import {
   Text,
   View,
 } from '@react-pdf/renderer'
+import {
+  type CompanyBranding,
+  getCompanyAddressLines,
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 export type HBLData = {
   bl_number: string | null
@@ -48,10 +54,6 @@ export type HBLData = {
   printed_at_destination: boolean | null
   condiciones: string | null
 }
-
-const SARI_LEGAL_NAME = 'SARI EXPRESS S DE R.L. DE C.V.'
-const SARI_ADDRESS = 'BO. LOS ANDES 9 CALLE 12-13 AVE N.E, San Pedro Sula, Cortes, Honduras, CP: 21101'
-const SARI_RTN = '08019003239182'
 
 const BRAND_RED = '#B91C1C'
 const BRAND_NAVY = '#1e3a5f'
@@ -274,7 +276,17 @@ function DataRow({ label, value: val }: { label: string; value: string }) {
   )
 }
 
-export default function HouseBLPdf({ bl }: { bl: HBLData }) {
+export default function HouseBLPdf({
+  bl,
+  company,
+}: {
+  bl: HBLData
+  company?: Partial<CompanyBranding> | null
+}) {
+  const companyBranding = normalizeCompanyBranding(company)
+  const companyName = getCompanyDisplayName(companyBranding)
+  const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
+  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
   const issuePlace = bl.printed_at_destination ? v(bl.port_of_discharge) : 'San Pedro Sula, Honduras'
 
   return (
@@ -282,11 +294,16 @@ export default function HouseBLPdf({ bl }: { bl: HBLData }) {
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Image src="/logo/sari-logo.png" style={styles.logo} />
+          <Image src={companyLogo} style={styles.logo} />
           <View style={styles.titleBlock}>
             <Text style={styles.docTitle}>HOUSE BILL OF LADING</Text>
-            <Text style={styles.docSubtitle}>{SARI_LEGAL_NAME} · RTN {SARI_RTN}</Text>
-            <Text style={styles.docSubtitle}>{SARI_ADDRESS}</Text>
+            <Text style={styles.docSubtitle}>
+              {companyName}
+              {companyBranding.rtn ? ` · RTN ${companyBranding.rtn}` : ''}
+            </Text>
+            {companyAddress && (
+              <Text style={styles.docSubtitle}>{companyAddress}</Text>
+            )}
             {bl.bl_number && (
               <Text style={styles.blNumber}>HBL# {bl.bl_number}</Text>
             )}
@@ -394,7 +411,7 @@ export default function HouseBLPdf({ bl }: { bl: HBLData }) {
               Place and Date of Issue: {issuePlace}, {dateV(bl.issue_date || bl.bl_date)}
             </Text>
             <Text style={styles.sigLine}>Signature &amp; Stamp — As Agent for the Carrier</Text>
-            <Text style={[styles.sigLine, { marginTop: 4, fontWeight: 700 }]}>{SARI_LEGAL_NAME}</Text>
+            <Text style={[styles.sigLine, { marginTop: 4, fontWeight: 700 }]}>{companyName}</Text>
           </View>
           <View style={styles.sigBox}>
             <Text style={styles.sigLabel}>
@@ -404,7 +421,11 @@ export default function HouseBLPdf({ bl }: { bl: HBLData }) {
         </View>
 
         <Text style={styles.footer}>
-          {SARI_LEGAL_NAME} · RTN {SARI_RTN} · {SARI_ADDRESS}
+          {[
+            companyName,
+            companyBranding.rtn ? `RTN ${companyBranding.rtn}` : null,
+            companyAddress,
+          ].filter(Boolean).join(' · ')}
         </Text>
       </Page>
     </Document>
