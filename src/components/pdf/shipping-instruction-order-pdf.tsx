@@ -7,18 +7,20 @@ import {
   Image,
   Font,
 } from '@react-pdf/renderer'
+import {
+  type CompanyBranding,
+  getCompanyAddressLines,
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 type RoutingOrderPdfProps = {
   routing: any
   quotation?: any
   cliente?: any
   selectedAgent?: any
+  company?: Partial<CompanyBranding> | null
 }
-
-const SARI_LEGAL_NAME = 'SARI EXPRESS S DE R.L. DE C.V.'
-const SARI_ADDRESS =
-  'BO. LOS ANDES 9 CALLE 12-13 AVE N.E, San Pedro Sula, Cortes, Honduras, CP: 21101'
-const SARI_RTN = '08019003239182'
 
 Font.registerHyphenationCallback((word) => [word])
 
@@ -233,7 +235,12 @@ export default function RoutingOrderPDF({
   quotation,
   cliente,
   selectedAgent,
+  company,
 }: RoutingOrderPdfProps) {
+  const companyBranding = normalizeCompanyBranding(company)
+  const companyName = getCompanyDisplayName(companyBranding)
+  const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
+  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
   const quote = quotation || routing?.quotation || {}
   const client = quote?.cliente || quote?.clientes || cliente || routing?.cliente || {}
   const freeDays =
@@ -278,7 +285,7 @@ export default function RoutingOrderPDF({
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Image src="/logo/sari-logo.png" style={styles.logo} />
+          <Image src={companyLogo} style={styles.logo} />
 
           <View>
             <Text style={styles.title}>SHIPPING INSTRUCTION</Text>
@@ -350,12 +357,12 @@ export default function RoutingOrderPDF({
           <Text style={styles.noteBox}>{value(remarks)}</Text>
         </Section>
 
-        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  -  Shipping Instruction ${value(routing?.routing_number)}  -  Page ${pageNumber} of ${totalPages}`} />
+        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `${companyName} ERP  -  Shipping Instruction ${value(routing?.routing_number)}  -  Page ${pageNumber} of ${totalPages}`} />
       </Page>
 
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
-          <Image src="/logo/sari-logo.png" style={styles.logo} />
+          <Image src={companyLogo} style={styles.logo} />
 
           <View>
             <Text style={styles.title}>BILL OF LADING INSTRUCTIONS</Text>
@@ -370,7 +377,7 @@ export default function RoutingOrderPDF({
 
         <Section title="1. MASTER BILL OF LADING">
           <Text style={styles.noteBox}>
-            MBL consignee must be issued to {SARI_LEGAL_NAME}, {SARI_ADDRESS}. RTN: {SARI_RTN}.
+            MBL consignee must be issued to {companyName}, {companyAddress}. {companyBranding.rtn ? `RTN: ${companyBranding.rtn}.` : ''}
           </Text>
           <InfoRow label="Freight terms">{value(routing?.freight_terms || 'Collect')}</InfoRow>
         </Section>
@@ -378,9 +385,9 @@ export default function RoutingOrderPDF({
         <Section title="2. HOUSE BILL OF LADING">
           <InfoRow label="Shipper / Exporter">{value(routing?.shipper || routing?.supplier_name || 'Exporter')}</InfoRow>
           <InfoRow label="Consignee / Importer">{value(routing?.consignee || client?.nombre)}</InfoRow>
-          <InfoRow label="Notify party">{SARI_LEGAL_NAME}</InfoRow>
-          <InfoRow label="Notify address">{SARI_ADDRESS}</InfoRow>
-          <InfoRow label="Notify RTN / Tax ID">{SARI_RTN}</InfoRow>
+          <InfoRow label="Notify party">{companyName}</InfoRow>
+          <InfoRow label="Notify address">{companyAddress || 'N/A'}</InfoRow>
+          <InfoRow label="Notify RTN / Tax ID">{value(companyBranding.rtn)}</InfoRow>
         </Section>
 
         <Section title="3. DOCUMENTS">
@@ -395,7 +402,7 @@ export default function RoutingOrderPDF({
           </Text>
         </Section>
 
-        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `Sari Express ERP  -  Bill of Lading Instructions  -  Page ${pageNumber} of ${totalPages}`} />
+        <Text style={styles.footer} render={({ pageNumber, totalPages }) => `${companyName} ERP  -  Bill of Lading Instructions  -  Page ${pageNumber} of ${totalPages}`} />
       </Page>
     </Document>
   )

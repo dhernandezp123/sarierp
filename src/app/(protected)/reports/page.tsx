@@ -19,6 +19,11 @@ import { cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { ReportPdf, type ReportPdfColumn, type ReportPdfData, type ReportPdfRow } from '@/src/components/pdf/report-pdf'
+import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 type ReportId = 'commercial' | 'operations' | 'billing' | 'receivable' | 'payable' | 'overdue' | 'supplier_payments'
 type DatePreset = 'month' | 'quarter' | 'year' | 'all' | 'custom'
@@ -288,6 +293,8 @@ export default function ReportsPage() {
   const [receivables, setReceivables] = useState<ReceivableRow[]>([])
   const [payables, setPayables] = useState<PayableRow[]>([])
   const [proveedorPayments, setProveedorPayments] = useState<ProveedorPaymentRow[]>([])
+  const [companyBranding, setCompanyBranding] =
+    useState<CompanyBranding>(normalizeCompanyBranding(null))
 
   const availableReports = useMemo(
     () => REPORTS.filter((report) => report.roles.includes(role)),
@@ -311,6 +318,17 @@ export default function ReportsPage() {
     const wantsFinance = role === 'Admin' || role === 'Finanzas' || role === 'Contabilidad'
 
     const tasks: PromiseLike<void>[] = []
+
+    tasks.push(
+      supabase
+        .from('company_settings')
+        .select(COMPANY_BRANDING_SELECT)
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => {
+          setCompanyBranding(normalizeCompanyBranding(data))
+        })
+    )
 
     if (wantsCommercial) {
       tasks.push(
@@ -912,7 +930,7 @@ export default function ReportsPage() {
   const handleOpenPdf = async () => {
     setGeneratingPdf(true)
     try {
-      const blob = await pdf(<ReportPdf data={pdfData} />).toBlob()
+      const blob = await pdf(<ReportPdf data={pdfData} company={companyBranding} />).toBlob()
       const url = URL.createObjectURL(blob)
       window.open(url, '_blank')
       setTimeout(() => URL.revokeObjectURL(url), 30000)
@@ -998,7 +1016,7 @@ export default function ReportsPage() {
             <span className="sr-only">Abrir PDF</span>
           </button>
           <PDFDownloadLink
-            document={<ReportPdf data={pdfData} />}
+            document={<ReportPdf data={pdfData} company={companyBranding} />}
             fileName={`reporte-${activeReport}.pdf`}
             title="Descargar PDF"
             className={actionIconButtonClass}

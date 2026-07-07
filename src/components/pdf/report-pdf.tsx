@@ -6,6 +6,12 @@ import {
   Text,
   View,
 } from '@react-pdf/renderer'
+import {
+  type CompanyBranding,
+  getCompanyAddressLines,
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 export type ReportPdfColumn = {
   key: string
@@ -208,8 +214,21 @@ const styles = StyleSheet.create({
   },
 })
 
-export function ReportPdf({ data }: { data: ReportPdfData }) {
+export function ReportPdf({
+  data,
+  company,
+}: {
+  data: ReportPdfData
+  company?: Partial<CompanyBranding> | null
+}) {
   const rows = data.rows.slice(0, 500)
+  const companyBranding = normalizeCompanyBranding(company)
+  const companyName = getCompanyDisplayName(companyBranding)
+  const companyAddress = getCompanyAddressLines(companyBranding).join(' · ')
+  const companySub = [
+    companyAddress,
+    companyBranding.rtn ? `RTN ${companyBranding.rtn}` : null,
+  ].filter(Boolean).join(' · ')
 
   return (
     <Document>
@@ -218,8 +237,8 @@ export function ReportPdf({ data }: { data: ReportPdfData }) {
         {/* ── Header ── */}
         <View style={styles.headerRow} fixed>
           <View style={styles.brandBlock}>
-            <Text style={styles.brandName}>SARI EXPRESS S DE R.L. DE C.V.</Text>
-            <Text style={styles.brandSub}>San Pedro Sula, Cortés, Honduras · RTN 08019003239182</Text>
+            <Text style={styles.brandName}>{companyName}</Text>
+            {companySub && <Text style={styles.brandSub}>{companySub}</Text>}
             <View style={styles.brandAccent} />
           </View>
           <View style={styles.reportBlock}>

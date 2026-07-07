@@ -18,6 +18,11 @@ import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import ShippingInstructionOrderPDF from '@/src/components/pdf/shipping-instruction-order-pdf'
 import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -422,6 +427,8 @@ export default function RoutingDetailPage() {
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [companyBranding, setCompanyBranding] =
+    useState<CompanyBranding>(normalizeCompanyBranding(null))
 
   const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
   const canViewRouting =
@@ -467,6 +474,14 @@ export default function RoutingDetailPage() {
       .single()
 
     if (!error && data) {
+      const { data: companyData } = await supabase
+        .from('company_settings')
+        .select(COMPANY_BRANDING_SELECT)
+        .limit(1)
+        .maybeSingle()
+
+      setCompanyBranding(normalizeCompanyBranding(companyData))
+
       const quotationId = data.quotation_id || data.quotation?.id
 
       if (quotationId) {
@@ -1298,6 +1313,7 @@ export default function RoutingDetailPage() {
         quotation={routing.quotation}
         cliente={routing.quotation?.cliente || routing.cliente}
         selectedAgent={selectedAgent}
+        company={companyBranding}
       />
     ).toBlob()
 
@@ -1463,6 +1479,7 @@ export default function RoutingDetailPage() {
                       quotation={routing.quotation}
                       cliente={routing.quotation?.cliente || routing.cliente}
                       selectedAgent={selectedAgent}
+                      company={companyBranding}
                     />
                 }
                 fileName={routingPdfFileName}

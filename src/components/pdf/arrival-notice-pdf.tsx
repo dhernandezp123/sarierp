@@ -7,6 +7,12 @@ import {
   Text,
   View,
 } from '@react-pdf/renderer'
+import {
+  type CompanyBranding,
+  getCompanyAddressLines,
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 export type ArrivalNoticeData = {
   // SI / Booking
@@ -53,12 +59,6 @@ export type ArrivalNoticeData = {
   // Sari contact
   issued_by_name: string | null
 }
-
-const SARI_LEGAL_NAME = 'SARI EXPRESS S DE R.L. DE C.V.'
-const SARI_ADDRESS = 'BO. LOS ANDES 9 CALLE 12-13 AVE N.E, San Pedro Sula, Cortes, Honduras, CP: 21101'
-const SARI_RTN = '08019003239182'
-const SARI_PHONE = '+504 2553-0000'
-const SARI_EMAIL = 'operaciones@sariexpress.com'
 
 const BRAND_RED = '#B91C1C'
 const BRAND_NAVY = '#1e3a5f'
@@ -180,7 +180,17 @@ function DataRow({ label, value: val }: { label: string; value: string }) {
   )
 }
 
-export default function ArrivalNoticePdf({ data }: { data: ArrivalNoticeData }) {
+export default function ArrivalNoticePdf({
+  data,
+  company,
+}: {
+  data: ArrivalNoticeData
+  company?: Partial<CompanyBranding> | null
+}) {
+  const companyBranding = normalizeCompanyBranding(company)
+  const companyName = getCompanyDisplayName(companyBranding)
+  const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
+  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
   const arrivalDate = data.actual_eta || data.eta
   const freeDaysLabel = data.remaining_free_days !== null && data.remaining_free_days !== undefined
     ? String(data.remaining_free_days)
@@ -193,11 +203,13 @@ export default function ArrivalNoticePdf({ data }: { data: ArrivalNoticeData }) 
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Image src="/logo/sari-logo.png" style={styles.logo} />
+          <Image src={companyLogo} style={styles.logo} />
           <View style={styles.titleBlock}>
             <Text style={styles.docTitle}>AVISO DE LLEGADA</Text>
-            <Text style={styles.docSubtitle}>Arrival Notice · {SARI_LEGAL_NAME}</Text>
-            <Text style={styles.docSubtitle}>{SARI_ADDRESS}</Text>
+            <Text style={styles.docSubtitle}>Arrival Notice · {companyName}</Text>
+            {companyAddress && (
+              <Text style={styles.docSubtitle}>{companyAddress}</Text>
+            )}
             <Text style={styles.issueDate}>Emitido: {todayFormatted()}</Text>
           </View>
         </View>
@@ -322,7 +334,7 @@ export default function ArrivalNoticePdf({ data }: { data: ArrivalNoticeData }) 
         <View style={{ flexDirection: 'row', gap: 16 }}>
           <View style={{ flex: 2, border: '1 solid #d1d5db', padding: '8 10', minHeight: 52 }}>
             <Text style={{ fontSize: 8, color: '#6b7280', marginBottom: 14 }}>
-              Emitido por: {v(data.issued_by_name)} · {SARI_LEGAL_NAME}
+              Emitido por: {v(data.issued_by_name)} · {companyName}
             </Text>
             <View style={{ borderTop: '1 solid #111827', paddingTop: 3 }}>
               <Text style={{ fontSize: 8 }}>Firma y sello — Agente de Carga</Text>
@@ -330,13 +342,21 @@ export default function ArrivalNoticePdf({ data }: { data: ArrivalNoticeData }) 
           </View>
           <View style={{ flex: 1, border: '1 solid #d1d5db', padding: '8 10' }}>
             <Text style={{ fontSize: 8, color: '#6b7280', marginBottom: 4 }}>Contacto operaciones:</Text>
-            <Text style={{ fontSize: 8.5, fontWeight: 700 }}>{SARI_PHONE}</Text>
-            <Text style={{ fontSize: 8.5 }}>{SARI_EMAIL}</Text>
+            {companyBranding.phone && (
+              <Text style={{ fontSize: 8.5, fontWeight: 700 }}>{companyBranding.phone}</Text>
+            )}
+            {companyBranding.email && (
+              <Text style={{ fontSize: 8.5 }}>{companyBranding.email}</Text>
+            )}
           </View>
         </View>
 
         <Text style={styles.footer}>
-          {SARI_LEGAL_NAME} · RTN {SARI_RTN} · {SARI_ADDRESS}
+          {[
+            companyName,
+            companyBranding.rtn ? `RTN ${companyBranding.rtn}` : null,
+            companyAddress,
+          ].filter(Boolean).join(' · ')}
         </Text>
       </Page>
     </Document>

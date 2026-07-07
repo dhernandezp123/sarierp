@@ -24,6 +24,11 @@ import {
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import {
+  COMPANY_BRANDING_SELECT,
+  type CompanyBranding,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 type ClienteJoin = {
   nombre: string | null
@@ -325,6 +330,8 @@ export default function RoutingBookingChildPage() {
     useState<BookingDocument | null>(null)
   const [billsOfLading, setBillsOfLading] = useState<BillOfLading[]>([])
   const [loadingBLs, setLoadingBLs] = useState(false)
+  const [companyBranding, setCompanyBranding] =
+    useState<CompanyBranding>(normalizeCompanyBranding(null))
 
   const loadBillsOfLading = async (targetBookingId = bookingId) => {
     setLoadingBLs(true)
@@ -455,6 +462,14 @@ export default function RoutingBookingChildPage() {
       setLoading(false)
       return
     }
+
+    const { data: companyData } = await supabase
+      .from('company_settings')
+      .select(COMPANY_BRANDING_SELECT)
+      .limit(1)
+      .maybeSingle()
+
+    setCompanyBranding(normalizeCompanyBranding(companyData))
 
     const quotation = resolveJoin((routingData as RoutingData).quotation)
     const quotationId = (routingData as RoutingData).quotation_id || quotation?.id
@@ -1013,7 +1028,7 @@ export default function RoutingBookingChildPage() {
             <div className="flex flex-wrap items-center gap-2">
               {isArrived && (
                 <PDFDownloadLink
-                  document={<ArrivalNoticePdf data={arrivalNoticeData} />}
+                  document={<ArrivalNoticePdf data={arrivalNoticeData} company={companyBranding} />}
                   fileName={`Aviso-Llegada-${booking.booking_number || bookingId}.pdf`}
                   className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
                 >

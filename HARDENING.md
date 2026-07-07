@@ -1680,6 +1680,34 @@ Agregar una entrada por fix:
     el formulario lateral de la pagina si lo hace.
 - Commit: hash pendiente
 
+### 2026-07-07 - UX-022 - Branding configurable en PDFs operativos y reportes
+
+- Estado: En validacion manual.
+- Hallazgo: UX-022 (continuacion auditoria de valores hardcodeados).
+- Codigo:
+  - `src/components/pdf/arrival-notice-pdf.tsx`
+  - `src/components/pdf/shipping-instruction-order-pdf.tsx`
+  - `src/components/pdf/report-pdf.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/reports/page.tsx`
+- SQL:
+  - No aplica; se reutiliza `company_settings`.
+- Cambios:
+  - Arrival Notice, Shipping Instruction Order, BL Instructions y Reportes usan
+    el branding normalizado de Config. Empresa.
+  - Se eliminan constantes locales de razon social, direccion, RTN, telefono y
+    correo en esos PDFs.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - Busqueda de constantes hardcodeadas en los archivos corregidos: OK; solo
+    queda `/logo/sari-logo.png` como fallback local.
+- Verificacion manual pendiente:
+  - Generar Arrival Notice, SI PDF y reportes para validar encabezado/footer.
+- Riesgos pendientes:
+  - Si `company_settings` no esta completo, se usan fallbacks normalizados.
+- Commit: hash pendiente
+
 ### 2026-07-07 - UX-021 - Datos de empresa configurables en contacto y PDF comercial
 
 - Estado: En validacion manual.
