@@ -1680,6 +1680,27 @@ Agregar una entrada por fix:
     el formulario lateral de la pagina si lo hace.
 - Commit: hash pendiente
 
+### 2026-07-07 - INV-006 - Fallback legal de factura desde branding
+
+- Estado: En validacion manual.
+- Hallazgo: INV-006 (auditoria de valores hardcodeados).
+- Codigo:
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+- SQL:
+  - No aplica; se reutiliza `company_settings`.
+- Cambios:
+  - El PDF de factura deja de tener razon social fallback duplicada y usa
+    `normalizeCompanyBranding`.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - Busqueda de fallback legal duplicado en `invoicing/[id]/page.tsx`: OK.
+- Verificacion manual pendiente:
+  - Descargar factura/proforma y verificar encabezado con Config. Empresa.
+- Riesgos pendientes:
+  - Los calculos fiscales `ISV 15`/`ISV 18` se mantienen por normativa SAR y
+    requieren revision fiscal separada antes de parametrizarlos.
+- Commit: hash pendiente
+
 ### 2026-07-07 - FIN-013 - Etiqueta fiscal neutral en validacion de costos
 
 - Estado: En validacion manual.

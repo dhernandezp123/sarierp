@@ -11,6 +11,10 @@ import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass } from 
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { InvoicePdf, type InvoicePdfData } from '@/src/components/pdf/invoice-pdf'
 import { ReciboPagoPdf, type ReciboPagoData } from '@/src/components/pdf/recibo-pago-pdf'
+import {
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
 
 type Invoice = {
   id: string
@@ -308,6 +312,8 @@ export default function InvoiceDetailPage() {
 
   const isv15 = invoice.tax_amount - invoice.isv_18_amount
   const gravado15 = isv15 > 0 ? isv15 / 0.15 : (invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado)
+  const companyBranding = normalizeCompanyBranding(companySetting)
+  const companyDisplayName = getCompanyDisplayName(companyBranding)
 
   const pdfData: InvoicePdfData = {
     invoice_number: invoice.invoice_number || '',
@@ -344,7 +350,7 @@ export default function InvoiceDetailPage() {
     rango_hasta: invoice.rango_hasta,
     fecha_limite_emision: invoice.fecha_limite_emision,
     lugar_emision: invoice.lugar_emision,
-    company_legal_name: companySetting?.legal_name || 'SARI EXPRESS S DE R.L. DE C.V.',
+    company_legal_name: companyDisplayName,
     company_trade_name: companySetting?.trade_name || null,
     company_rtn: companySetting?.rtn || null,
     company_address: companySetting?.address || null,
