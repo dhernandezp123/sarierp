@@ -6,11 +6,11 @@ import { ScanLine, X, Search, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { useMiamiCarriers } from '@/src/hooks/useMiamiCarriers'
 import { notifyClientPackageAssigned } from '@/src/lib/client-notifications'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 
-const CARRIERS = ['UPS', 'FedEx', 'DHL', 'USPS', 'Amazon Logistics', 'OnTrac', 'LaserShip', 'Otro']
 const TIPOS_CARGA = ['Paquetería', 'LCL', 'Aéreo Consolidado'] as const
 
 type ClienteOption = { id: string; nombre: string; codigo_cliente: string | null }
@@ -18,6 +18,7 @@ type ClienteOption = { id: string; nombre: string; codigo_cliente: string | null
 export default function MiamiIngresoPage() {
   const router = useRouter()
   const { user } = useUser()
+  const { carriers } = useMiamiCarriers()
   const trackingRef = useRef<HTMLInputElement>(null)
 
   const [saving, setSaving] = useState(false)
@@ -27,11 +28,12 @@ export default function MiamiIngresoPage() {
   const [selectedClient, setSelectedClient] = useState<ClienteOption | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
 
+  const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg'>('lbs')
   const [form, setForm] = useState({
     tracking_number: '',
     carrier: '',
     tipo_carga: 'Paquetería',
-    weight_lbs: '',
+    weight: '',
     length_in: '',
     width_in: '',
     height_in: '',
@@ -74,7 +76,11 @@ export default function MiamiIngresoPage() {
 
     setSaving(true)
     try {
-      const weight_lbs = parseFloat(form.weight_lbs) || null
+      const weightInput = parseFloat(form.weight) || null
+      const weight_lbs = weightInput === null ? null :
+        weightUnit === 'lbs' ? weightInput : parseFloat((weightInput * 2.20462).toFixed(2))
+      const weight_kg = weightInput === null ? null :
+        weightUnit === 'kg' ? weightInput : parseFloat((weightInput * 0.453592).toFixed(2))
       const length_in  = parseFloat(form.length_in)  || null
       const width_in   = parseFloat(form.width_in)   || null
       const height_in  = parseFloat(form.height_in)  || null
@@ -87,7 +93,7 @@ export default function MiamiIngresoPage() {
           tipo_carga:      form.tipo_carga,
           cargo_status:    'Recibido en Miami',
           weight_lbs,
-          weight_kg:       weight_lbs ? parseFloat((weight_lbs * 0.453592).toFixed(2)) : null,
+          weight_kg,
           length_in,
           width_in,
           height_in,
@@ -128,7 +134,7 @@ export default function MiamiIngresoPage() {
       }
 
       // Reset form, keep carrier
-      setForm(prev => ({ ...prev, tracking_number: '', weight_lbs: '', length_in: '', width_in: '', height_in: '', description: '', notes: '' }))
+      setForm(prev => ({ ...prev, tracking_number: '', weight: '', length_in: '', width_in: '', height_in: '', description: '', notes: '' }))
       setSelectedClient(null)
       setClientSearch('')
       setAssignClient(false)
@@ -193,13 +199,38 @@ export default function MiamiIngresoPage() {
               <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Carrier</label>
               <select value={form.carrier} onChange={set('carrier')} className={fieldClass}>
                 <option value="">Seleccionar carrier...</option>
-                {CARRIERS.map(c => <option key={c} value={c}>{c}</option>)}
+                {carriers.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">Peso (lbs)</label>
-              <input type="number" step="0.01" min="0" value={form.weight_lbs} onChange={set('weight_lbs')} placeholder="0.00" className={fieldClass} />
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">Peso</label>
+                <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">
+                  {(['lbs', 'kg'] as const).map(u => (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => setWeightUnit(u)}
+                      className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold transition ${
+                        weightUnit === u
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      {u}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <input type="number" step="0.01" min="0" value={form.weight} onChange={set('weight')} placeholder="0.00" className={fieldClass} />
+              {parseFloat(form.weight) > 0 && (
+                <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                  ≈ {weightUnit === 'lbs'
+                    ? `${(parseFloat(form.weight) * 0.453592).toFixed(2)} kg`
+                    : `${(parseFloat(form.weight) * 2.20462).toFixed(2)} lbs`}
+                </p>
+              )}
             </div>
           </div>
         </div>

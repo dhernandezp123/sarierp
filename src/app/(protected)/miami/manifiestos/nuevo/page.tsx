@@ -5,16 +5,22 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { useMiamiCarriers } from '@/src/hooks/useMiamiCarriers'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { NewCarrierModal } from '@/src/components/miami/NewCarrierModal'
 
 export default function NuevoManifiestoPage() {
   const router = useRouter()
   const { user } = useUser()
+  const { carriers, reload: reloadCarriers } = useMiamiCarriers()
+  const [carrier, setCarrier] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [carrierModalOpen, setCarrierModalOpen] = useState(false)
 
   const handleCreate = async () => {
+    if (!carrier) { toast.error('Selecciona el transportista del lote'); return }
     setSaving(true)
     try {
       const { data: manifestNumber } = await supabase.rpc('next_manifest_number')
@@ -24,6 +30,7 @@ export default function NuevoManifiestoPage() {
         .insert({
           manifest_number: manifestNumber,
           status: 'Abierto',
+          carrier,
           notes: notes || null,
           received_by: user?.id ?? null,
         })
@@ -60,6 +67,28 @@ export default function NuevoManifiestoPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
+              Transportista del lote <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={carrier}
+              onChange={e => {
+                if (e.target.value === 'Otro') { setCarrierModalOpen(true); return }
+                setCarrier(e.target.value)
+              }}
+              className={fieldClass}
+            >
+              <option value="">Seleccionar transportista...</option>
+              {carriers.map(c => (
+                <option key={c} value={c}>{c === 'Otro' ? 'Otro (agregar nuevo...)' : c}</option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
+              Un manifiesto corresponde a un solo transportista; todos los paquetes escaneados lo heredan.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
               Notas del lote (opcional)
             </label>
             <textarea
@@ -82,10 +111,20 @@ export default function NuevoManifiestoPage() {
         <button type="button" onClick={() => router.push('/miami/manifiestos')} className={secondaryButtonClass}>
           Cancelar
         </button>
-        <button type="button" onClick={handleCreate} disabled={saving} className={primaryButtonClass}>
+        <button type="button" onClick={handleCreate} disabled={saving || !carrier} className={primaryButtonClass}>
           {saving ? 'Creando...' : 'Crear y escanear paquetes'}
         </button>
       </div>
+
+      <NewCarrierModal
+        open={carrierModalOpen}
+        onClose={() => setCarrierModalOpen(false)}
+        carriers={carriers}
+        onCreated={async (name) => {
+          await reloadCarriers()
+          setCarrier(name)
+        }}
+      />
     </div>
   )
 }

@@ -2240,3 +2240,273 @@ Agregar una entrada por fix:
   - MIA-004 queda parcial: reversos y auditoría quedan cubiertos; POD/documento
     de entrega queda pendiente de estructura de archivos.
 - Commit: pendiente.
+
+### 2026-07-07 — MIA-005 — Ubicación por rack e inventario físico en bodega Miami
+
+- Estado: En validación
+- Código:
+  - `src/app/(protected)/miami/inventario/page.tsx`
+- SQL:
+  - `supabase/migrations/20260707110000_miami_rack_locations.sql`
+- Cambios:
+  - Agrega `rack_location`, `location_updated_at` y `location_updated_by` a
+    `miami_packages`, con índice parcial por rack.
+  - Agrega RPC `set_miami_package_location(p_tracking, p_rack)` (security
+    definer, rol Operaciones/Admin): busca por tracking o WH#, exige que el
+    paquete siga en bodega (`Recibido en Miami` / `En Consolidación`), ante
+    trackings duplicados toma el ingreso más reciente en bodega, actualiza la
+    ubicación y registra evento `location_change` en `miami_package_events` y
+    entrada en `activity_logs` en la misma transacción.
+  - Inventario muestra columna `Rack`, incluye rack en la búsqueda y agrega
+    KPI/filtro `Sin rack (en bodega)` para medir avance del conteo físico.
+  - Nuevo modo `Conteo por rack`: se escanea primero el rack y luego los
+    trackings uno a uno con input auto-enfocado (mismo patrón de escaneo de
+    manifiestos); cada escaneo persiste la ubicación vía RPC y lista lo
+    ubicado en la sesión.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificación manual/RLS pendiente:
+  - Aplicar la migración en Supabase remoto (`supabase db push` o pipeline).
+  - Confirmar que un usuario Cliente no puede ejecutar
+    `set_miami_package_location` (debe fallar con 42501).
+  - En `/miami/inventario`, iniciar `Conteo por rack`, escanear un tracking en
+    bodega y confirmar toast, rack en la tabla y evento `location_change` en
+    el historial del paquete.
+  - Escanear un tracking ya despachado y confirmar error claro con el estado.
+  - Confirmar KPI `Sin rack (en bodega)` disminuye al ubicar paquetes.
+- Riesgos o trabajo pendiente:
+  - Rack es texto libre normalizado (mayúsculas); si se requiere validar
+    contra un layout fijo de bodega, agregar catálogo `miami_racks` después.
+  - Fase 2 sugerida: reporte de conteo (escaneado vs esperado por rack) para
+    detectar faltantes/sobrantes.
+- Commit: pendiente.
+
+### 2026-07-07 — MIA-006 — Selector de unidad de peso (lbs/kg) en ingreso Miami
+
+- Estado: En validación
+- Código:
+  - `src/app/(protected)/miami/ingreso/page.tsx`
+- SQL: ninguno (usa columnas existentes `weight_lbs` y `weight_kg`).
+- Cambios:
+  - El campo de peso ahora tiene toggle `lbs`/`kg`; el valor se captura en la
+    unidad elegida y se persisten ambas columnas convertidas (factor 0.453592
+    / 2.20462, redondeo a 2 decimales).
+  - Muestra la conversión aproximada en vivo bajo el campo.
+  - La unidad elegida se conserva entre ingresos consecutivos (igual que el
+    carrier).
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificación manual pendiente:
+  - Ingresar un paquete en kg y confirmar que `weight_lbs` y `weight_kg`
+    quedan correctos en `miami_packages`.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-07 — MIA-007 — Escaneo de manifiesto: unidad de peso, duplicados y eliminación segura
+
+- Estado: En validación
+- Código:
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`
+- SQL: ninguno (el trigger existente de `total_packages` cubre el DELETE).
+- Cambios:
+  - Selector `lbs`/`kg` en el formulario de escaneo; se persisten `weight_lbs`
+    y `weight_kg` convertidos (mismos factores que MIA-006).
+  - Escaneo duplicado dentro del mismo manifiesto ya no inserta: muestra
+    toast de advertencia, limpia el campo y re-enfoca el escáner.
+  - Botón rojo (ícono basurero) por fila para eliminar un tracking escaneado
+    por accidente; visible solo con manifiesto `Abierto` y paquete
+    `Sin asignar`.
+  - La eliminación pasa por `ConfirmDialog` (danger) con el tracking en el
+    mensaje; el DELETE filtra además por `status = 'Sin asignar'` en servidor
+    y verifica filas afectadas para no reportar éxito falso si el paquete fue
+    asignado en paralelo.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificación manual pendiente:
+  - Escanear en kg y confirmar ambos pesos en `miami_packages`.
+  - Escanear dos veces el mismo tracking y confirmar advertencia sin fila
+    duplicada.
+  - Eliminar un tracking con confirmación y verificar que `total_packages`
+    del manifiesto disminuye (trigger).
+  - Confirmar por RLS que un usuario Cliente no puede borrar
+    `miami_packages`.
+- Riesgos pendientes:
+  - Paquetes ya asignados no se pueden eliminar desde la UI por diseño
+    (tienen WH# y notificación al cliente); si se requiere, definir flujo de
+    reverso de asignación aparte.
+- Commit: pendiente.
+
+### 2026-07-07 — MIA-008 — Catálogo de transportistas Miami administrable
+
+- Estado: En validación
+- Código:
+  - `src/hooks/useMiamiCarriers.ts` (nuevo)
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`
+  - `src/app/(protected)/miami/ingreso/page.tsx`
+- SQL:
+  - `supabase/migrations/20260707120000_miami_carriers_catalog.sql`
+- Cambios:
+  - Nueva tabla `miami_carriers` (nombre único case-insensitive, `is_active`,
+    auditoría de creador) sembrada con los 8 valores que estaban hardcodeados.
+  - RLS: lectura para `authenticated`; insert/update solo Admin/Operaciones.
+  - Hook `useMiamiCarriers` comparte el catálogo (alfabético, `Otro` al
+    final) con fallback a la lista anterior si la tabla aún no existe.
+  - Botón `Nuevo transportista` junto a `Cerrar manifiesto` con modal custom;
+    valida nombre vacío y duplicados (cliente + índice único 23505) y
+    auto-selecciona el nuevo carrier en el formulario de escaneo.
+  - `Ingreso Individual` y el detalle de manifiesto leen del catálogo; se
+    eliminaron las constantes hardcodeadas (el portal de pre-alertas conserva
+    su lista propia, pendiente de unificar).
+- Decisión de diseño:
+  - NO se guardan en `proveedores`: su RLS es exclusiva de
+    Admin/Finanzas/Contabilidad (bodega no puede leer ni escribir) y los
+    couriers de ingreso (USPS, Amazon Logistics, `Otro`) contaminarían el
+    catálogo de cuentas por pagar. Si un transportista se vuelve proveedor
+    real, Finanzas lo crea en su módulo como hasta ahora.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificación manual pendiente:
+  - Aplicar la migración y confirmar el seed (8 filas).
+  - Crear un transportista desde el manifiesto y verlo en ambos selects.
+  - Intentar crear un duplicado (debe rechazarse con mensaje claro).
+  - Confirmar que un usuario Cliente no puede insertar en `miami_carriers`.
+- Riesgos pendientes:
+  - Lista del portal de pre-alertas sigue hardcodeada; unificarla requiere
+    revisar UX del portal (RLS ya permite el select).
+- Commit: pendiente.
+
+### 2026-07-07 — MIA-009 — Transportista a nivel de manifiesto (un lote = un carrier)
+
+- Estado: En validación
+- Código:
+  - `src/app/(protected)/miami/manifiestos/nuevo/page.tsx`
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`
+  - `src/app/(protected)/miami/manifiestos/page.tsx`
+- SQL:
+  - `supabase/migrations/20260707130000_miami_manifest_carrier.sql`
+- Cambios:
+  - Columna `carrier` en `miami_manifests`; UX corregida: el transportista se
+    define una vez por manifiesto en lugar de seleccionarse en cada escaneo.
+  - Crear manifiesto exige transportista (validación + botón deshabilitado).
+  - En el detalle, el select por escaneo se elimina; los paquetes heredan
+    `manifest.carrier` al insertarse. Sin transportista definido (manifiestos
+    previos) el escaneo queda bloqueado con aviso.
+  - Cambiar el transportista de un manifiesto abierto propaga el cambio a los
+    paquetes ya escaneados del manifiesto para no mezclar carriers.
+  - Crear un transportista desde el modal lo asigna directo al manifiesto
+    abierto; la lista de manifiestos muestra columna `Transportista`.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificación manual pendiente:
+  - Aplicar la migración; crear manifiesto nuevo eligiendo transportista y
+    confirmar que cada paquete escaneado hereda el carrier.
+  - En un manifiesto viejo sin carrier, confirmar aviso y bloqueo de escaneo
+    hasta seleccionarlo.
+  - Cambiar el transportista con paquetes escaneados y confirmar que las
+    filas existentes se actualizan.
+- Riesgos pendientes:
+  - Manifiestos históricos quedan con `carrier` null (solo lectura si están
+    cerrados); no se hace backfill porque el dato real no se conoce.
+- Commit: pendiente.
+
+### 2026-07-07 — MIA-010 — "Otro" abre alta de transportista; modal reutilizable
+
+- Estado: En validación
+- Código:
+  - `src/components/miami/NewCarrierModal.tsx` (nuevo)
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`
+  - `src/app/(protected)/miami/manifiestos/nuevo/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - El modal de nuevo transportista se extrae a `NewCarrierModal`
+    (validación de vacío/duplicado, 23505 amigable, callback `onCreated`).
+  - En los selects de transportista del manifiesto (crear y detalle),
+    seleccionar `Otro` ya no asigna el valor literal: abre el modal para
+    agregar el transportista real; la opción se rotula
+    `Otro (agregar nuevo...)`. Al guardarlo queda auto-seleccionado (en
+    detalle, propagado al manifiesto y sus paquetes vía MIA-009).
+  - Cancelar el modal conserva la selección anterior (selects controlados).
+  - El select de carrier de Ingreso Individual conserva `Otro` como valor
+    válido (paquete suelto con courier desconocido).
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificación manual pendiente:
+  - Elegir `Otro` en crear manifiesto y en detalle: debe abrir el modal y,
+    al guardar, quedar seleccionado el nuevo transportista.
+  - Cancelar el modal y confirmar que el select regresa al valor previo.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-07 — MIA-011 — Eliminación de manifiestos solo Admin con auditoría
+
+- Estado: En validación
+- Código:
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`
+- SQL:
+  - `supabase/migrations/20260707140000_miami_manifest_delete.sql`
+- Cambios:
+  - RPC `delete_miami_manifest(p_manifest_id, p_reason)` (security definer):
+    exige `is_admin()` y motivo obligatorio; bloquea si algún paquete del
+    manifiesto está asignado/procesado (status distinto de `Sin asignar`,
+    `cliente_id` o `warehouse_number` presentes) o vinculado a un despacho
+    (`miami_shipment_packages`).
+  - Antes de borrar registra en `activity_logs` (permanente): número,
+    estado, carrier, motivo, conteo y lista de trackings eliminados — los
+    `miami_package_events` se van en cascada, por eso el log vive fuera.
+  - Borra paquetes y manifiesto en una sola transacción.
+  - UI: botón rojo `Eliminar manifiesto` visible solo para rol Admin
+    (abierto o cerrado), con modal custom de motivo obligatorio; al eliminar
+    redirige a la lista.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificación manual pendiente:
+  - Aplicar la migración y eliminar el manifiesto de prueba del usuario con
+    motivo; confirmar registro en `activity_logs` con trackings.
+  - Confirmar que un usuario Operaciones no ve el botón y que la RPC le
+    devuelve 42501 si la invoca directo.
+  - Intentar eliminar un manifiesto con paquete asignado (debe bloquear).
+- Riesgos pendientes:
+  - La eliminación es física (no soft-delete); el registro de auditoría en
+    `activity_logs` es el único rastro. Aceptado por diseño para lotes de
+    prueba/error.
+- Commit: pendiente.
+
+### 2026-07-07 - MIA-012 - Hardening de escaneo y edicion de manifiestos Miami
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`
+- SQL:
+  - `supabase/migrations/20260707150000_miami_manifest_scan_hardening.sql`
+- Cambios:
+  - Agrega indice unico parcial `miami_packages_manifest_tracking_unique_idx`
+    para impedir trackings duplicados dentro de un mismo manifiesto, incluso
+    si dos usuarios escanean al mismo tiempo o si alguien inserta directo.
+  - Agrega RPC `scan_miami_manifest_package(...)`: bloquea la fila del
+    manifiesto, valida rol Operaciones/Admin, manifiesto abierto, carrier
+    definido y duplicados antes de insertar el paquete.
+  - Agrega RPC `update_miami_manifest_carrier(...)`: cambia el carrier solo
+    en manifiestos abiertos sin paquetes asignados/procesados, propaga el
+    carrier a los paquetes aun sin asignar y registra `activity_logs`.
+  - Agrega RPC `delete_miami_manifest_package(...)`: elimina paquetes
+    escaneados por error solo si el manifiesto sigue abierto y el paquete no
+    fue asignado/procesado ni vinculado a despacho; registra auditoria antes
+    del DELETE.
+  - La UI del detalle de manifiesto deja de hacer insert/update/delete directo
+    para esas operaciones y llama las RPC auditadas.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificacion manual/RLS pendiente:
+  - Aplicar la migracion en Supabase remoto.
+  - Probar dos escaneos concurrentes del mismo tracking en el mismo manifiesto:
+    uno debe insertar y el otro debe fallar con mensaje de duplicado.
+  - Intentar cambiar carrier con paquetes ya asignados/procesados: debe
+    bloquear.
+  - Eliminar un paquete sin asignar y confirmar registro
+    `delete_miami_manifest_package` en `activity_logs`.
+  - Confirmar que un usuario Cliente no puede ejecutar las nuevas RPC.
+- Riesgos pendientes:
+  - Si existen duplicados historicos por `(manifest_id, tracking_number)`, el
+    indice unico fallara al aplicar la migracion; limpiar esos duplicados antes
+    de desplegar.
+- Commit: pendiente.

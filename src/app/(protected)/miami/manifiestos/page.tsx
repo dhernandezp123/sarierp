@@ -15,6 +15,7 @@ type ManifestRow = {
   id: string
   manifest_number: string
   status: 'Abierto' | 'Cerrado'
+  carrier: string | null
   total_packages: number
   notes: string | null
   created_at: string
@@ -33,7 +34,7 @@ export default function ManifestosPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('miami_manifests')
-      .select('id, manifest_number, status, total_packages, notes, created_at, closed_at')
+      .select('id, manifest_number, status, carrier, total_packages, notes, created_at, closed_at')
       .order('created_at', { ascending: false })
 
     if (error) { toast.error(error.message); setLoading(false); return }
@@ -100,7 +101,7 @@ export default function ManifestosPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-900 dark:bg-[#081120]">
-                  {['Manifiesto', 'Paquetes', 'Estado', 'Apertura', 'Cierre', ''].map(h => (
+                  {['Manifiesto', 'Transportista', 'Paquetes', 'Estado', 'Apertura', 'Cierre', ''].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-300">{h}</th>
                   ))}
                 </tr>
@@ -113,6 +114,7 @@ export default function ManifestosPage() {
                     className="cursor-pointer border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
                   >
                     <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{m.manifest_number}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{m.carrier ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{m.total_packages}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
