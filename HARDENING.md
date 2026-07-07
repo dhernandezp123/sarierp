@@ -1710,7 +1710,7 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - Facturacion conserva calculos fiscales especificos de factura/ISV 15; debe
     revisarse en un paquete separado para no romper reportes fiscales.
-- Commit: d988749
+- Commit: c93092d
 
 ### 2026-07-07 - PRC-010 - Reglas de negocio de Miami Air y FCL desde catalogo
 
