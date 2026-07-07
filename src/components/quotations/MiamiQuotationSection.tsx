@@ -938,7 +938,8 @@ export function MiamiQuotationSection({
                       }
                     />
                     <span className="font-medium text-slate-700 dark:text-slate-200">
-                      ISV 15% en Documentos / Manejo y Desconsolidación
+                      ISV {miami.taxRatePercent}% en Documentos / Manejo y
+                      Desconsolidación
                     </span>
                   </label>
                 </div>
@@ -1313,7 +1314,7 @@ export function MiamiQuotationSection({
                             )
                           }
                         />
-                        ISV 15%
+                        ISV {miami.taxRatePercent}%
                       </label>
 
                       <button
@@ -1444,7 +1445,7 @@ export function MiamiQuotationSection({
                             )
                           }
                         />
-                        ISV 15%
+                        ISV {miami.taxRatePercent}%
                       </label>
 
                       <button

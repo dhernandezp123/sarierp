@@ -542,6 +542,7 @@ export function useMiamiQuotation({
   return {
     clientRates,
     surchargeRules,
+    taxRatePercent,
     showClientRates,
     setShowClientRates,
     pickupMode,

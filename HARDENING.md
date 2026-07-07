@@ -1680,6 +1680,29 @@ Agregar una entrada por fix:
     el formulario lateral de la pagina si lo hace.
 - Commit: hash pendiente
 
+### 2026-07-07 - FIN-012 - Etiquetas Miami usan ISV configurable
+
+- Estado: En validacion manual.
+- Hallazgo: FIN-012 (auditoria de valores hardcodeados).
+- Codigo:
+  - `src/hooks/useMiamiQuotation.ts`
+  - `src/components/quotations/MiamiQuotationSection.tsx`
+- SQL:
+  - No aplica; se reutiliza `company_settings.default_tax_rate`.
+- Cambios:
+  - El hook de Miami expone `taxRatePercent`.
+  - Las etiquetas de cargos gravables en Miami muestran el porcentaje
+    configurado en lugar de `ISV 15%`.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - Busqueda de `ISV 15` en `MiamiQuotationSection` y `useMiamiQuotation`: OK.
+- Verificacion manual pendiente:
+  - Cambiar `default_tax_rate` y revisar etiquetas de cargos estandar,
+    origen y destino en cotizacion Miami.
+- Riesgos pendientes:
+  - Ninguno identificado; cambio visual alineado con el calculo ya corregido.
+- Commit: hash pendiente
+
 ### 2026-07-07 - UX-023 - Branding configurable en documentos operativos restantes
 
 - Estado: En validacion manual.
