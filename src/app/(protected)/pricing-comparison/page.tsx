@@ -722,7 +722,7 @@ function PricingComparisonContent() {
   }
 
   const handleEditAgentQuote = async (quote: any) => {
-    if (!ensureQuoteIsEditable()) return
+    if (!ensureAgentQuoteCanBeModified()) return
 
     setEditingAgentQuoteId(quote.id)
     const airRatePerKg =
@@ -772,7 +772,7 @@ function PricingComparisonContent() {
       return
     }
 
-    if (!ensureQuoteIsEditable()) return
+    if (!ensureAgentQuoteCanBeModified()) return
 
     const oldStatus = selectedQuote.status || 'Borrador'
     const nextStatus = 'Pendiente de Fijar Precios'
@@ -2796,6 +2796,7 @@ const profitabilityColor =
     selectedQuote?.status === 'Ganada' ||
     selectedQuote?.status === 'Perdida'
   const isPricingActionDisabled = !canManagePricing || isLockedQuote
+  const isAgentQuoteFormActionDisabled = !canManagePricing
 
   const optionalClientRates = clientRates.filter((rate) => {
     return (
@@ -2810,10 +2811,13 @@ const profitabilityColor =
   const lockedQuoteMessage =
     'Esta cotización ya fue enviada, ganada o perdida. La edición está bloqueada para proteger el historial comercial.'
 
+  const tariffStatusRequiredMessage =
+    'Cotización debe estar en "Pendiente de Fijar Precios" para modificar/agregar tarifas'
+
   const unauthorizedPricingMessage =
     'No tienes permiso para gestionar pricing.'
 
-  const ensureQuoteIsEditable = () => {
+  const ensureQuoteIsEditable = (options?: { lockedMessage?: string }) => {
     if (!canManagePricing) {
       toast.error(unauthorizedPricingMessage)
       return false
@@ -2821,7 +2825,19 @@ const profitabilityColor =
 
     if (!isLockedQuote) return true
 
-    toast.error(lockedQuoteMessage)
+    toast.error(options?.lockedMessage || lockedQuoteMessage)
+    return false
+  }
+
+  const ensureAgentQuoteCanBeModified = () => {
+    if (!canManagePricing) {
+      toast.error(unauthorizedPricingMessage)
+      return false
+    }
+
+    if (selectedQuote?.status === 'Pendiente de Fijar Precios') return true
+
+    toast.error(tariffStatusRequiredMessage)
     return false
   }
 
@@ -3629,7 +3645,7 @@ const profitabilityColor =
                                 }
                                 filterType={getCarrierFilterType()}
                                 className="mt-1"
-                                disabled={isPricingActionDisabled}
+                                disabled={isAgentQuoteFormActionDisabled}
                               />
                             </div>
                           )}
@@ -3769,7 +3785,7 @@ const profitabilityColor =
 
                             <button
                               onClick={saveAgentQuote}
-                              disabled={isPricingActionDisabled}
+                              disabled={isAgentQuoteFormActionDisabled}
                               className="flex shrink-0 items-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                             >
                               <Save className="h-3.5 w-3.5" />
@@ -4184,7 +4200,7 @@ const profitabilityColor =
                                     <button
                                       type="button"
                                       onClick={() => handleEditAgentQuote(quote)}
-                                      disabled={isPricingActionDisabled}
+                                      disabled={!canManagePricing}
                                       className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                                     >
                                       <Pencil className="h-3.5 w-3.5" />

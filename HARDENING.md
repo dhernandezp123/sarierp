@@ -2302,6 +2302,32 @@ Agregar una entrada por fix:
 - Riesgos pendientes: ninguno.
 - Commit: pendiente.
 
+### 2026-07-08 - PRC-014 - Aviso de estado requerido para modificar tarifas
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Agrega una validacion especifica para editar/agregar tarifas de agente:
+    la cotizacion debe estar en `Pendiente de Fijar Precios`.
+  - Cuando la cotizacion esta en otro estado, Pricing muestra Sonner:
+    `Cotización debe estar en "Pendiente de Fijar Precios" para modificar/agregar tarifas`.
+  - Se evita reabrir automaticamente cotizaciones enviadas/aprobadas desde el
+    guardado de tarifas.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - En una cotizacion `Aereo Consolidado` con tarifa seleccionada y estado
+    distinto de `Pendiente de Fijar Precios`, intentar editar/guardar tarifa y
+    confirmar el Sonner de estado requerido.
+  - Cambiar la cotizacion a `Pendiente de Fijar Precios` y confirmar que
+    editar/agregar tarifa funciona normalmente.
+- Riesgos pendientes:
+  - El usuario debe cambiar el estado de la cotizacion antes de modificar o
+    agregar tarifas.
+- Commit: pendiente.
+
 ### 2026-07-07 — MIA-007 — Escaneo de manifiesto: unidad de peso, duplicados y eliminación segura
 
 - Estado: En validación
