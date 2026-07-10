@@ -2302,6 +2302,31 @@ Agregar una entrada por fix:
 - Riesgos pendientes: ninguno.
 - Commit: pendiente.
 
+### 2026-07-10 - UX-025 - Breakbulk en catalogo de tipos de contenedor / unidad
+
+- Estado: Aplicado
+- Codigo: ninguno (cambio de datos).
+- SQL:
+  - `supabase/migrations/20260710120000_add_breakbulk_container_type.sql`
+  - INSERT idempotente de la fila `Breakbulk` en `public.container_types`
+    (name='Breakbulk', category=NULL, active=true).
+- Cambios:
+  - El dropdown "Tipo de contenedor / unidad" de la seccion Carga en
+    cotizaciones FCL/FTL (`quotations/new` y `quotations/[id]/edit`) se alimenta
+    de `container_types` (`where active = true order by name`), no de opciones
+    hardcodeadas. Al agregar "Breakbulk" como fila del catalogo aparece
+    automaticamente en ambas pantallas, ordenado alfabeticamente.
+- Validaciones:
+  - SQL ejecutado en Supabase (Success, no rows returned).
+  - Verificacion REST: `container_types?name=eq.Breakbulk` devuelve
+    `[{"name":"Breakbulk","active":true,"category":null}]`.
+- Riesgos pendientes:
+  - El SQL se corrio manualmente desde el SQL Editor, no con `supabase db push`,
+    por lo que la migracion no queda registrada en el historial de migraciones
+    remoto. Es idempotente (`WHERE NOT EXISTS`), asi que un `db push` futuro es
+    seguro y no duplica la fila.
+- Commit: pendiente.
+
 ### 2026-07-10 - UX-024 - Parpadeo en portal por bucle de re-render en useUser
 
 - Estado: En validacion
