@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import type { User } from '@supabase/supabase-js'
@@ -35,12 +36,18 @@ export function UserProvider({
   const [profile, setProfile] = useState<Profile | null>(initialProfile)
   const [loading, setLoading] = useState(!hasInitialSession)
 
+  // Id del usuario ya cargado. Sirve para ignorar eventos redundantes de auth
+  // (p. ej. refresco de token) sin meter `user`/`profile` en las dependencias
+  // del efecto, lo que provocaria un bucle de re-suscripcion y re-fetch.
+  const loadedUserIdRef = useRef<string | null>(initialUser?.id ?? null)
+
   useEffect(() => {
     let active = true
 
     const loadProfile = async (authUser: User | null) => {
       if (!active) return
 
+      loadedUserIdRef.current = authUser?.id ?? null
       setUser(authUser)
 
       if (!authUser) {
@@ -67,7 +74,8 @@ export function UserProvider({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user?.id === user?.id && profile) return
+      const nextUserId = session?.user?.id ?? null
+      if (nextUserId === loadedUserIdRef.current) return
       void loadProfile(session?.user ?? null)
     })
 
@@ -75,7 +83,7 @@ export function UserProvider({
       active = false
       subscription.unsubscribe()
     }
-  }, [hasInitialSession, profile, user?.id])
+  }, [hasInitialSession])
 
   const value = useMemo(
     () => ({ user, profile, loading }),

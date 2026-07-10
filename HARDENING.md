@@ -2302,6 +2302,38 @@ Agregar una entrada por fix:
 - Riesgos pendientes: ninguno.
 - Commit: pendiente.
 
+### 2026-07-10 - UX-024 - Parpadeo en portal por bucle de re-render en useUser
+
+- Estado: En validacion
+- Codigo:
+  - `src/hooks/useUser.tsx`
+- SQL: ninguno.
+- Cambios:
+  - El efecto de `UserProvider` tenia `profile` y `user?.id` en sus
+    dependencias mientras el mismo efecto reescribia `profile`/`user` con
+    objetos nuevos en cada fetch. Sin sesion inicial (portal de clientes) esto
+    generaba un bucle: cada `setProfile`/`setUser` re-ejecutaba el efecto,
+    volvia a llamar `getUser()` y re-fetch, emitiendo un objeto `user` nuevo en
+    cada vuelta.
+  - Cada objeto `user` nuevo disparaba los efectos de las paginas hijas
+    (`[user]` / `[profile?.cliente_id]`), que ponian `loading = true` y
+    recargaban, produciendo el parpadeo "aparece y desaparece" reportado en
+    `/portal/notificaciones`.
+  - El efecto ahora se suscribe una sola vez (dependencia unica
+    `hasInitialSession`) y la guardia de "mismo usuario" usa un `ref`
+    (`loadedUserIdRef`) en lugar de `user`/`profile`. Elimina el bucle y de
+    paso el doble fetch inicial.
+  - El lado `(protected)` no estaba afectado porque monta el provider con
+    `initialUser`/`initialProfile`.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Con sesion de Cliente, abrir `/portal/notificaciones` y confirmar que la
+    lista carga una sola vez y no parpadea.
+  - Navegar entre paginas del portal y confirmar que no hay recargas repetidas.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
 ### 2026-07-08 - PRC-014 - Aviso de estado requerido para modificar tarifas
 
 - Estado: En validacion
