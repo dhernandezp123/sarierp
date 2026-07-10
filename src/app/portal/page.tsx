@@ -135,7 +135,7 @@ export default function PortalDashboard() {
       {/* Welcome */}
       <div>
         <p className="text-sm text-slate-500 dark:text-slate-400">Bienvenido,</p>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
+        <h1 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">
           {profile?.nombre ?? 'Cliente'}
         </h1>
       </div>
@@ -157,27 +157,9 @@ export default function PortalDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Envíos activos</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
-            {loading ? <span className="inline-block h-7 w-7 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" /> : shipments.length}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">en tránsito</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">En bodega Miami</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
-            {loading ? <span className="inline-block h-7 w-7 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" /> : packageCount}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">paquetes listos</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Pre-alertas</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
-            {loading ? <span className="inline-block h-7 w-7 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" /> : preAlertCount}
-          </p>
-          <p className="mt-1 text-xs text-slate-400">pendientes</p>
-        </div>
+        <StatCard label="Envíos activos" value={shipments.length} sublabel="en tránsito" loading={loading} />
+        <StatCard label="En bodega Miami" value={packageCount} sublabel="paquetes listos" loading={loading} />
+        <StatCard label="Pre-alertas" value={preAlertCount} sublabel="pendientes" loading={loading} />
       </div>
 
       {/* Active shipments */}
@@ -186,7 +168,7 @@ export default function PortalDashboard() {
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
             <div className="flex items-center gap-2">
               <Ship className="h-4 w-4 text-slate-400" />
-              <h2 className="font-semibold text-slate-900 dark:text-white">Envíos activos</h2>
+              <h2 className="font-display font-semibold text-slate-900 dark:text-white">Envíos activos</h2>
             </div>
             <Link
               href="/portal/envios"
@@ -270,7 +252,7 @@ export default function PortalDashboard() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-slate-400" />
-            <h2 className="font-semibold text-slate-900 dark:text-white">Paquetería reciente</h2>
+            <h2 className="font-display font-semibold text-slate-900 dark:text-white">Paquetería reciente</h2>
           </div>
           <Link
             href="/portal/paquetes"
@@ -321,7 +303,7 @@ export default function PortalDashboard() {
           <div className="flex items-center justify-between border-b border-amber-100 px-5 py-4 dark:border-amber-900/20">
             <div className="flex items-center gap-2">
               <Bell className="h-4 w-4 text-amber-500" />
-              <h2 className="font-semibold text-slate-900 dark:text-white">Pre-alertas pendientes</h2>
+              <h2 className="font-display font-semibold text-slate-900 dark:text-white">Pre-alertas pendientes</h2>
             </div>
             <Link href="/portal/pre-alertas" className="flex items-center gap-1 text-xs font-medium text-amber-600 hover:underline dark:text-amber-400">
               Ver todas <ArrowRight className="h-3.5 w-3.5" />
@@ -344,6 +326,32 @@ export default function PortalDashboard() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  sublabel,
+  loading,
+}: {
+  label: string
+  value: number
+  sublabel: string
+  loading: boolean
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
+      <p className="mt-1 font-display text-2xl font-semibold text-slate-900 dark:text-white">
+        {loading ? (
+          <span className="inline-block h-7 w-7 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" />
+        ) : (
+          value
+        )}
+      </p>
+      <p className="mt-1 text-xs text-slate-400">{sublabel}</p>
     </div>
   )
 }
