@@ -12,7 +12,10 @@ import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { createNotification } from '@/src/lib/notifications'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import { canTransition } from '@/src/lib/quotation-status'
-import { serviceProducts } from '@/src/lib/quotation-products'
+import {
+  fetchActiveServiceProducts,
+  serviceProducts,
+} from '@/src/lib/quotation-products'
 import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
 import { MiamiQuotationSection } from '@/src/components/quotations/MiamiQuotationSection'
 import {
@@ -149,6 +152,8 @@ export default function EditQuotationPage() {
     client_notes: '',
     observaciones: '',
   })
+  const [serviceProductOptions, setServiceProductOptions] =
+    useState(serviceProducts)
 
   useEffect(() => {
     if (userLoading) return
@@ -223,10 +228,13 @@ export default function EditQuotationPage() {
       return
     }
 
+    const activeServiceProducts = await fetchActiveServiceProducts(supabase)
+
     setCountries(countriesData || [])
     setPorts(portsData || [])
     setPackageTypes(packageTypesData || [])
     setContainerTypes(containerTypesData || [])
+    setServiceProductOptions(activeServiceProducts)
   }
 
   const fetchQuotation = async (id: string) => {
@@ -1166,7 +1174,7 @@ export default function EditQuotationPage() {
                   onChange={handleServiceProductChange}
                   className={fieldClass}
                 >
-                  {serviceProducts
+                  {serviceProductOptions
                     .filter((product) =>
                       ['miami_lcl', 'miami_air'].includes(product.value)
                     )

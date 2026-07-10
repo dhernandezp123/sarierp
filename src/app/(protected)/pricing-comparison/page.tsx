@@ -12,7 +12,16 @@ import QuotationPDF from '../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
-import { serviceProducts } from '@/src/lib/quotation-products'
+import {
+  fetchActiveServiceProducts,
+  serviceProducts,
+} from '@/src/lib/quotation-products'
+import {
+  buildOptionalClientRateConfig,
+  defaultOptionalClientRateConfig,
+  fetchActiveClientRateCatalog,
+  type OptionalClientRateConfig,
+} from '@/src/lib/pricing-catalogs'
 import { canTransition } from '@/src/lib/quotation-status'
 import {
   calculateGrossProfitPercent,
@@ -103,38 +112,7 @@ type ClientRate = {
   is_active?: boolean | null
 }
 
-const optionalClientRateCodes = [
-  'fumigacion',
-  'pallet_embalaje',
-  'segregacion',
-  'in_and_out',
-  'equipo_especial',
-  'oversize',
-  'embalaje_madera',
-  'hazmat_imo_charge_line',
-  'declaracion_imo',
-  'certificado_imo',
-  'bonded_fcl_proveedor',
-  'bonded_documentacion_7512',
-] as const
-
-const optionalClientRateConfig: Record<
-  (typeof optionalClientRateCodes)[number],
-  { itemType: string; taxable: boolean }
-> = {
-  fumigacion: { itemType: 'origin_charge', taxable: false },
-  pallet_embalaje: { itemType: 'origin_charge', taxable: false },
-  segregacion: { itemType: 'origin_charge', taxable: false },
-  in_and_out: { itemType: 'origin_charge', taxable: false },
-  equipo_especial: { itemType: 'origin_charge', taxable: false },
-  oversize: { itemType: 'origin_charge', taxable: false },
-  embalaje_madera: { itemType: 'origin_charge', taxable: false },
-  hazmat_imo_charge_line: { itemType: 'origin_charge', taxable: false },
-  declaracion_imo: { itemType: 'origin_charge', taxable: false },
-  certificado_imo: { itemType: 'origin_charge', taxable: false },
-  bonded_fcl_proveedor: { itemType: 'origin_charge', taxable: false },
-  bonded_documentacion_7512: { itemType: 'origin_charge', taxable: false },
-}
+const fallbackOptionalClientRateConfig = defaultOptionalClientRateConfig
 
 const BUNKER_CODE = 'bunker_emergency_surcharge'
 
@@ -261,6 +239,10 @@ function PricingComparisonContent() {
   const [savingCargo, setSavingCargo] = useState(false)
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
+  const [serviceProductOptions, setServiceProductOptions] =
+    useState(serviceProducts)
+  const [optionalClientRateConfig, setOptionalClientRateConfig] =
+    useState<OptionalClientRateConfig>(fallbackOptionalClientRateConfig)
   const [insuranceTaxable, setInsuranceTaxable] = useState(true)
   const [agentRouteRates, setAgentRouteRates] = useState<any[]>([])
 
@@ -387,7 +369,20 @@ function PricingComparisonContent() {
     fetchQuotations()
     fetchAgents()
     fetchCompanyBranding()
+    fetchDynamicCatalogs()
   }, [quoteId])
+
+  const fetchDynamicCatalogs = async () => {
+    const [activeServiceProducts, activeClientRateCatalog] = await Promise.all([
+      fetchActiveServiceProducts(supabase),
+      fetchActiveClientRateCatalog(supabase),
+    ])
+
+    setServiceProductOptions(activeServiceProducts)
+    setOptionalClientRateConfig(
+      buildOptionalClientRateConfig(activeClientRateCatalog)
+    )
+  }
 
   const fetchCompanyBranding = async () => {
     const { data } = await supabase
@@ -2704,7 +2699,7 @@ const profitabilityColor =
 
   const getServiceProductLabel = (serviceProduct?: string | null) => {
     return (
-      serviceProducts.find((item) => item.value === serviceProduct)?.label ||
+      serviceProductOptions.find((item) => item.value === serviceProduct)?.label ||
       serviceProduct ||
       'N/A'
     )
@@ -2800,9 +2795,7 @@ const profitabilityColor =
 
   const optionalClientRates = clientRates.filter((rate) => {
     return (
-      optionalClientRateCodes.includes(
-        rate.rate_code as (typeof optionalClientRateCodes)[number]
-      ) &&
+      Boolean(optionalClientRateConfig[rate.rate_code]) &&
       Number(rate.amount || 0) > 0 &&
       rate.is_active !== false
     )
@@ -2994,9 +2987,7 @@ const profitabilityColor =
     }
 
     const config =
-      optionalClientRateConfig[
-        rate.rate_code as (typeof optionalClientRateCodes)[number]
-      ]
+      optionalClientRateConfig[rate.rate_code]
 
     if (!config) {
       toast.error('Este cargo no esta configurado como opcional')

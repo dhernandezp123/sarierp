@@ -4,10 +4,18 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Ship, Plane, Truck, Package,
-  MapPin, Calendar, Search,
+  MapPin, Calendar,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import {
+  PortalCard,
+  PortalEmptyState,
+  PortalFilterPills,
+  PortalPageHeader,
+  PortalSearchInput,
+  PortalStatusBadge,
+} from '@/src/components/portal/PortalUI'
 
 type Shipment = {
   id: string
@@ -51,18 +59,6 @@ const SERVICE_COLOR: Record<string, string> = {
   other_origin_air:  'bg-purple-100 text-purple-600 dark:bg-purple-900/40 dark:text-purple-300',
   usa_ltl_ftl:       'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300',
   courier:           'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300',
-}
-
-function statusColor(status: string): string {
-  if (['En Tránsito', 'Embarcado'].includes(status))
-    return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-  if (status === 'Arribado')
-    return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-  if (status === 'Booking Confirmado')
-    return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
-  if (status === 'Listo para Embarque')
-    return 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
-  return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
 }
 
 function fmt(date: string | null) {
@@ -120,42 +116,18 @@ export default function EnviosPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Mis Envíos</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Contenedores, carga LCL, aérea y terrestre
-        </p>
-      </div>
+      <PortalPageHeader
+        title="Mis Envíos"
+        subtitle="Contenedores, carga LCL, aérea y terrestre"
+      />
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          placeholder="Buscar por routing, origen, destino…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500"
-        />
-      </div>
+      <PortalSearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Buscar por routing, origen, destino..."
+      />
 
-      {/* Filters */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {FILTERS.map(f => (
-          <button
-            key={f}
-            type="button"
-            onClick={() => setFilter(f)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
-              filter === f
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
+      <PortalFilterPills options={FILTERS} value={filter} onChange={setFilter} />
 
       {/* List */}
       {loading ? (
@@ -165,17 +137,15 @@ export default function EnviosPage() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-center dark:border-slate-800 dark:bg-slate-900">
-          <Ship className="mx-auto mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
-          <p className="font-semibold text-slate-700 dark:text-slate-300">
-            {all.length === 0 ? 'No tienes envíos activos' : 'Sin resultados'}
-          </p>
-          <p className="mt-1 text-sm text-slate-400">
-            {all.length === 0
-              ? 'Aquí verás tus contenedores, carga LCL y aérea'
-              : 'Intenta con otro filtro o búsqueda'}
-          </p>
-        </div>
+        <PortalCard>
+          <PortalEmptyState
+            icon={<Ship className="h-10 w-10" />}
+            title={all.length === 0 ? 'No tienes envíos activos' : 'Sin resultados'}
+            description={all.length === 0
+              ? 'Aquí verás tus contenedores, carga LCL y aérea.'
+              : 'Intenta con otro filtro o búsqueda.'}
+          />
+        </PortalCard>
       ) : (
         <div className="space-y-3">
           {filtered.map(s => {
@@ -209,9 +179,7 @@ export default function EnviosPage() {
                       )}
                     </div>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusColor(s.shipment_status)}`}>
-                    {s.shipment_status}
-                  </span>
+                  <PortalStatusBadge status={s.shipment_status} className="shrink-0 py-1" />
                 </div>
 
                 {/* Dates row */}

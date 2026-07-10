@@ -6,6 +6,12 @@ import { Bell, Package, AlertTriangle, Info, CheckCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import {
+  PortalButton,
+  PortalCard,
+  PortalEmptyState,
+  PortalPageHeader,
+} from '@/src/components/portal/PortalUI'
 
 type Notification = {
   id: string
@@ -97,29 +103,18 @@ export default function NotificacionesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Notificaciones</h1>
-          {unreadCount > 0 && (
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {unreadCount} sin leer
-            </p>
-          )}
-        </div>
-        {unreadCount > 0 && (
-          <button
-            type="button"
-            onClick={markAllRead}
-            disabled={marking}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
+      <PortalPageHeader
+        title="Notificaciones"
+        subtitle={unreadCount > 0 ? `${unreadCount} sin leer` : undefined}
+        action={unreadCount > 0 ? (
+          <PortalButton variant="secondary" onClick={markAllRead} disabled={marking}>
             <CheckCheck className="h-3.5 w-3.5" />
             Marcar todo leído
-          </button>
-        )}
-      </div>
+          </PortalButton>
+        ) : undefined}
+      />
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <PortalCard>
         {loading ? (
           <div className="space-y-3 p-4">
             {[...Array(4)].map((_, i) => (
@@ -127,13 +122,11 @@ export default function NotificacionesPage() {
             ))}
           </div>
         ) : notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Bell className="mb-2 h-8 w-8 text-slate-300 dark:text-slate-600" />
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Sin notificaciones</p>
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-              Te avisaremos cuando lleguen tus paquetes
-            </p>
-          </div>
+          <PortalEmptyState
+            icon={<Bell className="h-8 w-8" />}
+            title="Sin notificaciones"
+            description="Te avisaremos cuando lleguen tus paquetes."
+          />
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {notifications.map(n => {
@@ -184,7 +177,7 @@ export default function NotificacionesPage() {
             })}
           </div>
         )}
-      </div>
+      </PortalCard>
     </div>
   )
 }

@@ -4,8 +4,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+
+const emailInputId = 'portal-login-email'
+const passwordInputId = 'portal-login-password'
 
 export default function PortalLoginPage() {
   const router = useRouter()
@@ -87,7 +91,15 @@ export default function PortalLoginPage() {
 
           {/* tracking preview */}
           <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-            <div className="grid grid-cols-[1.2fr_1fr_1fr_0.9fr] bg-white/[0.04] px-4.5 py-3 font-mono text-[11px] uppercase tracking-wide text-[#7E8AA0]">
+            <div className="flex items-center justify-between border-b border-white/[0.06] bg-white/[0.04] px-4.5 py-3">
+              <span className="font-mono text-[11px] uppercase tracking-wide text-[#7E8AA0]">
+                Ejemplo de tracking
+              </span>
+              <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-[#AEB8CC]">
+                Demo
+              </span>
+            </div>
+            <div className="grid grid-cols-[1.2fr_1fr_1fr_0.9fr] px-4.5 py-3 font-mono text-[11px] uppercase tracking-wide text-[#7E8AA0]">
               <span>Referencia</span><span>Modo</span><span>ETA</span><span>Estado</span>
             </div>
             {[
@@ -107,23 +119,42 @@ export default function PortalLoginPage() {
       </div>
 
       {/* RIGHT · LOGIN FORM */}
-      <div className="flex w-full flex-col justify-center bg-white px-8 py-16 lg:w-[480px] lg:flex-none lg:px-14">
+      <div className="flex w-full flex-col justify-center bg-white px-8 py-12 dark:bg-[#020817] lg:w-[480px] lg:flex-none lg:px-14 lg:py-16">
         <div className="mx-auto w-full max-w-[360px]">
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <Image
+              src="/brand/isotipo-color.png"
+              alt=""
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0 object-contain"
+            />
+            <div>
+              <p className="font-display text-lg font-bold tracking-tight text-[#07111F] dark:text-white">
+                Forwarders <span className="text-[#EF8E01]">ERP</span>
+              </p>
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#7E8AA0]">
+                Portal de clientes
+              </p>
+            </div>
+          </div>
+
           <div className="mb-9">
-            <h2 className="font-display text-[28px] font-semibold tracking-tight text-[#07111F]">
+            <h2 className="font-display text-[28px] font-semibold tracking-tight text-[#07111F] dark:text-white">
               Bienvenido de vuelta
             </h2>
-            <p className="mt-2 text-[15px] leading-relaxed text-[#5B6573]">
+            <p className="mt-2 text-[15px] leading-relaxed text-[#5B6573] dark:text-slate-400">
               Ingresa a tu cuenta para dar seguimiento a tus embarques.
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4.5">
             <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-[#3A4151]">
+              <label htmlFor={emailInputId} className="mb-1.5 block text-[13px] font-semibold text-[#3A4151] dark:text-slate-300">
                 Correo electrónico
               </label>
               <input
+                id={emailInputId}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -131,31 +162,32 @@ export default function PortalLoginPage() {
                 required
                 autoComplete="email"
                 autoFocus
-                className="h-[46px] w-full rounded-[10px] border border-[#D8DEE7] bg-white px-4 text-[15px] text-[#07111F] outline-none placeholder:text-[#9AA3B2] focus:border-[#0038BD] focus:ring-4 focus:ring-[#0038BD]/[0.12]"
+                className="h-[46px] w-full rounded-[10px] border border-[#D8DEE7] bg-white px-4 text-[15px] text-[#07111F] outline-none placeholder:text-[#9AA3B2] focus:border-[#0038BD] focus:ring-4 focus:ring-[#0038BD]/[0.12] dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-950"
               />
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-[#3A4151]">
+              <label htmlFor={passwordInputId} className="mb-1.5 block text-[13px] font-semibold text-[#3A4151] dark:text-slate-300">
                 Contraseña
               </label>
               <div className="relative">
                 <input
+                  id={passwordInputId}
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
                   autoComplete="current-password"
-                  className="h-[46px] w-full rounded-[10px] border border-[#D8DEE7] bg-white px-4 pr-12 text-[15px] text-[#07111F] outline-none placeholder:text-[#9AA3B2] focus:border-[#0038BD] focus:ring-4 focus:ring-[#0038BD]/[0.12]"
+                  className="h-[46px] w-full rounded-[10px] border border-[#D8DEE7] bg-white px-4 pr-12 text-[15px] text-[#07111F] outline-none placeholder:text-[#9AA3B2] focus:border-[#0038BD] focus:ring-4 focus:ring-[#0038BD]/[0.12] dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-950"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                  className="absolute right-1.5 top-1/2 h-[34px] w-[34px] -translate-y-1/2 rounded-md font-mono text-xs tracking-wide text-[#8B96AB] hover:bg-[#F7F8FA]"
+                  className="absolute right-1.5 top-1/2 flex h-[34px] w-[34px] -translate-y-1/2 items-center justify-center rounded-md text-[#8B96AB] hover:bg-[#F7F8FA] focus:outline-none focus:ring-2 focus:ring-[#0038BD]/30 dark:text-slate-400 dark:hover:bg-slate-800 dark:focus:ring-blue-400/30"
                 >
-                  {showPassword ? 'OCULTAR' : 'VER'}
+                  {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
                 </button>
               </div>
             </div>
@@ -163,27 +195,27 @@ export default function PortalLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="h-[46px] w-full rounded-[10px] bg-[#0038BD] text-[15px] font-semibold text-white transition-colors hover:bg-[#022a91] disabled:cursor-not-allowed disabled:bg-[#5B7CD6]"
+              className="h-[46px] w-full rounded-[10px] bg-[#0038BD] text-[15px] font-semibold text-white transition-colors hover:bg-[#022a91] disabled:cursor-not-allowed disabled:bg-[#5B7CD6] dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-blue-900"
             >
               {loading ? 'Ingresando...' : 'Ingresar'}
             </button>
 
             <div className="text-center">
-              <Link href="/portal/forgot-password" className="text-sm font-medium text-[#0038BD] hover:underline">
+              <Link href="/portal/forgot-password" className="text-sm font-medium text-[#0038BD] hover:underline dark:text-blue-400">
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
           </form>
 
-          <div className="my-8 h-px bg-[#EDEFF3]" />
+          <div className="my-8 h-px bg-[#EDEFF3] dark:bg-slate-800" />
 
-          <p className="text-center text-sm leading-relaxed text-[#5B6573]">
+          <p className="text-center text-sm leading-relaxed text-[#5B6573] dark:text-slate-400">
             ¿Aún no tienes acceso?{' '}
-            <Link href="/portal/register" className="font-semibold text-[#0038BD] hover:underline">
+            <Link href="/portal/register" className="font-semibold text-[#0038BD] hover:underline dark:text-blue-400">
               Solicitar cuenta
             </Link>
           </p>
-          <p className="mt-4.5 text-center text-xs leading-relaxed text-[#9AA3B2]">
+          <p className="mt-4.5 text-center text-xs leading-relaxed text-[#9AA3B2] dark:text-slate-500">
             ¿Problemas para ingresar? Contacta a tu agente de carga.
           </p>
         </div>

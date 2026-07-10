@@ -2302,6 +2302,75 @@ Agregar una entrada por fix:
 - Riesgos pendientes: ninguno.
 - Commit: pendiente.
 
+### 2026-07-10 - UX-030 - Catalogo administrable de tipos de contenedor/transporte
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/catalogs/page.tsx`
+  - `src/app/(protected)/quotations/new/page.tsx`
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Convierte `/catalogs` en pantalla operativa para Pricing/Admin con
+    gestion de tipos de contenedor/transporte desde `container_types`.
+  - Agrega alta y edicion de nombre/categoria, y selector de encendido/apagado
+    sobre `active`.
+  - Los tipos apagados se ocultan de nuevas cotizaciones porque los flujos de
+    cotizacion leen `container_types` con `active = true`.
+  - Mantiene los catalogos existentes de paises y puertos con estilos
+    consistentes con el ERP.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificacion manual pendiente:
+  - Crear un tipo nuevo en `/catalogs`, confirmar que aparece en
+    `/quotations/new` para carga FCL/FTL.
+  - Apagar el tipo y confirmar que deja de aparecer como nueva opcion.
+  - Confirmar con rol Pricing que RLS permite insertar/actualizar el catalogo.
+- Riesgos pendientes:
+  - No se agrega borrado fisico por seguridad historica; desactivar es la via
+    operativa para ocultar opciones.
+- Commit: pendiente.
+
+### 2026-07-10 - UX-031 - Catalogos editables para productos y tarifas Miami
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/catalogs/page.tsx`
+  - `src/app/(protected)/quotations/new/page.tsx`
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/clientes/[id]/page.tsx`
+  - `src/lib/pricing-catalogs.ts`
+  - `src/lib/quotation-products.ts`
+- SQL:
+  - `supabase/migrations/20260710133000_operational_catalogs.sql`
+- Cambios:
+  - Agrega tablas `service_products` y `client_rate_catalog` con RLS para
+    usuarios internos y gestion por Pricing/Admin.
+  - Siembra los productos y cargos actuales para preservar comportamiento.
+  - `/catalogs` permite crear, editar y activar/desactivar productos de
+    cotizacion y cargos/tarifas Miami por cliente.
+  - `quotations/new`, `quotations/[id]/edit`, `clientes/[id]` y
+    `pricing-comparison` leen catalogos activos con fallback local para no
+    romper si la migracion aun no esta aplicada.
+  - Los PDFs no cambian: siguen consumiendo datos guardados en cotizaciones,
+    pricing items y client rates.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificacion manual pendiente:
+  - Aplicar migracion en Supabase.
+  - Apagar un producto en `/catalogs` y confirmar que no aparece en nueva
+    cotizacion.
+  - Apagar un cargo de `client_rate_catalog` y confirmar que desaparece del
+    tab Tarifas del Cliente, sin afectar `client_rates` historicos.
+  - Confirmar que una cotizacion/PDF historica sigue mostrando sus datos
+    guardados.
+- Riesgos pendientes:
+  - Los productos Miami con logica especial siguen siendo `miami_lcl` y
+    `miami_air`; agregar un producto nuevo con comportamiento Miami requiere
+    implementar su logica operativa antes de usarlo en produccion.
+- Commit: pendiente.
+
 ### 2026-07-10 - UX-025 - Breakbulk en catalogo de tipos de contenedor / unidad
 
 - Estado: Aplicado
@@ -2325,6 +2394,127 @@ Agregar una entrada por fix:
     por lo que la migracion no queda registrada en el historial de migraciones
     remoto. Es idempotente (`WHERE NOT EXISTS`), asi que un `db push` futuro es
     seguro y no duplica la fila.
+- Commit: pendiente.
+
+### 2026-07-10 - UX-026 - Correcciones UX en login del portal cliente
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/portal/login/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Agrega identidad visible en mobile para que el login no pierda contexto de
+    Portal de clientes cuando el panel lateral se oculta.
+  - Cambia el toggle textual de contrasena por iconos `Eye`/`EyeOff`, evitando
+    overflow dentro del input y manteniendo `aria-label`.
+  - Asocia labels con inputs mediante `htmlFor`/`id`.
+  - Restaura estilos `dark:*` para mantener consistencia con register,
+    forgot-password y reset-password.
+  - Marca el preview lateral como ejemplo/demo para no confundir datos
+    ilustrativos con tracking real.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificacion manual/RLS pendiente:
+  - Abrir `/portal/login` en mobile y desktop, modo claro/oscuro, y confirmar
+    identidad visible, foco accesible y toggle de contrasena sin overflow.
+  - No aplica RLS ni SQL.
+- Riesgos pendientes:
+  - No se ejecuto prueba visual automatizada porque no hay herramienta de
+    navegador disponible en esta sesion.
+- Commit: pendiente.
+
+### 2026-07-10 - UX-027 - Sistema visual base para portal de clientes forwarder
+
+- Estado: En validacion
+- Codigo:
+  - `src/components/portal/PortalUI.tsx`
+  - `src/app/portal/envios/page.tsx`
+  - `src/app/portal/paquetes/page.tsx`
+  - `src/app/portal/pre-alertas/page.tsx`
+  - `src/app/portal/notificaciones/page.tsx`
+  - `src/app/(protected)/quotations/new/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Agrega componentes compartidos del portal para headers, cards, secciones,
+    buscador, filtros, estados vacios, badges, botones y links de texto.
+  - Migra listas principales del portal a un patron visual consistente,
+    orientado a clientes de freight forwarders: tracking, envios, paquetes,
+    pre-alertas y avisos.
+  - Unifica filtros activos con acento azul de marca, headers con
+    `font-display`, estados vacios y cards `rounded-2xl`.
+  - El selector legacy `container_type` en la seccion Carga de
+    `quotations/new` deja de tener opciones hardcodeadas y usa el catalogo
+    `container_types` ya cargado desde Supabase.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+  - `rg "Contenedor 20FR|Contenedor 20DR|Contenedor 20OT|Contenedor 40DR|Contenedor 40HC|Camion 8 tons|Contenedor 48' FTL" src -S`: sin resultados.
+- Verificacion manual/RLS pendiente:
+  - Abrir `/portal`, `/portal/envios`, `/portal/paquetes`,
+    `/portal/pre-alertas` y `/portal/notificaciones` en mobile/desktop y
+    confirmar consistencia visual.
+  - Crear cotizacion FCL en `/quotations/new`, abrir seccion Carga y confirmar
+    que "Tipo de contenedor / unidad" refleja el catalogo `container_types`
+    incluyendo `Breakbulk`.
+  - No aplica cambio de RLS ni SQL.
+- Riesgos pendientes:
+  - Faltan por migrar pantallas secundarias del portal: detalles, perfil,
+    herramientas, contacto, info y flujos auth restantes.
+- Commit: pendiente.
+
+### 2026-07-10 - UX-028 - Consistencia visual en carga LCL/LTL de cotizacion nueva
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/quotations/new/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - El bloque `Detalle de carga` para LCL/LTL/Consolidado/Courier de otros
+    origenes adopta el mismo lenguaje visual del bloque Miami: cabecera por
+    linea, borde/fondo segun completitud, labels compactos, campos `h-10` y
+    resumen por linea.
+  - Se elimina del formulario visible el selector `Caja/Pallet/Pieza` para
+    que LCL Otros Origenes y LTL/FTL USA pidan directamente cantidad, volumen,
+    unidad, peso y dimensiones/CBM. Internamente se conserva `packageType:
+    'Caja'` para no romper persistencia ni PDF.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificacion manual/RLS pendiente:
+  - En `/quotations/new`, seleccionar `LCL Otros Origenes` y confirmar que
+    pide detalle de carga sin selector de tipo de empaque por linea.
+  - Seleccionar `LTL / FTL USA` con modalidad `LTL` y confirmar el mismo
+    comportamiento.
+  - Confirmar que Miami LCL/Aereo conserva su flujo y que guardar cotizacion
+    persiste `quotation_cargo_lines`.
+  - No aplica cambio de RLS ni SQL.
+- Riesgos pendientes:
+  - El tipo de paquete queda fijo como `Caja` en datos heredados para estas
+    lineas; si despues se requiere clasificacion real de empaque, debe
+    definirse un catalogo/UX separado.
+- Commit: pendiente.
+
+### 2026-07-10 - UX-029 - Reset visual despues de enviar cotizacion a Pricing
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/quotations/new/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Corrige que despues de `Enviar a Pricing` el formulario quedara limpio
+    pero con `submitted=true`, provocando bordes rojos en campos requeridos
+    vacios.
+  - Agrega helper `createEmptyCargoLine()` para reiniciar las lineas de carga
+    con un estado inicial consistente tras guardar/enviar.
+  - Al crear correctamente una cotizacion se resetean `formData`,
+    `submitted`, lineas de carga, lineas de contenedor, duplicacion y formulario
+    de contenedor.
+- Validaciones:
+  - `npx tsc --noEmit`: OK
+- Verificacion manual/RLS pendiente:
+  - Crear cotizacion con `Enviar a Pricing` y confirmar que el formulario queda
+    en blanco sin bordes rojos residuales.
+  - Crear borrador y confirmar el mismo reset visual.
+  - No aplica cambio de RLS ni SQL.
+- Riesgos pendientes: ninguno.
 - Commit: pendiente.
 
 ### 2026-07-10 - UX-024 - Parpadeo en portal por bucle de re-render en useUser

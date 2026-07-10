@@ -14,10 +14,11 @@ import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { MiamiQuotationSection } from '@/src/components/quotations/MiamiQuotationSection'
 import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
 import {
+  fetchActiveServiceProducts,
   serviceProducts,
   tradeDirections,
-  usesClientRates,
 } from '@/src/lib/quotation-products'
+import { usesClientRatesFromCatalog } from '@/src/lib/pricing-catalogs'
 import {
   COMPANY_BRANDING_SELECT,
   type CompanyBranding,
@@ -52,6 +53,20 @@ type ContainerLine = {
   notes: string | null
 }
 
+const createEmptyCargoLine = (): CargoDimensionLine => ({
+  id: crypto.randomUUID(),
+  quantity: '1',
+  packageType: 'Caja',
+  length: '',
+  width: '',
+  height: '',
+  dimensionUnit: 'm',
+  weight: '',
+  weightUnit: 'lbs',
+  volumeMode: 'dimensions',
+  manualCbm: '',
+})
+
 export default function NewQuotationPage() {
   const { profile } = useUser()
   const defaultValidUntil = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
@@ -67,19 +82,7 @@ export default function NewQuotationPage() {
   const [ports, setPorts] = useState<any[]>([])
   const [containerTypes, setContainerTypes] = useState<any[]>([])
   const [cargoLines, setCargoLines] = useState<CargoDimensionLine[]>([
-    {
-      id: crypto.randomUUID(),
-      quantity: '1',
-      packageType: 'Caja',
-      length: '',
-      width: '',
-      height: '',
-      dimensionUnit: 'm',
-      weight: '',
-      weightUnit: 'lbs',
-      volumeMode: 'dimensions',
-      manualCbm: '',
-    },
+    createEmptyCargoLine(),
   ])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
   const [duplicateSource, setDuplicateSource] = useState<{
@@ -146,6 +149,8 @@ export default function NewQuotationPage() {
 
   const [formData, setFormData] = useState(initialFormData)
   const [submitted, setSubmitted] = useState(false)
+  const [serviceProductOptions, setServiceProductOptions] =
+    useState(serviceProducts)
 
   // Returns red border class if field is required, form was submitted, and value is empty
   const reqClass = (value: string) =>
@@ -246,9 +251,12 @@ export default function NewQuotationPage() {
       return
     }
 
+    const activeServiceProducts = await fetchActiveServiceProducts(supabase)
+
     setCountries(countriesData || [])
     setPorts(portsData || [])
     setContainerTypes(containerTypesData || [])
+    setServiceProductOptions(activeServiceProducts)
   }
 
   const toFormString = (value: unknown) =>
@@ -451,7 +459,7 @@ export default function NewQuotationPage() {
     e: React.ChangeEvent<HTMLSelectElement>
   ) => {
     const serviceProduct = e.target.value
-    const isMiamiProduct = usesClientRates(serviceProduct)
+    const isMiamiProduct = usesClientRatesFromCatalog(serviceProductOptions, serviceProduct)
 
     setFormData((prev) => ({
       ...prev,
@@ -482,21 +490,7 @@ export default function NewQuotationPage() {
       setCargoLines((prev) =>
         prev.length > 0
           ? prev
-          : [
-              {
-                id: crypto.randomUUID(),
-                quantity: '1',
-                packageType: 'Caja',
-                length: '',
-                width: '',
-                height: '',
-                dimensionUnit: 'm',
-                weight: '',
-                weightUnit: 'lbs',
-                volumeMode: 'dimensions',
-                manualCbm: '',
-              },
-            ]
+          : [createEmptyCargoLine()]
       )
     }
   }
@@ -622,7 +616,10 @@ export default function NewQuotationPage() {
       return
     }
 
-    const submitIsMiamiFlow = usesClientRates(formData.service_product)
+    const submitIsMiamiFlow = usesClientRatesFromCatalog(
+      serviceProductOptions,
+      formData.service_product
+    )
     const isDraftSave = status === 'Borrador'
 
     if (!isDraftSave && formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
@@ -918,6 +915,8 @@ export default function NewQuotationPage() {
       }
 
       setFormData(initialFormData)
+      setSubmitted(false)
+      setCargoLines([createEmptyCargoLine()])
       setContainerLines([])
       setDuplicateSource(null)
       setEditingContainerLineIndex(null)
@@ -1389,7 +1388,7 @@ export default function NewQuotationPage() {
                 className={`${fieldClass} ${reqClass(formData.service_product)}`}
               >
                 <option value="">Seleccionar producto</option>
-                {serviceProducts.map((product) => (
+                {serviceProductOptions.map((product) => (
                   <option key={product.value} value={product.value}>
                     {product.label}
                   </option>
@@ -1738,25 +1737,11 @@ export default function NewQuotationPage() {
                     className={fieldClass}
                   >
                     <option value="">Tipo de contenedor / unidad</option>
-                    <option value="Contenedor 20FR">Contenedor 20FR</option>
-                    <option value="Contenedor 20DR">Contenedor 20DR</option>
-                    <option value="Contenedor 20OT">Contenedor 20OT</option>
-                    <option value="Contenedor 40DR">Contenedor 40DR</option>
-                    <option value="Contenedor 40HC">Contenedor 40HC</option>
-                    <option value="Contenedor 40FR">Contenedor 40FR</option>
-                    <option value="Contenedor 45-102DR">
-                      Contenedor 45-102DR
-                    </option>
-                    <option value="Contenedor 40HR">Contenedor 40HR</option>
-                    <option value="Contenedor 40OT">Contenedor 40OT</option>
-                    <option value="Contenedor 40NOR">Contenedor 40NOR</option>
-                    <option value="Contenedor 20OT OH">Contenedor 20OT OH</option>
-                    <option value="Contenedor 53'">Contenedor 53'</option>
-                    <option value="Contenedor 20GP">Contenedor 20GP</option>
-                    <option value="Camion 8 tons">Camion 8 tons</option>
-                    <option value="Contenedor 48' FTL">
-                      Contenedor 48' FTL
-                    </option>
+                    {containerTypes.map((type) => (
+                      <option key={type.id} value={type.name}>
+                        {type.name}
+                      </option>
+                    ))}
                   </select>
 
                   <input
@@ -1790,19 +1775,7 @@ export default function NewQuotationPage() {
                       onClick={() =>
                         setCargoLines((prev) => [
                           ...prev,
-                          {
-                            id: crypto.randomUUID(),
-                            quantity: '1',
-                            packageType: 'Caja',
-                            length: '',
-                            width: '',
-                            height: '',
-                            dimensionUnit: 'm',
-                            weight: '',
-                            weightUnit: 'lbs',
-                            volumeMode: 'dimensions',
-                            manualCbm: '',
-                          },
+                          createEmptyCargoLine(),
                         ])
                       }
                       className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
@@ -1824,17 +1797,28 @@ export default function NewQuotationPage() {
                         const lineCbm = calculateLineCbm(line)
                         const lineWeightUnit = getCargoWeightUnit(line)
                         const lineVolumeMode = getCargoVolumeMode(line)
+                        const isLineComplete =
+                          Number(line.quantity || 0) > 0 &&
+                          hasLineVolume(line) &&
+                          Number(line.weight || 0) > 0
                         const lineTotalLbs = getLineTotalWeightLbs(line)
                         const lineTotalKg = getLineTotalWeightKg(line)
 
                         return (
                           <div
                             key={line.id}
-                            className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950/60"
+                            className={`overflow-hidden rounded-2xl border transition-colors ${
+                              isLineComplete
+                                ? 'border-sky-300 dark:border-sky-800/70'
+                                : 'border-slate-200 dark:border-slate-700'
+                            }`}
                           >
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                              <span className="text-sm font-semibold text-slate-600">
-                                Línea #{idx + 1}
+                            <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
+                              <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
+                                #{idx + 1}
+                              </span>
+                              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                Línea de carga
                               </span>
 
                               <button
@@ -1844,222 +1828,242 @@ export default function NewQuotationPage() {
                                     prev.filter((item) => item.id !== line.id)
                                   )
                                 }
-                                className="text-sm font-semibold text-red-700 dark:text-red-300"
+                                className="ml-auto flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
                               >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                                </svg>
                                 Quitar
                               </button>
                             </div>
 
-                            <div className="grid gap-3 md:grid-cols-4">
-                              <select
-                                value={line.packageType}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? {
-                                            ...item,
-                                            packageType:
-                                              e.target.value as CargoDimensionLine['packageType'],
-                                          }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              >
-                                <option>Caja</option>
-                                <option>Pallet</option>
-                                <option>Pieza</option>
-                              </select>
-
-                              <input
-                                type="number"
-                                min="1"
-                                step="any"
-                                placeholder="Cantidad"
-                                value={line.quantity}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? { ...item, quantity: e.target.value }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              />
-
-                              <select
-                                value={lineVolumeMode}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? {
-                                            ...item,
-                                            volumeMode:
-                                              e.target.value as CargoDimensionLine['volumeMode'],
-                                          }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              >
-                                <option value="dimensions">
-                                  Calcular por dimensiones
-                                </option>
-                                <option value="manual">
-                                  Ingresar CBM manual
-                                </option>
-                              </select>
-
-                              {lineVolumeMode === 'dimensions' ? (
-                                <select
-                                value={line.dimensionUnit}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? {
-                                            ...item,
-                                            dimensionUnit:
-                                              e.target.value as CargoDimensionLine['dimensionUnit'],
-                                          }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              >
-                                <option value="in">Pulgadas (in)</option>
-                                <option value="cm">Centímetros (cm)</option>
-                                <option value="mm">Milímetros (mm)</option>
-                                <option value="m">Metros (m)</option>
-                              </select>
-                              ) : (
+                            <div
+                              className={`space-y-3 p-4 ${
+                                isLineComplete
+                                  ? 'bg-sky-50/80 dark:bg-sky-950/25'
+                                  : 'bg-white dark:bg-slate-950/40'
+                              }`}
+                            >
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                                 <div className="flex flex-col gap-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Cant.
+                                  </label>
                                   <input
                                     type="number"
-                                    min="0"
+                                    min="1"
                                     step="any"
-                                    placeholder="CBM total de la línea"
-                                    value={line.manualCbm || ''}
+                                    placeholder="1"
+                                    value={line.quantity}
+                                    onChange={(e) =>
+                                      setCargoLines((prev) =>
+                                        prev.map((item) =>
+                                          item.id === line.id
+                                            ? { ...item, quantity: e.target.value }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    className={`${fieldClass} h-10 w-full`}
+                                  />
+                                </div>
+
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Volumen
+                                  </label>
+                                  <select
+                                    value={lineVolumeMode}
                                     onChange={(e) =>
                                       setCargoLines((prev) =>
                                         prev.map((item) =>
                                           item.id === line.id
                                             ? {
                                                 ...item,
-                                                manualCbm: e.target.value,
+                                                volumeMode:
+                                                  e.target.value as CargoDimensionLine['volumeMode'],
                                               }
                                             : item
                                         )
                                       )
                                     }
-                                    className={fieldClass}
-                                  />
-                                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                                    CBM total de la línea
-                                  </span>
+                                    className={`${fieldClass} h-10 w-full text-sm`}
+                                  >
+                                    <option value="dimensions">Calcular por dimensiones</option>
+                                    <option value="manual">Ingresar CBM manual</option>
+                                  </select>
                                 </div>
-                              )}
 
-                              <div className="grid grid-cols-[1fr_92px] gap-2">
-                                <input
-                                  type="number"
-                                  step="any"
-                                  placeholder={`Peso unitario ${lineWeightUnit}`}
-                                  value={line.weight}
-                                  onChange={(e) =>
-                                    setCargoLines((prev) =>
-                                      prev.map((item) =>
-                                        item.id === line.id
-                                          ? { ...item, weight: e.target.value }
-                                          : item
-                                      )
-                                    )
-                                  }
-                                  className={fieldClass}
-                                />
+                                {lineVolumeMode === 'dimensions' ? (
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                      Unidad
+                                    </label>
+                                    <select
+                                      value={line.dimensionUnit}
+                                      onChange={(e) =>
+                                        setCargoLines((prev) =>
+                                          prev.map((item) =>
+                                            item.id === line.id
+                                              ? {
+                                                  ...item,
+                                                  dimensionUnit:
+                                                    e.target.value as CargoDimensionLine['dimensionUnit'],
+                                                }
+                                              : item
+                                          )
+                                        )
+                                      }
+                                      className={`${fieldClass} h-10 w-full text-sm`}
+                                    >
+                                      <option value="in">Pulgadas (in)</option>
+                                      <option value="cm">Centímetros (cm)</option>
+                                      <option value="mm">Milímetros (mm)</option>
+                                      <option value="m">Metros (m)</option>
+                                    </select>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                      CBM total de la línea
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      placeholder="CBM total de la línea"
+                                      value={line.manualCbm || ''}
+                                      onChange={(e) =>
+                                        setCargoLines((prev) =>
+                                          prev.map((item) =>
+                                            item.id === line.id
+                                              ? {
+                                                  ...item,
+                                                  manualCbm: e.target.value,
+                                                }
+                                              : item
+                                          )
+                                        )
+                                      }
+                                      className={`${fieldClass} h-10 w-full`}
+                                    />
+                                  </div>
+                                )}
 
-                                <select
-                                  value={lineWeightUnit}
-                                  onChange={(e) =>
-                                    setCargoLines((prev) =>
-                                      prev.map((item) =>
-                                        item.id === line.id
-                                          ? {
-                                              ...item,
-                                              weightUnit:
-                                                e.target.value as CargoDimensionLine['weightUnit'],
-                                            }
-                                          : item
-                                      )
-                                    )
-                                  }
-                                  className={fieldClass}
-                                >
-                                  <option value="lbs">LBS</option>
-                                  <option value="kg">KG</option>
-                                </select>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                    Peso unit. {lineWeightUnit}
+                                  </label>
+                                  <div className="grid grid-cols-[1fr_82px] gap-2">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      placeholder={`Peso unit. ${lineWeightUnit}`}
+                                      value={line.weight}
+                                      onChange={(e) =>
+                                        setCargoLines((prev) =>
+                                          prev.map((item) =>
+                                            item.id === line.id
+                                              ? { ...item, weight: e.target.value }
+                                              : item
+                                          )
+                                        )
+                                      }
+                                      className={`${fieldClass} h-10 w-full`}
+                                    />
+
+                                    <select
+                                      value={lineWeightUnit}
+                                      onChange={(e) =>
+                                        setCargoLines((prev) =>
+                                          prev.map((item) =>
+                                            item.id === line.id
+                                              ? {
+                                                  ...item,
+                                                  weightUnit:
+                                                    e.target.value as CargoDimensionLine['weightUnit'],
+                                                }
+                                              : item
+                                          )
+                                        )
+                                      }
+                                      className={`${fieldClass} h-10 w-full`}
+                                    >
+                                      <option value="lbs">LBS</option>
+                                      <option value="kg">KG</option>
+                                    </select>
+                                  </div>
+                                </div>
                               </div>
 
                               {lineVolumeMode === 'dimensions' && (
-                                <>
-                                  <input
-                                    type="number"
-                                    step="any"
-                                    placeholder="Largo"
-                                    value={line.length}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, length: e.target.value }
-                                            : item
+                                <div className="grid grid-cols-3 gap-3">
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                      Largo
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      placeholder="0"
+                                      value={line.length}
+                                      onChange={(e) =>
+                                        setCargoLines((prev) =>
+                                          prev.map((item) =>
+                                            item.id === line.id
+                                              ? { ...item, length: e.target.value }
+                                              : item
+                                          )
                                         )
-                                      )
-                                    }
-                                    className={fieldClass}
-                                  />
+                                      }
+                                      className={`${fieldClass} h-10`}
+                                    />
+                                  </div>
 
-                                  <input
-                                    type="number"
-                                    step="any"
-                                    placeholder="Ancho"
-                                    value={line.width}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, width: e.target.value }
-                                            : item
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                      Ancho
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      placeholder="0"
+                                      value={line.width}
+                                      onChange={(e) =>
+                                        setCargoLines((prev) =>
+                                          prev.map((item) =>
+                                            item.id === line.id
+                                              ? { ...item, width: e.target.value }
+                                              : item
+                                          )
                                         )
-                                      )
-                                    }
-                                    className={fieldClass}
-                                  />
+                                      }
+                                      className={`${fieldClass} h-10`}
+                                    />
+                                  </div>
 
-                                  <input
-                                    type="number"
-                                    step="any"
-                                    placeholder="Alto"
-                                    value={line.height}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, height: e.target.value }
-                                            : item
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                                      Alto
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      placeholder="0"
+                                      value={line.height}
+                                      onChange={(e) =>
+                                        setCargoLines((prev) =>
+                                          prev.map((item) =>
+                                            item.id === line.id
+                                              ? { ...item, height: e.target.value }
+                                              : item
+                                          )
                                         )
-                                      )
-                                    }
-                                    className={fieldClass}
-                                  />
-                                </>
+                                      }
+                                      className={`${fieldClass} h-10`}
+                                    />
+                                  </div>
+                                </div>
                               )}
 
                               <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">

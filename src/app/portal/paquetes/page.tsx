@@ -2,9 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Package, ChevronRight, CheckCircle2, Clock, AlertTriangle, Search } from 'lucide-react'
+import { Package, ChevronRight } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import {
+  PortalButton,
+  PortalCard,
+  PortalEmptyState,
+  PortalFilterPills,
+  PortalPageHeader,
+  PortalSearchInput,
+  PortalStatusBadge,
+} from '@/src/components/portal/PortalUI'
 
 type PackageRow = {
   id: string
@@ -16,14 +25,15 @@ type PackageRow = {
   received_at: string
 }
 
-const STATUS_FILTERS = ['Todos', 'Asignado', 'Entregado', 'Con incidencia', 'Sin asignar']
+const STATUS_FILTERS = ['Todos', 'Asignado', 'Entregado', 'Con incidencia', 'Sin asignar'] as const
+type StatusFilter = (typeof STATUS_FILTERS)[number]
 const PAGE_SIZE = 20
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  'Sin asignar':    { label: 'Pendiente',    color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
-  'Asignado':       { label: 'En bodega',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
-  'Entregado':      { label: 'Entregado',    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
-  'Con incidencia': { label: 'Incidencia',   color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+const statusLabel: Record<string, string> = {
+  'Sin asignar': 'Pendiente',
+  Asignado: 'En bodega',
+  Entregado: 'Entregado',
+  'Con incidencia': 'Incidencia',
 }
 
 export default function PortalPaquetesPage() {
@@ -33,7 +43,7 @@ export default function PortalPaquetesPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('Todos')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('Todos')
   const [search, setSearch] = useState('')
 
   const loadPackages = async (clientId: string, reset: boolean) => {
@@ -75,42 +85,26 @@ export default function PortalPaquetesPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Mis Paquetes</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Historial de paquetes recibidos en bodega Miami</p>
-      </div>
+      <PortalPageHeader
+        title="Mis Paquetes"
+        subtitle="Historial de paquetes recibidos en bodega Miami"
+      />
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por tracking o WH#..."
-          className="h-10 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-blue-400"
-        />
-      </div>
+      <PortalSearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Buscar por tracking o WH#..."
+      />
 
-      {/* Status filters */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {STATUS_FILTERS.map(s => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setStatusFilter(s)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
-              statusFilter === s
-                ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-            }`}
-          >
-            {s === 'Asignado' ? 'En bodega' : s}
-          </button>
-        ))}
-      </div>
+      <PortalFilterPills
+        options={STATUS_FILTERS}
+        value={statusFilter}
+        onChange={setStatusFilter}
+        labelFor={(status) => status === 'Asignado' ? 'En bodega' : status}
+      />
 
       {/* List */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+      <PortalCard>
         {loading ? (
           <div className="space-y-3 p-4">
             {[...Array(5)].map((_, i) => (
@@ -118,19 +112,14 @@ export default function PortalPaquetesPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Package className="mb-2 h-8 w-8 text-slate-300 dark:text-slate-600" />
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-              {packages.length === 0 ? 'No tienes paquetes aún' : 'Sin resultados para ese filtro'}
-            </p>
-            {packages.length === 0 && (
-              <p className="mt-1 text-xs text-slate-400">Tus paquetes aparecerán aquí cuando lleguen a bodega</p>
-            )}
-          </div>
+          <PortalEmptyState
+            icon={<Package className="h-8 w-8" />}
+            title={packages.length === 0 ? 'No tienes paquetes aún' : 'Sin resultados para ese filtro'}
+            description={packages.length === 0 ? 'Tus paquetes aparecerán aquí cuando lleguen a bodega.' : undefined}
+          />
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {filtered.map(p => {
-              const cfg = statusConfig[p.status] ?? { label: p.status, color: 'bg-slate-100 text-slate-600' }
               return (
                 <button
                   key={p.id}
@@ -153,7 +142,7 @@ export default function PortalPaquetesPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.color}`}>{cfg.label}</span>
+                    <PortalStatusBadge status={p.status} label={statusLabel[p.status] ?? p.status} />
                     <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600" />
                   </div>
                 </button>
@@ -164,14 +153,14 @@ export default function PortalPaquetesPage() {
 
         {!loading && filtered.length > 0 && hasMore && !search.trim() && statusFilter === 'Todos' && (
           <div className="border-t border-slate-100 p-4 dark:border-slate-800">
-            <button
-              type="button"
+            <PortalButton
+              variant="secondary"
               onClick={() => profile?.cliente_id && loadPackages(profile.cliente_id, false)}
               disabled={loadingMore}
-              className="w-full rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="w-full"
             >
               {loadingMore ? 'Cargando...' : 'Cargar más paquetes'}
-            </button>
+            </PortalButton>
           </div>
         )}
 
@@ -180,7 +169,7 @@ export default function PortalPaquetesPage() {
             <p className="text-xs text-slate-400">{filtered.length} paquetes cargados</p>
           </div>
         )}
-      </div>
+      </PortalCard>
     </div>
   )
 }
