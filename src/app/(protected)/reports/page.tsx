@@ -40,6 +40,7 @@ type QuotationRow = {
   status: string | null
   quote_type: string | null
   tipo_transporte: string | null
+  total_cost: number | string | null
   total_sale: number | string | null
   profit_amount: number | string | null
   gp_percentage: number | string | null
@@ -152,6 +153,7 @@ type ReportRow = ReportPdfRow & {
   __status?: string
   __currency?: string
   __amount?: number
+  __cost?: number
   __gp?: number
 }
 
@@ -351,6 +353,7 @@ export default function ReportsPage() {
             status,
             quote_type,
             tipo_transporte,
+            total_cost,
             total_sale,
             profit_amount,
             gp_percentage,
@@ -487,6 +490,7 @@ export default function ReportsPage() {
         const client = clientName(q.clientes)
         const seller = sellerName(q.created_by_profile)
         const service = serviceLabel(q.quote_type, q.tipo_transporte)
+        const cost = Number(q.total_cost || 0)
         const sale = Number(q.total_sale || 0)
         const profit = Number(q.profit_amount || 0)
         const gp = sale > 0 ? (profit / sale) * 100 : Number(q.gp_percentage || 0)
@@ -499,6 +503,7 @@ export default function ReportsPage() {
           __status: q.status || '',
           __currency: 'USD',
           __amount: sale,
+          __cost: cost,
           __gp: profit,
           numero: quoteNumber(q),
           fecha: fmtDate(q.created_at),
@@ -506,6 +511,7 @@ export default function ReportsPage() {
           vendedor: seller,
           servicio: service,
           estado: q.status || '-',
+          costo: fmtMoney(cost),
           venta: fmtMoney(sale),
           gp: fmtMoney(profit),
           margen: `${gp.toFixed(1)}%`,
@@ -731,12 +737,13 @@ export default function ReportsPage() {
         { key: 'numero', label: 'Cotizacion', width: '11%' },
         { key: 'fecha', label: 'Fecha', width: '9%' },
         { key: 'cliente', label: 'Cliente', width: '17%' },
-        { key: 'vendedor', label: 'Vendedor', width: '14%' },
-        { key: 'servicio', label: 'Servicio', width: '14%' },
-        { key: 'estado', label: 'Estado', width: '12%' },
-        { key: 'venta', label: 'Venta', width: '11%', align: 'right' },
+        { key: 'vendedor', label: 'Vendedor', width: '12%' },
+        { key: 'servicio', label: 'Servicio', width: '12%' },
+        { key: 'estado', label: 'Estado', width: '10%' },
+        { key: 'costo', label: 'Costo', width: '10%', align: 'right' },
+        { key: 'venta', label: 'Venta', width: '10%', align: 'right' },
         { key: 'gp', label: 'GP', width: '8%', align: 'right' },
-        { key: 'margen', label: 'GP%', width: '4%', align: 'right' },
+        { key: 'margen', label: 'GP%', width: '5%', align: 'right' },
       ]
     }
     if (activeReport === 'operations') {
@@ -827,18 +834,19 @@ export default function ReportsPage() {
 
   // REP-001: los totales se agrupan por moneda; nunca sumar USD y HNL juntos.
   const totalsByCurrency = useMemo(() => {
-    const acc = new Map<string, { amount: number; gp: number }>()
+    const acc = new Map<string, { amount: number; cost: number; gp: number }>()
     rows.forEach((row) => {
       const currency = row.__currency || 'USD'
-      const entry = acc.get(currency) ?? { amount: 0, gp: 0 }
+      const entry = acc.get(currency) ?? { amount: 0, cost: 0, gp: 0 }
       entry.amount += Number(row.__amount || 0)
+      entry.cost += Number(row.__cost || 0)
       entry.gp += Number(row.__gp || 0)
       acc.set(currency, entry)
     })
     return acc
   }, [rows])
 
-  const fmtTotalsByCurrency = (key: 'amount' | 'gp') => {
+  const fmtTotalsByCurrency = (key: 'amount' | 'cost' | 'gp') => {
     if (totalsByCurrency.size === 0) {
       return fmtMoney(0, currencyFilter === ALL ? 'USD' : currencyFilter)
     }
@@ -865,7 +873,7 @@ export default function ReportsPage() {
 
   // Which columns show totals per report
   const totalColumnsConfig: Record<ReportId, string[]> = {
-    commercial: ['venta', 'gp', 'margen'],
+    commercial: ['costo', 'venta', 'gp', 'margen'],
     operations: [],
     billing: ['total'],
     receivable: ['saldo'],
@@ -879,7 +887,9 @@ export default function ReportsPage() {
   const pdfTotals: Record<string, string> = {}
   if (activeTotalColumns.length > 0) {
     columns.forEach((col, idx) => {
-      if (col.key === 'gp') {
+      if (col.key === 'costo') {
+        pdfTotals[col.key] = fmtTotalsByCurrency('cost')
+      } else if (col.key === 'gp') {
         pdfTotals[col.key] = fmtTotalsByCurrency('gp')
       } else if (col.key === 'margen') {
         pdfTotals[col.key] = rows.length > 0 && singleCurrencyTotals ? `${avgMargen.toFixed(1)}% prom.` : '-'
@@ -911,6 +921,7 @@ export default function ReportsPage() {
     metrics: activeReport === 'commercial'
       ? [
           { label: 'Cotizaciones', value: String(rows.length) },
+          { label: 'Costo total', value: fmtTotalsByCurrency('cost') },
           { label: 'Venta total', value: fmtTotalsByCurrency('amount') },
           { label: 'GP total', value: fmtTotalsByCurrency('gp') },
           { label: 'Margen promedio', value: rows.length > 0 && singleCurrencyTotals ? `${avgMargen.toFixed(1)}%` : '-' },

@@ -4,6 +4,91 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-13 - REP-008 - Costo en reporte comercial exportable
+
+- Estado: Completado
+- Codigo: `src/app/(protected)/reports/page.tsx`
+- SQL: ninguno.
+- Cambios: agrega `Costo` desde `quotations.total_cost` a tabla, CSV y PDF,
+  incluyendo el total agrupado por moneda.
+- Validaciones: `npx tsc --noEmit`: OK.
+- Verificacion manual: OK con `CLI-00001 - Inversiones Dennis`; se confirmo
+  Costo en pantalla, CSV y PDF, con valores y totales correctos.
+- Riesgos pendientes: conserva fecha de creacion y filtros actuales.
+- Commit: pendiente.
+
+### 2026-07-15 - UX-014 - Desglose visible del Costo Base Sari
+
+- Estado: En validacion.
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - La seccion Construccion de Tarifa muestra dentro de Costo Base Sari el
+    desglose en tiempo real de flete, EXW, MBL/documentacion y profit del
+    agente.
+  - Para Aereo Consolidado muestra peso real, peso volumetrico con divisor
+    IATA 6000 (`largo * ancho * alto / 6000`, equivalente a
+    `CBM * 166.6667`), peso cobrable (`MAX(real, volumetrico)`) y la
+    multiplicacion por tarifa/KG.
+  - El desglose usa exactamente los mismos valores que forman
+    `agentTotalCost`, evitando costos cargados silenciosamente por el catalogo
+    del agente.
+  - La tarjeta limita su ancho en escritorio para facilitar la lectura de cada
+    concepto junto a su monto, manteniendo ancho completo en pantallas
+    pequenas.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Abrir Pricing Comparison con una cotizacion Aereo Consolidado y confirmar
+    que los componentes del desglose suman el Costo Base Sari.
+  - Revisar el comportamiento responsive de la tabla en movil.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-15 - UX-015 - Cargos opcionales del cliente desplegables
+
+- Estado: En validacion.
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - La seccion Cargos opcionales del cliente incorpora un control accesible
+    para mostrar u ocultar su contenido.
+  - En cotizaciones `other_origin_air` inicia cerrada; para los demas
+    productos permanece abierta por defecto.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Confirmar que Aereo Consolidado de otros origenes inicia cerrado y que el
+    boton Mostrar/Ocultar conserva disponibles las acciones Agregar.
+  - Revisar el encabezado y el control en pantalla movil.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-13 - ENV-001 - Ambiente tecnico Supabase staging aislado
+
+- Estado: Disponible, no conectado a la aplicacion local
+- Proyecto: `sarierp-staging` (`wlssekvxpfxhwedsjhpz`), region `us-east-1`.
+- SQL: las 38 migraciones versionadas de `supabase/migrations` fueron aplicadas
+  exitosamente al proyecto staging; Produccion no fue modificada.
+- Validaciones:
+  - `npx supabase db push --linked --dry-run`: base remota al dia.
+  - Staging quedo sincronizado y disponible para uso futuro.
+- Verificacion pendiente:
+  - Configurar la aplicacion local con URL y anon key de staging.
+  - Crear usuarios de prueba por rol y `CLI-00001 - Inversiones Dennis`.
+- Decision operativa 2026-07-13:
+  - Por solicitud del titular, `.env.local` y Supabase CLI fueron restaurados
+    a Produccion (`fwspgdzvlbtbgiupvrzo`).
+  - Las pruebas manuales continuaran exclusivamente con
+    `CLI-00001 - Inversiones Dennis`.
+- Riesgos pendientes:
+  - Antes de cada prueba se debe confirmar cliente, usuario y alcance. Los
+    movimientos financieros se revierten mediante el flujo auditado; no se
+    eliminan fisicamente para ocultar pruebas.
+- Commit: pendiente.
+
 ## Reglas del registro
 
 - No eliminar hallazgos completados; conservarlos como historial.

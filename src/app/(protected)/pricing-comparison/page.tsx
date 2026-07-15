@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
+import { ChevronDown, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 
@@ -85,6 +85,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+
+const AIR_VOLUMETRIC_DIVISOR_CM3 = 6000
+const AIR_VOLUMETRIC_KG_PER_CBM = 1_000_000 / AIR_VOLUMETRIC_DIVISOR_CM3
 
 type CargoLine = {
   id: string
@@ -245,6 +248,11 @@ function PricingComparisonContent() {
     useState<OptionalClientRateConfig>(fallbackOptionalClientRateConfig)
   const [insuranceTaxable, setInsuranceTaxable] = useState(true)
   const [agentRouteRates, setAgentRouteRates] = useState<any[]>([])
+  const [isOptionalClientRatesOpen, setIsOptionalClientRatesOpen] = useState(true)
+
+  useEffect(() => {
+    setIsOptionalClientRatesOpen(selectedQuote?.service_product !== 'other_origin_air')
+  }, [selectedQuote?.id, selectedQuote?.service_product])
 
   const fclTableStorageKey = selectedQuote?.id
     ? `pricing-comparison:fcl-table:${selectedQuote.id}`
@@ -667,7 +675,7 @@ function PricingComparisonContent() {
   const getAirConsolidatedWeights = () => {
     const realKg = totalCargoKg || Number(selectedQuote?.peso_kg || 0)
     const cbm = totalCargoCbm || Number(selectedQuote?.volumen_cbm || 0)
-    const volumetricKg = cbm * 167
+    const volumetricKg = cbm * AIR_VOLUMETRIC_KG_PER_CBM
 
     return {
       actualWeightKg: realKg,
@@ -3758,7 +3766,7 @@ const profitabilityColor =
                         </div>
                       )}
 
-                      <div className="col-span-full">
+                      <div className="col-span-full w-full max-w-4xl">
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-slate-900/60">
                           <div className="flex items-center justify-between gap-4">
                             <div>
@@ -3787,6 +3795,88 @@ const profitabilityColor =
                           </div>
 
                           <div className="my-4 border-t border-slate-100 dark:border-slate-800" />
+
+                          <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/40 dark:bg-blue-950/20">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                              Cómo se calcula
+                            </p>
+
+                            {isAirConsolidatedQuote() && (
+                              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                                <div>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Peso real
+                                  </p>
+                                  <p className="font-semibold text-slate-900 dark:text-white">
+                                    {formatCurrency(getAirConsolidatedWeights().actualWeightKg)} KG
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Peso volumétrico
+                                  </p>
+                                  <p className="font-semibold text-slate-900 dark:text-white">
+                                    {formatCurrency(totalCargoCbm)} CBM ×{' '}
+                                    {AIR_VOLUMETRIC_KG_PER_CBM.toFixed(4)} ={' '}
+                                    {formatCurrency(getAirConsolidatedWeights().volumetricWeightKg)} KG
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                    Equivale a (largo × ancho × alto en cm) ÷{' '}
+                                    {AIR_VOLUMETRIC_DIVISOR_CM3}.
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Peso cobrable
+                                  </p>
+                                  <p className="font-semibold text-blue-700 dark:text-blue-300">
+                                    MAX(real, volumétrico) ={' '}
+                                    {formatCurrency(getChargeableKg())} KG
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="mt-3 space-y-2 border-t border-blue-100 pt-3 text-sm dark:border-blue-900/40">
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-slate-600 dark:text-slate-300">
+                                  {isAirConsolidatedQuote()
+                                    ? `${formatCurrency(getChargeableKg())} KG × ${agentForm.moneda || 'USD'} ${formatCurrency(Number(agentForm.ocean_freight || 0))}/KG`
+                                    : 'Flete proveedor'}
+                                </span>
+                                <span className="font-medium tabular-nums text-slate-900 dark:text-white">
+                                  {agentForm.moneda || 'USD'} {formatCurrency(totalOceanFreight)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-slate-600 dark:text-slate-300">EXW / Recolección</span>
+                                <span className="font-medium tabular-nums text-slate-900 dark:text-white">
+                                  {agentForm.moneda || 'USD'} {formatCurrency(Number(agentForm.exw_cost || 0))}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-slate-600 dark:text-slate-300">MBL / Documentación del agente</span>
+                                <span className="font-medium tabular-nums text-slate-900 dark:text-white">
+                                  {agentForm.moneda || 'USD'} {formatCurrency(Number(agentForm.mbl_fee || 0))}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-slate-600 dark:text-slate-300">
+                                  Profit agente ({formatCurrency(Number(agentForm.profit_per_container || 0))} × {totalContainersQty})
+                                </span>
+                                <span className="font-medium tabular-nums text-slate-900 dark:text-white">
+                                  {agentForm.moneda || 'USD'}{' '}
+                                  {formatCurrency(Number(agentForm.profit_per_container || 0) * totalContainersQty)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4 border-t border-blue-200 pt-2 font-bold dark:border-blue-800/60">
+                                <span className="text-slate-900 dark:text-white">Costo Base Sari</span>
+                                <span className="tabular-nums text-blue-800 dark:text-blue-200">
+                                  {agentForm.moneda || 'USD'} {formatCurrency(agentTotalCost)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
 
                           <div>
                             <p className="mb-2.5 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -4736,16 +4826,38 @@ const profitabilityColor =
 
                     {optionalClientRates.length > 0 && (
                       <section className={cn(cardClass, 'mb-4 p-5')}>
-                        <div className="mb-4">
-                          <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                            Cargos opcionales del cliente
-                          </h3>
-                          <p className="text-sm text-slate-500 dark:text-slate-400">
-                            Agrega manualmente cargos configurados en el perfil del cliente.
-                          </p>
+                        <div className={cn('flex items-center justify-between gap-4', isOptionalClientRatesOpen && 'mb-4')}>
+                          <div>
+                            <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                              Cargos opcionales del cliente
+                            </h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">
+                              Agrega manualmente cargos configurados en el perfil del cliente.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setIsOptionalClientRatesOpen((current) => !current)}
+                            aria-expanded={isOptionalClientRatesOpen}
+                            aria-controls="optional-client-rates-content"
+                            className={cn(secondaryButtonClass, 'flex shrink-0 items-center gap-2')}
+                          >
+                            {isOptionalClientRatesOpen ? 'Ocultar' : 'Mostrar'}
+                            <ChevronDown
+                              className={cn(
+                                'h-4 w-4 transition-transform',
+                                isOptionalClientRatesOpen && 'rotate-180'
+                              )}
+                            />
+                          </button>
                         </div>
 
-                        <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                        {isOptionalClientRatesOpen && (
+                        <div
+                          id="optional-client-rates-content"
+                          className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
+                        >
                           <div className="grid grid-cols-[1fr_140px_120px] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-400">
                             <span>Cargo</span>
                             <span className="text-right">Monto</span>
@@ -4800,6 +4912,7 @@ const profitabilityColor =
                             )
                           })}
                         </div>
+                        )}
                       </section>
                     )}
 
@@ -5113,22 +5226,23 @@ const profitabilityColor =
                     <CardTitle>Resumen Comercial</CardTitle>
                   </CardHeader>
 
-                  <CardContent className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
                       <p className="text-xs text-gray-500 dark:text-slate-400">Costo Base Sari</p>
                       <p className="text-xl font-bold dark:text-white">
                         USD {formatCurrency(totalCost)}
                       </p>
-                    </div>
+                      </div>
 
-                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
                       <p className="text-xs text-gray-500 dark:text-slate-400">Venta Cliente</p>
                       <p className="text-xl font-bold dark:text-white">
                         USD {formatCurrency(totalSaleWithTax)}
                       </p>
-                    </div>
+                      </div>
 
-                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
                       <p className="text-xs text-gray-500 dark:text-slate-400">Profit</p>
                       <p
                         className={`text-xl font-bold ${
@@ -5137,9 +5251,9 @@ const profitabilityColor =
                       >
                         USD {formatCurrency(profit)}
                       </p>
-                    </div>
+                      </div>
 
-                    <div
+                      <div
                       className={`rounded-xl border p-4 ${
                         gpPercentage >= 15
                           ? 'border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-950/30'
@@ -5171,18 +5285,18 @@ const profitabilityColor =
                       >
                         {profitabilityStatus}
                       </p>
-                    </div>
+                      </div>
 
-                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
                       <p className="text-xs text-gray-500 dark:text-slate-400">Target Cliente</p>
                       <p className="text-xl font-bold dark:text-white">
                         {targetRate > 0
                           ? `USD ${formatCurrency(targetRate)}`
                           : 'N/A'}
                       </p>
-                    </div>
+                      </div>
 
-                    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
                       <p className="text-xs text-gray-500 dark:text-slate-400">Vs Target</p>
 
                       {targetRate > 0 ? (
@@ -5207,7 +5321,9 @@ const profitabilityColor =
                       ) : (
                         <p className="text-xl font-bold">N/A</p>
                       )}
+                      </div>
                     </div>
+
                   </CardContent>
                 </Card>
               </>
