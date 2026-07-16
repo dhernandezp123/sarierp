@@ -11,6 +11,7 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { createNotification } from '@/src/lib/notifications'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { canTransition } from '@/src/lib/quotation-status'
 import {
   fetchActiveServiceProducts,
@@ -95,6 +96,8 @@ export default function EditQuotationPage() {
   const [quotationNumber, setQuotationNumber] = useState<string | null>(null)
   const [sendPricingDialogOpen, setSendPricingDialogOpen] = useState(false)
   const [savingAfterEdit, setSavingAfterEdit] = useState(false)
+  const [clientes, setClientes] = useState<any[]>([])
+  const [originalClienteId, setOriginalClienteId] = useState('')
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
   const [packageTypes, setPackageTypes] = useState<any[]>([])
@@ -164,6 +167,7 @@ export default function EditQuotationPage() {
     }
 
     fetchCatalogs()
+    fetchClientes()
 
     if (params.id) {
       fetchQuotation(params.id as string)
@@ -237,6 +241,21 @@ export default function EditQuotationPage() {
     setServiceProductOptions(activeServiceProducts)
   }
 
+  const fetchClientes = async () => {
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('id, codigo_cliente, nombre, email_1, telefono, origen_frecuente')
+      .is('deleted_at', null)
+      .order('nombre', { ascending: true })
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    setClientes(data || [])
+  }
+
   const fetchQuotation = async (id: string) => {
     const { data, error } = await supabase
       .from('quotations')
@@ -294,6 +313,7 @@ export default function EditQuotationPage() {
     })
 
     setQuotationNumber(data.quotation_number || null)
+    setOriginalClienteId(data.cliente_id || '')
     setLoading(false)
   }
 
@@ -384,6 +404,21 @@ export default function EditQuotationPage() {
           ? (e.target as HTMLInputElement).checked
           : value,
     })
+  }
+
+  const handleClienteChange = (clienteId: string) => {
+    if (clienteId === formData.cliente_id) return
+
+    const selectedCliente = clientes.find((cliente) => cliente.id === clienteId)
+
+    setFormData((current) => ({
+      ...current,
+      cliente_id: clienteId,
+      contact_name: selectedCliente?.nombre || '',
+      contact_email: selectedCliente?.email_1 || '',
+      contact_phone: selectedCliente?.telefono || '',
+      origen: selectedCliente?.origen_frecuente || current.origen,
+    }))
   }
 
   const handleServiceProductChange = (
@@ -638,6 +673,11 @@ export default function EditQuotationPage() {
   const handleSave = async () => {
     if (!params.id) return
 
+    if (!formData.cliente_id) {
+      toast.error('Debes seleccionar un cliente')
+      return
+    }
+
     if (!formData.commodity.trim()) {
       toast.error('Debes ingresar Commodity/Descripción de la carga')
       return
@@ -699,6 +739,7 @@ export default function EditQuotationPage() {
 
     try {
       const quotationPayload = {
+        cliente_id: formData.cliente_id,
         service_product: formData.service_product || null,
         quote_type: formData.quote_type,
         valid_until: formData.valid_until || null,
@@ -776,6 +817,21 @@ export default function EditQuotationPage() {
       if (error) {
         toast.error(error.message)
         return
+      }
+
+      if (originalClienteId && originalClienteId !== formData.cliente_id) {
+        await createActivityLog({
+          module: 'quotations',
+          action: 'change_client',
+          entityType: 'quotation',
+          entityId: quotationId,
+          description: `Cliente de la cotización ${quotationNumber || quotationId} actualizado`,
+          metadata: {
+            previous_cliente_id: originalClienteId,
+            new_cliente_id: formData.cliente_id,
+          },
+        })
+        setOriginalClienteId(formData.cliente_id)
       }
 
       const shouldReplaceContainers =
@@ -1125,6 +1181,22 @@ export default function EditQuotationPage() {
             <h2 className="text-xl font-bold mb-4">Información General</h2>
 
             <div className="grid gap-4 md:grid-cols-3">
+              <div className={`${fieldGroupClass} md:col-span-2`}>
+                <label className={formLabelClass}>
+                  Cliente <span className="text-red-500">*</span>
+                </label>
+                <ClienteCombobox
+                  clientes={clientes}
+                  value={formData.cliente_id}
+                  onChange={handleClienteChange}
+                  placeholder="Seleccionar otro cliente"
+                  className={fieldClass}
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Al cambiarlo se actualizarán los datos de contacto desde su perfil.
+                </p>
+              </div>
+
               <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Transporte</label>
               <select

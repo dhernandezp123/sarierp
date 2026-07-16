@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronDown, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
+import { ChevronDown, CircleHelp, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 
@@ -307,6 +307,9 @@ function PricingComparisonContent() {
     valid_until: '',
     etd: '',
   })
+  const [airFreightEntryMode, setAirFreightEntryMode] = useState<
+    'per_kg' | 'all_in'
+  >('per_kg')
 
   const [pricingForm, setPricingForm] = useState({
     item_type: 'Flete',
@@ -710,7 +713,10 @@ function PricingComparisonContent() {
 
   const getTotalOceanFreight = () => {
     if (isAirConsolidatedQuote()) {
-      return Number(agentForm.ocean_freight || 0) * getChargeableKg()
+      const enteredFreight = Number(agentForm.ocean_freight || 0)
+      return airFreightEntryMode === 'all_in'
+        ? enteredFreight
+        : enteredFreight * getChargeableKg()
     }
 
     return containerRateLines.length > 0
@@ -728,6 +734,7 @@ function PricingComparisonContent() {
     if (!ensureAgentQuoteCanBeModified()) return
 
     setEditingAgentQuoteId(quote.id)
+    setAirFreightEntryMode('per_kg')
     const airRatePerKg =
       isAirConsolidatedQuote()
         ? getAgentAirRatePerKg(quote)
@@ -766,7 +773,35 @@ function PricingComparisonContent() {
       return
     }
 
-    setContainerRateLines(containerRatesData || [])
+    const savedContainerRates = containerRatesData || []
+    const normalizedContainerRates = quotationContainers.map((container) => {
+      const matchingRate =
+        savedContainerRates.find(
+          (rate) => rate.quotation_container_id === container.id
+        ) ||
+        savedContainerRates.find(
+          (rate) =>
+            normalizeText(rate.container_type_name) ===
+            normalizeText(container.container_type_name)
+        ) ||
+        (quotationContainers.length === 1 && savedContainerRates.length === 1
+          ? savedContainerRates[0]
+          : null)
+
+      return {
+        ...(matchingRate || {}),
+        quotation_container_id: container.id,
+        container_type_name: container.container_type_name,
+        quantity: container.quantity,
+        ocean_freight:
+          matchingRate?.ocean_freight ??
+          (quotationContainers.length === 1
+            ? quote.ocean_freight || quote.costo || ''
+            : ''),
+      }
+    })
+
+    setContainerRateLines(normalizedContainerRates)
   }
 
   const saveAgentQuote = async () => {
@@ -815,12 +850,19 @@ function PricingComparisonContent() {
 
     const totalContainersQty = getTotalContainersQty()
     const airWeights = getAirConsolidatedWeights()
+    const enteredAirFreight = Number(agentForm.ocean_freight || 0)
     const ratePerKg = isAirConsolidatedQuote()
-      ? Number(agentForm.ocean_freight || 0)
+      ? airFreightEntryMode === 'all_in'
+        ? airWeights.chargeableWeightKg > 0
+          ? enteredAirFreight / airWeights.chargeableWeightKg
+          : 0
+        : enteredAirFreight
       : null
     const baseFreight =
       ratePerKg !== null
-        ? ratePerKg * airWeights.chargeableWeightKg
+        ? airFreightEntryMode === 'all_in'
+          ? enteredAirFreight
+          : ratePerKg * airWeights.chargeableWeightKg
         : getTotalOceanFreight()
 
     const suggestedSale =
@@ -1015,6 +1057,7 @@ function PricingComparisonContent() {
 
     setContainerRateLines([])
     setEditingAgentQuoteId(null)
+    setAirFreightEntryMode('per_kg')
 
     await fetchAgentQuotes(selectedQuote.id)
     await fetchQuotations()
@@ -1101,7 +1144,7 @@ function PricingComparisonContent() {
       : 0
     const airFreightNotes =
       isAirConsolidatedQuote() && chargeableKg > 0
-        ? `Peso cobrable ${chargeableKg.toFixed(2)} KG × USD ${airRatePerKg.toFixed(
+        ? `Peso cobrable ${chargeableKg.toFixed(2)} KG × ${selectedAgentQuote.moneda || 'USD'} ${airRatePerKg.toFixed(
             2
           )}/KG.`
         : ''
@@ -2598,7 +2641,9 @@ const profitabilityColor =
 
   const totalOceanFreight =
     isAirConsolidatedQuote()
-      ? Number(agentForm.ocean_freight || 0) * getChargeableKg()
+      ? airFreightEntryMode === 'all_in'
+        ? Number(agentForm.ocean_freight || 0)
+        : Number(agentForm.ocean_freight || 0) * getChargeableKg()
       : containerRateLines.length > 0
       ? containerRateLines.reduce(
           (sum, line) =>
@@ -3602,9 +3647,63 @@ const profitabilityColor =
 
                           {quotationContainers.length === 0 && (
                             <div>
+                              {isAirConsolidatedQuote() && (
+                                <div className="mb-3 inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (airFreightEntryMode === 'all_in') return
+                                      const currentValue = Number(agentForm.ocean_freight || 0)
+                                      const chargeableKg = getChargeableKg()
+                                      setAgentForm((current) => ({
+                                        ...current,
+                                        ocean_freight:
+                                          currentValue > 0
+                                            ? String(currentValue * chargeableKg)
+                                            : '',
+                                      }))
+                                      setAirFreightEntryMode('all_in')
+                                    }}
+                                    className={cn(
+                                      'rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                                      airFreightEntryMode === 'all_in'
+                                        ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-700 dark:text-white'
+                                        : 'text-slate-500 dark:text-slate-400'
+                                    )}
+                                  >
+                                    Tarifa All In
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (airFreightEntryMode === 'per_kg') return
+                                      const currentValue = Number(agentForm.ocean_freight || 0)
+                                      const chargeableKg = getChargeableKg()
+                                      setAgentForm((current) => ({
+                                        ...current,
+                                        ocean_freight:
+                                          currentValue > 0 && chargeableKg > 0
+                                            ? String(currentValue / chargeableKg)
+                                            : '',
+                                      }))
+                                      setAirFreightEntryMode('per_kg')
+                                    }}
+                                    className={cn(
+                                      'rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                                      airFreightEntryMode === 'per_kg'
+                                        ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-700 dark:text-white'
+                                        : 'text-slate-500 dark:text-slate-400'
+                                    )}
+                                  >
+                                    Tarifa por KG
+                                  </button>
+                                </div>
+                              )}
                               <label className={labelClass}>
                                 {isAirConsolidatedQuote()
-                                  ? 'Tarifa por KG proveedor'
+                                  ? airFreightEntryMode === 'all_in'
+                                    ? 'Costo All In proveedor'
+                                    : 'Tarifa por KG proveedor'
                                   : 'Costo proveedor'}
                               </label>
 
@@ -3612,13 +3711,29 @@ const profitabilityColor =
                                 name="ocean_freight"
                                 placeholder={
                                   isAirConsolidatedQuote()
-                                    ? 'Ej. 3.50'
+                                    ? airFreightEntryMode === 'all_in'
+                                      ? 'Ej. 1260.00'
+                                      : 'Ej. 3.50'
                                     : getFreightDescription()
                                 }
                                 value={agentForm.ocean_freight}
                                 onChange={handleAgentChange}
                                 className={cn(fieldClass, 'mt-1 w-full')}
                               />
+                              {isAirConsolidatedQuote() &&
+                                airFreightEntryMode === 'all_in' && (
+                                  <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                    Equivale a {agentForm.moneda || 'USD'}{' '}
+                                    {formatCurrency(
+                                      getChargeableKg() > 0
+                                        ? Number(agentForm.ocean_freight || 0) /
+                                            getChargeableKg()
+                                        : 0
+                                    )}
+                                    /KG sobre {formatCurrency(getChargeableKg())} KG
+                                    facturables.
+                                  </p>
+                                )}
                             </div>
                           )}
                         </div>
@@ -3841,7 +3956,9 @@ const profitabilityColor =
                               <div className="flex items-center justify-between gap-4">
                                 <span className="text-slate-600 dark:text-slate-300">
                                   {isAirConsolidatedQuote()
-                                    ? `${formatCurrency(getChargeableKg())} KG × ${agentForm.moneda || 'USD'} ${formatCurrency(Number(agentForm.ocean_freight || 0))}/KG`
+                                    ? airFreightEntryMode === 'all_in'
+                                      ? `Tarifa All In (${agentForm.moneda || 'USD'} ${formatCurrency(getChargeableKg() > 0 ? Number(agentForm.ocean_freight || 0) / getChargeableKg() : 0)}/KG equivalente)`
+                                      : `${formatCurrency(getChargeableKg())} KG × ${agentForm.moneda || 'USD'} ${formatCurrency(Number(agentForm.ocean_freight || 0))}/KG`
                                     : 'Flete proveedor'}
                                 </span>
                                 <span className="font-medium tabular-nums text-slate-900 dark:text-white">
@@ -4184,8 +4301,10 @@ const profitabilityColor =
                                       </div>
 
                                       <div className="col-span-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100">
-                                        Cálculo: USD {formatCurrency(airRatePerKg)}/KG ×{' '}
-                                        {formatCurrency(chargeableWeightKg)} KG = USD{' '}
+                                        Cálculo: {quote.moneda || 'USD'}{' '}
+                                        {formatCurrency(airRatePerKg)}/KG ×{' '}
+                                        {formatCurrency(chargeableWeightKg)} KG ={' '}
+                                        {quote.moneda || 'USD'}{' '}
                                         {formatCurrency(baseCost)}
                                       </div>
                                     </div>
@@ -4990,6 +5109,27 @@ const profitabilityColor =
                                       }
                                       className="border rounded px-2 py-1 text-sm w-full"
                                     />
+                                  ) : isInsurancePricingItem(item) ? (
+                                    <div className="group/insurance relative inline-flex items-center gap-1.5">
+                                      <span>{item.description}</span>
+                                      <button
+                                        type="button"
+                                        aria-label="Ver calculo del seguro"
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-blue-600 transition hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:text-blue-300 dark:hover:bg-blue-950 dark:focus:bg-blue-950"
+                                      >
+                                        <CircleHelp className="h-4 w-4" />
+                                      </button>
+                                      <div
+                                        role="tooltip"
+                                        className="pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-96 max-w-[min(24rem,80vw)] whitespace-pre-line rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-5 text-slate-100 shadow-xl group-hover/insurance:block group-focus-within/insurance:block"
+                                      >
+                                        <p className="mb-1 font-semibold text-white">
+                                          Cálculo del seguro
+                                        </p>
+                                        {item.notes ||
+                                          'Esta línea no tiene el detalle histórico del cálculo.'}
+                                      </div>
+                                    </div>
                                   ) : (
                                     item.description
                                   )}

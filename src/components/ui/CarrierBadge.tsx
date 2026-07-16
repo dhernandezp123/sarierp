@@ -21,6 +21,9 @@ export function CarrierBadge({
   className,
 }: CarrierBadgeProps) {
   const carrier = getCarrier(code)
+  const shouldShowName =
+    showName &&
+    carrier?.name.trim().toLocaleUpperCase() !== carrier?.code.trim().toLocaleUpperCase()
 
   // Fallback para carriers no registrados
   if (!carrier) {
@@ -49,7 +52,7 @@ export function CarrierBadge({
       >
         {carrier.code}
       </span>
-      {showName && (
+      {shouldShowName && (
         <span className="text-sm text-slate-600 dark:text-slate-400">
           {carrier.name}
         </span>

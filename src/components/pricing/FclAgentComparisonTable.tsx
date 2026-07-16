@@ -1,9 +1,12 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
+import { Printer } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
+import { getCarrier } from '@/src/lib/constants/carriers'
 import { cn } from '@/src/lib/utils'
 
 type AgentQuote = any
@@ -107,6 +110,8 @@ export function FclAgentComparisonTable({
   onSaveTable,
   onSelectQuote,
 }: FclAgentComparisonTableProps) {
+  const printableTableRef = useRef<HTMLDivElement>(null)
+
   const getRouteValue = (quote: AgentQuote, type: 'pol' | 'pod') => {
     if (type === 'pol') {
       return (
@@ -403,9 +408,160 @@ export function FclAgentComparisonTable({
     { label: 'ETD', getValue: (quote) => formatDisplayDate(quote.etd) },
   ]
 
+  const handlePrintAgentCosts = () => {
+    if (!printableTableRef.current) return
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error('El navegador bloqueo la ventana de impresion.')
+      return
+    }
+
+    const printableTable = printableTableRef.current.cloneNode(true) as HTMLDivElement
+    const sourceInputs = printableTableRef.current.querySelectorAll('input')
+    const clonedInputs = printableTable.querySelectorAll('input')
+
+    clonedInputs.forEach((input, index) => {
+      const value = (sourceInputs[index] as HTMLInputElement | undefined)?.value || '0'
+      const amount = document.createElement('span')
+      amount.className = 'print-amount'
+      amount.textContent = `USD ${formatCurrency(toFiniteNumber(value))}`
+      input.closest('label')?.replaceWith(amount)
+    })
+
+    agentQuotes.forEach((quote, index) => {
+      const columnNumber = index + 2
+      const columnCells = printableTable.querySelectorAll(
+        `thead th:nth-child(${columnNumber}), tbody td:nth-child(${columnNumber})`
+      )
+
+      if (quote.id === adjustedBestCostQuoteId) {
+        columnCells.forEach((cell) => cell.classList.add('print-best-cost'))
+      }
+      if (quote.id === fastestQuoteId) {
+        columnCells.forEach((cell) => cell.classList.add('print-fastest'))
+      }
+      if (quote.id === selectedAgentQuoteId || quote.is_selected) {
+        columnCells.forEach((cell) => cell.classList.add('print-selected'))
+      }
+    })
+
+    printableTable.querySelectorAll('span.rounded-full').forEach((badge) => {
+      const label = badge.textContent?.trim().toLowerCase()
+      if (label === 'mejor costo') badge.classList.add('print-best-badge')
+      if (label === 'mas rapido') badge.classList.add('print-fastest-badge')
+      if (label === 'seleccionada') badge.classList.add('print-selected-badge')
+    })
+
+    printableTable.querySelectorAll('tbody > tr').forEach((row) => {
+      const rowLabel = row.querySelector('th')?.textContent?.trim().toLowerCase()
+      if (rowLabel === 'total') row.classList.add('print-total-row')
+
+      if (rowLabel === 'naviera / carrier') {
+        agentQuotes.forEach((quote, index) => {
+          const carrier = getCarrier(String(quote.carrier || ''))
+          const cell = row.querySelector(`td:nth-child(${index + 2})`)
+          if (!cell || !carrier) return
+
+          const carrierLabel = document.createElement('span')
+          carrierLabel.className = 'print-carrier-label'
+          carrierLabel.textContent = carrier.name
+          carrierLabel.style.backgroundColor = carrier.bg
+          carrierLabel.style.color = carrier.text
+          cell.replaceChildren(carrierLabel)
+        })
+      }
+    })
+
+    printableTable.querySelector('tbody > tr:last-child')?.remove()
+
+    const quotationReference = firstFilledValue(
+      selectedQuote?.quotation_number,
+      selectedQuote?.quote_number,
+      selectedQuote?.numero_cotizacion
+    )
+    const title = quotationReference
+      ? `Costos de agentes - ${quotationReference}`
+      : 'Costos de agentes'
+
+    printWindow.document.open()
+    printWindow.document.write(`<!doctype html>
+      <html lang="es">
+        <head>
+          <meta charset="utf-8" />
+          <title></title>
+          <style>
+            @page { size: A4 landscape; margin: 8mm; }
+            * { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            body {
+              width: min(1120px, calc(100vw - 32px));
+              margin: 24px auto;
+              color: #0f172a;
+              font-family: Arial, sans-serif;
+            }
+            h1 { margin: 0 0 2mm; color: #0f3d66; font-size: 14pt; }
+            .meta { margin: 0 0 4mm; color: #475569; font-size: 8pt; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 7.5pt; }
+            th, td { border: 0.25mm solid #b8c9dc; padding: 1.8mm 2mm; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+            th:first-child { width: 34mm; background: #eaf1f8 !important; color: #173b61; text-align: right; text-transform: uppercase; font-size: 6.7pt; }
+            thead th { background: #edf3f9 !important; color: #102f50; font-weight: 700; }
+            .print-best-cost { background: #e3f7ec !important; }
+            .print-fastest:not(.print-best-cost) { background: #fff3d6 !important; }
+            thead .print-selected { box-shadow: inset 0 0 0 0.6mm #60a5fa; }
+            p { margin: 0; }
+            .space-y-1\\.5 > * + *, .space-y-2 > * + * { margin-top: 1mm; }
+            .flex { display: flex; }
+            .flex-wrap { flex-wrap: wrap; }
+            .gap-1\\.5 { gap: 1mm; }
+            span.rounded-full { display: inline-block; border-radius: 999px; padding: 0.5mm 1.4mm; font-size: 6pt; font-weight: 700; }
+            .print-best-badge { border: 0.2mm solid #6ee7a8; background: #bff0d3 !important; color: #08643a; }
+            .print-fastest-badge { border: 0.2mm solid #f2c55c; background: #ffe3a3 !important; color: #8a4b08; }
+            .print-selected-badge { border: 0.2mm solid #8bbcf5; background: #cfe5ff !important; color: #174f91; }
+            .print-carrier-label { display: inline-block; border-radius: 1mm; padding: 0.6mm 1.5mm; font-weight: 700; }
+            .print-amount { display: block; font-weight: 700; }
+            .print-total-row > th,
+            .print-total-row > td {
+              border-top: 0.55mm solid #37688f;
+              border-bottom: 0.55mm solid #37688f;
+              background: #dceaf6 !important;
+              color: #092f52;
+              font-size: 8pt;
+              font-weight: 800;
+            }
+            .print-total-row p { font-weight: 800 !important; }
+            .print-total-row p + p { color: #315a7a; font-size: 6.5pt; }
+            img { max-width: 12mm; max-height: 4mm; object-fit: contain; }
+            tr { break-inside: avoid; }
+            @media print {
+              body { width: auto; margin: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1></h1>
+          <p class="meta">Comparativo interno de costos FCL</p>
+          <main></main>
+        </body>
+      </html>`)
+    printWindow.document.close()
+    printWindow.document.title = title
+    printWindow.document.querySelector('h1')!.textContent = title
+    printWindow.document.querySelector('main')!.appendChild(printableTable)
+    printWindow.focus()
+    window.setTimeout(() => printWindow.print(), 250)
+  }
+
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={handlePrintAgentCosts}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
+        >
+          <Printer className="h-4 w-4" />
+          Imprimir Costos Agentes
+        </button>
         <button
           type="button"
           onClick={onSaveTable}
@@ -415,7 +571,10 @@ export function FclAgentComparisonTable({
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+      <div
+        ref={printableTableRef}
+        className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
+      >
         <table className="min-w-max border-separate border-spacing-0 text-left text-sm">
         <thead>
           <tr>

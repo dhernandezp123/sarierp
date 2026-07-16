@@ -17,6 +17,45 @@ Git entre computadoras y ambientes.
 - Riesgos pendientes: conserva fecha de creacion y filtros actuales.
 - Commit: pendiente.
 
+### 2026-07-16 - PDF-017 - Pesos en libras y kilogramos en detalle de carga
+
+- Estado: En validacion
+- Codigo:
+  - `src/components/pdf/quotation-pdf.tsx`
+- SQL: ninguno.
+- Cambios:
+  - El detalle de carga comercial muestra peso unitario y peso total de cada
+    linea en libras y kilogramos.
+  - El resumen inferior muestra siempre `Total lbs` y `Total KG` juntos.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Generar una cotizacion con carga suelta y confirmar los valores por linea y
+    totales en el PDF principal y en el anexo de cargas extensas.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-16 - QUO-016 - Cambio de cliente al editar cotizacion
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Agrega el selector reutilizable de clientes a la edicion de cotizaciones.
+  - Guarda `cliente_id` en la cotizacion y autocompleta nombre, correo y
+    telefono de contacto al seleccionar un cliente diferente.
+  - Registra en `activity_logs` el cliente anterior y el nuevo cuando cambia.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Editar una cotizacion, cambiar el cliente, guardar y confirmar el nuevo
+    cliente, los datos de contacto y el registro `change_client`.
+- Riesgos pendientes:
+  - Las entidades operativas ya creadas conservan su cliente propio; la edicion
+    cambia la cotizacion y notifica a Operaciones si existe una SI activa.
+- Commit: pendiente.
+
 ### 2026-07-15 - UX-014 - Desglose visible del Costo Base Sari
 
 - Estado: En validacion.
@@ -44,6 +83,52 @@ Git entre computadoras y ambientes.
     que los componentes del desglose suman el Costo Base Sari.
   - Revisar el comportamiento responsive de la tabla en movil.
 - Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-16 - PRC-015 - Impresion horizontal de costos de agentes FCL
+
+- Estado: En validacion
+- Codigo:
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Agrega la accion `Imprimir Costos Agentes` al comparativo en tabla FCL.
+  - Genera una vista exclusiva de impresion en A4 horizontal, conserva los
+    indicadores de mejor costo y menor transito y convierte los campos
+    editables a importes legibles.
+  - Fuerza la impresion de fondos y colores para distinguir visualmente mejor
+    costo, menor transito y tarifa seleccionada aun sin graficos de fondo.
+  - Evita repetir el nombre cuando el codigo y el nombre comercial de la
+    naviera son iguales (por ejemplo, `MSC MSC`).
+  - Abre el documento imprimible en una pestaña nueva y la mantiene disponible
+    despues del dialogo para volver a imprimirlo o guardarlo como PDF.
+  - Limita y centra la previsualizacion en pantalla para aproximarla al ancho
+    de una hoja A4 horizontal, sin reducir el espacio disponible al imprimir.
+  - Resalta toda la fila `TOTAL` con fondo azul, bordes reforzados y tipografia
+    uniforme en negrita para todas las tarifas.
+  - Alinea a la derecha el encabezado y todas las etiquetas de la columna
+    `Concepto` para mejorar su separacion visual de los importes.
+  - Unifica el carrier impreso en una sola etiqueta con el nombre comercial y
+    su color de marca, evitando combinaciones visuales como `CMA CMA CGM` o
+    `MSK Maersk`.
+  - Muestra junto a la linea de seguro un tooltip temporal con el detalle
+    persistido de su formula al pasar el cursor o enfocar el indicador.
+  - Al editar tarifas FCL reconcilia las lineas historicas del agente con los
+    contenedores vigentes por ID o tipo, evitando que el nuevo flete se agregue
+    al anterior en lugar de reemplazarlo.
+  - En Aereo Consolidado permite alternar entre tarifa por KG y costo `All In`;
+    calcula automaticamente el equivalente por KG facturable y conserva el
+    costo total normalizado para tarjetas, margenes y seleccion de tarifa.
+  - El detalle del calculo aereo respeta la moneda de la tarifa del agente en
+    lugar de rotular siempre los importes como USD.
+  - Excluye de la impresion los controles de seleccion de tarifa.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Abrir un comparativo FCL con varias tarifas, imprimir/guardar como PDF y
+    confirmar legibilidad, orientacion horizontal e importes ajustados.
+- Riesgos pendientes:
+  - El escalado final puede variar segun el navegador y la cantidad de agentes.
 - Commit: pendiente.
 
 ### 2026-07-15 - UX-015 - Cargos opcionales del cliente desplegables

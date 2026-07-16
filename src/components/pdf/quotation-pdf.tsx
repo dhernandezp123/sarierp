@@ -633,8 +633,8 @@ function CargoDetailsTable({
           <Text style={styles.cargoQtyCell}>Cant.</Text>
           <Text style={styles.cargoTypeCell}>Tipo</Text>
           <Text style={styles.cargoDimensionsCell}>Dimensiones</Text>
-          <Text style={styles.cargoNumberCell}>Peso unit.</Text>
-          <Text style={styles.cargoNumberCell}>Total lbs</Text>
+          <Text style={styles.cargoNumberCell}>Peso unit. lbs / kg</Text>
+          <Text style={styles.cargoNumberCell}>Total lbs / kg</Text>
           <Text style={styles.cargoNumberCell}>FT3</Text>
           <Text style={styles.cargoNumberCell}>CBM</Text>
         </View>
@@ -642,6 +642,8 @@ function CargoDetailsTable({
         {cargoLines.map((line, index) => {
           const lineTotalLbs =
             Number(line.weight_lbs || 0) * Number(line.quantity || 0)
+          const unitWeightKg = Number(line.weight_lbs || 0) / 2.20462
+          const lineTotalKg = lineTotalLbs / 2.20462
 
           return (
             <View key={index} style={styles.tableRow}>
@@ -656,10 +658,11 @@ function CargoDetailsTable({
                 {line.height ?? 'N/A'} {line.dimension_unit}
               </Text>
               <Text style={styles.cargoNumberCell}>
-                {formatNumber(Number(line.weight_lbs || 0), 2)}
+                {formatNumber(Number(line.weight_lbs || 0), 2)} /{' '}
+                {formatNumber(unitWeightKg, 2)}
               </Text>
               <Text style={styles.cargoNumberCell}>
-                {formatNumber(lineTotalLbs, 2)}
+                {formatNumber(lineTotalLbs, 2)} / {formatNumber(lineTotalKg, 2)}
               </Text>
               <Text style={styles.cargoNumberCell}>
                 {formatNumber(Number(line.ft3 || 0), 2)}
@@ -672,10 +675,14 @@ function CargoDetailsTable({
         })}
 
         <View style={styles.cargoSummary}>
-          {showTotalKg && (
-            <Text>Total KG: {formatNumber(Number(totalCargoKg || 0), 2)}</Text>
-          )}
           <Text>Total lbs: {formatNumber(totalCargoLbs, 0)}</Text>
+          <Text>
+            Total KG:{' '}
+            {formatNumber(
+              Number(totalCargoKg ?? totalCargoLbs / 2.20462),
+              2
+            )}
+          </Text>
           <Text>Total FT3: {formatNumber(totalCargoFt3, 2)}</Text>
           <Text>Total CBM: {formatNumber(totalCargoCbm, 3)}</Text>
         </View>
@@ -1140,6 +1147,7 @@ export default function QuotationPDF({
             title="DETALLE DE CARGA"
             cargoLines={cargoLines}
             totalCargoLbs={totalCargoLbs}
+            totalCargoKg={totalCargoKg}
             totalCargoFt3={totalCargoFt3}
             totalCargoCbm={totalCargoCbm}
           />
