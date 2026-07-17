@@ -4,6 +4,63 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-17 - INS-019 - Calculo operativo para aseguradora
+
+- Estado: En validacion
+- Codigo:
+  - `src/components/quotations/InsuranceCalculationDialog.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/lib/insurance-calculator.ts`
+- SQL: ninguno.
+- Cambios:
+  - Habilita `Calculo para Aseguradora` en el detalle de cotizaciones que ya
+    contienen una linea de seguro, visible para Admin, Pricing, Ventas y
+    Operaciones.
+  - Presenta por separado factura/FOB y todos los servicios full cover,
+    excluyendo seguro e ISV, con los recargos de 10% aplicables.
+  - Permite corregir temporalmente los servicios declarados, calcula costo al
+    0.28% sobre FOB + costos y venta con el porcentaje del cliente sobre FOB +
+    ventas, y advierte diferencias contra la linea comercial guardada.
+  - Genera una hoja horizontal imprimible o guardable como PDF para apoyar el
+    llenado del formato de la aseguradora.
+  - Agrega un detalle desplegable de todos los servicios incluidos en la linea
+    comercial, mostrando costo y venta por item, las bases FOB + servicios y
+    sus diferencias contra el valor declarado a la aseguradora.
+  - Conserva la regla full cover comercial: costo basado en FOB + costos de
+    todos los servicios y venta basada en FOB + ventas de todos los servicios,
+    excluyendo en ambos casos el seguro y el ISV.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Abrir una cotizacion con seguro como Operaciones, validar FOB y todos los
+    servicios full cover precargados, comparar contra la cotizacion y guardar
+    PDF.
+- Riesgos pendientes:
+  - Los ajustes manuales de servicios en el modal son temporales y no modifican
+    la cotizacion; deben verificarse contra la solicitud enviada a la
+    aseguradora.
+- Commit: pendiente.
+
+### 2026-07-17 - PRC-018 - Correccion de tasa de costo del seguro
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Corrige la tasa utilizada para calcular el costo del seguro de carga de
+    `0.27%` a `0.28%`.
+  - El detalle persistido de la formula toma la misma constante del calculo
+    para evitar discrepancias futuras entre el importe y su explicacion.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Reaplicar el seguro en una cotizacion y confirmar costo, margen y tooltip.
+- Riesgos pendientes:
+  - Las lineas de seguro creadas anteriormente conservan el costo historico
+    hasta que se vuelva a ejecutar `Aplicar seguro de carga`.
+- Commit: pendiente.
+
 ### 2026-07-13 - REP-008 - Costo en reporte comercial exportable
 
 - Estado: Completado

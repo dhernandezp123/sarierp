@@ -38,6 +38,9 @@ import {
   calculateTaxAmount,
   normalizeTaxRatePercent,
 } from '@/src/lib/tax'
+import {
+  INSURANCE_COST_RATE_PERCENT,
+} from '@/src/lib/insurance-calculator'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
@@ -2947,18 +2950,18 @@ const profitabilityColor =
     )
 
     if (serviceSaleWithoutInsurance <= 0) {
-      toast.error('No se detectaron cargos base para calcular seguro full cover.')
+      toast.error('No se detectaron servicios para calcular el seguro full cover.')
       return
     }
 
     const insuranceMarkupMultiplier = 1.1
-    const costRatePercent = 0.27
     const insuredBaseSale = fob + serviceSaleWithoutInsurance
     const insuredBaseCost = fob + serviceCostWithoutInsurance
-    const insuranceSale =
-      insuredBaseSale * insuranceMarkupMultiplier * (saleRatePercent / 100)
+    const insuredValueSale = insuredBaseSale * insuranceMarkupMultiplier
+    const insuredValueCost = insuredBaseCost * insuranceMarkupMultiplier
+    const insuranceSale = insuredValueSale * (saleRatePercent / 100)
     const insuranceCost =
-      insuredBaseCost * insuranceMarkupMultiplier * (costRatePercent / 100)
+      insuredValueCost * (INSURANCE_COST_RATE_PERCENT / 100)
     const insuranceTaxAmount = calculateTaxAmount(
       insuranceTaxable,
       insuranceSale,
@@ -2966,22 +2969,16 @@ const profitabilityColor =
     )
     const insuranceTotalAmount = insuranceSale + insuranceTaxAmount
     const notes = [
-      `Base full cover venta: FOB USD ${formatCurrency(
-        fob
-      )} + Servicios USD ${formatCurrency(
-        serviceSaleWithoutInsurance
-      )} = USD ${formatCurrency(insuredBaseSale)}`,
-      `Seguro venta: USD ${formatCurrency(
-        insuredBaseSale
-      )} × 1.10 × ${saleRatePercent}% = USD ${formatCurrency(insuranceSale)}`,
-      `Base full cover costo: FOB USD ${formatCurrency(
-        fob
-      )} + Servicios costo USD ${formatCurrency(
-        serviceCostWithoutInsurance
-      )} = USD ${formatCurrency(insuredBaseCost)}`,
-      `Seguro costo: USD ${formatCurrency(
-        insuredBaseCost
-      )} × 1.10 × 0.27% = USD ${formatCurrency(insuranceCost)}`,
+      `Valor factura / FOB: USD ${formatCurrency(fob)}`,
+      `Servicios full cover sin seguro ni ISV - venta: USD ${formatCurrency(serviceSaleWithoutInsurance)} (${serviceItemsWithoutInsurance
+        .map((item) => item.description)
+        .filter(Boolean)
+        .join(' + ')})`,
+      `Servicios full cover sin seguro ni ISV - costo: USD ${formatCurrency(serviceCostWithoutInsurance)}`,
+      `Valor asegurado costo: (FOB + costos) × 1.10 = USD ${formatCurrency(insuredValueCost)}`,
+      `Valor asegurado venta: (FOB + ventas) × 1.10 = USD ${formatCurrency(insuredValueSale)}`,
+      `Seguro costo: USD ${formatCurrency(insuredValueCost)} × ${INSURANCE_COST_RATE_PERCENT}% = USD ${formatCurrency(insuranceCost)}`,
+      `Seguro venta: USD ${formatCurrency(insuredValueSale)} × ${saleRatePercent}% = USD ${formatCurrency(insuranceSale)}`,
       `ISV ${defaultTaxRate}% aplicado: ${insuranceTaxable ? 'Sí' : 'No'}`,
     ].join('\n')
     const existingInsuranceItem = pricingItems.find(isInsurancePricingItem)

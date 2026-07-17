@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Route,
   Scale,
+  ShieldCheck,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -33,6 +34,7 @@ import {
 
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
+import { InsuranceCalculationDialog } from '@/src/components/quotations/InsuranceCalculationDialog'
 import {
   DEFAULT_EMAIL_TEMPLATES,
   fetchActiveEmailTemplates,
@@ -369,6 +371,7 @@ export default function QuotationDetailPage() {
   const [generandoCxP, setGenerandoCxP] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const [repricingDialogOpen, setRepricingDialogOpen] = useState(false)
+  const [insuranceCalculationOpen, setInsuranceCalculationOpen] = useState(false)
   const [repricingReason, setRepricingReason] = useState('')
   const [reopeningRepricing, setReopeningRepricing] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -1289,6 +1292,14 @@ const pricingTotals = pricingItems.reduce(
 )
 
 const hasPricingItems = pricingItems.length > 0
+const hasCargoInsurance = pricingItems.some((item) => {
+  const itemType = String(item.item_type || '').trim().toLowerCase()
+  const description = String(item.description || '').trim().toLowerCase()
+  return itemType === 'seguro' || description.includes('seguro de carga')
+})
+const canViewInsuranceCalculation = ['Admin', 'Pricing', 'Ventas', 'Operaciones'].includes(
+  userRole || ''
+)
 
 const gpPercent =
   pricingTotals.subtotal > 0
@@ -1768,6 +1779,20 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     >
                       <FileSpreadsheet className="h-4 w-4" />
                       Imprimir Detalle de Costos
+                    </button>
+                  )}
+
+                  {hasCargoInsurance && canViewInsuranceCalculation && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenMoreMenu(false)
+                        setInsuranceCalculationOpen(true)
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      Cálculo para Aseguradora
                     </button>
                   )}
 
@@ -2561,6 +2586,15 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         </div>
       </DialogContent>
     </Dialog>
+
+    {quotation && (
+      <InsuranceCalculationDialog
+        open={insuranceCalculationOpen}
+        onOpenChange={setInsuranceCalculationOpen}
+        quotation={quotation}
+        pricingItems={pricingItems}
+      />
+    )}
   </>
 )
 }
