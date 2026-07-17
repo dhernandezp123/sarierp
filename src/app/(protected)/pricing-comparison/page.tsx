@@ -39,7 +39,7 @@ import {
   normalizeTaxRatePercent,
 } from '@/src/lib/tax'
 import {
-  INSURANCE_COST_RATE_PERCENT,
+  DEFAULT_INSURANCE_COST_RATE_PERCENT,
 } from '@/src/lib/insurance-calculator'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
@@ -230,6 +230,9 @@ function PricingComparisonContent() {
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
   const [defaultTaxRate, setDefaultTaxRate] = useState(DEFAULT_TAX_RATE_PERCENT)
+  const [insuranceCostRatePercent, setInsuranceCostRatePercent] = useState(
+    DEFAULT_INSURANCE_COST_RATE_PERCENT
+  )
   const defaultSupplierName = getCompanyTradeName(companyBranding)
 
   const [agents, setAgents] = useState<any[]>([])
@@ -333,6 +336,8 @@ function PricingComparisonContent() {
   const [confirmSelectRateOpen, setConfirmSelectRateOpen] = useState(false)
   const [selectingRate, setSelectingRate] = useState(false)
   const [deleteAgentQuoteId, setDeleteAgentQuoteId] = useState<string | null>(null)
+  const [deletePricingItemId, setDeletePricingItemId] = useState<string | null>(null)
+  const [deletingPricingItem, setDeletingPricingItem] = useState(false)
   const [pricingValidationDialogOpen, setPricingValidationDialogOpen] =
     useState(false)
   const [pricingValidationErrors, setPricingValidationErrors] =
@@ -401,7 +406,7 @@ function PricingComparisonContent() {
   const fetchCompanyBranding = async () => {
     const { data } = await supabase
       .from('company_settings')
-      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate`)
+      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent`)
       .limit(1)
       .maybeSingle()
 
@@ -415,6 +420,14 @@ function PricingComparisonContent() {
           : getCompanyTradeName(normalizedBranding),
     }))
     setDefaultTaxRate(normalizeTaxRatePercent((data as any)?.default_tax_rate))
+    const configuredInsuranceCostRate = Number(
+      (data as any)?.insurance_cost_rate_percent
+    )
+    setInsuranceCostRatePercent(
+      Number.isFinite(configuredInsuranceCostRate) && configuredInsuranceCostRate > 0
+        ? configuredInsuranceCostRate
+        : DEFAULT_INSURANCE_COST_RATE_PERCENT
+    )
   }
 
   const fetchQuotations = async () => {
@@ -1723,11 +1736,11 @@ function PricingComparisonContent() {
   }
 
   const deletePricingItem = async (itemId: string) => {
-    if (!ensureQuoteIsEditable()) return
+    if (!ensureQuoteIsEditable()) return false
 
     const reason = await requestChangeReason('Eliminar línea de cotización')
 
-    if (reason === null) return
+    if (reason === null) return false
 
     const { error } = await supabase
       .from('pricing_items')
@@ -1736,11 +1749,30 @@ function PricingComparisonContent() {
 
     if (error) {
       toast.error(error.message)
-      return
+      return false
     }
 
     if (selectedQuote) {
       await fetchPricingItems(selectedQuote.id)
+    }
+
+    toast.success('Línea de cotización eliminada')
+    return true
+  }
+
+  const confirmDeletePricingItem = async () => {
+    if (!deletePricingItemId || deletingPricingItem) return
+
+    setDeletingPricingItem(true)
+
+    try {
+      const deleted = await deletePricingItem(deletePricingItemId)
+
+      if (deleted) {
+        setDeletePricingItemId(null)
+      }
+    } finally {
+      setDeletingPricingItem(false)
     }
   }
 
@@ -2743,6 +2775,9 @@ const profitabilityColor =
   const agentQuotePendingDelete = deleteAgentQuoteId
     ? agentQuotes.find((quote) => quote.id === deleteAgentQuoteId)
     : null
+  const pricingItemPendingDelete = deletePricingItemId
+    ? pricingItems.find((item) => item.id === deletePricingItemId)
+    : null
 
   const isBestCostQuote = (quote: AgentQuote) =>
     bestCostQuote?.id === quote.id
@@ -2775,7 +2810,110 @@ const profitabilityColor =
   }
 
   const showCarrierInput = shouldShowCarrierInput(selectedQuote)
-  const isFclQuote = normalizeText(selectedQuote?.quote_type) === 'fcl'
+  const isFclQuote =
+    normalizeText(selectedQuote?.quote_type) === 'fcl' ||
+    normalizeText(selectedQuote?.service_product) === 'other_origin_fcl'
+
+  const fclContainerCommercialBreakdown = (() => {
+    if (!isFclQuote || quotationContainers.length === 0) return []
+
+    const groups = new Map<
+      string,
+      {
+        key: string
+        matchKey: string
+        containerType: string
+        quantity: number
+        directCost: number
+        directSaleWithTax: number
+        directProfit: number
+      }
+    >()
+
+    quotationContainers.forEach((container) => {
+      const containerType = String(
+        container.container_type_name || 'Contenedor'
+      ).trim()
+      const matchKey = normalizeText(containerType)
+      const key = matchKey || String(container.id)
+      const quantity = Math.max(Number(container.quantity || 0), 0)
+      const current = groups.get(key)
+
+      if (current) {
+        current.quantity += quantity
+        return
+      }
+
+      groups.set(key, {
+        key,
+        matchKey,
+        containerType,
+        quantity,
+        directCost: 0,
+        directSaleWithTax: 0,
+        directProfit: 0,
+      })
+    })
+
+    const containerGroups = Array.from(groups.values()).filter(
+      (group) => group.quantity > 0
+    )
+    const totalContainerQuantity = containerGroups.reduce(
+      (sum, group) => sum + group.quantity,
+      0
+    )
+
+    if (totalContainerQuantity <= 0) return []
+
+    let sharedCost = 0
+    let sharedSaleWithTax = 0
+    let sharedProfit = 0
+
+    pricingItems.forEach((item) => {
+      const itemQuantity = Number(item.quantity || 1)
+      const lineCost = Number(item.cost_amount || 0) * itemQuantity
+      const lineSale = Number(item.sale_amount || 0) * itemQuantity
+      const lineSaleWithTax = Number(item.total_amount || 0)
+      const lineProfit = lineSale - lineCost
+      const description = normalizeText(item.description)
+      const isFreightLine = normalizeText(item.item_type) === 'flete'
+      const matchingGroup = isFreightLine
+        ? containerGroups
+            .filter(
+              (group) =>
+                group.matchKey && description.includes(group.matchKey)
+            )
+            .sort((a, b) => b.matchKey.length - a.matchKey.length)[0]
+        : undefined
+
+      if (matchingGroup) {
+        matchingGroup.directCost += lineCost
+        matchingGroup.directSaleWithTax += lineSaleWithTax
+        matchingGroup.directProfit += lineProfit
+        return
+      }
+
+      sharedCost += lineCost
+      sharedSaleWithTax += lineSaleWithTax
+      sharedProfit += lineProfit
+    })
+
+    const sharedCostPerContainer = sharedCost / totalContainerQuantity
+    const sharedSalePerContainer = sharedSaleWithTax / totalContainerQuantity
+    const sharedProfitPerContainer = sharedProfit / totalContainerQuantity
+
+    return containerGroups.map((group) => ({
+      key: group.key,
+      containerType: group.containerType,
+      quantity: group.quantity,
+      costPerContainer:
+        group.directCost / group.quantity + sharedCostPerContainer,
+      salePerContainer:
+        group.directSaleWithTax / group.quantity + sharedSalePerContainer,
+      profitPerContainer:
+        group.directProfit / group.quantity + sharedProfitPerContainer,
+    }))
+  })()
 
   const getCarrierFilterType = () => {
     if (selectedQuote?.tipo_transporte === 'Marítima') return 'ocean'
@@ -2961,7 +3099,7 @@ const profitabilityColor =
     const insuredValueCost = insuredBaseCost * insuranceMarkupMultiplier
     const insuranceSale = insuredValueSale * (saleRatePercent / 100)
     const insuranceCost =
-      insuredValueCost * (INSURANCE_COST_RATE_PERCENT / 100)
+      insuredValueCost * (insuranceCostRatePercent / 100)
     const insuranceTaxAmount = calculateTaxAmount(
       insuranceTaxable,
       insuranceSale,
@@ -2977,7 +3115,7 @@ const profitabilityColor =
       `Servicios full cover sin seguro ni ISV - costo: USD ${formatCurrency(serviceCostWithoutInsurance)}`,
       `Valor asegurado costo: (FOB + costos) × 1.10 = USD ${formatCurrency(insuredValueCost)}`,
       `Valor asegurado venta: (FOB + ventas) × 1.10 = USD ${formatCurrency(insuredValueSale)}`,
-      `Seguro costo: USD ${formatCurrency(insuredValueCost)} × ${INSURANCE_COST_RATE_PERCENT}% = USD ${formatCurrency(insuranceCost)}`,
+      `Seguro costo: USD ${formatCurrency(insuredValueCost)} × ${insuranceCostRatePercent}% = USD ${formatCurrency(insuranceCost)}`,
       `Seguro venta: USD ${formatCurrency(insuredValueSale)} × ${saleRatePercent}% = USD ${formatCurrency(insuranceSale)}`,
       `ISV ${defaultTaxRate}% aplicado: ${insuranceTaxable ? 'Sí' : 'No'}`,
     ].join('\n')
@@ -5283,7 +5421,7 @@ const profitabilityColor =
                                       </button>
 
                                       <button
-                                        onClick={() => deletePricingItem(item.id)}
+                                        onClick={() => setDeletePricingItemId(item.id)}
                                         disabled={isPricingActionDisabled}
                                         className="text-red-600 font-medium"
                                       >
@@ -5460,6 +5598,84 @@ const profitabilityColor =
                       )}
                       </div>
                     </div>
+
+                    {fclContainerCommercialBreakdown.length > 0 && (
+                      <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/60 dark:bg-blue-950/20">
+                        <div className="mb-3">
+                          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Resumen por contenedor
+                          </h3>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Valores unitarios según los tipos y cantidades de la cotización.
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3">
+                          {fclContainerCommercialBreakdown.map((container) => (
+                            <div
+                              key={container.key}
+                              className="w-full max-w-md flex-none rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900"
+                            >
+                              <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
+                                <p className="font-semibold text-slate-900 dark:text-white">
+                                  {container.containerType}
+                                </p>
+                                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                  {container.quantity}{' '}
+                                  {container.quantity === 1
+                                    ? 'contenedor'
+                                    : 'contenedores'}
+                                </span>
+                              </div>
+
+                              <div className="grid gap-3 sm:grid-cols-3">
+                                <div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Costo Base Sari / cont.
+                                  </p>
+                                  <p className="mt-1 font-bold text-slate-900 dark:text-white">
+                                    USD {formatCurrency(container.costPerContainer)}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Venta Cliente / cont.
+                                  </p>
+                                  <p className="mt-1 font-bold text-slate-900 dark:text-white">
+                                    USD {formatCurrency(container.salePerContainer)}
+                                  </p>
+                                  <p className="mt-0.5 text-[10px] text-slate-400">
+                                    Con ISV
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    Profit / cont.
+                                  </p>
+                                  <p
+                                    className={`mt-1 font-bold ${
+                                      container.profitPerContainer >= 0
+                                        ? 'text-green-600'
+                                        : 'text-red-600'
+                                    }`}
+                                  >
+                                    USD {formatCurrency(container.profitPerContainer)}
+                                  </p>
+                                  <p className="mt-0.5 text-[10px] text-slate-400">
+                                    Sin ISV
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+                          El flete se asigna a su tipo de contenedor. Los cargos
+                          generales se distribuyen entre el total de contenedores.
+                        </p>
+                      </div>
+                    )}
 
                   </CardContent>
                 </Card>
@@ -5955,6 +6171,63 @@ const profitabilityColor =
               className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
             >
               {savingPostApproval ? 'Registrando...' : 'Guardar cambio'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deletePricingItemId)}
+        onOpenChange={(open) => {
+          if (!open && !deletingPricingItem) {
+            setDeletePricingItemId(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton={!deletingPricingItem}>
+          <DialogHeader>
+            <DialogTitle>Eliminar línea de cotización</DialogTitle>
+            <DialogDescription>
+              Esta línea se eliminará permanentemente del cálculo comercial.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/20">
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
+              Línea seleccionada
+            </p>
+            <p className="mt-1 font-semibold text-slate-950 dark:text-white">
+              {pricingItemPendingDelete?.description || 'Sin descripción'}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
+              <span>Tipo: {pricingItemPendingDelete?.item_type || 'N/A'}</span>
+              <span>
+                Total: USD{' '}
+                {formatCurrency(Number(pricingItemPendingDelete?.total_amount || 0))}
+              </span>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Esta acción no se puede deshacer.
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={deletingPricingItem}
+              onClick={() => setDeletePricingItemId(null)}
+              className={secondaryButtonClass}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={deletingPricingItem}
+              onClick={confirmDeletePricingItem}
+              className="rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deletingPricingItem ? 'Eliminando...' : 'Sí, eliminar línea'}
             </button>
           </div>
         </DialogContent>

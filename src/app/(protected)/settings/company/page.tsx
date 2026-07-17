@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Building2, Fuel, MapPin, Save } from 'lucide-react'
+import { Building2, Fuel, MapPin, Save, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
+import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
 
 type CompanySettings = {
   id: string
@@ -24,6 +25,7 @@ type CompanySettings = {
   logo_url: string | null
   default_currency: string | null
   default_tax_rate: number | null
+  insurance_cost_rate_percent: number | null
   invoice_footer_note: string | null
   lugar_emision_defecto: string | null
   exchange_rate_usd_hnl: number | null
@@ -82,6 +84,7 @@ export default function CompanySettingsPage() {
     logo_url: '',
     default_currency: 'USD',
     default_tax_rate: 15,
+    insurance_cost_rate_percent: DEFAULT_INSURANCE_COST_RATE_PERCENT,
     invoice_footer_note: '',
     lugar_emision_defecto: '',
     exchange_rate_usd_hnl: 25.30,
@@ -143,6 +146,9 @@ export default function CompanySettingsPage() {
         logo_url: data.logo_url ?? '',
         default_currency: data.default_currency ?? 'USD',
         default_tax_rate: data.default_tax_rate ?? 15,
+        insurance_cost_rate_percent:
+          (data as any).insurance_cost_rate_percent ??
+          DEFAULT_INSURANCE_COST_RATE_PERCENT,
         invoice_footer_note: data.invoice_footer_note ?? '',
         lugar_emision_defecto: data.lugar_emision_defecto ?? '',
         exchange_rate_usd_hnl: data.exchange_rate_usd_hnl ?? 25.30,
@@ -203,11 +209,21 @@ export default function CompanySettingsPage() {
       toast.error('No se puede guardar hasta cargar la configuracion del Bunker')
       return
     }
+    const insuranceCostRatePercent = Number(form.insurance_cost_rate_percent)
+    if (
+      !Number.isFinite(insuranceCostRatePercent) ||
+      insuranceCostRatePercent <= 0 ||
+      insuranceCostRatePercent > 5
+    ) {
+      toast.error('El costo del seguro debe ser mayor que 0% y no superar 5%.')
+      return
+    }
     setSaving(true)
 
     const payload = {
       ...form,
       default_tax_rate: Number(form.default_tax_rate) || 15,
+      insurance_cost_rate_percent: insuranceCostRatePercent,
       legal_name: form.legal_name || null,
       trade_name: form.trade_name || null,
       rtn: form.rtn || null,
@@ -508,6 +524,42 @@ export default function CompanySettingsPage() {
       </div>
 
       {/* Dirección de recepción en Miami */}
+      <section className={cardClass}>
+        <div className="mb-1 flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-slate-400" />
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+            Seguro de carga Full Cover
+          </h2>
+        </div>
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          Porcentaje que cobra la aseguradora sobre la base asegurada de costo.
+          Ingrese 0.28 para representar 0.28%.
+        </p>
+        <div className="max-w-xs">
+          <Field label="Costo de seguro (%)">
+            <input
+              type="number"
+              value={
+                form.insurance_cost_rate_percent ??
+                DEFAULT_INSURANCE_COST_RATE_PERCENT
+              }
+              onChange={(e) =>
+                set('insurance_cost_rate_percent', Number(e.target.value))
+              }
+              disabled={!isAdmin}
+              min="0.0001"
+              max="5"
+              step="0.0001"
+              className={`${fieldClass} disabled:opacity-60`}
+            />
+          </Field>
+        </div>
+        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+          El cambio se utiliza al calcular o actualizar líneas de seguro. Los
+          importes ya guardados no se alteran automáticamente.
+        </p>
+      </section>
+
       <section className={cardClass}>
         <div className="mb-1 flex items-center gap-2">
           <MapPin className="h-5 w-5 text-slate-400" />

@@ -51,6 +51,7 @@ import {
   calculateTaxAmount,
   normalizeTaxRatePercent,
 } from '@/src/lib/tax'
+import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
 import {
   Tabs,
   TabsContent,
@@ -356,6 +357,9 @@ export default function QuotationDetailPage() {
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
   const [defaultTaxRate, setDefaultTaxRate] = useState(DEFAULT_TAX_RATE_PERCENT)
+  const [insuranceCostRatePercent, setInsuranceCostRatePercent] = useState(
+    DEFAULT_INSURANCE_COST_RATE_PERCENT
+  )
 
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
@@ -486,7 +490,7 @@ export default function QuotationDetailPage() {
 
     const { data: companyData } = await supabase
       .from('company_settings')
-      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate`)
+      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent`)
       .limit(1)
       .maybeSingle()
 
@@ -522,6 +526,14 @@ export default function QuotationDetailPage() {
     setSelectedAgent(selectedPricing)
     setCompanyBranding(normalizeCompanyBranding(companyData))
     setDefaultTaxRate(normalizeTaxRatePercent((companyData as any)?.default_tax_rate))
+    const configuredInsuranceCostRate = Number(
+      (companyData as any)?.insurance_cost_rate_percent
+    )
+    setInsuranceCostRatePercent(
+      Number.isFinite(configuredInsuranceCostRate) && configuredInsuranceCostRate > 0
+        ? configuredInsuranceCostRate
+        : DEFAULT_INSURANCE_COST_RATE_PERCENT
+    )
     setAgentQuotes(agentData || [])
     setValidations(validationData || [])
     setLoading(false)
@@ -2593,6 +2605,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         onOpenChange={setInsuranceCalculationOpen}
         quotation={quotation}
         pricingItems={pricingItems}
+        insuranceCostRatePercent={insuranceCostRatePercent}
       />
     )}
   </>

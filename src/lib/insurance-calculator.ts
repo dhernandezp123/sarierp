@@ -1,4 +1,4 @@
-export const INSURANCE_COST_RATE_PERCENT = 0.28
+export const DEFAULT_INSURANCE_COST_RATE_PERCENT = 0.28
 export const INSURANCE_SURCHARGE_PERCENT = 10
 
 type InsuranceDeclarationInput = {
@@ -7,6 +7,7 @@ type InsuranceDeclarationInput = {
   nationalTaxes?: number
   includeAdditionalExpenses?: boolean
   includeOperationalExpenses?: boolean
+  costRatePercent?: number
   saleRatePercent: number
 }
 
@@ -19,6 +20,7 @@ export function calculateInsuranceDeclaration({
   nationalTaxes = 0,
   includeAdditionalExpenses = true,
   includeOperationalExpenses = false,
+  costRatePercent = DEFAULT_INSURANCE_COST_RATE_PERCENT,
   saleRatePercent,
 }: InsuranceDeclarationInput) {
   const invoice = finiteAmount(invoiceValue)
@@ -32,8 +34,9 @@ export function calculateInsuranceDeclaration({
     ? subtotal * (INSURANCE_SURCHARGE_PERCENT / 100)
     : 0
   const insuredValue = subtotal + additionalExpenses + operationalExpenses
+  const normalizedCostRate = finiteAmount(costRatePercent)
   const insuranceCost =
-    insuredValue * (INSURANCE_COST_RATE_PERCENT / 100)
+    insuredValue * (normalizedCostRate / 100)
   const insuranceSale =
     insuredValue * (finiteAmount(saleRatePercent) / 100)
 
@@ -45,6 +48,7 @@ export function calculateInsuranceDeclaration({
     additionalExpenses,
     operationalExpenses,
     insuredValue,
+    costRatePercent: normalizedCostRate,
     insuranceCost,
     insuranceSale,
   }

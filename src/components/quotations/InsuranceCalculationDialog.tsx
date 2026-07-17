@@ -13,7 +13,7 @@ import {
 } from '@/src/components/ui/dialog'
 import {
   calculateInsuranceDeclaration,
-  INSURANCE_COST_RATE_PERCENT,
+  DEFAULT_INSURANCE_COST_RATE_PERCENT,
   INSURANCE_SURCHARGE_PERCENT,
 } from '@/src/lib/insurance-calculator'
 
@@ -22,6 +22,7 @@ type InsuranceCalculationDialogProps = {
   onOpenChange: (open: boolean) => void
   quotation: any
   pricingItems: any[]
+  insuranceCostRatePercent?: number
 }
 
 const normalizeText = (value?: string | null) =>
@@ -51,6 +52,7 @@ export function InsuranceCalculationDialog({
   onOpenChange,
   quotation,
   pricingItems,
+  insuranceCostRatePercent = DEFAULT_INSURANCE_COST_RATE_PERCENT,
 }: InsuranceCalculationDialogProps) {
   const insuranceItem = pricingItems.find(isInsuranceItem)
   const commercialServiceItems = useMemo(
@@ -93,6 +95,7 @@ export function InsuranceCalculationDialog({
     nationalTaxes: 0,
     includeAdditionalExpenses,
     includeOperationalExpenses,
+    costRatePercent: insuranceCostRatePercent,
     saleRatePercent: clientSaleRate,
   })
   const costDeclaration = calculateInsuranceDeclaration({
@@ -101,6 +104,7 @@ export function InsuranceCalculationDialog({
     nationalTaxes: 0,
     includeAdditionalExpenses,
     includeOperationalExpenses,
+    costRatePercent: insuranceCostRatePercent,
     saleRatePercent: clientSaleRate,
   })
   const {
@@ -113,6 +117,14 @@ export function InsuranceCalculationDialog({
   const insuranceCost = costDeclaration.insuranceCost
   const storedCost = toAmount(insuranceItem?.cost_amount)
   const storedSale = toAmount(insuranceItem?.sale_amount)
+  const storedTax = toAmount(insuranceItem?.tax_amount)
+  const insuranceTaxRate = insuranceItem?.taxable
+    ? toAmount(insuranceItem?.tax_rate) ||
+      (storedSale > 0 ? (storedTax / storedSale) * 100 : 0)
+    : 0
+  const calculatedInsuranceTax =
+    insuranceSale * (insuranceTaxRate / 100)
+  const insuranceSaleWithTax = insuranceSale + calculatedInsuranceTax
   const costDifference = storedCost - insuranceCost
   const saleDifference = storedSale - insuranceSale
   const commercialCostInsuredBase = costDeclaration.insuredValue
@@ -145,26 +157,87 @@ export function InsuranceCalculationDialog({
           <style>
             @page { size: A4 landscape; margin: 12mm; }
             * { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-            body { width: min(1000px, calc(100vw - 32px)); margin: 24px auto; color: #0f172a; font-family: Arial, sans-serif; }
-            header { margin-bottom: 18px; border-bottom: 3px solid #075f9e; padding-bottom: 10px; }
+            body { width: min(1100px, calc(100vw - 32px)); margin: 24px auto; color: #0f172a; font-family: Arial, sans-serif; }
+            header { margin-bottom: 14px; border-bottom: 3px solid #075f9e; padding-bottom: 10px; }
             h1 { margin: 0; color: #075f9e; font-size: 22px; }
             .meta { margin-top: 5px; color: #475569; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            th { background: #075f9e; color: white; padding: 9px; text-align: left; }
-            td { border: 1px solid #94a3b8; padding: 8px; }
-            td:last-child { text-align: right; font-weight: 700; }
+            .intro { margin: 0 0 14px; color: #475569; font-size: 12px; }
+            .section { margin-top: 16px; break-inside: avoid; }
+            .section-title { margin: 0 0 8px; color: #075f9e; font-size: 15px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th { background: #075f9e; color: white; padding: 7px; text-align: left; }
+            td { border: 1px solid #94a3b8; padding: 6px 7px; }
+            .money { text-align: right; font-weight: 700; white-space: nowrap; }
+            .center { text-align: center; }
+            tfoot td { background: #f1f5f9; font-weight: 700; border-top: 2px solid #075f9e; }
+            .calculation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+            .calculation-card { overflow: hidden; border: 1px solid #94a3b8; border-radius: 8px; break-inside: avoid; }
+            .calculation-card h2 { margin: 0; padding: 9px 11px; background: #e6f1f8; color: #075f9e; font-size: 14px; }
+            .calculation-card table td:first-child { width: 66%; }
+            .calculation-card .base td { border-top: 2px solid #075f9e; background: #f1f5f9; font-weight: 700; }
+            .calculation-card .premium-result td { border-top: 3px solid #075f9e; background: #dbeafe; color: #075f9e; font-size: 13px; font-weight: 700; }
+            .formula-note { padding: 8px 11px; background: #f8fafc; color: #475569; font-size: 10px; }
+            .declared-adjustment { display: none; margin-top: 8px; padding: 8px; background: #fff7d6; border: 1px solid #e5b93d; font-size: 10px; }
+            .insurer-section { margin-top: 18px; break-inside: avoid; }
+            .insurer-section td:last-child { text-align: right; font-weight: 700; white-space: nowrap; }
             .total td { border-top: 3px solid #075f9e; background: #e6f1f8; font-size: 15px; }
-            .premium { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
-            .card { border: 1px solid #94a3b8; border-radius: 8px; padding: 14px; }
-            .card h2 { margin: 0 0 10px; color: #075f9e; font-size: 15px; }
-            .row { display: flex; justify-content: space-between; margin-top: 7px; }
             .notice { margin-top: 18px; padding: 10px; background: #fff7d6; border: 1px solid #e5b93d; font-size: 11px; }
             @media print { body { width: auto; margin: 0; } }
           </style>
         </head>
         <body>
-          <header><h1>Cálculo de valor asegurado</h1><div class="meta" id="meta"></div></header>
-          <table>
+          <header><h1>Detalle de cálculo del seguro de carga</h1><div class="meta" id="meta"></div></header>
+          <p class="intro">El seguro Full Cover utiliza todos los servicios de la cotización, excepto la propia línea de seguro y el ISV. El costo usa los costos internos; la venta usa los valores ofrecidos al cliente.</p>
+
+          <section class="section">
+            <h2 class="section-title">1. Servicios incluidos en la base Full Cover</h2>
+            <table>
+              <thead><tr><th>Servicio</th><th class="center">QTY</th><th class="money">Costo total</th><th class="money">Venta total</th></tr></thead>
+              <tbody id="services-body"></tbody>
+              <tfoot><tr><td colspan="2">Total servicios sin seguro ni ISV</td><td class="money" id="services-cost-total"></td><td class="money" id="services-sale-total"></td></tr></tfoot>
+            </table>
+            <div class="declared-adjustment" id="declared-adjustment"></div>
+          </section>
+
+          <div class="calculation-grid">
+            <section class="calculation-card">
+              <h2>2. Cálculo del costo del seguro</h2>
+              <table>
+                <tbody>
+                  <tr><td>Valor factura / FOB</td><td class="money" id="cost-invoice"></td></tr>
+                  <tr><td>Costos internos de servicios</td><td class="money" id="cost-services"></td></tr>
+                  <tr><td>Subtotal costo (FOB + servicios)</td><td class="money" id="cost-subtotal"></td></tr>
+                  <tr><td id="cost-additional-label"></td><td class="money" id="cost-additional"></td></tr>
+                  <tr><td id="cost-operational-label"></td><td class="money" id="cost-operational"></td></tr>
+                  <tr class="base"><td>Base asegurada de costo</td><td class="money" id="cost-insured-base"></td></tr>
+                  <tr class="premium-result"><td id="cost-premium-label"></td><td class="money" id="cost-premium"></td></tr>
+                </tbody>
+              </table>
+              <div class="formula-note" id="cost-formula-detail"></div>
+            </section>
+
+            <section class="calculation-card">
+              <h2>3. Cálculo de la venta del seguro</h2>
+              <table>
+                <tbody>
+                  <tr><td>Valor factura / FOB</td><td class="money" id="sale-invoice"></td></tr>
+                  <tr><td>Venta de servicios declarada</td><td class="money" id="sale-services"></td></tr>
+                  <tr><td>Subtotal venta (FOB + servicios)</td><td class="money" id="sale-subtotal"></td></tr>
+                  <tr><td id="sale-additional-label"></td><td class="money" id="sale-additional"></td></tr>
+                  <tr><td id="sale-operational-label"></td><td class="money" id="sale-operational"></td></tr>
+                  <tr class="base"><td>Base asegurada de venta</td><td class="money" id="sale-insured-base"></td></tr>
+                  <tr><td id="sale-premium-label"></td><td class="money" id="sale-premium"></td></tr>
+                  <tr><td id="sale-tax-label"></td><td class="money" id="sale-tax"></td></tr>
+                  <tr class="premium-result"><td>Total seguro cobrado al cliente</td><td class="money" id="sale-total-with-tax"></td></tr>
+                </tbody>
+              </table>
+              <div class="formula-note" id="sale-formula-detail"></div>
+            </section>
+          </div>
+
+          <section class="insurer-section">
+            <h2 class="section-title">4. Datos para completar el formato de la aseguradora</h2>
+            <table>
             <thead><tr><th>Concepto</th><th>Aplicación</th><th>Valor USD</th></tr></thead>
             <tbody>
               <tr><td>1. Valor factura / FOB</td><td>Obligatorio</td><td id="invoice"></td></tr>
@@ -175,11 +248,8 @@ export function InsuranceCalculationDialog({
               <tr><td>5. Gastos operacionales (10%)</td><td id="operational-status"></td><td id="operational"></td></tr>
               <tr class="total"><td>VALOR TOTAL ASEGURADO</td><td></td><td id="insured"></td></tr>
             </tbody>
-          </table>
-          <div class="premium">
-            <div class="card"><h2>Costo de seguro</h2><div class="row"><span id="cost-formula"></span><strong id="cost"></strong></div></div>
-            <div class="card"><h2>Venta de seguro</h2><div class="row"><span id="sale-formula"></span><strong id="sale"></strong></div></div>
-          </div>
+            </table>
+          </section>
           <div class="notice">Documento de apoyo para completar la solicitud de la aseguradora. Verifique que el FOB y todos los servicios full cover declarados coincidan con la cotización; no incluya seguro ni ISV.</div>
         </body>
       </html>`)
@@ -190,10 +260,132 @@ export function InsuranceCalculationDialog({
       if (element) element.textContent = value
     }
     const money = (value: number) => `USD ${formatAmount(value)}`
+    const servicesBody = printWindow.document.getElementById('services-body')
+
+    commercialServiceItems.forEach((item) => {
+      if (!servicesBody) return
+
+      const quantity = Math.max(toAmount(item.quantity), 1)
+      const row = printWindow.document.createElement('tr')
+      const values = [
+        item.description || 'Servicio',
+        String(quantity),
+        money(toAmount(item.cost_amount) * quantity),
+        money(toAmount(item.sale_amount) * quantity),
+      ]
+
+      values.forEach((value, index) => {
+        const cell = printWindow.document.createElement('td')
+        cell.textContent = value
+
+        if (index === 1) cell.className = 'center'
+        if (index >= 2) cell.className = 'money'
+
+        row.appendChild(cell)
+      })
+
+      servicesBody.appendChild(row)
+    })
+
+    if (servicesBody && commercialServiceItems.length === 0) {
+      const row = printWindow.document.createElement('tr')
+      const cell = printWindow.document.createElement('td')
+      cell.colSpan = 4
+      cell.textContent = 'No se encontraron servicios incluidos.'
+      row.appendChild(cell)
+      servicesBody.appendChild(row)
+    }
+
     setText(
       'meta',
       `${quotation?.quotation_number || 'Cotización'} · ${quotation?.clientes?.nombre || 'Cliente'}`
     )
+    setText('services-cost-total', money(commercialServiceCost))
+    setText('services-sale-total', money(commercialServiceSale))
+
+    const declaredAdjustment = printWindow.document.getElementById(
+      'declared-adjustment'
+    )
+    if (
+      declaredAdjustment &&
+      Math.abs(freight - commercialServiceSale) >= 0.01
+    ) {
+      declaredAdjustment.style.display = 'block'
+      declaredAdjustment.textContent =
+        `La venta total de servicios de la cotización es ${money(commercialServiceSale)}, ` +
+        `pero para el formato se declaró manualmente ${money(freight)}. ` +
+        `El cálculo de venta utiliza el valor declarado.`
+    }
+
+    setText('cost-invoice', money(invoice))
+    setText('cost-services', money(commercialServiceCost))
+    setText('cost-subtotal', money(costDeclaration.subtotal))
+    setText(
+      'cost-additional-label',
+      `Gastos adicionales (${INSURANCE_SURCHARGE_PERCENT}%) - ${
+        includeAdditionalExpenses ? 'Sí' : 'No'
+      }`
+    )
+    setText('cost-additional', money(costDeclaration.additionalExpenses))
+    setText(
+      'cost-operational-label',
+      `Gastos operacionales (${INSURANCE_SURCHARGE_PERCENT}%) - ${
+        includeOperationalExpenses ? 'Sí' : 'No'
+      }`
+    )
+    setText('cost-operational', money(costDeclaration.operationalExpenses))
+    setText('cost-insured-base', money(costDeclaration.insuredValue))
+    setText(
+      'cost-premium-label',
+      `Costo del seguro (${insuranceCostRatePercent}%)`
+    )
+    setText('cost-premium', money(insuranceCost))
+    setText(
+      'cost-formula-detail',
+      `Base: (${money(invoice)} + ${money(commercialServiceCost)}) + ` +
+        `${money(costDeclaration.additionalExpenses)} + ${money(costDeclaration.operationalExpenses)} ` +
+        `= ${money(costDeclaration.insuredValue)}. Prima: ${money(costDeclaration.insuredValue)} × ` +
+        `${insuranceCostRatePercent}% = ${money(insuranceCost)}.`
+    )
+
+    setText('sale-invoice', money(invoice))
+    setText('sale-services', money(freight))
+    setText('sale-subtotal', money(saleDeclaration.subtotal))
+    setText(
+      'sale-additional-label',
+      `Gastos adicionales (${INSURANCE_SURCHARGE_PERCENT}%) - ${
+        includeAdditionalExpenses ? 'Sí' : 'No'
+      }`
+    )
+    setText('sale-additional', money(saleDeclaration.additionalExpenses))
+    setText(
+      'sale-operational-label',
+      `Gastos operacionales (${INSURANCE_SURCHARGE_PERCENT}%) - ${
+        includeOperationalExpenses ? 'Sí' : 'No'
+      }`
+    )
+    setText('sale-operational', money(saleDeclaration.operationalExpenses))
+    setText('sale-insured-base', money(saleDeclaration.insuredValue))
+    setText('sale-premium-label', `Venta del seguro (${clientSaleRate}%)`)
+    setText('sale-premium', money(insuranceSale))
+    setText(
+      'sale-tax-label',
+      insuranceTaxRate > 0
+        ? `ISV sobre el seguro (${formatAmount(insuranceTaxRate)}%)`
+        : 'ISV sobre el seguro - No aplicado'
+    )
+    setText('sale-tax', money(calculatedInsuranceTax))
+    setText('sale-total-with-tax', money(insuranceSaleWithTax))
+    setText(
+      'sale-formula-detail',
+      `Base: (${money(invoice)} + ${money(freight)}) + ` +
+        `${money(saleDeclaration.additionalExpenses)} + ${money(saleDeclaration.operationalExpenses)} ` +
+        `= ${money(saleDeclaration.insuredValue)}. Prima: ${money(saleDeclaration.insuredValue)} × ` +
+        `${clientSaleRate}% = ${money(insuranceSale)}. ` +
+        `Total cliente: ${money(insuranceSale)} + ISV ${money(calculatedInsuranceTax)} ` +
+        `= ${money(insuranceSaleWithTax)}.`
+    )
+
     setText('invoice', money(invoice))
     setText('freight', money(freight))
     setText('taxes', money(0))
@@ -203,10 +395,6 @@ export function InsuranceCalculationDialog({
     setText('operational-status', includeOperationalExpenses ? 'Sí' : 'No')
     setText('operational', money(operationalExpenses))
     setText('insured', money(insuredValue))
-    setText('cost-formula', `${formatAmount(commercialCostInsuredBase)} × ${INSURANCE_COST_RATE_PERCENT}%`)
-    setText('cost', money(insuranceCost))
-    setText('sale-formula', `${formatAmount(insuredValue)} × ${clientSaleRate}%`)
-    setText('sale', money(insuranceSale))
     printWindow.focus()
     window.setTimeout(() => printWindow.print(), 250)
   }
@@ -312,7 +500,7 @@ export function InsuranceCalculationDialog({
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-            <p className="text-xs text-slate-500">Costo aseguradora ({INSURANCE_COST_RATE_PERCENT}%)</p>
+            <p className="text-xs text-slate-500">Costo aseguradora ({insuranceCostRatePercent}%)</p>
             <p className="mt-1 text-xl font-bold">USD {formatAmount(insuranceCost)}</p>
             <p className="mt-1 text-[11px] text-slate-500">
               Base: USD {formatAmount(commercialCostInsuredBase)}

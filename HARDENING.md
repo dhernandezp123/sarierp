@@ -4,6 +4,118 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-17 - INS-023 - PDF con trazabilidad completa del calculo de seguro
+
+- Estado: En validacion
+- Codigo:
+  - `src/components/quotations/InsuranceCalculationDialog.tsx`
+- SQL: ninguno.
+- Cambios:
+  - El documento imprimible agrega el detalle de todos los servicios Full Cover
+    con cantidad, costo total y venta total, excluyendo seguro e ISV.
+  - Separa el recorrido de costo y venta: FOB, servicios, subtotal, gastos
+    adicionales, gastos operacionales, base asegurada, porcentaje y prima.
+  - La venta muestra tambien el ISV configurado en la linea y el total final
+    cobrado al cliente para conciliar con `pricing_items.total_amount`.
+  - Mantiene al final los valores resumidos que Operaciones debe trasladar al
+    formato de la aseguradora.
+  - Si el valor de servicios declarado fue ajustado manualmente, el PDF muestra
+    la diferencia contra la suma comercial y aclara cual valor usa la venta.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Imprimir una cotizacion con varios servicios y confirmar que la suma del
+    detalle concilia con ambas bases aseguradas y con las primas guardadas.
+  - Probar un ajuste manual del valor declarado y confirmar la advertencia en
+    el documento.
+- Riesgos pendientes:
+  - Cotizaciones con muchas lineas pueden extender el documento a una segunda
+    pagina; las secciones de calculo se mantienen juntas al imprimir.
+- Commit: pendiente.
+
+### 2026-07-17 - PRC-022 - Confirmacion de borrado y resumen FCL compacto
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Limita el ancho de cada tarjeta del resumen por contenedor FCL para evitar
+    que una sola tarjeta se extienda por toda la pantalla.
+  - Reemplaza el borrado inmediato de lineas de cotizacion por un modal de
+    confirmacion que identifica descripcion, tipo y total de la linea.
+  - Bloquea acciones duplicadas mientras se elimina y conserva la solicitud de
+    motivo para cotizaciones que ya requieren trazabilidad post-aprobacion.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Abrir una cotizacion FCL con uno y varios tipos de contenedor y validar el
+    ancho responsivo del resumen.
+  - Presionar Eliminar, cancelar y confirmar que la linea permanece.
+  - Confirmar el borrado y validar que la tabla y el resumen se recalculan.
+  - Repetir en una cotizacion enviada al cliente y validar el modal adicional
+    de motivo de cambio.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-17 - PRC-021 - Resumen comercial FCL por contenedor
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Agrega al Resumen Comercial de cotizaciones FCL un desglose unitario por
+    cada tipo de contenedor incluido en `quotation_containers`.
+  - Muestra costo base Sari, venta al cliente con ISV y profit sin ISV por
+    contenedor, junto con la cantidad cotizada de cada tipo.
+  - Asigna las lineas de flete al tipo de contenedor indicado en su descripcion
+    y prorratea los cargos generales entre el total de unidades, conservando la
+    conciliacion con los totales generales de la cotizacion.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Probar una cotizacion FCL con un solo tipo y varias unidades.
+  - Probar una cotizacion FCL con dos tipos de contenedor y confirmar que costo,
+    venta y profit unitarios multiplicados por sus cantidades concilian con el
+    resumen general.
+- Riesgos pendientes:
+  - Las lineas generales no tienen relacion directa con un tipo de contenedor;
+    por eso se distribuyen uniformemente entre todas las unidades.
+- Commit: pendiente.
+
+### 2026-07-17 - INS-020 - Tasa de costo de seguro configurable por empresa
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/settings/company/page.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/quotations/InsuranceCalculationDialog.tsx`
+  - `src/lib/insurance-calculator.ts`
+- SQL:
+  - `supabase/migrations/20260717140000_company_insurance_cost_rate.sql`
+- Cambios:
+  - Agrega `insurance_cost_rate_percent` a `company_settings`, con valor
+    inicial `0.28` y restriccion de rango mayor que 0% y hasta 5%.
+  - Permite al Admin modificar la tasa desde Configuracion > Empresa usando
+    notacion porcentual (`0.28` representa `0.28%`).
+  - Pricing utiliza la tasa configurada al crear o actualizar la linea de
+    seguro, y el calculo operativo para la aseguradora muestra la misma tasa.
+  - Conserva `0.28%` como fallback de aplicacion si la configuracion no esta
+    disponible.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Aplicar la migracion en Supabase.
+  - Cambiar la tasa como Admin, recargar Pricing y recalcular una linea de
+    seguro; confirmar importe, formula guardada y detalle para aseguradora.
+  - Confirmar que usuarios no Admin solo ven el campo en modo lectura.
+- Riesgos pendientes:
+  - Las lineas de seguro ya guardadas mantienen su costo historico hasta que
+    se vuelvan a calcular.
+- Commit: pendiente.
+
 ### 2026-07-17 - INS-019 - Calculo operativo para aseguradora
 
 - Estado: En validacion
