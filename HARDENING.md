@@ -3147,3 +3147,21 @@ Agregar una entrada por fix:
     quedando en `Pricing Aprobado`.
 - Riesgos pendientes: ninguno.
 - Commit: pendiente.
+
+### 2026-07-18 - QUO-014 - Cierre externo del menu de acciones de cotizacion
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - El menu de los tres puntos en el detalle de cotizacion se cierra al hacer
+    clic fuera del boton o de sus opciones.
+  - Los clics dentro del menu conservan el comportamiento de cada accion.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Abrir el menu, hacer clic fuera y confirmar que se cierre.
+  - Confirmar que las opciones del menu continuen ejecutando su accion.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.

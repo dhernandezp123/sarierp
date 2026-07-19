@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -371,6 +371,7 @@ export default function QuotationDetailPage() {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
   const [openMoreMenu, setOpenMoreMenu] = useState(false)
+  const moreMenuRef = useRef<HTMLDivElement>(null)
   const [creatingRouting, setCreatingRouting] = useState(false)
   const [generandoCxP, setGenerandoCxP] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
@@ -388,6 +389,20 @@ export default function QuotationDetailPage() {
     loading: false,
   })
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        moreMenuRef.current &&
+        !moreMenuRef.current.contains(event.target as Node)
+      ) {
+        setOpenMoreMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     if (params.id) {
@@ -1741,7 +1756,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             canEditQuotation ||
             (canGenerateSI && quotation.status === 'Ganada') ||
             (canGenerateCxP && quotation.status === 'Ganada')) && (
-            <div className="relative">
+            <div ref={moreMenuRef} className="relative">
               <button
                 type="button"
                 onClick={() => setOpenMoreMenu(!openMoreMenu)}
