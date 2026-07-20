@@ -1,8 +1,18 @@
 export type InsuranceCoverageItem = {
+  id?: string | null
   item_type?: string | null
   description?: string | null
   rate_code?: string | null
+  insurance_coverage_override?: boolean | null
 }
+
+export const DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS = [
+  'Ocean Freight',
+  'Origen',
+  'origin_charge',
+  'Documentación',
+  'Aduana',
+]
 
 const normalizeCoverageText = (value?: string | null) =>
   (value || '')
@@ -22,6 +32,9 @@ export function normalizeInsuranceExclusionPatterns(value: unknown): string[] {
     )
   )
 }
+
+export const normalizeInsuranceCoveragePatterns =
+  normalizeInsuranceExclusionPatterns
 
 export function isInsurancePricingItem(item: InsuranceCoverageItem) {
   const itemType = normalizeCoverageText(item.item_type)
@@ -49,15 +62,33 @@ export function getInsuranceExclusionMatch(
   )
 }
 
+export function getInsuranceInclusionMatch(
+  item: InsuranceCoverageItem,
+  patterns: string[]
+) {
+  return getInsuranceExclusionMatch(item, patterns)
+}
+
 export function partitionInsuranceCoverage<T extends InsuranceCoverageItem>(
   items: T[],
-  exclusionPatterns: string[]
+  exclusionPatterns: string[],
+  inclusionPatterns: string[] = DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS
 ) {
   const included: T[] = []
   const excluded: Array<{ item: T; matchedPattern: string }> = []
 
   items.forEach((item) => {
     if (isInsurancePricingItem(item)) return
+
+    if (item.insurance_coverage_override === true) {
+      included.push(item)
+      return
+    }
+
+    if (item.insurance_coverage_override === false) {
+      excluded.push({ item, matchedPattern: 'Exclusión excepcional de la cotización' })
+      return
+    }
 
     const matchedPattern = getInsuranceExclusionMatch(item, exclusionPatterns)
 
@@ -66,7 +97,17 @@ export function partitionInsuranceCoverage<T extends InsuranceCoverageItem>(
       return
     }
 
-    included.push(item)
+    const inclusionMatch = getInsuranceInclusionMatch(item, inclusionPatterns)
+
+    if (inclusionMatch) {
+      included.push(item)
+      return
+    }
+
+    excluded.push({
+      item,
+      matchedPattern: 'No incluido por la política general',
+    })
   })
 
   return { included, excluded }

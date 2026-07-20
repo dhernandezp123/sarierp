@@ -8,7 +8,11 @@ import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
-import { normalizeInsuranceExclusionPatterns } from '@/src/lib/insurance-coverage'
+import {
+  DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS,
+  normalizeInsuranceCoveragePatterns,
+  normalizeInsuranceExclusionPatterns,
+} from '@/src/lib/insurance-coverage'
 
 type CompanySettings = {
   id: string
@@ -27,6 +31,7 @@ type CompanySettings = {
   default_currency: string | null
   default_tax_rate: number | null
   insurance_cost_rate_percent: number | null
+  insurance_included_service_patterns: string[]
   insurance_excluded_service_patterns: string[]
   invoice_footer_note: string | null
   lugar_emision_defecto: string | null
@@ -87,6 +92,8 @@ export default function CompanySettingsPage() {
     default_currency: 'USD',
     default_tax_rate: 15,
     insurance_cost_rate_percent: DEFAULT_INSURANCE_COST_RATE_PERCENT,
+    insurance_included_service_patterns:
+      DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS,
     insurance_excluded_service_patterns: [],
     invoice_footer_note: '',
     lugar_emision_defecto: '',
@@ -115,6 +122,7 @@ export default function CompanySettingsPage() {
   const [bunkerExists, setBunkerExists] = useState(false)
   const [bunkerDirty, setBunkerDirty] = useState(false)
   const [insuranceExclusionInput, setInsuranceExclusionInput] = useState('')
+  const [insuranceInclusionInput, setInsuranceInclusionInput] = useState('')
 
   const isAdmin = profile?.rol === 'Admin'
 
@@ -153,6 +161,11 @@ export default function CompanySettingsPage() {
         insurance_cost_rate_percent:
           (data as any).insurance_cost_rate_percent ??
           DEFAULT_INSURANCE_COST_RATE_PERCENT,
+        insurance_included_service_patterns:
+          normalizeInsuranceCoveragePatterns(
+            (data as any).insurance_included_service_patterns ??
+              DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS
+          ),
         insurance_excluded_service_patterns:
           normalizeInsuranceExclusionPatterns(
             (data as any).insurance_excluded_service_patterns
@@ -229,6 +242,35 @@ export default function CompanySettingsPage() {
     setInsuranceExclusionInput('')
   }
 
+  const addInsuranceInclusion = () => {
+    const pattern = insuranceInclusionInput.trim()
+    if (!pattern) return
+
+    const currentPatterns = normalizeInsuranceCoveragePatterns(
+      form.insurance_included_service_patterns
+    )
+    if (
+      currentPatterns.some(
+        (current) => current.toLowerCase() === pattern.toLowerCase()
+      )
+    ) {
+      toast.error('Ese servicio ya está incluido por defecto.')
+      return
+    }
+
+    set('insurance_included_service_patterns', [...currentPatterns, pattern])
+    setInsuranceInclusionInput('')
+  }
+
+  const removeInsuranceInclusion = (pattern: string) => {
+    set(
+      'insurance_included_service_patterns',
+      form.insurance_included_service_patterns.filter(
+        (current) => current !== pattern
+      )
+    )
+  }
+
   const removeInsuranceExclusion = (pattern: string) => {
     set(
       'insurance_excluded_service_patterns',
@@ -264,6 +306,10 @@ export default function CompanySettingsPage() {
       ...form,
       default_tax_rate: Number(form.default_tax_rate) || 15,
       insurance_cost_rate_percent: insuranceCostRatePercent,
+      insurance_included_service_patterns:
+        normalizeInsuranceCoveragePatterns(
+          form.insurance_included_service_patterns
+        ),
       insurance_excluded_service_patterns:
         normalizeInsuranceExclusionPatterns(
           form.insurance_excluded_service_patterns
@@ -599,6 +645,62 @@ export default function CompanySettingsPage() {
           </Field>
         </div>
         <div className="mt-5 border-t border-slate-200 pt-5 dark:border-slate-700">
+          <Field label="Servicios incluidos por defecto en la base del seguro">
+            <div className="flex max-w-xl gap-2">
+              <input
+                value={insuranceInclusionInput}
+                onChange={(event) =>
+                  setInsuranceInclusionInput(event.target.value)
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    addInsuranceInclusion()
+                  }
+                }}
+                disabled={!isAdmin}
+                placeholder="Ej. Ocean Freight"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+              <button
+                type="button"
+                onClick={addInsuranceInclusion}
+                disabled={!isAdmin || !insuranceInclusionInput.trim()}
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
+              >
+                <Plus className="h-4 w-4" />
+                Incluir
+              </button>
+            </div>
+          </Field>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {form.insurance_included_service_patterns.map((pattern) => (
+              <span
+                key={pattern}
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
+              >
+                {pattern}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => removeInsuranceInclusion(pattern)}
+                    aria-label={`Quitar ${pattern} de la regla general`}
+                    className="rounded-full p-0.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Regla general recomendada: valor FOB + Ocean Freight + gastos de
+            origen. Los demás cargos se pueden incluir excepcionalmente en cada
+            cotización.
+          </p>
+        </div>
+        <div className="mt-5 border-t border-slate-200 pt-5 dark:border-slate-700">
           <Field label="Servicios excluidos de la base del seguro">
             <div className="flex max-w-xl gap-2">
               <input
@@ -650,8 +752,8 @@ export default function CompanySettingsPage() {
               ))
             ) : (
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                No hay exclusiones: todos los servicios, salvo el propio seguro
-                y el ISV, forman parte de la base Full Cover.
+                No hay exclusiones adicionales. Los servicios que no coincidan
+                con la regla general permanecen fuera de la base.
               </p>
             )}
           </div>

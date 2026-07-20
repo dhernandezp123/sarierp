@@ -28,6 +28,7 @@ type InsuranceCalculationDialogProps = {
   pricingItems: any[]
   insuranceCostRatePercent?: number
   insuranceExclusionPatterns?: string[]
+  insuranceInclusionPatterns?: string[]
 }
 
 const toAmount = (value: string | number | null | undefined) => {
@@ -48,12 +49,17 @@ export function InsuranceCalculationDialog({
   pricingItems,
   insuranceCostRatePercent = DEFAULT_INSURANCE_COST_RATE_PERCENT,
   insuranceExclusionPatterns = [],
+  insuranceInclusionPatterns,
 }: InsuranceCalculationDialogProps) {
   const insuranceItem = pricingItems.find(isInsurancePricingItem)
   const insuranceCoverage = useMemo(
     () =>
-      partitionInsuranceCoverage(pricingItems, insuranceExclusionPatterns),
-    [pricingItems, insuranceExclusionPatterns]
+      partitionInsuranceCoverage(
+        pricingItems,
+        insuranceExclusionPatterns,
+        insuranceInclusionPatterns
+      ),
+    [pricingItems, insuranceExclusionPatterns, insuranceInclusionPatterns]
   )
   const commercialServiceItems = insuranceCoverage.included
   const excludedServiceItems = insuranceCoverage.excluded
@@ -276,7 +282,11 @@ export function InsuranceCalculationDialog({
       const quantity = Math.max(toAmount(item.quantity), 1)
       const row = printWindow.document.createElement('tr')
       const values = [
-        item.description || 'Servicio',
+        `${item.description || 'Servicio'}${
+          item.insurance_coverage_override === true
+            ? ' (Inclusión excepcional)'
+            : ''
+        }`,
         String(quantity),
         money(toAmount(item.cost_amount) * quantity),
         money(toAmount(item.sale_amount) * quantity),
@@ -499,6 +509,9 @@ export function InsuranceCalculationDialog({
                   {formatAmount(
                     toAmount(item.sale_amount) * Math.max(toAmount(item.quantity), 1)
                   )}
+                  {item.insurance_coverage_override === true
+                    ? ' — inclusión excepcional solicitada por el cliente'
+                    : ''}
                 </li>
               ))}
             </ul>
@@ -620,7 +633,14 @@ export function InsuranceCalculationDialog({
                         key={item.id || item.description}
                         className="border-t border-slate-200 dark:border-slate-700"
                       >
-                        <td className="px-3 py-2">{item.description || 'Servicio'}</td>
+                        <td className="px-3 py-2">
+                          {item.description || 'Servicio'}
+                          {item.insurance_coverage_override === true && (
+                            <span className="ml-1 text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                              (inclusión excepcional)
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-center">{quantity}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           USD {formatAmount(toAmount(item.cost_amount) * quantity)}

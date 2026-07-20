@@ -4,6 +4,47 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-20 - INS-025 - Cobertura general minima y excepciones por cotizacion
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/settings/company/page.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/quotations/InsuranceCalculationDialog.tsx`
+  - `src/lib/insurance-coverage.ts`
+- SQL:
+  - `supabase/migrations/20260720153000_insurance_default_coverage_and_quote_overrides.sql`
+- Cambios:
+  - Invierte la politica anterior de incluir todo: por defecto solo se incluyen
+    Ocean Freight y cargos clasificados como origen, ademas del FOB obligatorio.
+  - Configuracion > Empresa permite administrar los textos que identifican los
+    servicios incluidos por defecto; las exclusiones se conservan como regla
+    adicional.
+  - Antes de aplicar el seguro, Pricing muestra un modal con los servicios de
+    regla general y casillas para incluir excepcionalmente DTHC, redestino,
+    entrega local u otros cargos. Tambien permite incluir todos de una vez.
+  - La excepcion queda guardada en la propia linea de `pricing_items`, por lo que
+    el detalle operativo y el PDF reproducen la misma base utilizada al calcular.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Verificacion manual pendiente:
+  - Aplicar la migracion en Supabase.
+  - Recalcular sin excepciones y confirmar que DTHC, redestino y entrega local
+    no formen parte de las bases de costo ni venta.
+  - Recalcular marcando uno y luego todos los cargos adicionales; confirmar el
+    importe guardado, el detalle para Operaciones y el PDF.
+  - Cambiar las inclusiones generales desde Configuracion > Empresa y confirmar
+    que las nuevas cotizaciones respeten la regla.
+- Riesgos pendientes:
+  - Las lineas de seguro existentes conservan el calculo historico hasta que se
+    vuelvan a aplicar con la nueva seleccion.
+  - La actualizacion de overrides y de la linea de seguro usa operaciones
+    consecutivas; si la red falla entre ambas, el modal de detalle advertira la
+    diferencia y Pricing debera volver a aplicar el seguro.
+- Commit: pendiente.
+
 ### 2026-07-20 - INS-024 - Politica configurable de servicios asegurables
 
 - Estado: En validacion

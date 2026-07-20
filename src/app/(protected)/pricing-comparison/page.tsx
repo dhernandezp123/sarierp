@@ -42,7 +42,9 @@ import {
   DEFAULT_INSURANCE_COST_RATE_PERCENT,
 } from '@/src/lib/insurance-calculator'
 import {
+  DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS,
   isInsurancePricingItem,
+  normalizeInsuranceCoveragePatterns,
   normalizeInsuranceExclusionPatterns,
   partitionInsuranceCoverage,
 } from '@/src/lib/insurance-coverage'
@@ -247,6 +249,13 @@ function PricingComparisonContent() {
   )
   const [insuranceExclusionPatterns, setInsuranceExclusionPatterns] =
     useState<string[]>([])
+  const [insuranceInclusionPatterns, setInsuranceInclusionPatterns] =
+    useState<string[]>(DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS)
+  const [insuranceCoverageDialogOpen, setInsuranceCoverageDialogOpen] =
+    useState(false)
+  const [insuranceAdditionalItemIds, setInsuranceAdditionalItemIds] =
+    useState<string[]>([])
+  const [applyingCargoInsurance, setApplyingCargoInsurance] = useState(false)
   const defaultSupplierName = getCompanyTradeName(companyBranding)
 
   const [agents, setAgents] = useState<any[]>([])
@@ -421,7 +430,7 @@ function PricingComparisonContent() {
   const fetchCompanyBranding = async () => {
     const { data } = await supabase
       .from('company_settings')
-      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent, insurance_excluded_service_patterns`)
+      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent, insurance_included_service_patterns, insurance_excluded_service_patterns`)
       .limit(1)
       .maybeSingle()
 
@@ -446,6 +455,12 @@ function PricingComparisonContent() {
     setInsuranceExclusionPatterns(
       normalizeInsuranceExclusionPatterns(
         (data as any)?.insurance_excluded_service_patterns
+      )
+    )
+    setInsuranceInclusionPatterns(
+      normalizeInsuranceCoveragePatterns(
+        (data as any)?.insurance_included_service_patterns ??
+          DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS
       )
     )
   }
@@ -3097,6 +3112,29 @@ const profitabilityColor =
     selectedQuote && clientRequiresCargoInsurance
   )
 
+  const generalInsuranceCoverage = partitionInsuranceCoverage(
+    pricingItems.map((item) => ({
+      ...item,
+      insurance_coverage_override: null,
+    })),
+    insuranceExclusionPatterns,
+    insuranceInclusionPatterns
+  )
+  const exceptionalInsuranceCandidates = generalInsuranceCoverage.excluded
+
+  const openCargoInsuranceCoverageDialog = () => {
+    const candidateIds = new Set(
+      exceptionalInsuranceCandidates.map(({ item }) => item.id)
+    )
+    setInsuranceAdditionalItemIds(
+      pricingItems
+        .filter((item) => item.insurance_coverage_override === true)
+        .map((item) => item.id)
+        .filter((itemId) => itemId && candidateIds.has(itemId))
+    )
+    setInsuranceCoverageDialogOpen(true)
+  }
+
   const applyCargoInsurance = async () => {
     if (!selectedQuote) {
       toast.error('Selecciona una cotizacion primero')
@@ -3124,9 +3162,18 @@ const profitabilityColor =
       return
     }
 
+    setApplyingCargoInsurance(true)
+
+    const itemsWithCoverageOverrides = pricingItems.map((item) => ({
+      ...item,
+      insurance_coverage_override: insuranceAdditionalItemIds.includes(item.id)
+        ? true
+        : null,
+    }))
     const insuranceCoverage = partitionInsuranceCoverage(
-      pricingItems,
-      insuranceExclusionPatterns
+      itemsWithCoverageOverrides,
+      insuranceExclusionPatterns,
+      insuranceInclusionPatterns
     )
     const coveredServiceItems = insuranceCoverage.included
     const serviceSaleWithoutInsurance = coveredServiceItems.reduce(
@@ -3142,6 +3189,7 @@ const profitabilityColor =
 
     if (serviceSaleWithoutInsurance <= 0) {
       toast.error('No se detectaron servicios para calcular el seguro full cover.')
+      setApplyingCargoInsurance(false)
       return
     }
 
@@ -3162,7 +3210,13 @@ const profitabilityColor =
     const notes = [
       `Valor factura / FOB: USD ${formatCurrency(fob)}`,
       `Servicios incluidos en Full Cover - venta: USD ${formatCurrency(serviceSaleWithoutInsurance)} (${coveredServiceItems
-        .map((item) => item.description)
+        .map((item) =>
+          `${item.description || item.rate_code || 'Servicio'}${
+            item.insurance_coverage_override === true
+              ? ' [inclusión excepcional solicitada por cliente]'
+              : ''
+          }`
+        )
         .filter(Boolean)
         .join(' + ')})`,
       `Servicios incluidos en Full Cover - costo: USD ${formatCurrency(serviceCostWithoutInsurance)}`,
@@ -3198,6 +3252,38 @@ const profitabilityColor =
       notes,
     }
 
+    const previousOverrideIds = pricingItems
+      .filter((item) => item.insurance_coverage_override === true)
+      .map((item) => item.id)
+      .filter(Boolean)
+    const overridesToClear = previousOverrideIds.filter(
+      (itemId) => !insuranceAdditionalItemIds.includes(itemId)
+    )
+
+    if (overridesToClear.length > 0) {
+      const { error: clearError } = await supabase
+        .from('pricing_items')
+        .update({ insurance_coverage_override: null })
+        .in('id', overridesToClear)
+      if (clearError) {
+        toast.error('No se pudieron actualizar las excepciones del seguro.')
+        setApplyingCargoInsurance(false)
+        return
+      }
+    }
+
+    if (insuranceAdditionalItemIds.length > 0) {
+      const { error: overrideError } = await supabase
+        .from('pricing_items')
+        .update({ insurance_coverage_override: true })
+        .in('id', insuranceAdditionalItemIds)
+      if (overrideError) {
+        toast.error('No se pudieron guardar las inclusiones excepcionales.')
+        setApplyingCargoInsurance(false)
+        return
+      }
+    }
+
     const { error } = existingInsuranceItem
       ? await supabase
           .from('pricing_items')
@@ -3212,6 +3298,7 @@ const profitabilityColor =
 
     if (error) {
       toast.error(error.message || 'No se pudo aplicar el seguro de carga')
+      setApplyingCargoInsurance(false)
       return
     }
 
@@ -3220,7 +3307,9 @@ const profitabilityColor =
         ? 'Seguro de carga actualizado'
         : 'Seguro de carga agregado'
     )
+    setInsuranceCoverageDialogOpen(false)
     await fetchPricingItems(selectedQuote.id)
+    setApplyingCargoInsurance(false)
   }
 
   const addOptionalClientRate = async (rate: ClientRate) => {
@@ -5133,7 +5222,7 @@ const profitabilityColor =
                           type="button"
                           className={secondaryButtonClass}
                           disabled={isPricingActionDisabled}
-                          onClick={applyCargoInsurance}
+                          onClick={openCargoInsuranceCoverageDialog}
                         >
                           Aplicar seguro de carga
                         </button>
@@ -6307,6 +6396,124 @@ const profitabilityColor =
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={insuranceCoverageDialogOpen}
+        onOpenChange={(open) => {
+          if (!applyingCargoInsurance) setInsuranceCoverageDialogOpen(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl" showCloseButton={!applyingCargoInsurance}>
+          <DialogHeader>
+            <DialogTitle>Definir cobertura del seguro</DialogTitle>
+            <DialogDescription>
+              La regla general incluye FOB, Ocean Freight y gastos de origen.
+              Marca cargos adicionales solo cuando el cliente solicite incluirlos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
+              <p className="font-semibold">Incluidos por la regla general</p>
+              <ul className="mt-1 list-inside list-disc text-xs">
+                {generalInsuranceCoverage.included.map((item) => (
+                  <li key={item.id}>{item.description || item.rate_code || 'Servicio'}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Inclusiones excepcionales para esta cotización
+                </p>
+                {exceptionalInsuranceCandidates.length > 0 && (
+                  <div className="flex gap-3 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setInsuranceAdditionalItemIds(
+                          exceptionalInsuranceCandidates.map(({ item }) => item.id)
+                        )
+                      }
+                      className="text-blue-700 hover:underline dark:text-blue-300"
+                    >
+                      Incluir todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInsuranceAdditionalItemIds([])}
+                      className="text-slate-500 hover:underline"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 max-h-72 space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-2 dark:border-slate-700">
+                {exceptionalInsuranceCandidates.length > 0 ? (
+                  exceptionalInsuranceCandidates.map(({ item, matchedPattern }) => {
+                    const checked = insuranceAdditionalItemIds.includes(item.id)
+                    return (
+                      <label
+                        key={item.id}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-slate-50 dark:hover:bg-slate-900"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) =>
+                            setInsuranceAdditionalItemIds((current) =>
+                              event.target.checked
+                                ? [...current, item.id]
+                                : current.filter((id) => id !== item.id)
+                            )
+                          }
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-600"
+                        />
+                        <span className="min-w-0 text-sm">
+                          <span className="block font-medium text-slate-900 dark:text-white">
+                            {item.description || item.rate_code || 'Servicio'}
+                          </span>
+                          <span className="block text-xs text-slate-500">
+                            Fuera por defecto: {matchedPattern}. Venta USD{' '}
+                            {formatCurrency(
+                              Number(item.sale_amount || 0) * Number(item.quantity || 1)
+                            )}
+                          </span>
+                        </span>
+                      </label>
+                    )
+                  })
+                ) : (
+                  <p className="p-2 text-sm text-slate-500">
+                    No hay otros cargos disponibles.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={applyingCargoInsurance}
+              onClick={() => setInsuranceCoverageDialogOpen(false)}
+              className={secondaryButtonClass}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={applyingCargoInsurance}
+              onClick={applyCargoInsurance}
+              className={primaryButtonClass}
+            >
+              {applyingCargoInsurance ? 'Calculando...' : 'Calcular y guardar seguro'}
+            </button>
+          </div>
         </DialogContent>
       </Dialog>
 
