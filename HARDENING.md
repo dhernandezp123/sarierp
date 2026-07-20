@@ -4,6 +4,42 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-20 - INS-024 - Politica configurable de servicios asegurables
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/settings/company/page.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/quotations/InsuranceCalculationDialog.tsx`
+  - `src/lib/insurance-coverage.ts`
+- SQL:
+  - `supabase/migrations/20260720100000_company_insurance_coverage_rules.sql`
+- Cambios:
+  - Agrega a Configuracion > Empresa una lista editable de servicios excluidos
+    de la base Full Cover; todo servicio no excluido permanece incluido.
+  - La coincidencia parcial revisa `pricing_items.rate_code`, `description` e
+    `item_type` sin distinguir mayusculas ni tildes.
+  - La migracion inicializa la politica con `DTHC` excluido, sin introducir una
+    condicion especial de DTHC en el codigo del calculo.
+  - Pricing, el detalle operativo y el PDF comparten el mismo helper de
+    inclusion/exclusion y muestran las lineas descartadas junto con la regla
+    aplicada.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Aplicar la migracion en Supabase y confirmar que Configuracion > Empresa
+    muestre `DTHC` como exclusion inicial.
+  - Recalcular una cotizacion con DTHC y verificar que su costo y venta no
+    formen parte de ninguna base asegurada.
+  - Retirar DTHC de la configuracion, recalcular y confirmar que vuelva a
+    incluirse; agregar otra exclusion y repetir.
+- Riesgos pendientes:
+  - Las lineas historicas sin `rate_code` se evalúan por descripcion o tipo; una
+    descripcion demasiado generica puede coincidir con mas servicios de los
+    previstos, por lo que el modal y PDF muestran cada coincidencia.
+- Commit: pendiente.
+
 ### 2026-07-17 - INS-023 - PDF con trazabilidad completa del calculo de seguro
 
 - Estado: En validacion
@@ -3164,4 +3200,30 @@ Agregar una entrada por fix:
   - Abrir el menu, hacer clic fuera y confirmar que se cierre.
   - Confirmar que las opciones del menu continuen ejecutando su accion.
 - Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-20 - PRI-015 - Revision de cantidades FCL antes de aprobar Pricing
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - `Aprobar Pricing` abre una revision previa con todas las lineas, cantidades,
+    costos unitarios y totales antes de continuar con las validaciones existentes.
+  - En FCL se compara la cantidad de las lineas DTHC y Entrega Local presentes
+    contra el total de `quotation_containers`.
+  - La confirmacion queda bloqueada si uno de esos cargos no tiene una unidad
+    por contenedor; el usuario debe volver y corregir la cantidad.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Probar una cotizacion FCL de 2 contenedores con DTHC o Entrega Local en
+    cantidad 1 y confirmar que la aprobacion se bloquee.
+  - Corregir ambas cantidades a 2 y confirmar que continúe el flujo normal,
+    incluidas las validaciones de margen y de impacto operativo.
+  - Confirmar que una cotizacion no FCL solo muestre la revision informativa.
+- Riesgos pendientes:
+  - La deteccion depende de que la descripcion incluya DTHC, Destination THC,
+    THC Destino, Entrega Local o Local Delivery.
 - Commit: pendiente.

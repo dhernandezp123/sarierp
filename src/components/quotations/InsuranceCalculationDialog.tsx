@@ -16,6 +16,10 @@ import {
   DEFAULT_INSURANCE_COST_RATE_PERCENT,
   INSURANCE_SURCHARGE_PERCENT,
 } from '@/src/lib/insurance-calculator'
+import {
+  isInsurancePricingItem,
+  partitionInsuranceCoverage,
+} from '@/src/lib/insurance-coverage'
 
 type InsuranceCalculationDialogProps = {
   open: boolean
@@ -23,14 +27,8 @@ type InsuranceCalculationDialogProps = {
   quotation: any
   pricingItems: any[]
   insuranceCostRatePercent?: number
+  insuranceExclusionPatterns?: string[]
 }
-
-const normalizeText = (value?: string | null) =>
-  (value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
 
 const toAmount = (value: string | number | null | undefined) => {
   const amount = Number(value || 0)
@@ -43,22 +41,22 @@ const formatAmount = (value: number) =>
     maximumFractionDigits: 2,
   })
 
-const isInsuranceItem = (item: any) =>
-  normalizeText(item.item_type) === 'seguro' ||
-  normalizeText(item.description).includes('seguro de carga')
-
 export function InsuranceCalculationDialog({
   open,
   onOpenChange,
   quotation,
   pricingItems,
   insuranceCostRatePercent = DEFAULT_INSURANCE_COST_RATE_PERCENT,
+  insuranceExclusionPatterns = [],
 }: InsuranceCalculationDialogProps) {
-  const insuranceItem = pricingItems.find(isInsuranceItem)
-  const commercialServiceItems = useMemo(
-    () => pricingItems.filter((item) => !isInsuranceItem(item)),
-    [pricingItems]
+  const insuranceItem = pricingItems.find(isInsurancePricingItem)
+  const insuranceCoverage = useMemo(
+    () =>
+      partitionInsuranceCoverage(pricingItems, insuranceExclusionPatterns),
+    [pricingItems, insuranceExclusionPatterns]
   )
+  const commercialServiceItems = insuranceCoverage.included
+  const excludedServiceItems = insuranceCoverage.excluded
   const commercialServiceCost = commercialServiceItems.reduce(
     (sum, item) =>
       sum + toAmount(item.cost_amount) * Math.max(toAmount(item.quantity), 1),
@@ -178,6 +176,9 @@ export function InsuranceCalculationDialog({
             .calculation-card .premium-result td { border-top: 3px solid #075f9e; background: #dbeafe; color: #075f9e; font-size: 13px; font-weight: 700; }
             .formula-note { padding: 8px 11px; background: #f8fafc; color: #475569; font-size: 10px; }
             .declared-adjustment { display: none; margin-top: 8px; padding: 8px; background: #fff7d6; border: 1px solid #e5b93d; font-size: 10px; }
+            .excluded-services { display: none; margin-top: 12px; }
+            .excluded-services th { background: #92400e; }
+            .excluded-services tfoot td { background: #fffbeb; border-top-color: #d97706; }
             .insurer-section { margin-top: 18px; break-inside: avoid; }
             .insurer-section td:last-child { text-align: right; font-weight: 700; white-space: nowrap; }
             .total td { border-top: 3px solid #075f9e; background: #e6f1f8; font-size: 15px; }
@@ -187,16 +188,23 @@ export function InsuranceCalculationDialog({
         </head>
         <body>
           <header><h1>Detalle de cálculo del seguro de carga</h1><div class="meta" id="meta"></div></header>
-          <p class="intro">El seguro Full Cover utiliza todos los servicios de la cotización, excepto la propia línea de seguro y el ISV. El costo usa los costos internos; la venta usa los valores ofrecidos al cliente.</p>
+          <p class="intro">El seguro Full Cover utiliza los servicios permitidos por la política de la empresa. Siempre excluye la propia línea de seguro y el ISV; también excluye las líneas que coincidan con las reglas configuradas. El costo usa los costos internos y la venta usa los valores ofrecidos al cliente.</p>
 
           <section class="section">
             <h2 class="section-title">1. Servicios incluidos en la base Full Cover</h2>
             <table>
               <thead><tr><th>Servicio</th><th class="center">QTY</th><th class="money">Costo total</th><th class="money">Venta total</th></tr></thead>
               <tbody id="services-body"></tbody>
-              <tfoot><tr><td colspan="2">Total servicios sin seguro ni ISV</td><td class="money" id="services-cost-total"></td><td class="money" id="services-sale-total"></td></tr></tfoot>
+              <tfoot><tr><td colspan="2">Total servicios incluidos, sin seguro ni ISV</td><td class="money" id="services-cost-total"></td><td class="money" id="services-sale-total"></td></tr></tfoot>
             </table>
             <div class="declared-adjustment" id="declared-adjustment"></div>
+            <div class="excluded-services" id="excluded-services-section">
+              <h2 class="section-title">Servicios excluidos por política de empresa</h2>
+              <table>
+                <thead><tr><th>Servicio excluido</th><th>Regla aplicada</th><th class="money">Costo no incluido</th><th class="money">Venta no incluida</th></tr></thead>
+                <tbody id="excluded-services-body"></tbody>
+              </table>
+            </div>
           </section>
 
           <div class="calculation-grid">
@@ -250,7 +258,7 @@ export function InsuranceCalculationDialog({
             </tbody>
             </table>
           </section>
-          <div class="notice">Documento de apoyo para completar la solicitud de la aseguradora. Verifique que el FOB y todos los servicios full cover declarados coincidan con la cotización; no incluya seguro ni ISV.</div>
+          <div class="notice">Documento de apoyo para completar la solicitud de la aseguradora. Verifique el FOB, los servicios incluidos y las exclusiones aplicadas por la política de empresa. El seguro y el ISV no forman parte de la base.</div>
         </body>
       </html>`)
     printWindow.document.close()
@@ -294,6 +302,41 @@ export function InsuranceCalculationDialog({
       cell.textContent = 'No se encontraron servicios incluidos.'
       row.appendChild(cell)
       servicesBody.appendChild(row)
+    }
+
+    const excludedServicesSection = printWindow.document.getElementById(
+      'excluded-services-section'
+    )
+    const excludedServicesBody = printWindow.document.getElementById(
+      'excluded-services-body'
+    )
+
+    if (
+      excludedServicesSection &&
+      excludedServicesBody &&
+      excludedServiceItems.length > 0
+    ) {
+      excludedServicesSection.style.display = 'block'
+
+      excludedServiceItems.forEach(({ item, matchedPattern }) => {
+        const quantity = Math.max(toAmount(item.quantity), 1)
+        const row = printWindow.document.createElement('tr')
+        const values = [
+          item.description || item.rate_code || 'Servicio',
+          matchedPattern,
+          money(toAmount(item.cost_amount) * quantity),
+          money(toAmount(item.sale_amount) * quantity),
+        ]
+
+        values.forEach((value, index) => {
+          const cell = printWindow.document.createElement('td')
+          cell.textContent = value
+          if (index >= 2) cell.className = 'money'
+          row.appendChild(cell)
+        })
+
+        excludedServicesBody.appendChild(row)
+      })
     }
 
     setText(
@@ -447,7 +490,7 @@ export function InsuranceCalculationDialog({
         </div>
 
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-100">
-          <p className="font-semibold">Servicios incluidos en full cover: USD {formatAmount(commercialServiceSale)}</p>
+          <p className="font-semibold">Servicios incluidos en Full Cover: USD {formatAmount(commercialServiceSale)}</p>
           {commercialServiceItems.length > 0 ? (
             <ul className="mt-1 list-inside list-disc space-y-0.5">
               {commercialServiceItems.map((item) => (
@@ -462,8 +505,22 @@ export function InsuranceCalculationDialog({
           ) : (
             <p className="mt-1">No se encontraron servicios para la base full cover.</p>
           )}
-          <p className="mt-2">Se incluyen todos los servicios excepto el seguro y el ISV. El campo es editable para corregir el valor declarado antes de imprimir.</p>
+          <p className="mt-2">Se incluyen los servicios que no coinciden con las exclusiones configuradas por la empresa. El seguro y el ISV nunca forman parte de la base. El campo es editable para corregir el valor declarado antes de imprimir.</p>
         </div>
+
+        {excludedServiceItems.length > 0 && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+            <p className="font-semibold">Servicios excluidos por política</p>
+            <ul className="mt-1 list-inside list-disc space-y-0.5">
+              {excludedServiceItems.map(({ item, matchedPattern }) => (
+                <li key={item.id || `${item.description}-${matchedPattern}`}>
+                  {item.description || item.rate_code || 'Servicio'} — regla:{' '}
+                  {matchedPattern}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex items-center justify-between rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
@@ -538,8 +595,8 @@ export function InsuranceCalculationDialog({
 
           <div className="space-y-3 p-4">
             <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">
-              El full cover incluye todos los servicios sin seguro. Para el costo
-              toma{' '}
+              El Full Cover incluye únicamente los servicios permitidos por la
+              política de empresa. Para el costo toma{' '}
               <strong>cost_amount × cantidad</strong>; para la venta toma{' '}
               <strong>sale_amount × cantidad</strong>. El ISV no forma parte de
               ninguna base.
@@ -605,8 +662,8 @@ export function InsuranceCalculationDialog({
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-100">
               <p className="font-semibold">Valores que Operaciones debe validar antes de enviar</p>
               <p className="mt-1">
-                FOB declarado: USD {formatAmount(invoice)}. Servicios de venta sin
-                seguro ni ISV: USD {formatAmount(freight)}. Valor full cover de
+                FOB declarado: USD {formatAmount(invoice)}. Servicios incluidos de
+                venta, sin seguro ni ISV: USD {formatAmount(freight)}. Valor Full Cover de
                 venta: USD {formatAmount(commercialSaleInsuredBase)}.
               </p>
             </div>

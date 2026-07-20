@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronDown, CircleHelp, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, CircleHelp, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 
@@ -41,6 +41,11 @@ import {
 import {
   DEFAULT_INSURANCE_COST_RATE_PERCENT,
 } from '@/src/lib/insurance-calculator'
+import {
+  isInsurancePricingItem,
+  normalizeInsuranceExclusionPatterns,
+  partitionInsuranceCoverage,
+} from '@/src/lib/insurance-coverage'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
@@ -171,6 +176,13 @@ type FinancialTotalsSnapshot = {
   gp_percentage: number
 }
 
+type FclQuantityReview = {
+  itemId: string
+  description: string
+  actualQuantity: number
+  expectedQuantity: number
+}
+
 const formatDisplayDate = (date?: string | null) => {
   if (!date) return 'N/A'
 
@@ -233,6 +245,8 @@ function PricingComparisonContent() {
   const [insuranceCostRatePercent, setInsuranceCostRatePercent] = useState(
     DEFAULT_INSURANCE_COST_RATE_PERCENT
   )
+  const [insuranceExclusionPatterns, setInsuranceExclusionPatterns] =
+    useState<string[]>([])
   const defaultSupplierName = getCompanyTradeName(companyBranding)
 
   const [agents, setAgents] = useState<any[]>([])
@@ -340,6 +354,7 @@ function PricingComparisonContent() {
   const [deletingPricingItem, setDeletingPricingItem] = useState(false)
   const [pricingValidationDialogOpen, setPricingValidationDialogOpen] =
     useState(false)
+  const [costReviewDialogOpen, setCostReviewDialogOpen] = useState(false)
   const [pricingValidationErrors, setPricingValidationErrors] =
     useState<string[]>([])
   const [profitabilityDialogOpen, setProfitabilityDialogOpen] = useState(false)
@@ -406,7 +421,7 @@ function PricingComparisonContent() {
   const fetchCompanyBranding = async () => {
     const { data } = await supabase
       .from('company_settings')
-      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent`)
+      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent, insurance_excluded_service_patterns`)
       .limit(1)
       .maybeSingle()
 
@@ -427,6 +442,11 @@ function PricingComparisonContent() {
       Number.isFinite(configuredInsuranceCostRate) && configuredInsuranceCostRate > 0
         ? configuredInsuranceCostRate
         : DEFAULT_INSURANCE_COST_RATE_PERCENT
+    )
+    setInsuranceExclusionPatterns(
+      normalizeInsuranceExclusionPatterns(
+        (data as any)?.insurance_excluded_service_patterns
+      )
     )
   }
 
@@ -2451,7 +2471,7 @@ function PricingComparisonContent() {
     }
   }
 
-  const approvePricing = async () => {
+  const approvePricingAfterCostReview = async () => {
     if (!selectedQuote) return
 
     if (!ensureQuoteIsEditable()) return
@@ -2515,6 +2535,13 @@ function PricingComparisonContent() {
     }
 
     await executeApprovePricing()
+  }
+
+  const approvePricing = () => {
+    if (!selectedQuote) return
+    if (!ensureQuoteIsEditable()) return
+
+    setCostReviewDialogOpen(true)
   }
 
   const markAsSentToClient = async () => {
@@ -2814,6 +2841,40 @@ const profitabilityColor =
     normalizeText(selectedQuote?.quote_type) === 'fcl' ||
     normalizeText(selectedQuote?.service_product) === 'other_origin_fcl'
 
+  const totalFclContainers = isFclQuote
+    ? quotationContainers.reduce(
+        (sum, container) => sum + Math.max(Number(container.quantity || 0), 0),
+        0
+      )
+    : 0
+
+  const isPerContainerDestinationCharge = (description?: string | null) => {
+    const normalizedDescription = normalizeText(description)
+
+    return (
+      normalizedDescription.includes('dthc') ||
+      normalizedDescription.includes('destination thc') ||
+      normalizedDescription.includes('thc destino') ||
+      normalizedDescription.includes('entrega local') ||
+      normalizedDescription.includes('local delivery')
+    )
+  }
+
+  const fclQuantityReview: FclQuantityReview[] =
+    isFclQuote && totalFclContainers > 0
+      ? pricingItems
+          .filter((item) => isPerContainerDestinationCharge(item.description))
+          .filter(
+            (item) => Number(item.quantity || 0) !== totalFclContainers
+          )
+          .map((item) => ({
+            itemId: String(item.id),
+            description: String(item.description || 'Cargo sin descripción'),
+            actualQuantity: Number(item.quantity || 0),
+            expectedQuantity: totalFclContainers,
+          }))
+      : []
+
   const fclContainerCommercialBreakdown = (() => {
     if (!isFclQuote || quotationContainers.length === 0) return []
 
@@ -3028,16 +3089,6 @@ const profitabilityColor =
     return false
   }
 
-  const isInsurancePricingItem = (item: any) => {
-    const normalizedType = normalizeText(item.item_type)
-    const normalizedDescription = normalizeText(item.description)
-
-    return (
-      normalizedType === 'seguro' ||
-      normalizedDescription.includes('seguro de carga')
-    )
-  }
-
   const clientRequiresCargoInsurance =
     selectedQuote?.clientes?.asegura_carga === true ||
     selectedQuote?.requires_insurance === true
@@ -3073,15 +3124,17 @@ const profitabilityColor =
       return
     }
 
-    const serviceItemsWithoutInsurance = pricingItems.filter(
-      (item) => !isInsurancePricingItem(item)
+    const insuranceCoverage = partitionInsuranceCoverage(
+      pricingItems,
+      insuranceExclusionPatterns
     )
-    const serviceSaleWithoutInsurance = serviceItemsWithoutInsurance.reduce(
+    const coveredServiceItems = insuranceCoverage.included
+    const serviceSaleWithoutInsurance = coveredServiceItems.reduce(
       (sum, item) =>
         sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
       0
     )
-    const serviceCostWithoutInsurance = serviceItemsWithoutInsurance.reduce(
+    const serviceCostWithoutInsurance = coveredServiceItems.reduce(
       (sum, item) =>
         sum + Number(item.cost_amount || 0) * Number(item.quantity || 1),
       0
@@ -3108,11 +3161,20 @@ const profitabilityColor =
     const insuranceTotalAmount = insuranceSale + insuranceTaxAmount
     const notes = [
       `Valor factura / FOB: USD ${formatCurrency(fob)}`,
-      `Servicios full cover sin seguro ni ISV - venta: USD ${formatCurrency(serviceSaleWithoutInsurance)} (${serviceItemsWithoutInsurance
+      `Servicios incluidos en Full Cover - venta: USD ${formatCurrency(serviceSaleWithoutInsurance)} (${coveredServiceItems
         .map((item) => item.description)
         .filter(Boolean)
         .join(' + ')})`,
-      `Servicios full cover sin seguro ni ISV - costo: USD ${formatCurrency(serviceCostWithoutInsurance)}`,
+      `Servicios incluidos en Full Cover - costo: USD ${formatCurrency(serviceCostWithoutInsurance)}`,
+      `Servicios excluidos por política: ${
+        insuranceCoverage.excluded.length > 0
+          ? insuranceCoverage.excluded
+              .map(({ item, matchedPattern }) =>
+                `${item.description || item.rate_code || 'Servicio'} [${matchedPattern}]`
+              )
+              .join(' + ')
+          : 'Ninguno'
+      }`,
       `Valor asegurado costo: (FOB + costos) × 1.10 = USD ${formatCurrency(insuredValueCost)}`,
       `Valor asegurado venta: (FOB + ventas) × 1.10 = USD ${formatCurrency(insuredValueSale)}`,
       `Seguro costo: USD ${formatCurrency(insuredValueCost)} × ${insuranceCostRatePercent}% = USD ${formatCurrency(insuranceCost)}`,
@@ -5873,6 +5935,137 @@ const profitabilityColor =
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
             >
               {selectingRate ? 'Seleccionando...' : 'Si, seleccionar tarifa'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={costReviewDialogOpen}
+        onOpenChange={setCostReviewDialogOpen}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Revisión de costos antes de aprobar</DialogTitle>
+            <DialogDescription>
+              Confirma las cantidades y los totales que quedarán aprobados en Pricing.
+            </DialogDescription>
+          </DialogHeader>
+
+          {isFclQuote && totalFclContainers > 0 && (
+            <div
+              className={cn(
+                'rounded-xl border p-4',
+                fclQuantityReview.length > 0
+                  ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30'
+                  : 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/30'
+              )}
+            >
+              <div className="flex items-start gap-3">
+                {fclQuantityReview.length > 0 ? (
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-300" />
+                ) : (
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
+                )}
+                <div>
+                  <p className="font-semibold text-slate-950 dark:text-white">
+                    Esta cotización tiene {totalFclContainers}{' '}
+                    {totalFclContainers === 1 ? 'contenedor' : 'contenedores'}.
+                  </p>
+                  {fclQuantityReview.length > 0 ? (
+                    <ul className="mt-2 space-y-1 text-sm text-amber-900 dark:text-amber-100">
+                      {fclQuantityReview.map((review) => (
+                        <li key={review.itemId}>
+                          {review.description}: cantidad {review.actualQuantity}; debe ser{' '}
+                          {review.expectedQuantity} (una por contenedor).
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-sm text-emerald-800 dark:text-emerald-100">
+                      Las líneas DTHC y Entrega Local presentes tienen una unidad por contenedor.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="bg-slate-950 text-white dark:bg-slate-900">
+                <tr>
+                  <th className="px-3 py-2">Descripción</th>
+                  <th className="px-3 py-2">Proveedor</th>
+                  <th className="px-3 py-2 text-right">QTY</th>
+                  <th className="px-3 py-2 text-right">Costo unit.</th>
+                  <th className="px-3 py-2 text-right">Costo total</th>
+                  <th className="px-3 py-2 text-right">Venta total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pricingItems.map((item) => {
+                  const quantity = Number(item.quantity || 0)
+                  const hasQuantityIssue = fclQuantityReview.some(
+                    (review) => review.itemId === String(item.id)
+                  )
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className={cn(
+                        'border-t border-slate-200 dark:border-slate-800',
+                        hasQuantityIssue && 'bg-amber-50 dark:bg-amber-950/30'
+                      )}
+                    >
+                      <td className="px-3 py-2 font-medium">
+                        {item.description || 'Sin descripción'}
+                      </td>
+                      <td className="px-3 py-2">{item.supplier || 'N/A'}</td>
+                      <td className={cn('px-3 py-2 text-right', hasQuantityIssue && 'font-bold text-amber-800 dark:text-amber-200')}>
+                        {quantity}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {item.currency || 'USD'} {formatCurrency(Number(item.cost_amount || 0))}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold">
+                        {item.currency || 'USD'} {formatCurrency(Number(item.cost_amount || 0) * quantity)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {item.currency || 'USD'} {formatCurrency(Number(item.sale_amount || 0) * quantity)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold dark:border-slate-700 dark:bg-slate-900">
+                <tr>
+                  <td colSpan={4} className="px-3 py-2 text-right">Totales</td>
+                  <td className="px-3 py-2 text-right">USD {formatCurrency(totalCost)}</td>
+                  <td className="px-3 py-2 text-right">USD {formatCurrency(totalSale)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setCostReviewDialogOpen(false)}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-slate-700"
+            >
+              Volver a editar
+            </button>
+            <button
+              type="button"
+              disabled={fclQuantityReview.length > 0}
+              onClick={async () => {
+                setCostReviewDialogOpen(false)
+                await approvePricingAfterCostReview()
+              }}
+              className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-950"
+            >
+              Confirmar y aprobar Pricing
             </button>
           </div>
         </DialogContent>

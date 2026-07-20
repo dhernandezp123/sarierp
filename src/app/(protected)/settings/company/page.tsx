@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Building2, Fuel, MapPin, Save, ShieldCheck } from 'lucide-react'
+import { Building2, Fuel, MapPin, Plus, Save, ShieldCheck, X } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
+import { normalizeInsuranceExclusionPatterns } from '@/src/lib/insurance-coverage'
 
 type CompanySettings = {
   id: string
@@ -26,6 +27,7 @@ type CompanySettings = {
   default_currency: string | null
   default_tax_rate: number | null
   insurance_cost_rate_percent: number | null
+  insurance_excluded_service_patterns: string[]
   invoice_footer_note: string | null
   lugar_emision_defecto: string | null
   exchange_rate_usd_hnl: number | null
@@ -85,6 +87,7 @@ export default function CompanySettingsPage() {
     default_currency: 'USD',
     default_tax_rate: 15,
     insurance_cost_rate_percent: DEFAULT_INSURANCE_COST_RATE_PERCENT,
+    insurance_excluded_service_patterns: [],
     invoice_footer_note: '',
     lugar_emision_defecto: '',
     exchange_rate_usd_hnl: 25.30,
@@ -111,6 +114,7 @@ export default function CompanySettingsPage() {
   const [bunkerLoaded, setBunkerLoaded] = useState(false)
   const [bunkerExists, setBunkerExists] = useState(false)
   const [bunkerDirty, setBunkerDirty] = useState(false)
+  const [insuranceExclusionInput, setInsuranceExclusionInput] = useState('')
 
   const isAdmin = profile?.rol === 'Admin'
 
@@ -149,6 +153,10 @@ export default function CompanySettingsPage() {
         insurance_cost_rate_percent:
           (data as any).insurance_cost_rate_percent ??
           DEFAULT_INSURANCE_COST_RATE_PERCENT,
+        insurance_excluded_service_patterns:
+          normalizeInsuranceExclusionPatterns(
+            (data as any).insurance_excluded_service_patterns
+          ),
         invoice_footer_note: data.invoice_footer_note ?? '',
         lugar_emision_defecto: data.lugar_emision_defecto ?? '',
         exchange_rate_usd_hnl: data.exchange_rate_usd_hnl ?? 25.30,
@@ -195,8 +203,40 @@ export default function CompanySettingsPage() {
     setLoading(false)
   }
 
-  const set = (key: keyof typeof form, value: string | number | null) =>
+  const set = (
+    key: keyof typeof form,
+    value: string | number | string[] | null
+  ) =>
     setForm((prev) => ({ ...prev, [key]: value }))
+
+  const addInsuranceExclusion = () => {
+    const pattern = insuranceExclusionInput.trim()
+    if (!pattern) return
+
+    const currentPatterns = normalizeInsuranceExclusionPatterns(
+      form.insurance_excluded_service_patterns
+    )
+    const alreadyExists = currentPatterns.some(
+      (current) => current.toLowerCase() === pattern.toLowerCase()
+    )
+
+    if (alreadyExists) {
+      toast.error('Ese servicio ya está en las exclusiones del seguro.')
+      return
+    }
+
+    set('insurance_excluded_service_patterns', [...currentPatterns, pattern])
+    setInsuranceExclusionInput('')
+  }
+
+  const removeInsuranceExclusion = (pattern: string) => {
+    set(
+      'insurance_excluded_service_patterns',
+      form.insurance_excluded_service_patterns.filter(
+        (current) => current !== pattern
+      )
+    )
+  }
 
   const setBunkerField = (key: keyof BunkerForm, value: string | number | boolean) => {
     setBunkerDirty(true)
@@ -224,6 +264,10 @@ export default function CompanySettingsPage() {
       ...form,
       default_tax_rate: Number(form.default_tax_rate) || 15,
       insurance_cost_rate_percent: insuranceCostRatePercent,
+      insurance_excluded_service_patterns:
+        normalizeInsuranceExclusionPatterns(
+          form.insurance_excluded_service_patterns
+        ),
       legal_name: form.legal_name || null,
       trade_name: form.trade_name || null,
       rtn: form.rtn || null,
@@ -523,7 +567,7 @@ export default function CompanySettingsPage() {
         </section>
       </div>
 
-      {/* Dirección de recepción en Miami */}
+      {/* Seguro de carga */}
       <section className={cardClass}>
         <div className="mb-1 flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-slate-400" />
@@ -554,12 +598,75 @@ export default function CompanySettingsPage() {
             />
           </Field>
         </div>
+        <div className="mt-5 border-t border-slate-200 pt-5 dark:border-slate-700">
+          <Field label="Servicios excluidos de la base del seguro">
+            <div className="flex max-w-xl gap-2">
+              <input
+                value={insuranceExclusionInput}
+                onChange={(event) =>
+                  setInsuranceExclusionInput(event.target.value)
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    addInsuranceExclusion()
+                  }
+                }}
+                disabled={!isAdmin}
+                placeholder="Ej. DTHC"
+                className={`${fieldClass} disabled:opacity-60`}
+              />
+              <button
+                type="button"
+                onClick={addInsuranceExclusion}
+                disabled={!isAdmin || !insuranceExclusionInput.trim()}
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
+              >
+                <Plus className="h-4 w-4" />
+                Excluir
+              </button>
+            </div>
+          </Field>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {form.insurance_excluded_service_patterns.length > 0 ? (
+              form.insurance_excluded_service_patterns.map((pattern) => (
+                <span
+                  key={pattern}
+                  className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+                >
+                  {pattern}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => removeInsuranceExclusion(pattern)}
+                      aria-label={`Incluir nuevamente ${pattern}`}
+                      className="rounded-full p-0.5 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </span>
+              ))
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                No hay exclusiones: todos los servicios, salvo el propio seguro
+                y el ISV, forman parte de la base Full Cover.
+              </p>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            La coincidencia es parcial y no distingue mayúsculas. Se revisan el
+            código, la descripción y el tipo de cada línea de cotización.
+          </p>
+        </div>
         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
           El cambio se utiliza al calcular o actualizar líneas de seguro. Los
           importes ya guardados no se alteran automáticamente.
         </p>
       </section>
 
+      {/* Dirección de recepción en Miami */}
       <section className={cardClass}>
         <div className="mb-1 flex items-center gap-2">
           <MapPin className="h-5 w-5 text-slate-400" />

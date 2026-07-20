@@ -52,6 +52,7 @@ import {
   normalizeTaxRatePercent,
 } from '@/src/lib/tax'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
+import { normalizeInsuranceExclusionPatterns } from '@/src/lib/insurance-coverage'
 import {
   Tabs,
   TabsContent,
@@ -360,6 +361,8 @@ export default function QuotationDetailPage() {
   const [insuranceCostRatePercent, setInsuranceCostRatePercent] = useState(
     DEFAULT_INSURANCE_COST_RATE_PERCENT
   )
+  const [insuranceExclusionPatterns, setInsuranceExclusionPatterns] =
+    useState<string[]>([])
 
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
@@ -505,7 +508,7 @@ export default function QuotationDetailPage() {
 
     const { data: companyData } = await supabase
       .from('company_settings')
-      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent`)
+      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent, insurance_excluded_service_patterns`)
       .limit(1)
       .maybeSingle()
 
@@ -548,6 +551,11 @@ export default function QuotationDetailPage() {
       Number.isFinite(configuredInsuranceCostRate) && configuredInsuranceCostRate > 0
         ? configuredInsuranceCostRate
         : DEFAULT_INSURANCE_COST_RATE_PERCENT
+    )
+    setInsuranceExclusionPatterns(
+      normalizeInsuranceExclusionPatterns(
+        (companyData as any)?.insurance_excluded_service_patterns
+      )
     )
     setAgentQuotes(agentData || [])
     setValidations(validationData || [])
@@ -2621,6 +2629,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         quotation={quotation}
         pricingItems={pricingItems}
         insuranceCostRatePercent={insuranceCostRatePercent}
+        insuranceExclusionPatterns={insuranceExclusionPatterns}
       />
     )}
   </>
