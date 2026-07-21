@@ -4,6 +4,80 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-21 - UX-041 - Acceso a cotizacion desde toast de creacion
+
+- Estado: En validacion.
+- Hallazgo: UX-041.
+- Codigo: `src/app/(protected)/quotations/new/page.tsx`.
+- SQL: No aplica.
+- Cambio: El toast de creacion incluye la accion `Ir a Cotizacion`, que navega
+  al detalle de la cotizacion recien creada. El toast se muestra despues de
+  marcar el formulario como guardado para no activar el guard de salida y
+  permite cerrarlo manualmente mediante su boton `X`.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Verificacion manual pendiente: Crear una cotizacion, pulsar la accion del
+  toast y confirmar que abre el detalle correcto sin advertencia de cambios.
+- Riesgos o trabajo pendiente: Ninguno identificado.
+- Commit: Pendiente.
+
+### 2026-07-21 - CALC-003 - ISV opcional en Redestino del comparativo FCL
+
+- Estado: En validacion.
+- Hallazgo: CALC-003.
+- Codigo: `src/components/pricing/FclAgentComparisonTable.tsx`.
+- SQL: No aplica.
+- Cambio: Redestino permite indicar por agente si aplica ISV. El impuesto usa
+  la tasa configurada en Empresa, se acumula con el ISV opcional de Entrega
+  Local y se refleja en la fila ISV y el total ajustado.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Verificacion manual pendiente: Probar Redestino con y sin ISV, incluyendo un
+  caso donde Entrega Local y Redestino sean gravables simultaneamente.
+- Riesgos o trabajo pendiente: La seleccion mantiene la persistencia local ya
+  existente para la tabla comparativa.
+- Commit: Pendiente.
+
+### 2026-07-21 - CALC-002 - ISV opcional en Entrega Local del comparativo FCL
+
+- Estado: En validacion.
+- Hallazgo: CALC-002.
+- Codigo:
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: No aplica.
+- Cambio: Entrega Local permite indicar por agente si aplica ISV, usando la
+  tasa configurada en Empresa. El impuesto se refleja en la fila ISV y en el
+  total ajustado, y la seleccion se conserva al guardar la tabla.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Verificacion manual pendiente: Comparar tarifas con y sin ISV en Entrega
+  Local y confirmar persistencia, fila ISV y total ajustado.
+- Riesgos o trabajo pendiente: La tabla se guarda localmente en el navegador,
+  conforme al comportamiento existente del comparativo FCL.
+- Commit: Pendiente.
+
+### 2026-07-21 - CALC-001 - MBL por BL en tabla comparativa FCL
+
+- Estado: En validacion.
+- Hallazgo: CALC-001.
+- Codigo: `src/components/pricing/FclAgentComparisonTable.tsx`.
+- SQL: No aplica.
+- Cambio: El MBL se suma una sola vez por BL (uno por defecto) y su ayuda
+  visual distribuye el importe entre los contenedores. PS continua siendo un
+  cargo multiplicado por contenedor.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Verificacion manual pendiente: Probar una cotizacion FCL de varios
+  contenedores y confirmar el total y el MBL unitario mostrado.
+- Riesgos o trabajo pendiente: Si el agente emite varios BL, se debe ingresar
+  el importe total de los BL emitidos.
+- Commit: Pendiente.
+
 ### 2026-07-20 - INS-025 - Cobertura general minima y excepciones por cotizacion
 
 - Estado: En validacion
@@ -1831,8 +1905,10 @@ Agregar una entrada por fix:
   - La nueva tabla reutiliza las tarifas ya cargadas y el mismo handler de
     seleccion de tarifa mediante confirmacion existente.
   - La tabla resalta mejor costo, tarifa mas rapida y tarifa seleccionada.
-  - MBL y PS se toman como cargos por contenedor y se multiplican por la
-    cantidad real de contenedores de la cotizacion.
+  - PS se toma como cargo por contenedor y se multiplica por la cantidad real
+    de contenedores de la cotizacion. El MBL se toma como cargo por BL (uno por
+    defecto) y se distribuye entre los contenedores solo para mostrar su costo
+    unitario, sin multiplicarlo en el total.
   - Bank Transfer Fee queda fijo en USD 25.
   - DTHC queda editable por naviera; Entrega Local y Redestino se comparten
     entre columnas para comparar con el mismo valor.

@@ -27,6 +27,7 @@ type FclAgentComparisonTableProps = {
   formatCurrency: (value: number) => string
   formatDisplayDate: (date?: string | null) => string
   bankTransferFee: number
+  taxRate: number
   onChargeOverridesChange: (
     updater: (current: FclTableChargeOverrides) => FclTableChargeOverrides
   ) => void
@@ -45,8 +46,10 @@ export type FclEditableChargeKey =
   | 'ps'
   | 'dthc'
   | 'localDelivery'
+  | 'localDeliveryTaxable'
   | 'transshipment'
   | 'redestination'
+  | 'redestinationTaxable'
 
 export type FclTableChargeOverrides = Record<
   string,
@@ -58,6 +61,7 @@ type EditableChargeConfig = {
   label: string
   getInitialValue: (quote: AgentQuote) => number
   multiplyByContainers?: boolean
+  distributeAcrossContainers?: boolean
   sharedAcrossQuotes?: boolean
 }
 
@@ -106,6 +110,7 @@ export function FclAgentComparisonTable({
   formatCurrency,
   formatDisplayDate,
   bankTransferFee,
+  taxRate,
   onChargeOverridesChange,
   onSaveTable,
   onSelectQuote,
@@ -144,7 +149,7 @@ export function FclAgentComparisonTable({
       label: 'MBL',
       getInitialValue: (quote) =>
         firstNumericValue(quote.mbl_amount, quote.mbl_cost, quote.mbl_fee),
-      multiplyByContainers: true,
+      distributeAcrossContainers: true,
     },
     {
       key: 'ps',
@@ -209,6 +214,34 @@ export function FclAgentComparisonTable({
     return config.getInitialValue(quote)
   }
 
+  const getOptionalChargeTax = (
+    quote: AgentQuote,
+    chargeKey: 'localDelivery' | 'redestination',
+    taxableKey: 'localDeliveryTaxable' | 'redestinationTaxable'
+  ) => {
+    const isTaxable = chargeOverrides[quote.id]?.[taxableKey] === 'true'
+    if (!isTaxable) return 0
+
+    const chargeConfig = editableCharges.find(
+      (config) => config.key === chargeKey
+    )
+    if (!chargeConfig) return 0
+
+    return getEditableChargeValue(quote, chargeConfig) * (taxRate / 100)
+  }
+
+  const getOptionalChargesTax = (quote: AgentQuote) =>
+    getOptionalChargeTax(
+      quote,
+      'localDelivery',
+      'localDeliveryTaxable'
+    ) +
+    getOptionalChargeTax(
+      quote,
+      'redestination',
+      'redestinationTaxable'
+    )
+
   const getAdjustedTotalCost = (quote: AgentQuote) => {
     const containersQty = Math.max(getAgentQuoteContainersQty(quote), 1)
     const oceanFreight = getAgentQuoteBaseCost(quote)
@@ -226,7 +259,11 @@ export function FclAgentComparisonTable({
     )
 
     return Math.max(
-      oceanFreight + exwCost + editableChargesTotal + bankTransferFee,
+      oceanFreight +
+        exwCost +
+        editableChargesTotal +
+        getOptionalChargesTax(quote) +
+        bankTransferFee,
       0
     )
   }
@@ -281,6 +318,11 @@ export function FclAgentComparisonTable({
     const displayValue =
       currentValue ?? String(config.getInitialValue(quote) || '')
     const isTransshipment = config.key === 'transshipment'
+    const isLocalDelivery = config.key === 'localDelivery'
+    const isRedestination = config.key === 'redestination'
+    const taxableKey = isLocalDelivery
+      ? 'localDeliveryTaxable'
+      : 'redestinationTaxable'
     const containersQty = Math.max(getAgentQuoteContainersQty(quote), 1)
     const numericValue = toFiniteNumber(displayValue)
     const transshipmentNote = firstFilledValue(
@@ -308,6 +350,29 @@ export function FclAgentComparisonTable({
             x {containersQty} cont. = USD{' '}
             {formatCurrency(numericValue * containersQty)}
           </p>
+        )}
+        {config.distributeAcrossContainers && (
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            ÷ {containersQty} cont. = USD{' '}
+            {formatCurrency(numericValue / containersQty)} por cont.
+          </p>
+        )}
+        {(isLocalDelivery || isRedestination) && (
+          <label className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={chargeOverrides[quote.id]?.[taxableKey] === 'true'}
+              onChange={(event) =>
+                updateChargeOverride(
+                  quote.id,
+                  taxableKey,
+                  String(event.target.checked)
+                )
+              }
+              className="h-3.5 w-3.5 rounded border-slate-300"
+            />
+            Aplica ISV {taxRate}%
+          </label>
         )}
         {isTransshipment && transshipmentNote && (
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -382,12 +447,16 @@ export function FclAgentComparisonTable({
       getValue: (quote) => `USD ${formatCurrency(getAgentQuoteBaseCost(quote))}`,
     },
     {
-      label: 'ISV',
-      getValue: (quote) =>
-        formatNullableCurrency(
-          firstFilledValue(quote.isv, quote.tax_amount, quote.tax),
+      label: `ISV ${taxRate}%`,
+      getValue: (quote) => {
+        const storedTax = firstNumericValue(quote.isv, quote.tax_amount, quote.tax)
+        const optionalChargesTax = getOptionalChargesTax(quote)
+
+        return formatNullableCurrency(
+          storedTax + optionalChargesTax,
           formatCurrency
-        ),
+        )
+      },
     },
     {
       label: 'Total',

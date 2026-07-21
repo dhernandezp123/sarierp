@@ -4446,6 +4446,7 @@ const profitabilityColor =
                           formatCurrency={formatCurrency}
                           formatDisplayDate={formatDisplayDate}
                           bankTransferFee={bankTransferFee}
+                          taxRate={defaultTaxRate}
                           onChargeOverridesChange={setFclTableChargeOverrides}
                           onSaveTable={saveFclTableOverrides}
                           onSelectQuote={(quote) => {

@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { pdf } from '@react-pdf/renderer'
 
@@ -68,6 +69,7 @@ const createEmptyCargoLine = (): CargoDimensionLine => ({
 })
 
 export default function NewQuotationPage() {
+  const router = useRouter()
   const { profile } = useUser()
   const defaultValidUntil = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
     .toISOString()
@@ -865,8 +867,6 @@ export default function NewQuotationPage() {
         }
       }
 
-      toast.success('Cotización creada correctamente')
-
       if (initialStatus === 'Pendiente de Fijar Precios') {
         const pricingUsers = await fetchPricingUsers()
 
@@ -922,6 +922,15 @@ export default function NewQuotationPage() {
       setEditingContainerLineIndex(null)
       resetContainerLineForm()
       markFormSaved()
+
+      toast.success('Cotización creada correctamente', {
+        duration: 8000,
+        closeButton: true,
+        action: {
+          label: 'Ir a Cotización',
+          onClick: () => router.push(`/quotations/${quotation.id}`),
+        },
+      })
 
       await fetchCatalogs()
     } catch {
