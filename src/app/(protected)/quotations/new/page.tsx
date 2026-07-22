@@ -91,6 +91,8 @@ export default function NewQuotationPage() {
     id: string
     quotation_number: string | null
   } | null>(null)
+  const [reactivationMode, setReactivationMode] = useState(false)
+  const [reactivationReason, setReactivationReason] = useState('')
   const [editingContainerLineIndex, setEditingContainerLineIndex] =
     useState<number | null>(null)
   const [containerLineForm, setContainerLineForm] = useState({
@@ -181,8 +183,13 @@ export default function NewQuotationPage() {
       'duplicateFrom'
     )
 
+    const shouldReactivate =
+      new URLSearchParams(window.location.search).get('reactivate') === '1'
+
+    setReactivationMode(shouldReactivate)
+
     if (duplicateFromId) {
-      loadDuplicateSource(duplicateFromId)
+      loadDuplicateSource(duplicateFromId, shouldReactivate)
     }
   }, [])
 
@@ -284,7 +291,10 @@ export default function NewQuotationPage() {
     return 'Caja'
   }
 
-  const loadDuplicateSource = async (quotationId: string) => {
+  const loadDuplicateSource = async (
+    quotationId: string,
+    shouldReactivate = false
+  ) => {
     setLoading(true)
 
     try {
@@ -313,6 +323,12 @@ export default function NewQuotationPage() {
 
       if (quoteError || !sourceQuote) {
         toast.error('No se pudo cargar la cotización a duplicar')
+        return
+      }
+
+      if (shouldReactivate && sourceQuote.status !== 'Perdida') {
+        toast.error('Solo se pueden reactivar cotizaciones perdidas.')
+        router.push(`/quotations/${quotationId}`)
         return
       }
 
@@ -597,6 +613,11 @@ export default function NewQuotationPage() {
 
   const handleSubmit = async (status: string) => {
     setSubmitted(true)
+
+    if (reactivationMode && !reactivationReason.trim()) {
+      toast.error('Ingresa el motivo de reactivación.')
+      return
+    }
 
     if (!formData.cliente_id) {
       toast.error('Debes seleccionar un cliente')
@@ -898,7 +919,40 @@ export default function NewQuotationPage() {
         }
       }
 
-      if (duplicateSource && quotation) {
+      if (duplicateSource && quotation && reactivationMode) {
+        const reason = reactivationReason.trim()
+
+        await Promise.all([
+          createActivityLog({
+            module: 'quotations',
+            action: 'quotation_reactivated',
+            entityType: 'quotation',
+            entityId: quotation.id,
+            description: `Cotización reactivada desde ${
+              duplicateSource.quotation_number || duplicateSource.id
+            } como una nueva oportunidad`,
+            metadata: {
+              sourceQuotationId: duplicateSource.id,
+              sourceQuotationNumber: duplicateSource.quotation_number,
+              reactivationReason: reason,
+            },
+          }),
+          createActivityLog({
+            module: 'quotations',
+            action: 'quotation_reactivated_as_new',
+            entityType: 'quotation',
+            entityId: duplicateSource.id,
+            description: `Cotización reactivada como ${
+              quotation.quotation_number || quotation.id
+            }`,
+            metadata: {
+              newQuotationId: quotation.id,
+              newQuotationNumber: quotation.quotation_number,
+              reactivationReason: reason,
+            },
+          }),
+        ])
+      } else if (duplicateSource && quotation) {
         await createActivityLog({
           module: 'quotations',
           action: 'quotation_duplicated',
@@ -919,6 +973,8 @@ export default function NewQuotationPage() {
       setCargoLines([createEmptyCargoLine()])
       setContainerLines([])
       setDuplicateSource(null)
+      setReactivationMode(false)
+      setReactivationReason('')
       setEditingContainerLineIndex(null)
       resetContainerLineForm()
       markFormSaved()
@@ -1186,10 +1242,18 @@ export default function NewQuotationPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-              {duplicateSource ? 'Duplicar Cotización' : 'Nueva Cotización'}
+              {reactivationMode
+                ? 'Reactivar como nueva cotización'
+                : duplicateSource
+                  ? 'Duplicar Cotización'
+                  : 'Nueva Cotización'}
             </h1>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {duplicateSource
+              {reactivationMode
+                ? `Crea una nueva oportunidad a partir de ${
+                    duplicateSource?.quotation_number || 'la cotización perdida'
+                  } sin modificar su cierre histórico.`
+                : duplicateSource
                 ? `Edita la información copiada de ${
                     duplicateSource.quotation_number || 'la cotización origen'
                   } antes de enviarla a Pricing.`
@@ -1200,9 +1264,25 @@ export default function NewQuotationPage() {
 
         {duplicateSource && (
           <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
-            Esta nueva cotización quedará vinculada a{' '}
+            {reactivationMode ? 'La reactivación' : 'Esta nueva cotización'} quedará vinculada a{' '}
             {duplicateSource.quotation_number || 'la cotización origen'}.
           </div>
+        )}
+
+        {reactivationMode && (
+          <section className={cardClass}>
+            <label className="text-sm font-semibold text-slate-900 dark:text-white">
+              Motivo de reactivación <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={reactivationReason}
+              onChange={(event) => setReactivationReason(event.target.value)}
+              rows={3}
+              maxLength={500}
+              placeholder="Ej. El cliente retomó el embarque y solicita una tarifa actualizada"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            />
+          </section>
         )}
 
         <section className={cardClass}>

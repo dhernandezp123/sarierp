@@ -4,6 +4,36 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-22 - QTN-028 - Reactivar cotización perdida como nueva
+
+- Estado: En validación.
+- Código: `src/app/(protected)/quotations/[id]/page.tsx`, `src/app/(protected)/quotations/new/page.tsx`.
+- SQL: No aplica; reutiliza `quotations.duplicated_from` y `activity_logs`.
+- Cambio: una cotización `Perdida` conserva su estado y puede reactivarse como una cotización nueva vinculada, con nuevo número, datos editables y motivo obligatorio. La relación queda registrada en ambas cotizaciones mediante el log de actividad.
+- Validaciones: `npx tsc --noEmit` OK; `git diff --check` OK.
+- Riesgo pendiente: validar manualmente una reactivación FCL/FTL y una de carga suelta; confirmar notificación a Pricing al enviarla.
+- Commit: Pendiente.
+
+### 2026-07-22 - QTN-027 - Razón obligatoria al perder cotización
+
+- Estado: En validación.
+- Código: `src/app/(protected)/quotations/[id]/page.tsx`, `src/lib/quotation-loss-reasons.ts`.
+- SQL: `supabase/migrations/20260722143000_quotation_loss_reason.sql`.
+- Cambio: al pasar una cotización a `Perdida`, abre un modal con razones categorizadas. `Otra` exige una explicación; la selección se guarda en la cotización, el historial y el log de actividad.
+- Validaciones: `npx tsc --noEmit` OK; `git diff --check` OK.
+- Riesgo pendiente: aplicar la migración y validar manualmente una transición real; los registros históricos permanecen sin razón.
+- Commit: Pendiente.
+
+### 2026-07-22 - INS-026 - Flete terrestre y aéreo en seguro
+
+- Estado: En validación.
+- Código: `src/lib/insurance-coverage.ts`, `src/app/(protected)/pricing-comparison/page.tsx`, `src/app/(protected)/settings/company/page.tsx`.
+- SQL: `supabase/migrations/20260722120000_include_ground_and_air_freight_in_insurance.sql`.
+- Cambio: incluye `Flete Terrestre`, `Air Freight` y `Aéreo Consolidado` en la regla general Full Cover. Entrega Local permanece fuera salvo inclusión excepcional.
+- Validaciones: `npx tsc --noEmit` OK; `git diff --check` OK.
+- Riesgo pendiente: aplicar la migración y recalcular seguros existentes; validar manualmente LTL, aéreo y la exclusión de Entrega Local.
+- Commit: Pendiente.
+
 ### 2026-07-21 - UX-041 - Acceso a cotizacion desde toast de creacion
 
 - Estado: En validacion.

@@ -695,7 +695,7 @@ export default function CompanySettingsPage() {
             ))}
           </div>
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            Regla general recomendada: valor FOB + Ocean Freight + gastos de
+            Regla general recomendada: valor FOB + flete marítimo, terrestre o aéreo + gastos de
             origen. Los demás cargos se pueden incluir excepcionalmente en cada
             cotización.
           </p>

@@ -28,6 +28,10 @@ import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { createNotification } from '@/src/lib/notifications'
 import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
 import {
+  QUOTATION_LOSS_REASONS,
+  type QuotationLossReason,
+} from '@/src/lib/quotation-loss-reasons'
+import {
   PDFDownloadLink,
   pdf,
 } from '@react-pdf/renderer'
@@ -76,6 +80,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '../../../../components/ui/dialog'
@@ -379,6 +384,10 @@ export default function QuotationDetailPage() {
   const [changeLogs, setChangeLogs] = useState<QuotationChangeLog[]>([])
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
+  const [lossReasonDialogOpen, setLossReasonDialogOpen] = useState(false)
+  const [lossReason, setLossReason] = useState<QuotationLossReason | ''>('')
+  const [lossReasonDetail, setLossReasonDetail] = useState('')
+  const [savingLossReason, setSavingLossReason] = useState(false)
   const [openMoreMenu, setOpenMoreMenu] = useState(false)
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const [creatingRouting, setCreatingRouting] = useState(false)
@@ -657,19 +666,45 @@ export default function QuotationDetailPage() {
       return
     }
 
+    if (newStatus === 'Perdida') {
+      setLossReason('')
+      setLossReasonDetail('')
+      setLossReasonDialogOpen(true)
+      return
+    }
+
+    await updateQuotationStatus(newStatus)
+  }
+
+  const updateQuotationStatus = async (
+    newStatus: string,
+    loss?: { reason: QuotationLossReason; detail: string }
+  ) => {
+    if (!quotation) return false
+
+    const oldStatus = quotation.status || 'Borrador'
+
     if (!canTransition(oldStatus, newStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${newStatus}`)
-      return
+      return false
     }
 
     const { error } = await supabase
       .from('quotations')
-      .update({ status: newStatus })
+      .update({
+        status: newStatus,
+        ...(loss
+          ? {
+              loss_reason: loss.reason,
+              loss_reason_detail: loss.detail || null,
+            }
+          : {}),
+      })
       .eq('id', quotation.id)
 
     if (error) {
       toast.error(error.message)
-      return
+      return false
     }
 
     await supabase.from('quotation_status_history').insert([
@@ -678,6 +713,9 @@ export default function QuotationDetailPage() {
         old_status: oldStatus,
         new_status: newStatus,
         changed_by: profile?.id,
+        notes: loss
+          ? `Razón: ${loss.reason}${loss.detail ? `. Detalle: ${loss.detail}` : ''}`
+          : null,
       },
     ])
 
@@ -690,6 +728,9 @@ export default function QuotationDetailPage() {
       metadata: {
         oldStatus,
         newStatus,
+        ...(loss
+          ? { lossReason: loss.reason, lossReasonDetail: loss.detail || null }
+          : {}),
       },
     })
 
@@ -698,10 +739,38 @@ export default function QuotationDetailPage() {
     setQuotation({
       ...quotation,
       status: newStatus,
+      ...(loss
+        ? {
+            loss_reason: loss.reason,
+            loss_reason_detail: loss.detail || null,
+          }
+        : {}),
     })
 
     await fetchStatusHistory()
     await loadChangeLogs()
+    return true
+  }
+
+  const confirmQuotationLoss = async () => {
+    if (!lossReason) {
+      toast.error('Selecciona la razón por la que se perdió la cotización.')
+      return
+    }
+
+    const detail = lossReasonDetail.trim()
+    if (lossReason === 'Otra' && !detail) {
+      toast.error('Especifica la razón de pérdida.')
+      return
+    }
+
+    setSavingLossReason(true)
+    const updated = await updateQuotationStatus('Perdida', {
+      reason: lossReason,
+      detail,
+    })
+    setSavingLossReason(false)
+    if (updated) setLossReasonDialogOpen(false)
   }
 
   const loadRepricingImpact = async () => {
@@ -973,7 +1042,8 @@ export default function QuotationDetailPage() {
     if (!quotation || duplicating) return
 
     setDuplicating(true)
-    router.push(`/quotations/new?duplicateFrom=${quotation.id}`)
+    const reactivationParam = quotation.status === 'Perdida' ? '&reactivate=1' : ''
+    router.push(`/quotations/new?duplicateFrom=${quotation.id}${reactivationParam}`)
     return
     /*
 
@@ -1682,6 +1752,21 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
               {canEditQuotation && openStatusMenu && (
                 <div className="absolute left-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
+                  {quotation?.status === 'Perdida' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenStatusMenu(false)
+                        duplicateQuotation()
+                      }}
+                      disabled={duplicating}
+                      className="block w-full px-4 py-2 text-left text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                    >
+                      {duplicating
+                        ? 'Preparando reactivación...'
+                        : 'Reactivar como nueva cotización'}
+                    </button>
+                  )}
                   {statusOptions
                     .filter((status) =>
                       canTransition(quotation?.status || 'Borrador', status) &&
@@ -1811,7 +1896,13 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                       className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       <Copy className="h-4 w-4" />
-                      {duplicating ? 'Duplicando...' : 'Duplicar Cotización'}
+                      {duplicating
+                        ? quotation.status === 'Perdida'
+                          ? 'Preparando reactivación...'
+                          : 'Duplicando...'
+                        : quotation.status === 'Perdida'
+                          ? 'Reactivar como nueva cotización'
+                          : 'Duplicar Cotización'}
                     </button>
                   )}
 
@@ -2565,6 +2656,77 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         </TabsContent>
       </Tabs>
     </div>
+
+    <Dialog
+      open={lossReasonDialogOpen}
+      onOpenChange={(open) => {
+        if (!savingLossReason) setLossReasonDialogOpen(open)
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Marcar cotización como perdida</DialogTitle>
+          <DialogDescription>
+            Selecciona la razón comercial. Quedará registrada en la cotización
+            y en su historial.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+          {QUOTATION_LOSS_REASONS.map((reason) => (
+            <label
+              key={reason}
+              className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-900"
+            >
+              <input
+                type="radio"
+                name="quotation-loss-reason"
+                checked={lossReason === reason}
+                onChange={() => setLossReason(reason)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>{reason}</span>
+            </label>
+          ))}
+
+          {lossReason === 'Otra' && (
+            <div className="pt-2">
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Especifique la razón
+              </label>
+              <textarea
+                value={lossReasonDetail}
+                onChange={(event) => setLossReasonDetail(event.target.value)}
+                rows={3}
+                maxLength={500}
+                autoFocus
+                placeholder="Describe por qué se perdió la cotización"
+                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400"
+              />
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={() => setLossReasonDialogOpen(false)}
+            disabled={savingLossReason}
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={confirmQuotationLoss}
+            disabled={savingLossReason || !lossReason}
+            className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {savingLossReason ? 'Guardando...' : 'Confirmar pérdida'}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <Dialog
       open={repricingDialogOpen}

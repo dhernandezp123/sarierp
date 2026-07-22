@@ -6410,7 +6410,8 @@ const profitabilityColor =
           <DialogHeader>
             <DialogTitle>Definir cobertura del seguro</DialogTitle>
             <DialogDescription>
-              La regla general incluye FOB, Ocean Freight y gastos de origen.
+              La regla general incluye FOB, flete marítimo, terrestre o aéreo,
+              y gastos de origen.
               Marca cargos adicionales solo cuando el cliente solicite incluirlos.
             </DialogDescription>
           </DialogHeader>

@@ -8,6 +8,9 @@ export type InsuranceCoverageItem = {
 
 export const DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS = [
   'Ocean Freight',
+  'Flete Terrestre',
+  'Air Freight',
+  'Aéreo Consolidado',
   'Origen',
   'origin_charge',
   'Documentación',
