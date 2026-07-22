@@ -384,6 +384,7 @@ export default function QuotationDetailPage() {
   const [changeLogs, setChangeLogs] = useState<QuotationChangeLog[]>([])
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [openStatusMenu, setOpenStatusMenu] = useState(false)
+  const statusMenuRef = useRef<HTMLDivElement>(null)
   const [lossReasonDialogOpen, setLossReasonDialogOpen] = useState(false)
   const [lossReason, setLossReason] = useState<QuotationLossReason | ''>('')
   const [lossReasonDetail, setLossReasonDetail] = useState('')
@@ -415,6 +416,13 @@ export default function QuotationDetailPage() {
         !moreMenuRef.current.contains(event.target as Node)
       ) {
         setOpenMoreMenu(false)
+      }
+
+      if (
+        statusMenuRef.current &&
+        !statusMenuRef.current.contains(event.target as Node)
+      ) {
+        setOpenStatusMenu(false)
       }
     }
 
@@ -1736,7 +1744,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
               {quotation.quotation_number || 'Sin número'}
             </h1>
 
-            <div className="relative">
+            <div ref={statusMenuRef} className="relative">
               {canEditQuotation ? (
                 <button
                   type="button"

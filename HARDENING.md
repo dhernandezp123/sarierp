@@ -4,6 +4,26 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-22 - REP-009 - Cierre mensual histórico de Pricing
+
+- Estado: En validación.
+- Código: `src/app/(protected)/reports/page.tsx`.
+- SQL: No aplica; utiliza `quotation_status_history` y las relaciones existentes.
+- Cambio: agrega una reportería de Pricing exportable a CSV/PDF que reconstruye ciclos desde `Pendiente de Fijar Precios` hasta `Pricing Aprobado` o `Perdida`, con entradas y aprobaciones del período, pendientes a la fecha de cierre, responsable, tiempo calendario de respuesta, valores comerciales y motivo de pérdida. Las métricas se identifican como `Cotizaciones recibidas`, `Aprobadas Pricing` y `Pendientes en Pricing al cierre` para evitar confusiones con la creación y el resultado comercial.
+- Validaciones: `npx tsc --noEmit` OK; `git diff --check` OK.
+- Riesgo pendiente: aplicar primero la migración de razones de pérdida, verificar RLS con un usuario Pricing y conciliar manualmente un mes con reingresos a Pricing.
+- Commit: Pendiente.
+
+### 2026-07-22 - UX-042 - Cierre exterior del selector de estado
+
+- Estado: En validación.
+- Código: `src/app/(protected)/quotations/[id]/page.tsx`.
+- SQL: No aplica.
+- Cambio: el desplegable de estado se cierra al hacer clic fuera de su botón o menú.
+- Validaciones: `npx tsc --noEmit` OK; `git diff --check` OK.
+- Riesgo pendiente: verificación visual manual en escritorio y móvil.
+- Commit: Pendiente.
+
 ### 2026-07-22 - QTN-028 - Reactivar cotización perdida como nueva
 
 - Estado: En validación.

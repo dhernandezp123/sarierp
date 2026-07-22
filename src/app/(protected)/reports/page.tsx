@@ -25,7 +25,7 @@ import {
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 
-type ReportId = 'commercial' | 'operations' | 'billing' | 'receivable' | 'payable' | 'overdue' | 'supplier_payments'
+type ReportId = 'commercial' | 'pricing' | 'operations' | 'billing' | 'receivable' | 'payable' | 'overdue' | 'supplier_payments'
 type DatePreset = 'month' | 'quarter' | 'year' | 'all' | 'custom'
 
 type Join<T> = T | T[] | null
@@ -44,8 +44,20 @@ type QuotationRow = {
   total_sale: number | string | null
   profit_amount: number | string | null
   gp_percentage: number | string | null
+  loss_reason?: string | null
+  loss_reason_detail?: string | null
   clientes: Join<ClientJoin>
   created_by_profile: Join<ProfileJoin>
+}
+
+type PricingHistoryRow = {
+  id: string
+  quotation_id: string
+  old_status: string | null
+  new_status: string
+  created_at: string
+  changed_by_profile: Join<ProfileJoin>
+  quotation: Join<QuotationRow>
 }
 
 type ShippingInstructionRow = {
@@ -155,10 +167,16 @@ type ReportRow = ReportPdfRow & {
   __amount?: number
   __cost?: number
   __gp?: number
+  __enteredInPeriod?: number
+  __approvedInPeriod?: number
+  __lostInPeriod?: number
+  __pendingAtClose?: number
+  __responseHours?: number
 }
 
 const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[] = [
   { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones, ventas, GP y vendedores', roles: ['Admin', 'Ventas', 'Pricing'] },
+  { id: 'pricing', label: 'Pricing', scope: 'Entradas, aprobaciones, pendientes al cierre y tiempos de respuesta', roles: ['Admin', 'Pricing'] },
   { id: 'operations', label: 'Cargas', scope: 'Shipping instructions, bookings, carrier y ETA', roles: ['Admin', 'Operaciones'] },
   { id: 'billing', label: 'Facturación', scope: 'Facturas por cliente, tipo, ciudad, segmento y vendedor', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'receivable', label: 'Cuentas por cobrar', scope: 'Facturas enviadas/aprobadas/vencidas pendientes', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
@@ -188,6 +206,17 @@ function fmtDate(value?: string | null) {
   return `${day}/${month}/${year}`
 }
 
+function guatemalaDateKey(value: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Guatemala',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(value))
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
 function daysOverdue(value?: string | null) {
   if (!value) return 0
   const due = new Date(value.slice(0, 10) + 'T00:00:00')
@@ -212,6 +241,12 @@ function quoteNumber(q: Pick<QuotationRow, 'quotation_number'>) {
 
 function serviceLabel(quoteType?: string | null, transport?: string | null) {
   return [quoteType, transport].filter(Boolean).join(' / ') || 'Sin servicio'
+}
+
+function formatResponseTime(hours?: number) {
+  if (hours === undefined || !Number.isFinite(hours)) return '-'
+  if (hours < 24) return `${hours.toFixed(1)} h`
+  return `${(hours / 24).toFixed(1)} días`
 }
 
 function payableBalance(row: PayableRow) {
@@ -289,6 +324,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
 
   const [quotations, setQuotations] = useState<QuotationRow[]>([])
+  const [pricingHistory, setPricingHistory] = useState<PricingHistoryRow[]>([])
   const [instructions, setInstructions] = useState<ShippingInstructionRow[]>([])
   const [bookings, setBookings] = useState<BookingRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
@@ -310,6 +346,14 @@ export default function ReportsPage() {
       return () => window.clearTimeout(timeout)
     }
   }, [activeReport, availableReports, userLoading])
+
+  useEffect(() => {
+    setClientFilter(ALL)
+    setSellerFilter(ALL)
+    setServiceFilter(ALL)
+    setStatusFilter(ALL)
+    setCurrencyFilter(ALL)
+  }, [activeReport])
 
   const loadReports = useCallback(async () => {
     if (!role) return
@@ -341,6 +385,42 @@ export default function ReportsPage() {
           .then(({ data, error }) => {
             if (error) toast.error('No se pudieron cargar cuentas por cobrar')
             setReceivables((data || []) as ReceivableRow[])
+          })
+      )
+      tasks.push(
+        supabase
+          .from('quotation_status_history')
+          .select(`
+            id,
+            quotation_id,
+            old_status,
+            new_status,
+            created_at,
+            changed_by_profile:profiles!quotation_status_history_changed_by_fkey (
+              id, nombre, apellido, email
+            ),
+            quotation:quotations (
+              id,
+              quotation_number,
+              created_at,
+              status,
+              quote_type,
+              tipo_transporte,
+              total_cost,
+              total_sale,
+              profit_amount,
+              gp_percentage,
+              loss_reason,
+              loss_reason_detail,
+              clientes ( id, nombre ),
+              created_by_profile:profiles!quotations_created_by_fkey ( id, nombre, apellido, email )
+            )
+          `)
+          .in('new_status', ['Pendiente de Fijar Precios', 'Pricing Aprobado', 'Perdida'])
+          .order('created_at', { ascending: true })
+          .then(({ data, error }) => {
+            if (error) toast.error('No se pudo cargar el historial de Pricing')
+            setPricingHistory((data || []) as unknown as PricingHistoryRow[])
           })
       )
       tasks.push(
@@ -485,6 +565,126 @@ export default function ReportsPage() {
   const reportConfig = REPORTS.find((report) => report.id === activeReport) || REPORTS[0]
 
   const baseRows = useMemo<ReportRow[]>(() => {
+    if (activeReport === 'pricing') {
+      type PricingCycle = {
+        entry: PricingHistoryRow
+        exit?: PricingHistoryRow
+      }
+
+      const cycles: PricingCycle[] = []
+      const openByQuotation = new Map<string, PricingCycle>()
+
+      pricingHistory.forEach((event) => {
+        if (event.new_status === 'Pendiente de Fijar Precios') {
+          const previousOpen = openByQuotation.get(event.quotation_id)
+          if (previousOpen) previousOpen.exit = event
+
+          const cycle = { entry: event }
+          cycles.push(cycle)
+          openByQuotation.set(event.quotation_id, cycle)
+          return
+        }
+
+        const openCycle = openByQuotation.get(event.quotation_id)
+        if (openCycle) {
+          openCycle.exit = event
+          openByQuotation.delete(event.quotation_id)
+        }
+      })
+
+      const rangeFrom = dateFrom || '0000-01-01'
+      const rangeTo = dateTo || new Date().toISOString().slice(0, 10)
+
+      return cycles.flatMap((cycle, index) => {
+        const quotation = resolveJoin(cycle.entry.quotation)
+        if (!quotation) return []
+
+        const entryDate = guatemalaDateKey(cycle.entry.created_at)
+        const exitDate = cycle.exit
+          ? guatemalaDateKey(cycle.exit.created_at)
+          : ''
+        const exitAtClose = Boolean(exitDate && exitDate <= rangeTo)
+        const enteredInPeriod = entryDate >= rangeFrom && entryDate <= rangeTo
+        const approvedInPeriod = Boolean(
+          cycle.exit?.new_status === 'Pricing Aprobado' &&
+          exitDate >= rangeFrom &&
+          exitDate <= rangeTo
+        )
+        const lostInPeriod = Boolean(
+          cycle.exit?.new_status === 'Perdida' &&
+          exitDate >= rangeFrom &&
+          exitDate <= rangeTo
+        )
+        const pendingAtClose = entryDate <= rangeTo && !exitAtClose
+
+        if (!enteredInPeriod && !approvedInPeriod && !lostInPeriod && !pendingAtClose) {
+          return []
+        }
+
+        const responseHours =
+          cycle.exit?.new_status === 'Pricing Aprobado'
+            ? Math.max(
+                0,
+                (new Date(cycle.exit.created_at).getTime() -
+                  new Date(cycle.entry.created_at).getTime()) /
+                  3600000
+              )
+            : undefined
+        const outcome = exitAtClose
+          ? cycle.exit?.new_status || 'Cerrado'
+          : 'Pendiente al cierre'
+        const responseAtClose =
+          exitAtClose && cycle.exit?.new_status === 'Pricing Aprobado'
+            ? responseHours
+            : undefined
+        const client = clientName(quotation.clientes)
+        const responsibleName = cycle.exit
+          ? sellerName(cycle.exit.changed_by_profile)
+          : 'Sin responsable'
+        const responsible = responsibleName === 'Sin vendedor'
+          ? 'Sin responsable'
+          : responsibleName
+        const service = serviceLabel(
+          quotation.quote_type,
+          quotation.tipo_transporte
+        )
+
+        return [{
+          __key: `${quotation.id}-${cycle.entry.id}-${index}`,
+          __date: '',
+          __client: client,
+          __seller: responsible,
+          __service: service,
+          __status: outcome,
+          __currency: 'USD',
+          __amount: Number(quotation.total_sale || 0),
+          __cost: Number(quotation.total_cost || 0),
+          __gp: Number(quotation.profit_amount || 0),
+          __enteredInPeriod: enteredInPeriod ? 1 : 0,
+          __approvedInPeriod: approvedInPeriod ? 1 : 0,
+          __lostInPeriod: lostInPeriod ? 1 : 0,
+          __pendingAtClose: pendingAtClose ? 1 : 0,
+          __responseHours:
+            approvedInPeriod && responseHours !== undefined ? responseHours : -1,
+          numero: quoteNumber(quotation),
+          cliente: client,
+          servicio: service,
+          entrada: fmtDate(entryDate),
+          salida: exitAtClose ? fmtDate(exitDate) : '-',
+          resultado: outcome,
+          motivo: outcome === 'Perdida'
+            ? [quotation.loss_reason, quotation.loss_reason_detail]
+                .filter(Boolean)
+                .join(': ') || '-'
+            : '-',
+          responsable: responsible,
+          respuesta: formatResponseTime(responseAtClose),
+          venta: fmtMoney(Number(quotation.total_sale || 0)),
+          gp: fmtMoney(Number(quotation.profit_amount || 0)),
+        }]
+      })
+    }
+
     if (activeReport === 'commercial') {
       return quotations.map((q) => {
         const client = clientName(q.clientes)
@@ -715,7 +915,7 @@ export default function ReportsPage() {
     }
 
     return []
-  }, [activeReport, bookings, instructions, invoices, payables, proveedorPayments, quotations, receivables])
+  }, [activeReport, bookings, dateFrom, dateTo, instructions, invoices, payables, pricingHistory, proveedorPayments, quotations, receivables])
 
   const rows = useMemo(() => {
     return baseRows.filter((row) => {
@@ -732,6 +932,22 @@ export default function ReportsPage() {
   }, [baseRows, clientFilter, currencyFilter, dateFrom, dateTo, sellerFilter, serviceFilter, statusFilter])
 
   const columns = useMemo<ReportPdfColumn[]>(() => {
+    if (activeReport === 'pricing') {
+      return [
+        { key: 'numero', label: 'Cotización', width: '9%' },
+        { key: 'cliente', label: 'Cliente', width: '12%' },
+        { key: 'servicio', label: 'Servicio', width: '11%' },
+        { key: 'entrada', label: 'Entrada', width: '8%' },
+        { key: 'salida', label: 'Salida', width: '8%' },
+        { key: 'resultado', label: 'Resultado', width: '10%' },
+        { key: 'motivo', label: 'Motivo pérdida', width: '12%' },
+        { key: 'responsable', label: 'Responsable', width: '10%' },
+        { key: 'respuesta', label: 'Respuesta', width: '7%', align: 'right' },
+        { key: 'venta', label: 'Venta', width: '7%', align: 'right' },
+        { key: 'gp', label: 'GP', width: '6%', align: 'right' },
+      ]
+    }
+
     if (activeReport === 'commercial') {
       return [
         { key: 'numero', label: 'Cotizacion', width: '11%' },
@@ -827,10 +1043,12 @@ export default function ReportsPage() {
       clients: unique(baseRows.map((row) => row.__client)),
       sellers: unique(baseRows.map((row) => row.__seller)),
       services: unique(baseRows.map((row) => row.__service)),
-      statuses: unique([...baseRows.map((row) => row.__status), ...STATUS_OPTIONS.filter((s) => s !== ALL)]),
+      statuses: activeReport === 'pricing'
+        ? unique(baseRows.map((row) => row.__status))
+        : unique([...baseRows.map((row) => row.__status), ...STATUS_OPTIONS.filter((s) => s !== ALL)]),
       currencies: unique(baseRows.map((row) => row.__currency)),
     }
-  }, [baseRows])
+  }, [activeReport, baseRows])
 
   // REP-001: los totales se agrupan por moneda; nunca sumar USD y HNL juntos.
   const totalsByCurrency = useMemo(() => {
@@ -874,6 +1092,7 @@ export default function ReportsPage() {
   // Which columns show totals per report
   const totalColumnsConfig: Record<ReportId, string[]> = {
     commercial: ['costo', 'venta', 'gp', 'margen'],
+    pricing: [],
     operations: [],
     billing: ['total'],
     receivable: ['saldo'],
@@ -905,6 +1124,22 @@ export default function ReportsPage() {
 
   const dateRangeLabel = `${dateFrom ? fmtDate(dateFrom) : 'Inicio'} – ${dateTo ? fmtDate(dateTo) : 'Hoy'}`
 
+  const pricingMetrics = activeReport === 'pricing'
+    ? {
+        received: rows.reduce((sum, row) => sum + Number(row.__enteredInPeriod || 0), 0),
+        approved: rows.reduce((sum, row) => sum + Number(row.__approvedInPeriod || 0), 0),
+        lost: rows.reduce((sum, row) => sum + Number(row.__lostInPeriod || 0), 0),
+        pending: rows.reduce((sum, row) => sum + Number(row.__pendingAtClose || 0), 0),
+        responseHours: rows
+          .map((row) => row.__responseHours)
+          .filter((value): value is number => value !== undefined && value >= 0),
+      }
+    : null
+  const averagePricingResponse = pricingMetrics?.responseHours.length
+    ? pricingMetrics.responseHours.reduce((sum, value) => sum + value, 0) /
+      pricingMetrics.responseHours.length
+    : undefined
+
   const pdfData: ReportPdfData = {
     title: `Reporte ${reportConfig.label}`,
     subtitle: reportConfig.scope,
@@ -913,12 +1148,22 @@ export default function ReportsPage() {
     filters: [
       `Período: ${dateRangeLabel}`,
       clientFilter !== ALL ? `Cliente/Proveedor: ${clientFilter}` : '',
-      sellerFilter !== ALL ? `Vendedor: ${sellerFilter}` : '',
+      sellerFilter !== ALL
+        ? `${activeReport === 'pricing' ? 'Responsable Pricing' : 'Vendedor'}: ${sellerFilter}`
+        : '',
       serviceFilter !== ALL ? `Servicio: ${serviceFilter}` : '',
       statusFilter !== ALL ? `Estado: ${statusFilter}` : '',
       currencyFilter !== ALL ? `Moneda: ${currencyFilter}` : '',
     ].filter(Boolean),
-    metrics: activeReport === 'commercial'
+    metrics: activeReport === 'pricing' && pricingMetrics
+      ? [
+          { label: 'Cotizaciones recibidas', value: String(pricingMetrics.received) },
+          { label: 'Aprobadas Pricing', value: String(pricingMetrics.approved) },
+          { label: 'Pendientes en Pricing al cierre', value: String(pricingMetrics.pending) },
+          { label: 'Perdidas en Pricing', value: String(pricingMetrics.lost) },
+          { label: 'Respuesta promedio', value: formatResponseTime(averagePricingResponse) },
+        ]
+      : activeReport === 'commercial'
       ? [
           { label: 'Cotizaciones', value: String(rows.length) },
           { label: 'Costo total', value: fmtTotalsByCurrency('cost') },
@@ -1085,7 +1330,9 @@ export default function ReportsPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Vendedor</label>
+            <label className="mb-1 block text-xs font-medium text-slate-500">
+              {activeReport === 'pricing' ? 'Responsable Pricing' : 'Vendedor'}
+            </label>
             <select value={sellerFilter} onChange={(e) => setSellerFilter(e.target.value)} className={fieldClass}>
               {options.sellers.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
