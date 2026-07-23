@@ -3394,3 +3394,52 @@ Agregar una entrada por fix:
   - La deteccion depende de que la descripcion incluya DTHC, Destination THC,
     THC Destino, Entrega Local o Local Delivery.
 - Commit: pendiente.
+
+### 2026-07-23 - UX-043 - Calculadora referencial de seguro en acciones rapidas
+
+- Estado: En validacion
+- Codigo:
+  - `src/components/layout/topbar.tsx`
+  - `src/components/quotations/ReferenceInsuranceCalculatorDialog.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Agrega `Calculadora de Seguro` al menu global de acciones rapidas para los
+    roles internos.
+  - El modal permite ingresar mercancía/FOB, flete y servicios, impuestos
+    nacionales y tarifa porcentual, además de activar los recargos adicionales
+    y operacionales.
+  - Muestra subtotal, valor asegurado y prima estimada en formato USD.
+  - El cálculo es local, no guarda información y se identifica como referencia
+    no vinculante.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Abrir la calculadora desde acciones rapidas en escritorio y movil.
+  - Confirmar el cálculo con y sin cada recargo del 10%.
+  - Confirmar que `Limpiar`, `Cerrar` y el cierre exterior del modal funcionen.
+- Riesgos pendientes:
+  - La tarifa predeterminada es 0.28%; el usuario debe ajustarla a la póliza o
+    condición comercial aplicable antes de usar el resultado como referencia.
+- Commit: pendiente.
+
+### 2026-07-23 - PRI-016 - Comparacion contra target incluye ISV
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - `Vs Target` compara la venta total con ISV contra el target del cliente,
+    que tambien se registra con ISV.
+  - Las tarjetas de venta y target indican explicitamente que incluyen ISV.
+  - Profit y GP conservan su calculo sin ISV.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - Para venta con ISV USD 8,507.50 y target USD 8,122.00, confirmar que
+    `Vs Target` muestre `+ USD 385.50` y `4.75% arriba`.
+  - Confirmar que Profit permanezca en USD 700.00 y GP en 8.34%.
+- Riesgos pendientes:
+  - Las cotizaciones historicas cuyo target se haya ingresado sin ISV deben
+    corregir ese dato antes de interpretar la comparacion.
+- Commit: pendiente.

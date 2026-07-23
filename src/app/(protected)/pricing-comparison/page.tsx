@@ -2689,7 +2689,7 @@ function PricingComparisonContent() {
   const targetRate = Number(selectedQuote?.target_rate || 0)
 
   const targetRateDifference =
-    targetRate > 0 ? totalSale - targetRate : 0
+    targetRate > 0 ? totalSaleWithTax - targetRate : 0
 
   const targetRateDifferencePercentage =
     targetRate > 0 ? (targetRateDifference / targetRate) * 100 : 0
@@ -5663,7 +5663,7 @@ const profitabilityColor =
                       </div>
 
                       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
-                      <p className="text-xs text-gray-500 dark:text-slate-400">Venta Cliente</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Venta Cliente (con ISV)</p>
                       <p className="text-xl font-bold dark:text-white">
                         USD {formatCurrency(totalSaleWithTax)}
                       </p>
@@ -5715,7 +5715,7 @@ const profitabilityColor =
                       </div>
 
                       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
-                      <p className="text-xs text-gray-500 dark:text-slate-400">Target Cliente</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Target Cliente (con ISV)</p>
                       <p className="text-xl font-bold dark:text-white">
                         {targetRate > 0
                           ? `USD ${formatCurrency(targetRate)}`
