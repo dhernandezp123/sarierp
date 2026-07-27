@@ -1825,6 +1825,7 @@ function PricingComparisonContent() {
       quantity: item.quantity || 1,
       sale_amount: formatEditableMoney(item.sale_amount),
       cost_amount: formatEditableMoney(item.cost_amount),
+      taxable: Boolean(item.taxable),
       provider: item.provider || item.supplier || '',
       notes: item.notes || '',
     })
@@ -1847,7 +1848,8 @@ function PricingComparisonContent() {
     const quantity = Number(editingPricingItemForm.quantity || 1)
     const saleAmount = Number(editingPricingItemForm.sale_amount || 0)
     const subtotal = saleAmount * quantity
-    const taxAmount = calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
+    const taxable = Boolean(editingPricingItemForm.taxable)
+    const taxAmount = calculateTaxAmount(taxable, subtotal, defaultTaxRate)
     const totalAmount = subtotal + taxAmount
 
     const { error } = await supabase
@@ -1858,6 +1860,8 @@ function PricingComparisonContent() {
         quantity,
         cost_amount: Number(editingPricingItemForm.cost_amount || 0),
         sale_amount: saleAmount,
+        taxable,
+        tax_rate: taxable ? defaultTaxRate : 0,
         supplier: editingPricingItemForm.provider,
         notes: editingPricingItemForm.notes,
         tax_amount: taxAmount,
@@ -5369,6 +5373,17 @@ const profitabilityColor =
                               editingPricingItemId === item.id
                                 ? editingSale * editingQty
                                 : saleSubtotal
+                            const displayTaxable =
+                              editingPricingItemId === item.id
+                                ? Boolean(editingPricingItemForm?.taxable)
+                                : Boolean(item.taxable)
+                            const displayTax = calculateTaxAmount(
+                              displayTaxable,
+                              displaySaleSubtotal,
+                              defaultTaxRate
+                            )
+                            const displaySaleTotal =
+                              displaySaleSubtotal + displayTax
                             const displayMargin =
                               displaySaleSubtotal - displayCostSubtotal
                             const margin = displayMargin
@@ -5515,12 +5530,31 @@ const profitabilityColor =
                                 </td>
 
                                 <td className="p-2 text-sm">
-                                  {currency} {tax.toFixed(2)}
+                                  {editingPricingItemId === item.id ? (
+                                    <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap">
+                                      <input
+                                        type="checkbox"
+                                        checked={Boolean(
+                                          editingPricingItemForm?.taxable
+                                        )}
+                                        onChange={(e) =>
+                                          setEditingPricingItemForm({
+                                            ...editingPricingItemForm,
+                                            taxable: e.target.checked,
+                                          })
+                                        }
+                                        className="h-4 w-4 rounded border-slate-300"
+                                      />
+                                      {currency} {displayTax.toFixed(2)}
+                                    </label>
+                                  ) : (
+                                    `${currency} ${tax.toFixed(2)}`
+                                  )}
                                 </td>
 
                                 <td className="p-2 text-sm font-bold">
                                   {editingPricingItemId === item.id
-                                    ? `USD ${formatCurrency(displaySaleSubtotal)}`
+                                    ? `USD ${formatCurrency(displaySaleTotal)}`
                                     : `USD ${formatCurrency(item.total_amount)}`
                                   }
                                 </td>

@@ -3443,3 +3443,28 @@ Agregar una entrada por fix:
   - Las cotizaciones historicas cuyo target se haya ingresado sin ISV deben
     corregir ese dato antes de interpretar la comparacion.
 - Commit: pendiente.
+
+### 2026-07-24 - PRI-017 - Edicion de ISV en lineas de Pricing
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Al modificar una linea de pricing, el formulario carga su indicador gravable
+    y permite activarlo o desactivarlo desde la columna ISV.
+  - La vista previa de ISV y venta total se recalcula inmediatamente con el
+    monto, cantidad y seleccion gravable editados.
+  - Al guardar se persisten `taxable`, `tax_rate`, `tax_amount` y `total_amount`
+    de forma consistente.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+- Verificacion manual pendiente:
+  - En una cotizacion FCL, modificar una linea inicialmente exenta, cambiar el
+    monto, activar ISV y confirmar que el impuesto y total se actualicen.
+  - Guardar, volver a abrir la linea y confirmar que el indicador ISV permanezca
+    activo.
+  - Desactivar ISV y confirmar que el impuesto quede en cero y el total sea el
+    subtotal.
+- Riesgos pendientes: ninguno.
+- Commit: pendiente.
