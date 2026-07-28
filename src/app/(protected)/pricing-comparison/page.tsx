@@ -403,10 +403,6 @@ function PricingComparisonContent() {
 
   const [editingPricingItemForm, setEditingPricingItemForm] =
     useState<any>(null)
-  const bankTransferFee = Number(
-    surchargeRules.find((rule) => rule.code === 'bank_transfer_fee')
-      ?.fixed_amount || 0
-  )
 
   useEffect(() => {
     fetchQuotations()
@@ -1165,9 +1161,32 @@ function PricingComparisonContent() {
       selectedAgentQuote.ocean_freight || selectedAgentQuote.costo || 0
     )
     const exwCost = Number(selectedAgentQuote.exw_cost || 0)
-    const mblFee = Number(selectedAgentQuote.mbl_fee || 0)
-    const totalProfit =
-      Number(selectedAgentQuote.profit_per_container || 0) * containersQty
+    const isFclSelection =
+      normalizeText(selectedQuote.quote_type) === 'fcl'
+    const selectedFclOverrides = fclTableChargeOverrides[agentQuoteId]
+    const getSelectedFclAmount = (
+      key: 'mbl' | 'ps',
+      fallbackValue: unknown
+    ) => {
+      const overrideValue = selectedFclOverrides?.[key]
+      const fallbackAmount = Number(fallbackValue || 0)
+      const amount =
+        overrideValue === undefined ? fallbackAmount : Number(overrideValue)
+
+      return Number.isFinite(amount)
+        ? Math.max(amount, 0)
+        : Math.max(Number.isFinite(fallbackAmount) ? fallbackAmount : 0, 0)
+    }
+    const mblFee = isFclSelection
+      ? getSelectedFclAmount('mbl', selectedAgentQuote.mbl_fee)
+      : Number(selectedAgentQuote.mbl_fee || 0)
+    const agentProfitPerContainer = isFclSelection
+      ? getSelectedFclAmount(
+          'ps',
+          selectedAgentQuote.profit_per_container
+        )
+      : Number(selectedAgentQuote.profit_per_container || 0)
+    const totalProfit = agentProfitPerContainer * containersQty
 
     const { data: containerRatesData, error: containerRatesError } =
       await supabase
@@ -1181,11 +1200,8 @@ function PricingComparisonContent() {
       return
     }
 
-    const agentProfitPerContainer =
-      Number(selectedAgentQuote.profit_per_container || 0)
-
     const mblPerContainer =
-      containersQty > 0 ? Number(selectedAgentQuote.mbl_fee || 0) / containersQty : 0
+      containersQty > 0 ? mblFee / containersQty : 0
 
     const freightDescription = getFreightDescription()
     const chargeableKg =
@@ -4449,7 +4465,6 @@ const profitabilityColor =
                           getValidTransitDays={getValidTransitDays}
                           formatCurrency={formatCurrency}
                           formatDisplayDate={formatDisplayDate}
-                          bankTransferFee={bankTransferFee}
                           taxRate={defaultTaxRate}
                           onChargeOverridesChange={setFclTableChargeOverrides}
                           onSaveTable={saveFclTableOverrides}

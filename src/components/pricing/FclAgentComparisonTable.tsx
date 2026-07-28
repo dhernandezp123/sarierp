@@ -26,7 +26,6 @@ type FclAgentComparisonTableProps = {
   getValidTransitDays: (quote?: AgentQuote | null) => number | null
   formatCurrency: (value: number) => string
   formatDisplayDate: (date?: string | null) => string
-  bankTransferFee: number
   taxRate: number
   onChargeOverridesChange: (
     updater: (current: FclTableChargeOverrides) => FclTableChargeOverrides
@@ -109,7 +108,6 @@ export function FclAgentComparisonTable({
   getValidTransitDays,
   formatCurrency,
   formatDisplayDate,
-  bankTransferFee,
   taxRate,
   onChargeOverridesChange,
   onSaveTable,
@@ -262,8 +260,7 @@ export function FclAgentComparisonTable({
       oceanFreight +
         exwCost +
         editableChargesTotal +
-        getOptionalChargesTax(quote) +
-        bankTransferFee,
+        getOptionalChargesTax(quote),
       0
     )
   }
@@ -437,10 +434,6 @@ export function FclAgentComparisonTable({
       label: config.label,
       getValue: (quote: AgentQuote) => renderEditableChargeInput(quote, config),
     })),
-    {
-      label: 'Bank Transfer Fee',
-      getValue: () => `USD ${formatCurrency(bankTransferFee)}`,
-    },
     {
       label: 'Costo',
       emphasis: 'cost',

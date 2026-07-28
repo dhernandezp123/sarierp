@@ -4,6 +4,64 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-07-28 - CALC-005 - Retiro de Bank Transfer Fee del comparativo FCL
+
+- Estado: En validación manual.
+- Hallazgo: CALC-005.
+- Código:
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: No aplica.
+- Cambio:
+  - Se elimina la fila Bank Transfer Fee de la tabla comparativa FCL.
+  - El cargo deja de participar en el total ajustado y en la determinación de
+    la tarifa de mejor costo.
+  - Se retira la lectura y el prop que conectaban `bank_transfer_fee` desde
+    `surcharge_rules` con la tabla.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Búsqueda dirigida de `bankTransferFee`, `Bank Transfer Fee` y
+    `bank_transfer_fee` en los componentes del comparativo: sin resultados.
+- Verificación manual pendiente:
+  - Abrir el comparativo FCL, confirmar que no exista la fila Bank Transfer Fee
+    y que el total disminuya por el importe anteriormente configurado.
+- Riesgos o trabajo pendiente: Ninguno identificado.
+- Commit: Pendiente.
+
+### 2026-07-28 - CALC-004 - MBL y Profit Share consolidados en Ocean Freight
+
+- Estado: En validación manual.
+- Hallazgo: CALC-004.
+- Código: `src/app/(protected)/pricing-comparison/page.tsx`.
+- SQL: No aplica.
+- Causa raíz: La tabla FCL permite ajustar MBL y Profit Share por agente, pero
+  la selección de tarifa regeneraba Pricing usando únicamente los valores
+  persistidos en `agent_quotes`, ignorando los importes visibles ajustados en
+  el comparativo.
+- Cambio:
+  - MBL y Profit Share permanecen consolidados dentro de la línea de Ocean
+    Freight; no se generan como líneas independientes.
+  - MBL se interpreta como total por BL y se divide entre la cantidad real de
+    contenedores antes de sumarlo al costo y venta unitarios del flete.
+  - Profit Share se interpreta como importe por contenedor y se suma a la venta
+    unitaria de Ocean Freight.
+  - Al seleccionar desde el comparativo FCL se usan los valores visibles de
+    MBL y Profit Share, con fallback a `agent_quotes` cuando no existe ajuste.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente aviso de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Con un contenedor, Ocean Freight USD 6,300.00, MBL USD 50.00 y Profit
+    Share USD 50.00 deben generar costo unitario USD 6,350.00 y venta base USD
+    6,400.00 antes de margen comercial adicional.
+  - Con dos contenedores, un MBL total USD 50.00 debe aportar USD 25.00 por
+    contenedor; Profit Share debe conservar su importe completo por cada
+    contenedor.
+- Riesgos o trabajo pendiente:
+  - Bank Transfer Fee fue retirado del comparativo bajo CALC-005.
+- Commit: Pendiente.
+
 ### 2026-07-22 - REP-009 - Cierre mensual histórico de Pricing
 
 - Estado: En validación.
