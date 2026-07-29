@@ -68,6 +68,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
+import { formatDateTime } from '@/src/lib/format'
 
 import { Badge } from '../../../components/ui/badge'
 import {
@@ -4515,6 +4516,9 @@ const profitabilityColor =
                                         <span>
                                           {quote.transit_time || quote.transit || 'N/A'} dias
                                         </span>
+                                      </p>
+                                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        Ingresada: {formatDateTime(quote.created_at, 'N/A')}
                                       </p>
                                     </div>
 

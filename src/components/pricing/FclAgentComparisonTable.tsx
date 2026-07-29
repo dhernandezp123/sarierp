@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import { getCarrier } from '@/src/lib/constants/carriers'
+import { formatDateTime } from '@/src/lib/format'
 import { cn } from '@/src/lib/utils'
 
 type AgentQuote = any
@@ -381,6 +382,10 @@ export function FclAgentComparisonTable({
   }
 
   const rows: Row[] = [
+    {
+      label: 'Fecha y hora de ingreso',
+      getValue: (quote) => formatDateTime(quote.created_at, 'N/A'),
+    },
     {
       label: 'Naviera / Carrier',
       getValue: (quote) =>

@@ -69,7 +69,10 @@ Git entre computadoras y ambientes.
 - SQL: No aplica; utiliza `quotation_status_history` y las relaciones existentes.
 - Cambio: agrega una reportería de Pricing exportable a CSV/PDF que reconstruye ciclos desde `Pendiente de Fijar Precios` hasta `Pricing Aprobado` o `Perdida`, con entradas y aprobaciones del período, pendientes a la fecha de cierre, responsable, tiempo calendario de respuesta, valores comerciales y motivo de pérdida. Las métricas se identifican como `Cotizaciones recibidas`, `Aprobadas Pricing` y `Pendientes en Pricing al cierre` para evitar confusiones con la creación y el resultado comercial.
 - Validaciones: `npx tsc --noEmit` OK; `git diff --check` OK.
-- Riesgo pendiente: aplicar primero la migración de razones de pérdida, verificar RLS con un usuario Pricing y conciliar manualmente un mes con reingresos a Pricing.
+- Riesgo pendiente: migración aplicada previamente y registrada el 2026-07-28;
+  verificar
+  RLS con un usuario Pricing y conciliar manualmente un mes con reingresos a
+  Pricing.
 - Commit: Pendiente.
 
 ### 2026-07-22 - UX-042 - Cierre exterior del selector de estado
@@ -99,7 +102,10 @@ Git entre computadoras y ambientes.
 - SQL: `supabase/migrations/20260722143000_quotation_loss_reason.sql`.
 - Cambio: al pasar una cotización a `Perdida`, abre un modal con razones categorizadas. `Otra` exige una explicación; la selección se guarda en la cotización, el historial y el log de actividad.
 - Validaciones: `npx tsc --noEmit` OK; `git diff --check` OK.
-- Riesgo pendiente: aplicar la migración y validar manualmente una transición real; los registros históricos permanecen sin razón.
+- Riesgo pendiente: migración aplicada previamente y registrada el 2026-07-28;
+  validar
+  manualmente una transición real. Los registros históricos permanecen sin
+  razón.
 - Commit: Pendiente.
 
 ### 2026-07-22 - INS-026 - Flete terrestre y aéreo en seguro
@@ -109,7 +115,10 @@ Git entre computadoras y ambientes.
 - SQL: `supabase/migrations/20260722120000_include_ground_and_air_freight_in_insurance.sql`.
 - Cambio: incluye `Flete Terrestre`, `Air Freight` y `Aéreo Consolidado` en la regla general Full Cover. Entrega Local permanece fuera salvo inclusión excepcional.
 - Validaciones: `npx tsc --noEmit` OK; `git diff --check` OK.
-- Riesgo pendiente: aplicar la migración y recalcular seguros existentes; validar manualmente LTL, aéreo y la exclusión de Entrega Local.
+- Riesgo pendiente: migración aplicada previamente y registrada el 2026-07-28;
+  recalcular
+  seguros existentes y validar manualmente LTL, aéreo y la exclusión de
+  Entrega Local.
 - Commit: Pendiente.
 
 ### 2026-07-21 - UX-041 - Acceso a cotizacion desde toast de creacion
@@ -212,7 +221,7 @@ Git entre computadoras y ambientes.
   - `npx tsc --noEmit`: OK.
   - `git diff --check`: OK.
 - Verificacion manual pendiente:
-  - Aplicar la migracion en Supabase.
+  - Migracion aplicada previamente y registrada en Supabase el 2026-07-28.
   - Recalcular sin excepciones y confirmar que DTHC, redestino y entrega local
     no formen parte de las bases de costo ni venta.
   - Recalcular marcando uno y luego todos los cargos adicionales; confirmar el
@@ -251,7 +260,7 @@ Git entre computadoras y ambientes.
 - Validaciones:
   - `npx tsc --noEmit`: OK.
 - Verificacion manual pendiente:
-  - Aplicar la migracion en Supabase y confirmar que Configuracion > Empresa
+  - Migracion aplicada y registrada; confirmar que Configuracion > Empresa
     muestre `DTHC` como exclusion inicial.
   - Recalcular una cotizacion con DTHC y verificar que su costo y venta no
     formen parte de ninguna base asegurada.
@@ -366,7 +375,7 @@ Git entre computadoras y ambientes.
 - Validaciones:
   - `npx tsc --noEmit`: OK.
 - Verificacion manual pendiente:
-  - Aplicar la migracion en Supabase.
+  - Migracion aplicada y registrada.
   - Cambiar la tasa como Admin, recargar Pricing y recalcular una linea de
     seguro; confirmar importe, formula guardada y detalle para aseguradora.
   - Confirmar que usuarios no Admin solo ven el campo en modo lectura.
@@ -2098,8 +2107,8 @@ Agregar una entrada por fix:
 ### 2026-07-06 - UX-017 - Plantillas de correo editables (fin del cuerpo hardcodeado)
 
 - Estado: En validacion; migraciones aplicadas en remoto el 2026-07-06 via
-  `supabase db push` y SQL Editor (registradas como `20260706200000`,
-  `20260706210000` y `20260706220000`).
+  `supabase db push` y SQL Editor. El historial de `20260706220000` se
+  registro el 2026-07-28 tras auditar esquema, policies y semillas.
 - Hallazgo: UX-017 (mejora solicitada por el titular).
 - Causa raiz: El cuerpo del correo de cotizacion estaba hardcodeado (~35
   lineas) en `quotations/[id]/page.tsx`; solo el texto de cierre era
@@ -2414,7 +2423,8 @@ Agregar una entrada por fix:
 
 ### 2026-07-07 - PRC-010 - Reglas de negocio de Miami Air y FCL desde catalogo
 
-- Estado: En validacion manual; requiere aplicar migracion SQL.
+- Estado: En validacion manual; migracion aplicada previamente y registrada el
+  2026-07-28.
 - Hallazgo: PRC-010 (auditoria de valores hardcodeados).
 - Codigo:
   - `src/hooks/useMiamiQuotation.ts`
@@ -2432,12 +2442,11 @@ Agregar una entrada por fix:
 - Validaciones:
   - `npx tsc --noEmit`: OK.
 - Verificacion manual pendiente:
-  - Aplicar migracion SQL en Supabase.
+  - Migracion aplicada previamente y registrada en Supabase el 2026-07-28.
   - Crear/previsualizar cotizacion Miami Air y confirmar minimos.
   - Abrir comparativo FCL y confirmar Bank Transfer Fee.
 - Riesgos pendientes:
-  - En ambientes donde no se haya aplicado la migracion, los minimos/fee quedan
-    en 0 porque ya no hay fallback hardcodeado.
+  - Validar manualmente los minimos/fee configurados en los flujos indicados.
 - Commit: hash pendiente
 
 ### 2026-07-07 - UX-022 - Branding configurable en PDFs operativos y reportes
@@ -2866,7 +2875,8 @@ Agregar una entrada por fix:
 - Validaciones:
   - `npx tsc --noEmit`: OK
 - Verificación manual/RLS pendiente:
-  - Aplicar la migración en Supabase remoto (`supabase db push` o pipeline).
+  - Migración aplicada previamente y registrada en Supabase remoto el
+    2026-07-28.
   - Confirmar que un usuario Cliente no puede ejecutar
     `set_miami_package_location` (debe fallar con 42501).
   - En `/miami/inventario`, iniciar `Conteo por rack`, escanear un tracking en
@@ -2958,7 +2968,7 @@ Agregar una entrada por fix:
 - Validaciones:
   - `npx tsc --noEmit`: OK
 - Verificacion manual pendiente:
-  - Aplicar migracion en Supabase.
+  - Migracion aplicada previamente y registrada en Supabase el 2026-07-28.
   - Apagar un producto en `/catalogs` y confirmar que no aparece en nueva
     cotizacion.
   - Apagar un cargo de `client_rate_catalog` y confirmar que desaparece del
@@ -2990,10 +3000,8 @@ Agregar una entrada por fix:
   - Verificacion REST: `container_types?name=eq.Breakbulk` devuelve
     `[{"name":"Breakbulk","active":true,"category":null}]`.
 - Riesgos pendientes:
-  - El SQL se corrio manualmente desde el SQL Editor, no con `supabase db push`,
-    por lo que la migracion no queda registrada en el historial de migraciones
-    remoto. Es idempotente (`WHERE NOT EXISTS`), asi que un `db push` futuro es
-    seguro y no duplica la fila.
+  - Ninguno de SQL; la ejecucion manual fue auditada y la version
+    `20260710120000` quedo registrada en remoto el 2026-07-28.
 - Commit: pendiente.
 
 ### 2026-07-10 - UX-026 - Correcciones UX en login del portal cliente
@@ -3239,7 +3247,8 @@ Agregar una entrada por fix:
 - Validaciones:
   - `npx tsc --noEmit`: OK
 - Verificación manual pendiente:
-  - Aplicar la migración y confirmar el seed (8 filas).
+  - Migración aplicada previamente y registrada el 2026-07-28; seed confirmado
+    con 8 filas.
   - Crear un transportista desde el manifiesto y verlo en ambos selects.
   - Intentar crear un duplicado (debe rechazarse con mensaje claro).
   - Confirmar que un usuario Cliente no puede insertar en `miami_carriers`.
@@ -3271,7 +3280,8 @@ Agregar una entrada por fix:
 - Validaciones:
   - `npx tsc --noEmit`: OK
 - Verificación manual pendiente:
-  - Aplicar la migración; crear manifiesto nuevo eligiendo transportista y
+  - Migración aplicada previamente y registrada el 2026-07-28; crear
+    manifiesto nuevo eligiendo transportista y
     confirmar que cada paquete escaneado hereda el carrier.
   - En un manifiesto viejo sin carrier, confirmar aviso y bloqueo de escaneo
     hasta seleccionarlo.
@@ -3333,7 +3343,8 @@ Agregar una entrada por fix:
 - Validaciones:
   - `npx tsc --noEmit`: OK
 - Verificación manual pendiente:
-  - Aplicar la migración y eliminar el manifiesto de prueba del usuario con
+  - Migración aplicada previamente y registrada el 2026-07-28; eliminar el
+    manifiesto de prueba del usuario con
     motivo; confirmar registro en `activity_logs` con trackings.
   - Confirmar que un usuario Operaciones no ve el botón y que la RPC le
     devuelve 42501 si la invoca directo.
@@ -3370,7 +3381,8 @@ Agregar una entrada por fix:
 - Validaciones:
   - `npx tsc --noEmit`: OK
 - Verificacion manual/RLS pendiente:
-  - Aplicar la migracion en Supabase remoto.
+  - Migracion aplicada previamente y registrada en Supabase remoto el
+    2026-07-28.
   - Probar dos escaneos concurrentes del mismo tracking en el mismo manifiesto:
     uno debe insertar y el otro debe fallar con mensaje de duplicado.
   - Intentar cambiar carrier con paquetes ya asignados/procesados: debe
@@ -3525,4 +3537,110 @@ Agregar una entrada por fix:
   - Desactivar ISV y confirmar que el impuesto quede en cero y el total sea el
     subtotal.
 - Riesgos pendientes: ninguno.
+- Commit: pendiente.
+
+### 2026-07-28 - PRI-018 - Fecha y hora de ingreso de tarifas de agentes
+
+- Estado: En validacion
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Cada tarjeta de tarifa de agente muestra la fecha y hora en que fue
+    ingresada al comparativo, tanto para LCL maritimo, aereo consolidado y los
+    demas servicios que utilizan la vista de tarjetas.
+  - La tabla comparativa FCL incorpora una fila de fecha y hora de ingreso por
+    agente, incluida en su impresion interna.
+  - Se reutiliza `agent_quotes.created_at` y el helper central
+    `formatDateTime`; no se modifica la fecha original al editar una tarifa.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Verificacion manual pendiente:
+  - Agregar dos tarifas de agentes en momentos distintos para FCL y confirmar
+    que sus fechas y horas sean visibles y comparables en cards y tabla.
+  - Repetir en LCL maritimo y aereo consolidado y confirmar el formato
+    `DD/MM/YYYY HH:mm`.
+  - Editar una tarifa existente y confirmar que conserve la fecha y hora de
+    ingreso original.
+- Riesgos pendientes:
+  - Las tarifas historicas sin `created_at` mostraran `N/A`.
+- Commit: pendiente.
+
+### 2026-07-28 - FLOW-011 - RPC de contenedores Booking y BL sin ambiguedad
+
+- Estado: En validacion; SQL aplicado en remoto.
+- Hallazgo: FLOW-011.
+- Causa raiz:
+  - `replace_booking_containers` retorna una columna llamada `booking_id` y
+    utilizaba `where booking_id = p_booking_id` sin alias de tabla. PL/pgSQL no
+    podia distinguir la columna real de la variable de salida.
+  - `replace_bl_containers` repetia el mismo patron con `bl_id`, por lo que
+    conservaba el mismo fallo latente al guardar contenedores de un BL.
+- SQL:
+  - `supabase/migrations/20260728110000_fix_booking_container_rpc_ambiguous_ids.sql`
+- Codigo:
+  - Sin cambios TypeScript; los formularios ya llaman las RPC correctas.
+- Cambios:
+  - Los deletes califican las columnas como `bc.booking_id` y `blc.bl_id`.
+  - Los recorridos JSON usan alias explicitos y los `return query` nombran sus
+    columnas de salida para evitar nuevas colisiones.
+  - Se conservan las validaciones de permisos, bloqueos transaccionales,
+    validacion de datos y grants existentes.
+- Validaciones:
+  - `npx supabase db push --dry-run`: OK; incluyo exclusivamente
+    `20260728110000_fix_booking_container_rpc_ambiguous_ids.sql`.
+  - `npx supabase db push --yes`: OK; migracion aplicada en remoto el
+    2026-07-28.
+  - `npx supabase migration list`: OK; version local y remota
+    `20260728110000`.
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Verificacion manual pendiente:
+  - Guardar varios contenedores en un Booking, confirmando que reemplace las
+    filas sin el error `booking_id is ambiguous`.
+  - Editar los contenedores nuevamente y confirmar que no se dupliquen.
+  - Guardar contenedores en un BL y confirmar que no aparezca
+    `bl_id is ambiguous`.
+- Riesgos pendientes:
+  - No marcar como completado hasta probar los flujos de Booking y BL con un
+    usuario autenticado de Operaciones/Admin.
+- Commit: pendiente.
+
+### 2026-07-28 - ENV-002 - Historial remoto de migraciones manuales alineado
+
+- Estado: Completado.
+- Hallazgo: ENV-002.
+- Causa:
+  - Doce migraciones ejecutadas manualmente en Supabase tenian sus cambios
+    presentes en la base, pero no estaban registradas en
+    `supabase_migrations.schema_migrations`.
+- Versiones auditadas:
+  - `20260706220000`, `20260707090000`, `20260707110000`,
+    `20260707120000`, `20260707130000`, `20260707140000`,
+    `20260707150000`, `20260710120000`, `20260710133000`,
+    `20260720153000`, `20260722120000` y `20260722143000`.
+- Verificaciones remotas:
+  - El volcado de esquema confirmo tablas, columnas, indices, funciones,
+    policies, grants, defaults y comentarios esperados.
+  - Plantillas de correo: 2/2 y sin texto UTF-8 corrupto.
+  - Recargos de negocio: 3/3 con sus importes esperados.
+  - Carriers Miami: 8/8; Breakbulk: 1/1.
+  - Catalogos operativos: 7/7 productos y 24/24 tarifas.
+  - Configuracion de seguro: patrones base, terrestre y aereo presentes en
+    todas las configuraciones revisadas.
+  - Columnas de rack, carrier de manifiesto, excepcion de seguro y razones de
+    perdida consultables mediante PostgREST.
+- Accion:
+  - `npx supabase migration repair --linked --status applied ...`: OK para las
+    doce versiones, sin volver a ejecutar su SQL.
+- Validaciones:
+  - `npx supabase migration list`: todas las versiones Local/Remote alineadas.
+  - `npx supabase db push --dry-run`: `Remote database is up to date`.
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Riesgos pendientes:
+  - Ninguno en el historial de migraciones. Las pruebas funcionales/RLS
+    pendientes de cada modulo permanecen documentadas en sus hallazgos.
 - Commit: pendiente.
