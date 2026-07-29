@@ -628,15 +628,14 @@ export default function BLPage() {
     }
 
     if (isNew) {
-      const { data, error } = await supabase
+      const newBlId = crypto.randomUUID()
+      const { error } = await supabase
         .from('bills_of_lading')
-        .insert({ ...payload, created_by: user?.id || null })
-        .select('id')
-        .single()
+        .insert({ id: newBlId, ...payload, created_by: user?.id || null })
 
       setSaving(false)
 
-      if (error || !data) {
+      if (error) {
         toast.error(error?.message || 'Error al crear el BL')
         return
       }
@@ -646,12 +645,12 @@ export default function BLPage() {
         module: 'operations_bl',
         action: 'create',
         entityType: 'bill_of_lading',
-        entityId: data.id,
+        entityId: newBlId,
         description: `${form.bl_type} creado para booking ${bookingId}`,
         metadata: { bl_type: form.bl_type, booking_id: bookingId, shipping_instruction_id: id },
       })
 
-      router.replace(`/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${data.id}`)
+      router.replace(`/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${newBlId}`)
       return
     }
 
@@ -840,7 +839,7 @@ export default function BLPage() {
 
     setUploadingDraft(true)
     const safeName = sanitizeFileName(file.name)
-    const path = `bl-drafts/${isNew ? 'new' : blId}/${Date.now()}-${safeName}`
+    const path = `${bookingId}/bl-drafts/${isNew ? 'new' : blId}/${Date.now()}-${safeName}`
 
     const { error: uploadError } = await supabase.storage
       .from(BOOKING_DOCUMENTS_BUCKET)

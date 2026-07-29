@@ -3566,7 +3566,7 @@ Agregar una entrada por fix:
     ingreso original.
 - Riesgos pendientes:
   - Las tarifas historicas sin `created_at` mostraran `N/A`.
-- Commit: pendiente.
+- Commit: `d719cb2`.
 
 ### 2026-07-28 - FLOW-011 - RPC de contenedores Booking y BL sin ambiguedad
 
@@ -3606,7 +3606,7 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - No marcar como completado hasta probar los flujos de Booking y BL con un
     usuario autenticado de Operaciones/Admin.
-- Commit: pendiente.
+- Commit: `d719cb2`.
 
 ### 2026-07-28 - ENV-002 - Historial remoto de migraciones manuales alineado
 
@@ -3643,4 +3643,71 @@ Agregar una entrada por fix:
 - Riesgos pendientes:
   - Ninguno en el historial de migraciones. Las pruebas funcionales/RLS
     pendientes de cada modulo permanecen documentadas en sus hallazgos.
+- Commit: `d719cb2`.
+
+### 2026-07-28 - FLOW-012 - Draft MBL respeta la ruta RLS del booking
+
+- Estado: En validacion.
+- Hallazgo: FLOW-012.
+- Causa raiz:
+  - La carga del Draft MBL usaba `bl-drafts/...` como ruta dentro del bucket
+    `booking-documents`.
+  - La policy de Storage obtiene el booking desde el primer segmento del
+    objeto; `bl-drafts` no es un UUID, por lo que
+    `booking_id_from_storage_object_name(name)` devolvia `null` y el insert era
+    rechazado por RLS.
+- Codigo:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - La ruta ahora comienza con `bookingId` y conserva la jerarquia
+    `bl-drafts/{new|blId}/{timestamp}-{archivo}`.
+  - No se relajan policies ni permisos; la carga utiliza el contrato de ruta
+    ya aplicado a los documentos generales del booking.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK.
+- Verificacion manual pendiente:
+  - Crear un MBL, subir el Draft MBL del agente y confirmar que Storage no
+    devuelve `new row violates row-level security policy`.
+  - Guardar el MBL y abrir el enlace del archivo cargado.
+  - Repetir la carga al editar un MBL existente.
+- Riesgos pendientes:
+  - Si el usuario abandona un MBL nuevo despues de subir el archivo, el objeto
+    queda bajo `bl-drafts/new`; la limpieza de borradores huerfanos sigue
+    pendiente de una politica de retencion.
+- Commit: pendiente.
+
+### 2026-07-28 - FLOW-013 - Creacion de BL compatible con RLS
+
+- Estado: En validacion.
+- Hallazgo: FLOW-013.
+- Causa raiz:
+  - La creacion ejecutaba `.insert(...).select('id').single()`, por lo que
+    PostgREST solicitaba `INSERT ... RETURNING`.
+  - La policy SELECT de `bills_of_lading` usa
+    `can_access_bill_of_lading(id)`, que vuelve a consultar la fila. Durante
+    el mismo statement de insercion esa comprobacion no encuentra la nueva
+    fila y rechaza el `RETURNING`, aunque `can_manage_operations()` sea true.
+- Codigo:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+- SQL: ninguno; no se relajan ni modifican policies RLS.
+- Cambios:
+  - El cliente genera el UUID del BL antes de insertarlo.
+  - El insert incluye ese UUID y no solicita representacion de retorno.
+  - El mismo UUID se utiliza en el log de actividad y en la redireccion al BL.
+- Validaciones:
+  - Reproduccion SQL local con rol `Admin`: `current_user_role() = Admin` y
+    `can_manage_operations() = true`; `INSERT ... RETURNING` reproduce el
+    rechazo RLS.
+  - Transaccion local con rollback: el mismo insert sin `RETURNING` se crea y
+    puede consultarse despues del statement.
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; unicamente avisos de conversion LF/CRLF.
+- Verificacion manual pendiente:
+  - Pulsar `Crear Master BL` con el Draft MBL cargado y confirmar que se crea,
+    registra la actividad y abre el detalle del nuevo MBL.
+- Riesgos pendientes:
+  - La verificacion funcional requiere la sesion autenticada y los datos del
+    booking del ambiente remoto.
 - Commit: pendiente.
