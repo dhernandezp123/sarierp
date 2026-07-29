@@ -877,6 +877,13 @@ function PricingComparisonContent() {
     const previousFinalCost = editingAgentQuote
       ? getAgentQuoteFinalCost(editingAgentQuote)
       : null
+    const shouldClearFclCostOverrides =
+      normalizeText(selectedQuote.quote_type) === 'fcl' &&
+      Boolean(editingAgentQuote) &&
+      (Number(editingAgentQuote?.mbl_fee || 0) !==
+        Number(agentForm.mbl_fee || 0) ||
+        Number(editingAgentQuote?.profit_per_container || 0) !==
+          Number(agentForm.profit_per_container || 0))
 
     const reason = await requestChangeReason(
       isEditingSelectedAgentQuote
@@ -1046,6 +1053,38 @@ function PricingComparisonContent() {
       })
     }
 
+    if (shouldClearFclCostOverrides) {
+      const currentQuoteOverrides =
+        fclTableChargeOverrides[savedAgentQuote.id]
+
+      if (currentQuoteOverrides) {
+        const nextQuoteOverrides = { ...currentQuoteOverrides }
+        delete nextQuoteOverrides.mbl
+        delete nextQuoteOverrides.ps
+
+        const nextOverrides = { ...fclTableChargeOverrides }
+
+        if (Object.keys(nextQuoteOverrides).length > 0) {
+          nextOverrides[savedAgentQuote.id] = nextQuoteOverrides
+        } else {
+          delete nextOverrides[savedAgentQuote.id]
+        }
+
+        setFclTableChargeOverrides(nextOverrides)
+
+        if (fclTableStorageKey) {
+          try {
+            window.localStorage.setItem(
+              fclTableStorageKey,
+              JSON.stringify(nextOverrides)
+            )
+          } catch {
+            // State remains synchronized for the current session.
+          }
+        }
+      }
+    }
+
     toast.success(
       editingAgentQuoteId
         ? 'Tarifa del agente actualizada'
@@ -1164,7 +1203,10 @@ function PricingComparisonContent() {
     const exwCost = Number(selectedAgentQuote.exw_cost || 0)
     const isFclSelection =
       normalizeText(selectedQuote.quote_type) === 'fcl'
-    const selectedFclOverrides = fclTableChargeOverrides[agentQuoteId]
+    const selectedFclOverrides =
+      isFclSelection && agentQuotesViewMode === 'table'
+        ? fclTableChargeOverrides[agentQuoteId]
+        : undefined
     const getSelectedFclAmount = (
       key: 'mbl' | 'ps',
       fallbackValue: unknown
@@ -1217,7 +1259,8 @@ function PricingComparisonContent() {
           )}/KG.`
         : ''
 
-    const totalSaleFreight = oceanFreight + mblFee + totalProfit
+    const totalFreightWithAgentProfit =
+      oceanFreight + mblFee + totalProfit
 
     const oceanFreightLines = isAirConsolidatedQuote()
       ? [
@@ -1225,13 +1268,15 @@ function PricingComparisonContent() {
             quotation_id: selectedQuote.id,
             item_type: 'Flete',
             description: freightDescription,
-            cost_amount: oceanFreight + mblFee,
-            sale_amount: totalSaleFreight,
+            cost_amount: isFclSelection
+              ? totalFreightWithAgentProfit
+              : oceanFreight + mblFee,
+            sale_amount: totalFreightWithAgentProfit,
             quantity: 1,
             taxable: false,
             tax_rate: 0,
             tax_amount: 0,
-            total_amount: totalSaleFreight,
+            total_amount: totalFreightWithAgentProfit,
             currency,
             supplier,
             notes: airFreightNotes,
@@ -1240,12 +1285,14 @@ function PricingComparisonContent() {
         ]
       : containerRatesData && containerRatesData.length > 0
         ? containerRatesData.map((rate) => {
-            const unitCost =
-              Number(rate.ocean_freight || 0) + mblPerContainer
-            const unitSale =
+            const unitAgentCost =
               Number(rate.ocean_freight || 0) +
               agentProfitPerContainer +
               mblPerContainer
+            const unitCost = isFclSelection
+              ? unitAgentCost
+              : Number(rate.ocean_freight || 0) + mblPerContainer
+            const unitSale = unitAgentCost
 
             const quantity = Number(rate.quantity || 1)
 
@@ -1271,13 +1318,15 @@ function PricingComparisonContent() {
               quotation_id: selectedQuote.id,
               item_type: 'Flete',
               description: freightDescription,
-              cost_amount: oceanFreight + mblFee,
-              sale_amount: totalSaleFreight,
+              cost_amount: isFclSelection
+                ? totalFreightWithAgentProfit
+                : oceanFreight + mblFee,
+              sale_amount: totalFreightWithAgentProfit,
               quantity: 1,
               taxable: false,
               tax_rate: 0,
               tax_amount: 0,
-              total_amount: totalSaleFreight,
+              total_amount: totalFreightWithAgentProfit,
               currency,
               supplier,
               notes: '',

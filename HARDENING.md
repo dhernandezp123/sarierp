@@ -3711,3 +3711,86 @@ Agregar una entrada por fix:
   - La verificacion funcional requiere la sesion autenticada y los datos del
     booking del ambiente remoto.
 - Commit: pendiente.
+
+### 2026-07-28 - FLOW-014 - HBL hereda contenedores del MBL
+
+- Estado: En validacion; SQL aplicado en remoto.
+- Hallazgo: FLOW-014.
+- Causa raiz:
+  - Al crear un HBL se heredaban los datos generales del MBL padre, pero no sus
+    filas de `bl_containers`.
+  - El HBL se abria sin contenedores y exigia volver a ingresarlos manualmente.
+- SQL:
+  - `supabase/migrations/20260728130000_copy_mbl_containers_to_hbl.sql`
+- Codigo TypeScript: ninguno.
+- Cambios:
+  - Un trigger copia los contenedores del MBL padre dentro de la misma
+    transaccion que crea el HBL.
+  - Se copian numero, precinto, tipo, cantidad, peso, volumen y notas.
+  - El trigger valida que el padre sea un MBL del mismo booking.
+  - La copia es inicial: despues de crear el HBL, Operaciones puede ajustar sus
+    contenedores sin modificar el MBL ni otros HBL.
+- Validaciones:
+  - `npx supabase migration up`: OK.
+  - Prueba SQL transaccional con rollback: 2/2 contenedores copiados y todos
+    sus campos coinciden con el MBL padre.
+  - Prueba negativa local: un MBL de otro booking es rechazado.
+  - `npx supabase db push --linked --dry-run`: incluyo unicamente
+    `20260728130000_copy_mbl_containers_to_hbl.sql`.
+  - `npx supabase db push --linked --yes`: OK; migracion aplicada en remoto.
+  - `npx supabase migration list --linked`: version local/remota
+    `20260728130000` alineada.
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; unicamente aviso de conversion LF/CRLF.
+- Verificacion manual pendiente:
+  - Crear un HBL desde un MBL con varios contenedores y confirmar que todos
+    aparezcan al abrir el nuevo HBL.
+  - Modificar el HBL y confirmar que el MBL padre conserve sus datos.
+- Riesgos pendientes:
+  - Los HBL creados antes de esta migracion no se rellenan automaticamente.
+- Commit: pendiente.
+
+### 2026-07-29 - CALC-006 - Profit del agente incluido en costo FCL
+
+- Estado: En validacion manual.
+- Hallazgo: CALC-006.
+- Causa raiz:
+  - La tabla comparativa FCL trataba Flete, MBL y Profit del agente como costo,
+    pero al seleccionar la tarifa `pricing_items` excluia el Profit del costo
+    y lo convertia en margen entre costo y venta.
+  - Los ajustes locales de MBL y Profit podian seguir afectando una seleccion
+    desde Cards aunque la tabla no estuviera visible.
+- Codigo:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - En FCL, el costo unitario de la linea Flete suma el flete del contenedor,
+    el MBL prorrateado y el Profit del agente por contenedor.
+  - La venta inicial se iguala al costo proveedor, sin crear margen comercial
+    automatico; Pricing conserva la edicion manual de la venta para alcanzar
+    el target del cliente.
+  - Los overrides visibles de la tabla solo se usan al seleccionar desde la
+    vista Tabla. Cards utiliza los valores persistidos de la tarifa.
+  - Al editar MBL o Profit en una tarifa, se eliminan sus overrides locales
+    anteriores para evitar que valores obsoletos prevalezcan.
+- Caso validado:
+  - 1 contenedor, Flete USD 6,700.00, MBL USD 65.00 y Profit del agente
+    USD 50.00 deben generar costo y venta inicial unitarios de USD 6,815.00.
+  - Una venta modificada manualmente, por ejemplo USD 7,160.00, conserva un
+    margen comercial de USD 345.00 sobre el costo correcto.
+- Validaciones:
+  - Auditoria remota de solo lectura sobre `SARIHN-2607-0167-AP`: tarifa
+    FCL USD 6,700.00, MBL USD 65.00, Profit USD 50.00 y un contenedor.
+  - Revision dirigida de formula: `6,700 + 65 / 1 + 50 = 6,815` para costo
+    y venta inicial; venta manual USD 7,160.00 produce margen USD 345.00.
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; unicamente avisos de conversion LF/CRLF.
+- Verificacion manual pendiente:
+  - Seleccionar la tarifa FCL del caso y confirmar una sola linea Ocean
+    Freight con costo unitario USD 6,815.00 y venta inicial USD 6,815.00.
+  - Cambiar manualmente la venta y confirmar que el costo permanezca intacto.
+  - Editar MBL/Profit, volver a seleccionar desde Cards y Tabla y confirmar
+    que no reaparezcan overrides anteriores.
+- Riesgos pendientes:
+  - Las ventas ya ajustadas manualmente no se modifican con este cambio.
+- Commit: pendiente.
