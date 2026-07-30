@@ -236,9 +236,49 @@ Git entre computadoras y ambientes.
     diferencia y Pricing debera volver a aplicar el seguro.
 - Commit: pendiente.
 
+### 2026-07-29 - REL-004 - Postdeploy remoto 4A–5C
+
+- Estado: SQL aplicado y validado en producción; frontend pendiente por destino
+  de hosting no identificado.
+- Hallazgo: REL-004.
+- Alcance:
+  - Verificación final del historial remoto.
+  - Gate estructural, conteos, seguridad/permisos y 15 diagnósticos.
+  - Conciliación del único conflicto legacy/canónico.
+- Validaciones remotas:
+  - `npx supabase migration list --linked`: seis versiones
+    `20260729120000`–`20260729170000` alineadas.
+  - `POSTDEPLOY_GATE_OK`.
+  - 15 diagnósticos ejecutados sentencia por sentencia mediante
+    `supabase db query --linked`: cero filas en todas las consultas de
+    integridad.
+  - 12 Shipping Instructions, 12 shipments, 4 bookings, 4 revisiones, 6 filas
+    físicas de contenedor, 48 requisitos y cero cut-offs/VGM/excepciones.
+  - Cero SI, bookings o eventos sin shipment y cero diferencias de
+    clasificación de backfill.
+  - 27 RPC `SECURITY DEFINER`: todas ejecutables por `authenticated`, ninguna
+    por `anon`.
+  - Cero permisos directos de escritura para `anon/authenticated` en tablas 5C.
+  - Las cuatro evaluaciones FCL ejecutaron sin error y quedaron bloqueadas por
+    readiness incompleto, estado preoperativo esperado; no se forzó transición.
+- Conciliación manual:
+  - `RT0020` reportó diferencia de `master_bl`.
+  - `bills_of_lading` contiene el MBL canónico `APS20260700173`, estado
+    `MBL Validado`, igual al cache del booking.
+  - `COSU6506723360` permanece solo en el campo legacy de la SI; no se modificó
+    ningún dato.
+- Riesgos o trabajo pendiente:
+  - El repositorio no tiene `.vercel/project.json`, `.openai/hosting.json` ni
+    workflow de deploy.
+  - La única cuenta Vercel disponible no contiene un proyecto Sari ERP.
+  - No desplegar frontend hasta recibir el proyecto o procedimiento de hosting
+    correcto. Desplegar el árbol frontend exacto de `856e2a4d...`.
+  - Completar UAT autenticada crítica después del despliegue.
+- Commit: pendiente.
+
 ### 2026-07-29 - REL-003 - Backfill 5C compatible con triggers diferidos
 
-- Estado: Corrección imprescindible validada localmente; 5C remota pendiente.
+- Estado: Aplicada y validada en producción.
 - Hallazgo: REL-003.
 - Causa raíz:
   - Con bookings reales, el backfill de requisitos generó eventos de los
@@ -273,9 +313,10 @@ Git entre computadoras y ambientes.
   - SHA-256 corregido de 5C:
     `8A9BB9F793FF419593D9A1646F889568B30035B16B3600EEA297561B3BFB3925`.
 - Riesgos o trabajo pendiente:
-  - Repetir rehearsal acumulado, dry-run remoto y aplicar únicamente 5C.
-  - Mantener frontend sin desplegar hasta completar postdeploy remoto.
-- Commit: pendiente.
+  - SQL y postdeploy remoto completados.
+  - Mantener frontend sin desplegar hasta identificar el hosting y completar
+    la UAT autenticada.
+- Commit: `618d3dd`.
 
 ### 2026-07-29 - REL-002 - Backfill 4A compatible con rol de migración
 

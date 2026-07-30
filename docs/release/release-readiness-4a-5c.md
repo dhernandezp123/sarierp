@@ -2,25 +2,25 @@
 
 ## Veredicto actual
 
-**NO-GO para producción.**
+**SQL 4A–5C aplicado y postdeploy aprobado. Frontend pendiente.**
 
-La implementación y el rehearsal sintético local están aprobados. Faltan dos
-gates obligatorios:
-
-1. rehearsal sobre copia representativa;
-2. UAT autenticada firmada.
-
-No se aplicó SQL ni frontend a producción.
+Las seis migraciones están registradas en producción y los gates estructurales,
+de seguridad, conteos y diagnósticos aprobaron. El frontend no se desplegó
+porque el repositorio no contiene un destino de hosting verificable y la única
+cuenta Vercel autenticada no incluye un proyecto Sari ERP. No crear ni enlazar
+un proyecto nuevo por suposición.
 
 ## Estado verificado
 
 - Branch: `main`.
-- Baseline Git remoto: `43e11bb`.
-- Baseline Supabase remoto: `20260728130000`.
-- Migraciones pendientes remotas: exactamente seis, `120000`–`170000`.
-- Dry-run remoto: aprobado; no aplicó cambios.
+- Commit frontend aprobado: `856e2a4d347d9a27954786e0bb18c2febeb53e37`.
+- Forward-fix 4A: `229d07b9ecbe148b6342ae9ae7153bc561e63017`.
+- Forward-fix 5C: `618d3dd`.
+- Baseline Supabase remoto previo: `20260728130000`.
+- Baseline Supabase remoto actual: `20260729170000`.
+- Historial remoto: las seis migraciones `120000`–`170000` alineadas.
 - PostgreSQL local del rehearsal: 17.6.
-- Supabase CLI: 2.108.0.
+- Supabase CLI: 2.108.0 para migraciones y 2.110.0 para consultas remotas.
 - Rehearsal sintético: `LOCAL_REHEARSAL_OK`.
 - Predeploy/postdeploy/security gates: aprobados.
 - Suites SQL 4A, 4B, 4C, 5A, 5B y 5C: aprobadas.
@@ -32,6 +32,18 @@ No se aplicó SQL ni frontend a producción.
 - ESLint global conserva deuda preexistente: 384 hallazgos
   (312 errores y 72 warnings). No se amplió el release para corregir módulos
   ajenos; debe quedar como riesgo aceptado o gate adicional de la organización.
+- Producción: `POSTDEPLOY_GATE_OK`.
+- Producción: 15 diagnósticos ejecutados sentencia por sentencia; todas las
+  consultas de integridad devolvieron cero filas.
+- Producción: 27 RPC del release son `SECURITY DEFINER`, ejecutables por
+  `authenticated` y ninguna por `anon`.
+- Producción: cero permisos directos `INSERT/UPDATE/DELETE` para
+  `anon/authenticated` sobre tablas 5C.
+- Producción: 12 SI = 12 shipments; 4 bookings = 4 revisiones; 48 requisitos;
+  cero bookings/eventos sin shipment y cero diferencias de clasificación.
+- El único `MANUAL_REVIEW` era el `master_bl` legacy de `RT0020`. El MBL
+  canónico en `bills_of_lading`, estado `MBL Validado`, coincide con el cache
+  del booking; el valor de SI es legacy obsoleto y no requiere corrección.
 
 La evidencia cruda se genera en `release-evidence/` y está excluida de Git
 porque una ejecución representativa puede contener conteos o identificadores.
@@ -167,9 +179,7 @@ Solo aprobar si:
 - locks exceden ventana;
 - no existe backup restaurable.
 
-## Secuencia de producción — bloqueada
-
-La siguiente secuencia es documental y no está autorizada todavía:
+## Secuencia de producción
 
 1. congelar escrituras y confirmar backup;
 2. volver a validar baseline/hashes;
@@ -181,4 +191,9 @@ La siguiente secuencia es documental y no está autorizada todavía:
 8. ejecutar smoke/UAT crítica;
 9. reabrir escrituras y monitorear.
 
-Hasta aprobar rehearsal representativo y UAT, no ejecutar el paso 4.
+Los pasos 4–6 se ejecutaron y aprobaron el 29/07/2026, después de confirmar
+proyecto, baseline, hashes y dry-run. No quedó evidencia automatizada en este
+repositorio del backup/congelamiento de los pasos 1–3. El paso 7 permanece
+bloqueado hasta identificar el proyecto/destino de hosting correcto. La UAT
+autenticada crítica debe completarse inmediatamente después del despliegue
+frontend y antes de reabrir el release a uso operativo general.
