@@ -236,6 +236,34 @@ Git entre computadoras y ambientes.
     diferencia y Pricing debera volver a aplicar el seguro.
 - Commit: pendiente.
 
+### 2026-07-30 - UX-044 - Confirmación antes de duplicar una cotización
+
+- Estado: En validación.
+- Hallazgo: UX-044.
+- Archivos modificados:
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `HARDENING.md`
+- SQL: No aplica.
+- Cambios:
+  - Los accesos para duplicar una cotización o reactivar una cotización perdida
+    abren el `ConfirmDialog` existente antes de navegar al formulario nuevo.
+  - El modal identifica la cotización origen y aclara que los datos podrán
+    revisarse antes de guardar la copia.
+  - Ambos accesos comparten el mismo flujo y conservan el bloqueo de la acción
+    mientras inicia la navegación.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente avisos LF/CRLF.
+- Validación manual pendiente:
+  - Desde `/quotations/[id]`, cancelar el modal y confirmar que no se abra el
+    formulario de duplicación.
+  - Confirmar la acción y verificar que abra
+    `/quotations/new?duplicateFrom=...` con los datos precargados.
+  - Repetir con una cotización `Perdida` y confirmar el texto de reactivación.
+- Riesgos pendientes:
+  - Falta UAT autenticada de ambos accesos.
+- Commit: pendiente.
+
 ### 2026-07-29 - REL-004 - Postdeploy remoto 4A–5C
 
 - Estado: SQL aplicado y validado en producción; frontend pendiente por destino

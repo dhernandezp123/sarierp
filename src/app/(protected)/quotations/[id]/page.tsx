@@ -39,6 +39,7 @@ import {
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
 import { InsuranceCalculationDialog } from '@/src/components/quotations/InsuranceCalculationDialog'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
   DEFAULT_EMAIL_TEMPLATES,
   fetchActiveEmailTemplates,
@@ -394,6 +395,7 @@ export default function QuotationDetailPage() {
   const [creatingRouting, setCreatingRouting] = useState(false)
   const [generandoCxP, setGenerandoCxP] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [repricingDialogOpen, setRepricingDialogOpen] = useState(false)
   const [insuranceCalculationOpen, setInsuranceCalculationOpen] = useState(false)
   const [repricingReason, setRepricingReason] = useState('')
@@ -1151,6 +1153,14 @@ export default function QuotationDetailPage() {
     */
   }
 
+  const requestDuplicateQuotation = () => {
+    if (!quotation || duplicating) return
+
+    setOpenMoreMenu(false)
+    setOpenStatusMenu(false)
+    setDuplicateDialogOpen(true)
+  }
+
   const createRoutingInstruction = async () => {
     if (!quotation?.id || creatingRouting) return
 
@@ -1642,10 +1652,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   {quotation?.status === 'Perdida' && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setOpenStatusMenu(false)
-                        duplicateQuotation()
-                      }}
+                      onClick={requestDuplicateQuotation}
                       disabled={duplicating}
                       className="block w-full px-4 py-2 text-left text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:opacity-50 dark:text-blue-300 dark:hover:bg-blue-950/40"
                     >
@@ -1775,10 +1782,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   {canEditQuotation && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setOpenMoreMenu(false)
-                        duplicateQuotation()
-                      }}
+                      onClick={requestDuplicateQuotation}
                       disabled={duplicating}
                       className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
@@ -2614,6 +2618,33 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <ConfirmDialog
+      open={duplicateDialogOpen}
+      onOpenChange={(open) => {
+        if (!duplicating) setDuplicateDialogOpen(open)
+      }}
+      title={
+        quotation?.status === 'Perdida'
+          ? '¿Reactivar como nueva cotización?'
+          : '¿Duplicar esta cotización?'
+      }
+      description={
+        quotation?.status === 'Perdida'
+          ? `Se abrirá una nueva cotización con los datos de ${
+              quotation.quotation_number || 'la cotización actual'
+            }. La cotización perdida conservará su cierre histórico.`
+          : `Se abrirá una nueva cotización con los datos de ${
+              quotation?.quotation_number || 'la cotización actual'
+            } para que puedas revisarlos antes de guardarla.`
+      }
+      confirmLabel={
+        quotation?.status === 'Perdida'
+          ? 'Reactivar como nueva'
+          : 'Duplicar cotización'
+      }
+      onConfirm={duplicateQuotation}
+    />
 
     <Dialog
       open={repricingDialogOpen}
