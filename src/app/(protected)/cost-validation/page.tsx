@@ -9,13 +9,21 @@ import { supabase } from '../../../lib/supabase/client'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { ShieldOff, ClipboardCheck } from 'lucide-react'
+import { aggregateBookingStatus } from '@/src/lib/booking-status'
+
+type CostValidationBooking = {
+  id: string
+  booking_number: string | null
+  carrier_booking: string | null
+  carrier: string | null
+  shipment_status: string | null
+}
 
 type ShipmentCostValidationItem = {
   id: string
-  routing_number: string | null
-  booking_number: string | null
-  carrier: string | null
-  shipment_status: string | null
+  shipment_number: string
+  operational_status: string | null
+  bookings: CostValidationBooking[]
   quotation:
     | {
         id: string
@@ -67,14 +75,22 @@ export default function CostValidationPage() {
     setLoading(true)
 
     const { data, error } = await supabase
-      .from('shipping_instructions')
+      .from('shipments')
       .select(`
         id,
-        routing_number,
-        booking_number,
-        carrier,
-        shipment_status,
-        quotation:quotations (
+        shipment_number,
+        operational_status,
+        shipping_instruction:shipping_instructions!inner (
+          deleted_at
+        ),
+        bookings (
+          id,
+          booking_number,
+          carrier_booking,
+          carrier,
+          shipment_status
+        ),
+        quotation:quotations!inner (
           id,
           quotation_number,
           status,
@@ -85,6 +101,7 @@ export default function CostValidationPage() {
         )
       `)
       .eq('quotation.status', 'Ganada')
+      .is('shipping_instruction.deleted_at', null)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -111,7 +128,7 @@ export default function CostValidationPage() {
             : null,
         }
       })
-      .filter((shipment) => shipment.quotation && shipment.routing_number)
+      .filter((shipment) => shipment.quotation && shipment.shipment_number)
 
     setShipments(normalizedShipments)
     setLoading(false)
@@ -185,11 +202,17 @@ export default function CostValidationPage() {
                       className="border-b hover:bg-slate-50"
                     >
                       <td className="p-3 font-semibold">
-                        {shipment.routing_number || 'N/A'}
+                        {shipment.shipment_number || 'N/A'}
                       </td>
 
                       <td className="p-3">
-                        {shipment.booking_number || 'Pendiente'}
+                        {shipment.bookings.length === 0
+                          ? 'Sin bookings'
+                          : shipment.bookings.length === 1
+                            ? shipment.bookings[0].booking_number ||
+                              shipment.bookings[0].carrier_booking ||
+                              'Pendiente'
+                            : `${shipment.bookings.length} bookings`}
                       </td>
 
                       <td className="p-3">
@@ -201,11 +224,20 @@ export default function CostValidationPage() {
                       </td>
 
                       <td className="p-3">
-                        {shipment.carrier || 'N/A'}
+                        {Array.from(
+                          new Set(
+                            shipment.bookings
+                              .map((booking) => booking.carrier)
+                              .filter(Boolean)
+                          )
+                        ).join(', ') || 'N/A'}
                       </td>
 
                       <td className="p-3">
-                        {shipment.shipment_status || 'N/A'}
+                        {aggregateBookingStatus(
+                          shipment.bookings,
+                          shipment.operational_status || 'Sin bookings'
+                        )}
                       </td>
 
                       <td className="p-3">

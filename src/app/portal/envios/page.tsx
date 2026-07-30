@@ -20,10 +20,10 @@ import {
 type Shipment = {
   id: string
   routing_number: string
-  shipment_status: string
-  carrier: string | null
-  etd: string | null
-  eta: string | null
+  aggregate_status: string
+  booking_count: number
+  min_etd: string | null
+  max_eta: string | null
   created_at: string
   service_product: string | null
   origen: string | null
@@ -88,8 +88,7 @@ export default function EnviosPage() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const { data, error } = await supabase.rpc('get_client_shipments', {
-        p_shipment_id: null,
+      const { data, error } = await supabase.rpc('get_client_shipments_v2', {
         p_include_completed: false,
       })
       if (error) toast.error('No se pudieron cargar tus envíos')
@@ -108,7 +107,7 @@ export default function EnviosPage() {
         s.routing_number.toLowerCase().includes(q) ||
         (s.origen ?? '').toLowerCase().includes(q) ||
         (s.destino ?? '').toLowerCase().includes(q) ||
-        (s.carrier ?? '').toLowerCase().includes(q)
+        (s.quotation_number ?? '').toLowerCase().includes(q)
       )
     }
     return true
@@ -170,6 +169,9 @@ export default function EnviosPage() {
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                           {SERVICE_LABELS[sp] ?? sp}
                         </span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+                          {s.booking_count} booking{s.booking_count === 1 ? '' : 's'}
+                        </span>
                       </div>
                       {s.origen && (
                         <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
@@ -179,28 +181,25 @@ export default function EnviosPage() {
                       )}
                     </div>
                   </div>
-                  <PortalStatusBadge status={s.shipment_status} className="shrink-0 py-1" />
+                  <PortalStatusBadge status={s.aggregate_status} className="shrink-0 py-1" />
                 </div>
 
                 {/* Dates row */}
-                {(s.etd || s.eta) && (
+                {(s.min_etd || s.max_eta) && (
                   <div className="mt-3 flex gap-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-                    {s.etd && (
+                    {s.min_etd && (
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                         <Calendar className="h-3.5 w-3.5 text-slate-400" />
                         <span className="font-medium text-slate-700 dark:text-slate-300">ETD</span>
-                        {fmt(s.etd)}
+                        {fmt(s.min_etd)}
                       </div>
                     )}
-                    {s.eta && (
+                    {s.max_eta && (
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                         <Calendar className="h-3.5 w-3.5 text-slate-400" />
                         <span className="font-medium text-slate-700 dark:text-slate-300">ETA</span>
-                        {fmt(s.eta)}
+                        {fmt(s.max_eta)}
                       </div>
-                    )}
-                    {s.carrier && (
-                      <span className="ml-auto text-xs text-slate-400">{s.carrier}</span>
                     )}
                   </div>
                 )}

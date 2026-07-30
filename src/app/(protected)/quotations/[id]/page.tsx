@@ -1155,182 +1155,61 @@ export default function QuotationDetailPage() {
     if (!quotation?.id || creatingRouting) return
 
     setCreatingRouting(true)
+    try {
+      const { data, error } = await supabase.rpc('create_shipment_from_quotation', {
+        p_quotation_id: quotation.id,
+        p_creation_key: 'default',
+      })
 
-    const { data: existingSI, error: existingError } = await supabase
-      .from('shipping_instructions')
-      .select('id')
-      .eq('quotation_id', quotation.id)
-      .maybeSingle()
+      if (error) {
+        toast.error(error.message)
+        return
+      }
 
-    if (existingError) {
-      toast.error(existingError.message)
-      setCreatingRouting(false)
-      return
-    }
+      const result = data as {
+        created?: boolean
+        shipment?: { id?: string; shipment_number?: string }
+        shipping_instruction?: { id?: string; routing_number?: string }
+      } | null
+      const shippingInstructionId = result?.shipping_instruction?.id
 
-    if (existingSI?.id) {
-      toast.warning('Esta cotización ya tiene Shipping Instructions.')
-      router.push(`/operations/shipping-instructions/${existingSI.id}`)
-      setCreatingRouting(false)
-      return
-    }
+      if (!shippingInstructionId) {
+        toast.error('La operación fue procesada, pero no se pudo recuperar su contexto.')
+        return
+      }
 
-    const { data: selectedAgentQuote, error: agentError } = await supabase
-      .from('agent_quotes')
-      .select('*')
-      .eq('quotation_id', quotation.id)
-      .eq('is_selected', true)
-      .maybeSingle()
+      if (result.created) {
+        const operationNumber =
+          result.shipment?.shipment_number ||
+          result.shipping_instruction?.routing_number ||
+          shippingInstructionId
+        const { data: operationsUsers } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('rol', 'Operaciones')
+          .eq('is_active', true)
 
-    if (agentError) {
-      toast.error(agentError.message)
-      setCreatingRouting(false)
-      return
-    }
-
-    if (!selectedAgentQuote) {
-      toast.error('Selecciona una tarifa de agente antes de generar Shipping Instructions.')
-      setCreatingRouting(false)
-      return
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      toast.error('No se pudo validar el usuario')
-      setCreatingRouting(false)
-      return
-    }
-
-    const containerQty =
-      quotationContainers.length > 0
-        ? quotationContainers.reduce(
-            (sum, container) => sum + Number(container.quantity || 0),
-            0
+        await Promise.all(
+          (operationsUsers || []).map((operationsUser) =>
+            createNotification({
+              userId: operationsUser.id,
+              title: `Nueva operación ${operationNumber} pendiente de validación`,
+              message: `Cotización ${
+                quotation.quotation_number || quotation.id
+              } requiere validación operativa.`,
+              type: 'info',
+            })
           )
-        : Number(quotation.containers_qty || 1)
+        )
+        toast.success('Operación y Shipping Instructions generadas')
+      } else {
+        toast.warning('Esta cotización ya tiene una operación con la clave indicada.')
+      }
 
-    const containerType =
-      quotationContainers.length > 0
-        ? quotationContainers
-            .map(
-              (container) =>
-                `${container.quantity || 1} x ${
-                  container.container_type_name ||
-                  container.container_type ||
-                  'N/A'
-                }`
-            )
-            .join(', ')
-        : quotation.container_type || quotation.quote_type || null
-
-    const shippingInstructionPayload = {
-      quotation_id: quotation.id,
-      client_id: quotation.cliente_id || quotation.client_id || null,
-      created_by: user.id,
-      carrier: selectedAgentQuote.carrier || null,
-      agent_name:
-        selectedAgentQuote.agent_name ||
-        selectedAgentQuote.agente_nombre ||
-        selectedAgentQuote.agent ||
-        null,
-      agent_contact:
-        selectedAgentQuote.agent_contact ||
-        selectedAgentQuote.contact ||
-        null,
-      agent_email:
-        selectedAgentQuote.agent_email ||
-        selectedAgentQuote.email ||
-        null,
-      container_qty: quotation.total_containers || containerQty || null,
-      container_type: quotation.container_type || containerType || null,
-      origin_address: quotation.puerto_origen || quotation.origen || null,
-      destination_address: quotation.puerto_destino || quotation.destino || null,
-      free_days: selectedAgentQuote.free_days || null,
-      freight_terms: selectedAgentQuote.freight_terms || 'Collect',
-      release_type: 'Express Release',
-      hbl_freight_visibility: 'No Freight Charges',
-      printed_at_destination: true,
-      insurance_requested: Boolean(quotation.requires_insurance),
-      shipment_status: 'Pendiente Validación',
-      operational_status: 'Pendiente Validación',
-    }
-
-    const insertResult = await supabase
-      .from('shipping_instructions')
-      .insert(shippingInstructionPayload)
-
-    if (insertResult.error) {
-      toast.error(insertResult.error.message)
+      router.push(`/operations/shipping-instructions/${shippingInstructionId}`)
+    } finally {
       setCreatingRouting(false)
-      return
     }
-
-    const selectResult = await supabase
-      .from('shipping_instructions')
-      .select('*')
-      .eq('quotation_id', quotation.id)
-      .eq('created_by', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (selectResult.error) {
-      toast.error(selectResult.error.message)
-      setCreatingRouting(false)
-      return
-    }
-
-    const shippingInstruction = selectResult.data
-
-    if (!shippingInstruction) {
-      toast.error('Shipping Instruction creada, pero no se pudo recuperar el registro.')
-      setCreatingRouting(false)
-      return
-    }
-
-    const routingCode =
-      shippingInstruction.routing_number ||
-      shippingInstruction.number ||
-      shippingInstruction.id
-
-    const { data: operationsUsers } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('rol', 'Operaciones')
-      .eq('is_active', true)
-
-    await Promise.all(
-      (operationsUsers || []).map((operationsUser) =>
-        createNotification({
-          userId: operationsUser.id,
-          title: `Nueva Shipping Instruction ${routingCode} pendiente de validación`,
-          message: `Cotización ${
-            quotation.quotation_number || quotation.id
-          } requiere validación operativa.`,
-          type: 'info',
-        })
-      )
-    )
-
-    await createActivityLog({
-      module: 'operations',
-      action: 'shipping_instruction_created',
-      entityType: 'shipping_instruction',
-      entityId: shippingInstruction.id,
-      description: `Shipping Instructions creadas para ${
-        quotation.quotation_number || quotation.id
-      }`,
-      metadata: {
-        quotationId: quotation.id,
-        routingCode,
-      },
-    })
-
-    toast.success('Shipping Instructions generadas')
-    router.push(`/operations/shipping-instructions/${shippingInstruction.id}`)
   }
 
   if (loading) {

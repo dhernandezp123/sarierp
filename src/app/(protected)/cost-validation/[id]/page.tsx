@@ -7,6 +7,23 @@ import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { aggregateBookingStatus } from '@/src/lib/booking-status'
+
+type CostValidationBookingContainer = {
+  container_type: string | null
+  quantity: number | null
+}
+
+type CostValidationBooking = {
+  id: string
+  booking_number: string | null
+  carrier_booking: string | null
+  carrier: string | null
+  etd: string | null
+  eta: string | null
+  shipment_status: string | null
+  booking_containers: CostValidationBookingContainer[] | null
+}
 
 export default function CostValidationDetailPage() {
   const { profile, loading: userLoading } = useUser()
@@ -30,7 +47,7 @@ export default function CostValidationDetailPage() {
     isAdmin || isFinance
 
   const [quotation, setQuotation] = useState<any>(null)
-  const [shippingInstruction, setShippingInstruction] = useState<any>(null)
+  const [shipmentContext, setShipmentContext] = useState<any>(null)
   const [pricingItems, setPricingItems] = useState<any[]>([])
   const [invoiceItems, setInvoiceItems] = useState<any[]>([])
   const [taxRates, setTaxRates] = useState<any[]>([])
@@ -99,26 +116,69 @@ export default function CostValidationDetailPage() {
       return
     }
 
-    const { data: shippingInstructionData, error: shippingInstructionError } =
+    const { data: shipmentData, error: shipmentError } =
       await supabase
-        .from('shipping_instructions')
+        .from('shipments')
         .select(`
           id,
-          routing_number,
-          reference_number,
-          booking_number,
-          carrier,
-          shipment_status,
-          etd,
-          eta
+          shipment_number,
+          operational_status,
+          shipping_instruction:shipping_instructions!inner (
+            reference_number,
+            deleted_at
+          ),
+          bookings (
+            id,
+            booking_number,
+            carrier_booking,
+            carrier,
+            etd,
+            eta,
+            shipment_status,
+            booking_containers (
+              container_type,
+              quantity
+            )
+          )
         `)
         .eq('quotation_id', quotationId)
-        .maybeSingle()
+        .is('shipping_instruction.deleted_at', null)
+        .order('created_at', { ascending: true })
 
-    if (shippingInstructionError) {
-      toast.error(shippingInstructionError.message)
+    if (shipmentError) {
+      toast.error(shipmentError.message)
       return
     }
+
+    const operationShipments = shipmentData || []
+    const operationStatuses = Array.from(
+      new Set(operationShipments.map((shipment) => shipment.operational_status).filter(Boolean))
+    )
+    const normalizedShipmentContext =
+      operationShipments.length > 0
+        ? {
+            id: operationShipments[0].id,
+            shipment_number: operationShipments
+              .map((shipment) => shipment.shipment_number)
+              .join(', '),
+            reference_number: operationShipments
+              .map((shipment) => {
+                const instruction = Array.isArray(shipment.shipping_instruction)
+                  ? shipment.shipping_instruction[0]
+                  : shipment.shipping_instruction
+                return instruction?.reference_number
+              })
+              .filter(Boolean)
+              .join(', '),
+            operational_status:
+              operationStatuses.length === 1
+                ? operationStatuses[0]
+                : operationStatuses.length > 1
+                  ? 'Múltiples operaciones'
+                  : 'Sin bookings',
+            bookings: operationShipments.flatMap((shipment) => shipment.bookings || []),
+          }
+        : null
 
     const { data: pricingData, error: pricingError } = await supabase
       .from('pricing_items')
@@ -143,7 +203,7 @@ export default function CostValidationDetailPage() {
     }
 
     setQuotation(quotationData)
-    setShippingInstruction(shippingInstructionData)
+    setShipmentContext(normalizedShipmentContext)
     setPricingItems(pricingData || [])
     setInvoiceItems(invoiceData || [])
     setLoading(false)
@@ -195,6 +255,19 @@ export default function CostValidationDetailPage() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
+
+  const formatDate = (value?: string | null) => {
+    if (!value) return 'N/A'
+    const [year, month, day] = value.split('-').map(Number)
+    return new Date(year, month - 1, day).toLocaleDateString('es-HN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+  }
+
+  const operationalBookings =
+    (shipmentContext?.bookings || []) as CostValidationBooking[]
 
   const financialStatus =
     realProfit < 0
@@ -427,56 +500,79 @@ export default function CostValidationDetailPage() {
             Información Operativa
           </h2>
 
-          {shippingInstruction ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="text-sm text-gray-500">RT</p>
-                <p className="mt-1 font-semibold">
-                  {shippingInstruction.routing_number || 'N/A'}
-                </p>
+          {shipmentContext ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-gray-500">RT</p>
+                  <p className="mt-1 font-semibold">
+                    {shipmentContext.shipment_number || 'N/A'}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-gray-500">Referencias operativas</p>
+                  <p className="mt-1 font-semibold">
+                    {operationalBookings.length === 0
+                      ? 'Sin bookings'
+                      : `${operationalBookings.length} booking${operationalBookings.length === 1 ? '' : 's'}`}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-sm text-gray-500">Estado agregado</p>
+                  <p className="mt-1 font-semibold">
+                    {aggregateBookingStatus(
+                      operationalBookings,
+                      shipmentContext.operational_status || 'Sin bookings'
+                    )}
+                  </p>
+                </div>
               </div>
 
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="text-sm text-gray-500">Booking</p>
-                <p className="mt-1 font-semibold">
-                  {shippingInstruction.booking_number || 'Pendiente'}
-                </p>
-              </div>
+              {operationalBookings.length > 0 && (
+                <div className="overflow-x-auto rounded-xl border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-900 text-white">
+                      <tr>
+                        <th className="p-3 text-left">Booking</th>
+                        <th className="p-3 text-left">Carrier</th>
+                        <th className="p-3 text-left">ETD</th>
+                        <th className="p-3 text-left">ETA</th>
+                        <th className="p-3 text-left">Estado</th>
+                        <th className="p-3 text-right">Contenedores</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {operationalBookings.map((booking) => {
+                        const containers = (booking.booking_containers || [])
+                          .reduce(
+                            (sum, container) =>
+                              sum + Number(container.quantity || 0),
+                            0
+                          )
+                        return (
+                          <tr key={booking.id} className="border-b">
+                            <td className="p-3 font-semibold">
+                              {booking.booking_number ||
+                                booking.carrier_booking ||
+                                'Pendiente'}
+                            </td>
+                            <td className="p-3">{booking.carrier || 'N/A'}</td>
+                            <td className="p-3">{formatDate(booking.etd)}</td>
+                            <td className="p-3">{formatDate(booking.eta)}</td>
+                            <td className="p-3">{booking.shipment_status || 'N/A'}</td>
+                            <td className="p-3 text-right">{containers}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="text-sm text-gray-500">Carrier</p>
-                <p className="mt-1 font-semibold">
-                  {shippingInstruction.carrier || 'N/A'}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="text-sm text-gray-500">Estado operativo</p>
-                <p className="mt-1 font-semibold">
-                  {shippingInstruction.shipment_status || 'N/A'}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="text-sm text-gray-500">Referencia</p>
-                <p className="mt-1 font-semibold">
-                  {shippingInstruction.reference_number || 'N/A'}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="text-sm text-gray-500">ETD</p>
-                <p className="mt-1 font-semibold">
-                  {shippingInstruction.etd || 'N/A'}
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="text-sm text-gray-500">ETA</p>
-                <p className="mt-1 font-semibold">
-                  {shippingInstruction.eta || 'N/A'}
-                </p>
-              </div>
+              <p className="text-xs text-slate-500">
+                Los bookings son referencias operativas. Los importes siguientes no
+                se multiplican por booking.
+              </p>
             </div>
           ) : (
             <p className="text-gray-500">
@@ -539,6 +635,10 @@ export default function CostValidationDetailPage() {
               USD {formatCurrency(realProfit)}
             </p>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+          Costo a nivel de cotización
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

@@ -24,9 +24,15 @@ import {
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { aggregateBookingStatus } from '@/src/lib/booking-status'
+import {
+  resolveBookingDocumentSummary,
+  type StructuredBillOfLading,
+} from '@/src/lib/booking-document-summary'
 
 type ReportId = 'commercial' | 'pricing' | 'operations' | 'billing' | 'receivable' | 'payable' | 'overdue' | 'supplier_payments'
 type DatePreset = 'month' | 'quarter' | 'year' | 'all' | 'custom'
+type OperationsGranularity = 'operations' | 'bookings' | 'readiness'
 
 type Join<T> = T | T[] | null
 
@@ -60,13 +66,23 @@ type PricingHistoryRow = {
   quotation: Join<QuotationRow>
 }
 
-type ShippingInstructionRow = {
+type ShipmentRow = {
   id: string
-  routing_number: string | null
-  booking_number: string | null
-  shipment_status: string | null
+  shipment_number: string
   operational_status: string | null
   created_at: string | null
+  bookings: Array<{
+    id: string
+    shipment_status: string | null
+    booking_lifecycle_status: 'ACTIVE' | 'CANCELLED' | 'REPLACED'
+    etd: string | null
+    eta: string | null
+    actual_etd: string | null
+    actual_eta: string | null
+    booking_containers: Array<{
+      quantity: number | null
+    }> | null
+  }> | null
   quotation: Join<{
     quotation_number: string | null
     quote_type: string | null
@@ -78,14 +94,29 @@ type ShippingInstructionRow = {
 
 type BookingRow = {
   id: string
+  shipment_id: string | null
   booking_number: string | null
+  carrier_booking: string | null
+  master_bl: string | null
+  house_bl: string | null
   carrier: string | null
+  vessel_name: string | null
+  voyage: string | null
+  etd: string | null
   eta: string | null
+  original_etd: string | null
+  actual_etd: string | null
   actual_eta: string | null
   shipment_status: string | null
+  booking_lifecycle_status: 'ACTIVE' | 'CANCELLED' | 'REPLACED'
+  booking_schedule_revisions: Array<{
+    revision_number: number
+    revision_type: string
+  }> | null
   created_at: string | null
-  shipping_instruction: Join<{
-    routing_number: string | null
+  shipment: Join<{
+    id: string
+    shipment_number: string
     quotation: Join<{
       quote_type: string | null
       tipo_transporte: string | null
@@ -93,6 +124,26 @@ type BookingRow = {
       created_by_profile: Join<ProfileJoin>
     }>
   }>
+  booking_containers: Array<{
+    quantity: number | null
+  }> | null
+  bills_of_lading: StructuredBillOfLading[] | null
+}
+
+type BookingReadinessReportRow = {
+  shipment_id: string
+  booking_id: string
+  booking_number: string | null
+  mode: string
+  readiness_status: string
+  blocking_count: number
+  next_cutoff: string | null
+  hours_remaining: number | null
+  vgm_complete: boolean
+  missing_vgm_containers: number
+  overdue_cutoffs: number
+  active_exception: boolean
+  ready_to_ship: boolean
 }
 
 type InvoiceRow = {
@@ -314,6 +365,8 @@ export default function ReportsPage() {
   const role = profile?.rol || ''
   const today = new Date()
   const [activeReport, setActiveReport] = useState<ReportId>('commercial')
+  const [operationsGranularity, setOperationsGranularity] =
+    useState<OperationsGranularity>('operations')
   const [dateFrom, setDateFrom] = useState(toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)))
   const [dateTo, setDateTo] = useState(toDateInputValue(today))
   const [clientFilter, setClientFilter] = useState(ALL)
@@ -325,8 +378,10 @@ export default function ReportsPage() {
 
   const [quotations, setQuotations] = useState<QuotationRow[]>([])
   const [pricingHistory, setPricingHistory] = useState<PricingHistoryRow[]>([])
-  const [instructions, setInstructions] = useState<ShippingInstructionRow[]>([])
+  const [shipments, setShipments] = useState<ShipmentRow[]>([])
   const [bookings, setBookings] = useState<BookingRow[]>([])
+  const [bookingReadiness, setBookingReadiness] =
+    useState<BookingReadinessReportRow[]>([])
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [receivables, setReceivables] = useState<ReceivableRow[]>([])
   const [payables, setPayables] = useState<PayableRow[]>([])
@@ -348,11 +403,14 @@ export default function ReportsPage() {
   }, [activeReport, availableReports, userLoading])
 
   useEffect(() => {
-    setClientFilter(ALL)
-    setSellerFilter(ALL)
-    setServiceFilter(ALL)
-    setStatusFilter(ALL)
-    setCurrencyFilter(ALL)
+    const timeout = window.setTimeout(() => {
+      setClientFilter(ALL)
+      setSellerFilter(ALL)
+      setServiceFilter(ALL)
+      setStatusFilter(ALL)
+      setCurrencyFilter(ALL)
+    }, 0)
+    return () => window.clearTimeout(timeout)
   }, [activeReport])
 
   const loadReports = useCallback(async () => {
@@ -452,14 +510,27 @@ export default function ReportsPage() {
     if (wantsOperations) {
       tasks.push(
         supabase
-          .from('shipping_instructions')
+          .from('shipments')
           .select(`
             id,
-            routing_number,
-            booking_number,
-            shipment_status,
+            shipment_number,
             operational_status,
             created_at,
+            shipping_instruction:shipping_instructions!inner (
+              deleted_at
+            ),
+            bookings (
+              id,
+              shipment_status,
+              booking_lifecycle_status,
+              etd,
+              eta,
+              actual_etd,
+              actual_eta,
+              booking_containers (
+                quantity
+              )
+            ),
             quotation:quotations (
               quotation_number,
               quote_type,
@@ -468,10 +539,11 @@ export default function ReportsPage() {
               created_by_profile:profiles!quotations_created_by_fkey ( id, nombre, apellido, email )
             )
           `)
+          .is('shipping_instruction.deleted_at', null)
           .order('created_at', { ascending: false })
           .then(({ data, error }) => {
             if (error) toast.error('No se pudieron cargar cargas')
-            setInstructions((data || []) as unknown as ShippingInstructionRow[])
+            setShipments((data || []) as unknown as ShipmentRow[])
           })
       )
       tasks.push(
@@ -479,20 +551,46 @@ export default function ReportsPage() {
           .from('bookings')
           .select(`
             id,
+            shipment_id,
             booking_number,
+            carrier_booking,
+            master_bl,
+            house_bl,
             carrier,
+            vessel_name,
+            voyage,
+            etd,
             eta,
+            original_etd,
+            actual_etd,
             actual_eta,
             shipment_status,
+            booking_lifecycle_status,
             created_at,
-            shipping_instruction:shipping_instructions (
-              routing_number,
+            shipment:shipments!bookings_shipment_id_fkey (
+              id,
+              shipment_number,
               quotation:quotations (
                 quote_type,
                 tipo_transporte,
                 clientes ( id, nombre ),
                 created_by_profile:profiles!quotations_created_by_fkey ( id, nombre, apellido, email )
               )
+            ),
+            booking_containers (
+              quantity
+            ),
+            booking_schedule_revisions (
+              revision_number,
+              revision_type
+            ),
+            bills_of_lading (
+              id,
+              bl_type,
+              bl_number,
+              status,
+              release_type,
+              created_at
             )
           `)
           .order('created_at', { ascending: false })
@@ -500,6 +598,12 @@ export default function ReportsPage() {
             if (error) toast.error('No se pudieron cargar bookings')
             setBookings((data || []) as unknown as BookingRow[])
           })
+      )
+      tasks.push(
+        supabase.rpc('get_booking_readiness_report_v1').then(({ data, error }) => {
+          if (error) toast.error('No se pudo cargar readiness operativo')
+          setBookingReadiness((data || []) as BookingReadinessReportRow[])
+        })
       )
     }
 
@@ -563,6 +667,22 @@ export default function ReportsPage() {
   }, [loadReports, userLoading])
 
   const reportConfig = REPORTS.find((report) => report.id === activeReport) || REPORTS[0]
+  const reportScope = activeReport === 'operations'
+    ? operationsGranularity === 'operations'
+      ? 'Una fila por Shipping Instruction con estado y fechas agregadas desde todos sus bookings'
+      : operationsGranularity === 'bookings'
+        ? 'Una fila por booking con transporte, fechas, contenedores y BL canónicos'
+        : 'Una fila por booking activo con bloqueos, cut-offs y VGM'
+    : reportConfig.scope
+  const reportTitle = activeReport === 'operations'
+    ? `Cargas · ${
+        operationsGranularity === 'operations'
+          ? 'Operaciones'
+          : operationsGranularity === 'bookings'
+            ? 'Bookings'
+            : 'Readiness'
+      }`
+    : reportConfig.label
 
   const baseRows = useMemo<ReportRow[]>(() => {
     if (activeReport === 'pricing') {
@@ -720,37 +840,129 @@ export default function ReportsPage() {
     }
 
     if (activeReport === 'operations') {
-      const siRows: ReportRow[] = instructions.map((si) => {
-        const q = resolveJoin(si.quotation)
-        const client = clientName(q?.clientes)
-        const seller = sellerName(q?.created_by_profile)
-        const service = serviceLabel(q?.quote_type, q?.tipo_transporte)
-        const status = si.operational_status || si.shipment_status || '-'
-        return {
-          __key: si.id,
-          __date: si.created_at?.slice(0, 10) || '',
-          __client: client,
-          __seller: seller,
-          __service: service,
-          __status: status,
-          tipo: 'Shipping Instruction',
-          referencia: si.routing_number || si.booking_number || '-',
-          fecha: fmtDate(si.created_at),
-          cliente: client,
-          vendedor: seller,
-          servicio: service,
-          carrier: '-',
-          eta: '-',
-          estado: status,
-        }
-      })
+      if (operationsGranularity === 'operations') {
+        return shipments.map((shipment) => {
+          const q = resolveJoin(shipment.quotation)
+          const client = clientName(q?.clientes)
+          const seller = sellerName(q?.created_by_profile)
+          const service = serviceLabel(q?.quote_type, q?.tipo_transporte)
+          const operationBookings = (shipment.bookings || []).filter(
+            (booking) => booking.booking_lifecycle_status === 'ACTIVE'
+          )
+          const status =
+            shipment.operational_status ||
+            aggregateBookingStatus(operationBookings, 'Sin bookings')
+          const etdValues = operationBookings
+            .map((booking) => booking.actual_etd || booking.etd)
+            .filter((value): value is string => Boolean(value))
+            .sort()
+          const etaValues = operationBookings
+            .map((booking) => booking.actual_eta || booking.eta)
+            .filter((value): value is string => Boolean(value))
+            .sort()
+          const containerTotal = operationBookings.reduce(
+            (total, booking) =>
+              total +
+              (booking.booking_containers || []).reduce(
+                (sum, container) => sum + Number(container.quantity || 0),
+                0
+              ),
+            0
+          )
 
-      const bookingRows: ReportRow[] = bookings.map((booking) => {
-        const si = resolveJoin(booking.shipping_instruction)
-        const q = resolveJoin(si?.quotation)
+          return {
+            __key: shipment.id,
+            __date: shipment.created_at?.slice(0, 10) || '',
+            __client: client,
+            __seller: seller,
+            __service: service,
+            __status: status,
+            routing: shipment.shipment_number || '-',
+            fecha: fmtDate(shipment.created_at),
+            cliente: client,
+            servicio: service,
+            bookings: String(operationBookings.length),
+            estado: status,
+            etd: fmtDate(etdValues[0]),
+            eta: fmtDate(etaValues.at(-1)),
+            contenedores: String(containerTotal),
+            multiple: operationBookings.length > 1 ? 'Sí' : 'No',
+          }
+        })
+      }
+
+      if (operationsGranularity === 'readiness') {
+        return bookingReadiness.map((readiness) => {
+          const booking = bookings.find(
+            (candidate) => candidate.id === readiness.booking_id
+          )
+          const shipment = resolveJoin(booking?.shipment)
+          const quotation = resolveJoin(shipment?.quotation)
+          const client = clientName(quotation?.clientes)
+          const seller = sellerName(quotation?.created_by_profile)
+          const service = serviceLabel(
+            quotation?.quote_type,
+            quotation?.tipo_transporte
+          )
+
+          return {
+            __key: readiness.booking_id,
+            __date: readiness.next_cutoff?.slice(0, 10) || '',
+            __client: client,
+            __seller: seller,
+            __service: service,
+            __status: readiness.readiness_status,
+            routing: shipment?.shipment_number || '-',
+            booking:
+              readiness.booking_number ||
+              booking?.booking_number ||
+              booking?.carrier_booking ||
+              readiness.booking_id.slice(0, 8),
+            cliente: client,
+            modalidad: readiness.mode,
+            readiness: readiness.ready_to_ship ? 'Listo' : 'Bloqueado',
+            bloqueos: String(readiness.blocking_count),
+            proximo_cutoff: readiness.next_cutoff
+              ? fmtDate(readiness.next_cutoff)
+              : '-',
+            horas:
+              readiness.hours_remaining === null
+                ? '-'
+                : Number(readiness.hours_remaining).toFixed(1),
+            vgm: readiness.vgm_complete ? 'Sí' : 'No',
+            vgm_pendientes: String(readiness.missing_vgm_containers),
+            vencidos: String(readiness.overdue_cutoffs),
+            excepcion: readiness.active_exception ? 'Sí' : 'No',
+          }
+        })
+      }
+
+      return bookings.map((booking) => {
+        const shipment = resolveJoin(booking.shipment)
+        const q = resolveJoin(shipment?.quotation)
         const client = clientName(q?.clientes)
         const seller = sellerName(q?.created_by_profile)
         const service = serviceLabel(q?.quote_type, q?.tipo_transporte)
+        const containerTotal = (booking.booking_containers || []).reduce(
+          (sum, container) => sum + Number(container.quantity || 0),
+          0
+        )
+        const documents = resolveBookingDocumentSummary(
+          { master_bl: booking.master_bl, house_bl: booking.house_bl },
+          booking.bills_of_lading
+        )
+        const revisions = booking.booking_schedule_revisions || []
+        const originalEtd = booking.original_etd
+        const currentEtd = booking.etd
+        const shiftedDays =
+          originalEtd && currentEtd
+            ? Math.round(
+                (new Date(`${currentEtd}T00:00:00`).getTime() -
+                  new Date(`${originalEtd}T00:00:00`).getTime()) /
+                  86_400_000
+              )
+            : null
+
         return {
           __key: booking.id,
           __date: booking.created_at?.slice(0, 10) || '',
@@ -758,19 +970,36 @@ export default function ReportsPage() {
           __seller: seller,
           __service: service,
           __status: booking.shipment_status || '',
-          tipo: 'Booking',
-          referencia: booking.booking_number || si?.routing_number || '-',
-          fecha: fmtDate(booking.created_at),
+          routing: shipment?.shipment_number || '-',
+          booking: booking.booking_number || booking.carrier_booking || 'Pendiente',
           cliente: client,
-          vendedor: seller,
-          servicio: service,
           carrier: booking.carrier || '-',
+          nave_viaje: [booking.vessel_name, booking.voyage].filter(Boolean).join(' / ') || '-',
+          etd: fmtDate(booking.actual_etd || booking.etd),
           eta: fmtDate(booking.actual_eta || booking.eta),
           estado: booking.shipment_status || '-',
+          ciclo:
+            booking.booking_lifecycle_status === 'ACTIVE'
+              ? 'Activo'
+              : booking.booking_lifecycle_status === 'REPLACED'
+                ? 'Reemplazado'
+                : 'Cancelado',
+          revisiones: String(revisions.length),
+          etd_original: fmtDate(originalEtd),
+          etd_vigente: fmtDate(currentEtd),
+          dias_movidos: shiftedDays === null ? '-' : String(shiftedDays),
+          rollover: revisions.some(
+            (revision) => revision.revision_type === 'ROLLOVER_SAME_BOOKING'
+          )
+            ? 'Sí'
+            : 'No',
+          reemplazado:
+            booking.booking_lifecycle_status === 'REPLACED' ? 'Sí' : 'No',
+          contenedores: String(containerTotal),
+          mbl: documents.master?.number || '-',
+          hbl: documents.houses.map((house) => house.number).join(', ') || '-',
         }
       })
-
-      return [...siRows, ...bookingRows]
     }
 
     if (activeReport === 'billing') {
@@ -915,7 +1144,7 @@ export default function ReportsPage() {
     }
 
     return []
-  }, [activeReport, bookings, dateFrom, dateTo, instructions, invoices, payables, pricingHistory, proveedorPayments, quotations, receivables])
+  }, [activeReport, bookingReadiness, bookings, dateFrom, dateTo, shipments, invoices, operationsGranularity, payables, pricingHistory, proveedorPayments, quotations, receivables])
 
   const rows = useMemo(() => {
     return baseRows.filter((row) => {
@@ -963,16 +1192,59 @@ export default function ReportsPage() {
       ]
     }
     if (activeReport === 'operations') {
-      return [
-        { key: 'tipo', label: 'Tipo', width: '13%' },
-        { key: 'referencia', label: 'Referencia', width: '13%' },
-        { key: 'fecha', label: 'Fecha', width: '9%' },
-        { key: 'cliente', label: 'Cliente', width: '18%' },
-        { key: 'servicio', label: 'Servicio', width: '14%' },
-        { key: 'carrier', label: 'Carrier', width: '12%' },
-        { key: 'eta', label: 'ETA', width: '9%' },
-        { key: 'estado', label: 'Estado', width: '12%' },
-      ]
+      if (operationsGranularity === 'readiness') {
+        return [
+          { key: 'routing', label: 'Routing', width: '9%' },
+          { key: 'booking', label: 'Booking', width: '9%' },
+          { key: 'cliente', label: 'Cliente', width: '12%' },
+          { key: 'modalidad', label: 'Modalidad', width: '8%' },
+          { key: 'readiness', label: 'Readiness', width: '8%' },
+          { key: 'bloqueos', label: 'Bloq.', width: '6%', align: 'right' },
+          { key: 'proximo_cutoff', label: 'Próx. cut-off', width: '9%' },
+          { key: 'horas', label: 'Horas', width: '6%', align: 'right' },
+          { key: 'vgm', label: 'VGM', width: '5%' },
+          {
+            key: 'vgm_pendientes',
+            label: 'VGM pend.',
+            width: '7%',
+            align: 'right',
+          },
+          { key: 'vencidos', label: 'Vencidos', width: '7%', align: 'right' },
+          { key: 'excepcion', label: 'Excepción', width: '7%' },
+        ]
+      }
+      return operationsGranularity === 'operations'
+        ? [
+            { key: 'routing', label: 'Routing', width: '12%' },
+            { key: 'cliente', label: 'Cliente', width: '17%' },
+            { key: 'servicio', label: 'Servicio', width: '12%' },
+            { key: 'bookings', label: 'Bookings', width: '7%', align: 'right' },
+            { key: 'estado', label: 'Estado agregado', width: '14%' },
+            { key: 'etd', label: 'ETD mínima', width: '10%' },
+            { key: 'eta', label: 'ETA máxima', width: '10%' },
+            { key: 'contenedores', label: 'Cont.', width: '7%', align: 'right' },
+            { key: 'multiple', label: 'Multi', width: '6%' },
+          ]
+        : [
+            { key: 'routing', label: 'Routing', width: '9%' },
+            { key: 'booking', label: 'Booking', width: '10%' },
+            { key: 'cliente', label: 'Cliente', width: '12%' },
+            { key: 'carrier', label: 'Carrier', width: '9%' },
+            { key: 'nave_viaje', label: 'Nave / viaje', width: '11%' },
+            { key: 'etd', label: 'ETD', width: '8%' },
+            { key: 'eta', label: 'ETA', width: '8%' },
+            { key: 'estado', label: 'Estado', width: '10%' },
+            { key: 'ciclo', label: 'Ciclo', width: '7%' },
+            { key: 'revisiones', label: 'Rev.', width: '5%', align: 'right' },
+            { key: 'etd_original', label: 'ETD original', width: '8%' },
+            { key: 'etd_vigente', label: 'ETD vigente', width: '8%' },
+            { key: 'dias_movidos', label: 'Días mov.', width: '6%', align: 'right' },
+            { key: 'rollover', label: 'Rollover', width: '6%' },
+            { key: 'reemplazado', label: 'Reemplazado', width: '7%' },
+            { key: 'contenedores', label: 'Cont.', width: '6%', align: 'right' },
+            { key: 'mbl', label: 'MBL', width: '8%' },
+            { key: 'hbl', label: 'HBL', width: '9%' },
+          ]
     }
     if (activeReport === 'billing') {
       return [
@@ -1035,7 +1307,7 @@ export default function ReportsPage() {
       ]
     }
     return []
-  }, [activeReport])
+  }, [activeReport, operationsGranularity])
 
   const options = useMemo(() => {
     const unique = (values: (string | undefined)[]) => [ALL, ...Array.from(new Set(values.filter(Boolean) as string[])).sort()]
@@ -1141,8 +1413,8 @@ export default function ReportsPage() {
     : undefined
 
   const pdfData: ReportPdfData = {
-    title: `Reporte ${reportConfig.label}`,
-    subtitle: reportConfig.scope,
+    title: `Reporte ${reportTitle}`,
+    subtitle: reportScope,
     dateRange: dateRangeLabel,
     generatedAt: new Date().toLocaleString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
     filters: [
@@ -1304,6 +1576,32 @@ export default function ReportsPage() {
         ))}
       </div>
 
+      {activeReport === 'operations' && (
+        <div className="report-print-hidden flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Nivel del reporte
+          </span>
+          {([
+            ['operations', 'Operaciones'],
+            ['bookings', 'Bookings'],
+            ['readiness', 'Readiness'],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setOperationsGranularity(value)}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
+                operationsGranularity === value
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <section className={`${cardClass} report-print-hidden`}>
         <div className="mb-4 flex items-center gap-2">
           <Filter className="h-4 w-4 text-slate-400" />
@@ -1389,8 +1687,8 @@ export default function ReportsPage() {
       <section className={`${cardClass} report-print-section`}>
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{reportConfig.label}</h2>
-            <p className="text-xs text-slate-500">{reportConfig.scope}</p>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{reportTitle}</h2>
+            <p className="text-xs text-slate-500">{reportScope}</p>
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {rows.length} filas

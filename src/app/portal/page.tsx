@@ -29,10 +29,10 @@ type PreAlertRow = {
 type ShipmentRow = {
   id: string
   routing_number: string
-  shipment_status: string
-  carrier: string | null
-  etd: string | null
-  eta: string | null
+  aggregate_status: string
+  booking_count: number
+  min_etd: string | null
+  max_eta: string | null
   service_product: string | null
   origen: string | null
   destino: string | null
@@ -108,8 +108,7 @@ export default function PortalDashboard() {
         .eq('is_active', true)
         .limit(1),
       supabase
-        .rpc('get_client_shipments', {
-          p_shipment_id: null,
+        .rpc('get_client_shipments_v2', {
           p_include_completed: false,
         }),
     ])
@@ -203,11 +202,16 @@ export default function PortalDashboard() {
                       </p>
                       <p className="text-xs text-slate-400 truncate">
                         {s.origen ?? '—'} → {s.destino ?? '—'}
-                        {s.eta && <span className="ml-1">· ETA {fmt(s.eta)}</span>}
+                        {s.booking_count > 0 && (
+                          <span className="ml-1">
+                            · {s.booking_count} booking{s.booking_count === 1 ? '' : 's'}
+                          </span>
+                        )}
+                        {s.max_eta && <span className="ml-1">· ETA {fmt(s.max_eta)}</span>}
                       </p>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${shipmentStatusColor(s.shipment_status)}`}>
-                      {s.shipment_status}
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${shipmentStatusColor(s.aggregate_status)}`}>
+                      {s.aggregate_status}
                     </span>
                   </Link>
                 )

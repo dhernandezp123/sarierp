@@ -144,6 +144,27 @@ type AgentQuote = any
 
 type AgentQuotesViewMode = 'cards' | 'table'
 
+type OperationalBookingSnapshot = {
+  id: string
+  shipping_instruction_id: string
+  booking_number: string | null
+  carrier_booking: string | null
+  master_bl: string | null
+  house_bl: string | null
+  carrier: string | null
+  vessel_name: string | null
+  voyage: string | null
+  etd: string | null
+  eta: string | null
+  actual_etd: string | null
+  actual_eta: string | null
+  tracking_url: string | null
+  shipment_status: string | null
+  estimated_transit_days: number | null
+  free_days: number | null
+  bills_of_lading: Array<{ id: string }> | null
+}
+
 type OperationalImpactChange = {
   label: string
   previousValue: string
@@ -155,8 +176,8 @@ type OperationalImpact = {
   hasShippingInstruction: boolean
   shippingInstruction: any | null
   shippingInstructionIds: string[]
-  bookings: any[]
-  confirmedBookings: any[]
+  bookings: OperationalBookingSnapshot[]
+  confirmedBookings: OperationalBookingSnapshot[]
   changes: OperationalImpactChange[]
   newValues: {
     carrier: string | null
@@ -224,12 +245,48 @@ const addDaysToDate = (dateValue?: string | null, days?: number | null) => {
   return date.toISOString().slice(0, 10)
 }
 
-const hasConfirmedBookingData = (booking: any) =>
+const REPRICEABLE_BOOKING_STATUSES = new Set([
+  'Booking Solicitado',
+  'Pendiente Validación',
+  'Listo para Booking',
+])
+
+const hasConfirmedBookingData = (booking: OperationalBookingSnapshot) =>
+  !REPRICEABLE_BOOKING_STATUSES.has(booking.shipment_status || '') ||
   Boolean(
-    String(booking.booking_number || '').trim() ||
+      String(booking.booking_number || '').trim() ||
       String(booking.carrier_booking || '').trim() ||
-      String(booking.master_bl || '').trim()
+      String(booking.master_bl || '').trim() ||
+      String(booking.house_bl || '').trim() ||
+      String(booking.vessel_name || '').trim() ||
+      String(booking.voyage || '').trim() ||
+      booking.actual_etd ||
+      booking.actual_eta ||
+      String(booking.tracking_url || '').trim() ||
+      (booking.bills_of_lading || []).length > 0
   )
+
+const summarizeBookingValues = (
+  bookings: OperationalBookingSnapshot[],
+  selector: (
+    booking: OperationalBookingSnapshot
+  ) => string | number | null | undefined,
+  formatter: (value: string | number) => string = String
+) => {
+  const values = Array.from(
+    new Set(
+      bookings
+        .map(selector)
+        .filter(
+          (value): value is string | number =>
+            value !== null && value !== undefined && value !== ''
+        )
+        .map(formatter)
+    )
+  )
+
+  return values.length > 0 ? values.join(', ') : null
+}
 
 function PricingComparisonContent() {
   const { profile } = useUser()
@@ -1982,7 +2039,7 @@ function PricingComparisonContent() {
     const { data: shippingInstructions, error: siError } = await supabase
       .from('shipping_instructions')
       .select(
-        'id, routing_number, carrier, agent_name, agent_contact, agent_email, etd, free_days, estimated_transit_days'
+        'id, routing_number, agent_name, agent_contact, agent_email'
       )
       .eq('quotation_id', selectedQuote.id)
 
@@ -1992,7 +2049,7 @@ function PricingComparisonContent() {
     }
 
     const shippingInstructionIds = (shippingInstructions || []).map((item) => item.id)
-    let bookings: any[] = []
+    let bookings: OperationalBookingSnapshot[] = []
 
     if (shippingInstructionIds.length > 0) {
       const { data: bookingsData, error: bookingsError } = await supabase
@@ -2003,12 +2060,21 @@ function PricingComparisonContent() {
           booking_number,
           carrier_booking,
           master_bl,
+          house_bl,
           carrier,
+          vessel_name,
+          voyage,
           etd,
           eta,
+          actual_etd,
           actual_eta,
+          tracking_url,
+          shipment_status,
           estimated_transit_days,
-          free_days
+          free_days,
+          bills_of_lading (
+            id
+          )
         `)
         .in('shipping_instruction_id', shippingInstructionIds)
 
@@ -2017,7 +2083,7 @@ function PricingComparisonContent() {
         return null
       }
 
-      bookings = bookingsData || []
+      bookings = (bookingsData || []) as OperationalBookingSnapshot[]
     }
 
     const wasReopenedForRepricing =
@@ -2070,24 +2136,35 @@ function PricingComparisonContent() {
       null
 
     const previousCarrier =
-      shippingInstruction?.carrier || selectedQuote.preferred_carrier || null
+      summarizeBookingValues(bookings, (booking) => booking.carrier) ||
+      selectedQuote.preferred_carrier ||
+      null
     const previousAgentName =
       shippingInstruction?.agent_name || selectedQuote.agent_name || null
     const previousAgentContact =
       shippingInstruction?.agent_contact || selectedQuote.agent_contact || null
     const previousAgentEmail =
       shippingInstruction?.agent_email || selectedQuote.agent_email || null
-    const previousEtd = shippingInstruction?.etd || selectedQuote.etd || null
-    const previousTransit = firstFilledValue(
-      shippingInstruction?.estimated_transit_days,
-      selectedQuote.transit_time
-    )
-    const previousFreeDays = firstFilledValue(
-      shippingInstruction?.free_days,
-      selectedQuote.free_days_destination,
-      selectedQuote.free_days,
-      selectedQuote.dias_libres
-    )
+    const previousEtd =
+      summarizeBookingValues(
+        bookings,
+        (booking) => booking.etd,
+        (value) => formatDisplayDate(String(value))
+      ) ||
+      (selectedQuote.etd ? formatDisplayDate(selectedQuote.etd) : null)
+    const previousTransit =
+      summarizeBookingValues(
+        bookings,
+        (booking) => booking.estimated_transit_days
+      ) ||
+      firstFilledValue(selectedQuote.transit_time)
+    const previousFreeDays =
+      summarizeBookingValues(bookings, (booking) => booking.free_days) ||
+      firstFilledValue(
+        selectedQuote.free_days_destination,
+        selectedQuote.free_days,
+        selectedQuote.dias_libres
+      )
     const previousTransshipment = selectedQuote.transshipment || null
 
     return {
@@ -2120,7 +2197,7 @@ function PricingComparisonContent() {
         },
         {
           label: 'ETD',
-          previousValue: previousEtd ? formatDisplayDate(previousEtd) : 'N/A',
+          previousValue: previousEtd || 'N/A',
           newValue: etd ? formatDisplayDate(etd) : 'N/A',
         },
         {
@@ -2166,7 +2243,7 @@ function PricingComparisonContent() {
 
     for (const shippingInstructionId of impact.shippingInstructionIds) {
       const { error } = await supabase.rpc(
-        'sync_shipping_instruction_from_selected_agent_quote',
+        'sync_shipping_instruction_from_selected_agent_quote_v2',
         {
           p_shipping_instruction_id: shippingInstructionId,
           p_reason: 'Repricing desde Pricing Comparison',

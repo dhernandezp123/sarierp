@@ -236,6 +236,456 @@ Git entre computadoras y ambientes.
     diferencia y Pricing debera volver a aplicar el seguro.
 - Commit: pendiente.
 
+### 2026-07-29 - REL-001 - Release Readiness acumulado 4A–5C
+
+- Estado: Release candidate preparado; `NO-GO` para producción hasta aprobar
+  rehearsal representativo y UAT autenticada.
+- Hallazgo: REL-001.
+- Alcance:
+  - Congelamiento de las seis migraciones 4A–5C.
+  - Gates reproducibles de predeploy, postdeploy, conteos y seguridad.
+  - Rehearsal local exacto desde el baseline remoto.
+  - Checklist UAT unificado, criterios GO/NO-GO y rollback.
+- SQL y scripts:
+  - `supabase/release/phase_4a_5c/00_predeploy_gate.sql`
+  - `supabase/release/phase_4a_5c/01_predeploy_counts.sql`
+  - `supabase/release/phase_4a_5c/02_postdeploy_gate.sql`
+  - `supabase/release/phase_4a_5c/03_postdeploy_counts.sql`
+  - `supabase/release/phase_4a_5c/04_security_gate.sql`
+  - `scripts/release/rehearse-phase-4a-5c.ps1`
+- Documentación:
+  - `docs/release/release-readiness-4a-5c.md`
+  - `docs/release/migration-inventory-4a-5c.md`
+  - `docs/release/rollback-runbook-4a-5c.md`
+  - `docs/uat/release-4a-5c-authenticated.md`
+- Verificaciones:
+  - `npx supabase migration list --linked`: remoto termina en
+    `20260728130000`; 4A–5C no aplicadas.
+  - `npx supabase db push --linked --dry-run`: propone únicamente las seis
+    migraciones `20260729120000`–`20260729170000`; no aplicó cambios.
+  - Rehearsal local desde `20260728130000`: `LOCAL_REHEARSAL_OK`.
+  - Gates predeploy, postdeploy y seguridad: OK.
+  - Suites SQL 4A, 4B, 4C, 5A, 5B y 5C: OK con rollback.
+  - Quince diagnósticos: cero hallazgos sobre base local vacía.
+  - DB lint: sin errores ni warnings.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 66/66 páginas.
+  - ESLint dirigido a componentes/helpers nuevos: OK.
+  - `npm run lint`: conserva deuda global preexistente de 384 hallazgos
+    (312 errores y 72 warnings); no se amplió el alcance a módulos ajenos.
+- Corrección imprescindible encontrada:
+  - El primer runner enviaba SQL UTF-8 mediante el pipeline de texto de
+    Windows PowerShell y corrompía estados con acentos.
+  - Se cambió únicamente el transporte hacia Docker para preservar bytes
+    UTF-8; el rehearsal completo posterior aprobó.
+- Gates pendientes:
+  - Restaurar una copia representativa anonimizada.
+  - Conciliar conteos y clasificaciones reales.
+  - Medir locks/duración con volumen representativo.
+  - Completar y firmar UAT autenticada.
+- Riesgos:
+  - La evidencia actual es sintética y la base local estaba vacía.
+  - Los logs representativos pueden contener identificadores; por ello
+    `release-evidence/` está excluido de Git.
+  - Cualquier cambio de hash invalida las aprobaciones y obliga a repetir el
+    proceso.
+  - La deuda ESLint global requiere aceptación formal o remediación separada;
+    TypeScript y el build de producción sí están aprobados.
+- Producción: no se aplicó SQL ni frontend.
+- Commit: pendiente.
+
+### 2026-07-29 - FLOW-020 - Cut-offs, VGM y readiness previo al embarque
+
+- Estado: Implementado y validado en Supabase local; rehearsal representativo,
+  UAT autenticada y SQL remoto pendientes.
+- Hallazgo: FLOW-020.
+- Causa raíz:
+  - El paso a `Listo para Embarque` usaba validaciones marítimas fijas y no
+    distinguía FCL, LCL, aéreo ni terrestre.
+  - No existía evidencia canónica, versionada ni auditable de cut-offs o VGM
+    por contenedor físico.
+  - Los documentos se evaluaban por presencia y no existía un snapshot
+    inmutable que explicara por qué una transición fue aprobada o bloqueada.
+- SQL:
+  - `supabase/migrations/20260729170000_booking_cutoffs_and_readiness.sql`
+  - `supabase/tests/booking_cutoffs_and_readiness.sql`
+  - `supabase/diagnostics/booking_cutoff_integrity.sql`
+  - `supabase/diagnostics/container_vgm_integrity.sql`
+  - `supabase/diagnostics/booking_readiness_consistency.sql`
+  - `supabase/diagnostics/pre_shipment_post_validation.sql`
+- Código y documentación:
+  - `src/components/operations/BookingReadinessPanel.tsx`
+  - `src/components/operations/BookingTimeline.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/app/(protected)/reports/page.tsx`
+  - `src/app/portal/envios/[id]/page.tsx`
+  - `src/lib/alerts.ts`
+  - `docs/uat/phase-5c-booking-readiness.md`
+  - `docs/release/phase-5c-deployment-and-rollback.md`
+  - `docs/release/phase-4a-5b-release-rehearsal.md`
+  - `supabase/rehearsal/phase_4a_5b_pre_snapshot.sql`
+  - `supabase/rehearsal/phase_4a_5b_post_reconciliation.sql`
+  - `supabase/rehearsal/phase_4a_5b_security_validation.sql`
+- Cambios:
+  - Se agregaron cut-offs versionados con fecha/hora, zona horaria IANA,
+    fuente, estado, cumplimiento, cancelación y excepción administrativa.
+  - Se agregó VGM versionado por contenedor físico, masa positiva KG/LB,
+    método, documento y estados borrador/verificado/enviado/aceptado/rechazado.
+  - El checklist canónico se deriva por modalidad y conserva requisitos no
+    aplicables fuera de los bloqueadores.
+  - La evaluación de readiness es de solo lectura; las transiciones a
+    `Listo para Embarque` y `Embarcado` la aplican transaccionalmente y guardan
+    un snapshot inmutable.
+  - Los bloqueos retornan requisitos, cut-offs y contenedores concretos, crean
+    evento/alerta y no cambian silenciosamente el estado.
+  - Rollover conserva únicamente VGM del mismo contenedor, versiona cut-offs
+    provistos e invalida dependencias de itinerario. Un reemplazo comienza con
+    checklist independiente y no hereda evidencia 5C.
+  - Dashboard, alertas, reportes y portal consumen proyecciones específicas; el
+    portal no expone excepciones, aprobadores ni razones internas.
+  - El backfill crea solamente requisitos faltantes, es idempotente y no
+    inventa cut-offs/VGM ni cambia estados.
+  - Se corrigieron cadenas mal codificadas de estados en la migración 5B que
+    impedían un rollover válido desde `Listo para Embarque`.
+- Validaciones ejecutadas:
+  - Replay completo `npx supabase db reset --local`: OK.
+  - `supabase/tests/booking_cutoffs_and_readiness.sql`: OK con rollback.
+  - Regresiones 4A, 4B, 4C, 5A y 5B: OK con rollback.
+  - Cuatro diagnósticos 5C: cero hallazgos en la base local vacía.
+  - `npx supabase db lint --local --level warning`: sin errores ni warnings.
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido a los siete consumidores 5C: OK, sin errores ni warnings.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos LF/CRLF.
+- Verificación manual pendiente:
+  - Ejecutar el rehearsal acumulado 4A–5B sobre una copia representativa.
+  - Ejecutar la matriz UAT 5C con Admin, Operaciones y Cliente.
+  - Conciliar FCL, LCL, aéreo y terrestre, incluyendo rollover y reemplazo.
+  - Ejecutar smoke visual antes del despliegue.
+- Riesgos pendientes:
+  - La base local no contiene historia productiva ni contenedores físicos
+    reales; las pruebas sintéticas no reemplazan el rehearsal.
+  - Un registro `booking_containers` con cantidad mayor a uno no puede
+    certificar VGM por unidad y debe normalizarse antes de usar readiness FCL.
+  - No existe integración automática con navieras/básculas; la evidencia es
+    capturada por usuarios autorizados.
+  - La migración 5C no puede desplegarse hasta que 4A–5B estén aplicadas y
+    reconciliadas en remoto.
+- Rollback:
+  - Revertir consumidores y wrappers mediante migración compensatoria.
+  - Revocar escrituras 5C y conservar tablas/historia en modo lectura.
+  - No borrar cut-offs, VGM, excepciones, eventos ni snapshots.
+- Commit: pendiente.
+
+### 2026-07-29 - FLOW-019 - Revisiones y rollover de Booking
+
+- Estado: En validación; SQL aplicado únicamente en Supabase local y UAT
+  autenticada pendiente.
+- Hallazgo: FLOW-019.
+- Causa raíz:
+  - El guardado genérico de booking permitía sobrescribir identidad,
+    vessel/voyage, ETD/ETA, fechas originales y fechas reales sin distinguir
+    revisión, rollover, reemplazo o corrección.
+  - `Cancelada` no diferenciaba cancelación definitiva de reserva reemplazada.
+- SQL:
+  - `supabase/migrations/20260729160000_booking_schedule_revisions.sql`
+  - `supabase/tests/booking_schedule_revisions.sql`
+  - `supabase/diagnostics/booking_schedule_revision_coverage.sql`
+  - `supabase/diagnostics/booking_replacement_consistency.sql`
+  - `supabase/diagnostics/booking_original_schedule_integrity.sql`
+  - `supabase/diagnostics/booking_rollover_post_validation.sql`
+- Código y documentación:
+  - `src/components/operations/BookingScheduleManager.tsx`
+  - `src/components/operations/BookingTimeline.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/portal/envios/[id]/page.tsx`
+  - `src/app/(protected)/reports/page.tsx`
+  - `src/lib/alerts.ts`
+  - `docs/uat/phase-5b-booking-schedule-revisions.md`
+- Cambios:
+  - Historial inmutable y secuencial en `booking_schedule_revisions`, con
+    backfill `INITIAL` idempotente y metadata de inferencia.
+  - `original_etd` y `original_eta` quedan fijadas por la primera evidencia;
+    el schedule vigente permanece en `bookings`.
+  - Ciclo de vida explícito `ACTIVE/CANCELLED/REPLACED`, relaciones de
+    sustitución consistentes, sin ciclos y dentro del mismo shipment.
+  - RPC transaccionales para revisión, rollover, reemplazo, cancelación,
+    reactivación y corrección administrativa, con control optimista, locking,
+    eventos y activity logs.
+  - El guardado común ya no acepta identidad, schedule, originales ni actuals.
+  - Reemplazo no copia BL, documentos, fechas reales, tracking ni eventos.
+    Contenedores físicos no se mueven automáticamente.
+  - Portal muestra solo bookings activos e itinerario vigente; reportes y
+    alertas distinguen históricos y cambios de itinerario.
+- Validaciones:
+  - Replay completo `npx supabase db reset --local`: OK.
+  - `supabase/tests/booking_schedule_revisions.sql`: OK con rollback.
+  - Regresiones 4A, 4B, 4C y 5A: OK con rollback.
+  - Cuatro diagnósticos 5B: 0 hallazgos en la base local vacía.
+  - `npx supabase db lint --local --level warning`: sin errores.
+  - `npx tsc --noEmit`: OK.
+  - `npm run lint`: conserva baseline global de 392 problemas
+    (318 errores y 74 warnings); el componente nuevo no agrega hallazgos.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos LF/CRLF.
+- UAT autenticada:
+  - Pendiente; matriz preparada en
+    `docs/uat/phase-5b-booking-schedule-revisions.md`.
+- Riesgos pendientes:
+  - La base local no contiene datos productivos; ejecutar los cuatro
+    diagnósticos sobre una copia representativa antes de desplegar.
+  - La excepción Admin de reemplazo con BL emitido exige revisión documental
+    humana y queda auditada.
+  - La notificación al cliente es un registro manual; no existe integración
+    automática con navieras ni tareas persistentes en esta fase.
+- Rollback:
+  - Revertir frontend y consumidores.
+  - Deshabilitar/revocar los nuevos RPC mediante migración compensatoria.
+  - Conservar tabla de revisiones, relaciones, bookings y todo historial
+    generado; no borrar datos.
+- Commit: pendiente.
+
+### 2026-07-29 - FLOW-018 - Fundación de Shipment canónico
+
+- Estado: En validación manual; migración aplicada únicamente en Supabase local.
+- Hallazgo: FLOW-018.
+- Causa raíz:
+  - `shipping_instructions` funcionaba simultáneamente como documento y raíz
+    operativa, mientras bookings y eventos no tenían una FK estable hacia un
+    agregado shipment.
+  - Portal, reportes, alertas y Cost Validation usaban SI como fila operativa
+    y algunos consumidores asumían una sola SI por cotización.
+- SQL:
+  - `supabase/migrations/20260729150000_shipments_foundation.sql`
+  - `supabase/diagnostics/shipment_backfill_classification.sql`
+  - `supabase/diagnostics/shipment_relationship_consistency.sql`
+  - `supabase/diagnostics/shipment_status_comparison.sql`
+  - `supabase/diagnostics/shipment_post_foundation_validation.sql`
+  - `supabase/tests/shipment_foundation.sql`
+- Código y documentación:
+  - `src/lib/shipment-service.ts`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/operations/bookings/page.tsx`
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/components/operations/BookingTimeline.tsx`
+  - `src/app/(protected)/reports/page.tsx`
+  - `src/app/(protected)/cost-validation/page.tsx`
+  - `src/app/(protected)/cost-validation/[id]/page.tsx`
+  - `src/lib/alerts.ts`
+  - `docs/uat/phase-5a-shipment-foundation.md`
+- Cambios:
+  - Se creó `shipments` con FK conservadoras, RLS y backfill idempotente
+    SI→shipment conservando el UUID.
+  - `bookings` y `operational_events` recibieron `shipment_id`; triggers
+    impiden relaciones inconsistentes o mover registros históricos.
+  - Los RPC canónicos de booking, eventos, timeline y finalización validan y
+    retornan el shipment.
+  - La creación desde cotización es transaccional, auditable e idempotente.
+  - Una guardia de compatibilidad crea shipment para escritores legacy de SI;
+    la RPC canónica desactiva esa guardia localmente y no existe doble
+    escritura desde frontend.
+  - Portal v2, reportes, alertas y Cost Validation leen shipment como raíz.
+  - Las rutas y relaciones legacy se conservan.
+- Validaciones:
+  - Replay completo con `npx supabase db reset --local`: OK.
+  - `supabase/tests/shipment_foundation.sql`: OK con rollback; incluye
+    backfill de booking/evento y preservación de `updated_at` histórico.
+  - Regresiones `booking_canonical_foundation.sql`,
+    `booking_canonical_consumers.sql` y
+    `canonical_operational_events.sql`: OK con rollback.
+  - Cuatro diagnósticos 5A: OK; base local vacía con 0 inconsistencias.
+  - `npx supabase db lint --local --level warning`: sin errores.
+  - `npx tsc --noEmit`: OK.
+  - `npm run lint`: conserva baseline global de 392 problemas
+    (318 errores y 74 warnings); no agrega deuda.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos LF/CRLF.
+  - UAT autenticada: pendiente.
+- Verificación manual pendiente:
+  - Ejecutar toda la matriz de
+    `docs/uat/phase-5a-shipment-foundation.md`.
+  - Validar conteos y excepciones sobre una copia representativa antes de
+    aplicar SQL remoto.
+- Riesgos pendientes:
+  - La base local estaba vacía; no valida peculiaridades de datos productivos.
+  - Las URLs y documentos aún conservan SI como contexto por compatibilidad.
+  - `operational_status` legacy puede diferir del derivado; el diagnóstico lo
+    reporta y no se corrige destructivamente en 5A.
+- Rollback:
+  - Revertir consumidores a SI y revocar RPC mediante migración
+    compensatoria.
+  - Conservar tabla, columnas y relaciones nuevas sin uso; no borrar
+    shipments ni reescribir históricos.
+- Commit: pendiente.
+
+### 2026-07-29 - FLOW-017 - Timeline y transiciones canónicas de Booking
+
+- Estado: En validación manual; migración aplicada únicamente en Supabase
+  local.
+- Hallazgo: FLOW-017.
+- Causa raíz:
+  - El detalle del booking permitía seleccionar cualquier
+    `bookings.shipment_status` y enviarlo dentro de
+    `update_booking_canonical`, sin matriz de transición ni validaciones por
+    etapa.
+  - El historial operativo dependía de `shipping_instruction_events`, sin
+    asociación estructurada a booking/contenedor.
+  - La finalización de SI se validaba y ejecutaba desde el frontend mediante
+    actualización directa.
+- SQL:
+  - `supabase/migrations/20260729140000_canonical_operational_events.sql`
+  - `supabase/tests/canonical_operational_events.sql`
+  - Ajustes de regresión en las suites 4A y 4B.
+- Código:
+  - `src/components/operations/BookingTimeline.tsx`
+  - `src/lib/booking-status.ts`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `docs/uat/phase-4c-operational-timeline.md`
+- Cambios:
+  - Tabla `operational_events` con RLS, vínculos validados, fechas de
+    ocurrencia/registro separadas y origen auditado.
+  - Backfill idempotente desde eventos legacy, sin actualizar estados y sin
+    asociar silenciosamente eventos ambiguos a `primary_booking_id`.
+  - RPC `record_operational_event`, `transition_booking_status`,
+    `reopen_booking`, `get_booking_operational_timeline` y
+    `finalize_shipping_instruction_canonical`.
+  - `update_booking_canonical` rechaza `shipment_status` y hace inmutable un
+    booking finalizado.
+  - Selector libre sustituido por acción contextual y modal con concurrencia,
+    campos de ocurrencia y errores accionables.
+  - Timeline reutilizable con orden alternable y notas operativas.
+  - Estado agregado centralizado con confirmación/arribo parcial y cancelados
+    explícitos.
+  - Las nuevas escrituras de eventos del detalle de SI usan el RPC canónico;
+    la tabla legacy permanece solo como lectura histórica.
+- Validaciones:
+  - `npx supabase migration up --local`: OK.
+  - Reconciliación local: 0 eventos legacy, 0 reconciliados, 0 inserciones al
+    repetir el backfill.
+  - Suite SQL 4C: OK con rollback.
+  - Regresiones SQL 4A y 4B: OK con rollback.
+  - `npx supabase db lint --local --level warning`: sin hallazgos.
+  - `npx tsc --noEmit`: OK final.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `git diff --check`: OK; solo avisos esperados LF/CRLF.
+  - Lint global before: 401 problemas (326 errores, 75 warnings).
+  - Lint global after: 392 problemas (318 errores, 74 warnings); continúa
+    fallando por deuda preexistente.
+  - Lint focalizado: archivos nuevos sin hallazgos; detalle de booking conserva
+    3 errores y 2 warnings preexistentes.
+- Verificación manual pendiente:
+  - UAT autenticada completa descrita en
+    `docs/uat/phase-4c-operational-timeline.md`.
+  - Validar el backfill en un ambiente con eventos históricos reales antes de
+    producción.
+  - Aplicar la migración remota solo tras aprobar UAT y reconciliación.
+- Riesgos pendientes:
+  - El detalle de SI aún lee `shipping_instruction_events` como histórico y
+    `activity_logs`; queda pendiente migrarlo a una vista canónica completa.
+  - Las columnas de estado legacy de SI continúan coexistiendo y no deben
+    considerarse autoridad del booking.
+  - Booking Confirmation usa warning al confirmar y se vuelve obligatoria al
+    marcar Listo para Embarque.
+- Rollback:
+  - Revertir la UI y revocar RPC mediante migración compensatoria.
+  - Conservar ambas tablas de eventos en solo lectura; no borrar historia.
+  - No se eliminaron columnas, eventos ni datos.
+- Commit: pendiente.
+
+### 2026-07-29 - FLOW-016 - Consumidores de Booking canónico Fase 4B
+
+- Estado: En validación; SQL aplicado únicamente en Supabase local y UAT
+  autenticada pendiente.
+- Hallazgo: FLOW-016.
+- Causa raíz:
+  - Portal, Cost Validation, reportes, alertas/dashboard y repricing todavía
+    consumían o escribían semántica de booking desde campos legacy de
+    `shipping_instructions`.
+  - Reportes mezclaba una fila SI legacy con filas canónicas de `bookings`.
+  - Repricing podía modificar SI legacy y bookings con criterios basados solo
+    en identificadores vacíos.
+- SQL:
+  - `supabase/migrations/20260729130000_booking_canonical_consumers.sql`
+  - `supabase/tests/booking_canonical_consumers.sql`
+- Código y documentación:
+  - `src/lib/booking-status.ts`
+  - `src/lib/booking-document-summary.ts`
+  - `src/app/portal/page.tsx`
+  - `src/app/portal/envios/page.tsx`
+  - `src/app/portal/envios/[id]/page.tsx`
+  - `src/app/(protected)/cost-validation/page.tsx`
+  - `src/app/(protected)/cost-validation/[id]/page.tsx`
+  - `src/app/(protected)/reports/page.tsx`
+  - `src/lib/alerts.ts`
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `docs/uat/phase-4b-booking-canonical-consumers.md`
+- Cambios:
+  - Portal v2 valida `auth.uid()`, pertenencia del cliente y devuelve una
+    operación por SI más todos sus bookings en detalle, sin comentarios,
+    costos, márgenes ni contactos internos.
+  - Se conserva Portal v1 como rollback; los tres consumidores activos llaman
+    exclusivamente a v2.
+  - Cost Validation muestra 0/1/N referencias operativas y mantiene costos a
+    nivel de cotización sin multiplicarlos.
+  - Reportes separa explícitamente vista Operaciones y vista Bookings. La
+    primera agrega fechas, estado y contenedores; la segunda muestra un booking
+    por fila con MBL/HBL canónicos.
+  - Alertas y dashboard calculan semántica operativa desde bookings. Las
+    alertas SI se limitan a ausencia de bookings, validación, preparación y
+    brechas de asignación.
+  - `sync_shipping_instruction_from_selected_agent_quote_v2` actualiza solo
+    defaults de bookings sin confirmar; omite bookings confirmados, con datos
+    operativos o BL estructurado y audita IDs/motivos.
+  - Repricing v2 solo actualiza en SI datos propios del contacto del agente.
+    No escribe booking, carrier, itinerario, estado ni BL legacy en SI.
+  - El rol `authenticated` perdió acceso al RPC v1 de repricing; la función se
+    conserva para rollback administrativo.
+  - `booking-document-summary` prioriza `bills_of_lading`, usa caché de booking
+    solo si falta el BL estructurado y no acepta campos legacy de SI.
+  - La revisión PDF confirmó que el PDF activo es una instrucción prevista y
+    que el PDF alterno no tiene consumidor activo.
+  - No se eliminaron columnas ni se creó `shipments`.
+- Validaciones ejecutadas:
+  - Migración `20260729130000`: aplicada correctamente en Supabase local.
+  - `supabase/tests/booking_canonical_consumers.sql`: OK con rollback.
+  - Regresión `supabase/tests/booking_canonical_foundation.sql`: OK con
+    rollback sobre el esquema local que ya incluye Fase 4B.
+  - Portal probado por SQL con 0/1/N bookings, aislamiento entre dos clientes y
+    exclusión de comentarios operativos.
+  - Repricing probado con SI sin bookings, booking no confirmado, confirmado,
+    mezcla de estados, cambio de carrier/ETD/free days y BL estructurado.
+  - Evidencia SQL: los ocho campos booking legacy de SI permanecen iguales
+    después de repricing v2.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Prueba directa de helpers con Node 24: estado agregado conservador, BL
+    estructurado preferido y fallback de caché de booking, OK.
+  - `npm run lint`: ejecutado, no aprobado por deuda global previa del
+    repositorio (401 hallazgos: 326 errores y 75 warnings, principalmente
+    reglas React Hooks y `no-explicit-any` en módulos fuera de esta fase).
+- Verificación manual pendiente:
+  - Checklist autenticado completo en
+    `docs/uat/phase-4b-booking-canonical-consumers.md`.
+- Riesgos y trabajo pendiente:
+  - UAT visual/autenticada no ejecutada.
+  - Las columnas legacy permanecen y otros consumidores fuera del alcance de
+    Fase 4B todavía pueden leerlas.
+  - `shipping-instruction-pdf.tsx` se conserva aunque no tenga consumidor
+    activo; retirarlo requiere una fase explícita.
+  - La migración 4B no se aplicó en Supabase remoto.
+- Rollback:
+  - Revertir consumidores frontend a Portal v1 y consultas anteriores.
+  - Rehabilitar `EXECUTE` de repricing v1 solo mediante migración
+    compensatoria y aceptando temporalmente su doble semántica legacy.
+  - Mantener intactas las columnas permite la reversión sin pérdida de datos.
+- Commit: pendiente.
+
 ### 2026-07-20 - INS-024 - Politica configurable de servicios asegurables
 
 - Estado: En validacion
@@ -3793,4 +4243,85 @@ Agregar una entrada por fix:
     que no reaparezcan overrides anteriores.
 - Riesgos pendientes:
   - Las ventas ya ajustadas manualmente no se modifican con este cambio.
+- Commit: pendiente.
+
+### 2026-07-29 - FLOW-015 - Fundación de Booking canónico
+
+- Estado: En validación; migración aplicada únicamente en Supabase local.
+- Hallazgo: FLOW-015.
+- Causa raíz:
+  - Las pantallas internas principales coexistían con dos fuentes editables:
+    campos legacy de booking en `shipping_instructions` y registros hijos en
+    `bookings`.
+  - La creación y actualización del booking se ejecutaban directamente desde
+    el frontend, por lo que el cambio y su auditoría no eran una sola
+    transacción.
+- SQL:
+  - `supabase/migrations/20260729120000_booking_canonical_foundation.sql`
+  - `supabase/diagnostics/booking_source_classification.sql`
+  - `supabase/diagnostics/booking_field_conflicts.sql`
+  - `supabase/diagnostics/booking_post_foundation_validation.sql`
+  - `supabase/tests/booking_canonical_foundation.sql`
+- Código:
+  - `src/app/(protected)/operations/bookings/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/booking/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+- Cambios:
+  - Se agregó `shipping_instructions.primary_booking_id` con FK
+    `ON DELETE SET NULL`, índice y validación de pertenencia a la misma SI.
+  - El primer booking de una SI activa se selecciona automáticamente como
+    primario. La creación de un segundo booking no reemplaza el primario.
+  - Los RPC `create_booking_for_shipping_instruction`,
+    `update_booking_canonical`, `set_primary_booking` y
+    `select_primary_booking_if_single` validan autenticación y rol
+    Admin/Operaciones y registran `activity_logs` en la misma transacción.
+  - La actualización canónica limita los campos permitidos y utiliza
+    `updated_at` como control optimista de concurrencia.
+  - La pantalla nueva y las cachés temporales MBL/HBL dejaron de escribir
+    `bookings` directamente.
+  - `saveRouting` dejó de guardar `booking_number`, `carrier_booking`,
+    `master_bl`, `house_bl`, `etd`, `eta` y `free_days` en SI.
+  - La bandeja `/operations/bookings` ahora consulta `bookings`, conserva el
+    contexto de SI/cliente/asignado y abre la ruta canónica.
+  - La ruta `/shipping-instructions/{id}/booking` quedó como compatibilidad:
+    redirige para 0/1 bookings y muestra selector para N, sin escrituras.
+  - No se eliminó ni renombró ninguna columna legacy.
+- Validaciones:
+  - Inspección de migraciones: ninguna posterior a `20260728130000` alteraba
+    bookings, SI o sus RLS.
+  - `npx supabase migration up`: OK en base local.
+  - `npx supabase db push --linked --dry-run`: únicamente propone
+    `20260729120000_booking_canonical_foundation.sql`; no se aplicaron cambios
+    remotos.
+  - `supabase/tests/booking_canonical_foundation.sql`: OK, transacción con
+    rollback.
+  - Diagnósticos SQL: sintaxis validada localmente; únicamente `SELECT`.
+  - `npx supabase db lint --local --level warning`: sin errores.
+  - `npx tsc --noEmit`: OK.
+  - `npm run lint`: OK.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos LF/CRLF.
+- Verificación manual pendiente:
+  - UAT autenticada de creación/edición desde la UI.
+  - Confirmar visualmente la ruta de compatibilidad con 0, 1 y N bookings.
+  - Confirmar en la bandeja dos bookings pertenecientes a la misma SI.
+  - Aplicar la migración en remoto únicamente después de aprobar esta UAT.
+- Riesgos pendientes:
+  - `sync_shipping_instruction_from_selected_agent_quote` mantiene la
+    sincronización anterior de repricing hacia SI y bookings; quedó fuera del
+    alcance aprobado de Fase 4A.
+  - Portal, Cost Validation, reportes y alertas aún tienen consumidores legacy
+    documentados para fases posteriores.
+  - No existe todavía modelo de revisiones de itinerario ni relación formal de
+    rollover; cambios de ETD/vessel actualizan el mismo booking canónico.
+  - Los campos MBL/HBL en booking continúan como caché temporal hasta completar
+    la autoridad documental de `bills_of_lading`.
+- Rollback:
+  - Revertir las llamadas frontend a los RPC y la consulta de bandeja.
+  - Mantener las columnas legacy intactas permite volver temporalmente a las
+    lecturas anteriores.
+  - Retirar funciones/trigger/FK/índice y `primary_booking_id` solo mediante
+    una migración compensatoria; no editar ni borrar la migración ya aplicada.
 - Commit: pendiente.

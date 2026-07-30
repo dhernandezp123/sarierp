@@ -22,6 +22,7 @@
 
 # local database backups (may contain production data)
 /backups/
+/release-evidence/
 
 # misc
 .DS_Store

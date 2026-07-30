@@ -7,12 +7,14 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardList,
+  Clock3,
   FileWarning,
   PackageOpen,
   Ship,
 } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { aggregateBookingStatus } from '@/src/lib/booking-status'
 
 type ClientJoin = {
   nombre: string | null
@@ -26,8 +28,6 @@ type QuotationJoin = {
 type ShippingInstructionJoin = {
   id: string
   routing_number: string | null
-  booking_number: string | null
-  shipment_status: string | null
   operational_status: string | null
   operations_assigned_to: string | null
   container_qty: number | null
@@ -45,8 +45,13 @@ type BookingDocumentJoin = {
   document_type: string | null
 }
 
+type BillOfLadingJoin = {
+  bl_type: string | null
+}
+
 type BookingRow = {
   id: string
+  shipment_id: string | null
   shipping_instruction_id: string
   booking_number: string | null
   carrier_booking: string | null
@@ -64,6 +69,7 @@ type BookingRow = {
   shipping_instruction: ShippingInstructionJoin | ShippingInstructionJoin[] | null
   booking_containers: BookingContainerJoin[] | null
   booking_documents: BookingDocumentJoin[] | null
+  bills_of_lading: BillOfLadingJoin[] | null
 }
 
 type QuotationContainerRow = {
@@ -83,6 +89,21 @@ type RoutingContainerGap = {
 type DocumentationGap = {
   booking: BookingRow
   missing: string[]
+}
+
+type ReadinessOverview = {
+  booking_id: string
+  shipment_id: string
+  booking_number: string | null
+  mode: string
+  ready: boolean
+  blocking_count: number
+  warning_count: number
+  next_cutoff: string | null
+  overdue_cutoff_count: number
+  missing_vgm_count: number
+  active_exception: boolean
+  evaluated_at: string
 }
 
 const requiredDocumentTypes = [
@@ -282,12 +303,18 @@ function missingDocuments(booking: BookingRow) {
       .filter((type): type is string => Boolean(type))
   )
 
+  ;(booking.bills_of_lading || []).forEach((bill) => {
+    if (bill.bl_type === 'MBL') attached.add('Master BL')
+    if (bill.bl_type === 'HBL') attached.add('House BL')
+  })
+
   return requiredDocumentTypes.filter((type) => !attached.has(type))
 }
 
 export default function OperationsDashboardPage() {
   const [bookings, setBookings] = useState<BookingRow[]>([])
   const [quotationTotals, setQuotationTotals] = useState<Record<string, number>>({})
+  const [readinessOverview, setReadinessOverview] = useState<ReadinessOverview[]>([])
   const [loading, setLoading] = useState(true)
 
   const loadDashboard = async () => {
@@ -297,6 +324,7 @@ export default function OperationsDashboardPage() {
       .from('bookings')
       .select(`
         id,
+        shipment_id,
         shipping_instruction_id,
         booking_number,
         carrier_booking,
@@ -314,8 +342,6 @@ export default function OperationsDashboardPage() {
         shipping_instruction:shipping_instructions (
           id,
           routing_number,
-          booking_number,
-          shipment_status,
           operational_status,
           operations_assigned_to,
           container_qty,
@@ -334,14 +360,23 @@ export default function OperationsDashboardPage() {
         ),
         booking_documents (
           document_type
+        ),
+        bills_of_lading (
+          bl_type
         )
       `)
+      .eq('booking_lifecycle_status', 'ACTIVE')
       .order('created_at', { ascending: false })
 
     const { data: quotationContainersData, error: quotationContainersError } =
       await supabase
         .from('quotation_containers')
         .select('quotation_id, quantity')
+
+    const { data: readinessData, error: readinessError } = await supabase.rpc(
+      'get_booking_readiness_overview',
+      { p_shipment_id: null }
+    )
 
     if (bookingsError) {
       setBookings([])
@@ -365,11 +400,20 @@ export default function OperationsDashboardPage() {
       setQuotationTotals(totals)
     }
 
+    if (readinessError) {
+      setReadinessOverview([])
+    } else {
+      setReadinessOverview((readinessData || []) as ReadinessOverview[])
+    }
+
     setLoading(false)
   }
 
   useEffect(() => {
-    loadDashboard()
+    const timeout = window.setTimeout(() => {
+      void loadDashboard()
+    }, 0)
+    return () => window.clearTimeout(timeout)
   }, [])
 
   const dashboard = useMemo(() => {
@@ -386,12 +430,34 @@ export default function OperationsDashboardPage() {
       return isArrived(booking.shipment_status) && isCurrentMonth(dateValue)
     })
 
+    const allBookingsByRouting = bookings.reduce<Record<string, BookingRow[]>>(
+      (acc, booking) => {
+        const operationId = booking.shipment_id || booking.shipping_instruction_id
+        acc[operationId] = [
+          ...(acc[operationId] || []),
+          booking,
+        ]
+        return acc
+      },
+      {}
+    )
+
     const openRoutingIds = new Set(
-      bookings
-        .map((booking) => resolveJoin(booking.shipping_instruction))
-        .filter((routing): routing is ShippingInstructionJoin => Boolean(routing))
-        .filter((routing) => !isFinalStatus(routing.shipment_status))
-        .map((routing) => routing.id)
+      Object.values(allBookingsByRouting)
+        .filter((routingBookings) => {
+          const routing = resolveJoin(routingBookings[0]?.shipping_instruction)
+          return !isFinalStatus(
+            aggregateBookingStatus(
+              routingBookings,
+              routing?.operational_status || 'Sin bookings'
+            )
+          )
+        })
+        .map(
+          (routingBookings) =>
+            routingBookings[0].shipment_id ||
+            routingBookings[0].shipping_instruction_id
+        )
     )
 
     const etaNextSevenDays = activeBookings
@@ -416,8 +482,9 @@ export default function OperationsDashboardPage() {
 
     const bookingsByRouting = activeBookings.reduce<Record<string, BookingRow[]>>(
       (acc, booking) => {
-        acc[booking.shipping_instruction_id] = [
-          ...(acc[booking.shipping_instruction_id] || []),
+        const operationId = booking.shipment_id || booking.shipping_instruction_id
+        acc[operationId] = [
+          ...(acc[operationId] || []),
           booking,
         ]
         return acc
@@ -425,8 +492,8 @@ export default function OperationsDashboardPage() {
       {}
     )
 
-    const containerGaps = Object.entries(bookingsByRouting)
-      .map<RoutingContainerGap | null>(([routingId, routingBookings]) => {
+    const containerGaps = Object.values(bookingsByRouting)
+      .map<RoutingContainerGap | null>((routingBookings) => {
         const routing = resolveJoin(routingBookings[0]?.shipping_instruction)
         if (!routing) return null
 
@@ -437,7 +504,7 @@ export default function OperationsDashboardPage() {
         if (expected <= 0 || missing <= 0) return null
 
         return {
-          routingId,
+          routingId: routing.id,
           routingNumber: routing.routing_number || 'N/A',
           clientName: clientNameFor(routingBookings[0]),
           expected,
@@ -455,6 +522,18 @@ export default function OperationsDashboardPage() {
       })
       .filter((gap): gap is DocumentationGap => Boolean(gap))
 
+    const activeBookingIds = new Set(activeBookings.map((booking) => booking.id))
+    const readinessGaps = readinessOverview
+      .filter(
+        (overview) =>
+          activeBookingIds.has(overview.booking_id) && !overview.ready
+      )
+      .sort(
+        (left, right) =>
+          right.blocking_count - left.blocking_count ||
+          right.overdue_cutoff_count - left.overdue_cutoff_count
+      )
+
     return {
       metrics: {
         activeBookings: activeBookings.length,
@@ -462,14 +541,20 @@ export default function OperationsDashboardPage() {
         arrivedThisMonth: arrivedThisMonth.length,
         openRoutings: openRoutingIds.size,
         pendingDocuments: documentationGaps.length,
+        notReady: readinessGaps.length,
+        overdueCutoffs: readinessGaps.reduce(
+          (sum, overview) => sum + overview.overdue_cutoff_count,
+          0
+        ),
       },
       etaNextSevenDays,
       freeDaysExpiring,
       pendingConfirmation,
       containerGaps,
       documentationGaps,
+      readinessGaps,
     }
-  }, [bookings, quotationTotals])
+  }, [bookings, quotationTotals, readinessOverview])
 
   if (loading) {
     return (
@@ -502,7 +587,7 @@ export default function OperationsDashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
         <MetricCard
           title="Bookings activos"
           value={dashboard.metrics.activeBookings}
@@ -529,6 +614,18 @@ export default function OperationsDashboardPage() {
           icon={<FileWarning className="h-5 w-5" />}
           danger={dashboard.metrics.pendingDocuments > 0}
         />
+        <MetricCard
+          title="Bookings no listos"
+          value={dashboard.metrics.notReady}
+          icon={<AlertTriangle className="h-5 w-5" />}
+          danger={dashboard.metrics.notReady > 0}
+        />
+        <MetricCard
+          title="Cut-offs vencidos"
+          value={dashboard.metrics.overdueCutoffs}
+          icon={<Clock3 className="h-5 w-5" />}
+          danger={dashboard.metrics.overdueCutoffs > 0}
+        />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
@@ -537,6 +634,10 @@ export default function OperationsDashboardPage() {
         <PendingConfirmationTable bookings={dashboard.pendingConfirmation} />
         <ContainerGapsTable gaps={dashboard.containerGaps} />
         <DocumentationGapsTable gaps={dashboard.documentationGaps} />
+        <ReadinessGapsTable
+          gaps={dashboard.readinessGaps}
+          bookings={bookings}
+        />
       </div>
     </div>
   )
@@ -914,5 +1015,92 @@ function DocumentationGapsTable({ gaps }: { gaps: DocumentationGap[] }) {
         </table>
       </DashboardPanel>
     </div>
+  )
+}
+
+function ReadinessGapsTable({
+  gaps,
+  bookings,
+}: {
+  gaps: ReadinessOverview[]
+  bookings: BookingRow[]
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#0b1220] xl:col-span-2">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-5 w-5 text-amber-500" />
+        <h2 className="font-semibold text-slate-900 dark:text-white">
+          Readiness previo al embarque
+        </h2>
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th className="py-2 pr-4">Booking</th>
+              <th className="pr-4">Modalidad</th>
+              <th className="pr-4">Bloqueos</th>
+              <th className="pr-4">VGM pendientes</th>
+              <th className="pr-4">Cut-offs vencidos</th>
+              <th>Próximo cut-off</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gaps.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="border-t border-slate-100 py-6 text-center text-slate-500 dark:border-slate-800"
+                >
+                  No hay bookings activos bloqueados.
+                </td>
+              </tr>
+            ) : (
+              gaps.map((gap) => {
+                const booking = bookings.find(
+                  (candidate) => candidate.id === gap.booking_id
+                )
+                return (
+                  <tr
+                    key={gap.booking_id}
+                    className="border-t border-slate-100 dark:border-slate-800"
+                  >
+                    <td className="py-3 pr-4">
+                      {booking ? (
+                        <Link
+                          href={`/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`}
+                          className="font-semibold text-blue-600 hover:underline"
+                        >
+                          {gap.booking_number || gap.booking_id.slice(0, 8)}
+                        </Link>
+                      ) : (
+                        gap.booking_number || gap.booking_id.slice(0, 8)
+                      )}
+                    </td>
+                    <td className="pr-4">{gap.mode}</td>
+                    <td className="pr-4 font-semibold text-red-600">
+                      {gap.blocking_count}
+                    </td>
+                    <td className="pr-4">{gap.missing_vgm_count}</td>
+                    <td className="pr-4">{gap.overdue_cutoff_count}</td>
+                    <td>
+                      {gap.next_cutoff
+                        ? new Intl.DateTimeFormat('es-HN', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }).format(new Date(gap.next_cutoff))
+                        : 'N/A'}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }

@@ -13,6 +13,11 @@ import { useUser } from '@/src/hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
+import { aggregateBookingStatus as deriveBookingAggregateStatus } from '@/src/lib/booking-status'
+import {
+  loadShipmentContext,
+  type ShipmentContext,
+} from '@/src/lib/shipment-service'
 import { primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
@@ -149,6 +154,7 @@ type ShippingInstruction = {
 
   validated_at: string | null
   validated_by: string | null
+  updated_at: string | null
 }
 
 type SalesInitialInfoField =
@@ -272,25 +278,6 @@ function getBookingStatusBadgeClass(status?: string | null) {
   }
 }
 
-function getRoutingAggregateStatus(bookings: Booking[]) {
-  if (bookings.length === 0) return 'Sin bookings'
-
-  const statuses = bookings.map((booking) => booking.shipment_status || '')
-
-  if (statuses.every((status) => status === 'Finalizado')) return 'Finalizado'
-  if (statuses.some((status) => status === 'En Tránsito')) return 'En Tránsito'
-  if (statuses.some((status) => status === 'Embarcado')) return 'Embarcado'
-
-  const confirmedCount = statuses.filter((status) => status === 'Booking Confirmado').length
-  const requestedCount = statuses.filter((status) => status === 'Booking Solicitado').length
-
-  if (confirmedCount > 0 && requestedCount > 0) return 'Parcialmente Confirmado'
-  if (confirmedCount === statuses.length) return 'Booking Confirmado'
-  if (requestedCount > 0) return 'Booking Solicitado'
-
-  return 'En proceso'
-}
-
 function parseQuotedContainerTotal(routing: ShippingInstruction) {
   const containerType = routing.container_type?.trim()
   const containerQty = Number(routing.container_qty || 0)
@@ -411,6 +398,7 @@ export default function RoutingDetailPage() {
   const { user, profile, loading: userLoading } = useUser()
 
   const [routing, setRouting] = useState<ShippingInstruction | null>(null)
+  const [shipmentContext, setShipmentContext] = useState<ShipmentContext | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [operationalEvents, setOperationalEvents] = useState<OperationalTimelineEvent[]>([])
@@ -474,6 +462,16 @@ export default function RoutingDetailPage() {
       .single()
 
     if (!error && data) {
+      try {
+        setShipmentContext(await loadShipmentContext(data.id))
+      } catch (shipmentError) {
+        toast.error('No se pudo cargar el shipment canónico', {
+          description:
+            shipmentError instanceof Error ? shipmentError.message : undefined,
+        })
+        setShipmentContext(null)
+      }
+
       const { data: companyData } = await supabase
         .from('company_settings')
         .select(COMPANY_BRANDING_SELECT)
@@ -531,7 +529,7 @@ export default function RoutingDetailPage() {
 
     try {
       const { data, error } = await supabase.rpc(
-        'sync_shipping_instruction_from_selected_agent_quote',
+        'sync_shipping_instruction_from_selected_agent_quote_v2',
         {
           p_shipping_instruction_id: routing.id,
           p_reason: 'Actualizacion manual desde Shipping Instruction',
@@ -543,13 +541,21 @@ export default function RoutingDetailPage() {
         return
       }
 
-      const updatedBookings =
-        (data as Array<{ updated_bookings?: number }> | null)?.[0]?.updated_bookings ?? 0
+      const result = (
+        data as Array<{
+          updated_bookings?: number
+          skipped_count?: number
+        }> | null
+      )?.[0]
+      const updatedBookings = result?.updated_bookings ?? 0
+      const skippedBookings = result?.skipped_count ?? 0
 
       toast.success(
         updatedBookings > 0
-          ? `Informacion sincronizada desde Pricing (${updatedBookings} booking${updatedBookings === 1 ? '' : 's'} actualizado${updatedBookings === 1 ? '' : 's'})`
-          : 'Informacion sincronizada desde Pricing'
+          ? `Información sincronizada desde Pricing: ${updatedBookings} booking${updatedBookings === 1 ? '' : 's'} actualizado${updatedBookings === 1 ? '' : 's'}${skippedBookings > 0 ? `, ${skippedBookings} omitido${skippedBookings === 1 ? '' : 's'}` : ''}`
+          : skippedBookings > 0
+            ? `No se modificaron bookings confirmados (${skippedBookings} omitido${skippedBookings === 1 ? '' : 's'})`
+            : 'Información sincronizada desde Pricing'
       )
 
       await loadRouting()
@@ -706,28 +712,22 @@ export default function RoutingDetailPage() {
     notes: string
     metadata?: Record<string, unknown>
   }) => {
-    if (!routing || !user?.id) return
+    if (!routing) return
 
     try {
-      const { error } = await supabase
-        .from('shipping_instruction_events')
-        .insert({
-          shipping_instruction_id: routing.id,
-          event_type: eventType,
-          notes,
-          created_by: user.id,
-        })
+      const { error } = await supabase.rpc('record_operational_event', {
+        p_shipping_instruction_id: routing.id,
+        p_booking_id: null,
+        p_booking_container_id: null,
+        p_event_code: 'OPERATIONAL_NOTE',
+        p_event_label: eventType,
+        p_occurred_at: new Date().toISOString(),
+        p_location: null,
+        p_notes: notes,
+        p_metadata: metadata || {},
+      })
 
-      if (metadata) {
-        await createActivityLog({
-          module: 'operations_timeline',
-          action: eventType,
-          entityType: 'shipping_instruction',
-          entityId: routing.id,
-          description: notes,
-          metadata,
-        })
-      }
+      if (error) throw error
     } catch {
       // event creation failure is non-fatal
     }
@@ -754,16 +754,6 @@ export default function RoutingDetailPage() {
         supplier_email: routing.supplier_email,
         supplier_phone: routing.supplier_phone,
         supplier_address: routing.supplier_address,
-
-        booking_number: routing.booking_number,
-        carrier_booking: routing.carrier_booking,
-        master_bl: routing.master_bl,
-        house_bl: routing.house_bl,
-
-        etd: routing.etd,
-        eta: routing.eta,
-
-        free_days: routing.free_days,
 
         freight_terms: routing.freight_terms,
         release_type: routing.release_type,
@@ -997,41 +987,6 @@ export default function RoutingDetailPage() {
     toast.success('Operativo asignado')
   }
 
-  const validateCanFinalizeRouting = () => {
-    if (!routing) return 'No se encontró la Shipping Instruction.'
-    if (bookings.length === 0) {
-      return 'No se puede finalizar: debes crear al menos un booking hijo.'
-    }
-
-    const bookingsWithoutContainers = bookings.filter(
-      (booking) => !booking.booking_containers || booking.booking_containers.length === 0
-    )
-
-    if (bookingsWithoutContainers.length > 0) {
-      return 'No se puede finalizar: todos los bookings deben tener contenedores asignados.'
-    }
-
-    if (quotedContainerTotal > 0 && assignedContainerTotal < quotedContainerTotal) {
-      return `No se puede finalizar: faltan ${
-        quotedContainerTotal - assignedContainerTotal
-      } contenedores por asignar.`
-    }
-
-    if (quotedContainerTotal > 0 && assignedContainerTotal > quotedContainerTotal) {
-      return 'No se puede finalizar: hay más contenedores asignados que cotizados.'
-    }
-
-    const nonFinalizedBookings = bookings.filter(
-      (booking) => booking.shipment_status !== 'Finalizado'
-    )
-
-    if (nonFinalizedBookings.length > 0) {
-      return 'No se puede finalizar: todos los bookings deben estar en estado Finalizado.'
-    }
-
-    return null
-  }
-
   const finalizeRouting = async () => {
     if (!routing) return
     if (!canManageRouting) {
@@ -1043,58 +998,42 @@ export default function RoutingDetailPage() {
       return
     }
 
-    const validationError = validateCanFinalizeRouting()
-    if (validationError) {
-      toast.error(validationError)
-      return
-    }
-
     setFinalizing(true)
 
-    const { error } = await supabase
-      .from('shipping_instructions')
-      .update({
-        shipment_status: 'Finalizado',
-        operational_status: 'Finalizado',
-      })
-      .eq('id', routing.id)
+    const { data, error } = await supabase.rpc(
+      'finalize_shipping_instruction_canonical',
+      {
+        p_shipping_instruction_id: routing.id,
+        p_expected_updated_at: routing.updated_at,
+      }
+    )
 
     setFinalizing(false)
 
     if (error) {
-      toast.error(error.message || 'No se pudo finalizar la Shipping Instruction')
+      const conflict =
+        error.code === '40001' ||
+        error.message?.includes('SHIPPING_INSTRUCTION_VERSION_CONFLICT')
+
+      toast.error(
+        conflict
+          ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de finalizar.'
+          : error.message || 'No se pudo finalizar la Shipping Instruction'
+      )
       return
     }
 
-    await createActivityLog({
-      module: 'operations_routing',
-      action: 'shipping_instruction_finalized',
-      entityType: 'shipping_instruction',
-      entityId: routing.id,
-      description: `Shipping Instruction ${routing.routing_number} finalizada`,
-      metadata: {
-        routing_number: routing.routing_number,
-        total_bookings: bookings.length,
-        total_containers: assignedContainerTotal,
-        finalized_by: user?.id,
-      },
-    })
+    const result = data as {
+      shipping_instruction?: ShippingInstruction
+    } | null
 
-    await recordOperationalEvent({
-      eventType: 'Shipping Instruction finalizada',
-      notes: `Shipping Instruction ${routing.routing_number} finalizada`,
-      metadata: {
-        routing_number: routing.routing_number,
-        total_bookings: bookings.length,
-        total_containers: assignedContainerTotal,
-      },
-    })
-
-    setRouting({
-      ...routing,
-      shipment_status: 'Finalizado',
-      operational_status: 'Finalizado',
-    })
+    if (result?.shipping_instruction) {
+      setRouting(result.shipping_instruction)
+    } else {
+      await loadRouting()
+    }
+    setShipmentContext(await loadShipmentContext(routing.id))
+    await loadOperationalTimeline(routing, bookings)
 
     toast.success('Shipping Instruction finalizada')
   }
@@ -1200,43 +1139,12 @@ export default function RoutingDetailPage() {
 
     setCreatingBooking(true)
 
-    const freeDays =
-      parseIntegerValue(selectedAgent?.free_days_destination) ??
-      parseIntegerValue(selectedAgent?.free_days) ??
-      parseIntegerValue(selectedAgent?.dias_libres) ??
-      parseIntegerValue(routing.free_days_destination) ??
-      parseIntegerValue(routing.free_days)
-    const estimatedTransitDays =
-      parseIntegerValue(selectedAgent?.transit_time) ??
-      parseIntegerValue(selectedAgent?.transit) ??
-      parseIntegerValue(routing.transit_time) ??
-      parseIntegerValue(routing.transit) ??
-      parseIntegerValue(routing.estimated_transit_days)
-    const quotation = routing.quotation || {}
-
-    const bookingPayload = {
-      shipping_instruction_id: routing.id,
-      carrier:
-        selectedAgent?.carrier ||
-        routing.carrier ||
-        quotation.preferred_carrier ||
-        null,
-      etd: selectedAgent?.etd || routing.etd || null,
-      eta: routing.eta || null,
-      estimated_transit_days: estimatedTransitDays,
-      free_days: freeDays,
-      remaining_free_days: parseIntegerValue(routing.remaining_free_days) ?? freeDays,
-      freight_terms: routing.freight_terms,
-      release_type: routing.release_type,
-      hbl_freight_visibility: routing.hbl_freight_visibility,
-      printed_at_destination: routing.printed_at_destination ?? true,
-      shipment_status: 'Booking Solicitado',
-      created_by: user.id,
-    }
-
-    const { error } = await supabase
-      .from('bookings')
-      .insert(bookingPayload)
+    const { data, error } = await supabase.rpc(
+      'create_booking_for_shipping_instruction',
+      {
+        p_shipping_instruction_id: routing.id,
+      }
+    )
 
     setCreatingBooking(false)
 
@@ -1245,32 +1153,16 @@ export default function RoutingDetailPage() {
       return null
     }
 
-    const { data, error: selectError } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('shipping_instruction_id', routing.id)
-      .eq('created_by', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (selectError) {
-      toast.error(selectError.message || 'No se pudo crear el booking')
+    const createdBooking = Array.isArray(data) ? data[0] : data
+    if (!createdBooking?.id) {
+      toast.error('El booking fue creado, pero no se recibió su identificador')
       return null
     }
 
-    await recordOperationalEvent({
-      eventType: 'Booking creado',
-      notes: `Booking hijo creado para ${routing.routing_number}`,
-      metadata: {
-        routing_number: routing.routing_number,
-        booking_id: data.id,
-      },
-    })
-
     await loadBookings()
 
-    return data as { id: string }
+    toast.success('Booking creado')
+    return createdBooking as { id: string }
   }
 
   const handleCreateBookingChild = async () => {
@@ -1402,9 +1294,7 @@ export default function RoutingDetailPage() {
     canManageRouting && !isRoutingCancelled && routing.operational_status === SI_READY_FOR_BOOKING
 
   const hasBooking =
-    bookings.length > 0 ||
-    !!routing.booking_number ||
-    routing.operational_status === 'En Booking'
+    bookings.length > 0 || routing.operational_status === 'En Booking'
 
   const quotation = routing.quotation || {}
   const quotationId = routing.quotation_id || quotation.id
@@ -1444,7 +1334,10 @@ export default function RoutingDetailPage() {
   const canDownloadRoutingPdf =
     canManageRouting || (profile?.rol === 'Ventas' && routing.created_by === user?.id)
   const routingPdfFileName = `SI-${routing.routing_number || 'shipping-instruction'}.pdf`
-  const aggregateBookingStatus = getRoutingAggregateStatus(bookings)
+  const aggregateBookingStatus = deriveBookingAggregateStatus(
+    bookings,
+    routing.operational_status || 'Sin bookings'
+  )
   const assignedContainerTotal = countAssignedBookingContainers(bookings)
   const containerAssignmentSummary =
     quotedContainerTotal > 0
@@ -1533,6 +1426,43 @@ export default function RoutingDetailPage() {
           )}
         </div>
       </div>
+
+      {shipmentContext && (
+        <section className="mb-6 rounded-2xl border border-blue-200 bg-blue-50/60 p-5 shadow-sm dark:border-blue-900/60 dark:bg-blue-950/20">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300">
+                Operación canónica
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
+                Shipment {shipmentContext.shipment.shipment_number}
+              </h2>
+            </div>
+            <span className="inline-flex w-fit rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
+              {shipmentContext.shipment.derived_operational_status}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-4 text-sm md:grid-cols-4">
+            <Info label="Shipment ID" value={shipmentContext.shipment.id} />
+            <Info
+              label="Servicio"
+              value={shipmentContext.shipment.service_type || 'N/A'}
+            />
+            <Info
+              label="Origen"
+              value={shipmentContext.shipment.origin || 'N/A'}
+            />
+            <Info
+              label="Destino"
+              value={shipmentContext.shipment.destination || 'N/A'}
+            />
+          </div>
+          <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+            Esta página conserva la ruta de Shipping Instruction como contexto
+            documental. Bookings y eventos pertenecen al shipment mostrado.
+          </p>
+        </section>
+      )}
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1657,7 +1587,7 @@ export default function RoutingDetailPage() {
             </p>
           </div>
 
-          {canManageRouting && !isRoutingCancelled && (
+          {canCreateBooking && (
             <button
               type="button"
               onClick={handleCreateBookingChild}
@@ -1698,7 +1628,7 @@ export default function RoutingDetailPage() {
                   ? 'No hay bookings asociados.'
                   : 'No hay bookings creados todavía.'}
               </p>
-              {canManageRouting && !isRoutingCancelled && (
+              {canCreateBooking && (
                 <button
                   type="button"
                   onClick={handleCreateBookingChild}

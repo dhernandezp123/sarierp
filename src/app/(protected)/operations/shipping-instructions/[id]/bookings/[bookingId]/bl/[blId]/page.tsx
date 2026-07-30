@@ -335,12 +335,42 @@ export default function BLPage() {
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [amendmentNote, setAmendmentNote] = useState('')
   const [sendingDraft, setSendingDraft] = useState(false)
+  const [bookingUpdatedAt, setBookingUpdatedAt] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const savedFormRef = useRef<BLForm | null>(null)
 
   const set = (field: keyof BLForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const value = e.target.type === 'checkbox' ? (e.target as HTMLInputElement).checked : e.target.value
     setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const syncBookingBlCache = async (
+    changes: { master_bl?: string; house_bl?: string }
+  ) => {
+    if (!bookingUpdatedAt) {
+      toast.error('No se pudo validar la versión actual del booking. Recarga la página.')
+      return false
+    }
+
+    const { data, error } = await supabase.rpc('update_booking_canonical', {
+      p_booking_id: bookingId,
+      p_shipping_instruction_id: id,
+      p_expected_updated_at: bookingUpdatedAt,
+      p_changes: changes,
+    })
+
+    if (error) {
+      toast.error(
+        error.code === '40001'
+          ? 'El booking cambió mientras editabas el BL. Recarga la página antes de continuar.'
+          : error.message || 'No se pudo actualizar la referencia temporal del BL en el booking'
+      )
+      return false
+    }
+
+    const updatedBooking = Array.isArray(data) ? data[0] : data
+    setBookingUpdatedAt(updatedBooking?.updated_at || null)
+    return true
   }
 
   const loadData = async () => {
@@ -351,7 +381,7 @@ export default function BLPage() {
       supabase
         .from('bookings')
         .select(`
-          id, booking_number, carrier, vessel_name, voyage, etd, eta, freight_terms, release_type,
+          id, booking_number, carrier, vessel_name, voyage, etd, eta, freight_terms, release_type, updated_at,
           shipping_instruction:shipping_instructions (
             id, routing_number, supplier_name, supplier_contact, supplier_email, origin_address, destination_address,
             quotation:quotations (
@@ -375,6 +405,8 @@ export default function BLPage() {
       setCondicionesAWB((settingsData as any).condiciones_awb ?? null)
       setCondicionesCP((settingsData as any).condiciones_carta_porte ?? null)
     }
+
+    setBookingUpdatedAt(bookingData?.updated_at || null)
 
     // Extract tipo_transporte from quotation
     const siForType = Array.isArray(bookingData?.shipping_instruction) ? bookingData.shipping_instruction[0] : bookingData?.shipping_instruction
@@ -669,9 +701,9 @@ export default function BLPage() {
     // Sync bl_number back to bookings for legacy display
     if (form.bl_number) {
       if (form.bl_type === 'MBL') {
-        await supabase.from('bookings').update({ master_bl: form.bl_number }).eq('id', bookingId)
+        if (!(await syncBookingBlCache({ master_bl: form.bl_number }))) return
       } else if (form.bl_type === 'HBL' && ['Emitido', 'Liberado'].includes(form.status)) {
-        await supabase.from('bookings').update({ house_bl: form.bl_number }).eq('id', bookingId)
+        if (!(await syncBookingBlCache({ house_bl: form.bl_number }))) return
       }
     }
 
@@ -818,7 +850,7 @@ export default function BLPage() {
 
     // Sync HBL number to bookings when issued
     if (newStatus === 'Emitido' && form.bl_type === 'HBL' && form.bl_number) {
-      await supabase.from('bookings').update({ house_bl: form.bl_number }).eq('id', bookingId)
+      if (!(await syncBookingBlCache({ house_bl: form.bl_number }))) return
     }
 
     toast.success(`Estado actualizado: ${newStatus}`)

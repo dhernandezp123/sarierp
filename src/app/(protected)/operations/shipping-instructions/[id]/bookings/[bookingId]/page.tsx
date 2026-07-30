@@ -14,9 +14,23 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import {
+  BookingTimeline,
+  type BookingTimelineEvent,
+} from '@/src/components/operations/BookingTimeline'
+import {
+  BookingScheduleManager,
+  type ScheduleBooking,
+} from '@/src/components/operations/BookingScheduleManager'
+import {
+  BookingReadinessPanel,
+  type BookingReadinessEvaluation,
+  type ReadinessRequirement,
+} from '@/src/components/operations/BookingReadinessPanel'
 import {
   cardClass,
   fieldClass,
@@ -65,6 +79,19 @@ type BookingContainerRow = {
   notes: string
 }
 
+type QuotationContainerData = {
+  container_type_name: string | null
+  quantity: number | string | null
+}
+
+type StoredBookingContainerData = {
+  id: string
+  container_type: string | null
+  quantity: number | string | null
+  notes: string | null
+  created_at: string | null
+}
+
 type BookingDocument = {
   id: string
   booking_id: string
@@ -98,6 +125,7 @@ type RoutingData = {
 type BookingData = {
   id: string
   shipping_instruction_id: string
+  shipment_id: string | null
   booking_number: string | null
   carrier_booking: string | null
   master_bl: string | null
@@ -107,6 +135,7 @@ type BookingData = {
   voyage: string | null
   etd: string | null
   eta: string | null
+  original_etd: string | null
   original_eta: string | null
   actual_etd: string | null
   actual_eta: string | null
@@ -121,6 +150,13 @@ type BookingData = {
   hbl_freight_visibility: string | null
   printed_at_destination: boolean | null
   operational_comments: string | null
+  routing_summary: string | null
+  booking_lifecycle_status: 'ACTIVE' | 'CANCELLED' | 'REPLACED'
+  supersedes_booking_id: string | null
+  replaced_by_booking_id: string | null
+  cancellation_reason: string | null
+  cancelled_at: string | null
+  updated_at: string | null
 }
 
 type SelectedAgentQuote = {
@@ -145,16 +181,63 @@ type BillOfLading = {
   created_at: string | null
 }
 
-const bookingStatusOptions = [
-  'Booking Solicitado',
-  'Booking Confirmado',
-  'Documentación Pendiente',
-  'Listo para Embarque',
-  'Embarcado',
-  'En Tránsito',
-  'Arribado',
-  'Finalizado',
-]
+type BookingAction = {
+  kind: 'transition' | 'delivery'
+  label: string
+  targetStatus?: string
+  description: string
+}
+
+const bookingTransitionActions: Record<string, BookingAction> = {
+  'Pendiente Validación': {
+    kind: 'transition',
+    label: 'Solicitar booking',
+    targetStatus: 'Booking Solicitado',
+    description: 'Inicia formalmente la gestión del booking.',
+  },
+  'Listo para Booking': {
+    kind: 'transition',
+    label: 'Solicitar booking',
+    targetStatus: 'Booking Solicitado',
+    description: 'Inicia formalmente la gestión del booking.',
+  },
+  'Booking Solicitado': {
+    kind: 'transition',
+    label: 'Confirmar booking',
+    targetStatus: 'Booking Confirmado',
+    description: 'Valida los datos mínimos y registra la confirmación.',
+  },
+  'Booking Confirmado': {
+    kind: 'transition',
+    label: 'Marcar documentación pendiente',
+    targetStatus: 'Documentación Pendiente',
+    description: 'Continúa a la preparación documental del embarque.',
+  },
+  'Documentación Pendiente': {
+    kind: 'transition',
+    label: 'Marcar listo para embarque',
+    targetStatus: 'Listo para Embarque',
+    description: 'Valida nave, viaje, contenedores y documentos mínimos.',
+  },
+  'Listo para Embarque': {
+    kind: 'transition',
+    label: 'Registrar embarque',
+    targetStatus: 'Embarcado',
+    description: 'Registra la fecha real de embarque y el evento ON BOARD.',
+  },
+  Embarcado: {
+    kind: 'transition',
+    label: 'Marcar en tránsito',
+    targetStatus: 'En Tránsito',
+    description: 'Registra la salida real de la nave.',
+  },
+  'En Tránsito': {
+    kind: 'transition',
+    label: 'Registrar arribo',
+    targetStatus: 'Arribado',
+    description: 'Registra el arribo real de este booking.',
+  },
+}
 
 const BOOKING_DOCUMENT_BUCKET = 'booking-documents'
 
@@ -288,6 +371,11 @@ function formatDisplayDate(value: string | null) {
   }).format(new Date(value))
 }
 
+function toLocalDateTimeInput(value = new Date()) {
+  const offset = value.getTimezoneOffset() * 60_000
+  return new Date(value.getTime() - offset).toISOString().slice(0, 16)
+}
+
 function sanitizeFileName(fileName: string) {
   return fileName
     .normalize('NFD')
@@ -330,8 +418,40 @@ export default function RoutingBookingChildPage() {
     useState<BookingDocument | null>(null)
   const [billsOfLading, setBillsOfLading] = useState<BillOfLading[]>([])
   const [loadingBLs, setLoadingBLs] = useState(false)
+  const [timelineEvents, setTimelineEvents] = useState<BookingTimelineEvent[]>([])
+  const [loadingTimeline, setLoadingTimeline] = useState(false)
+  const [addingTimelineNote, setAddingTimelineNote] = useState(false)
+  const [pendingAction, setPendingAction] = useState<BookingAction | null>(null)
+  const [actionOccurredAt, setActionOccurredAt] = useState(toLocalDateTimeInput())
+  const [actionLocation, setActionLocation] = useState('')
+  const [actionNotes, setActionNotes] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [runningAction, setRunningAction] = useState(false)
+  const [readinessEvaluation, setReadinessEvaluation] =
+    useState<BookingReadinessEvaluation | null>(null)
+  const [actionReadiness, setActionReadiness] =
+    useState<BookingReadinessEvaluation | null>(null)
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
+
+  const loadTimeline = async (targetBookingId = bookingId) => {
+    setLoadingTimeline(true)
+    const { data, error } = await supabase.rpc(
+      'get_booking_operational_timeline',
+      { p_booking_id: targetBookingId }
+    )
+    setLoadingTimeline(false)
+
+    if (error) {
+      toast.error('No se pudo cargar el timeline operativo', {
+        description: error.message,
+      })
+      setTimelineEvents([])
+      return
+    }
+
+    setTimelineEvents((data || []) as BookingTimelineEvent[])
+  }
 
   const loadBillsOfLading = async (targetBookingId = bookingId) => {
     setLoadingBLs(true)
@@ -493,8 +613,10 @@ export default function RoutingBookingChildPage() {
       if (quotationContainersError) {
       }
 
-      quotedContainers = (quotationContainersData || [])
-        .map((container: any) => ({
+      quotedContainers = (
+        (quotationContainersData || []) as QuotationContainerData[]
+      )
+        .map((container) => ({
           container_type: container.container_type_name || '',
           quantity: Number(container.quantity || 0),
         }))
@@ -561,20 +683,28 @@ export default function RoutingBookingChildPage() {
     setAvailableContainers(quotedContainers)
     setAssignedInOtherBookings(Object.values(groupContainers(assignedByOthers)))
     setContainerRows(
-      (currentContainersData || []).map((container: any) => ({
-        id: container.id,
-        container_type: container.container_type || '',
-        quantity: Number(container.quantity || 0),
-        notes: container.notes || '',
-      }))
+      ((currentContainersData || []) as StoredBookingContainerData[]).map(
+        (container) => ({
+          id: container.id,
+          container_type: container.container_type || '',
+          quantity: Number(container.quantity || 0),
+          notes: container.notes || '',
+        })
+      )
     )
     await loadBookingDocuments((bookingData as BookingData).id)
     await loadBillsOfLading((bookingData as BookingData).id)
+    await loadTimeline((bookingData as BookingData).id)
     setLoading(false)
   }
 
   useEffect(() => {
-    loadData()
+    const timeout = window.setTimeout(() => {
+      void loadData()
+    }, 0)
+    return () => window.clearTimeout(timeout)
+    // loadData se reinicia cuando cambia la identidad canónica de la ruta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, bookingId])
 
   const recordBookingActivity = async ({
@@ -603,7 +733,7 @@ export default function RoutingBookingChildPage() {
           ...metadata,
         },
       })
-    } catch (error) {
+    } catch {
     }
   }
 
@@ -612,23 +742,14 @@ export default function RoutingBookingChildPage() {
 
     setSaving(true)
 
-    const { error } = await supabase
-      .from('bookings')
-      .update({
-        booking_number: booking.booking_number,
-        carrier_booking: booking.carrier_booking,
+    const { data, error } = await supabase.rpc('update_booking_canonical', {
+      p_booking_id: booking.id,
+      p_shipping_instruction_id: id,
+      p_expected_updated_at: booking.updated_at,
+      p_changes: {
         master_bl: booking.master_bl,
         house_bl: booking.house_bl,
-        carrier: booking.carrier,
-        vessel_name: booking.vessel_name,
-        voyage: booking.voyage,
-        etd: booking.etd,
-        eta: booking.eta,
-        original_eta: booking.original_eta,
-        actual_etd: booking.actual_etd,
-        actual_eta: booking.actual_eta,
         tracking_url: booking.tracking_url,
-        shipment_status: booking.shipment_status,
         estimated_transit_days: booking.estimated_transit_days,
         real_transit_days: booking.real_transit_days,
         free_days: booking.free_days,
@@ -638,29 +759,221 @@ export default function RoutingBookingChildPage() {
         hbl_freight_visibility: booking.hbl_freight_visibility,
         printed_at_destination: booking.printed_at_destination,
         operational_comments: booking.operational_comments,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', booking.id)
-      .eq('shipping_instruction_id', id)
+      },
+    })
 
     setSaving(false)
 
     if (error) {
+      if (error.code === '40001') {
+        toast.error(
+          'Este booking fue modificado por otro usuario. Recarga la página antes de guardar nuevamente.'
+        )
+        return
+      }
+
       toast.error(error.message || 'No se pudo guardar el booking')
       return
     }
 
-    await recordBookingActivity({
-      action: booking.shipment_status === 'Booking Confirmado'
-        ? 'booking_confirmed'
-        : 'booking_child_updated',
-      description: `Booking actualizado para ${routing?.routing_number || id}`,
-      metadata: {
-        shipment_status: booking.shipment_status,
-      },
-    })
+    const updatedBooking = Array.isArray(data) ? data[0] : data
+    if (updatedBooking) {
+      setBooking(updatedBooking as BookingData)
+    }
 
     toast.success('Booking actualizado')
+  }
+
+  const openBookingAction = async (action: BookingAction) => {
+    setPendingAction(action)
+    setActionOccurredAt(toLocalDateTimeInput())
+    setActionLocation('')
+    setActionNotes('')
+    setActionError('')
+    setActionReadiness(null)
+
+    if (
+      action.kind === 'transition' &&
+      ['Listo para Embarque', 'Embarcado'].includes(action.targetStatus || '')
+    ) {
+      const { data, error } = await supabase.rpc(
+        'evaluate_booking_readiness',
+        { p_booking_id: bookingId }
+      )
+      if (!error && data) {
+        const current = data as BookingReadinessEvaluation
+        setActionReadiness(current)
+        setReadinessEvaluation(current)
+      }
+    }
+  }
+
+  const runBookingAction = async () => {
+    if (!booking || !pendingAction) return
+
+    const parsedOccurredAt = new Date(actionOccurredAt)
+    if (Number.isNaN(parsedOccurredAt.getTime())) {
+      setActionError('Indica una fecha y hora de ocurrencia válida.')
+      return
+    }
+
+    setRunningAction(true)
+    setActionError('')
+
+    if (pendingAction.kind === 'delivery') {
+      const { error } = await supabase.rpc('record_operational_event', {
+        p_shipping_instruction_id: id,
+        p_booking_id: booking.id,
+        p_booking_container_id: null,
+        p_event_code: 'DELIVERED',
+        p_event_label: 'Entrega registrada',
+        p_occurred_at: parsedOccurredAt.toISOString(),
+        p_location: actionLocation.trim() || null,
+        p_notes: actionNotes.trim() || null,
+        p_metadata: {},
+      })
+
+      setRunningAction(false)
+
+      if (error) {
+        setActionError(error.message || 'No se pudo registrar la entrega.')
+        return
+      }
+
+      setPendingAction(null)
+      toast.success('Entrega registrada')
+      await loadTimeline(booking.id)
+      return
+    }
+
+    const { data, error } = await supabase.rpc('transition_booking_status', {
+      p_booking_id: booking.id,
+      p_expected_updated_at: booking.updated_at,
+      p_target_status: pendingAction.targetStatus,
+      p_occurred_at: parsedOccurredAt.toISOString(),
+      p_location: actionLocation.trim() || null,
+      p_notes: actionNotes.trim() || null,
+      p_metadata: {},
+    })
+
+    setRunningAction(false)
+
+    if (error) {
+      const conflict =
+        error.code === '40001' ||
+        error.message?.includes('BOOKING_VERSION_CONFLICT')
+      const message = conflict
+        ? 'Este booking cambió en otra sesión. Recarga la página antes de continuar.'
+        : error.message || 'No se pudo cambiar el estado del booking.'
+
+      setActionError(message)
+      return
+    }
+
+    const result = data as {
+      booking?: BookingData
+      warnings?: string[]
+      transitioned?: boolean
+      readiness?: BookingReadinessEvaluation
+      error?: {
+        code?: string
+        missing_requirements?: ReadinessRequirement[]
+        overdue_cutoffs?: Array<{ label?: string }>
+        missing_vgm_containers?: Array<{ container_reference?: string }>
+      }
+    } | null
+
+    if (result?.transitioned === false) {
+      const missingRequirements = (
+        result.error?.missing_requirements || []
+      )
+        .filter((requirement) => requirement.blocking)
+        .map((requirement) => requirement.label)
+      const blockers = [
+        ...missingRequirements,
+        ...(result.error?.overdue_cutoffs || []).map(
+          (cutoff) => `Cut-off vencido: ${cutoff.label || 'sin etiqueta'}`
+        ),
+        ...(result.error?.missing_vgm_containers || []).map(
+          (container) =>
+            `VGM pendiente: ${container.container_reference || 'contenedor sin referencia'}`
+        ),
+      ]
+      setActionReadiness(result.readiness || null)
+      setReadinessEvaluation(result.readiness || null)
+      setActionError(
+        blockers.length > 0
+          ? blockers.join(' · ')
+          : 'El booking no cumple los requisitos de readiness.'
+      )
+      await loadTimeline(booking.id)
+      return
+    }
+
+    if (result?.booking) {
+      setBooking(result.booking)
+    }
+
+    setPendingAction(null)
+    toast.success(`Estado actualizado a ${pendingAction.targetStatus}`)
+
+    if (result?.warnings?.length) {
+      toast.warning('Transición completada con advertencias', {
+        description: result.warnings.join(' '),
+      })
+    }
+
+    await loadTimeline(booking.id)
+  }
+
+  const addOperationalNote = async ({
+    eventLabel,
+    occurredAt,
+    location,
+    notes,
+  }: {
+    eventLabel: string
+    occurredAt: string
+    location: string
+    notes: string
+  }) => {
+    if (!booking) return false
+
+    if (!eventLabel.trim() || !notes.trim()) {
+      toast.error('La etiqueta y las notas son obligatorias.')
+      return false
+    }
+
+    const parsedOccurredAt = new Date(occurredAt)
+    if (Number.isNaN(parsedOccurredAt.getTime())) {
+      toast.error('Indica una fecha y hora de ocurrencia válida.')
+      return false
+    }
+
+    setAddingTimelineNote(true)
+    const { error } = await supabase.rpc('record_operational_event', {
+      p_shipping_instruction_id: id,
+      p_booking_id: booking.id,
+      p_booking_container_id: null,
+      p_event_code: 'OPERATIONAL_NOTE',
+      p_event_label: eventLabel.trim(),
+      p_occurred_at: parsedOccurredAt.toISOString(),
+      p_location: location.trim() || null,
+      p_notes: notes.trim(),
+      p_metadata: {},
+    })
+    setAddingTimelineNote(false)
+
+    if (error) {
+      toast.error('No se pudo registrar la nota operativa', {
+        description: error.message,
+      })
+      return false
+    }
+
+    toast.success('Nota operativa registrada')
+    await loadTimeline(booking.id)
+    return true
   }
 
   const addContainerRow = () => {
@@ -969,6 +1282,28 @@ export default function RoutingBookingChildPage() {
       ),
     }))
     .filter((container) => container.quantity > 0)
+  const hasDeliveredEvent = timelineEvents.some(
+    (event) => event.booking_id === booking.id && event.event_code === 'DELIVERED'
+  )
+  const contextualAction =
+    booking.booking_lifecycle_status !== 'ACTIVE'
+      ? undefined
+      : booking.shipment_status === 'Arribado'
+      ? hasDeliveredEvent
+        ? {
+            kind: 'transition' as const,
+            label: 'Finalizar booking',
+            targetStatus: 'Finalizado',
+            description:
+              'Valida contenedores, entrega y requisitos obligatorios antes del cierre.',
+          }
+        : {
+            kind: 'delivery' as const,
+            label: 'Registrar entrega',
+            description:
+              'Registra la entrega antes de habilitar la finalización del booking.',
+          }
+      : bookingTransitionActions[booking.shipment_status || 'Booking Solicitado']
 
   return (
     <div>
@@ -1026,6 +1361,15 @@ export default function RoutingBookingChildPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {contextualAction && (
+                <button
+                  type="button"
+                  onClick={() => void openBookingAction(contextualAction)}
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  {contextualAction.label}
+                </button>
+              )}
               {isArrived && (
                 <PDFDownloadLink
                   document={<ArrivalNoticePdf data={arrivalNoticeData} company={companyBranding} />}
@@ -1070,29 +1414,23 @@ export default function RoutingBookingChildPage() {
             <Field label="Booking Number">
               <input
                 value={booking.booking_number || ''}
-                onChange={(e) => setBooking({ ...booking, booking_number: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
             <Field label="Carrier Booking">
               <input
                 value={booking.carrier_booking || ''}
-                onChange={(e) => setBooking({ ...booking, carrier_booking: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
-            <Field label="Shipment Status">
-              <select
-                value={booking.shipment_status || 'Booking Solicitado'}
-                onChange={(e) => setBooking({ ...booking, shipment_status: e.target.value })}
-                className={fieldClass}
-              >
-                {bookingStatusOptions.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
+            <Field label="Estado operativo">
+              <div className="flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                {booking.shipment_status || 'Booking Solicitado'}
+              </div>
             </Field>
           </SectionCard>
 
@@ -1226,24 +1564,24 @@ export default function RoutingBookingChildPage() {
             <Field label="Carrier">
               <input
                 value={booking.carrier || ''}
-                onChange={(e) => setBooking({ ...booking, carrier: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
             <Field label="Vessel Name">
               <input
                 value={booking.vessel_name || ''}
-                onChange={(e) => setBooking({ ...booking, vessel_name: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
             <Field label="Voyage">
               <input
                 value={booking.voyage || ''}
-                onChange={(e) => setBooking({ ...booking, voyage: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
@@ -1281,8 +1619,8 @@ export default function RoutingBookingChildPage() {
               <input
                 type="date"
                 value={booking.etd || ''}
-                onChange={(e) => setBooking({ ...booking, etd: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
@@ -1290,8 +1628,17 @@ export default function RoutingBookingChildPage() {
               <input
                 type="date"
                 value={booking.eta || ''}
-                onChange={(e) => setBooking({ ...booking, eta: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
+              />
+            </Field>
+
+            <Field label="Original ETD">
+              <input
+                type="date"
+                value={booking.original_etd || ''}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
@@ -1299,8 +1646,8 @@ export default function RoutingBookingChildPage() {
               <input
                 type="date"
                 value={booking.original_eta || ''}
-                onChange={(e) => setBooking({ ...booking, original_eta: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
@@ -1308,8 +1655,8 @@ export default function RoutingBookingChildPage() {
               <input
                 type="date"
                 value={booking.actual_etd || ''}
-                onChange={(e) => setBooking({ ...booking, actual_etd: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
 
@@ -1317,12 +1664,31 @@ export default function RoutingBookingChildPage() {
               <input
                 type="date"
                 value={booking.actual_eta || ''}
-                onChange={(e) => setBooking({ ...booking, actual_eta: e.target.value })}
-                className={fieldClass}
+                readOnly
+                className={readonlyFieldClass}
               />
             </Field>
           </SectionCard>
         </div>
+
+        <BookingScheduleManager
+          booking={booking as ScheduleBooking}
+          userRole={profile?.rol}
+          onChanged={loadData}
+          onReplaced={(newBookingId) =>
+            router.push(
+              `/operations/shipping-instructions/${id}/bookings/${newBookingId}`
+            )
+          }
+        />
+
+        <BookingReadinessPanel
+          bookingId={booking.id}
+          shipmentId={booking.shipment_id}
+          containers={containerRows}
+          userRole={profile?.rol}
+          onEvaluationChange={setReadinessEvaluation}
+        />
 
         <section className={cardClass}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1664,6 +2030,15 @@ export default function RoutingBookingChildPage() {
         </button>
       </div>
 
+      <div className="mt-6">
+        <BookingTimeline
+          events={timelineEvents}
+          loading={loadingTimeline}
+          addingNote={addingTimelineNote}
+          onAddNote={addOperationalNote}
+        />
+      </div>
+
       {/* Bills of Lading */}
       <section className={`${cardClass} mt-6`}>
         <div className="mb-4 flex items-center justify-between">
@@ -1789,6 +2164,114 @@ export default function RoutingBookingChildPage() {
           </div>
         )}
       </section>
+
+      <Dialog
+        open={Boolean(pendingAction)}
+        onOpenChange={(open) => {
+          if (!open && !runningAction) {
+            setPendingAction(null)
+            setActionError('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{pendingAction?.label}</DialogTitle>
+            <DialogDescription>
+              {pendingAction?.description}
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingAction?.kind === 'transition' &&
+            ['Listo para Embarque', 'Embarcado'].includes(
+              pendingAction.targetStatus || ''
+            ) && (
+              <div
+                className={`rounded-xl border p-3 text-sm ${
+                  (actionReadiness || readinessEvaluation)?.ready
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
+                    : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300'
+                }`}
+              >
+                <p className="font-semibold">
+                  {(actionReadiness || readinessEvaluation)?.ready
+                    ? 'Readiness aprobado'
+                    : `${(actionReadiness || readinessEvaluation)?.blocking_count ?? 0} bloqueo(s) vigente(s)`}
+                </p>
+                {!actionReadiness && (
+                  <p className="mt-1 text-xs">
+                    Evaluando nuevamente antes de confirmar...
+                  </p>
+                )}
+                {(actionReadiness || readinessEvaluation)?.requirements
+                  .filter((requirement) => requirement.blocking)
+                  .slice(0, 4)
+                  .map((requirement) => (
+                    <p key={requirement.code} className="mt-1 text-xs">
+                      • {requirement.label}
+                    </p>
+                  ))}
+              </div>
+            )}
+
+          <div className="grid gap-4 py-2 sm:grid-cols-2">
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+              Fecha y hora
+              <input
+                type="datetime-local"
+                value={actionOccurredAt}
+                onChange={(event) => setActionOccurredAt(event.target.value)}
+                className={`${fieldClass} mt-1`}
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+              Ubicación
+              <input
+                value={actionLocation}
+                onChange={(event) => setActionLocation(event.target.value)}
+                placeholder="Puerto, terminal o ciudad"
+                className={`${fieldClass} mt-1`}
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-300 sm:col-span-2">
+              Notas
+              <textarea
+                value={actionNotes}
+                onChange={(event) => setActionNotes(event.target.value)}
+                rows={3}
+                placeholder="Observaciones de la transición"
+                className={`${fieldClass} mt-1 min-h-24`}
+              />
+            </label>
+          </div>
+
+          {actionError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+              <p className="font-semibold">No se pudo completar la acción</p>
+              <p className="mt-1">{actionError}</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setPendingAction(null)}
+              disabled={runningAction}
+              className={secondaryButtonClass}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={runBookingAction}
+              disabled={runningAction}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {runningAction ? 'Procesando...' : pendingAction?.label}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(documentPendingDelete)}

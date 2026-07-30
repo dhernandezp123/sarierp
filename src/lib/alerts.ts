@@ -1,3 +1,6 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { aggregateBookingStatus } from '@/src/lib/booking-status'
+
 export type SystemAlertCategory = 'Comercial' | 'Operativa' | 'Gerencial'
 export type SystemAlertSeverity = 'Alta' | 'Media' | 'Baja'
 
@@ -55,6 +58,10 @@ type BookingDocumentJoin = {
   document_type: string | null
 }
 
+type BillOfLadingJoin = {
+  bl_type: string | null
+}
+
 type BookingContainerJoin = {
   container_type: string | null
   quantity: number | string | null
@@ -68,9 +75,10 @@ type RoutingQuoteJoin = {
 
 type ShippingInstructionRow = {
   id: string
+  shipping_instruction_id: string
   quotation_id: string | null
   routing_number: string | null
-  shipment_status: string | null
+  operational_status: string | null
   container_qty: number | null
   container_type: string | null
   created_by: string | null
@@ -78,11 +86,13 @@ type ShippingInstructionRow = {
   bookings: Array<{
     id: string
     booking_number: string | null
+    shipment_status: string | null
   }> | null
 }
 
-type BookingRoutingJoin = {
+type ShipmentRoutingJoin = {
   id: string
+  shipping_instruction_id: string
   routing_number: string | null
   quotation_id: string | null
   container_qty: number | null
@@ -93,16 +103,80 @@ type BookingRoutingJoin = {
 
 type BookingRow = {
   id: string
+  shipment_id: string | null
   shipping_instruction_id: string
   booking_number: string | null
   carrier_booking: string | null
   eta: string | null
   actual_eta: string | null
   shipment_status: string | null
+  booking_lifecycle_status: 'ACTIVE' | 'CANCELLED' | 'REPLACED'
+  replaced_by_booking_id: string | null
   remaining_free_days: number | null
-  shipping_instruction: BookingRoutingJoin | BookingRoutingJoin[] | null
+  shipment: ShipmentRoutingJoin | ShipmentRoutingJoin[] | null
   booking_documents: BookingDocumentJoin[] | null
+  bills_of_lading: BillOfLadingJoin[] | null
   booking_containers: BookingContainerJoin[] | null
+  booking_schedule_revisions: Array<{
+    id: string
+    revision_number: number
+    revision_type: string
+    vessel_name: string | null
+    voyage: string | null
+    etd: string | null
+    created_at: string
+    client_notified_at: string | null
+  }> | null
+}
+
+type ShipmentInstructionContextJoin = {
+  id: string
+  container_qty: number | null
+  container_type: string | null
+  deleted_at?: string | null
+}
+
+type ShipmentAlertRaw = {
+  id: string
+  quotation_id: string | null
+  shipment_number: string
+  operational_status: string | null
+  created_by: string | null
+  shipping_instruction:
+    | ShipmentInstructionContextJoin
+    | ShipmentInstructionContextJoin[]
+    | null
+  quotation?: RoutingQuoteJoin | RoutingQuoteJoin[] | null
+  bookings: ShippingInstructionRow['bookings']
+}
+
+type BookingShipmentJoin = {
+  id: string
+  shipment_number: string
+  quotation_id: string | null
+  created_by?: string | null
+  shipping_instruction:
+    | ShipmentInstructionContextJoin
+    | ShipmentInstructionContextJoin[]
+    | null
+  quotation?: RoutingQuoteJoin | RoutingQuoteJoin[] | null
+}
+
+type BookingAlertRaw = Omit<BookingRow, 'shipment'> & {
+  shipment: BookingShipmentJoin | BookingShipmentJoin[] | null
+}
+
+type ReadinessAlertRow = {
+  alert_key: string
+  severity: 'INFO' | 'WARNING' | 'CRITICAL'
+  alert_code: string
+  shipment_id: string
+  booking_id: string
+  booking_container_id: string | null
+  cutoff_id: string | null
+  title: string
+  description: string
+  due_at: string | null
 }
 
 const requiredDocumentTypes = [
@@ -123,7 +197,7 @@ function clientNameFromQuote(quote: QuotationRow) {
 }
 
 function clientNameFromRouting(
-  routing: ShippingInstructionRow | BookingRow['shipping_instruction'] | null
+  routing: ShippingInstructionRow | BookingRow['shipment'] | null
 ) {
   const singleRouting = resolveJoin(routing)
   const quote = resolveJoin(singleRouting?.quotation)
@@ -241,6 +315,11 @@ function missingDocuments(booking: BookingRow) {
       .filter((type): type is string => Boolean(type))
   )
 
+  ;(booking.bills_of_lading || []).forEach((bill) => {
+    if (bill.bl_type === 'MBL') attached.add('Master BL')
+    if (bill.bl_type === 'HBL') attached.add('House BL')
+  })
+
   return requiredDocumentTypes.filter((type) => !attached.has(type))
 }
 
@@ -249,7 +328,7 @@ function quoteBelongsToUser(quote: QuotationRow, userId?: string | null) {
 }
 
 function routingBelongsToUser(
-  routing: ShippingInstructionRow | BookingRoutingJoin | null,
+  routing: ShippingInstructionRow | ShipmentRoutingJoin | null,
   userId?: string | null
 ) {
   const quote = resolveJoin(routing?.quotation)
@@ -257,7 +336,7 @@ function routingBelongsToUser(
 }
 
 export async function getSystemAlerts(
-  supabaseClient: any,
+  supabaseClient: SupabaseClient,
   profile?: ProfileLike | null,
   user?: UserLike | null
 ): Promise<SystemAlert[]> {
@@ -298,15 +377,19 @@ export async function getSystemAlerts(
   if (pricingError) throw pricingError
 
   const { data: siData, error: siError } = await supabaseClient
-    .from('shipping_instructions')
+    .from('shipments')
     .select(`
       id,
       quotation_id,
-      routing_number,
-      shipment_status,
-      container_qty,
-      container_type,
+      shipment_number,
+      operational_status,
       created_by,
+      shipping_instruction:shipping_instructions!inner (
+        id,
+        container_qty,
+        container_type,
+        deleted_at
+      ),
       quotation:quotations (
         id,
         created_by,
@@ -316,13 +399,30 @@ export async function getSystemAlerts(
       ),
       bookings (
         id,
-        booking_number
+        booking_number,
+        shipment_status
       )
     `)
+    .is('shipping_instruction.deleted_at', null)
 
   if (siError) throw siError
 
-  let shippingInstructions = (siData || []) as ShippingInstructionRow[]
+  let shippingInstructions: ShippingInstructionRow[] =
+    ((siData || []) as ShipmentAlertRaw[]).map((shipment) => {
+      const instruction = resolveJoin(shipment.shipping_instruction)
+      return {
+        id: shipment.id,
+        shipping_instruction_id: instruction?.id || shipment.id,
+        quotation_id: shipment.quotation_id,
+        routing_number: shipment.shipment_number,
+        operational_status: shipment.operational_status,
+        container_qty: instruction?.container_qty ?? null,
+        container_type: instruction?.container_type ?? null,
+        created_by: shipment.created_by,
+        quotation: shipment.quotation,
+        bookings: shipment.bookings,
+      } as ShippingInstructionRow
+    })
 
   if (isSales && !isAdmin) {
     shippingInstructions = shippingInstructions.filter((routing) =>
@@ -338,20 +438,26 @@ export async function getSystemAlerts(
     .from('bookings')
     .select(`
       id,
+      shipment_id,
       shipping_instruction_id,
       booking_number,
       carrier_booking,
       eta,
       actual_eta,
       shipment_status,
+      booking_lifecycle_status,
+      replaced_by_booking_id,
       remaining_free_days,
-      shipping_instruction:shipping_instructions (
+      shipment:shipments!bookings_shipment_id_fkey (
         id,
-        routing_number,
+        shipment_number,
         quotation_id,
-        container_qty,
-        container_type,
         created_by,
+        shipping_instruction:shipping_instructions (
+          id,
+          container_qty,
+          container_type
+        ),
         quotation:quotations (
           id,
           created_by,
@@ -363,19 +469,52 @@ export async function getSystemAlerts(
       booking_documents (
         document_type
       ),
+      bills_of_lading (
+        bl_type
+      ),
       booking_containers (
         container_type,
         quantity
+      ),
+      booking_schedule_revisions (
+        id,
+        revision_number,
+        revision_type,
+        vessel_name,
+        voyage,
+        etd,
+        created_at,
+        client_notified_at
       )
     `)
 
   if (bookingsError) throw bookingsError
 
-  let bookings = (bookingsData || []) as BookingRow[]
+  let bookings: BookingRow[] =
+    ((bookingsData || []) as BookingAlertRaw[]).map((booking) => {
+      const shipment = resolveJoin(booking.shipment)
+      const instruction = resolveJoin(shipment?.shipping_instruction)
+      return {
+        ...booking,
+        shipment: shipment
+          ? {
+              id: shipment.id,
+              shipping_instruction_id:
+                instruction?.id || booking.shipping_instruction_id,
+              routing_number: shipment.shipment_number,
+              quotation_id: shipment.quotation_id,
+              container_qty: instruction?.container_qty ?? null,
+              container_type: instruction?.container_type ?? null,
+              created_by: shipment.created_by,
+              quotation: shipment.quotation,
+            }
+          : null,
+      } as BookingRow
+    })
 
   if (isSales && !isAdmin) {
     bookings = bookings.filter((booking) =>
-      routingBelongsToUser(resolveJoin(booking.shipping_instruction), userId)
+      routingBelongsToUser(resolveJoin(booking.shipment), userId)
     )
   }
 
@@ -505,7 +644,12 @@ export async function getSystemAlerts(
 
   if (!isFinance) {
     shippingInstructions.forEach((routing) => {
-      if (!isFinalStatus(routing.shipment_status) && (routing.bookings || []).length === 0) {
+      const aggregateStatus = aggregateBookingStatus(
+        routing.bookings || [],
+        routing.operational_status || 'Sin bookings'
+      )
+
+      if (!isFinalStatus(aggregateStatus) && (routing.bookings || []).length === 0) {
         alerts.push({
           id: `rt-no-bookings-${routing.id}`,
           category: 'Operativa',
@@ -514,7 +658,37 @@ export async function getSystemAlerts(
           description: `${clientNameFromRouting(routing)} no tiene bookings creados.`,
           entityLabel: routingLabel(routing),
           entityType: 'SI',
-          href: `/operations/shipping-instructions/${routing.id}`,
+          href: `/operations/shipping-instructions/${routing.shipping_instruction_id}`,
+          createdAt: new Date().toISOString(),
+          ageLabel: 'Activo',
+        })
+      }
+
+      if (routing.operational_status === 'Pendiente Validación') {
+        alerts.push({
+          id: `rt-pending-validation-${routing.id}`,
+          category: 'Operativa',
+          severity: 'Media',
+          title: 'SI pendiente de validación',
+          description: `${clientNameFromRouting(routing)} requiere validación operativa.`,
+          entityLabel: routingLabel(routing),
+          entityType: 'SI',
+          href: `/operations/shipping-instructions/${routing.shipping_instruction_id}`,
+          createdAt: new Date().toISOString(),
+          ageLabel: 'Activo',
+        })
+      }
+
+      if (routing.operational_status === 'Listo para Booking') {
+        alerts.push({
+          id: `rt-ready-booking-${routing.id}`,
+          category: 'Operativa',
+          severity: 'Media',
+          title: 'SI lista para booking',
+          description: `${clientNameFromRouting(routing)} está lista para crear booking.`,
+          entityLabel: routingLabel(routing),
+          entityType: 'SI',
+          href: `/operations/shipping-instructions/${routing.shipping_instruction_id}`,
           createdAt: new Date().toISOString(),
           ageLabel: 'Activo',
         })
@@ -523,15 +697,16 @@ export async function getSystemAlerts(
   }
 
   const bookingsByRouting = bookings.reduce<Record<string, BookingRow[]>>((acc, booking) => {
-    acc[booking.shipping_instruction_id] = [
-      ...(acc[booking.shipping_instruction_id] || []),
+    const operationId = booking.shipment_id || booking.shipping_instruction_id
+    acc[operationId] = [
+      ...(acc[operationId] || []),
       booking,
     ]
     return acc
   }, {})
 
   Object.entries(bookingsByRouting).forEach(([routingId, routingBookings]) => {
-    const routing = resolveJoin(routingBookings[0]?.shipping_instruction)
+    const routing = resolveJoin(routingBookings[0]?.shipment)
     if (!routing) return
 
     const expected = expectedContainers(routing, quotationContainerTotals)
@@ -547,7 +722,7 @@ export async function getSystemAlerts(
         description: `${assigned}/${expected} asignados. Faltan ${missing}.`,
         entityLabel: routingLabel(routing),
         entityType: 'SI',
-        href: `/operations/shipping-instructions/${routingId}`,
+        href: `/operations/shipping-instructions/${routing.shipping_instruction_id}`,
         createdAt: new Date().toISOString(),
         ageLabel: 'Activo',
       })
@@ -555,10 +730,187 @@ export async function getSystemAlerts(
   })
 
   bookings.forEach((booking) => {
-    const routing = resolveJoin(booking.shipping_instruction)
+    const routing = resolveJoin(booking.shipment)
     const missingDocs = missingDocuments(booking)
     const etaDays = daysUntil(booking.actual_eta || booking.eta)
     const remainingFreeDays = Number(booking.remaining_free_days)
+    const assignedContainers = (booking.booking_containers || []).reduce(
+      (sum, container) => sum + Number(container.quantity || 0),
+      0
+    )
+    const newestRevision = [...(booking.booking_schedule_revisions || [])].sort(
+      (left, right) => right.revision_number - left.revision_number
+    )[0]
+    const revisionAgeDays = newestRevision
+      ? Math.floor(
+          (Date.now() - new Date(newestRevision.created_at).getTime()) /
+            86_400_000
+        )
+      : null
+
+    if (booking.booking_lifecycle_status === 'REPLACED') {
+      const replacement = bookings.find(
+        (candidate) => candidate.id === booking.replaced_by_booking_id
+      )
+      const hasReplacementConfirmation =
+        replacement?.booking_documents?.some(
+          (document) => document.document_type === 'Booking Confirmation'
+        ) || false
+
+      if (!replacement || !hasReplacementConfirmation) {
+        alerts.push({
+          id: `replacement-docs-${booking.id}`,
+          category: 'Operativa',
+          severity: 'Alta',
+          title: 'Booking reemplazado con documentos pendientes',
+          description: replacement
+            ? 'El booking sustituto aún no tiene Booking Confirmation.'
+            : 'La relación no tiene un booking sustituto válido.',
+          entityLabel: bookingLabel(booking),
+          entityType: 'Booking',
+          href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+          createdAt: newestRevision?.created_at || new Date().toISOString(),
+          ageLabel: routingLabel(routing),
+        })
+      }
+
+      if (assignedContainers > 0) {
+        alerts.push({
+          id: `replacement-containers-${booking.id}`,
+          category: 'Operativa',
+          severity: 'Alta',
+          title: 'Contenedores vinculados al booking anterior',
+          description: `${assignedContainers} contenedor(es) permanecen en el booking reemplazado; confirma que fue intencional.`,
+          entityLabel: bookingLabel(booking),
+          entityType: 'Booking',
+          href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+          createdAt: new Date().toISOString(),
+          ageLabel: routingLabel(routing),
+        })
+      }
+      return
+    }
+
+    if (booking.booking_lifecycle_status === 'CANCELLED') {
+      alerts.push({
+        id: `cancelled-without-replacement-${booking.id}`,
+        category: 'Operativa',
+        severity: 'Alta',
+        title: 'Booking cancelado sin sustituto',
+        description: 'La operación no tiene una reserva sustituta vinculada.',
+        entityLabel: bookingLabel(booking),
+        entityType: 'Booking',
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        createdAt: new Date().toISOString(),
+        ageLabel: routingLabel(routing),
+      })
+      return
+    }
+
+    if (
+      newestRevision &&
+      newestRevision.revision_number > 1 &&
+      newestRevision.revision_type !== 'ADMIN_CORRECTION' &&
+      revisionAgeDays !== null &&
+      revisionAgeDays <= 7
+    ) {
+      const rollover =
+        newestRevision.revision_type === 'ROLLOVER_SAME_BOOKING'
+      alerts.push({
+        id: `schedule-change-${newestRevision.id}`,
+        category: 'Operativa',
+        severity: rollover ? 'Alta' : 'Media',
+        title: rollover
+          ? 'Cambio reciente de vessel/voyage'
+          : 'Cambio reciente de ETD',
+        description: `Itinerario actualizado recientemente${
+          newestRevision.etd ? `; ETD vigente ${newestRevision.etd}` : ''
+        }.`,
+        entityLabel: bookingLabel(booking),
+        entityType: 'Booking',
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        createdAt: newestRevision.created_at,
+        ageLabel: routingLabel(routing),
+      })
+    }
+
+    const unnotifiedRollover = (booking.booking_schedule_revisions || []).find(
+      (revision) =>
+        revision.revision_type === 'ROLLOVER_SAME_BOOKING' &&
+        !revision.client_notified_at
+    )
+    if (unnotifiedRollover) {
+      alerts.push({
+        id: `rollover-unnotified-${unnotifiedRollover.id}`,
+        category: 'Operativa',
+        severity: 'Alta',
+        title: 'Rollover sin notificación al cliente',
+        description: 'Registra la notificación al cliente del nuevo itinerario.',
+        entityLabel: bookingLabel(booking),
+        entityType: 'Booking',
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        createdAt: unnotifiedRollover.created_at,
+        ageLabel: routingLabel(routing),
+      })
+    }
+
+    if (
+      !isFinalStatus(booking.shipment_status) &&
+      (
+        booking.shipment_status === 'Booking Solicitado' ||
+        !booking.booking_number ||
+        !booking.carrier_booking
+      )
+    ) {
+      alerts.push({
+        id: `booking-unconfirmed-${booking.id}`,
+        category: 'Operativa',
+        severity: 'Media',
+        title: 'Booking sin confirmar',
+        description: 'Falta número de booking, carrier booking o confirmación.',
+        entityLabel: bookingLabel(booking),
+        entityType: 'Booking',
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        createdAt: new Date().toISOString(),
+        ageLabel: routingLabel(routing),
+      })
+    }
+
+    if (!isFinalStatus(booking.shipment_status) && assignedContainers === 0) {
+      alerts.push({
+        id: `booking-no-containers-${booking.id}`,
+        category: 'Operativa',
+        severity: 'Alta',
+        title: 'Booking sin contenedores',
+        description: 'Este booking no tiene contenedores físicos asignados.',
+        entityLabel: bookingLabel(booking),
+        entityType: 'Booking',
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        createdAt: new Date().toISOString(),
+        ageLabel: routingLabel(routing),
+      })
+    }
+
+    if (
+      isFinalStatus(booking.shipment_status) &&
+      (missingDocs.length > 0 || assignedContainers === 0)
+    ) {
+      alerts.push({
+        id: `booking-final-incomplete-${booking.id}`,
+        category: 'Operativa',
+        severity: 'Alta',
+        title: 'Booking finalizado incompletamente',
+        description: [
+          missingDocs.length > 0 ? `documentos pendientes: ${missingDocs.join(', ')}` : '',
+          assignedContainers === 0 ? 'sin contenedores asignados' : '',
+        ].filter(Boolean).join('; '),
+        entityLabel: bookingLabel(booking),
+        entityType: 'Booking',
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        createdAt: new Date().toISOString(),
+        ageLabel: routingLabel(routing),
+      })
+    }
 
     if (!isFinalStatus(booking.shipment_status) && missingDocs.length > 0) {
       alerts.push({
@@ -617,6 +969,38 @@ export async function getSystemAlerts(
       })
     }
   })
+
+  if (!isFinance) {
+    const { data: readinessAlertData, error: readinessAlertError } =
+      await supabaseClient.rpc('get_booking_readiness_alerts')
+
+    if (readinessAlertError) throw readinessAlertError
+
+    ;((readinessAlertData || []) as ReadinessAlertRow[]).forEach((readinessAlert) => {
+      const booking = bookings.find(
+        (candidate) => candidate.id === readinessAlert.booking_id
+      )
+      if (!booking) return
+
+      alerts.push({
+        id: `readiness-${readinessAlert.alert_key}`,
+        category: 'Operativa',
+        severity:
+          readinessAlert.severity === 'CRITICAL'
+            ? 'Alta'
+            : readinessAlert.severity === 'WARNING'
+              ? 'Media'
+              : 'Baja',
+        title: readinessAlert.title,
+        description: readinessAlert.description,
+        entityLabel: bookingLabel(booking),
+        entityType: 'Booking',
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        createdAt: readinessAlert.due_at || new Date().toISOString(),
+        ageLabel: readinessAlert.alert_code,
+      })
+    })
+  }
 
   const severityWeight: Record<SystemAlertSeverity, number> = {
     Alta: 0,

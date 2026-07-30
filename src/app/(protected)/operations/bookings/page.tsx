@@ -10,6 +10,8 @@ import { Pagination } from '@/src/components/ui/Pagination'
 
 type BookingItem = {
   id: string
+  shipment_id: string | null
+  shipping_instruction_id: string
   routing_number: string
   reference_number: string | null
   booking_number: string | null
@@ -108,11 +110,11 @@ export default function OperationsBookingsPage() {
     setLoading(true)
 
     const { data, error } = await supabase
-      .from('shipping_instructions')
+      .from('bookings')
       .select(`
         id,
-        routing_number,
-        reference_number,
+        shipment_id,
+        shipping_instruction_id,
         booking_number,
         carrier_booking,
         shipment_status,
@@ -120,28 +122,57 @@ export default function OperationsBookingsPage() {
         etd,
         eta,
         actual_eta,
-        operations_assigned_to,
         tracking_url,
-        cliente:clientes (
-          nombre
-        ),
-        assigned_user:profiles!shipping_instructions_operations_assigned_to_fkey (
-          nombre,
-          apellido
+        created_at,
+        shipping_instruction:shipping_instructions (
+          id,
+          routing_number,
+          reference_number,
+          operations_assigned_to,
+          cliente:clientes (
+            nombre
+          ),
+          assigned_user:profiles!shipping_instructions_operations_assigned_to_fkey (
+            nombre,
+            apellido
+          )
         )
       `)
+      .eq('booking_lifecycle_status', 'ACTIVE')
       .order('created_at', { ascending: false })
 
     if (!error && data) {
-      const normalizedItems = data.map((item) => ({
-        ...item,
-        cliente: Array.isArray(item.cliente)
-          ? item.cliente[0] ?? null
-          : item.cliente,
-        assigned_user: Array.isArray(item.assigned_user)
-          ? item.assigned_user[0] ?? null
-          : item.assigned_user,
-      }))
+      const normalizedItems = (data as any[]).map((item) => {
+        const shippingInstruction = Array.isArray(item.shipping_instruction)
+          ? item.shipping_instruction[0] ?? null
+          : item.shipping_instruction
+        const cliente = Array.isArray(shippingInstruction?.cliente)
+          ? shippingInstruction.cliente[0] ?? null
+          : shippingInstruction?.cliente ?? null
+        const assignedUser = Array.isArray(shippingInstruction?.assigned_user)
+          ? shippingInstruction.assigned_user[0] ?? null
+          : shippingInstruction?.assigned_user ?? null
+
+        return {
+          id: item.id,
+          shipment_id: item.shipment_id,
+          shipping_instruction_id: item.shipping_instruction_id,
+          routing_number: shippingInstruction?.routing_number || 'N/A',
+          reference_number: shippingInstruction?.reference_number || null,
+          booking_number: item.booking_number,
+          carrier_booking: item.carrier_booking,
+          shipment_status: item.shipment_status,
+          carrier: item.carrier,
+          etd: item.etd,
+          eta: item.eta,
+          actual_eta: item.actual_eta,
+          operations_assigned_to:
+            shippingInstruction?.operations_assigned_to || null,
+          tracking_url: item.tracking_url,
+          cliente,
+          assigned_user: assignedUser,
+        } satisfies BookingItem
+      })
 
       setItems(normalizedItems)
     }
@@ -377,7 +408,7 @@ export default function OperationsBookingsPage() {
                     <td>{assigned}</td>
                     <td className="text-right">
                       <Link
-                        href={`/operations/shipping-instructions/${item.id}/booking`}
+                        href={`/operations/shipping-instructions/${item.shipping_instruction_id}/bookings/${item.id}`}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         Abrir
