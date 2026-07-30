@@ -36,6 +36,24 @@ No se aplicó SQL ni frontend a producción.
 La evidencia cruda se genera en `release-evidence/` y está excluida de Git
 porque una ejecución representativa puede contener conteos o identificadores.
 
+## Registro de ejecución remota del 29/07/2026
+
+- Proyecto enlazado confirmado: `sarierp` producción,
+  `fwspgdzvlbtbgiupvrzo`.
+- Commit candidato inicial confirmado y publicado:
+  `856e2a4d347d9a27954786e0bb18c2febeb53e37`.
+- El primer `db push` falló dentro de 4A al ejecutar el backfill mediante una
+  RPC que requiere autenticación interactiva.
+- La transacción fue revertida. `migration list` siguió terminando en
+  `20260728130000` y un dump de esquema posterior no encontró objetos parciales
+  de 4A.
+- Se aplicó una corrección imprescindible a la migración 4A todavía no
+  registrada: el backfill ahora realiza directamente la actualización y su
+  auditoría, sin depender de `auth.uid()`.
+- El paquete corregido volvió a aprobar el rehearsal completo:
+  `LOCAL_REHEARSAL_OK`.
+- No se desplegó frontend ni se crearon operaciones durante el incidente.
+
 ## Paquete ejecutable
 
 - Runner: `scripts/release/rehearse-phase-4a-5c.ps1`.

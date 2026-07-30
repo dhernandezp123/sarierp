@@ -236,6 +236,45 @@ Git entre computadoras y ambientes.
     diferencia y Pricing debera volver a aplicar el seguro.
 - Commit: pendiente.
 
+### 2026-07-29 - REL-002 - Backfill 4A compatible con rol de migración
+
+- Estado: Corrección imprescindible validada localmente; reaplicación remota
+  pendiente.
+- Hallazgo: REL-002.
+- Causa raíz:
+  - El backfill final de 4A llamaba
+    `select_primary_booking_if_single`, una RPC diseñada para sesiones
+    autenticadas.
+  - Supabase ejecuta las migraciones remotas con un rol técnico que no aporta
+    `auth.uid()` y no necesariamente tiene `session_user = 'postgres'`.
+- SQL y documentación:
+  - `supabase/migrations/20260729120000_booking_canonical_foundation.sql`
+  - `docs/release/migration-inventory-4a-5c.md`
+  - `docs/release/release-readiness-4a-5c.md`
+- Corrección:
+  - El backfill hace directamente el `UPDATE` de
+    `shipping_instructions.primary_booking_id` y crea el mismo
+    `activity_logs` de auditoría con fuente `foundation_migration`.
+  - Las RPC interactivas conservan sus controles de autenticación y permisos.
+  - No se añadió ninguna migración; 4A aún no figuraba en el historial remoto.
+- Validaciones:
+  - El primer `npx supabase db push` remoto falló con SQLSTATE `42501` y
+    PostgreSQL revirtió la migración completa.
+  - `npx supabase migration list --linked` confirmó que el remoto continuó en
+    `20260728130000`.
+  - Un dump de esquema remoto posterior no encontró
+    `primary_booking_id`, RPC ni trigger parciales de 4A.
+  - Rehearsal local completo corregido: `LOCAL_REHEARSAL_OK`.
+  - Gates predeploy/postdeploy/seguridad, seis suites SQL, quince diagnósticos
+    y DB lint: OK.
+  - SHA-256 corregido de 4A:
+    `2E21D65AD37C3BBA53B7433D09894FACCCF8746E5D798E257E6E4319898E95B3`.
+- Riesgos o trabajo pendiente:
+  - Repetir `migration list` y `db push --dry-run` antes de reaplicar.
+  - No desplegar frontend hasta que el SQL remoto y todos los gates
+    postdeploy estén aprobados.
+- Commit: pendiente.
+
 ### 2026-07-29 - REL-001 - Release Readiness acumulado 4A–5C
 
 - Estado: Release candidate preparado; `NO-GO` para producción hasta aprobar
@@ -292,7 +331,7 @@ Git entre computadoras y ambientes.
   - La deuda ESLint global requiere aceptación formal o remediación separada;
     TypeScript y el build de producción sí están aprobados.
 - Producción: no se aplicó SQL ni frontend.
-- Commit: pendiente.
+- Commit: `856e2a4d347d9a27954786e0bb18c2febeb53e37`.
 
 ### 2026-07-29 - FLOW-020 - Cut-offs, VGM y readiness previo al embarque
 

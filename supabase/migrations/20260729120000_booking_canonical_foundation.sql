@@ -587,10 +587,11 @@ grant execute on function public.update_booking_canonical(uuid, uuid, timestampt
 -- No toca registros finalizados/cancelados ni intenta resolver multiples bookings.
 do $$
 declare
-  v_shipping_instruction_id uuid;
+  v_candidate record;
 begin
-  for v_shipping_instruction_id in
-    select si.id
+  for v_candidate in
+    select si.id as shipping_instruction_id,
+           min(b.id::text)::uuid as booking_id
     from public.shipping_instructions si
     join public.bookings b on b.shipping_instruction_id = si.id
     where si.primary_booking_id is null
@@ -599,7 +600,33 @@ begin
     group by si.id
     having count(b.id) = 1
   loop
-    perform public.select_primary_booking_if_single(v_shipping_instruction_id);
+    update public.shipping_instructions
+    set primary_booking_id = v_candidate.booking_id,
+        updated_at = clock_timestamp()
+    where id = v_candidate.shipping_instruction_id
+      and primary_booking_id is null;
+
+    insert into public.activity_logs (
+      user_id,
+      module,
+      action,
+      entity_type,
+      entity_id,
+      description,
+      metadata
+    ) values (
+      null,
+      'operations_booking',
+      'primary_booking_auto_selected',
+      'shipping_instruction',
+      v_candidate.shipping_instruction_id,
+      'Booking primario seleccionado automaticamente por ser el unico booking',
+      jsonb_build_object(
+        'booking_id', v_candidate.booking_id,
+        'booking_count', 1,
+        'source', 'foundation_migration'
+      )
+    );
   end loop;
 end;
 $$;

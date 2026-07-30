@@ -10,7 +10,7 @@ migraciones siguientes y ninguna adicional.
 
 | Orden | Fase | Migración | SHA-256 |
 |---:|---|---|---|
-| 1 | 4A | `20260729120000_booking_canonical_foundation.sql` | `77643B25415DEF3C3EBAF5ADA093E5836272054C5DAF684F2248C2FD15888E91` |
+| 1 | 4A | `20260729120000_booking_canonical_foundation.sql` | `2E21D65AD37C3BBA53B7433D09894FACCCF8746E5D798E257E6E4319898E95B3` |
 | 2 | 4B | `20260729130000_booking_canonical_consumers.sql` | `6E6492EA9AD84316CB2BDC40F793B0B3303A0643908979F1936E0D5774E83E05` |
 | 3 | 4C | `20260729140000_canonical_operational_events.sql` | `33A00C76FFC39CE03B5CCD72DF6AECE4CF5318B8B0652768117D2B5B19927B2F` |
 | 4 | 5A | `20260729150000_shipments_foundation.sql` | `8558521D4A4FD0FF1D52EF0420AEC264E8A76726FEDE44384298E0DA11B54A46` |
@@ -79,3 +79,16 @@ invalidada y debe repetirse.
 
 No renombrar, reordenar, editar ni añadir migraciones dentro de este paquete
 sin documentar el hallazgo imprescindible y reiniciar Release Readiness.
+
+## Corrección imprescindible del 29/07/2026
+
+El primer intento de `db push` remoto se detuvo dentro de 4A porque el backfill
+invocaba una RPC interactiva que exige una sesión autenticada. El rol de
+migración remoto no cumple esa precondición. PostgreSQL revirtió la migración
+completa y `migration list` confirmó que ninguna versión 4A–5C quedó registrada.
+
+Se reemplazó únicamente esa llamada del backfill por el `UPDATE` y el registro
+de auditoría equivalentes dentro de la propia migración todavía no aplicada. No
+se agregó, renombró ni reordenó ninguna migración. El nuevo hash anterior quedó
+congelado después de repetir el rehearsal completo con resultado
+`LOCAL_REHEARSAL_OK`.
