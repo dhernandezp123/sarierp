@@ -264,6 +264,28 @@ Git entre computadoras y ambientes.
   - Falta UAT autenticada de ambos accesos.
 - Commit: pendiente.
 
+### 2026-07-30 - UX-045 - Branding del footer de inicio de sesión
+
+- Estado: En validación.
+- Hallazgo: UX-045.
+- Archivos modificados:
+  - `src/app/login/page.tsx`
+  - `HARDENING.md`
+- SQL: No aplica.
+- Cambios:
+  - El footer de `/login` muestra `Forwarders ERP` en lugar de
+    `© 2026 Sari Express ERP`.
+  - La atribución de la plataforma ahora identifica a `Hernova Systems`.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente avisos LF/CRLF.
+- Validación manual pendiente:
+  - Abrir `/login` en escritorio y móvil y confirmar que ambas líneas del
+    footer sean legibles y no se superpongan con el formulario.
+- Riesgos pendientes:
+  - Falta validación visual autenticada en el deployment de Preview o Production.
+- Commit: pendiente.
+
 ### 2026-07-29 - REL-004 - Postdeploy remoto 4A–5C
 
 - Estado: SQL aplicado y validado en producción; frontend pendiente por destino

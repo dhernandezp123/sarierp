@@ -153,8 +153,8 @@ export default function LoginPage() {
         </div>
 
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-center text-xs leading-relaxed text-slate-400">
-          <p>© 2026 Sari Express ERP</p>
-          <p>Freight Management Platform by DHER Solutions</p>
+          <p>Forwarders ERP</p>
+          <p>Freight Management Platform by Hernova Systems</p>
         </div>
       </div>
     </div>
