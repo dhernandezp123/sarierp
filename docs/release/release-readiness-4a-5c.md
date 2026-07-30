@@ -52,7 +52,16 @@ porque una ejecución representativa puede contener conteos o identificadores.
   auditoría, sin depender de `auth.uid()`.
 - El paquete corregido volvió a aprobar el rehearsal completo:
   `LOCAL_REHEARSAL_OK`.
-- No se desplegó frontend ni se crearon operaciones durante el incidente.
+- El segundo `db push` aplicó 4A–5B y se detuvo en 5C porque el backfill real
+  dejó eventos de constraint triggers diferidos antes de habilitar RLS.
+- La transacción de 5C fue revertida; `migration list` confirmó 4A–5B
+  registradas y 5C pendiente, y el dump remoto no encontró objetos 5C.
+- El forward-fix mínimo fuerza `SET CONSTRAINTS ALL IMMEDIATE` después del
+  backfill y antes de los `ALTER TABLE`.
+- El ensayo local equivalente, dentro de una única transacción y con un
+  booking FCL existente, confirmó `COMMIT`, 12 requisitos, RLS habilitada,
+  `POSTDEPLOY_GATE_OK`, seguridad aprobada y cero hallazgos 5C.
+- No se desplegó frontend ni se crearon operaciones durante los incidentes.
 
 ## Paquete ejecutable
 

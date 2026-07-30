@@ -15,7 +15,7 @@ migraciones siguientes y ninguna adicional.
 | 3 | 4C | `20260729140000_canonical_operational_events.sql` | `33A00C76FFC39CE03B5CCD72DF6AECE4CF5318B8B0652768117D2B5B19927B2F` |
 | 4 | 5A | `20260729150000_shipments_foundation.sql` | `8558521D4A4FD0FF1D52EF0420AEC264E8A76726FEDE44384298E0DA11B54A46` |
 | 5 | 5B | `20260729160000_booking_schedule_revisions.sql` | `09EC3C22A6CF082BA64E3BDF2F29FFD35B6161F670B53076E6B5A9050FFFA477` |
-| 6 | 5C | `20260729170000_booking_cutoffs_and_readiness.sql` | `EA2E3C49BB3819436F5C3C3B5E1D7A17F55FCA05E2547C99D7D2D6A3BFAC17B1` |
+| 6 | 5C | `20260729170000_booking_cutoffs_and_readiness.sql` | `8A9BB9F793FF419593D9A1646F889568B30035B16B3600EEA297561B3BFB3925` |
 
 ## Responsabilidad y dependencias
 
@@ -92,3 +92,11 @@ de auditoría equivalentes dentro de la propia migración todavía no aplicada. 
 se agregó, renombró ni reordenó ninguna migración. El nuevo hash anterior quedó
 congelado después de repetir el rehearsal completo con resultado
 `LOCAL_REHEARSAL_OK`.
+
+El segundo intento aplicó 4A–5B y se detuvo transaccionalmente dentro de 5C:
+el backfill con bookings reales dejó eventos de constraint triggers diferidos
+antes de `ENABLE ROW LEVEL SECURITY`. Se agregó `SET CONSTRAINTS ALL IMMEDIATE`
+entre el backfill y los `ALTER TABLE`, sin cambiar datos ni relaciones. El
+ensayo equivalente dentro de una sola transacción, con un booking FCL y un
+contenedor existentes, generó 12 requisitos, habilitó RLS y confirmó `COMMIT`.
+Los gates, seguridad, conteos, suite 5C y diagnósticos posteriores aprobaron.

@@ -236,10 +236,50 @@ Git entre computadoras y ambientes.
     diferencia y Pricing debera volver a aplicar el seguro.
 - Commit: pendiente.
 
+### 2026-07-29 - REL-003 - Backfill 5C compatible con triggers diferidos
+
+- Estado: Corrección imprescindible validada localmente; 5C remota pendiente.
+- Hallazgo: REL-003.
+- Causa raíz:
+  - Con bookings reales, el backfill de requisitos generó eventos de los
+    constraint triggers `DEFERRABLE INITIALLY DEFERRED`.
+  - La migración intentaba ejecutar `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
+    antes de resolverlos y PostgreSQL respondió SQLSTATE `55006`.
+- SQL y documentación:
+  - `supabase/migrations/20260729170000_booking_cutoffs_and_readiness.sql`
+  - `docs/release/migration-inventory-4a-5c.md`
+  - `docs/release/release-readiness-4a-5c.md`
+- Corrección:
+  - Se agregó `SET CONSTRAINTS ALL IMMEDIATE` inmediatamente después del
+    backfill y antes de habilitar RLS.
+  - La instrucción ejecuta y valida todos los eventos diferidos; no omite ni
+    deshabilita controles de relación.
+  - No se añadió ninguna migración y 5C todavía no figuraba en el historial
+    remoto.
+- Validaciones:
+  - `migration list --linked`: 4A–5B aplicadas y 5C pendiente.
+  - Dump de esquema remoto: objetos 4A–5B presentes y tablas 5C ausentes.
+  - Ensayo local con un booking FCL y contenedor existentes dentro de una sola
+    transacción: 12 requisitos creados, `SET CONSTRAINTS`, RLS y `COMMIT`.
+  - `POSTDEPLOY_GATE_OK`.
+  - Conteos: 1 quotation, SI, shipment, booking, contenedor y revisión; 12
+    requisitos; cero cut-offs, VGM, excepciones y evaluaciones.
+  - Seguridad: ninguna RPC expuesta a `anon` y ninguna escritura directa
+    concedida a `authenticated`.
+  - Suite SQL 5C: OK.
+  - Diagnósticos de cut-offs, VGM, readiness y pre-shipment: cero hallazgos.
+  - Rehearsal acumulado 4A–5C posterior: `LOCAL_REHEARSAL_OK`.
+  - `npx next typegen` y `npx tsc --noEmit`: OK.
+  - SHA-256 corregido de 5C:
+    `8A9BB9F793FF419593D9A1646F889568B30035B16B3600EEA297561B3BFB3925`.
+- Riesgos o trabajo pendiente:
+  - Repetir rehearsal acumulado, dry-run remoto y aplicar únicamente 5C.
+  - Mantener frontend sin desplegar hasta completar postdeploy remoto.
+- Commit: pendiente.
+
 ### 2026-07-29 - REL-002 - Backfill 4A compatible con rol de migración
 
-- Estado: Corrección imprescindible validada localmente; reaplicación remota
-  pendiente.
+- Estado: Aplicada en producción; postdeploy acumulado pendiente de 5C.
 - Hallazgo: REL-002.
 - Causa raíz:
   - El backfill final de 4A llamaba
@@ -273,7 +313,7 @@ Git entre computadoras y ambientes.
   - Repetir `migration list` y `db push --dry-run` antes de reaplicar.
   - No desplegar frontend hasta que el SQL remoto y todos los gates
     postdeploy estén aprobados.
-- Commit: pendiente.
+- Commit: `229d07b9ecbe148b6342ae9ae7153bc561e63017`.
 
 ### 2026-07-29 - REL-001 - Release Readiness acumulado 4A–5C
 

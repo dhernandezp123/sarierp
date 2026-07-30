@@ -3162,6 +3162,11 @@ select public.seed_booking_readiness_requirements(
 from public.bookings booking
 where booking.shipment_id is not null;
 
+-- El backfill genera eventos de los constraint triggers diferidos. En bases
+-- con bookings existentes deben resolverse antes de alterar las tablas para
+-- habilitar RLS; PostgreSQL rechaza ALTER TABLE mientras existan pendientes.
+set constraints all immediate;
+
 alter table public.booking_cutoffs enable row level security;
 alter table public.container_vgm_records enable row level security;
 alter table public.booking_readiness_requirements enable row level security;
