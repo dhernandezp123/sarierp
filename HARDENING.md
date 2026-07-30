@@ -274,7 +274,7 @@ Git entre computadoras y ambientes.
   - No desplegar frontend hasta recibir el proyecto o procedimiento de hosting
     correcto. Desplegar el árbol frontend exacto de `856e2a4d...`.
   - Completar UAT autenticada crítica después del despliegue.
-- Commit: pendiente.
+- Commit: `a1b569c`.
 
 ### 2026-07-29 - REL-003 - Backfill 5C compatible con triggers diferidos
 
