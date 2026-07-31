@@ -4604,3 +4604,41 @@ Agregar una entrada por fix:
   - La validación funcional requiere una sesión autenticada y datos del
     ambiente Supabase.
 - Commit: pendiente.
+
+### 2026-07-31 - UX-049 - Footers unificados con la marca de plataforma
+
+- Estado: En validación.
+- Hallazgo: UX-049.
+- Código:
+  - `src/lib/platform-branding.ts`
+  - `src/app/login/page.tsx`
+  - `src/app/register/page.tsx`
+  - `src/app/onboarding/page.tsx`
+  - `src/components/layout/protected-shell.tsx`
+  - `src/components/marketing/ForwardersLanding.tsx`
+  - `src/app/politicas/page.tsx`
+  - `src/app/(protected)/invoicing/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Todos los footers de aplicación, acceso, páginas públicas y cierre
+    imprimible usan `Forwarders ERP` y
+    `Freight Management Platform by Hernova Systems`.
+  - El nombre y la atribución se centralizaron en constantes compartidas para
+    evitar divergencias futuras.
+  - Las páginas públicas conservan por separado los avisos de derechos
+    reservados y región; no se alteró el contenido contractual de Políticas.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido: sin errores; conserva dos advertencias preexistentes en
+    `ForwardersLanding.tsx` (`AnimatePresence` y `<img>`).
+  - `git diff --check`: OK; únicamente avisos LF/CRLF.
+  - Búsqueda global de footers: sin referencias restantes a `DHER Solutions`,
+    `Sari Express ERP` o `Generado por Sari` dentro de footers.
+- Verificación manual pendiente:
+  - Revisar los footers de `/login`, `/register`, `/onboarding`, aplicación
+    autenticada, landing, `/politicas` y cierre imprimible de facturación.
+- Riesgos pendientes:
+  - `contacto@dher.dev` y las referencias contractuales a DHer permanecen sin
+    cambios hasta confirmar el correo y la identidad jurídica oficiales de
+    Hernova Systems.
+- Commit: pendiente.

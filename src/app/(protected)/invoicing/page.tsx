@@ -11,6 +11,10 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, cardClass, filterSelectClass, fieldClassSm } from '@/src/lib/ui-classes'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { EstadoCuentaPdf, type EstadoCuentaData, type EstadoCuentaItem } from '@/src/components/pdf/estado-cuenta-pdf'
+import {
+  PLATFORM_ATTRIBUTION,
+  PLATFORM_NAME,
+} from '@/src/lib/platform-branding'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -252,7 +256,7 @@ export default function InvoicingPage() {
 <div class="title">Cierre del período</div>
 <div class="sub">${mes} ${cierreAnio} &mdash; Sari Express &mdash; ${s.total} documentos</div>
 ${summaryCards || '<p>Sin movimientos para este período.</p>'}
-<div class="footer">Generado por Sari Express ERP &middot; ${new Date().toLocaleDateString('es-HN')}</div>
+<div class="footer">${PLATFORM_NAME}<br>${PLATFORM_ATTRIBUTION} &middot; ${new Date().toLocaleDateString('es-HN')}</div>
 <script>window.onload=()=>window.print()</script></body></html>`
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close() }

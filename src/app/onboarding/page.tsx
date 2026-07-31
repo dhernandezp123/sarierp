@@ -7,6 +7,10 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
+import {
+  PLATFORM_ATTRIBUTION,
+  PLATFORM_NAME,
+} from '@/src/lib/platform-branding'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -206,9 +210,10 @@ export default function OnboardingPage() {
               </button>
             </form>
 
-            <p className="mt-6 text-center text-xs text-slate-500">
-              © 2026 Sari Express ERP — Freight Management Platform
-            </p>
+            <div className="mt-6 text-center text-xs leading-relaxed text-slate-500">
+              <p>{PLATFORM_NAME}</p>
+              <p>{PLATFORM_ATTRIBUTION}</p>
+            </div>
           </div>
         </div>
       </div>

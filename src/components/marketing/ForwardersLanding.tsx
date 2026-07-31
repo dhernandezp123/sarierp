@@ -10,6 +10,10 @@ import type { ReactNode } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import {
+  PLATFORM_ATTRIBUTION,
+  PLATFORM_NAME,
+} from '@/src/lib/platform-branding'
+import {
   ArrowRight,
   Activity,
   BarChart3,
@@ -1484,9 +1488,11 @@ export function ForwardersLanding() {
           </div>
 
           <div className="flex flex-col gap-3 border-t border-white/10 pt-6 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p>
-              &copy; 2026 Forwarders ERP by DHer. Todos los derechos reservados.
-            </p>
+            <div className="leading-relaxed">
+              <p className="font-semibold text-slate-400">{PLATFORM_NAME}</p>
+              <p>{PLATFORM_ATTRIBUTION}</p>
+              <p>Todos los derechos reservados.</p>
+            </div>
             <div className="flex items-center gap-4">
               <Link
                 href="/politicas"

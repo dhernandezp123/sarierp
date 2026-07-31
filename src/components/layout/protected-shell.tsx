@@ -9,6 +9,10 @@ import { ErrorBoundary } from '@/src/components/ui/error-boundary'
 import OnboardingTutorial from '@/src/components/onboarding/OnboardingTutorial'
 import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath, getDefaultPathForRole } from '@/src/lib/permissions'
+import {
+  PLATFORM_ATTRIBUTION,
+  PLATFORM_NAME,
+} from '@/src/lib/platform-branding'
 
 export function ProtectedShell({ children }: { children: React.ReactNode }) {
   const { profile } = useUser()
@@ -63,9 +67,8 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
         <OnboardingTutorial />
 
         <footer className="border-t border-slate-200 bg-[#F5F7FA] px-6 py-3 text-center text-xs text-slate-500">
-          Sistema desarrollado por{' '}
-          <span className="font-semibold text-slate-700">DHER Solutions</span>{' '}
-          para <span className="font-semibold text-slate-700">Sari Express</span>. 2026
+          <p className="font-semibold text-slate-700">{PLATFORM_NAME}</p>
+          <p>{PLATFORM_ATTRIBUTION}</p>
         </footer>
       </div>
     </div>

@@ -1,5 +1,9 @@
 import Link from 'next/link'
 import { Globe2, ArrowLeft, Mail } from 'lucide-react'
+import {
+  PLATFORM_ATTRIBUTION,
+  PLATFORM_NAME,
+} from '@/src/lib/platform-branding'
 
 export const metadata = {
   title: 'Términos de Uso y Privacidad — Forwarders ERP by DHer',
@@ -410,9 +414,11 @@ export default function PoliticasPage() {
             <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#EF8E01]/15">
               <Globe2 size={12} className="text-[#EF8E01]" />
             </span>
-            <p className="text-xs text-slate-500">
-              &copy; 2026 Forwarders ERP by DHer. Todos los derechos reservados.
-            </p>
+            <div className="text-xs leading-relaxed text-slate-500">
+              <p className="font-semibold text-slate-400">{PLATFORM_NAME}</p>
+              <p>{PLATFORM_ATTRIBUTION}</p>
+              <p>Todos los derechos reservados.</p>
+            </div>
           </div>
           <p className="text-xs text-slate-600">Honduras &amp; Centroam&eacute;rica</p>
         </div>

@@ -7,6 +7,10 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import {
+  PLATFORM_ATTRIBUTION,
+  PLATFORM_NAME,
+} from '@/src/lib/platform-branding'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -153,8 +157,8 @@ export default function LoginPage() {
         </div>
 
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-center text-xs leading-relaxed text-slate-400">
-          <p>Forwarders ERP</p>
-          <p>Freight Management Platform by Hernova Systems</p>
+          <p>{PLATFORM_NAME}</p>
+          <p>{PLATFORM_ATTRIBUTION}</p>
         </div>
       </div>
     </div>

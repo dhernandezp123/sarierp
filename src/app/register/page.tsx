@@ -7,6 +7,10 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import {
+  PLATFORM_ATTRIBUTION,
+  PLATFORM_NAME,
+} from '@/src/lib/platform-branding'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -186,8 +190,8 @@ export default function RegisterPage() {
         </div>
 
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-center text-xs leading-relaxed text-slate-400">
-          <p>© 2026 Sari Express ERP</p>
-          <p>Freight Management Platform by DHER Solutions</p>
+          <p>{PLATFORM_NAME}</p>
+          <p>{PLATFORM_ATTRIBUTION}</p>
         </div>
       </div>
     </div>
