@@ -391,6 +391,7 @@ export default function ClientProfileDialog({
               onChange={setSelectedClientId}
               placeholder={loadingLists ? 'Cargando clientes...' : 'Buscar por nombre o código...'}
               disabled={loadingLists}
+              renderInline
               className={fieldClass}
             />
           </Field>

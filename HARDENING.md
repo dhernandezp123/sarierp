@@ -236,6 +236,39 @@ Git entre computadoras y ambientes.
     diferencia y Pricing debera volver a aplicar el seguro.
 - Commit: pendiente.
 
+### 2026-07-31 - UX-048 - Combobox de clientes interactivo dentro del modal
+
+- Estado: En validación manual.
+- Hallazgo: UX-048.
+- Causa raíz:
+  - `ClienteCombobox` renderizaba su buscador y lista mediante un portal en
+    `document.body`.
+  - En el modal de perfil rápido, el bloqueo de foco y eventos del diálogo
+    impedía escribir en el buscador y desplazar la lista portaleada.
+- Código:
+  - `src/components/ui/ClienteCombobox.tsx`
+  - `src/components/clientes/ClientProfileDialog.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Se agregó el modo reutilizable `renderInline` para montar la lista dentro
+    del árbol del diálogo y conservar el portal como comportamiento por defecto
+    en los demás formularios.
+  - La acción rápida activa este modo, permitiendo enfocar el buscador, escribir,
+    navegar con teclado y usar scroll en la lista de clientes.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `npx eslint src/components/ui/ClienteCombobox.tsx src/components/clientes/ClientProfileDialog.tsx`:
+    OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Abrir `Ver / Editar Cliente`, escribir nombre y código en el buscador,
+    recorrer la lista con scroll y seleccionar un resultado.
+- Riesgos pendientes:
+  - La verificación funcional requiere una sesión autenticada con clientes
+    visibles.
+- Commit: pendiente.
+
+
 ### 2026-07-31 - UX-047 - Cargos manuales y catálogo completo en Miami Aéreo
 
 - Estado: En validación manual.

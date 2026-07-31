@@ -20,6 +20,7 @@ interface ClienteComboboxProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  renderInline?: boolean
 }
 
 export function ClienteCombobox({
@@ -29,20 +30,16 @@ export function ClienteCombobox({
   placeholder = 'Seleccionar cliente',
   className,
   disabled = false,
+  renderInline = false,
 }: ClienteComboboxProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlighted, setHighlighted] = useState(0)
-  const [mounted, setMounted] = useState(false)
 
   const triggerRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   const selected = clientes.find((cliente) => cliente.id === value) ?? null
 
@@ -54,7 +51,7 @@ export function ClienteCombobox({
       )
     : clientes
 
-  const pos = useDropdownPosition(open, triggerRef)
+  const pos = useDropdownPosition(open && !renderInline, triggerRef)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -80,7 +77,6 @@ export function ClienteCombobox({
     if (!open) return
 
     setTimeout(() => inputRef.current?.focus(), 0)
-    setHighlighted(0)
   }, [open])
 
   useEffect(() => {
@@ -108,6 +104,7 @@ export function ClienteCombobox({
         event.key === 'ArrowDown'
       ) {
         event.preventDefault()
+        setHighlighted(0)
         setOpen(true)
       }
 
@@ -137,13 +134,23 @@ export function ClienteCombobox({
   const dropdown = (
     <div
       ref={dropRef}
-      style={{
-        position: 'absolute',
-        top: pos.top,
-        left: pos.left,
-        width: pos.width,
-        zIndex: 9999,
-      }}
+      style={
+        renderInline
+          ? {
+              position: 'absolute',
+              top: 'calc(100% + 0.5rem)',
+              left: 0,
+              width: '100%',
+              zIndex: 9999,
+            }
+          : {
+              position: 'absolute',
+              top: pos.top,
+              left: pos.left,
+              width: pos.width,
+              zIndex: 9999,
+            }
+      }
       className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
     >
       <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
@@ -240,7 +247,10 @@ export function ClienteCombobox({
         ref={triggerRef}
         type="button"
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          setHighlighted(0)
+          setOpen((current) => !current)
+        }}
         onKeyDown={handleKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -270,7 +280,10 @@ export function ClienteCombobox({
         <ChevronsUpDown className="h-4 w-4 shrink-0 text-slate-400" />
       </button>
 
-      {mounted && open && createPortal(dropdown, document.body)}
+      {open &&
+        (renderInline
+          ? dropdown
+          : createPortal(dropdown, document.body))}
     </div>
   )
 }
