@@ -9,6 +9,11 @@ import { usesClientRates } from '@/src/lib/quotation-products'
 import { getCompanyTradeName } from '@/src/lib/company-branding'
 import { DEFAULT_TAX_RATE_PERCENT, normalizeTaxRatePercent } from '@/src/lib/tax'
 import {
+  defaultClientRateCatalog,
+  fetchActiveClientRateCatalog,
+  type ClientRateCatalogItem,
+} from '@/src/lib/pricing-catalogs'
+import {
   buildMiamiPricingItems as buildMiamiPricingItemsPayload,
   type ClientRate,
   type DestinationCharge,
@@ -58,6 +63,9 @@ export function useMiamiQuotation({
   )
   const [manualPickupAmount, setManualPickupAmount] = useState(0)
   const [originCharges, setOriginCharges] = useState<OriginCharge[]>([])
+  const [clientRateCatalog, setClientRateCatalog] = useState<
+    ClientRateCatalogItem[]
+  >(defaultClientRateCatalog)
   const [destinationCharges, setDestinationCharges] = useState<
     DestinationCharge[]
   >([])
@@ -88,6 +96,22 @@ export function useMiamiQuotation({
 
     loadClientRates(clienteId)
   }, [clienteId, serviceProduct])
+
+  useEffect(() => {
+    let active = true
+
+    const loadOriginChargeCatalog = async () => {
+      const catalog = await fetchActiveClientRateCatalog(supabase)
+      if (!active) return
+      setClientRateCatalog(catalog)
+    }
+
+    loadOriginChargeCatalog()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const loadCompanyDefaults = async () => {
     const { data } = await supabase
@@ -154,24 +178,55 @@ export function useMiamiQuotation({
     'delivery_miami',
     'recolectas_internas',
     'documentos_manejo',
-    'desconsolidar',
-    'bl',
-    'sed',
-    'hazmat_imo_charge_line',
-    'declaracion_imo',
-    'certificado_imo',
   ])
 
-  const originChargeRates = clientRates.filter((rate) => {
-    const amount = Number(rate.amount || 0)
-    const category = (rate.category || '').toLowerCase()
+  if (serviceProduct === 'miami_lcl') {
+    ;[
+      'desconsolidar',
+      'bl',
+      'sed',
+      'hazmat_imo_charge_line',
+      'declaracion_imo',
+      'certificado_imo',
+    ].forEach((code) => automaticRateCodes.add(code))
+  }
 
-    return (
-      amount > 0 &&
-      category === 'otros cargos' &&
-      !automaticRateCodes.has(rate.rate_code)
+  const clientRatesByCode = new Map(
+    clientRates.map((rate) => [rate.rate_code, rate])
+  )
+  const catalogOriginRates = clientRateCatalog
+    .filter(
+      (item) =>
+        item.category.toLowerCase() === 'otros cargos' ||
+        item.optionalItemType === 'origin_charge'
     )
-  })
+    .map(
+      (item): ClientRate =>
+        clientRatesByCode.get(item.code) || {
+          cliente_id: clienteId,
+          rate_code: item.code,
+          rate_label: item.label,
+          category: item.category,
+          unit: item.unit,
+          currency: 'USD',
+          amount: 0,
+          is_active: true,
+          valid_from: null,
+          valid_to: null,
+          notes: null,
+        }
+    )
+  const catalogOriginRateCodes = new Set(
+    catalogOriginRates.map((rate) => rate.rate_code)
+  )
+  const legacyOriginRates = clientRates.filter(
+    (rate) =>
+      !catalogOriginRateCodes.has(rate.rate_code) &&
+      (rate.category || '').toLowerCase() === 'otros cargos'
+  )
+  const originChargeRates = [...catalogOriginRates, ...legacyOriginRates].filter(
+    (rate) => !automaticRateCodes.has(rate.rate_code)
+  )
 
   const airDocumentsHandlingRate = getClientRate('documentos_manejo')
 
@@ -427,6 +482,7 @@ export function useMiamiQuotation({
             description,
             amount: String(amount),
             taxable: Boolean(item.taxable),
+            isManual: sourceRateCode === 'manual' || !sourceRateCode,
           })
           return
         }
@@ -474,6 +530,7 @@ export function useMiamiQuotation({
           description,
           amount: String(amount),
           taxable: Boolean(item.taxable),
+          isManual: !matchingOriginRate,
         })
         return
       }

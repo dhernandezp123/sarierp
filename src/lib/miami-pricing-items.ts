@@ -42,6 +42,7 @@ export type OriginCharge = {
   description: string
   amount: string
   taxable: boolean
+  isManual?: boolean
 }
 
 export type MiamiOptions = {

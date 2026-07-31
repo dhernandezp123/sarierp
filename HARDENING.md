@@ -236,6 +236,49 @@ Git entre computadoras y ambientes.
     diferencia y Pricing debera volver a aplicar el seguro.
 - Commit: pendiente.
 
+### 2026-07-31 - UX-047 - Cargos manuales y catálogo completo en Miami Aéreo
+
+- Estado: En validación manual.
+- Hallazgo: UX-047.
+- Causa raíz:
+  - Los cargos adicionales en origen exigían una tarifa activa con monto mayor
+    que cero y categoría literal `Otros Cargos`.
+  - Los conceptos reservados para automatismos de Miami LCL también se
+    excluían en Consolidado Aéreo, aunque no tuvieran un control automático en
+    ese flujo.
+  - No existía una alternativa para cargos no incluidos en el tarifario.
+- Código:
+  - `src/hooks/useMiamiQuotation.ts`
+  - `src/components/quotations/MiamiQuotationSection.tsx`
+  - `src/lib/miami-pricing-items.ts`
+- SQL: ninguno.
+- Cambios:
+  - Consolidado Aéreo carga las tarifas de origen configuradas en el catálogo
+    activo y conserva compatibilidad con las tarifas de `Otros Cargos`.
+  - Las líneas activas con monto `0.00` también aparecen para poder asignar un
+    monto específico en la cotización sin crear un concepto manual duplicado.
+  - Las exclusiones automáticas ahora dependen del producto: BL, SED,
+    Desconsolidación y cargos IMO pueden seleccionarse en Aéreo si el perfil
+    del cliente tiene un monto activo; en LCL conservan sus controles actuales.
+  - Se agregó `Otro cargo (manual)` para capturar concepto, monto e ISV y
+    persistirlo como cargo de origen incluso si no existe en el tarifario.
+  - Los cargos manuales existentes se reconocen al reabrir una cotización.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido sobre la lógica nueva: OK. La ejecución con todas las
+    reglas conserva hallazgos preexistentes del hook y del componente.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - En una cotización Miami Aéreo, confirmar que aparezcan todas las tarifas de
+    origen del catálogo activo, incluyendo las configuradas en `0.00`.
+  - Agregar `Otro cargo (manual)`, guardar, reabrir y confirmar concepto, monto
+    e ISV tanto en la cotización como en el PDF comercial.
+- Riesgos pendientes:
+  - La verificación funcional requiere una sesión autenticada y un cliente con
+    tarifario Miami configurado.
+- Commit: pendiente.
+
+
 ### 2026-07-30 - UX-044 - Confirmación antes de duplicar una cotización
 
 - Estado: En validación.
@@ -4494,4 +4537,37 @@ Agregar una entrada por fix:
     lecturas anteriores.
   - Retirar funciones/trigger/FK/índice y `primary_booking_id` solo mediante
     una migración compensatoria; no editar ni borrar la migración ya aplicada.
+- Commit: pendiente.
+
+### 2026-07-31 - UX-046 - Perfil de cliente editable desde acciones rápidas
+
+- Estado: En validación manual.
+- Hallazgo: UX-046.
+- Causa raíz:
+  - El menú de acciones rápidas permitía crear clientes, pero consultar o
+    modificar uno existente exigía navegar al módulo de Clientes.
+- Código:
+  - `src/components/clientes/ClientProfileDialog.tsx`
+  - `src/components/layout/topbar.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Se agregó la acción `Ver / Editar Cliente` para Admin y Ventas, alineada
+    con la política RLS vigente de actualización de clientes.
+  - El modal permite buscar por nombre o código, consultar el perfil completo
+    y actualizar datos de contacto, dirección, clasificación comercial,
+    crédito, seguro y notas sin abandonar la pantalla actual.
+  - Cada actualización intenta registrar el evento en `cliente_history` y
+    avisa si el perfil se guardó pero falló su registro de historial.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `npx eslint src/components/layout/topbar.tsx src/components/clientes/ClientProfileDialog.tsx`:
+    OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Abrir la acción con un usuario Admin y otro de Ventas, buscar un cliente,
+    modificarlo y confirmar que los datos y el historial persisten.
+  - Confirmar que la acción no aparece para roles sin permiso de edición.
+- Riesgos pendientes:
+  - La validación funcional requiere una sesión autenticada y datos del
+    ambiente Supabase.
 - Commit: pendiente.

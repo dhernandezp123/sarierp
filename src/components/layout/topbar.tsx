@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { Bell, Calculator, Home, Mail, Menu, Moon, Sun, Plus, FileText, UserPlus, Users, X } from 'lucide-react'
+import { Bell, Calculator, Contact, Home, Mail, Menu, Moon, Sun, Plus, FileText, UserPlus, Users, X } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useUser } from '@/src/hooks/useUser'
 import { getSystemAlerts, type SystemAlert } from '@/src/lib/alerts'
 import { supabase } from '@/src/lib/supabase/client'
 import NewAgentDialog from '@/src/components/agents/NewAgentDialog'
 import NewClientDialog from '@/src/components/clientes/NewClientDialog'
+import ClientProfileDialog from '@/src/components/clientes/ClientProfileDialog'
 import EmailTemplatesDialog from '@/src/components/email/EmailTemplatesDialog'
 import ReferenceInsuranceCalculatorDialog from '@/src/components/quotations/ReferenceInsuranceCalculatorDialog'
 
@@ -26,6 +27,12 @@ const QUICK_ACTIONS = [
     label: 'Nuevo Cliente',
     action: 'new-client',
     icon: Users,
+    roles: ['Admin', 'Ventas'],
+  },
+  {
+    label: 'Ver / Editar Cliente',
+    action: 'client-profile',
+    icon: Contact,
     roles: ['Admin', 'Ventas'],
   },
   {
@@ -49,7 +56,7 @@ const QUICK_ACTIONS = [
 ] as Array<{
   label: string
   href?: string
-  action?: 'new-agent' | 'new-client' | 'insurance-calculator' | 'email-templates'
+  action?: 'new-agent' | 'new-client' | 'client-profile' | 'insurance-calculator' | 'email-templates'
   icon: typeof FileText
   roles: string[]
 }>
@@ -86,6 +93,7 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
   const [quickOpen, setQuickOpen] = useState(false)
   const [agentDialogOpen, setAgentDialogOpen] = useState(false)
   const [clientDialogOpen, setClientDialogOpen] = useState(false)
+  const [clientProfileDialogOpen, setClientProfileDialogOpen] = useState(false)
   const [emailTemplatesOpen, setEmailTemplatesOpen] = useState(false)
   const [insuranceCalculatorOpen, setInsuranceCalculatorOpen] = useState(false)
 
@@ -230,6 +238,7 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
                     const dialogSetters = {
                       'new-agent': setAgentDialogOpen,
                       'new-client': setClientDialogOpen,
+                      'client-profile': setClientProfileDialogOpen,
                       'insurance-calculator': setInsuranceCalculatorOpen,
                       'email-templates': setEmailTemplatesOpen,
                     } as const
@@ -363,6 +372,10 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
 
       <NewAgentDialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen} />
       <NewClientDialog open={clientDialogOpen} onOpenChange={setClientDialogOpen} />
+      <ClientProfileDialog
+        open={clientProfileDialogOpen}
+        onOpenChange={setClientProfileDialogOpen}
+      />
       <EmailTemplatesDialog open={emailTemplatesOpen} onOpenChange={setEmailTemplatesOpen} />
       <ReferenceInsuranceCalculatorDialog
         open={insuranceCalculatorOpen}

@@ -1190,7 +1190,8 @@ export function MiamiQuotationSection({
                   Cargos adicionales en origen
                 </h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Selecciona cargos activos del perfil del cliente.
+                  Selecciona una tarifa activa del cliente o agrega un concepto
+                  manual.
                 </p>
               </div>
 
@@ -1205,29 +1206,28 @@ export function MiamiQuotationSection({
                       description: '',
                       amount: '',
                       taxable: false,
+                      isManual: false,
                     },
                   ])
                 }
-                disabled={miami.originChargeRates.length === 0}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
               >
                 Agregar cargo
               </button>
             </div>
 
             <div className="space-y-5">
-              {miami.originChargeRates.length === 0 ? (
+              {miami.originCharges.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  No hay tarifas de origen activas para agregar.
-                </p>
-              ) : miami.originCharges.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  No hay cargos adicionales en origen.
+                  No hay cargos adicionales en origen. Puedes elegir una tarifa
+                  del cliente o registrar otro cargo manualmente.
                 </p>
               ) : (
                 miami.originCharges.map((charge) => {
                   const isChargeComplete =
-                    (charge.rateCode || '').trim().length > 0 &&
+                    (charge.isManual
+                      ? charge.description.trim().length > 0
+                      : (charge.rateCode || '').trim().length > 0) &&
                     Number(charge.amount || 0) > 0
 
                   return (
@@ -1240,10 +1240,31 @@ export function MiamiQuotationSection({
                       }`}
                     >
                       <div className="flex flex-col gap-1.5">
-                        <label className={fieldLabelClass}>Tarifa</label>
+                        <label className={fieldLabelClass}>
+                          {charge.isManual ? 'Tipo de cargo' : 'Tarifa'}
+                        </label>
                         <select
-                          value={charge.rateCode || ''}
+                          value={
+                            charge.isManual ? '__manual__' : charge.rateCode || ''
+                          }
                           onChange={(e) => {
+                            if (e.target.value === '__manual__') {
+                              miami.setOriginCharges((prev) =>
+                                prev.map((item) =>
+                                  item.id === charge.id
+                                    ? {
+                                        ...item,
+                                        rateCode: 'manual',
+                                        description: '',
+                                        amount: '',
+                                        isManual: true,
+                                      }
+                                    : item
+                                )
+                              )
+                              return
+                            }
+
                             const selectedRate = miami.originChargeRates.find(
                               (rate) => rate.rate_code === e.target.value
                             )
@@ -1258,6 +1279,7 @@ export function MiamiQuotationSection({
                                       amount: selectedRate
                                         ? String(selectedRate.amount || '')
                                         : '',
+                                      isManual: false,
                                     }
                                   : item
                               )
@@ -1272,7 +1294,28 @@ export function MiamiQuotationSection({
                               {Number(rate.amount || 0).toFixed(2)}
                             </option>
                           ))}
+                          <option value="__manual__">Otro cargo (manual)</option>
                         </select>
+
+                        {charge.isManual && (
+                          <div className="mt-2 flex flex-col gap-1.5">
+                            <label className={fieldLabelClass}>Concepto</label>
+                            <input
+                              value={charge.description || ''}
+                              onChange={(e) =>
+                                miami.setOriginCharges((prev) =>
+                                  prev.map((item) =>
+                                    item.id === charge.id
+                                      ? { ...item, description: e.target.value }
+                                      : item
+                                  )
+                                )
+                              }
+                              placeholder="Ej. Almacenaje, inspección, etiquetado..."
+                              className={fieldClass}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-col gap-1.5">
