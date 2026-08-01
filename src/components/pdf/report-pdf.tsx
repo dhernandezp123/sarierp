@@ -12,6 +12,7 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 export type ReportPdfColumn = {
   key: string
@@ -233,6 +234,7 @@ export function ReportPdf({
   return (
     <Document>
       <Page size="LETTER" orientation="landscape" style={styles.page}>
+        <DemoPdfWatermark />
 
         {/* ── Header ── */}
         <View style={styles.headerRow} fixed>

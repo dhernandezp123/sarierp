@@ -13,6 +13,7 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 export type CartaPorteData = {
   numero: string | null
@@ -266,10 +267,11 @@ export default function CartaPortePdf({
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
   const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
-  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
+  const companyLogo = companyBranding.logo_url || '/brand/lockup-h-color.png'
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        <DemoPdfWatermark />
         {/* Header */}
         <View style={styles.header}>
           <Image src={companyLogo} style={styles.logo} />

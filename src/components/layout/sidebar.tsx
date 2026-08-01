@@ -31,10 +31,12 @@ import {
   CreditCard,
   ShieldAlert,
   Mail,
+  Inbox,
 } from 'lucide-react'
 
 interface SidebarProps {
   role?: string
+  isPlatformAdmin?: boolean
 }
 
 type ProfileSummary = {
@@ -43,9 +45,13 @@ type ProfileSummary = {
   email: string | null
   rol: string | null
   avatar_url: string | null
+  is_platform_admin: boolean | null
 }
 
-export default function Sidebar({ role: profileRole }: SidebarProps) {
+export default function Sidebar({
+  role: profileRole,
+  isPlatformAdmin: platformAdminProp,
+}: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [currentRole, setCurrentRole] = useState<string | null>(profileRole ?? null)
@@ -71,7 +77,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
       const profileResult = await supabase
         .from('profiles')
-        .select('nombre, apellido, email, rol, avatar_url')
+        .select('nombre, apellido, email, rol, avatar_url, is_platform_admin')
         .eq('id', user.id)
         .single()
 
@@ -116,6 +122,8 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   const isPricing = currentRole === 'Pricing'
   const isFinance = currentRole === 'Finanzas' || currentRole === 'Contabilidad'
   const isOperations = currentRole === 'Operaciones'
+  const isPlatformAdmin =
+    platformAdminProp ?? profile?.is_platform_admin === true
 
   const canViewCommercial =
     isAdmin || isSales || isPricing || isFinance || isOperations
@@ -260,6 +268,13 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
   ]
 
   const adminItems = [
+    ...(isPlatformAdmin
+      ? [{
+          label: 'Solicitudes de Demo',
+          href: '/admin/demo-requests',
+          icon: Inbox,
+        }]
+      : []),
     {
       label: 'Usuarios',
       href: '/admin/users',

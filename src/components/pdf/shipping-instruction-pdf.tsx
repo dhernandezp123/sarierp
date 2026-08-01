@@ -12,6 +12,7 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 type RoutingPdfProps = {
   routing: any
@@ -116,8 +117,9 @@ export default function RoutingInstructionsPdf({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        <DemoPdfWatermark />
         <View style={styles.header}>
-          <Image src={companyBranding.logo_url || '/logo/sari-logo.png'} style={styles.logo} />
+          <Image src={companyBranding.logo_url || '/brand/lockup-h-color.png'} style={styles.logo} />
 
           <View>
             <Text style={styles.title}>ROUTING ORDER</Text>
@@ -204,6 +206,7 @@ export default function RoutingInstructionsPdf({
       </Page>
 
       <Page size="A4" style={styles.page}>
+        <DemoPdfWatermark />
         <Text style={styles.title}>BILL OF LADING INSTRUCTIONS</Text>
 
         <Text style={styles.paragraph}>To: Overseas Agents</Text>

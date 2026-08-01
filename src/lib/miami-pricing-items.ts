@@ -1,5 +1,6 @@
 import { usesClientRates } from '@/src/lib/quotation-products'
 import { calculateTaxAmount, normalizeTaxRatePercent } from '@/src/lib/tax'
+import { getCompanyTradeName } from '@/src/lib/company-branding'
 
 export type ClientRate = {
   id?: string
@@ -102,7 +103,7 @@ export function buildMiamiPricingItems({
   if (!usesClientRates(serviceProduct)) return []
 
   const normalizedTaxRate = normalizeTaxRatePercent(taxRatePercent)
-  const defaultSupplier = supplierName?.trim() || 'Sari Express'
+  const defaultSupplier = supplierName?.trim() || getCompanyTradeName()
 
   const getClientRate = (code: string) =>
     clientRates.find((item) => item.rate_code === code)

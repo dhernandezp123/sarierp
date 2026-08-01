@@ -7,6 +7,12 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import { DemoEnvironmentBanner } from '@/src/components/demo/DemoEnvironmentBanner'
+import {
+  AUTH_BACKGROUND_IMAGE,
+  IS_DEMO_ENVIRONMENT,
+  isDemoAccessExpired,
+} from '@/src/lib/demo-environment'
 import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
@@ -69,7 +75,25 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/dashboard')
+      if (
+        IS_DEMO_ENVIRONMENT
+        && (
+          profile.is_demo_user !== true
+          || !profile.demo_access_grant_id
+        )
+      ) {
+        await supabase.auth.signOut()
+        toast.error('Esta cuenta no está habilitada para el ambiente demo.')
+        return
+      }
+
+      if (isDemoAccessExpired(profile)) {
+        await supabase.auth.signOut()
+        toast.error('El acceso temporal de esta cuenta demo ha vencido.')
+        return
+      }
+
+      router.push(profile.rol === 'Cliente' ? '/portal' : '/dashboard')
     } finally {
       setLoading(false)
     }
@@ -79,7 +103,7 @@ export default function LoginPage() {
     <div
       className="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat"
       style={{
-        backgroundImage: "url('/login-bg.png')",
+        backgroundImage: AUTH_BACKGROUND_IMAGE,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
@@ -89,6 +113,7 @@ export default function LoginPage() {
       <div className="relative min-h-screen bg-gradient-to-r from-[#020617]/95 via-[#020617]/80 to-[#020617]/20">
         <div className="flex min-h-screen items-center px-10 py-20">
           <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
+            <DemoEnvironmentBanner className="-mx-4 mb-7 rounded-xl border" />
             <div className="mb-10 text-center">
               <Image
                 src="/brand/lockup-h-blanco.png"
@@ -114,7 +139,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-14 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-white placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
-                  placeholder="usuario@sariexpress.com"
+                  placeholder="usuario@empresa.com"
                   autoComplete="email"
                   required
                 />
@@ -144,15 +169,17 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <p className="mt-6 text-center text-sm text-slate-300">
-              Necesitas acceso?{' '}
-              <Link
-                href="/register"
-                className="font-semibold text-yellow-300 hover:underline"
-              >
-                Solicitar acceso
-              </Link>
-            </p>
+            {!IS_DEMO_ENVIRONMENT && (
+              <p className="mt-6 text-center text-sm text-slate-300">
+                Necesitas acceso?{' '}
+                <Link
+                  href="/register"
+                  className="font-semibold text-yellow-300 hover:underline"
+                >
+                  Solicitar acceso
+                </Link>
+              </p>
+            )}
           </div>
         </div>
 

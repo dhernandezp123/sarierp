@@ -1,9 +1,11 @@
 'use client'
 
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useState } from 'react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 const compressImage = async (file: File) => {
   return new Promise<File>((resolve) => {
@@ -56,21 +58,13 @@ export default function ProfilePage() {
     profile?.avatar_url ?? null
   )
   const [uploading, setUploading] = useState(false)
-  const [nombre, setNombre] = useState('')
-  const [apellido, setApellido] = useState('')
+  const [nombre, setNombre] = useState(profile?.nombre || '')
+  const [apellido, setApellido] = useState(profile?.apellido || '')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
-
-  useEffect(() => {
-    if (!profile) return
-
-    setNombre(profile.nombre || '')
-    setApellido(profile.apellido || '')
-    setAvatarUrl(profile.avatar_url ?? null)
-  }, [profile])
 
   const currentAvatarUrl = avatarUrl ?? profile?.avatar_url ?? null
   const displayName = profile?.nombre
@@ -78,7 +72,7 @@ export default function ProfilePage() {
     : 'Usuario'
 
   const handleAvatarUpload = async (file: File) => {
-    if (!user) return
+    if (!user || IS_DEMO_ENVIRONMENT) return
 
     setUploading(true)
 
@@ -119,7 +113,7 @@ export default function ProfilePage() {
   const handleProfileUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!user) return
+    if (!user || IS_DEMO_ENVIRONMENT) return
 
     setSavingProfile(true)
 
@@ -145,6 +139,8 @@ export default function ProfilePage() {
 
   const handlePasswordUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    if (IS_DEMO_ENVIRONMENT) return
 
     if (!currentPassword || !newPassword || !confirmPassword) {
       toast.info('Completa todos los campos de contrasena.')
@@ -236,6 +232,8 @@ export default function ProfilePage() {
         </button>
       </div>
 
+      <DemoReadOnlyNotice label="El nombre, la foto y la contraseña pertenecen a este acceso temporal y no se pueden modificar durante la demo." />
+
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
         <div className="flex items-center gap-5">
           {currentAvatarUrl ? (
@@ -260,27 +258,31 @@ export default function ProfilePage() {
               </p>
             </div>
 
-            <input
-              type="file"
-              accept="image/*"
-              disabled={uploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) handleAvatarUpload(file)
-              }}
-              className="block text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800 disabled:opacity-50 dark:text-slate-300"
-            />
+            {!IS_DEMO_ENVIRONMENT && (
+              <>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) handleAvatarUpload(file)
+                  }}
+                  className="block text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800 disabled:opacity-50 dark:text-slate-300"
+                />
 
-            {uploading && (
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Subiendo imagen...
-              </p>
+                {uploading && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Subiendo imagen...
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
 
-      <form
+      {!IS_DEMO_ENVIRONMENT && <form
         onSubmit={handleProfileUpdate}
         className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]"
       >
@@ -324,9 +326,9 @@ export default function ProfilePage() {
         >
           {savingProfile ? 'Guardando...' : 'Guardar perfil'}
         </button>
-      </form>
+      </form>}
 
-      <form
+      {!IS_DEMO_ENVIRONMENT && <form
         onSubmit={handlePasswordUpdate}
         className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]"
       >
@@ -387,7 +389,7 @@ export default function ProfilePage() {
         >
           {savingPassword ? 'Actualizando...' : 'Actualizar contraseña'}
         </button>
-      </form>
+      </form>}
     </div>
   )
 }

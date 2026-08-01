@@ -28,4 +28,8 @@ export type Profile = {
   created_at: string
   updated_at?: string
   tutorial_completed?: boolean | null
+  is_demo_user?: boolean
+  demo_expires_at?: string | null
+  demo_access_grant_id?: string | null
+  is_platform_admin?: boolean
 }

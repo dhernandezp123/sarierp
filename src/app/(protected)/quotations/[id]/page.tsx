@@ -40,6 +40,7 @@ import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
 import { InsuranceCalculationDialog } from '@/src/components/quotations/InsuranceCalculationDialog'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 import {
   DEFAULT_EMAIL_TEMPLATES,
   fetchActiveEmailTemplates,
@@ -1508,7 +1509,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         ? formatDisplayDate(quotation?.valid_until)
         : '',
     cierre:
-      plantillaCotizacion || 'Saludos cordiales,\nSari Express — Equipo Comercial',
+      plantillaCotizacion || 'Saludos cordiales,\nEquipo Comercial',
   }
 
   const activeEmailTemplate =
@@ -1528,7 +1529,9 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-[#0b1220]">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Enviar Cotización por Correo</h2>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+              {IS_DEMO_ENVIRONMENT ? 'Vista previa del correo de cotización' : 'Enviar Cotización por Correo'}
+            </h2>
             <div className="flex items-center gap-2">
               {profile?.rol === 'Admin' && (
                 <Link
@@ -1586,8 +1589,14 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             className="mb-4 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           />
 
+          {IS_DEMO_ENVIRONMENT && (
+            <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Simulación demo: puedes copiar el texto, pero no se abrirá ni enviará ningún correo real.
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-3">
-            {mailtoLinkQ && (
+            {mailtoLinkQ && !IS_DEMO_ENVIRONMENT && (
               <a
                 href={mailtoLinkQ}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
@@ -1730,7 +1739,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
           <button
             type="button"
-            title="Enviar cotización por correo"
+            title={IS_DEMO_ENVIRONMENT ? 'Simular correo de cotización' : 'Enviar cotización por correo'}
             onClick={async () => {
               if (!plantillaCotizacion) {
                 const { data } = await supabase
@@ -1748,7 +1757,9 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <Mail className="h-4 w-4" />
-            <span className="sr-only">Enviar por correo</span>
+            <span className="sr-only">
+              {IS_DEMO_ENVIRONMENT ? 'Simular correo de cotización' : 'Enviar por correo'}
+            </span>
           </button>
 
           {(canManagePricing ||

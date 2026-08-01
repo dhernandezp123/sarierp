@@ -38,6 +38,9 @@ import {
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+import { normalizeExternalHttpUrl } from '@/src/lib/external-url'
 import {
   COMPANY_BRANDING_SELECT,
   type CompanyBranding,
@@ -740,26 +743,39 @@ export default function RoutingBookingChildPage() {
   const saveBooking = async () => {
     if (!booking) return
 
+    const rawTrackingUrl = booking.tracking_url?.trim() || ''
+    const normalizedTrackingUrl = normalizeExternalHttpUrl(rawTrackingUrl)
+
+    if (!IS_DEMO_ENVIRONMENT && rawTrackingUrl && !normalizedTrackingUrl) {
+      toast.error('La URL de tracking debe comenzar con http:// o https:// y no puede incluir credenciales.')
+      return
+    }
+
     setSaving(true)
+
+    const bookingChanges: Record<string, unknown> = {
+      master_bl: booking.master_bl,
+      house_bl: booking.house_bl,
+      estimated_transit_days: booking.estimated_transit_days,
+      real_transit_days: booking.real_transit_days,
+      free_days: booking.free_days,
+      remaining_free_days: booking.remaining_free_days,
+      freight_terms: booking.freight_terms,
+      release_type: booking.release_type,
+      hbl_freight_visibility: booking.hbl_freight_visibility,
+      printed_at_destination: booking.printed_at_destination,
+      operational_comments: booking.operational_comments,
+    }
+
+    if (!IS_DEMO_ENVIRONMENT) {
+      bookingChanges.tracking_url = normalizedTrackingUrl
+    }
 
     const { data, error } = await supabase.rpc('update_booking_canonical', {
       p_booking_id: booking.id,
       p_shipping_instruction_id: id,
       p_expected_updated_at: booking.updated_at,
-      p_changes: {
-        master_bl: booking.master_bl,
-        house_bl: booking.house_bl,
-        tracking_url: booking.tracking_url,
-        estimated_transit_days: booking.estimated_transit_days,
-        real_transit_days: booking.real_transit_days,
-        free_days: booking.free_days,
-        remaining_free_days: booking.remaining_free_days,
-        freight_terms: booking.freight_terms,
-        release_type: booking.release_type,
-        hbl_freight_visibility: booking.hbl_freight_visibility,
-        printed_at_destination: booking.printed_at_destination,
-        operational_comments: booking.operational_comments,
-      },
+      p_changes: bookingChanges,
     })
 
     setSaving(false)
@@ -1836,52 +1852,58 @@ export default function RoutingBookingChildPage() {
             </div>
           </div>
 
-          <form
-            onSubmit={uploadBookingDocument}
-            className="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70 md:grid-cols-2 lg:grid-cols-4"
-          >
-            <Field label="Tipo">
-              <select
-                value={documentType}
-                onChange={(event) => setDocumentType(event.target.value)}
-                className={fieldClass}
-              >
-                {bookingDocumentTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Archivo">
-              <input
-                name="documentFile"
-                type="file"
-                className={fieldClass}
-              />
-            </Field>
-
-            <Field label="Notas">
-              <input
-                value={documentNotes}
-                onChange={(event) => setDocumentNotes(event.target.value)}
-                className={fieldClass}
-                placeholder="Opcional"
-              />
-            </Field>
-
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={uploadingDocument}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                <Upload className="h-4 w-4" />
-                {uploadingDocument ? 'Subiendo...' : 'Subir documento'}
-              </button>
+          {IS_DEMO_ENVIRONMENT ? (
+            <div className="mt-5">
+              <DemoReadOnlyNotice label="Los documentos precargados son de consulta. Las cargas y reemplazos están bloqueados en el sandbox compartido." />
             </div>
-          </form>
+          ) : (
+            <form
+              onSubmit={uploadBookingDocument}
+              className="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70 md:grid-cols-2 lg:grid-cols-4"
+            >
+              <Field label="Tipo">
+                <select
+                  value={documentType}
+                  onChange={(event) => setDocumentType(event.target.value)}
+                  className={fieldClass}
+                >
+                  {bookingDocumentTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Archivo">
+                <input
+                  name="documentFile"
+                  type="file"
+                  className={fieldClass}
+                />
+              </Field>
+
+              <Field label="Notas">
+                <input
+                  value={documentNotes}
+                  onChange={(event) => setDocumentNotes(event.target.value)}
+                  className={fieldClass}
+                  placeholder="Opcional"
+                />
+              </Field>
+
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  disabled={uploadingDocument}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4" />
+                  {uploadingDocument ? 'Subiendo...' : 'Subir documento'}
+                </button>
+              </div>
+            </form>
+          )}
 
           <div className="mt-5 overflow-x-auto">
             <table className="w-full text-sm">
@@ -1945,15 +1967,17 @@ export default function RoutingBookingChildPage() {
                             <Download className="h-3.5 w-3.5" />
                             Descargar
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setDocumentPendingDelete(document)}
-                            disabled={deletingDocumentId === document.id}
-                            className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Eliminar
-                          </button>
+                          {!IS_DEMO_ENVIRONMENT && (
+                            <button
+                              type="button"
+                              onClick={() => setDocumentPendingDelete(document)}
+                              disabled={deletingDocumentId === document.id}
+                              className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Eliminar
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1967,11 +1991,20 @@ export default function RoutingBookingChildPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <SectionCard title="Tracking y Control">
             <Field label="Tracking URL">
-              <input
-                value={booking.tracking_url || ''}
-                onChange={(e) => setBooking({ ...booking, tracking_url: e.target.value })}
-                className={fieldClass}
-              />
+              {IS_DEMO_ENVIRONMENT ? (
+                <div className="flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                  Los enlaces externos están deshabilitados en el sandbox compartido.
+                </div>
+              ) : (
+                <input
+                  type="url"
+                  inputMode="url"
+                  value={booking.tracking_url || ''}
+                  onChange={(e) => setBooking({ ...booking, tracking_url: e.target.value })}
+                  placeholder="https://tracking.transportista.com/..."
+                  className={fieldClass}
+                />
+              )}
             </Field>
 
             <Field label="Free Days">

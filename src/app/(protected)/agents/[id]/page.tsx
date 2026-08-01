@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Plus, Trash2, ChevronLeft, Pencil, Check, X } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -82,6 +84,17 @@ function isExpired(d: string | null) {
   return d < new Date().toISOString().slice(0, 10)
 }
 
+async function queryAgentDetail(agentId: string) {
+  return Promise.all([
+    supabase.from('agents').select('*').eq('id', agentId).single(),
+    supabase
+      .from('agent_route_rates')
+      .select('*')
+      .eq('agent_id', agentId)
+      .order('created_at', { ascending: false }),
+  ])
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AgentDetailPage() {
@@ -101,20 +114,35 @@ export default function AgentDetailPage() {
   const [editingRateId, setEditingRateId] = useState<string | null>(null)
   const [editingRateData, setEditingRateData] = useState<RouteRate | null>(null)
 
-  useEffect(() => { if (id) fetchAll() }, [id])
-
-  const fetchAll = async () => {
-    setLoading(true)
-    const [agentRes, ratesRes] = await Promise.all([
-      supabase.from('agents').select('*').eq('id', id).single(),
-      supabase.from('agent_route_rates').select('*').eq('agent_id', id).order('created_at', { ascending: false }),
-    ])
+  const fetchAll = useCallback(async () => {
+    const [agentRes, ratesRes] = await queryAgentDetail(id)
     if (agentRes.error) { toast.error('Agente no encontrado'); router.push('/agents'); return }
     setAgent(agentRes.data as Agent)
     setFormData(agentRes.data as Agent)
     setRates((ratesRes.data || []) as RouteRate[])
     setLoading(false)
-  }
+  }, [id, router])
+
+  useEffect(() => {
+    let active = true
+    if (id) {
+      void queryAgentDetail(id).then(([agentRes, ratesRes]) => {
+        if (!active) return
+        if (agentRes.error) {
+          toast.error('Agente no encontrado')
+          router.push('/agents')
+          return
+        }
+        setAgent(agentRes.data as Agent)
+        setFormData(agentRes.data as Agent)
+        setRates((ratesRes.data || []) as RouteRate[])
+        setLoading(false)
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [id, router])
 
   const saveAgent = async () => {
     if (!formData) return
@@ -222,7 +250,7 @@ export default function AgentDetailPage() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        {!IS_DEMO_ENVIRONMENT && <div className="flex gap-2">
           {!editing ? (
             <button type="button" onClick={() => setEditing(true)} className={secondaryButtonClass}>
               <Pencil className="h-4 w-4" />
@@ -240,8 +268,10 @@ export default function AgentDetailPage() {
               </button>
             </>
           )}
-        </div>
+        </div>}
       </div>
+
+      <DemoReadOnlyNotice label="La ficha del agente y sus tarifas por ruta son datos maestros compartidos; puedes consultarlos durante la demo." />
 
       {/* Agent info */}
       <section className={cardClass}>
@@ -330,18 +360,18 @@ export default function AgentDetailPage() {
               {rates.length} tarifa{rates.length !== 1 ? 's' : ''} registrada{rates.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button
+          {!IS_DEMO_ENVIRONMENT && <button
             type="button"
             onClick={() => { setShowRateForm(!showRateForm); setRateForm(emptyRate(id)) }}
             className={primaryButtonClass}
           >
             <Plus className="h-4 w-4" />
             Agregar tarifa
-          </button>
+          </button>}
         </div>
 
         {/* New rate form */}
-        {showRateForm && (
+        {!IS_DEMO_ENVIRONMENT && showRateForm && (
           <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-800/40 dark:bg-blue-950/20">
             <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Nueva tarifa</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -496,7 +526,7 @@ export default function AgentDetailPage() {
               <tbody>
                 {rates.map((rate) => {
                   const expired = isExpired(rate.valid_until)
-                  if (editingRateId === rate.id && editingRateData) {
+                  if (!IS_DEMO_ENVIRONMENT && editingRateId === rate.id && editingRateData) {
                     return (
                       <tr key={rate.id} className="border-b border-blue-100 bg-blue-50/50 dark:border-blue-900/30 dark:bg-blue-950/10">
                         <td className="py-2 pr-3">
@@ -628,7 +658,7 @@ export default function AgentDetailPage() {
                         )}
                       </td>
                       <td>
-                        <div className="flex gap-1">
+                        {!IS_DEMO_ENVIRONMENT ? <div className="flex gap-1">
                           <button
                             type="button"
                             onClick={() => { setEditingRateId(rate.id); setEditingRateData({ ...rate }) }}
@@ -643,7 +673,7 @@ export default function AgentDetailPage() {
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
-                        </div>
+                        </div> : <span className="text-slate-400">—</span>}
                       </td>
                     </tr>
                   )
@@ -654,7 +684,7 @@ export default function AgentDetailPage() {
         )}
       </section>
 
-      <ConfirmDialog
+      {!IS_DEMO_ENVIRONMENT && <ConfirmDialog
         open={ratePendingDelete !== null}
         onOpenChange={(open) => { if (!open) setRatePendingDelete(null) }}
         title="Eliminar tarifa del agente"
@@ -665,7 +695,7 @@ export default function AgentDetailPage() {
           if (ratePendingDelete) void deleteRate(ratePendingDelete)
           setRatePendingDelete(null)
         }}
-      />
+      />}
     </div>
   )
 }

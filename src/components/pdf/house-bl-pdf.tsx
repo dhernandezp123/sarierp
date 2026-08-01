@@ -13,6 +13,7 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 export type HBLData = {
   bl_number: string | null
@@ -286,12 +287,13 @@ export default function HouseBLPdf({
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
   const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
-  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
+  const companyLogo = companyBranding.logo_url || '/brand/lockup-h-color.png'
   const issuePlace = bl.printed_at_destination ? v(bl.port_of_discharge) : 'San Pedro Sula, Honduras'
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        <DemoPdfWatermark />
         {/* Header */}
         <View style={styles.header}>
           <Image src={companyLogo} style={styles.logo} />

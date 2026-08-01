@@ -15,6 +15,13 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+import { getDemoHtmlWatermark } from '@/src/lib/demo-print'
+import {
+  getCompanyDisplayName,
+  normalizeCompanyBranding,
+} from '@/src/lib/company-branding'
+import { escapeHtml } from '@/src/lib/html'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -235,14 +242,21 @@ export default function InvoicingPage() {
     const mes = MESES[cierreMes - 1]
     const s = computeCierre()
     const fmt = (n: number, currency: string) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    const summaryCards = s.summaries.map((summary) => `
-<h2>${summary.currency}</h2>
+    const companyName = escapeHtml(
+      getCompanyDisplayName(normalizeCompanyBranding(ecCompany))
+    )
+    const demoWatermark = getDemoHtmlWatermark()
+    const summaryCards = s.summaries.map((summary) => {
+      const currency = escapeHtml(summary.currency)
+      return `
+<h2>${currency}</h2>
 <div class="grid">
-<div class="card"><div class="label">Total facturado</div><div class="value">${fmt(summary.emitido, summary.currency)}</div></div>
-<div class="card"><div class="label">Cobrado</div><div class="value green">${fmt(summary.cobrado, summary.currency)}</div></div>
-<div class="card"><div class="label">Por cobrar</div><div class="value amber">${fmt(summary.porCobrar, summary.currency)}</div></div>
-<div class="card"><div class="label">Vencido</div><div class="value red">${fmt(summary.vencido, summary.currency)}</div></div>
-</div>`).join('')
+<div class="card"><div class="label">Total facturado</div><div class="value">${escapeHtml(fmt(summary.emitido, summary.currency))}</div></div>
+<div class="card"><div class="label">Cobrado</div><div class="value green">${escapeHtml(fmt(summary.cobrado, summary.currency))}</div></div>
+<div class="card"><div class="label">Por cobrar</div><div class="value amber">${escapeHtml(fmt(summary.porCobrar, summary.currency))}</div></div>
+<div class="card"><div class="label">Vencido</div><div class="value red">${escapeHtml(fmt(summary.vencido, summary.currency))}</div></div>
+</div>`
+    }).join('')
     const html = `<!DOCTYPE html><html><head><title>Cierre ${mes} ${cierreAnio}</title>
 <style>body{font-family:Arial,sans-serif;padding:40px;color:#1e293b;max-width:700px;margin:0 auto}
 .title{font-size:22px;font-weight:bold;margin-bottom:4px}.sub{color:#64748b;font-size:13px;margin-bottom:28px}
@@ -251,10 +265,11 @@ export default function InvoicingPage() {
 .label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .value{font-size:22px;font-weight:bold}
 .green{color:#16a34a}.amber{color:#b45309}.red{color:#dc2626}
-.footer{font-size:11px;color:#94a3b8;margin-top:8px}
+.footer{font-size:11px;color:#94a3b8;margin-top:8px}${demoWatermark.styles}
 @media print{button{display:none}}</style></head><body>
+${demoWatermark.markup}
 <div class="title">Cierre del período</div>
-<div class="sub">${mes} ${cierreAnio} &mdash; Sari Express &mdash; ${s.total} documentos</div>
+<div class="sub">${mes} ${cierreAnio} &mdash; ${companyName} &mdash; ${s.total} documentos</div>
 ${summaryCards || '<p>Sin movimientos para este período.</p>'}
 <div class="footer">${PLATFORM_NAME}<br>${PLATFORM_ATTRIBUTION} &middot; ${new Date().toLocaleDateString('es-HN')}</div>
 <script>window.onload=()=>window.print()</script></body></html>`
@@ -336,7 +351,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       })
       .filter((item) => item.saldo > 0.005)
     setEcPdfData({
-      empresa: ecCompany?.legal_name || ecCompany?.trade_name || 'Sari Express',
+      empresa: getCompanyDisplayName(normalizeCompanyBranding(ecCompany)),
       empresa_rtn: ecCompany?.rtn ?? null,
       empresa_dir: ecCompany?.address ?? null,
       empresa_tel: ecCompany?.phone ?? null,
@@ -357,7 +372,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       ).map(([currency, balance]) => ({ currency, balance }))
     : []
   const ecEmailSubject = ecPdfData
-    ? `Estado de cuenta al ${ecPdfData.fecha_generacion.split('-').reverse().join('/')} - Sari Express`
+    ? `Estado de cuenta al ${ecPdfData.fecha_generacion.split('-').reverse().join('/')} - ${ecPdfData.empresa}`
     : ''
   const ecEmailBody = ecPdfData
     ? [
@@ -371,7 +386,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         'Por favor adjunte el PDF descargado antes de enviar este correo.',
         '',
         'Saludos cordiales,',
-        'Sari Express',
+        ecPdfData.empresa,
       ].join('\n')
     : ''
   const ecMailto = ecPdfData?.cliente_email
@@ -574,7 +589,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                   Descargar PDF
                 </button>
               )}
-              {ecPdfData && ecPdfData.items.length > 0 && ecMailto && (
+              {ecPdfData && ecPdfData.items.length > 0 && ecMailto && !IS_DEMO_ENVIRONMENT && (
                 <a
                   href={ecMailto}
                   className="inline-flex items-center gap-2 rounded-xl border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950/30"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, AlertCircle, Clock, Upload, ExternalLink } from 'lucide-react'
@@ -9,6 +9,8 @@ import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 type Proveedor = {
   id: string
@@ -55,6 +57,8 @@ const STATUS_COLOR: Record<string, string> = {
   Anulada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 }
 
+const SUPPLIER_TEXT_FIELDS = ['rtn', 'email', 'telefono', 'contacto', 'pais'] as const
+
 const fmtMoney = (n: number, cur: string) =>
   `${cur} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -66,6 +70,21 @@ const isOverdue = (d: string | null) => d ? new Date(d + 'T00:00:00') < new Date
 const saldoCuenta = (c: CuentaPagar) => {
   const pagado = (c.pagos_proveedor || []).reduce((sum, p) => sum + Number(p.monto || 0), 0)
   return Math.max(0, Number(c.monto || 0) - pagado)
+}
+
+async function querySupplierDetail(supplierId: string) {
+  return Promise.all([
+    supabase.from('proveedores').select('*, agents(id, name)').eq('id', supplierId).single(),
+    supabase.from('cuentas_pagar')
+      .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, documento_url, quotations(quotation_number), pagos_proveedor(monto)')
+      .eq('proveedor_id', supplierId)
+      .order('created_at', { ascending: false }),
+    supabase.from('quotations')
+      .select('id, quotation_number, clientes(nombre)')
+      .eq('status', 'Ganada')
+      .order('created_at', { ascending: false })
+      .limit(80),
+  ])
 }
 
 export default function SupplierDetailPage() {
@@ -95,20 +114,8 @@ export default function SupplierDetailPage() {
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<Partial<Proveedor>>({})
 
-  const load = async () => {
-    setLoading(true)
-    const [{ data: prov }, { data: cp }, { data: quotations }] = await Promise.all([
-      supabase.from('proveedores').select('*, agents(id, name)').eq('id', id).single(),
-      supabase.from('cuentas_pagar')
-        .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, documento_url, quotations(quotation_number), pagos_proveedor(monto)')
-        .eq('proveedor_id', id)
-        .order('created_at', { ascending: false }),
-      supabase.from('quotations')
-        .select('id, quotation_number, clientes(nombre)')
-        .eq('status', 'Ganada')
-        .order('created_at', { ascending: false })
-        .limit(80),
-    ])
+  const load = useCallback(async () => {
+    const [{ data: prov }, { data: cp }, { data: quotations }] = await querySupplierDetail(id)
 
     if (!prov) {
       toast.error('Proveedor no encontrado')
@@ -121,9 +128,27 @@ export default function SupplierDetailPage() {
     setCuentas((cp || []) as unknown as CuentaPagar[])
     setApprovedQuotations((quotations || []) as unknown as ApprovedQuotation[])
     setLoading(false)
-  }
+  }, [id, router])
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => {
+    let active = true
+    void querySupplierDetail(id).then(([{ data: prov }, { data: cp }, { data: quotations }]) => {
+      if (!active) return
+      if (!prov) {
+        toast.error('Proveedor no encontrado')
+        router.push('/suppliers')
+        return
+      }
+      setProveedor(prov as unknown as Proveedor)
+      setEditForm(prov as unknown as Proveedor)
+      setCuentas((cp || []) as unknown as CuentaPagar[])
+      setApprovedQuotations((quotations || []) as unknown as ApprovedQuotation[])
+      setLoading(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [id, router])
 
   const saveEdit = async () => {
     if (!editForm.nombre?.trim()) {
@@ -212,6 +237,8 @@ export default function SupplierDetailPage() {
   }
 
   const uploadDocumento = async (cuentaId: string, file: File) => {
+    if (IS_DEMO_ENVIRONMENT) return
+
     if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
       toast.error('Solo se permiten archivos PDF')
       return
@@ -295,14 +322,16 @@ export default function SupplierDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={() => setEditMode(!editMode)} className={secondaryButtonClass}>
+          {!IS_DEMO_ENVIRONMENT && <button type="button" onClick={() => setEditMode(!editMode)} className={secondaryButtonClass}>
             {editMode ? 'Cancelar' : 'Editar'}
-          </button>
+          </button>}
           <button type="button" onClick={() => router.push('/suppliers')} className={secondaryButtonClass}>
             Volver
           </button>
         </div>
       </div>
+
+      <DemoReadOnlyNotice label="La ficha maestra del proveedor es de solo lectura. Puedes continuar el recorrido con sus cuentas por pagar ficticias." />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
@@ -324,10 +353,10 @@ export default function SupplierDetailPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-500">Nombre</label>
                 <input value={editForm.nombre || ''} onChange={setEF('nombre')} className={fieldClass} />
               </div>
-              {['rtn', 'email', 'telefono', 'contacto', 'pais'].map((f) => (
+              {SUPPLIER_TEXT_FIELDS.map((f) => (
                 <div key={f}>
                   <label className="mb-1 block text-xs font-medium text-slate-500 capitalize">{f}</label>
-                  <input value={(editForm as any)[f] || ''} onChange={setEF(f as any)} className={fieldClass} />
+                  <input value={editForm[f] || ''} onChange={setEF(f)} className={fieldClass} />
                 </div>
               ))}
               <div>
@@ -480,7 +509,7 @@ export default function SupplierDetailPage() {
                     <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/20">
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-slate-800 dark:text-slate-200">{c.descripcion}</div>
-                        {c.quotations && <div className="text-xs text-slate-400">Cot. {(c.quotations as any).quotation_number}</div>}
+                        {c.quotations && <div className="text-xs text-slate-400">Cot. {c.quotations.quotation_number}</div>}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400">{c.numero_factura_proveedor || '-'}</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-800 dark:text-slate-200">{fmtMoney(Number(c.monto), c.moneda)}</td>
@@ -507,7 +536,7 @@ export default function SupplierDetailPage() {
                               <ExternalLink className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <label
+                          {!IS_DEMO_ENVIRONMENT && <label
                             className={`cursor-pointer ${uploadingDocId === c.id ? 'opacity-40' : ''}`}
                             title={c.documento_url ? 'Reemplazar documento' : 'Subir documento'}
                           >
@@ -522,7 +551,7 @@ export default function SupplierDetailPage() {
                               disabled={uploadingDocId !== null}
                               onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDocumento(c.id, f) }}
                             />
-                          </label>
+                          </label>}
                         </div>
                       </td>
                       <td className="px-3 py-2.5">

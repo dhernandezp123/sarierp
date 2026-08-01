@@ -1,3 +1,5 @@
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+
 export type CompanyBranding = {
   legal_name: string | null
   trade_name: string | null
@@ -38,17 +40,16 @@ export const COMPANY_BRANDING_SELECT = `
   miami_phone
 `
 
-export const DEFAULT_COMPANY_BRANDING: CompanyBranding = {
-  legal_name: 'SARI EXPRESS S DE R.L. DE C.V.',
-  trade_name: 'Sari Express',
-  rtn: '08019003239182',
-  address:
-    'BO. LOS ANDES 9 CALLE 12-13 AVE N.E, San Pedro Sula, Cortes, Honduras, CP: 21101',
+const DEMO_COMPANY_BRANDING: CompanyBranding = {
+  legal_name: 'ATLAS FORWARDING DEMO',
+  trade_name: 'Atlas Forwarding Demo',
+  rtn: 'DEMO-SIN-VALIDEZ',
+  address: 'Dirección ficticia para demostración',
   city: 'San Pedro Sula',
   country: 'Honduras',
   phone: null,
   email: null,
-  logo_url: '/logo/sari-logo.png',
+  logo_url: '/brand/lockup-h-color.png',
   miami_consignee: null,
   miami_address_line: null,
   miami_suite_prefix: null,
@@ -58,6 +59,30 @@ export const DEFAULT_COMPANY_BRANDING: CompanyBranding = {
   miami_country: 'USA',
   miami_phone: null,
 }
+
+const UNCONFIGURED_COMPANY_BRANDING: CompanyBranding = {
+  legal_name: 'EMPRESA NO CONFIGURADA',
+  trade_name: 'Forwarders ERP',
+  rtn: null,
+  address: null,
+  city: null,
+  country: 'Honduras',
+  phone: null,
+  email: null,
+  logo_url: '/brand/lockup-h-color.png',
+  miami_consignee: null,
+  miami_address_line: null,
+  miami_suite_prefix: null,
+  miami_city: 'Miami',
+  miami_state: 'FL',
+  miami_zip: null,
+  miami_country: 'USA',
+  miami_phone: null,
+}
+
+export const DEFAULT_COMPANY_BRANDING = IS_DEMO_ENVIRONMENT
+  ? DEMO_COMPANY_BRANDING
+  : UNCONFIGURED_COMPANY_BRANDING
 
 const clean = (value: unknown) => {
   if (typeof value !== 'string') return null
@@ -94,12 +119,12 @@ export function normalizeCompanyBranding(
 
 export function getCompanyDisplayName(company?: CompanyBranding | null) {
   const normalized = normalizeCompanyBranding(company)
-  return normalized.legal_name || normalized.trade_name || 'Sari Express'
+  return normalized.legal_name || normalized.trade_name || 'Forwarders ERP'
 }
 
 export function getCompanyTradeName(company?: CompanyBranding | null) {
   const normalized = normalizeCompanyBranding(company)
-  return normalized.trade_name || normalized.legal_name || 'Sari Express'
+  return normalized.trade_name || normalized.legal_name || 'Forwarders ERP'
 }
 
 export function getCompanyAddressLines(company?: CompanyBranding | null) {

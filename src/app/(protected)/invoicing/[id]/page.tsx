@@ -289,7 +289,7 @@ export default function InvoiceDetailPage() {
   if (loading || !invoice) return <PageSkeleton cards={2} rows={4} />
 
   const makeReceiptData = (p: Payment): ReciboPagoData => ({
-    empresa: companySetting?.legal_name || companySetting?.trade_name || 'Sari Express',
+    empresa: getCompanyDisplayName(normalizeCompanyBranding(companySetting)),
     empresa_rtn: companySetting?.rtn ?? null,
     empresa_dir: companySetting?.address ?? null,
     empresa_tel: companySetting?.phone ?? null,

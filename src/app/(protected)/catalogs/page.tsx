@@ -6,6 +6,9 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { useUser } from '@/src/hooks/useUser'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { canManageSensitiveSettings } from '@/src/lib/demo-environment'
 
 type Country = {
   id: string
@@ -87,6 +90,8 @@ const emptyClientRateForm = {
 const portTypes = ['Puerto', 'Ciudad', 'Aeropuerto', 'Frontera']
 
 export default function CatalogsPage() {
+  const { profile } = useUser()
+  const canManageCatalogs = canManageSensitiveSettings(profile)
   const [countries, setCountries] = useState<Country[]>([])
   const [ports, setPorts] = useState<Port[]>([])
   const [containerTypes, setContainerTypes] = useState<ContainerType[]>([])
@@ -202,6 +207,10 @@ export default function CatalogsPage() {
   }
 
   const createCountry = async () => {
+    if (!canManageCatalogs) {
+      toast.info('Los catálogos son de solo lectura en el ambiente demo')
+      return
+    }
     if (!countryName.trim()) {
       toast.info('Nombre de país requerido')
       return
@@ -222,6 +231,10 @@ export default function CatalogsPage() {
   }
 
   const createPort = async () => {
+    if (!canManageCatalogs) {
+      toast.info('Los catálogos son de solo lectura en el ambiente demo')
+      return
+    }
     if (!portForm.name.trim()) {
       toast.info('Nombre de puerto requerido')
       return
@@ -253,6 +266,10 @@ export default function CatalogsPage() {
   }
 
   const saveContainerType = async () => {
+    if (!canManageCatalogs) {
+      toast.info('Los catálogos son de solo lectura en el ambiente demo')
+      return
+    }
     const name = containerForm.name.trim()
     const category = containerForm.category.trim() || null
 
@@ -295,6 +312,10 @@ export default function CatalogsPage() {
   }
 
   const toggleContainerType = async (item: ContainerType) => {
+    if (!canManageCatalogs) {
+      toast.info('Los catálogos son de solo lectura en el ambiente demo')
+      return
+    }
     const nextActive = item.active === false
 
     setContainerTypes((current) =>
@@ -316,6 +337,10 @@ export default function CatalogsPage() {
   }
 
   const saveServiceProduct = async () => {
+    if (!canManageCatalogs) {
+      toast.info('Los catálogos son de solo lectura en el ambiente demo')
+      return
+    }
     const value = serviceProductForm.value.trim()
     const label = serviceProductForm.label.trim()
 
@@ -357,6 +382,10 @@ export default function CatalogsPage() {
   }
 
   const toggleServiceProduct = async (item: ServiceProductRow) => {
+    if (!canManageCatalogs) {
+      toast.info('Los catálogos son de solo lectura en el ambiente demo')
+      return
+    }
     const nextActive = item.active === false
 
     setServiceProducts((current) =>
@@ -378,6 +407,10 @@ export default function CatalogsPage() {
   }
 
   const saveClientRateCatalogItem = async () => {
+    if (!canManageCatalogs) {
+      toast.info('Los catálogos son de solo lectura en el ambiente demo')
+      return
+    }
     const code = clientRateForm.code.trim()
     const label = clientRateForm.label.trim()
     const category = clientRateForm.category.trim()
@@ -432,6 +465,10 @@ export default function CatalogsPage() {
   }
 
   const toggleClientRateCatalogItem = async (item: ClientRateCatalogRow) => {
+    if (!canManageCatalogs) {
+      toast.info('Los catálogos son de solo lectura en el ambiente demo')
+      return
+    }
     const nextActive = item.active === false
 
     setClientRateCatalog((current) =>
@@ -460,6 +497,8 @@ export default function CatalogsPage() {
           Tablas maestras para pricing y cotizaciones de forwarders.
         </p>
       </div>
+
+      <DemoReadOnlyNotice label="Los datos maestros compartidos pueden consultarse y filtrarse, pero no editarse durante una demo." />
 
       <section className={cardClass}>
         <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 dark:border-slate-800 lg:flex-row lg:items-start lg:justify-between">

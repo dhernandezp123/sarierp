@@ -8,11 +8,13 @@ import { useTheme } from 'next-themes'
 import { useUser } from '@/src/hooks/useUser'
 import { getSystemAlerts, type SystemAlert } from '@/src/lib/alerts'
 import { supabase } from '@/src/lib/supabase/client'
+import { PLATFORM_NAME } from '@/src/lib/platform-branding'
 import NewAgentDialog from '@/src/components/agents/NewAgentDialog'
 import NewClientDialog from '@/src/components/clientes/NewClientDialog'
 import ClientProfileDialog from '@/src/components/clientes/ClientProfileDialog'
 import EmailTemplatesDialog from '@/src/components/email/EmailTemplatesDialog'
 import ReferenceInsuranceCalculatorDialog from '@/src/components/quotations/ReferenceInsuranceCalculatorDialog'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 // Acciones rapidas disponibles segun rol; con `href` navegan y con
 // `action` abren un modal sin salir de la pagina actual.
@@ -167,9 +169,14 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
     saveSeenAlertIds(user.id, nextSeenIds)
   }
 
-  const visibleActions = QUICK_ACTIONS.filter((action) =>
-    !profile?.rol || action.roles.includes(profile.rol)
-  )
+  const visibleActions = QUICK_ACTIONS.filter((action) => {
+    const roleCanUseAction = !profile?.rol || action.roles.includes(profile.rol)
+    const isBlockedDemoMasterAction = IS_DEMO_ENVIRONMENT && (
+      action.action === 'new-agent'
+      || action.action === 'email-templates'
+    )
+    return roleCanUseAction && !isBlockedDemoMasterAction
+  })
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6 dark:border-slate-700/60 dark:bg-[#081120]/90">
@@ -195,7 +202,7 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
 
         <div className="hidden sm:block">
           <p className="text-sm font-semibold text-slate-900 dark:text-white">
-            Sari Express ERP
+            {PLATFORM_NAME}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
             Plataforma logistica interna

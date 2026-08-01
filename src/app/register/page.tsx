@@ -11,6 +11,7 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
+import { AUTH_BACKGROUND_IMAGE } from '@/src/lib/demo-environment'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -95,7 +96,7 @@ export default function RegisterPage() {
     <div
       className="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat"
       style={{
-        backgroundImage: "url('/login-bg.png')",
+        backgroundImage: AUTH_BACKGROUND_IMAGE,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
@@ -108,7 +109,7 @@ export default function RegisterPage() {
             <div className="mb-10 text-center">
               <Image
                 src="/brand/lockup-h-blanco.png"
-                alt="Sari Express"
+                alt="Forwarders ERP"
                 width={256}
                 height={140}
                 priority

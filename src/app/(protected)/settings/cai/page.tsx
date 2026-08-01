@@ -8,6 +8,8 @@ import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { canManageSensitiveSettings } from '@/src/lib/demo-environment'
 
 type CaiRange = {
   id: string
@@ -66,7 +68,7 @@ const emptyForm = {
 
 export default function CaiSettingsPage() {
   const { profile } = useUser()
-  const isAdmin = profile?.rol === 'Admin'
+  const isAdmin = canManageSensitiveSettings(profile)
 
   const [loading, setLoading] = useState(true)
   const [ranges, setRanges] = useState<CaiRange[]>([])
@@ -170,6 +172,8 @@ export default function CaiSettingsPage() {
           </button>
         )}
       </div>
+
+      <DemoReadOnlyNotice label="Los rangos fiscales son sintéticos y no pueden crearse, activarse ni eliminarse durante una evaluación." />
 
       <div className="flex flex-wrap gap-2">
         {FISCAL_DOCUMENT_TYPES.map((type) => (

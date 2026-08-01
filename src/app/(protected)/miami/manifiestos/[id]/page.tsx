@@ -13,6 +13,7 @@ import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { NewCarrierModal } from '@/src/components/miami/NewCarrierModal'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 type Manifest = {
   id: string
@@ -164,7 +165,7 @@ export default function ManifiestoDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!deletePackage) return
+    if (!deletePackage || IS_DEMO_ENVIRONMENT) return
     try {
       const { data, error } = await supabase.rpc('delete_miami_manifest_package', {
         p_package_id: deletePackage.id,
@@ -209,6 +210,10 @@ export default function ManifiestoDetailPage() {
   }
 
   const handleDeleteManifest = async () => {
+    if (IS_DEMO_ENVIRONMENT || profile?.is_demo_user === true) {
+      toast.info('La eliminación completa de manifiestos está bloqueada en el ambiente demo')
+      return
+    }
     if (!deleteReason.trim()) {
       toast.error('Indica el motivo de la eliminación')
       return
@@ -294,6 +299,8 @@ export default function ManifiestoDetailPage() {
   if (!manifest) return null
   const isOpen = manifest.status === 'Abierto'
   const isAdmin = profile?.rol === 'Admin'
+  const canDeleteManifest =
+    isAdmin && !IS_DEMO_ENVIRONMENT && profile?.is_demo_user !== true
 
   return (
     <div className="space-y-6">
@@ -346,14 +353,14 @@ export default function ManifiestoDetailPage() {
         <div className="flex flex-wrap items-center gap-3">
           {isOpen && (
             <>
-              <button
+              {!IS_DEMO_ENVIRONMENT && <button
                 type="button"
                 onClick={() => setCarrierModalOpen(true)}
                 className={`${secondaryButtonClass} inline-flex items-center gap-2`}
               >
                 <Truck className="h-4 w-4" />
                 Nuevo transportista
-              </button>
+              </button>}
               <button
                 type="button"
                 onClick={() => setConfirmClose(true)}
@@ -365,7 +372,7 @@ export default function ManifiestoDetailPage() {
               </button>
             </>
           )}
-          {isAdmin && (
+          {canDeleteManifest && (
             <button
               type="button"
               onClick={() => { setDeleteManifestOpen(true); setDeleteReason('') }}
@@ -401,7 +408,7 @@ export default function ManifiestoDetailPage() {
                 className={`${fieldClass} w-auto ${!manifest.carrier ? 'border-amber-400 dark:border-amber-600' : ''}`}
               >
                 <option value="" disabled>Seleccionar...</option>
-                {carriers.map(c => (
+                {carriers.filter(c => !IS_DEMO_ENVIRONMENT || c !== 'Otro').map(c => (
                   <option key={c} value={c}>{c === 'Otro' ? 'Otro (agregar nuevo...)' : c}</option>
                 ))}
               </select>
@@ -514,7 +521,7 @@ export default function ManifiestoDetailPage() {
                             >
                               Asignar
                             </button>
-                            {isOpen && (
+                            {isOpen && !IS_DEMO_ENVIRONMENT && (
                               <button
                                 type="button"
                                 onClick={() => setDeletePackage(p)}
@@ -538,12 +545,12 @@ export default function ManifiestoDetailPage() {
         )}
       </div>
 
-      <NewCarrierModal
+      {!IS_DEMO_ENVIRONMENT && <NewCarrierModal
         open={carrierModalOpen}
         onClose={() => setCarrierModalOpen(false)}
         carriers={carriers}
         onCreated={handleCarrierCreated}
-      />
+      />}
 
       {/* Delete manifest modal (Admin) */}
       {deleteManifestOpen && (

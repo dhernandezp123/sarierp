@@ -11,6 +11,7 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
+import { AUTH_BACKGROUND_IMAGE } from '@/src/lib/demo-environment'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -139,7 +140,7 @@ export default function OnboardingPage() {
   return (
     <div
       className="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: "url('/login-bg.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}
+      style={{ backgroundImage: AUTH_BACKGROUND_IMAGE, backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.15),transparent_35%)]" />
 
@@ -149,7 +150,7 @@ export default function OnboardingPage() {
             <div className="mb-8 text-center">
               <Image
                 src="/brand/lockup-h-blanco.png"
-                alt="Sari Express"
+                alt="Forwarders ERP"
                 width={256}
                 height={140}
                 priority

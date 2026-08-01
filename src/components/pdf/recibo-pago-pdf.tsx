@@ -1,4 +1,5 @@
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer'
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 export type ReciboPagoData = {
   empresa: string
@@ -43,6 +44,7 @@ export function ReciboPagoPdf({ data }: { data: ReciboPagoData }) {
   return (
     <Document>
       <Page size="A5" style={styles.page}>
+        <DemoPdfWatermark />
         <Text style={styles.titulo}>RECIBO DE PAGO</Text>
         <Text style={styles.empresa}>
           {data.empresa}{data.empresa_rtn ? ` · RTN ${data.empresa_rtn}` : ''}

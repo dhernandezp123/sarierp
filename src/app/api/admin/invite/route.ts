@@ -56,12 +56,30 @@ export async function POST(request: Request) {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('rol, status, is_active')
+      .select('rol, status, is_active, is_demo_user')
       .eq('id', authData.user.id)
       .single()
 
     if (profileError || profile?.rol !== 'Admin' || profile?.status !== 'Aprobado' || profile?.is_active === false) {
       return NextResponse.json({ error: 'Solo Admin puede invitar usuarios' }, { status: 403 })
+    }
+
+    const { data: environment } = await supabaseAdmin
+      .from('platform_environment')
+      .select('environment')
+      .eq('singleton', true)
+      .maybeSingle()
+
+    const isDemoEnvironment =
+      process.env.APP_ENV === 'demo'
+      || process.env.NEXT_PUBLIC_APP_ENV === 'demo'
+      || environment?.environment === 'demo'
+
+    if (isDemoEnvironment || profile.is_demo_user === true) {
+      return NextResponse.json(
+        { error: 'Las invitaciones están bloqueadas en el ambiente demo' },
+        { status: 403 }
+      )
     }
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'

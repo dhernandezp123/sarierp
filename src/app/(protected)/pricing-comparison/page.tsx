@@ -4319,7 +4319,7 @@ const profitabilityColor =
                           <div className="flex items-center justify-between gap-4">
                             <div>
                               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                                Costo base Sari
+                                Costo base
                               </p>
                               <p className="mt-1 text-3xl font-bold text-slate-900 dark:text-white">
                                 {agentForm.moneda || 'USD'}{' '}
@@ -4420,7 +4420,7 @@ const profitabilityColor =
                                 </span>
                               </div>
                               <div className="flex items-center justify-between gap-4 border-t border-blue-200 pt-2 font-bold dark:border-blue-800/60">
-                                <span className="text-slate-900 dark:text-white">Costo Base Sari</span>
+                                <span className="text-slate-900 dark:text-white">Costo base</span>
                                 <span className="tabular-nums text-blue-800 dark:text-blue-200">
                                   {agentForm.moneda || 'USD'} {formatCurrency(agentTotalCost)}
                                 </span>
@@ -5077,7 +5077,7 @@ const profitabilityColor =
                           Gestión operativa Miami
                         </h2>
                         <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                          Esta cotización usa tarifas propias de Sari Express. No requiere comparativo de agentes.
+                          Esta cotización usa tarifas propias de la empresa. No requiere comparativo de agentes.
                         </p>
 
                         <div className="mt-4 grid gap-3 sm:grid-cols-4">
@@ -5835,7 +5835,7 @@ const profitabilityColor =
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
                       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/50">
-                      <p className="text-xs text-gray-500 dark:text-slate-400">Costo Base Sari</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Costo base</p>
                       <p className="text-xl font-bold dark:text-white">
                         USD {formatCurrency(totalCost)}
                       </p>
@@ -5962,7 +5962,7 @@ const profitabilityColor =
                               <div className="grid gap-3 sm:grid-cols-3">
                                 <div>
                                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                    Costo Base Sari / cont.
+                                    Costo base / cont.
                                   </p>
                                   <p className="mt-1 font-bold text-slate-900 dark:text-white">
                                     USD {formatCurrency(container.costPerContainer)}

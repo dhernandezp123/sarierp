@@ -7,6 +7,11 @@ import Image from 'next/image'
 import { Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import { DemoEnvironmentBanner } from '@/src/components/demo/DemoEnvironmentBanner'
+import {
+  IS_DEMO_ENVIRONMENT,
+  isDemoAccessExpired,
+} from '@/src/lib/demo-environment'
 
 const emailInputId = 'portal-login-email'
 const passwordInputId = 'portal-login-password'
@@ -28,13 +33,31 @@ export default function PortalLoginPage() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('rol, status, is_active')
+        .select('rol, status, is_active, is_demo_user, demo_expires_at, demo_access_grant_id')
         .eq('id', data.user.id)
         .single()
 
       if (!profile || profile.status !== 'Aprobado' || !profile.is_active) {
         await supabase.auth.signOut()
         toast.error('Tu cuenta no está activa. Contacta a soporte.')
+        return
+      }
+
+      if (
+        IS_DEMO_ENVIRONMENT
+        && (
+          profile.is_demo_user !== true
+          || !profile.demo_access_grant_id
+        )
+      ) {
+        await supabase.auth.signOut()
+        toast.error('Esta cuenta no está habilitada para el ambiente demo.')
+        return
+      }
+
+      if (isDemoAccessExpired(profile)) {
+        await supabase.auth.signOut()
+        toast.error('El acceso temporal de esta cuenta demo ha vencido.')
         return
       }
 
@@ -121,6 +144,7 @@ export default function PortalLoginPage() {
       {/* RIGHT · LOGIN FORM */}
       <div className="flex w-full flex-col justify-center bg-white px-8 py-12 dark:bg-[#020817] lg:w-[480px] lg:flex-none lg:px-14 lg:py-16">
         <div className="mx-auto w-full max-w-[360px]">
+          <DemoEnvironmentBanner className="mb-7 rounded-xl border" />
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <Image
               src="/brand/isotipo-color.png"
@@ -200,21 +224,25 @@ export default function PortalLoginPage() {
               {loading ? 'Ingresando...' : 'Ingresar'}
             </button>
 
-            <div className="text-center">
-              <Link href="/portal/forgot-password" className="text-sm font-medium text-[#0038BD] hover:underline dark:text-blue-400">
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </div>
+            {!IS_DEMO_ENVIRONMENT && (
+              <div className="text-center">
+                <Link href="/portal/forgot-password" className="text-sm font-medium text-[#0038BD] hover:underline dark:text-blue-400">
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
+            )}
           </form>
 
           <div className="my-8 h-px bg-[#EDEFF3] dark:bg-slate-800" />
 
-          <p className="text-center text-sm leading-relaxed text-[#5B6573] dark:text-slate-400">
-            ¿Aún no tienes acceso?{' '}
-            <Link href="/portal/register" className="font-semibold text-[#0038BD] hover:underline dark:text-blue-400">
-              Solicitar cuenta
-            </Link>
-          </p>
+          {!IS_DEMO_ENVIRONMENT && (
+            <p className="text-center text-sm leading-relaxed text-[#5B6573] dark:text-slate-400">
+              ¿Aún no tienes acceso?{' '}
+              <Link href="/portal/register" className="font-semibold text-[#0038BD] hover:underline dark:text-blue-400">
+                Solicitar cuenta
+              </Link>
+            </p>
+          )}
           <p className="mt-4.5 text-center text-xs leading-relaxed text-[#9AA3B2] dark:text-slate-500">
             ¿Problemas para ingresar? Contacta a tu agente de carga.
           </p>

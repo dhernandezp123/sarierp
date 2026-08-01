@@ -82,7 +82,7 @@ export default function PortalRegisterPage() {
             Solicitar acceso de cliente
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Tu cuenta será revisada y vinculada por el equipo de Sari Express.
+            Tu cuenta será revisada y vinculada por el equipo de tu agente de carga.
           </p>
         </div>
 

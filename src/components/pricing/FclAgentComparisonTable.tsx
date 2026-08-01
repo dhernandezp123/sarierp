@@ -4,6 +4,7 @@ import { useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { Printer } from 'lucide-react'
 import { toast } from 'sonner'
+import { getDemoHtmlWatermark } from '@/src/lib/demo-print'
 
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import { getCarrier } from '@/src/lib/constants/carriers'
@@ -552,6 +553,7 @@ export function FclAgentComparisonTable({
       : 'Costos de agentes'
 
     printWindow.document.open()
+    const demoWatermark = getDemoHtmlWatermark()
     printWindow.document.write(`<!doctype html>
       <html lang="es">
         <head>
@@ -559,6 +561,7 @@ export function FclAgentComparisonTable({
           <title></title>
           <style>
             @page { size: A4 landscape; margin: 8mm; }
+            ${demoWatermark.styles}
             * { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             body {
               width: min(1120px, calc(100vw - 32px));
@@ -605,6 +608,7 @@ export function FclAgentComparisonTable({
           </style>
         </head>
         <body>
+          ${demoWatermark.markup}
           <h1></h1>
           <p class="meta">Comparativo interno de costos FCL</p>
           <main></main>

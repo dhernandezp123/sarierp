@@ -9,6 +9,8 @@ import { useUser } from '../../../../hooks/useUser'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { canManageSensitiveSettings } from '@/src/lib/demo-environment'
 import {
   UnsavedChangesGuard,
   markFormSaved,
@@ -49,7 +51,7 @@ const PREVIEW_VARS: Record<string, Record<string, string>> = {
     dias_libres: '14 días',
     tarifa_comercial: 'USD 5,865.00',
     valida_hasta: '31/08/2026',
-    cierre: 'Saludos cordiales,\nSari Express — Equipo Comercial',
+    cierre: 'Saludos cordiales,\nEquipo Comercial',
   },
 }
 
@@ -65,7 +67,7 @@ function formatUpdatedAt(value: string | null) {
 
 export default function EmailTemplatesPage() {
   const { profile } = useUser()
-  const isAdmin = profile?.rol === 'Admin'
+  const isAdmin = canManageSensitiveSettings(profile)
 
   const [templates, setTemplates] = useState<TemplateRow[]>([])
   const [selectedKey, setSelectedKey] = useState<string>('')
@@ -220,7 +222,7 @@ export default function EmailTemplatesPage() {
       nombre: 'Nueva plantilla',
       descripcion:
         'Plantilla personalizada. Disponible en el modal de correo del detalle de la cotización.',
-      asunto: 'Cotización {{numero_cotizacion}} - Sari Express',
+      asunto: 'Cotización {{numero_cotizacion}} - Forwarders ERP',
       cuerpo: 'Buen día {{cliente}},\n\n\n\n{{cierre}}',
     })
 
@@ -279,6 +281,8 @@ export default function EmailTemplatesPage() {
           datos reales; las líneas cuyas variables queden vacías se omiten.
         </p>
       </div>
+
+      <DemoReadOnlyNotice label="Puedes revisar y previsualizar las plantillas, pero no crear, guardar, restaurar ni suprimir contenido compartido." />
 
       {templates.length === 0 ? (
         <div className={cardClass}>

@@ -12,6 +12,7 @@ import {
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import { calculateTaxAmount, normalizeTaxRatePercent } from '@/src/lib/tax'
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 function formatCurrency(value: number) {
   return Number(value || 0).toLocaleString('en-US', {
@@ -510,9 +511,10 @@ export default function CostDetailPDF({
   return (
     <Document>
       <Page size="LETTER" orientation="portrait" style={styles.page} wrap={false}>
+        <DemoPdfWatermark />
         <View style={styles.header}>
           <View>
-            <Image src="/logo/sari-logo.png" style={styles.logo} />
+            <Image src="/brand/lockup-h-color.png" style={styles.logo} />
           </View>
 
           <View style={styles.headerRight}>

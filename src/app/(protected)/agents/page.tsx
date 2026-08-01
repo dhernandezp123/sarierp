@@ -7,6 +7,26 @@ import { supabase } from '../../../lib/supabase/client'
 import { cardClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import AgentForm from '@/src/components/agents/AgentForm'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+
+type AgentListRow = {
+  id: string
+  name: string
+  type: string | null
+  country: string | null
+  city: string | null
+  contact_name: string | null
+  email: string | null
+  currency: string | null
+  profit_per_container: number | null
+  mbl_fee: number | null
+}
+
+const queryAgents = () => supabase
+  .from('agents')
+  .select('*')
+  .order('created_at', { ascending: false })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,21 +45,29 @@ function getTipoBadge(tipo?: string | null) {
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function AgentsPage() {
-  const [agents,  setAgents]  = useState<any[]>([])
+  const [agents,  setAgents]  = useState<AgentListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
 
-  useEffect(() => { fetchAgents() }, [])
-
   const fetchAgents = async () => {
-    const { data, error } = await supabase
-      .from('agents')
-      .select('*')
-      .order('created_at', { ascending: false })
+    const { data, error } = await queryAgents()
     if (error) toast.error('Error al cargar agentes')
-    setAgents(data || [])
+    setAgents((data || []) as AgentListRow[])
     setLoading(false)
   }
+
+  useEffect(() => {
+    let active = true
+    void queryAgents().then(({ data, error }) => {
+      if (!active) return
+      if (error) toast.error('Error al cargar agentes')
+      setAgents((data || []) as AgentListRow[])
+      setLoading(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const filtered = agents.filter((a) => {
     const q = search.toLowerCase()
@@ -66,14 +94,16 @@ export default function AgentsPage() {
           Agentes de Carga
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Catálogo operativo de agentes con tarifas base y rutas. Para pagos y cuentas por pagar, ve a <a href="/suppliers" className="text-blue-600 hover:underline dark:text-blue-400">Proveedores</a>.
+          Catálogo operativo de agentes con tarifas base y rutas. Para pagos y cuentas por pagar, ve a <Link href="/suppliers" className="text-blue-600 hover:underline dark:text-blue-400">Proveedores</Link>.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+      <DemoReadOnlyNotice label="Los agentes y sus tarifas base son datos maestros compartidos; puedes consultarlos durante la demo." />
+
+      <div className={`grid gap-6 ${IS_DEMO_ENVIRONMENT ? '' : 'lg:grid-cols-[340px_1fr]'}`}>
 
         {/* ── Formulario nuevo agente ── */}
-        <div className={`${cardClass} self-start`}>
+        {!IS_DEMO_ENVIRONMENT && <div className={`${cardClass} self-start`}>
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">
             Nuevo Agente
           </h2>
@@ -84,7 +114,7 @@ export default function AgentsPage() {
           <div className="mt-5">
             <AgentForm onCreated={fetchAgents} />
           </div>
-        </div>
+        </div>}
 
         {/* ── Tabla de agentes ── */}
         <div className={`${cardClass} p-0 overflow-hidden`}>

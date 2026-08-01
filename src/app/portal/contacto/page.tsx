@@ -18,6 +18,7 @@ import {
   getCompanyAddressLines,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 type Office = {
   city: string
@@ -244,7 +245,7 @@ export default function ContactoPage() {
                       {office.phone}
                     </a>
                   )}
-                  {office.email && (
+                  {office.email && !IS_DEMO_ENVIRONMENT && (
                     <a
                       href={`mailto:${office.email}`}
                       className="flex items-center gap-3 text-sm text-slate-700 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400"

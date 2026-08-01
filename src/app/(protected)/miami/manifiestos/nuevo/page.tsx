@@ -9,6 +9,7 @@ import { useMiamiCarriers } from '@/src/hooks/useMiamiCarriers'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { NewCarrierModal } from '@/src/components/miami/NewCarrierModal'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 export default function NuevoManifiestoPage() {
   const router = useRouter()
@@ -78,7 +79,7 @@ export default function NuevoManifiestoPage() {
               className={fieldClass}
             >
               <option value="">Seleccionar transportista...</option>
-              {carriers.map(c => (
+              {carriers.filter(c => !IS_DEMO_ENVIRONMENT || c !== 'Otro').map(c => (
                 <option key={c} value={c}>{c === 'Otro' ? 'Otro (agregar nuevo...)' : c}</option>
               ))}
             </select>
@@ -116,7 +117,7 @@ export default function NuevoManifiestoPage() {
         </button>
       </div>
 
-      <NewCarrierModal
+      {!IS_DEMO_ENVIRONMENT && <NewCarrierModal
         open={carrierModalOpen}
         onClose={() => setCarrierModalOpen(false)}
         carriers={carriers}
@@ -124,7 +125,7 @@ export default function NuevoManifiestoPage() {
           await reloadCarriers()
           setCarrier(name)
         }}
-      />
+      />}
     </div>
   )
 }

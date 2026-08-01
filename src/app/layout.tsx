@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/src/components/theme-provider";
+import { IS_DEMO_ENVIRONMENT } from "@/src/lib/demo-environment";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,7 +21,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Forwarders ERP by DHer",
+  title: "Forwarders ERP by Hernova Systems",
   description:
     "ERP para freight forwarders: cotizaciones, pricing, operaciones, documentos y margenes en una sola plataforma.",
   icons: {
@@ -31,6 +32,21 @@ export const metadata: Metadata = {
     apple: { url: '/brand/app-icon-1024.png' },
     shortcut: '/brand/app-icon-32.png',
   },
+  robots: IS_DEMO_ENVIRONMENT
+    ? {
+        index: false,
+        follow: false,
+        nocache: true,
+        googleBot: {
+          index: false,
+          follow: false,
+          noimageindex: true,
+        },
+      }
+    : {
+        index: true,
+        follow: true,
+      },
 };
 
 export default function RootLayout({

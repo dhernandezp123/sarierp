@@ -9,6 +9,9 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { UserProvider, useUser } from '@/src/hooks/useUser'
 import { useClientNotifications } from '@/src/hooks/useClientNotifications'
+import { DemoAcceptanceGate } from '@/src/components/demo/DemoAcceptanceGate'
+import { DemoEnvironmentBanner } from '@/src/components/demo/DemoEnvironmentBanner'
+import { DemoPrintWatermark } from '@/src/components/demo/DemoPrintWatermark'
 
 function PortalShell({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useUser()
@@ -53,6 +56,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   ]
 
   return (
+    <DemoAcceptanceGate profile={profile}>
     <div className="min-h-screen bg-slate-50 dark:bg-[#020817]">
       {/* Top nav */}
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#07111F]/95 backdrop-blur-sm">
@@ -124,6 +128,8 @@ function PortalShell({ children }: { children: React.ReactNode }) {
 
       </header>
 
+      <DemoEnvironmentBanner />
+
       <main className="mx-auto max-w-4xl px-4 py-6 pb-24 sm:pb-10">
         {children}
       </main>
@@ -179,7 +185,9 @@ function PortalShell({ children }: { children: React.ReactNode }) {
           Perfil
         </Link>
       </nav>
+      <DemoPrintWatermark />
     </div>
+    </DemoAcceptanceGate>
   )
 }
 

@@ -13,6 +13,7 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 type RoutingOrderPdfProps = {
   routing: any
@@ -240,7 +241,7 @@ export default function RoutingOrderPDF({
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
   const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
-  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
+  const companyLogo = companyBranding.logo_url || '/brand/lockup-h-color.png'
   const quote = quotation || routing?.quotation || {}
   const client = quote?.cliente || quote?.clientes || cliente || routing?.cliente || {}
   const freeDays =
@@ -284,6 +285,7 @@ export default function RoutingOrderPDF({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        <DemoPdfWatermark />
         <View style={styles.header}>
           <Image src={companyLogo} style={styles.logo} />
 
@@ -361,6 +363,7 @@ export default function RoutingOrderPDF({
       </Page>
 
       <Page size="A4" style={styles.page}>
+        <DemoPdfWatermark />
         <View style={styles.header}>
           <Image src={companyLogo} style={styles.logo} />
 
@@ -392,7 +395,7 @@ export default function RoutingOrderPDF({
 
         <Section title="3. DOCUMENTS">
           <Text style={styles.noteBox}>
-            Send all operational updates and document drafts to Sari Express Operations before final release. Request and share commercial invoice, packing list and any relevant origin, customs, insurance, inspection or regulatory documents required for destination clearance.
+            Send all operational updates and document drafts to the forwarder&apos;s operations team before final release. Request and share commercial invoice, packing list and any relevant origin, customs, insurance, inspection or regulatory documents required for destination clearance.
           </Text>
         </Section>
 

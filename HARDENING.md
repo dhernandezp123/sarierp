@@ -1,4 +1,4 @@
-# Sari Express ERP — Hardening y Trial
+# Sari Express ERP — Hardening, Demo y Pilot
 
 Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
@@ -1350,7 +1350,7 @@ Fecha: 22/06/2026
 | 8 | Reportes, dashboards, monedas, GP y fechas | Pendiente |
 | 9 | UX, responsive y protección de formularios | Pendiente |
 | 10 | Calidad, modularización, documentación y CI | Pendiente |
-| 11 | Ambiente Trial aislado | Pendiente |
+| 11 | Ambiente Demo compartido y Pilot aislado | En progreso |
 | 12 | E2E, UAT freight-forwarding y release | Pendiente |
 
 ## Hallazgos
@@ -1375,6 +1375,9 @@ Fecha: 22/06/2026
 | SEC-014 | Invitado aprobado no puede iniciar sesión porque onboarding no establece contraseña | Alta | Completado |
 | SEC-015 | Portal no ofrece recuperación segura de contraseña ni callback PKCE | Alta | Completado |
 | SEC-016 | Portal de envíos abre tablas internas y puede exponer notas/contactos operativos | Crítica | En validación |
+| SEC-017 | Cualquier usuario autenticado podía leer los datos personales de solicitudes comerciales en `leads` | Crítica | En validación |
+| SEC-018 | Un slot Demo reutilizado podía conservar access/refresh tokens y términos de una entrega anterior | Crítica | En validación |
+| SEC-019 | Storage y URLs de tracking podían exponer contenido externo o permitir cargas dentro del sandbox compartido | Alta | En validación |
 
 ### Integridad y finanzas
 
@@ -1473,45 +1476,64 @@ Fecha: 22/06/2026
 
 | ID | Hallazgo | Prioridad | Estado |
 |---|---|---|---|
-| LEG-001 | La página pública no identifica todavía denominación legal, RTN/ID y domicilio contractual de DHer | Crítica | Bloqueado por datos del titular |
+| LEG-001 | Se incorporaron denominación legal y ubicación comercial de Hernova; falta RTN/ID y revisión contractual | Alta | En validación |
 | LEG-002 | SLA, respaldos, retención, exportación y eliminación deben reflejar capacidades y planes realmente ofrecidos | Alta | Pendiente de definición comercial |
 | LEG-003 | Términos, privacidad, tratamiento de datos y limitación de responsabilidad requieren revisión de abogado hondureño | Alta | En validación jurídica |
-| LEG-004 | Falta registrar versión y aceptación expresa de términos por organización/usuario | Alta | Pendiente |
+| LEG-004 | Demo registra aceptación versionada por usuario; falta aceptación por organización/usuario en instalaciones de clientes | Alta | En progreso |
 
-## Ambiente Trial
+## Ambiente Demo y Pilot
 
-El Trial se implementará después de completar las fases 0–10.
+Se separan dos productos comerciales con objetivos distintos.
 
-### Requisitos
+### Demo compartida
 
-- Deployment y Supabase separados de producción.
-- Cero datos reales de Sari Express.
-- Workspace aislado por prospecto.
-- Registro autónomo con correo verificado.
-- Vigencia configurable de 3, 7, 14 o 30 días.
-- Dataset ficticio precargado.
-- Banner de días restantes.
-- Expiración y bloqueo automáticos.
-- Panel interno para extender, revocar o convertir trials.
-- Rate limiting, protección antiabuso y auditoría.
-- Emails de bienvenida, recordatorio y expiración.
+- Deployment Preview de la rama `demo` y proyecto Supabase staging separados de
+  producción.
+- Dominio previsto: `demo.forwarders.app`.
+- Base compartida con datos exclusivamente ficticios y aviso explícito de que
+  otros evaluadores pueden ver o modificar esos datos.
+- Cinco pares de cuentas `Admin`/`Cliente`, creados manualmente y con vigencia
+  de 72 horas; no hay registro autónomo ni recuperación de contraseña.
+- Banner persistente, aceptación versionada, marca de agua en impresión/PDF,
+  expiración automática y bitácora de sesiones.
+- Configuración sensible, usuarios, CAI, catálogos maestros, leads privados y
+  eliminaciones raíz quedan bloqueados para evaluadores.
+- La bandeja de solicitudes comerciales pertenece únicamente a un Admin de
+  plataforma de Hernova; el rol `Admin` del ERP no concede ese privilegio.
+- Los cambios de una sesión pueden afectar a las demás porque este producto no
+  crea un workspace por prospecto.
+
+### Pilot pagado
+
+- Instancia independiente para un solo prospecto, con Supabase, deployment,
+  dominio y datos separados.
+- Vigencia comercial prevista de 14 días.
+- Puede incluir datos ficticios adaptados al prospecto y configuración propia.
+- El pago de onboarding se descuenta de la contratación si el prospecto
+  continúa.
+- Un Pilot no se implementa como usuario adicional dentro de la Demo compartida.
 
 ### Decisión Supabase Pro
 
-Estado: `Pendiente de evaluación en Fase 11`.
+Estado: `Proyecto staging existente seleccionado; plan Pro pendiente de uso real`.
 
-Antes de adquirir Supabase Pro se evaluará:
+La Demo utiliza el proyecto staging `wlssekvxpfxhwedsjhpz`. No se adquiere un
+plan únicamente por anticipación. Antes de escalar se evaluará:
 
-- Si el ambiente Trial requiere proyecto separado permanente.
-- Cantidad esperada de trials simultáneos.
+- Cantidad real de evaluadores simultáneos.
 - Necesidad de branching, PITR, backups y retención de logs.
-- Uso estimado de base de datos, storage, realtime y funciones.
+- Uso estimado de base de datos, Storage, Realtime y funciones.
 - Necesidad de cron y límites de ejecución.
-- Costo de un proyecto demo compartido con workspaces frente a proyectos
-  aislados por prospecto.
+- Costo y retención requeridos por Pilots o clientes independientes.
 
-No se recomienda comprar un plan únicamente por anticipación. La decisión se
-tomará con la arquitectura Trial definida y una estimación real de uso.
+La Demo no se habilita para terceros hasta aplicar y probar sus migraciones,
+desactivar el signup directo en Supabase Auth, cargar el dataset ficticio,
+verificar Storage, configurar las variables Preview por rama y completar UAT.
+Estado de release: `BLOQUEADO` hasta verificar y conservar evidencia de que
+`Allow new users to sign up` está desactivado en el proyecto demo. Ocultar o
+bloquear `/register` y `/portal/register` no sustituye este control, porque el
+endpoint público de Supabase Auth puede invocarse directamente y el trigger
+`handle_new_user` crea el perfil pendiente con `SECURITY DEFINER`.
 
 ## Bitácora de cambios
 
@@ -4638,7 +4660,140 @@ Agregar una entrada por fix:
   - Revisar los footers de `/login`, `/register`, `/onboarding`, aplicación
     autenticada, landing, `/politicas` y cierre imprimible de facturación.
 - Riesgos pendientes:
-  - `contacto@dher.dev` y las referencias contractuales a DHer permanecen sin
-    cambios hasta confirmar el correo y la identidad jurídica oficiales de
-    Hernova Systems.
+  - El correo se actualizó a `contacto@forwarders.app` y la identidad a
+    `Inversiones A Y H S de R.L.`; siguen pendientes RTN y revisión legal.
+- Commit: `d0f6923`.
+
+### 2026-07-31 - DEMO-001 - Sandbox compartido aislado y reproducible
+
+- Estado: En validación; release bloqueado hasta aplicar las migraciones sólo
+  en staging, desactivar signup, ejecutar las pruebas SQL y completar UAT.
+- Hallazgo: DEMO-001.
+- Código y configuración:
+  - `next.config.ts`
+  - `src/lib/demo-environment.ts`
+  - `src/proxy.ts`
+  - `src/components/demo/*`
+  - `src/app/login/page.tsx`
+  - `src/app/portal/login/page.tsx`
+  - `src/components/layout/protected-shell.tsx`
+  - `src/app/portal/layout.tsx`
+  - pantallas internas modificadas bajo `src/app/(protected)` y `src/app/portal`
+  - componentes PDF modificados bajo `src/components/pdf`
+- SQL:
+  - `supabase/migrations/20260731190000_demo_environment_foundation.sql`
+  - `supabase/migrations/20260731213000_demo_reset_and_seed.sql`
+  - `supabase/migrations/20260731214000_booking_tracking_url_hardening.sql`
+  - `supabase/migrations/20260731215000_demo_storage_hardening.sql`
+- Operación y pruebas:
+  - `scripts/demo/reset-and-seed.mjs`
+  - `scripts/demo/provision-users.mjs`
+  - `docs/demo-runbook.md`
+  - `supabase/tests/demo_environment_foundation.sql`
+  - `supabase/tests/demo_reset_and_seed.sql`
+  - `supabase/tests/booking_tracking_url_hardening.sql`
+  - `supabase/tests/demo_storage_hardening.sql`
+- Cambios:
+  - La rama Demo exige el project ref staging y el dominio
+    `demo.forwarders.app` al compilar; no admite silenciosamente variables de
+    producción.
+  - Se agregaron expiración, grant por entrega, aceptación versionada, banner,
+    noindex y marcas de agua en pantallas, impresiones HTML y PDF.
+  - El reset usa allowlist sin `CASCADE`, confirmación escrita, nonce de cinco
+    minutos, transacción y un dataset ficticio Atlas verificable.
+  - Usuarios, configuración, CAI, catálogos maestros, identidad de perfiles,
+    envíos externos, cargas de archivos y eliminaciones raíz quedan restringidos
+    en la Demo.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `node --check scripts/demo/reset-and-seed.mjs`: OK.
+  - `node --check scripts/demo/provision-users.mjs`: OK.
+  - ESLint dirigido de configuración, gates, helpers, login, shells y nueva
+    bandeja Demo: OK.
+  - ESLint sobre todos los TypeScript tocados: mantiene 133 errores y 30
+    advertencias preexistentes en páginas/PDF extensos; la capa Demo nueva no
+    agrega errores en su ejecución dirigida.
+  - Build negativo con `.env.local` de producción: rechazado como se esperaba
+    por exigir ambos marcadores `demo`.
+  - Build positivo con URLs staging exactas y claves placeholder modernas:
+    OK, 68/68 páginas.
+  - `git diff --check`: OK; sólo avisos LF/CRLF.
+  - Búsqueda de branding privado: sólo permanece `SARIHN-` en la rama
+    condicional no-demo del generador de cotizaciones.
+- Verificación manual/RLS pendiente:
+  - Aplicar todas las migraciones en `wlssekvxpfxhwedsjhpz`, nunca en
+    producción.
+  - Desactivar `Allow new users to sign up` en Supabase Auth y conservar
+    evidencia.
+  - Ejecutar las cuatro pruebas SQL contra una base local/staging controlada.
+  - Configurar variables Preview limitadas a la rama `demo`, asociar el dominio
+    y completar UAT Admin/Cliente.
+  - Inspeccionar/purgar cualquier blob heredado antes de entregar credenciales.
+- Riesgos pendientes:
+  - Docker/`psql` no están disponibles en esta estación, por lo que las pruebas
+    SQL aún no se han ejecutado.
+  - El lint global conserva deuda histórica y no es todavía una puerta limpia.
+- Commit: pendiente.
+
+### 2026-07-31 - SEC-018 - Rotación fail-closed de cuentas Demo
+
+- Estado: En validación; código preparado, pendiente de prueba real en staging.
+- Hallazgo: SEC-018.
+- Código:
+  - `scripts/demo/provision-users.mjs`
+- SQL:
+  - `supabase/migrations/20260731190000_demo_environment_foundation.sql`
+  - `supabase/migrations/20260731213000_demo_reset_and_seed.sql`
+- Pruebas:
+  - `supabase/tests/demo_environment_foundation.sql`
+  - `supabase/tests/demo_reset_and_seed.sql`
+- Cambios:
+  - Cada entrega rota un `demo_access_grant_id` común para la pareja; RLS exige
+    que el grant del JWT coincida con el perfil vigente, por lo que un access
+    token anterior deja de autorizar operaciones inmediatamente.
+  - El RPC privado elimina las sesiones de los dos usuarios administrados del
+    slot y sólo acepta la pareja exacta marcada por el aprovisionador.
+  - El script desactiva primero los perfiles, mantiene Auth bloqueado durante
+    la preparación, revoca sesiones y activa ambos perfiles juntos al final.
+  - Ante cualquier error no imprime contraseñas e intenta dejar ambos perfiles
+    inactivos y las cuentas Auth bloqueadas.
+- Validaciones ejecutadas:
+  - `node --check scripts/demo/provision-users.mjs`: OK.
+- Pendiente:
+  - Ejecutar la prueba SQL y una rotación real controlada, comprobando que el
+    navegador anterior pierde acceso y no puede renovar sesión.
+- Commit: pendiente.
+
+### 2026-07-31 - SEC-019 - Storage y enlaces externos fail-closed en Demo
+
+- Estado: En validación; pendiente de aplicar SQL y probar políticas reales.
+- Hallazgo: SEC-019.
+- Código:
+  - `src/lib/external-url.ts`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/portal/envios/[id]/page.tsx`
+  - pantallas de proveedores, BL y Miami que cargaban o eliminaban archivos
+- SQL:
+  - `supabase/migrations/20260731214000_booking_tracking_url_hardening.sql`
+  - `supabase/migrations/20260731215000_demo_storage_hardening.sql`
+  - guard general de Storage en
+    `supabase/migrations/20260731213000_demo_reset_and_seed.sql`
+- Pruebas:
+  - `supabase/tests/booking_tracking_url_hardening.sql`
+  - `supabase/tests/demo_storage_hardening.sql`
+- Cambios:
+  - Tracking sólo admite HTTP/HTTPS sin credenciales y se deshabilita por
+    completo en Demo.
+  - Se eliminan políticas públicas históricas, se fijan tamaños/MIME y los
+    cuatro buckets usados por la UI quedan privados en Demo.
+  - Una política restrictiva bloquea toda lectura y escritura de Storage en el
+    sandbox; los blobs no se borran automáticamente.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido de `external-url.ts`, proxy, gates y rutas nuevas: OK.
+  - `git diff --check`: OK; sólo avisos LF/CRLF.
+  - Build Demo: OK, 68/68 páginas.
+- Pendiente:
+  - Probar políticas con usuarios Admin/Cliente y revisar que staging no
+    contenga objetos reales heredados.
 - Commit: pendiente.

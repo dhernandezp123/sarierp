@@ -23,6 +23,8 @@ import {
   resolveBookingDocumentSummary,
   type StructuredBillOfLading,
 } from '@/src/lib/booking-document-summary'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+import { normalizeExternalHttpUrl } from '@/src/lib/external-url'
 
 type PortalBooking = {
   id: string
@@ -234,6 +236,9 @@ function BookingCard({
     booking.bills_of_lading
   )
   const bookingLabel = booking.booking_number || booking.carrier_booking || `Booking ${index + 1}`
+  const safeTrackingUrl = IS_DEMO_ENVIRONMENT
+    ? null
+    : normalizeExternalHttpUrl(booking.tracking_url)
 
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -402,11 +407,12 @@ function BookingCard({
           </section>
         </div>
 
-        {booking.tracking_url && (
+        {safeTrackingUrl && (
           <a
-            href={booking.tracking_url}
+            href={safeTrackingUrl}
             target="_blank"
             rel="noopener noreferrer"
+            referrerPolicy="no-referrer"
             className="flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300"
           >
             <ExternalLink className="h-4 w-4" />

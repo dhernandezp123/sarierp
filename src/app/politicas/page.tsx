@@ -2,11 +2,12 @@ import Link from 'next/link'
 import { Globe2, ArrowLeft, Mail } from 'lucide-react'
 import {
   PLATFORM_ATTRIBUTION,
+  PLATFORM_CONTACT_EMAIL,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
 
 export const metadata = {
-  title: 'Términos de Uso y Privacidad — Forwarders ERP by DHer',
+  title: 'Términos de Uso y Privacidad — Forwarders ERP by Hernova Systems',
   description: 'Términos de uso, aviso de privacidad y condiciones del sistema logístico Forwarders ERP.',
 }
 
@@ -14,7 +15,7 @@ const sections = [
   {
     id: 'alcance',
     title: 'Alcance, proveedor y aceptación',
-    body: `Forwarders ERP by DHer ("el Sistema") es un servicio empresarial de software. El proveedor contractual será la persona natural o jurídica identificada como DHer en la propuesta, orden de servicio o contrato suscrito con la organización contratante. Dicho documento deberá contener su denominación legal, identificación tributaria, domicilio y datos de contacto.
+    body: `Forwarders ERP by Hernova Systems ("el Sistema") es un servicio empresarial de software. Hernova Systems es el nombre comercial utilizado por Inversiones A Y H S de R.L., con domicilio en San Pedro Sula, Cortés, Honduras. La propuesta, orden de servicio o contrato identificará a la entidad proveedora y sus datos contractuales aplicables.
 
 El uso del Sistema implica la aceptación de estos Términos por parte del usuario y de la organización que representa. La organización declara que quien contrata o administra el servicio cuenta con facultades suficientes para obligarla. Si no está de acuerdo, deberá abstenerse de utilizarlo.
 
@@ -66,9 +67,9 @@ El incumplimiento de estas restricciones podrá resultar en la suspensión inmed
   {
     id: 'datos',
     title: 'Propiedad, licencia y gestión de los datos',
-    body: `La organización contratante conserva sus derechos sobre los datos operativos ingresados al Sistema: clientes, contactos, cotizaciones, embarques, documentos, facturas y archivos. La organización concede a DHer una autorización limitada, no exclusiva y temporal para alojar, respaldar, transmitir y procesar esos datos únicamente con el fin de prestar, proteger y mantener el servicio.
+    body: `La organización contratante conserva sus derechos sobre los datos operativos ingresados al Sistema: clientes, contactos, cotizaciones, embarques, documentos, facturas y archivos. La organización concede a Hernova Systems una autorización limitada, no exclusiva y temporal para alojar, respaldar, transmitir y procesar esos datos únicamente con el fin de prestar, proteger y mantener el servicio.
 
-DHer no adquiere derecho de comercialización sobre los datos de la organización. Los datos agregados o anonimizados solo podrán utilizarse para seguridad, métricas y mejora del servicio cuando no permitan identificar a una persona, cliente u operación.
+Hernova Systems no adquiere derecho de comercialización sobre los datos de la organización. Los datos agregados o anonimizados solo podrán utilizarse para seguridad, métricas y mejora del servicio cuando no permitan identificar a una persona, cliente u operación.
 
 La organización contratante es responsable de:
 
@@ -76,14 +77,14 @@ La organización contratante es responsable de:
 • El cumplimiento de las obligaciones fiscales y legales derivadas de los datos registrados.
 • La gestión de los accesos y roles de sus usuarios.
 
-DHer aplica medidas técnicas y organizativas razonables según el riesgo, incluyendo cifrado en tránsito, controles de acceso por rol, segregación lógica y mecanismos de registro disponibles. Ningún sistema es absolutamente seguro; las medidas específicas, respaldos, objetivos de recuperación y retención se definirán en el contrato o SLA vigente.`,
+Hernova Systems aplica medidas técnicas y organizativas razonables según el riesgo, incluyendo cifrado en tránsito, controles de acceso por rol, segregación lógica y mecanismos de registro disponibles. Ningún sistema es absolutamente seguro; las medidas específicas, respaldos, objetivos de recuperación y retención se definirán en el contrato o SLA vigente.`,
   },
   {
     id: 'privacidad',
     title: 'Aviso de privacidad y categorías de datos',
     body: `El Sistema puede tratar datos de usuarios, clientes, contactos, proveedores, transportistas y consignatarios, entre ellos: nombre, correo, teléfono, dirección, identificación fiscal, rol, credenciales técnicas, direcciones IP, registros de acceso, comunicaciones, documentos de transporte, fotografías, datos de facturación y detalles vinculados con una operación logística.
 
-La organización contratante determina los fines de los datos personales que carga y actúa como responsable frente a sus titulares. DHer los procesa como proveedor o encargado para prestar soporte, autenticación, alojamiento, seguridad, respaldo, continuidad, prevención de fraude, cumplimiento legal y mejora técnica del servicio.
+La organización contratante determina los fines de los datos personales que carga y actúa como responsable frente a sus titulares. Hernova Systems los procesa como proveedor o encargado para prestar soporte, autenticación, alojamiento, seguridad, respaldo, continuidad, prevención de fraude, cumplimiento legal y mejora técnica del servicio.
 
 La organización garantiza que cuenta con una base legítima para recopilar y cargar los datos, que ha informado a sus titulares y que no ingresará datos excesivos, ilícitos o ajenos a la operación. Las solicitudes de acceso, corrección, actualización, eliminación, oposición o portabilidad se atenderán conforme a la ley aplicable y a las obligaciones de conservación fiscal, contractual y de seguridad.`,
   },
@@ -92,9 +93,9 @@ La organización garantiza que cuenta con una base legítima para recopilar y ca
     title: 'Proveedores tecnológicos y transferencias',
     body: `Para operar el Sistema pueden utilizarse proveedores de infraestructura, base de datos, autenticación, almacenamiento, correo, monitoreo y despliegue, incluidos Supabase y Vercel u otros equivalentes. Estos proveedores procesan información bajo sus propios compromisos de seguridad y privacidad.
 
-Los datos pueden alojarse o procesarse fuera de Honduras. DHer procurará que los proveedores ofrezcan salvaguardas contractuales y técnicas razonables. La lista vigente de subprocesadores y las regiones de alojamiento deberán estar disponibles para la organización contratante a solicitud o en el acuerdo de tratamiento de datos.
+Los datos pueden alojarse o procesarse fuera de Honduras. Hernova Systems procurará que los proveedores ofrezcan salvaguardas contractuales y técnicas razonables. La lista vigente de subprocesadores y las regiones de alojamiento deberán estar disponibles para la organización contratante a solicitud o en el acuerdo de tratamiento de datos.
 
-DHer podrá revelar información cuando exista obligación legal, orden de autoridad competente o necesidad razonable de proteger la seguridad e integridad del servicio, informando a la organización cuando la ley lo permita.`,
+Hernova Systems podrá revelar información cuando exista obligación legal, orden de autoridad competente o necesidad razonable de proteger la seguridad e integridad del servicio, informando a la organización cuando la ley lo permita.`,
   },
   {
     id: 'cookies',
@@ -108,7 +109,7 @@ Bloquear el almacenamiento técnico esencial puede impedir el inicio de sesión 
     title: 'Retención, exportación y eliminación',
     body: `Los datos se conservarán durante la vigencia del servicio y posteriormente por los períodos definidos en el contrato, las obligaciones legales aplicables, la resolución de controversias y los ciclos razonables de respaldo.
 
-Antes de terminar el servicio, la organización podrá solicitar una exportación en un formato técnicamente disponible. Finalizado el plazo de transición contractual, DHer eliminará o anonimizará los datos bajo su control, salvo aquellos que deban conservarse por obligación legal o respaldo pendiente de rotación. Los plazos, formato, costo y asistencia de migración deberán constar en la orden de servicio o acuerdo de tratamiento de datos.`,
+Antes de terminar el servicio, la organización podrá solicitar una exportación en un formato técnicamente disponible. Finalizado el plazo de transición contractual, Hernova Systems eliminará o anonimizará los datos bajo su control, salvo aquellos que deban conservarse por obligación legal o respaldo pendiente de rotación. Los plazos, formato, costo y asistencia de migración deberán constar en la orden de servicio o acuerdo de tratamiento de datos.`,
   },
   {
     id: 'roles',
@@ -133,11 +134,11 @@ Los mantenimientos programados se comunicarán con antelación razonable cuando 
 
 No se garantiza disponibilidad continua en casos de:
 
-• Fuerza mayor o causas fuera del control de DHer.
+• Fuerza mayor o causas fuera del control de Hernova Systems.
 • Fallas en servicios de infraestructura de terceros (Supabase, Vercel u otros proveedores).
 • Incidentes de seguridad que requieran intervención inmediata.
 
-En caso de interrupción no programada, DHer comunicará la información disponible por los canales acordados, sin que una estimación inicial constituya garantía de restablecimiento.`,
+En caso de interrupción no programada, Hernova Systems comunicará la información disponible por los canales acordados, sin que una estimación inicial constituya garantía de restablecimiento.`,
   },
   {
     id: 'documentos-logisticos',
@@ -146,7 +147,7 @@ En caso de interrupción no programada, DHer comunicará la información disponi
 
 La organización debe revisar y autorizar cada documento antes de emitirlo o enviarlo. Es responsable de pesos, medidas, clasificación, valor, mercancías peligrosas o restringidas, licencias, sanciones, controles de exportación, origen, destino y declaraciones aduaneras.
 
-DHer no controla pérdidas, daños, demoras, almacenajes, demurrage, detention, inspecciones, rechazos, actos del carrier ni eventos propios del transporte. Las responsabilidades por la carga se rigen por los contratos de transporte y la normativa aplicable.`,
+Hernova Systems no controla pérdidas, daños, demoras, almacenajes, demurrage, detention, inspecciones, rechazos, actos del carrier ni eventos propios del transporte. Las responsabilidades por la carga se rigen por los contratos de transporte y la normativa aplicable.`,
   },
   {
     id: 'documentos-fiscales',
@@ -155,12 +156,12 @@ DHer no controla pérdidas, daños, demoras, almacenajes, demurrage, detention, 
 
 El Sistema provee herramientas para facilitar el cumplimiento fiscal (cálculo de ISV, generación de documentos con número correlativo), pero no reemplaza la responsabilidad del contador o representante legal de la organización ante las autoridades tributarias.
 
-DHer no presta asesoría tributaria, contable o legal y no garantiza que una configuración sea suficiente para cada operación. La organización debe validar rangos CAI, correlativos, tasas, exoneraciones, retenciones, cierres y conservación documental con su profesional responsable.`,
+Hernova Systems no presta asesoría tributaria, contable o legal y no garantiza que una configuración sea suficiente para cada operación. La organización debe validar rangos CAI, correlativos, tasas, exoneraciones, retenciones, cierres y conservación documental con su profesional responsable.`,
   },
   {
     id: 'propiedad-intelectual',
     title: 'Propiedad intelectual',
-    body: `DHer conserva los derechos sobre el software, diseño, documentación, marcas, componentes, mejoras y código del Sistema. La contratación concede únicamente un derecho limitado, revocable, no transferible y no sublicenciable de uso durante la vigencia del servicio.
+    body: `Hernova Systems conserva los derechos sobre el software, diseño, documentación, marcas, componentes, mejoras y código del Sistema. La contratación concede únicamente un derecho limitado, revocable, no transferible y no sublicenciable de uso durante la vigencia del servicio, salvo que un acuerdo escrito establezca expresamente una licencia de código o una cesión excepcional de propiedad intelectual.
 
 La organización no podrá copiar, revender, sublicenciar, descompilar, intentar obtener el código fuente ni crear un servicio competidor a partir del Sistema, salvo lo que una norma imperativa permita. Los comentarios o sugerencias podrán utilizarse para mejorar el producto sin revelar información confidencial.`,
   },
@@ -178,21 +179,23 @@ El personal y los proveedores que requieran acceso estarán sujetos a deberes de
 
 La asignación de riesgos, exclusiones y límite económico de responsabilidad se establecerán en el contrato. Ninguna cláusula pretende excluir responsabilidad que no pueda limitarse legalmente, incluyendo fraude, dolo o culpa grave cuando corresponda.
 
-La organización será responsable por el uso indebido de sus cuentas, por instrucciones autorizadas desde ellas y por reclamaciones derivadas de datos o documentos que haya cargado, salvo que resulten directamente de un incumplimiento atribuible a DHer.`,
+La organización será responsable por el uso indebido de sus cuentas, por instrucciones autorizadas desde ellas y por reclamaciones derivadas de datos o documentos que haya cargado, salvo que resulten directamente de un incumplimiento atribuible a Hernova Systems.`,
   },
   {
     id: 'suspension-terminacion',
     title: 'Suspensión y terminación',
-    body: `DHer podrá suspender temporalmente el acceso por riesgo de seguridad, uso ilícito, incumplimiento material, mora conforme al contrato o requerimiento de autoridad. Cuando sea razonablemente posible, notificará y permitirá subsanar antes de la suspensión.
+    body: `Hernova Systems podrá suspender temporalmente el acceso por riesgo de seguridad, uso ilícito, incumplimiento material, mora conforme al contrato o requerimiento de autoridad. Cuando sea razonablemente posible, notificará y permitirá subsanar antes de la suspensión.
 
 La terminación, preavisos, pagos pendientes, asistencia de salida y acceso a exportaciones se regirán por la orden de servicio. La terminación no elimina obligaciones devengadas, confidencialidad, propiedad intelectual ni aquellas que por su naturaleza deban sobrevivir.`,
   },
   {
     id: 'pruebas',
     title: 'Ambientes de prueba y demostración',
-    body: `Las cuentas de demostración o prueba tienen duración, capacidad y funcionalidades limitadas; pueden suspenderse o expirar automáticamente y no incluyen SLA salvo pacto escrito. No deben utilizarse para operaciones reales, documentos fiscales válidos, datos personales sensibles ni información confidencial de clientes.
+    body: `La demostración comercial es un sandbox compartido con datos exclusivamente ficticios. Otros evaluadores pueden consultar o modificar la información visible y Hernova Systems puede reiniciarla sin previo aviso. No deben ingresarse datos personales, información confidencial, operaciones reales ni documentos fiscales válidos. Todo PDF o impresión generado en este ambiente carece de validez comercial, operativa y fiscal.
 
-Los datos ficticios del ambiente de prueba podrán reiniciarse o eliminarse al finalizar el período. La conversión a un plan contratado y cualquier migración de datos deberán confirmarse por escrito.`,
+Las credenciales son temporales, personales e intransferibles; pueden revocarse o expirar al finalizar la ventana comunicada. El acceso queda sujeto a una aceptación expresa y se conserva un registro mínimo de acceso y aceptación para seguridad.
+
+Un piloto contratado es un producto distinto: utiliza una instancia independiente, plazo, alcance y condiciones definidos por escrito. La conversión a un plan contratado y cualquier migración de datos deberán confirmarse expresamente.`,
   },
   {
     id: 'ley-aplicable',
@@ -204,7 +207,7 @@ El tribunal competente, arbitraje, ciudad, idioma y distribución de costos debe
   {
     id: 'modificaciones',
     title: 'Modificaciones a las políticas',
-    body: `DHer podrá actualizar estos Términos por cambios legales, de seguridad, técnicos o del servicio. Los cambios materiales se comunicarán al administrador por el sistema o correo con antelación razonable; los cambios urgentes de seguridad o cumplimiento podrán tener efecto inmediato cuando sea necesario.
+    body: `Hernova Systems podrá actualizar estos Términos por cambios legales, de seguridad, técnicos o del servicio. Los cambios materiales se comunicarán al administrador por el sistema o correo con antelación razonable; los cambios urgentes de seguridad o cumplimiento podrán tener efecto inmediato cuando sea necesario.
 
 Cada versión indicará fecha de vigencia. Cuando el cambio altere materialmente derechos u obligaciones, podrá requerirse aceptación expresa. La versión aplicable a un contrato no modificará unilateralmente condiciones comerciales pactadas que exijan acuerdo de ambas partes.`,
   },
@@ -213,10 +216,10 @@ Cada versión indicará fecha de vigencia. Cuando el cambio altere materialmente
     title: 'Contacto y soporte',
     body: `Para consultas sobre estas políticas, reportes de incidentes de seguridad o solicitudes relacionadas con la privacidad de datos, comunicarse a:
 
-Correo contractual y privacidad: contacto@dher.dev
-Sitio web: forwarderserp.com
+Correo contractual y privacidad: contacto@forwarders.app
+Sitio web: forwarders.app
 
-DHer acusará recibo y atenderá la solicitud en un plazo razonable según su naturaleza, la ley aplicable y el SLA contratado. Para proteger los datos, podrá solicitar verificación de identidad y canalizar solicitudes de titulares a través de la organización responsable.`,
+Hernova Systems acusará recibo y atenderá la solicitud en un plazo razonable según su naturaleza, la ley aplicable y el SLA contratado. Para proteger los datos, podrá solicitar verificación de identidad y canalizar solicitudes de titulares a través de la organización responsable.`,
   },
 ]
 
@@ -271,7 +274,7 @@ export default function PoliticasPage() {
               <Globe2 size={15} />
             </span>
             <span className="text-sm font-bold text-white">Forwarders ERP</span>
-            <span className="hidden text-[11px] text-slate-500 sm:block">by DHer</span>
+            <span className="hidden text-[11px] text-slate-500 sm:block">by Hernova Systems</span>
           </Link>
           <Link
             href="/"
@@ -295,7 +298,7 @@ export default function PoliticasPage() {
           <div className="inline-flex items-center gap-2 rounded-full border border-[#EF8E01]/25 bg-[#EF8E01]/10 px-4 py-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-[#EF8E01]" />
             <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#EF8E01]">
-              Forwarders ERP by DHer
+              Forwarders ERP by Hernova Systems
             </span>
           </div>
 
@@ -309,7 +312,7 @@ export default function PoliticasPage() {
 
           <p className="mt-5 max-w-2xl text-sm leading-relaxed text-slate-400 text-justify hyphens-auto">
             Estos términos establecen las condiciones de uso, responsabilidades y compromisos
-            entre DHer y las organizaciones que utilizan la plataforma Forwarders ERP para
+            entre Hernova Systems y las organizaciones que utilizan la plataforma Forwarders ERP para
             gestionar sus operaciones de carga internacional. Deben leerse junto con la orden
             de servicio, el SLA y el acuerdo de tratamiento de datos aplicables.
           </p>
@@ -391,15 +394,15 @@ export default function PoliticasPage() {
                     ¿Tienes preguntas sobre estas políticas?
                   </p>
                   <p className="mt-1 text-sm text-slate-400">
-                    DHer responde en un máximo de 3 días hábiles.
+                    Hernova Systems responde en un máximo de 3 días hábiles.
                   </p>
                 </div>
                 <a
-                  href="mailto:contacto@dher.dev"
+                  href={`mailto:${PLATFORM_CONTACT_EMAIL}`}
                   className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#EF8E01] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#EF8E01]/20 transition hover:bg-[#db8000]"
                 >
                   <Mail size={15} />
-                  contacto@dher.dev
+                  {PLATFORM_CONTACT_EMAIL}
                 </a>
               </div>
             </div>

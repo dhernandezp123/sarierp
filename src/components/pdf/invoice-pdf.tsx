@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from '@react-pdf/renderer'
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -220,6 +221,7 @@ export function InvoicePdf({ data }: { data: InvoicePdfData }) {
   return (
     <Document>
       <Page size="A4" style={s.page}>
+        <DemoPdfWatermark />
 
         {/* ── Header ─────────────────────────────────────────────────── */}
         <View style={s.header}>

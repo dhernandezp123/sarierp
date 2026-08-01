@@ -8,6 +8,11 @@ import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import {
+  IS_DEMO_ENVIRONMENT,
+  canManageSensitiveSettings,
+} from '@/src/lib/demo-environment'
 import {
   DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS,
   normalizeInsuranceCoveragePatterns,
@@ -124,7 +129,7 @@ export default function CompanySettingsPage() {
   const [insuranceExclusionInput, setInsuranceExclusionInput] = useState('')
   const [insuranceInclusionInput, setInsuranceInclusionInput] = useState('')
 
-  const isAdmin = profile?.rol === 'Admin'
+  const isAdmin = canManageSensitiveSettings(profile)
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -403,7 +408,9 @@ export default function CompanySettingsPage() {
         )}
       </div>
 
-      {!isAdmin && (
+      <DemoReadOnlyNotice />
+
+      {!IS_DEMO_ENVIRONMENT && !isAdmin && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
           Solo el administrador puede modificar estos datos. Estás viendo la configuración en modo lectura.
         </div>
@@ -422,7 +429,7 @@ export default function CompanySettingsPage() {
                 value={form.legal_name ?? ''}
                 onChange={(e) => set('legal_name', e.target.value)}
                 disabled={!isAdmin}
-                placeholder="Ej. SARI EXPRESS S DE R.L. DE C.V."
+                placeholder="Ej. Atlas Forwarding Demo"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -431,7 +438,7 @@ export default function CompanySettingsPage() {
                 value={form.trade_name ?? ''}
                 onChange={(e) => set('trade_name', e.target.value)}
                 disabled={!isAdmin}
-                placeholder="Ej. Sari Express"
+                placeholder="Ej. Atlas Forwarding"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -440,7 +447,7 @@ export default function CompanySettingsPage() {
                 value={form.rtn ?? ''}
                 onChange={(e) => set('rtn', e.target.value)}
                 disabled={!isAdmin}
-                placeholder="Ej. 08019003239182"
+                placeholder="Ej. DEMO-SIN-VALIDEZ"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -522,7 +529,7 @@ export default function CompanySettingsPage() {
                 value={form.email ?? ''}
                 onChange={(e) => set('email', e.target.value)}
                 disabled={!isAdmin}
-                placeholder="operaciones@sariexpress.com"
+                placeholder="operaciones@empresa.com"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -531,7 +538,7 @@ export default function CompanySettingsPage() {
                 value={form.website ?? ''}
                 onChange={(e) => set('website', e.target.value)}
                 disabled={!isAdmin}
-                placeholder="https://sariexpress.com"
+                placeholder="https://empresa.com"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -540,7 +547,7 @@ export default function CompanySettingsPage() {
                 value={form.logo_url ?? ''}
                 onChange={(e) => set('logo_url', e.target.value)}
                 disabled={!isAdmin}
-                placeholder="/logo/sari-logo.png"
+                placeholder="https://empresa.com/logo.png"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -783,7 +790,7 @@ export default function CompanySettingsPage() {
               value={form.miami_consignee ?? ''}
               onChange={(e) => set('miami_consignee', e.target.value)}
               disabled={!isAdmin}
-              placeholder="Ej. SARI EXPRESS"
+              placeholder="Ej. ATLAS FORWARDING"
               className={`${fieldClass} disabled:opacity-60`}
             />
           </Field>
@@ -970,7 +977,7 @@ export default function CompanySettingsPage() {
             onChange={(e) => set('plantilla_cotizacion', e.target.value)}
             disabled={!isAdmin}
             rows={4}
-            placeholder={'Saludos cordiales,\nSari Express — Equipo Comercial\noperaciones@sariexpress.com'}
+            placeholder={'Saludos cordiales,\nEquipo Comercial\noperaciones@empresa.com'}
             className={`${fieldClass} resize-none disabled:opacity-60`}
           />
         </Field>

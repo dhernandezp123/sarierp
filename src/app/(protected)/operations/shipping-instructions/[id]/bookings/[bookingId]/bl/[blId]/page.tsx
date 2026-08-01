@@ -18,6 +18,7 @@ import {
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
 
@@ -586,7 +587,7 @@ export default function BLPage() {
 
   const generateHBLNumber = async (): Promise<string> => {
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const prefix = `SARI-HBL-${dateStr}-`
+    const prefix = `${IS_DEMO_ENVIRONMENT ? 'DEMO' : 'SARI'}-HBL-${dateStr}-`
     const { data } = await supabase
       .from('bills_of_lading')
       .select('bl_number')
@@ -866,6 +867,8 @@ export default function BLPage() {
   }
 
   const uploadDraftFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (IS_DEMO_ENVIRONMENT) return
+
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -928,7 +931,7 @@ export default function BLPage() {
     'Por favor revise la información y confírmenos su aprobación, o notifíquenos si requiere algún ajuste.',
     '',
     'Saludos,',
-    'Sari Express — Operaciones',
+    'Equipo de Operaciones',
   ].join('\n')
 
   const mailtoLink = form.consignee_email
@@ -943,7 +946,9 @@ export default function BLPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className={`${cardClass} w-full max-w-2xl`}>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Enviar Draft al Cliente</h2>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                {IS_DEMO_ENVIRONMENT ? 'Simular envío de Draft' : 'Enviar Draft al Cliente'}
+              </h2>
               <button type="button" onClick={() => setShowEmailModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="h-5 w-5" />
               </button>
@@ -965,8 +970,14 @@ export default function BLPage() {
               Recuerda adjuntar el PDF del draft al correo electrónico.
             </p>
 
+            {IS_DEMO_ENVIRONMENT && (
+              <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Simulación demo: no se abrirá un cliente de correo ni se enviará un mensaje real.
+              </p>
+            )}
+
             <div className="flex flex-wrap gap-3">
-              {mailtoLink && (
+              {mailtoLink && !IS_DEMO_ENVIRONMENT && (
                 <a
                   href={mailtoLink}
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
@@ -992,7 +1003,11 @@ export default function BLPage() {
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
-                {sendingDraft ? 'Registrando...' : 'Registrar envío'}
+                {sendingDraft
+                  ? 'Registrando...'
+                  : IS_DEMO_ENVIRONMENT
+                    ? 'Registrar simulación'
+                    : 'Registrar envío'}
               </button>
               <button
                 type="button"
@@ -1034,22 +1049,31 @@ export default function BLPage() {
             Draft MBL del Agente
           </h2>
           <div className="flex items-center gap-4">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={uploadDraftFile}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingDraft}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <Upload className="h-4 w-4" />
-              {uploadingDraft ? 'Subiendo...' : 'Subir Draft MBL'}
-            </button>
+            {!IS_DEMO_ENVIRONMENT && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={uploadDraftFile}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingDraft}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  <Upload className="h-4 w-4" />
+                  {uploadingDraft ? 'Subiendo...' : 'Subir Draft MBL'}
+                </button>
+              </>
+            )}
+            {IS_DEMO_ENVIRONMENT && !form.draft_file_url && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                La carga de archivos está deshabilitada en la demo.
+              </p>
+            )}
             {form.draft_file_url && (
               <a
                 href={form.draft_file_url}
@@ -1074,7 +1098,7 @@ export default function BLPage() {
             className={fieldClass}
             placeholder={
               isNew && form.bl_type === 'HBL'
-                ? 'Se generará automáticamente (SARI-HBL-...)'
+                ? `Se generará automáticamente (${IS_DEMO_ENVIRONMENT ? 'DEMO' : 'SARI'}-HBL-...)`
                 : 'MOLU1234567'
             }
           />
@@ -1449,7 +1473,7 @@ export default function BLPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-700"
             >
               <Mail className="h-4 w-4" />
-              Enviar Draft al Cliente
+              {IS_DEMO_ENVIRONMENT ? 'Simular envío de Draft' : 'Enviar Draft al Cliente'}
             </button>
           )}
         </div>

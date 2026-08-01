@@ -16,6 +16,9 @@ import {
   DialogTitle,
 } from '@/src/components/ui/dialog'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { useUser } from '@/src/hooks/useUser'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { canManageSensitiveSettings } from '@/src/lib/demo-environment'
 
 type Cliente = { id: string; nombre: string; codigo_cliente: string | null }
 
@@ -69,6 +72,8 @@ const getStatusBadgeClass = (status: string) => {
 }
 
 export default function AdminUsersPage() {
+  const { profile: currentProfile } = useUser()
+  const canManageUsers = canManageSensitiveSettings(currentProfile)
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -389,14 +394,16 @@ export default function AdminUsersPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setInviteDialogOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-            >
-              <UserPlus className="h-4 w-4" />
-              Invitar usuario
-            </button>
+            {canManageUsers && (
+              <button
+                type="button"
+                onClick={() => setInviteDialogOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              >
+                <UserPlus className="h-4 w-4" />
+                Invitar usuario
+              </button>
+            )}
             <Link
               href="/dashboard"
               className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -405,6 +412,8 @@ export default function AdminUsersPage() {
             </Link>
           </div>
         </div>
+
+        <DemoReadOnlyNotice label="Las cuentas demo son provisionadas y revocadas únicamente por Hernova Systems. Roles, estados, vínculos e invitaciones están bloqueados." />
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
@@ -522,13 +531,15 @@ export default function AdminUsersPage() {
                               <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${getRolBadgeClass(user.rol)}`}>
                                 {user.rol}
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => openRoleDialog(user)}
-                                className="text-xs text-slate-400 underline underline-offset-2 transition hover:text-slate-700 dark:hover:text-slate-200"
-                              >
-                                Cambiar
-                              </button>
+                              {canManageUsers && (
+                                <button
+                                  type="button"
+                                  onClick={() => openRoleDialog(user)}
+                                  className="text-xs text-slate-400 underline underline-offset-2 transition hover:text-slate-700 dark:hover:text-slate-200"
+                                >
+                                  Cambiar
+                                </button>
+                              )}
                             </div>
 
                             {user.rol === 'Cliente' && (
@@ -540,14 +551,16 @@ export default function AdminUsersPage() {
                                 ) : (
                                   <span className="text-[11px] text-amber-600 dark:text-amber-400">Sin vincular</span>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => openLinkDialog(user)}
-                                  className="flex items-center gap-0.5 text-[11px] text-cyan-600 underline underline-offset-2 hover:text-cyan-700 dark:text-cyan-400"
-                                >
-                                  <Link2 className="h-2.5 w-2.5" />
-                                  {user.clientes ? 'Cambiar' : 'Vincular'}
-                                </button>
+                                {canManageUsers && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openLinkDialog(user)}
+                                    className="flex items-center gap-0.5 text-[11px] text-cyan-600 underline underline-offset-2 hover:text-cyan-700 dark:text-cyan-400"
+                                  >
+                                    <Link2 className="h-2.5 w-2.5" />
+                                    {user.clientes ? 'Cambiar' : 'Vincular'}
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -572,6 +585,7 @@ export default function AdminUsersPage() {
                         </td>
 
                         <td className="px-4 py-3">
+                          {canManageUsers ? (
                           <div className="flex items-center gap-1.5">
                             {user.status !== 'Aprobado' && (
                               <button
@@ -599,6 +613,11 @@ export default function AdminUsersPage() {
                               {user.is_active ? 'Desactivar' : 'Activar'}
                             </button>
                           </div>
+                          ) : (
+                            <span className="text-xs font-medium text-slate-400">
+                              Solo lectura
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))

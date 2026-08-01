@@ -8,6 +8,8 @@ import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
+import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 type Proveedor = {
   id: string
@@ -34,6 +36,11 @@ const TIPO_COLORS: Record<string, string> = {
   Otro: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
 }
 
+const querySuppliers = () => supabase
+  .from('proveedores')
+  .select('id, nombre, tipo, contacto, email, moneda, terminos_pago, is_active, pais, agents(name)')
+  .order('nombre', { ascending: true })
+
 export default function SuppliersPage() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,22 +48,21 @@ export default function SuppliersPage() {
   const [tipoFilter, setTipoFilter] = useState('Todos')
   const [showInactive, setShowInactive] = useState(false)
 
-  const fetchProveedores = async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('proveedores')
-      .select('id, nombre, tipo, contacto, email, moneda, terminos_pago, is_active, pais, agents(name)')
-      .order('nombre', { ascending: true })
-
-    if (error) {
-      toast.error(error.message)
-    } else {
-      setProveedores((data || []) as unknown as Proveedor[])
+  useEffect(() => {
+    let active = true
+    void querySuppliers().then(({ data, error }) => {
+      if (!active) return
+      if (error) {
+        toast.error(error.message)
+      } else {
+        setProveedores((data || []) as unknown as Proveedor[])
+      }
+      setLoading(false)
+    })
+    return () => {
+      active = false
     }
-    setLoading(false)
-  }
-
-  useEffect(() => { fetchProveedores() }, [])
+  }, [])
 
   const filtered = proveedores.filter((p) => {
     const q = search.toLowerCase()
@@ -84,11 +90,13 @@ export default function SuppliersPage() {
             Agentes, carriers, aduanales y otros proveedores de servicio.
           </p>
         </div>
-        <Link href="/suppliers/new" className={primaryButtonClass}>
+        {!IS_DEMO_ENVIRONMENT && <Link href="/suppliers/new" className={primaryButtonClass}>
           <Plus className="h-4 w-4" />
           Nuevo proveedor
-        </Link>
+        </Link>}
       </div>
+
+      <DemoReadOnlyNotice label="El catálogo de proveedores es compartido y de solo lectura; las cuentas por pagar del recorrido demo permanecen operativas." />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -143,7 +151,7 @@ export default function SuppliersPage() {
             icon={<Building2 className="h-6 w-6" />}
             title="No hay proveedores"
             description="Agrega un agente, carrier u otro proveedor para registrar cuentas por pagar."
-            action={{ label: 'Nuevo proveedor', href: '/suppliers/new' }}
+            action={IS_DEMO_ENVIRONMENT ? undefined : { label: 'Nuevo proveedor', href: '/suppliers/new' }}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -161,7 +169,7 @@ export default function SuppliersPage() {
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900 dark:text-white">{p.nombre}</div>
                       {p.pais && <div className="text-xs text-slate-400">{p.pais}</div>}
-                      {p.agents && <div className="text-xs text-blue-500">Agente ERP: {(p.agents as any).name}</div>}
+                      {p.agents && <div className="text-xs text-blue-500">Agente ERP: {p.agents.name}</div>}
                       {!p.is_active && <span className="text-xs italic text-slate-400">Inactivo</span>}
                     </td>
                     <td className="px-4 py-3">

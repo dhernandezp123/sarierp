@@ -177,7 +177,7 @@ export default function DireccionMiamiPage() {
       )}
 
       <p className="text-center text-xs text-slate-400 dark:text-slate-600">
-        Esta dirección es administrada por Sari Express. Úsala para indicar a tus proveedores dónde enviar tus paquetes.
+        Esta dirección es administrada por tu agente de carga. Úsala para indicar a tus proveedores dónde enviar tus paquetes.
       </p>
     </div>
   )

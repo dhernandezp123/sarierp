@@ -4,12 +4,13 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  MapPin, KeyRound, User, ChevronRight, Calculator, Truck,
+  MapPin, KeyRound, User, ChevronRight, Calculator,
   Phone, FileText, ShieldAlert, Info, LogOut, Smartphone, BookOpen,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 const APP_VERSION = '1.0.0'
 
@@ -22,6 +23,7 @@ export default function PortalPerfilPage() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (IS_DEMO_ENVIRONMENT) return
     if (pwd.new !== pwd.confirm) { toast.error('Las contraseñas no coinciden'); return }
     if (pwd.new.length < 6) { toast.error('Mínimo 6 caracteres'); return }
     setSaving(true)
@@ -31,8 +33,8 @@ export default function PortalPerfilPage() {
       toast.success('Contraseña actualizada correctamente')
       setChangingPwd(false)
       setPwd({ new: '', confirm: '' })
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al cambiar contraseña')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al cambiar contraseña')
     } finally {
       setSaving(false)
     }
@@ -99,7 +101,7 @@ export default function PortalPerfilPage() {
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium text-slate-900 dark:text-white">Contraseña</p>
-            {!changingPwd && (
+            {!IS_DEMO_ENVIRONMENT && !changingPwd && (
               <button
                 type="button"
                 onClick={() => setChangingPwd(true)}
@@ -109,7 +111,11 @@ export default function PortalPerfilPage() {
               </button>
             )}
           </div>
-          {changingPwd ? (
+          {IS_DEMO_ENVIRONMENT ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              La contraseña pertenece a este acceso temporal y no se puede modificar durante la demo.
+            </p>
+          ) : changingPwd ? (
             <form onSubmit={handleChangePassword} className="space-y-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Nueva contraseña</label>

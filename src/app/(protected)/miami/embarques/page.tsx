@@ -14,6 +14,8 @@ import {
   getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { getDemoHtmlWatermark } from '@/src/lib/demo-print'
+import { escapeHtml } from '@/src/lib/html'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -57,8 +59,6 @@ export default function EmbarquesPage() {
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
 
-  useEffect(() => { load() }, [])
-
   const load = async () => {
     setLoading(true)
     // Only show packages that are ready to dispatch (in bodega, not yet in transit)
@@ -96,10 +96,45 @@ export default function EmbarquesPage() {
     setSelected(new Set())
   }
 
+  useEffect(() => {
+    let active = true
+    void Promise.all([
+      supabase
+        .from('miami_packages')
+        .select('id, tracking_number, carrier, tipo_carga, cargo_status, weight_lbs, warehouse_number, received_at, clientes(nombre, codigo_cliente)')
+        .in('cargo_status', ['Recibido en Miami', 'En Consolidación'])
+        .order('received_at', { ascending: true })
+        .limit(500),
+      supabase
+        .from('miami_shipments')
+        .select('id, shipment_number, transport_mode, status, total_packages, total_weight_lbs, dispatched_at')
+        .order('dispatched_at', { ascending: false })
+        .limit(10),
+      supabase
+        .from('company_settings')
+        .select(COMPANY_BRANDING_SELECT)
+        .limit(1)
+        .maybeSingle(),
+    ]).then(([packagesResult, shipmentsResult, companyResult]) => {
+      if (!active) return
+      if (packagesResult.error) toast.error('Error al cargar paquetes')
+      if (shipmentsResult.error) toast.error('Error al cargar embarques Miami')
+      setPackages((packagesResult.data || []) as unknown as Pkg[])
+      setShipments((shipmentsResult.data || []) as ShipmentRow[])
+      setCompanyBranding(normalizeCompanyBranding(companyResult.data))
+      setLoading(false)
+      setSelected(new Set())
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
 
@@ -138,22 +173,24 @@ export default function EmbarquesPage() {
 
     const today = new Date().toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' })
     const totalWeight = items.reduce((s, p) => s + Number(p.weight_lbs || 0), 0)
-    const companyName = getCompanyDisplayName(companyBranding)
-    const tradeName = getCompanyTradeName(companyBranding)
+    const companyName = escapeHtml(getCompanyDisplayName(companyBranding))
+    const tradeName = escapeHtml(getCompanyTradeName(companyBranding))
 
     const rows = items.map((p, i) => `
       <tr>
         <td>${i + 1}</td>
-        <td>${p.warehouse_number || '—'}</td>
-        <td>${p.tracking_number}</td>
-        <td>${(p.clientes as any)?.nombre || '—'}</td>
-        <td>${(p.clientes as any)?.codigo_cliente || '—'}</td>
-        <td>${p.tipo_carga || 'Paquetería'}</td>
-        <td>${p.weight_lbs ? `${p.weight_lbs} lbs` : '—'}</td>
+        <td>${escapeHtml(p.warehouse_number || '—')}</td>
+        <td>${escapeHtml(p.tracking_number)}</td>
+        <td>${escapeHtml(p.clientes?.nombre || '—')}</td>
+        <td>${escapeHtml(p.clientes?.codigo_cliente || '—')}</td>
+        <td>${escapeHtml(p.tipo_carga || 'Paquetería')}</td>
+        <td>${escapeHtml(p.weight_lbs ? `${p.weight_lbs} lbs` : '—')}</td>
       </tr>`).join('')
 
+    const demoWatermark = getDemoHtmlWatermark()
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Lista de Embarque</title>
     <style>
+      ${demoWatermark.styles}
       body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; }
       h2 { color: #0038BD; margin-bottom: 4px; }
       p { margin: 2px 0; color: #555; }
@@ -164,12 +201,13 @@ export default function EmbarquesPage() {
       .footer { margin-top: 16px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; }
       @media print { body { margin: 10mm; } }
     </style></head><body>
+    ${demoWatermark.markup}
     <h2>${companyName}</h2>
     <p>Lista de Embarque — Miami → Honduras</p>
-    <p>Fecha: ${today} &nbsp;|&nbsp; Total paquetes: ${items.length} &nbsp;|&nbsp; Peso total: ${totalWeight.toFixed(2)} lbs</p>
+    <p>Fecha: ${escapeHtml(today)} &nbsp;|&nbsp; Total paquetes: ${items.length} &nbsp;|&nbsp; Peso total: ${totalWeight.toFixed(2)} lbs</p>
     <table><thead><tr><th>#</th><th>WH #</th><th>Tracking</th><th>Cliente</th><th>Código</th><th>Tipo</th><th>Peso</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <div class="footer">Generado: ${today} — ${tradeName} ERP</div>
+    <div class="footer">Generado: ${escapeHtml(today)} — ${tradeName} ERP</div>
     </body></html>`
 
     const win = window.open('', '_blank')
@@ -201,7 +239,7 @@ export default function EmbarquesPage() {
           </p>
           <h1 className="mt-1 text-3xl font-bold text-slate-900 dark:text-white">Lista de Embarque</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Selecciona los paquetes listos para despachar a Honduras. Se marcarán "En Tránsito".
+            Selecciona los paquetes listos para despachar a Honduras. Se marcarán como En Tránsito.
           </p>
         </div>
 
@@ -364,9 +402,9 @@ export default function EmbarquesPage() {
                         {p.carrier && <p className="text-xs text-slate-400">{p.carrier}</p>}
                       </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                        {(p.clientes as any)?.nombre || <span className="text-slate-300 text-xs">Sin cliente</span>}
-                        {(p.clientes as any)?.codigo_cliente && (
-                          <p className="text-xs text-slate-400">{(p.clientes as any).codigo_cliente}</p>
+                        {p.clientes?.nombre || <span className="text-slate-300 text-xs">Sin cliente</span>}
+                        {p.clientes?.codigo_cliente && (
+                          <p className="text-xs text-slate-400">{p.clientes.codigo_cliente}</p>
                         )}
                       </td>
                       <td className="px-4 py-3">

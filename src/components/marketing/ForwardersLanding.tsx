@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   PLATFORM_ATTRIBUTION,
+  PLATFORM_CONTACT_EMAIL,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
 import {
@@ -308,7 +309,7 @@ function DashboardMockup() {
             <span className="h-2.5 w-2.5 rounded-full bg-[#EF8E01]/80" />
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
             <span className="ml-3 hidden rounded-md border border-slate-200 bg-white px-3 py-1 font-mono text-[11px] text-slate-400 sm:block">
-              app.forwarderserp.com/dashboard
+              demo.forwarders.app/dashboard
             </span>
           </div>
           <span className="rounded-full border border-[#0038BD]/20 bg-[#0038BD]/6 px-3 py-1 text-[11px] font-semibold text-[#0038BD]">
@@ -325,7 +326,7 @@ function DashboardMockup() {
               </div>
               <div>
                 <p className="text-[11px] font-semibold text-[#07111F]">Forwarders ERP</p>
-                <p className="text-[9px] text-slate-400">by DHer</p>
+                <p className="text-[9px] text-slate-400">by Hernova Systems</p>
               </div>
             </div>
 
@@ -617,7 +618,7 @@ export function ForwardersLanding() {
             />
             <span>
               <span className="block text-sm font-bold text-[#07111F]">Forwarders ERP</span>
-              <span className="block text-[10px] text-slate-400">by DHer</span>
+              <span className="block text-[10px] text-slate-400">by Hernova Systems</span>
             </span>
           </Link>
 
@@ -894,7 +895,7 @@ export function ForwardersLanding() {
               variants={fadeUp}
               className="mt-6 text-xl leading-relaxed text-slate-500"
             >
-              Forwarders ERP by DHer conecta el flujo comercial con la
+              Forwarders ERP by Hernova Systems conecta el flujo comercial con la
               operación: clientes, tarifas, cotizaciones, pricing, documentos y
               actividad del equipo en una experiencia clara para el día a día.
             </motion.p>
@@ -1298,7 +1299,7 @@ export function ForwardersLanding() {
           <SectionHeading
             eyebrow="Comparativa"
             title="Por qué un ERP genérico no es suficiente."
-            description="Forwarders ERP by DHer resuelve procesos comerciales y operativos que los ERP tradicionales no modelan de forma nativa."
+            description="Forwarders ERP by Hernova Systems resuelve procesos comerciales y operativos que los ERP tradicionales no modelan de forma nativa."
           />
           <div className="mt-12 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60">
             <table className="w-full border-collapse text-left text-sm">
@@ -1306,7 +1307,7 @@ export function ForwardersLanding() {
                 <tr className="bg-[#07111F] text-xs font-bold uppercase tracking-wider text-white">
                   <th className="px-5 py-4 font-bold sm:px-6">Necesidad</th>
                   <th className="px-5 py-4 font-bold sm:px-6">Proceso tradicional</th>
-                  <th className="px-5 py-4 font-bold sm:px-6">Forwarders ERP by DHer</th>
+                  <th className="px-5 py-4 font-bold sm:px-6">Forwarders ERP by Hernova Systems</th>
                 </tr>
               </thead>
               <tbody>
@@ -1420,8 +1421,8 @@ export function ForwardersLanding() {
                 </p>
                 <p className="text-center text-xs text-slate-500">
                   O escríbenos a{' '}
-                  <a href="mailto:contacto@dher.dev" className="text-[#EF8E01] hover:underline">
-                    contacto@dher.dev
+                  <a href={`mailto:${PLATFORM_CONTACT_EMAIL}`} className="text-[#EF8E01] hover:underline">
+                    {PLATFORM_CONTACT_EMAIL}
                   </a>
                 </p>
               </form>
@@ -1478,11 +1479,11 @@ export function ForwardersLanding() {
               </div>
 
               <a
-                href="mailto:contacto@dher.dev"
+                href={`mailto:${PLATFORM_CONTACT_EMAIL}`}
                 className="inline-flex items-center gap-2 rounded-full border border-[#EF8E01]/20 bg-[#EF8E01]/10 px-4 py-2 text-sm font-semibold text-[#EF8E01] transition hover:bg-[#EF8E01]/15"
               >
                 <Mail size={15} />
-                contacto@dher.dev
+                {PLATFORM_CONTACT_EMAIL}
               </a>
             </div>
           </div>

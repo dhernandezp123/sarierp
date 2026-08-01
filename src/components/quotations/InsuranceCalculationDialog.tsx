@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FileText, Printer } from 'lucide-react'
 import { toast } from 'sonner'
+import { getDemoHtmlWatermark } from '@/src/lib/demo-print'
 
 import {
   Dialog,
@@ -153,6 +154,7 @@ export function InsuranceCalculationDialog({
     }
 
     printWindow.document.open()
+    const demoWatermark = getDemoHtmlWatermark()
     printWindow.document.write(`<!doctype html>
       <html lang="es">
         <head>
@@ -160,6 +162,7 @@ export function InsuranceCalculationDialog({
           <title>Cálculo para aseguradora</title>
           <style>
             @page { size: A4 landscape; margin: 12mm; }
+            ${demoWatermark.styles}
             * { box-sizing: border-box; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
             body { width: min(1100px, calc(100vw - 32px)); margin: 24px auto; color: #0f172a; font-family: Arial, sans-serif; }
             header { margin-bottom: 14px; border-bottom: 3px solid #075f9e; padding-bottom: 10px; }
@@ -193,6 +196,7 @@ export function InsuranceCalculationDialog({
           </style>
         </head>
         <body>
+          ${demoWatermark.markup}
           <header><h1>Detalle de cálculo del seguro de carga</h1><div class="meta" id="meta"></div></header>
           <p class="intro">El seguro Full Cover utiliza los servicios permitidos por la política de la empresa. Siempre excluye la propia línea de seguro y el ISV; también excluye las líneas que coincidan con las reglas configuradas. El costo usa los costos internos y la venta usa los valores ofrecidos al cliente.</p>
 
