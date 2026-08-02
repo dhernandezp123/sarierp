@@ -1790,7 +1790,7 @@ begin
       v_actor_profile_id,
       'Entrega historica demo.',
       v_now - interval '12 days',
-      'Courier',
+      'Paquetería',
       'Entregado',
       null,
       null,

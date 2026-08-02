@@ -58,12 +58,26 @@ select pg_temp.assert_true(
   'anon no debe consultar agents'
 );
 select pg_temp.assert_true(
-  has_table_privilege('anon', 'public.leads', 'INSERT'),
-  'anon debe poder insertar leads'
+  not has_table_privilege('anon', 'public.leads', 'INSERT')
+    and has_column_privilege('anon', 'public.leads', 'nombre', 'INSERT')
+    and has_column_privilege('anon', 'public.leads', 'empresa', 'INSERT')
+    and has_column_privilege('anon', 'public.leads', 'email', 'INSERT')
+    and has_column_privilege('anon', 'public.leads', 'telefono', 'INSERT')
+    and not has_column_privilege('anon', 'public.leads', 'status', 'INSERT')
+    and not has_column_privilege('anon', 'public.leads', 'notes', 'INSERT'),
+  'anon solo debe insertar las cuatro columnas publicas de leads'
 );
 select pg_temp.assert_true(
   not has_function_privilege('anon', 'public.is_admin()', 'EXECUTE'),
   'anon no debe ejecutar helpers internos'
+);
+select pg_temp.assert_true(
+  has_function_privilege('anon', 'public.is_demo_environment()', 'EXECUTE'),
+  'anon debe evaluar el ambiente para las politicas publicas de leads y storage'
+);
+select pg_temp.assert_true(
+  has_function_privilege('anon', 'public.is_restricted_demo_context()', 'EXECUTE'),
+  'anon debe evaluar el guard restrictivo de las policies publicas de storage'
 );
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data)

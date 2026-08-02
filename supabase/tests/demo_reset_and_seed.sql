@@ -174,7 +174,10 @@ set result = public.reset_and_seed_demo(
 
 select pg_temp.assert_true(
   (select result ->> 'ok' = 'true' from demo_reset_test_result),
-  'El reset transaccional debe completar el dataset Atlas'
+  format(
+    'El reset transaccional debe completar el dataset Atlas. Respuesta: %s',
+    (select result::text from demo_reset_test_result)
+  )
 );
 
 select pg_temp.expect_sqlstate(

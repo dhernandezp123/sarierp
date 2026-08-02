@@ -4666,8 +4666,8 @@ Agregar una entrada por fix:
 
 ### 2026-07-31 - DEMO-001 - Sandbox compartido aislado y reproducible
 
-- Estado: En validación; release bloqueado hasta aplicar las migraciones sólo
-  en staging, desactivar signup, ejecutar las pruebas SQL y completar UAT.
+- Estado: Validación local completada; release bloqueado hasta aplicar las
+  migraciones sólo en staging, desactivar signup y completar UAT.
 - Hallazgo: DEMO-001.
 - Código y configuración:
   - `next.config.ts`
@@ -4717,6 +4717,16 @@ Agregar una entrada por fix:
     por exigir ambos marcadores `demo`.
   - Build positivo con URLs staging exactas y claves placeholder modernas:
     OK, 68/68 páginas.
+  - `npx supabase db reset --local`: OK desde una base limpia con las 55
+    migraciones versionadas y `supabase/seed.sql`.
+  - Suite SQL completa ejecutada directamente con `psql` dentro de Docker:
+    23/23 archivos OK con rollback, incluidas las cuatro pruebas Demo.
+  - `npx supabase db lint --local --level error`: OK, sin errores de esquema.
+  - La validación detectó y corrigió el valor inválido `Courier` del paquete
+    Atlas histórico por el valor permitido `Paquetería`.
+  - La regresión RLS confirmó que `anon` sólo puede insertar las cuatro columnas
+    públicas de `leads`; los helpers booleanos requeridos por policies públicas
+    de leads/Storage son ejecutables sin exponer la tabla privada del ambiente.
   - `git diff --check`: OK; sólo avisos LF/CRLF.
   - Búsqueda de branding privado: sólo permanece `SARIHN-` en la rama
     condicional no-demo del generador de cotizaciones.
@@ -4725,19 +4735,21 @@ Agregar una entrada por fix:
     producción.
   - Desactivar `Allow new users to sign up` en Supabase Auth y conservar
     evidencia.
-  - Ejecutar las cuatro pruebas SQL contra una base local/staging controlada.
+  - Repetir las cuatro pruebas SQL después de aplicar las migraciones en staging.
   - Configurar variables Preview limitadas a la rama `demo`, asociar el dominio
     y completar UAT Admin/Cliente.
   - Inspeccionar/purgar cualquier blob heredado antes de entregar credenciales.
 - Riesgos pendientes:
-  - Docker/`psql` no están disponibles en esta estación, por lo que las pruebas
-    SQL aún no se han ejecutado.
-  - El lint global conserva deuda histórica y no es todavía una puerta limpia.
-- Commit: pendiente.
+  - `supabase test db` interpreta estas pruebas históricas como pgTAP y reporta
+    `No plan found`; la evidencia autoritativa local usa `psql` con
+    `ON_ERROR_STOP=1`. Convertir la suite a pgTAP queda como deuda de tooling.
+  - El lint global de frontend conserva deuda histórica y no es todavía una
+    puerta limpia.
+- Commit base: `497a3c5`; correcciones de validación local: pendiente.
 
 ### 2026-07-31 - SEC-018 - Rotación fail-closed de cuentas Demo
 
-- Estado: En validación; código preparado, pendiente de prueba real en staging.
+- Estado: Validación SQL local completada; pendiente de rotación real en staging.
 - Hallazgo: SEC-018.
 - Código:
   - `scripts/demo/provision-users.mjs`
@@ -4759,14 +4771,16 @@ Agregar una entrada por fix:
     inactivos y las cuentas Auth bloqueadas.
 - Validaciones ejecutadas:
   - `node --check scripts/demo/provision-users.mjs`: OK.
+  - `supabase/tests/demo_reset_and_seed.sql`: OK con `psql`, transacción y
+    rollback; valida revocación de sesiones, nonce y dataset Atlas.
 - Pendiente:
-  - Ejecutar la prueba SQL y una rotación real controlada, comprobando que el
+  - Ejecutar una rotación real controlada en staging, comprobando que el
     navegador anterior pierde acceso y no puede renovar sesión.
-- Commit: pendiente.
+- Commit base: `497a3c5`; correcciones de validación local: pendiente.
 
 ### 2026-07-31 - SEC-019 - Storage y enlaces externos fail-closed en Demo
 
-- Estado: En validación; pendiente de aplicar SQL y probar políticas reales.
+- Estado: Validación SQL local completada; pendiente de aplicar en staging y UAT.
 - Hallazgo: SEC-019.
 - Código:
   - `src/lib/external-url.ts`
@@ -4788,12 +4802,19 @@ Agregar una entrada por fix:
     cuatro buckets usados por la UI quedan privados en Demo.
   - Una política restrictiva bloquea toda lectura y escritura de Storage en el
     sandbox; los blobs no se borran automáticamente.
+  - `anon` sólo recibe ejecución sobre los helpers booleanos que las policies
+    públicas necesitan; las funciones internas continúan revocadas.
 - Validaciones ejecutadas:
   - `npx tsc --noEmit`: OK.
   - ESLint dirigido de `external-url.ts`, proxy, gates y rutas nuevas: OK.
   - `git diff --check`: OK; sólo avisos LF/CRLF.
   - Build Demo: OK, 68/68 páginas.
+  - `supabase/tests/booking_tracking_url_hardening.sql`: OK con rollback.
+  - `supabase/tests/demo_storage_hardening.sql`: OK con rollback; una operación
+    real de carga anónima en Demo fue rechazada por RLS, no por falta de permiso
+    sobre el helper de la policy.
+  - Suite SQL completa: 23/23 archivos OK; `db lint --level error`: OK.
 - Pendiente:
   - Probar políticas con usuarios Admin/Cliente y revisar que staging no
     contenga objetos reales heredados.
-- Commit: pendiente.
+- Commit base: `497a3c5`; correcciones de validación local: pendiente.

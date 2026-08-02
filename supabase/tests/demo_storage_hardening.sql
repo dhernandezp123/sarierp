@@ -13,6 +13,29 @@ begin
 end;
 $$;
 
+create or replace function pg_temp.expect_rls_denied(command text, message text)
+returns void
+language plpgsql
+as $$
+declare
+  caught_message text;
+begin
+  begin
+    execute command;
+  exception when sqlstate '42501' then
+    get stacked diagnostics caught_message = message_text;
+    if position('row-level security' in lower(caught_message)) = 0 then
+      raise exception 'ASSERTION FAILED: % (error inesperado: %)',
+        message,
+        caught_message;
+    end if;
+    return;
+  end;
+
+  raise exception 'ASSERTION FAILED: %', message;
+end;
+$$;
+
 select pg_temp.assert_true(
   not exists (
     select 1
@@ -132,6 +155,35 @@ select pg_temp.assert_true(
   ),
   'El guard fail-closed general del ambiente demo debe permanecer activo'
 );
+
+update public.platform_environment
+set environment = 'demo',
+    project_ref = 'wlssekvxpfxhwedsjhpz',
+    reset_enabled = false,
+    reset_armed_at = null,
+    dataset_version = null,
+    dataset_seeded_at = null,
+    dataset_client_id = null
+where singleton is true;
+
+set local role anon;
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+
+select pg_temp.assert_true(
+  public.is_demo_environment(),
+  'anon debe poder evaluar el helper usado por el guard general de Storage'
+);
+select pg_temp.assert_true(
+  public.is_restricted_demo_context(),
+  'anon debe poder evaluar el helper usado por los guards sensibles de Storage'
+);
+select pg_temp.expect_rls_denied(
+  $$insert into storage.objects (bucket_id, name)
+    values ('avatars', 'demo-anon-test.png')$$,
+  'Storage anonimo debe fallar por RLS y no por permisos del helper'
+);
+
+reset role;
 
 rollback;
 

@@ -259,9 +259,11 @@ revoke all on function public.current_user_cliente_id() from public, anon;
 revoke all on function public.current_demo_access_grant_id()
   from public, anon;
 
-grant execute on function public.is_demo_environment() to authenticated;
+-- Las politicas publicas de leads y storage deben poder evaluar el ambiente
+-- sin exponer la tabla privada platform_environment.
+grant execute on function public.is_demo_environment() to anon, authenticated;
 grant execute on function public.current_user_is_demo() to authenticated;
-grant execute on function public.is_restricted_demo_context() to authenticated;
+grant execute on function public.is_restricted_demo_context() to anon, authenticated;
 grant execute on function public.is_demo_access_active() to authenticated;
 grant execute on function public.is_platform_admin() to authenticated;
 grant execute on function public.current_user_role() to authenticated;
