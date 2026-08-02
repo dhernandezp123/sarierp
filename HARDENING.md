@@ -4745,7 +4745,7 @@ Agregar una entrada por fix:
     `ON_ERROR_STOP=1`. Convertir la suite a pgTAP queda como deuda de tooling.
   - El lint global de frontend conserva deuda histórica y no es todavía una
     puerta limpia.
-- Commit base: `497a3c5`; correcciones de validación local: pendiente.
+- Commits: base `497a3c5`; correcciones de validación local `99956c2`.
 
 ### 2026-07-31 - SEC-018 - Rotación fail-closed de cuentas Demo
 
@@ -4776,7 +4776,7 @@ Agregar una entrada por fix:
 - Pendiente:
   - Ejecutar una rotación real controlada en staging, comprobando que el
     navegador anterior pierde acceso y no puede renovar sesión.
-- Commit base: `497a3c5`; correcciones de validación local: pendiente.
+- Commits: base `497a3c5`; correcciones de validación local `99956c2`.
 
 ### 2026-07-31 - SEC-019 - Storage y enlaces externos fail-closed en Demo
 
@@ -4817,4 +4817,4 @@ Agregar una entrada por fix:
 - Pendiente:
   - Probar políticas con usuarios Admin/Cliente y revisar que staging no
     contenga objetos reales heredados.
-- Commit base: `497a3c5`; correcciones de validación local: pendiente.
+- Commits: base `497a3c5`; correcciones de validación local `99956c2`.
