@@ -49,7 +49,7 @@ Git entre computadoras y ambientes.
     borrar a Admin u Operaciones, pero la fila `booking_documents` sólo permite
     DELETE a Admin. Se atenderá como hallazgo independiente para evitar blobs o
     metadatos huérfanos.
-- Commit: Pendiente.
+- Commit de implementación: `18307e4`.
 
 ### 2026-07-28 - CALC-005 - Retiro de Bank Transfer Fee del comparativo FCL
 
