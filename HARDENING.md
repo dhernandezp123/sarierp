@@ -52,7 +52,7 @@ Git entre computadoras y ambientes.
   - El borrado en cascada de un booking elimina metadata, pero no limpia
     automáticamente sus objetos de Storage; requiere una estrategia de cleanup
     separada si se habilita eliminación física de bookings.
-- Commit: Pendiente.
+- Commit de implementación: `d89d21a`.
 
 ### 2026-08-03 - SEC-020 - Documentos de Booking en Storage privado
 
