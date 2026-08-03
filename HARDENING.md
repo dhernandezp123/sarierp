@@ -4,6 +4,53 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-03 - SEC-020 - Documentos de Booking en Storage privado
+
+- Estado: Implementado en código; pendiente de desplegar y aplicar en Producción.
+- Hallazgo: SEC-020.
+- Código:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+- SQL:
+  - `supabase/migrations/20260803121500_booking_documents_private.sql`.
+- Prueba:
+  - `supabase/tests/booking_documents_private.sql`.
+- Causa raíz:
+  - El bucket `booking-documents` estaba configurado como público en
+    Producción. Además, el Draft MBL guardaba y consumía una URL pública,
+    aunque el flujo general de documentos ya utilizaba enlaces firmados.
+- Cambios:
+  - El bucket queda definido como privado mediante una migración productiva,
+    idempotente y sin alterar sus límites o tipos MIME actuales.
+  - Los Draft MBL nuevos guardan la ruta del objeto, no una URL pública.
+  - Los Draft MBL se abren con una URL firmada por 60 segundos y se conservó
+    compatibilidad con las URLs públicas heredadas.
+  - La ruta se valida contra el UUID del booking actual antes de solicitar el
+    enlace firmado.
+- Validaciones ejecutadas:
+  - Revisión dirigida de todos los consumidores de `booking-documents`: sólo
+    el Draft MBL dependía de `getPublicUrl`; no hay consumidores en API, PDF o
+    envío real de correo.
+  - Preflight remoto de Producción: bucket existente con `public = true` y una
+    referencia heredada de Draft MBL; no se mostraron rutas ni datos sensibles.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - ESLint dirigido: sin hallazgos nuevos; la pantalla conserva ocho errores y
+    una advertencia históricos fuera de las líneas modificadas.
+- Validaciones pendientes:
+  - Prueba SQL local e idempotencia de la migración.
+  - Desplegar primero el consumidor de enlaces firmados y después aplicar la
+    privacidad del bucket en Producción.
+  - Confirmar que la URL pública sea rechazada y que una URL firmada permita
+    descargar el archivo existente.
+  - UAT autenticado de carga, descarga y eliminación.
+- Riesgos o trabajo pendiente:
+  - La eliminación conserva una inconsistencia preexistente: Storage permite
+    borrar a Admin u Operaciones, pero la fila `booking_documents` sólo permite
+    DELETE a Admin. Se atenderá como hallazgo independiente para evitar blobs o
+    metadatos huérfanos.
+- Commit: Pendiente.
+
 ### 2026-07-28 - CALC-005 - Retiro de Bank Transfer Fee del comparativo FCL
 
 - Estado: En validación manual.

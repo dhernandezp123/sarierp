@@ -20,6 +20,11 @@ import {
 } from '@/src/lib/company-branding'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
+const BOOKING_DOCUMENTS_STORAGE_MARKERS = [
+  `/storage/v1/object/public/${BOOKING_DOCUMENTS_BUCKET}/`,
+  `/storage/v1/object/sign/${BOOKING_DOCUMENTS_BUCKET}/`,
+  `/storage/v1/object/authenticated/${BOOKING_DOCUMENTS_BUCKET}/`,
+]
 
 type BLForm = {
   bl_type: 'MBL' | 'HBL'
@@ -296,6 +301,29 @@ function sanitizeFileName(name: string) {
     .replace(/-+/g, '-')
 }
 
+function normalizeBookingDocumentPath(value: string) {
+  const trimmedValue = value.trim()
+  if (!trimmedValue) return ''
+
+  const storageMarker = BOOKING_DOCUMENTS_STORAGE_MARKERS.find((marker) =>
+    trimmedValue.includes(marker)
+  )
+
+  if (storageMarker) {
+    const encodedPath = (trimmedValue.split(storageMarker)[1] || '').split(/[?#]/, 1)[0]
+
+    try {
+      return decodeURIComponent(encodedPath)
+    } catch {
+      return ''
+    }
+  }
+
+  if (/^https?:\/\//i.test(trimmedValue)) return ''
+
+  return trimmedValue.replace(/^\/+/, '')
+}
+
 function statusBadgeClass(status: string) {
   if (status === 'MBL Draft' || status === 'HBL Draft') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
   if (status === 'MBL Validado') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
@@ -328,6 +356,7 @@ export default function BLPage() {
   const [saving, setSaving] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
   const [uploadingDraft, setUploadingDraft] = useState(false)
+  const [openingDraft, setOpeningDraft] = useState(false)
   const [containers, setContainers] = useState<BLContainer[]>([])
   const [savingContainers, setSavingContainers] = useState(false)
   const [amendments, setAmendments] = useState<Amendment[]>([])
@@ -489,7 +518,7 @@ export default function BLPage() {
         measurement_cbm: blData.measurement_cbm ? String(blData.measurement_cbm) : '',
         special_instructions: blData.special_instructions || '',
         printed_at_destination: blData.printed_at_destination ?? true,
-        draft_file_url: blData.draft_file_url || '',
+        draft_file_url: normalizeBookingDocumentPath(blData.draft_file_url || ''),
         draft_file_name: blData.draft_file_name || '',
         placa_camion: blData.placa_camion || '',
         nombre_operador: blData.nombre_operador || '',
@@ -652,7 +681,7 @@ export default function BLPage() {
       measurement_cbm: form.measurement_cbm ? Number(form.measurement_cbm) : null,
       special_instructions: form.special_instructions || null,
       printed_at_destination: form.printed_at_destination,
-      draft_file_url: form.draft_file_url || null,
+      draft_file_url: normalizeBookingDocumentPath(form.draft_file_url) || null,
       draft_file_name: form.draft_file_name || null,
       placa_camion: form.placa_camion || null,
       nombre_operador: form.nombre_operador || null,
@@ -883,19 +912,37 @@ export default function BLPage() {
       return
     }
 
-    const { data: urlData } = supabase.storage
-      .from(BOOKING_DOCUMENTS_BUCKET)
-      .getPublicUrl(path)
-
     setForm((prev) => ({
       ...prev,
-      draft_file_url: urlData.publicUrl,
+      draft_file_url: path,
       draft_file_name: file.name,
     }))
     setUploadingDraft(false)
     toast.success('Archivo subido')
 
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const openDraftFile = async () => {
+    const path = normalizeBookingDocumentPath(form.draft_file_url)
+
+    if (!path || !path.startsWith(`${bookingId}/`)) {
+      toast.error('La ruta del Draft MBL no es válida')
+      return
+    }
+
+    setOpeningDraft(true)
+    const { data, error } = await supabase.storage
+      .from(BOOKING_DOCUMENTS_BUCKET)
+      .createSignedUrl(path, 60)
+    setOpeningDraft(false)
+
+    if (error || !data?.signedUrl) {
+      toast.error(error?.message || 'No se pudo abrir el Draft MBL')
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
   }
 
   if (loading) return <PageSkeleton cards={2} rows={4} />
@@ -1051,15 +1098,15 @@ export default function BLPage() {
               {uploadingDraft ? 'Subiendo...' : 'Subir Draft MBL'}
             </button>
             {form.draft_file_url && (
-              <a
-                href={form.draft_file_url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={openDraftFile}
+                disabled={openingDraft}
                 className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400"
               >
                 <FileText className="h-4 w-4" />
-                {form.draft_file_name || 'Ver archivo'}
-              </a>
+                {openingDraft ? 'Abriendo...' : form.draft_file_name || 'Ver archivo'}
+              </button>
             )}
           </div>
         </section>
