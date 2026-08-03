@@ -4638,7 +4638,37 @@ Agregar una entrada por fix:
   - Revisar los footers de `/login`, `/register`, `/onboarding`, aplicación
     autenticada, landing, `/politicas` y cierre imprimible de facturación.
 - Riesgos pendientes:
-  - `contacto@dher.dev` y las referencias contractuales a DHer permanecen sin
-    cambios hasta confirmar el correo y la identidad jurídica oficiales de
-    Hernova Systems.
+  - Las referencias contractuales a DHer permanecen sin cambios hasta completar
+    la revisión de identidad jurídica de Hernova Systems.
+- Commit: `d0f6923`.
+
+### 2026-08-03 - UX-050 - Correo público oficial unificado
+
+- Estado: Completado en código; pendiente de verificar el deployment Production.
+- Hallazgo: UX-050.
+- Código:
+  - `src/lib/platform-branding.ts`
+  - `src/components/marketing/ForwardersLanding.tsx`
+  - `src/app/politicas/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Se centralizó `contacto@forwarders.app` en
+    `PLATFORM_CONTACT_EMAIL`.
+  - El formulario y el footer del landing usan el correo oficial tanto en el
+    texto visible como en sus enlaces `mailto:`.
+  - La sección de contacto de Políticas reutiliza la misma constante para
+    evitar otra divergencia.
+- Validaciones:
+  - `npm run build`: OK, 66/66 páginas generadas.
+  - `npx tsc --noEmit`: OK después de regenerar los tipos de `.next` para
+    `main`.
+  - ESLint dirigido: cero errores; conserva dos advertencias preexistentes en
+    `ForwardersLanding.tsx` (`AnimatePresence` y `<img>`).
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Búsqueda en código y artefactos generados: ninguna referencia restante a
+    `contacto@dher.dev`; el correo y `mailto:` oficiales aparecen en landing y
+    Políticas.
+- Riesgos o trabajo pendiente:
+  - Confirmar en `forwarders.app` que el deployment de `main` esté Ready y que
+    ambos enlaces abran `mailto:contacto@forwarders.app`.
 - Commit: pendiente.

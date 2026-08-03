@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   PLATFORM_ATTRIBUTION,
+  PLATFORM_CONTACT_EMAIL,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
 import {
@@ -1420,8 +1421,8 @@ export function ForwardersLanding() {
                 </p>
                 <p className="text-center text-xs text-slate-500">
                   O escríbenos a{' '}
-                  <a href="mailto:contacto@dher.dev" className="text-[#EF8E01] hover:underline">
-                    contacto@dher.dev
+                  <a href={`mailto:${PLATFORM_CONTACT_EMAIL}`} className="text-[#EF8E01] hover:underline">
+                    {PLATFORM_CONTACT_EMAIL}
                   </a>
                 </p>
               </form>
@@ -1478,11 +1479,11 @@ export function ForwardersLanding() {
               </div>
 
               <a
-                href="mailto:contacto@dher.dev"
+                href={`mailto:${PLATFORM_CONTACT_EMAIL}`}
                 className="inline-flex items-center gap-2 rounded-full border border-[#EF8E01]/20 bg-[#EF8E01]/10 px-4 py-2 text-sm font-semibold text-[#EF8E01] transition hover:bg-[#EF8E01]/15"
               >
                 <Mail size={15} />
-                contacto@dher.dev
+                {PLATFORM_CONTACT_EMAIL}
               </a>
             </div>
           </div>

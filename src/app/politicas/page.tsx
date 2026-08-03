@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Globe2, ArrowLeft, Mail } from 'lucide-react'
 import {
   PLATFORM_ATTRIBUTION,
+  PLATFORM_CONTACT_EMAIL,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
 
@@ -213,7 +214,7 @@ Cada versión indicará fecha de vigencia. Cuando el cambio altere materialmente
     title: 'Contacto y soporte',
     body: `Para consultas sobre estas políticas, reportes de incidentes de seguridad o solicitudes relacionadas con la privacidad de datos, comunicarse a:
 
-Correo contractual y privacidad: contacto@dher.dev
+Correo contractual y privacidad: ${PLATFORM_CONTACT_EMAIL}
 Sitio web: forwarderserp.com
 
 DHer acusará recibo y atenderá la solicitud en un plazo razonable según su naturaleza, la ley aplicable y el SLA contratado. Para proteger los datos, podrá solicitar verificación de identidad y canalizar solicitudes de titulares a través de la organización responsable.`,
@@ -395,11 +396,11 @@ export default function PoliticasPage() {
                   </p>
                 </div>
                 <a
-                  href="mailto:contacto@dher.dev"
+                  href={`mailto:${PLATFORM_CONTACT_EMAIL}`}
                   className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#EF8E01] px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#EF8E01]/20 transition hover:bg-[#db8000]"
                 >
                   <Mail size={15} />
-                  contacto@dher.dev
+                  {PLATFORM_CONTACT_EMAIL}
                 </a>
               </div>
             </div>
