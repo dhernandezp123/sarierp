@@ -4749,8 +4749,9 @@ Agregar una entrada por fix:
 
 ### 2026-08-02 - DEMO-001 / SEC-018 / SEC-019 - Activación controlada de staging
 
-- Estado: Ambiente remoto configurado y slot `01` aprovisionado; entrega a
-  terceros pendiente de UAT visual Admin/Cliente y gates SQL remotos con owner.
+- Estado: Ambiente remoto configurado, slot `01` aprovisionado, gates SQL
+  remotos aprobados y UAT comercial Admin/Cliente completado el 03/08/2026.
+  Habilitado para demostraciones controladas.
 - Hallazgos: DEMO-001, SEC-018 y SEC-019.
 - Archivo de evidencia modificado:
   - `HARDENING.md`.
@@ -4806,13 +4807,38 @@ Agregar una entrada por fix:
     `X-Robots-Tag: noindex, nofollow, noarchive` y `robots.txt` bloquea `/`.
   - La búsqueda dirigida no encontró el project ref productivo hardcodeado en
     `src`, `scripts`, `supabase`, `next.config.ts` ni `package.json`.
+  - UAT Admin en navegador privado: login y reingreso OK; términos y aviso Demo
+    visibles; Dashboard, Cotizaciones, Pricing, Operaciones, Facturación y Miami
+    abren correctamente; sólo se observaron datos ficticios de Atlas; logout OK.
+  - Auditoría remota del UAT Admin: aceptación vigente
+    `2026-07-31-v1`, reconocimiento del sandbox compartido y eventos
+    `session_started`/`terms_accepted` registrados para el grant actual.
+  - UAT Cliente en navegador privado: login, términos, aviso Demo, Portal,
+    Paquetes, Envíos, Prealertas, Calculadora, aislamiento de Atlas, bloqueo de
+    rutas internas, logout y reingreso reportados OK.
+  - Auditoría remota del UAT Cliente: 10/10 comprobaciones de perfil, rol,
+    vigencia, cliente Atlas, grant, aceptación y eventos de acceso OK para la
+    versión `2026-07-31-v1`.
+  - Probe remoto anónimo de Storage: no enumeró buckets privados ni objetos y
+    la carga de un PNG mínimo fue rechazada con HTTP `403`; no se creó ningún
+    objeto de prueba.
+  - UAT documental: los PDF comerciales muestran una marca visible de ambiente
+    de pruebas y las facturas proforma indican que carecen de validez fiscal y
+    comercial.
+  - `02_postdeploy_gate.sql`: `POSTDEPLOY_GATE_OK`, con cero hallazgos NO-GO en
+    columnas, RLS, índices y constraints.
+  - `03_postdeploy_counts.sql`: `POSTDEPLOY_COUNTS_CAPTURED`; cuatro
+    cotizaciones y una cadena SI/shipment/booking con un contenedor físico,
+    un VGM activo, cero filas agregadas inválidas y un cutoff pendiente no
+    vencido. Readiness registró un booking bloqueado y cero listos.
+  - `04_security_gate.sql`: `SECURITY_GATE_COMPLETED`; 27 funciones
+    `security_definer`, ejecutables por `authenticated` y no por `anon`; cero
+    permisos DML directos indebidos. Los gates se ejecutaron por sentencias con
+    `supabase db query --linked`, rol `postgres` y `BYPASSRLS`, sin mutaciones.
 - Riesgos o trabajo pendiente:
-  - Completar UAT visual en navegador privado con Admin y Cliente, incluyendo
-    términos, aislamiento de Atlas, marcas Demo, PDFs y bloqueo de Storage.
-  - Ejecutar desde SQL Editor/rol owner los gates remotos
-    `02_postdeploy_gate.sql`, `03_postdeploy_counts.sql` y
-    `04_security_gate.sql`; el rol temporal de `supabase test db` no tiene
-    visibilidad suficiente y podría dar falsos verdes por RLS.
+  - Al reutilizar por primera vez un slot con una sesión anterior vigente,
+    confirmar que la rotación invalida inmediatamente esa sesión y su refresh
+    token para cerrar la validación operativa de SEC-018.
   - La desactivación de Vercel Authentication deja públicas futuras ramas
     Preview; cada Preview debe mantener autenticación de aplicación y noindex.
 - Código desplegado: `6ed860f`; evidencia operativa registrada en este
