@@ -4747,6 +4747,77 @@ Agregar una entrada por fix:
     puerta limpia.
 - Commits: base `497a3c5`; correcciones de validación local `99956c2`.
 
+### 2026-08-02 - DEMO-001 / SEC-018 / SEC-019 - Activación controlada de staging
+
+- Estado: Ambiente remoto configurado y slot `01` aprovisionado; entrega a
+  terceros pendiente de UAT visual Admin/Cliente y gates SQL remotos con owner.
+- Hallazgos: DEMO-001, SEC-018 y SEC-019.
+- Archivo de evidencia modificado:
+  - `HARDENING.md`.
+- Destinos verificados:
+  - Supabase staging `sarierp-staging`, project ref
+    `wlssekvxpfxhwedsjhpz`.
+  - Vercel Preview del proyecto `sarierp`, rama `demo`, dominio
+    `demo.forwarders.app`.
+  - Producción permaneció en `main` y no se ejecutó `vercel --prod`.
+- SQL aplicado solamente en staging:
+  - Las 55 migraciones versionadas quedaron alineadas local/remoto, incluidas
+    `20260731190000`, `20260731213000`, `20260731214000` y
+    `20260731215000` del ambiente Demo.
+- Configuración remota:
+  - Las seis variables Vercel se limitaron a `Preview (demo)` y usan la URL,
+    publishable key y secret key modernas de staging.
+  - `demo.forwarders.app` se asoció a la rama `demo`; el deployment verificado
+    fue `dpl_CJeRiyF7DhpNQJS8UekbCB1EogKG`, target `preview`, estado `Ready`.
+  - Vercel Authentication se desactivó con autorización expresa para permitir
+    acceso de prospectos al login. Esto vuelve públicos todos los deployments
+    Preview del proyecto, pero no cambia Production ni elimina el login del ERP.
+  - Supabase Auth conserva Email habilitado y tiene deshabilitados signup
+    público, Phone y usuarios anónimos. Site URL y redirects apuntan al dominio
+    Demo.
+  - Las API keys legacy `anon`/`service_role` de staging se deshabilitaron; la
+    aplicación y los scripts continúan con publishable/secret keys modernas.
+- Reset y aprovisionamiento:
+  - El preflight encontró cero perfiles vinculados fuera de Atlas y cero
+    objetos en Storage.
+  - `reset-and-seed.mjs` instaló `atlas-forwarding-demo-v1`; el sentinel quedó
+    en `environment='demo'`, con project ref exacto, reset desarmado y cliente
+    Atlas `10000000-0000-4000-8000-000000000001`.
+  - El dataset remoto verificado contiene una fila Atlas y cuatro cotizaciones;
+    los buckets `avatars`, `booking-documents`, `proveedor-docs` y
+    `miami-package-photos` quedaron privados.
+  - `provision-users.mjs --slot 01` creó el par Admin/Cliente con estado
+    `Aprobado`, activo, marcado Demo, mismo grant y vencimiento a 72 horas. El
+    Admin no tiene cliente ni privilegio de plataforma; Cliente sólo referencia
+    Atlas. Las contraseñas no se registraron en terminales automatizadas,
+    archivos ni este documento.
+- Validaciones ejecutadas:
+  - `npx supabase migration list --linked`: 55/55 alineadas.
+  - `npx supabase db push --linked --dry-run`: remoto actualizado.
+  - `npx supabase db lint --linked --level error`: OK, cero errores.
+  - Suite SQL completa local mediante PostgreSQL/Docker: 23/23 archivos OK.
+  - Sentinel y seed remoto: todas las guardas OK; reset desarmado.
+  - Slot `01`: 17/17 comprobaciones de Auth, perfil, grant, rol, cliente,
+    expiración y proveedores de acceso OK.
+  - Las claves modernas mantuvieron acceso a Auth y al sentinel; solicitudes
+    inocuas con ambas claves legacy fueron rechazadas con HTTP `401`.
+  - HTTP público: `/` redirige a `/login`; `/register` y
+    `/portal/register` redirigen a sus logins; todas las respuestas incluyen
+    `X-Robots-Tag: noindex, nofollow, noarchive` y `robots.txt` bloquea `/`.
+  - La búsqueda dirigida no encontró el project ref productivo hardcodeado en
+    `src`, `scripts`, `supabase`, `next.config.ts` ni `package.json`.
+- Riesgos o trabajo pendiente:
+  - Completar UAT visual en navegador privado con Admin y Cliente, incluyendo
+    términos, aislamiento de Atlas, marcas Demo, PDFs y bloqueo de Storage.
+  - Ejecutar desde SQL Editor/rol owner los gates remotos
+    `02_postdeploy_gate.sql`, `03_postdeploy_counts.sql` y
+    `04_security_gate.sql`; el rol temporal de `supabase test db` no tiene
+    visibilidad suficiente y podría dar falsos verdes por RLS.
+  - La desactivación de Vercel Authentication deja públicas futuras ramas
+    Preview; cada Preview debe mantener autenticación de aplicación y noindex.
+- Código desplegado: `6ed860f`; evidencia operativa registrada en este
+  commit de documentación.
+
 ### 2026-07-31 - SEC-018 - Rotación fail-closed de cuentas Demo
 
 - Estado: Validación SQL local completada; pendiente de rotación real en staging.
