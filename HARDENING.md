@@ -4,6 +4,56 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-03 - SEC-021 - Eliminación segura de documentos de Booking
+
+- Estado: Validación local completada; pendiente de despliegue y UAT.
+- Hallazgo: SEC-021.
+- Código:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`.
+- SQL:
+  - `supabase/migrations/20260803143000_booking_document_delete_permissions.sql`.
+- Prueba:
+  - `supabase/tests/booking_document_delete_permissions.sql`.
+- Causa raíz:
+  - Storage permitía eliminar a Admin y Operaciones, pero la policy DELETE de
+    `booking_documents` sólo aceptaba Admin. Operaciones podía borrar el blob y
+    fallar después al eliminar la metadata.
+  - La UI borraba primero Storage. Un documento asociado a VGM usa una FK
+    `ON DELETE RESTRICT`, por lo que PostgreSQL podía rechazar la fila después
+    de que el archivo ya hubiera sido destruido.
+- Cambios:
+  - La policy DELETE queda alineada con carga, actualización y Storage:
+    `can_manage_operations()` y acceso al booking.
+  - La UI sólo muestra carga y eliminación a Admin u Operaciones; Ventas
+    conserva lectura y descarga cuando es propietario de la SI.
+  - La eliminación ocurre primero en base de datos y exige una fila retornada.
+    Si RLS, una FK o una relación la bloquean, el archivo queda intacto.
+  - Storage se limpia únicamente después del DELETE autorizado. Si esa limpieza
+    falla, se informa al usuario y se registra el cleanup pendiente.
+- Validaciones ejecutadas:
+  - `supabase/tests/booking_document_delete_permissions.sql`: OK con transacción
+    y `ROLLBACK`; Admin y Operaciones eliminaron una fila, mientras Ventas
+    propietario, Ventas ajeno y Operaciones inactivo conservaron las suyas.
+  - La migración se ejecutó dos veces dentro de la prueba y dejó una sola
+    policy DELETE, confirmando idempotencia.
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido de la pantalla de Booking: OK, cero hallazgos.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `npx supabase db lint --local --level error`: OK, cero errores de esquema.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Validaciones pendientes:
+  - Desplegar primero la UI y después aplicar SQL en Producción.
+  - UAT de eliminación como Admin y Operaciones.
+- Riesgos o trabajo pendiente:
+  - `supabase migration up --local` no se forzó porque el link conservado a
+    staging contiene cuatro migraciones exclusivas de Demo que no existen en
+    `main`; no se reparó ni alteró ese historial. La prueba SQL transaccional
+    ejecutó directamente la migración versionada.
+  - El borrado en cascada de un booking elimina metadata, pero no limpia
+    automáticamente sus objetos de Storage; requiere una estrategia de cleanup
+    separada si se habilita eliminación física de bookings.
+- Commit: Pendiente.
+
 ### 2026-08-03 - SEC-020 - Documentos de Booking en Storage privado
 
 - Estado: Aplicado y verificado en Producción y SQL local; pendiente de UAT

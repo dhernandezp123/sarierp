@@ -397,6 +397,8 @@ export default function RoutingBookingChildPage() {
   const { profile } = useUser()
   const id = params.id
   const bookingId = params.bookingId
+  const canManageBookingDocuments =
+    profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
 
   const [routing, setRouting] = useState<RoutingData | null>(null)
   const [booking, setBooking] = useState<BookingData | null>(null)
@@ -1091,6 +1093,11 @@ export default function RoutingBookingChildPage() {
     event.preventDefault()
     if (!booking) return
 
+    if (!canManageBookingDocuments) {
+      toast.error('No tienes permisos para adjuntar documentos al booking')
+      return
+    }
+
     const fileInput = event.currentTarget.elements.namedItem('documentFile') as HTMLInputElement | null
     const file = fileInput?.files?.[0]
 
@@ -1186,43 +1193,60 @@ export default function RoutingBookingChildPage() {
   }
 
   const deleteBookingDocument = async (document: BookingDocument) => {
+    if (!canManageBookingDocuments) {
+      setDocumentPendingDelete(null)
+      toast.error('No tienes permisos para eliminar documentos del booking')
+      return
+    }
+
     setDeletingDocumentId(document.id)
+
+    const { data: deletedDocument, error: deleteError } = await supabase
+      .from('booking_documents')
+      .delete()
+      .eq('id', document.id)
+      .eq('booking_id', document.booking_id)
+      .select('id')
+      .maybeSingle()
+
+    if (deleteError || !deletedDocument) {
+      setDeletingDocumentId(null)
+      toast.error('No se pudo eliminar el documento', {
+        description:
+          deleteError?.message ||
+          'El documento no existe, está relacionado con otro registro o no tienes permisos.',
+      })
+      return
+    }
 
     const { error: removeError } = await supabase.storage
       .from(BOOKING_DOCUMENT_BUCKET)
       .remove([document.file_url])
 
-    if (removeError) {
-      toast.error('No se pudo eliminar el archivo del Storage', {
-        description: 'Se intentara quitar el registro del booking.',
-      })
-    }
-
-    const { error: deleteError } = await supabase
-      .from('booking_documents')
-      .delete()
-      .eq('id', document.id)
-
     setDeletingDocumentId(null)
     setDocumentPendingDelete(null)
 
-    if (deleteError) {
-      toast.error('No se pudo eliminar el documento', {
-        description: deleteError.message,
-      })
-      return
-    }
-
     await recordBookingActivity({
-      action: 'booking_document_deleted',
+      action: removeError
+        ? 'booking_document_storage_cleanup_failed'
+        : 'booking_document_deleted',
       description: `Documento ${document.document_type} eliminado del booking`,
       metadata: {
         document_type: document.document_type,
         file_name: document.file_name,
+        storage_cleanup_pending: Boolean(removeError),
       },
     })
 
-    toast.success('Documento eliminado')
+    if (removeError) {
+      toast.warning('Documento eliminado del booking', {
+        description:
+          'El archivo privado quedó pendiente de limpieza en Storage. Contacta a un administrador.',
+      })
+    } else {
+      toast.success('Documento eliminado')
+    }
+
     await loadBookingDocuments(document.booking_id)
   }
 
@@ -1836,52 +1860,54 @@ export default function RoutingBookingChildPage() {
             </div>
           </div>
 
-          <form
-            onSubmit={uploadBookingDocument}
-            className="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70 md:grid-cols-2 lg:grid-cols-4"
-          >
-            <Field label="Tipo">
-              <select
-                value={documentType}
-                onChange={(event) => setDocumentType(event.target.value)}
-                className={fieldClass}
-              >
-                {bookingDocumentTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </Field>
+          {canManageBookingDocuments && (
+            <form
+              onSubmit={uploadBookingDocument}
+              className="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70 md:grid-cols-2 lg:grid-cols-4"
+            >
+              <Field label="Tipo">
+                <select
+                  value={documentType}
+                  onChange={(event) => setDocumentType(event.target.value)}
+                  className={fieldClass}
+                >
+                  {bookingDocumentTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-            <Field label="Archivo">
-              <input
-                name="documentFile"
-                type="file"
-                className={fieldClass}
-              />
-            </Field>
+              <Field label="Archivo">
+                <input
+                  name="documentFile"
+                  type="file"
+                  className={fieldClass}
+                />
+              </Field>
 
-            <Field label="Notas">
-              <input
-                value={documentNotes}
-                onChange={(event) => setDocumentNotes(event.target.value)}
-                className={fieldClass}
-                placeholder="Opcional"
-              />
-            </Field>
+              <Field label="Notas">
+                <input
+                  value={documentNotes}
+                  onChange={(event) => setDocumentNotes(event.target.value)}
+                  className={fieldClass}
+                  placeholder="Opcional"
+                />
+              </Field>
 
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={uploadingDocument}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                <Upload className="h-4 w-4" />
-                {uploadingDocument ? 'Subiendo...' : 'Subir documento'}
-              </button>
-            </div>
-          </form>
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  disabled={uploadingDocument}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Upload className="h-4 w-4" />
+                  {uploadingDocument ? 'Subiendo...' : 'Subir documento'}
+                </button>
+              </div>
+            </form>
+          )}
 
           <div className="mt-5 overflow-x-auto">
             <table className="w-full text-sm">
@@ -1945,15 +1971,17 @@ export default function RoutingBookingChildPage() {
                             <Download className="h-3.5 w-3.5" />
                             Descargar
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setDocumentPendingDelete(document)}
-                            disabled={deletingDocumentId === document.id}
-                            className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            Eliminar
-                          </button>
+                          {canManageBookingDocuments && (
+                            <button
+                              type="button"
+                              onClick={() => setDocumentPendingDelete(document)}
+                              disabled={deletingDocumentId === document.id}
+                              className="inline-flex items-center gap-1 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Eliminar
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2274,7 +2302,7 @@ export default function RoutingBookingChildPage() {
       </Dialog>
 
       <Dialog
-        open={Boolean(documentPendingDelete)}
+        open={canManageBookingDocuments && Boolean(documentPendingDelete)}
         onOpenChange={(open) => {
           if (!open && !deletingDocumentId) {
             setDocumentPendingDelete(null)
