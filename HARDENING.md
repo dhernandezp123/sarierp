@@ -6,8 +6,8 @@ Git entre computadoras y ambientes.
 
 ### 2026-08-03 - SEC-020 - Documentos de Booking en Storage privado
 
-- Estado: Aplicado y verificado en Producción; pendiente de UAT autenticado y
-  de ejecutar la prueba SQL local cuando Docker esté disponible.
+- Estado: Aplicado y verificado en Producción y SQL local; pendiente de UAT
+  autenticado y registro de la migración en el historial remoto.
 - Hallazgo: SEC-020.
 - Código:
   - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
@@ -47,8 +47,11 @@ Git entre computadoras y ambientes.
     HTTP `400` después del cambio, sin imprimir URL, ruta o contenido.
   - Probe firmado del mismo objeto después del cambio: HTTP `206` con URL de 60
     segundos; confirma compatibilidad del archivo heredado.
+  - `supabase/tests/booking_documents_private.sql`: OK contra Supabase local;
+    comprobó privacidad, preservación exacta de límites/MIME e idempotencia y
+    finalizó con `ROLLBACK`.
+  - `npx supabase db lint --local --level error`: OK, cero errores de esquema.
 - Validaciones pendientes:
-  - Prueba SQL local e idempotencia de la migración.
   - Registrar la migración idempotente en el historial remoto durante la
     próxima sincronización controlada de `main`; el estado privado ya está
     aplicado mediante la API administrativa.
