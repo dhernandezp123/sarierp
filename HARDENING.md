@@ -6,7 +6,7 @@ Git entre computadoras y ambientes.
 
 ### 2026-08-03 - SEC-021 - Eliminación segura de documentos de Booking
 
-- Estado: Validación local completada; pendiente de despliegue y UAT.
+- Estado: Aplicado y verificado en Producción; pendiente de UAT manual.
 - Hallazgo: SEC-021.
 - Código:
   - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`.
@@ -41,8 +41,21 @@ Git entre computadoras y ambientes.
   - `npm run build`: OK; 66/66 páginas generadas.
   - `npx supabase db lint --local --level error`: OK, cero errores de esquema.
   - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Commits `d89d21a` y `88d68c9` enviados a `origin/main`; Vercel confirmó el
+    deployment Production de `88d68c9` en estado `READY` antes del cambio SQL.
+  - `supabase db push --linked --dry-run` desde un workdir temporal enlazado al
+    project ref productivo mostró exclusivamente las migraciones
+    `20260803121500` y `20260803143000`.
+  - `supabase db push --linked`: ambas migraciones aplicadas y registradas en
+    el historial remoto de Producción.
+  - Verificación SQL remota: dos migraciones esperadas, una sola policy DELETE,
+    expresión alineada con `can_manage_operations()` y `can_select_booking()`,
+    y `booking-documents` conservado como privado.
+  - `npx supabase db lint --linked --level error` en Producción: OK, cero
+    errores de esquema.
+  - El workdir temporal fue eliminado y el link permanente del workspace se
+    verificó sin cambios en staging `wlssekvxpfxhwedsjhpz`.
 - Validaciones pendientes:
-  - Desplegar primero la UI y después aplicar SQL en Producción.
   - UAT de eliminación como Admin y Operaciones.
 - Riesgos o trabajo pendiente:
   - `supabase migration up --local` no se forzó porque el link conservado a
