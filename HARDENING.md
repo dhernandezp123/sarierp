@@ -6,7 +6,8 @@ Git entre computadoras y ambientes.
 
 ### 2026-08-03 - SEC-020 - Documentos de Booking en Storage privado
 
-- Estado: Implementado en código; pendiente de desplegar y aplicar en Producción.
+- Estado: Aplicado y verificado en Producción; pendiente de UAT autenticado y
+  de ejecutar la prueba SQL local cuando Docker esté disponible.
 - Hallazgo: SEC-020.
 - Código:
   - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
@@ -37,12 +38,20 @@ Git entre computadoras y ambientes.
   - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
   - ESLint dirigido: sin hallazgos nuevos; la pantalla conserva ocho errores y
     una advertencia históricos fuera de las líneas modificadas.
+  - Commits `18307e4` y `f25e882` enviados a `origin/main`; Vercel confirmó el
+    deployment Production de `f25e882` en estado `READY` antes de privatizar.
+  - Cambio remoto mediante Storage Admin API limitado a
+    `booking-documents.public = false`; se conservaron exactamente la
+    configuración previa de tamaño y MIME, sin mover ni borrar objetos.
+  - Probe anónimo sobre el Draft MBL existente: HTTP `206` antes del cambio y
+    HTTP `400` después del cambio, sin imprimir URL, ruta o contenido.
+  - Probe firmado del mismo objeto después del cambio: HTTP `206` con URL de 60
+    segundos; confirma compatibilidad del archivo heredado.
 - Validaciones pendientes:
   - Prueba SQL local e idempotencia de la migración.
-  - Desplegar primero el consumidor de enlaces firmados y después aplicar la
-    privacidad del bucket en Producción.
-  - Confirmar que la URL pública sea rechazada y que una URL firmada permita
-    descargar el archivo existente.
+  - Registrar la migración idempotente en el historial remoto durante la
+    próxima sincronización controlada de `main`; el estado privado ya está
+    aplicado mediante la API administrativa.
   - UAT autenticado de carga, descarga y eliminación.
 - Riesgos o trabajo pendiente:
   - La eliminación conserva una inconsistencia preexistente: Storage permite
