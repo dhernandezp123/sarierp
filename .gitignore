@@ -46,3 +46,12 @@ next-env.d.ts
 
 .env.local
 .env
+
+# Understand Anything: keep persistent graph artifacts, ignore local scratch/runtime files
+/.ua/intermediate/
+/.ua/.trash-*/
+/.ua/dashboard*.log
+/.ua/diff-overlay.json
+
+# Local Claude permissions
+/.claude/settings.local.json
