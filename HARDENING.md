@@ -4,6 +4,73 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-10 - SEC-023 - Factura comercial privada y aviso de carga Miami
+
+- Estado: Implementado y validado localmente; pendiente de aplicar SQL,
+  configurar Resend API en Producción y ejecutar UAT.
+- Hallazgo: SEC-023.
+- Código:
+  - `src/app/api/miami/package-assignment-email/route.ts`.
+  - `src/lib/miami-assignment-email.ts`.
+  - `src/app/(protected)/miami/ingreso/page.tsx`.
+  - `src/app/(protected)/miami/inventario/page.tsx`.
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`.
+  - `src/app/portal/layout.tsx`.
+  - `src/app/portal/login/page.tsx`.
+  - `src/app/portal/paquetes/[id]/page.tsx`.
+- SQL:
+  - `supabase/migrations/20260810120000_miami_commercial_invoice_upload.sql`.
+- Cambio:
+  - Al asignar o autoasignar un paquete Miami, el backend puede enviar por
+    Resend un aviso exclusivamente a `clientes.email_1`, el correo principal.
+  - El mensaje incluye tracking, WH y un enlace al paquete con ancla
+    `#factura-comercial`. El portal conserva el destino al pedir login y sólo
+    permite continuar a rutas locales bajo `/portal`.
+  - El cliente puede adjuntar PDF, JPG o PNG de hasta 10 MB. Cada carga crea
+    una versión auditable y no sobrescribe archivos anteriores.
+  - El bucket `miami-package-documents` es privado. Las policies relacionan el
+    primer segmento del path con `cliente_id` y el segundo con `package_id`;
+    el cliente sólo accede a paquetes de su empresa y Administración u
+    Operaciones conservan acceso operativo.
+  - Inventario muestra si la factura está pendiente o recibida. Operaciones
+    puede abrirla mediante URL firmada de 60 segundos y únicamente Admin ve
+    las acciones para copiar el enlace autenticado, compartirlo manualmente y
+    enviar/reintentar el aviso.
+  - `client_email_deliveries` conserva destinatario, intentos, estado, error
+    y `resend_message_id`. La combinación paquete/evento es única y la
+    petición a Resend usa `Idempotency-Key`.
+  - La asignación de carga no se revierte si el proveedor de correo falla; el
+    personal recibe una advertencia y el fallo queda listo para reintento.
+  - El endpoint exige usuario aprobado Admin/Operaciones, service role sólo
+    en servidor, `OUTBOUND_EMAIL_ENABLED=true` y `RESEND_API_KEY`. Bloquea
+    `APP_ENV=demo`, `NEXT_PUBLIC_APP_ENV=demo` y el sentinel privado
+    `platform_environment` cuando existe en la base demo.
+- Validaciones ejecutadas:
+  - Guías locales de Next.js 16 sobre Route Handlers, variables de entorno y
+    separación Server/Client revisadas antes de implementar.
+  - La migración completa se ejecutó en Supabase Docker local con
+    `psql --single-transaction -v ON_ERROR_STOP=1`: OK.
+  - `npx supabase db lint --local --level error`: OK, cero errores.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 67 páginas generadas y el nuevo Route Handler quedó
+    dinámico.
+  - ESLint dirigido al endpoint, helper y flujo de retorno login/layout: OK.
+  - El lint global continúa fallando por 392 hallazgos preexistentes, incluidos
+    archivos temporales de `.ua`; no se introdujeron como parte de SEC-023.
+- Riesgos o trabajo pendiente:
+  - Aplicar la migración a Supabase Producción antes de desplegar el código.
+  - Crear una clave nueva de Resend con permiso de envío y guardarla sólo en
+    Vercel Production como `RESEND_API_KEY`.
+  - Configurar `OUTBOUND_EMAIL_ENABLED=true` sólo en Production y redeplegar.
+    Preview/demo deben conservarla ausente o en `false`.
+  - UAT con un paquete real de prueba: asignación manual, autoasignación por
+    prealerta, recepción en `email_1`, retorno después del login, carga,
+    lectura desde Inventario y rechazo de acceso con otro cliente.
+  - No se implementó análisis antivirus del contenido; se restringieron MIME,
+    tamaño, bucket y ownership, pero un escáner de malware sigue siendo una
+    mejora futura antes de aceptar formatos adicionales.
+- Commit: Pendiente.
+
 ### 2026-08-10 - SEC-022 - SMTP transaccional y redirecciones Auth de Producción
 
 - Estado: Aplicado y verificado manualmente en Producción.

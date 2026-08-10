@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { useRouter, usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Package, LogOut, User, Bell, Home, Ship } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
@@ -24,7 +24,11 @@ function PortalShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isPublicPortalPath) return
     if (loading) return
-    if (!user || !profile) { router.replace('/portal/login'); return }
+    if (!user || !profile) {
+      const returnTo = `${pathname}${window.location.search}${window.location.hash}`
+      router.replace(`/portal/login?next=${encodeURIComponent(returnTo)}`)
+      return
+    }
     if (profile.rol !== 'Cliente') {
       toast.error('Esta área es solo para clientes.')
       router.replace('/dashboard')
@@ -33,7 +37,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
     if (profile.status !== 'Aprobado' || !profile.is_active) {
       router.replace('/portal/login')
     }
-  }, [isPublicPortalPath, loading, user, profile, router])
+  }, [isPublicPortalPath, loading, user, profile, router, pathname])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()

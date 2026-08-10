@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, AlertTriangle, ExternalLink, CheckCircle2, Circle } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  Circle,
+  ExternalLink,
+  FileText,
+  FileUp,
+  Loader2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
@@ -51,6 +60,18 @@ type PackageEvent = {
   metadata: Record<string, unknown> | null
 }
 
+type PackageDocument = {
+  id: string
+  document_type: string
+  file_name: string
+  file_path: string
+  mime_type: string
+  file_size: number
+  status: 'Recibida' | 'Requiere corrección' | 'Reemplazada'
+  review_notes: string | null
+  created_at: string
+}
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const CARGO_STEPS = [
@@ -84,6 +105,14 @@ const TIPO_CARGA_COLOR: Record<string, string> = {
   'Aéreo Consolidado':  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
 }
 
+const PACKAGE_DOCUMENT_BUCKET = 'miami-package-documents'
+const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
+const ALLOWED_DOCUMENT_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+])
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const fmtDate = (d: string) =>
@@ -98,12 +127,21 @@ export default function PortalPaqueteDetailPage() {
   const [pkg, setPkg] = useState<PackageDetail | null>(null)
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
   const [events, setEvents] = useState<PackageEvent[]>([])
+  const [documents, setDocuments] = useState<PackageDocument[]>([])
   const [photoUrls, setPhotoUrls] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadInputKey, setUploadInputKey] = useState(0)
 
   const loadData = async (clientId: string) => {
     setLoading(true)
-    const [{ data: pkgData, error }, { data: incData }, { data: eventData }] = await Promise.all([
+    const [
+      { data: pkgData, error },
+      { data: incData },
+      { data: eventData },
+      { data: documentData },
+    ] = await Promise.all([
       supabase
         .from('miami_packages')
         .select('*')
@@ -120,6 +158,11 @@ export default function PortalPaqueteDetailPage() {
         .select('id, event_type, old_status, new_status, notes, created_at, metadata')
         .eq('package_id', id)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('miami_package_documents')
+        .select('id, document_type, file_name, file_path, mime_type, file_size, status, review_notes, created_at')
+        .eq('package_id', id)
+        .order('created_at', { ascending: false }),
     ])
 
     if (error || !pkgData) {
@@ -131,6 +174,7 @@ export default function PortalPaqueteDetailPage() {
     setPkg(pkgData as PackageDetail)
     setIncidencias((incData ?? []) as Incidencia[])
     setEvents((eventData ?? []) as PackageEvent[])
+    setDocuments((documentData ?? []) as PackageDocument[])
 
     // Generate signed URLs for photos
     if (pkgData.photos && pkgData.photos.length > 0) {
@@ -154,6 +198,92 @@ export default function PortalPaqueteDetailPage() {
     const timeout = window.setTimeout(() => void loadData(clientId), 0)
     return () => window.clearTimeout(timeout)
   }, [id, profile?.cliente_id])
+
+  useEffect(() => {
+    if (loading || window.location.hash !== '#factura-comercial') return
+    document.getElementById('factura-comercial')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    })
+  }, [loading])
+
+  const openDocument = async (document: PackageDocument) => {
+    const { data, error } = await supabase.storage
+      .from(PACKAGE_DOCUMENT_BUCKET)
+      .createSignedUrl(document.file_path, 60)
+
+    if (error || !data?.signedUrl) {
+      toast.error('No se pudo abrir la factura comercial')
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const uploadCommercialInvoice = async () => {
+    if (!pkg || !profile?.id || !profile.cliente_id || !selectedFile) return
+
+    if (!ALLOWED_DOCUMENT_TYPES.has(selectedFile.type)) {
+      toast.error('Adjunta un archivo PDF, JPG o PNG')
+      return
+    }
+
+    if (selectedFile.size <= 0 || selectedFile.size > MAX_DOCUMENT_SIZE) {
+      toast.error('El archivo debe pesar como máximo 10 MB')
+      return
+    }
+
+    setUploading(true)
+    const extension = selectedFile.type === 'application/pdf'
+      ? 'pdf'
+      : selectedFile.type === 'image/png'
+        ? 'png'
+        : 'jpg'
+    const filePath = `${profile.cliente_id}/${pkg.id}/${crypto.randomUUID()}.${extension}`
+
+    const { error: uploadError } = await supabase.storage
+      .from(PACKAGE_DOCUMENT_BUCKET)
+      .upload(filePath, selectedFile, {
+        contentType: selectedFile.type,
+        upsert: false,
+      })
+
+    if (uploadError) {
+      setUploading(false)
+      toast.error('No se pudo subir la factura comercial', {
+        description: uploadError.message,
+      })
+      return
+    }
+
+    const { error: documentError } = await supabase
+      .from('miami_package_documents')
+      .insert({
+        package_id: pkg.id,
+        document_type: 'Commercial Invoice',
+        file_name: selectedFile.name,
+        file_path: filePath,
+        mime_type: selectedFile.type,
+        file_size: selectedFile.size,
+        status: 'Recibida',
+        uploaded_by: profile.id,
+      })
+
+    if (documentError) {
+      await supabase.storage.from(PACKAGE_DOCUMENT_BUCKET).remove([filePath])
+      setUploading(false)
+      toast.error('El archivo subió, pero no pudo registrarse', {
+        description: documentError.message,
+      })
+      return
+    }
+
+    setSelectedFile(null)
+    setUploadInputKey((value) => value + 1)
+    await loadData(profile.cliente_id)
+    setUploading(false)
+    toast.success('Factura comercial recibida')
+  }
 
   if (loading) return (
     <div className="space-y-4">
@@ -313,6 +443,87 @@ export default function PortalPaqueteDetailPage() {
           {pkg.assigned_at && (
             <InfoRow label="Asignado" value={fmtDate(pkg.assigned_at)} />
           )}
+        </div>
+      </div>
+
+      <div
+        id="factura-comercial"
+        className="rounded-2xl border border-slate-200 bg-white p-5 transition target:border-blue-400 target:ring-4 target:ring-blue-100 dark:border-slate-800 dark:bg-slate-900 dark:target:border-blue-500 dark:target:ring-blue-950/50"
+      >
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-blue-50 p-2.5 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+            <FileText className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-semibold text-slate-900 dark:text-white">Factura comercial</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Adjunta la factura de tu compra para evitar retrasos durante la consolidación y el tránsito.
+            </p>
+          </div>
+          {documents.length > 0 && (
+            <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+              Recibida
+            </span>
+          )}
+        </div>
+
+        {documents.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {documents.map((document, index) => (
+              <div
+                key={document.id}
+                className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/40"
+              >
+                <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {document.file_name}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {index === 0 ? 'Versión más reciente · ' : ''}{fmtDate(document.created_at)}
+                  </p>
+                  {document.status === 'Requiere corrección' && document.review_notes && (
+                    <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                      Corrección solicitada: {document.review_notes}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openDocument(document)}
+                  className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Ver
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {documents.length > 0 ? 'Adjuntar una nueva versión' : 'Adjuntar documento'}
+          </label>
+          <input
+            key={uploadInputKey}
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
+            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+            disabled={uploading}
+            className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200 dark:text-slate-300 dark:file:bg-slate-800 dark:file:text-slate-200"
+          />
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-400">PDF, JPG o PNG · máximo 10 MB.</p>
+            <button
+              type="button"
+              onClick={uploadCommercialInvoice}
+              disabled={!selectedFile || uploading}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+              {uploading ? 'Subiendo...' : 'Subir factura'}
+            </button>
+          </div>
         </div>
       </div>
 

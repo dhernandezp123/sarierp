@@ -38,8 +38,18 @@ export default function PortalLoginPage() {
         return
       }
 
-      // Staff goes to ERP, clients to portal
-      router.replace(profile.rol === 'Cliente' ? '/portal' : '/dashboard')
+      const requestedNext = new URLSearchParams(window.location.search).get('next')
+      const safePortalDestination = requestedNext
+        && (requestedNext === '/portal' || requestedNext.startsWith('/portal/'))
+        && !requestedNext.startsWith('/portal/login')
+        && !requestedNext.startsWith('/portal/register')
+        && !requestedNext.startsWith('/portal/forgot-password')
+        && !requestedNext.startsWith('/portal/reset-password')
+          ? requestedNext
+          : '/portal'
+
+      // Staff goes to ERP; clients return to the authenticated portal link.
+      router.replace(profile.rol === 'Cliente' ? safePortalDestination : '/dashboard')
     } finally {
       setLoading(false)
     }

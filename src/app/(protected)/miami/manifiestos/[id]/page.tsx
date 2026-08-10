@@ -8,6 +8,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { useMiamiCarriers } from '@/src/hooks/useMiamiCarriers'
 import { notifyClientPackageAssigned } from '@/src/lib/client-notifications'
+import { sendMiamiPackageAssignmentEmail } from '@/src/lib/miami-assignment-email'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
@@ -144,13 +145,32 @@ export default function ManifiestoDetailPage() {
       const weight_kg = weightInput === null ? null :
         scanWeightUnit === 'kg' ? weightInput : parseFloat((weightInput * 0.453592).toFixed(2))
 
-      const { error } = await supabase.rpc('scan_miami_manifest_package', {
+      const { data: scanData, error } = await supabase.rpc('scan_miami_manifest_package', {
         p_manifest_id: id,
         p_tracking: tracking,
         p_weight_lbs: weight_lbs,
         p_weight_kg: weight_kg,
       })
       if (error) throw error
+      const scannedPackage = Array.isArray(scanData) ? scanData[0] : scanData
+      if (scannedPackage?.package_id) {
+        const { data: assignedPackage } = await supabase
+          .from('miami_packages')
+          .select('status')
+          .eq('id', scannedPackage.package_id)
+          .maybeSingle()
+
+        if (assignedPackage?.status === 'Asignado') {
+          const emailResult = await sendMiamiPackageAssignmentEmail(scannedPackage.package_id)
+          if (!emailResult.ok) {
+            toast.warning('Paquete auto-asignado, pero el correo no fue enviado', {
+              description: emailResult.error,
+            })
+          } else if (emailResult.skipped) {
+            toast.info('El cliente no tiene correo principal configurado')
+          }
+        }
+      }
       toast.success(`${tracking} añadido al manifiesto`)
       setScanTracking('')
       setScanWeight('')
@@ -270,6 +290,14 @@ export default function ManifiestoDetailPage() {
           trackingNumber:  pkg.tracking_number,
           warehouseNumber: whData,
         })
+        const emailResult = await sendMiamiPackageAssignmentEmail(assignPackageId)
+        if (!emailResult.ok) {
+          toast.warning('Paquete asignado, pero el correo no fue enviado', {
+            description: emailResult.error,
+          })
+        } else if (emailResult.skipped) {
+          toast.info('El cliente no tiene correo principal configurado')
+        }
       }
 
       toast.success(`Asignado a ${selectedClient.nombre} — WH: ${whData}`)

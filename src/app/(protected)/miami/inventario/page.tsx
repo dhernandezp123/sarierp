@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { History, MapPin, Package, ScanLine, Search, X } from 'lucide-react'
+import { Copy, ExternalLink, FileText, History, Mail, MapPin, Package, ScanLine, Search, X } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
+import { useUser } from '@/src/hooks/useUser'
+import { sendMiamiPackageAssignmentEmail } from '@/src/lib/miami-assignment-email'
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
@@ -20,9 +22,19 @@ type Pkg = {
   status: string
   weight_lbs: number | null
   warehouse_number: string | null
+  cliente_id: string | null
   rack_location: string | null
   received_at: string
   clientes?: { nombre: string | null } | null
+  miami_package_documents?: PackageDocument[] | null
+}
+
+type PackageDocument = {
+  id: string
+  file_name: string
+  file_path: string
+  status: string
+  created_at: string
 }
 
 type ScannedItem = {
@@ -83,6 +95,7 @@ const previousStatus = (current: CargoStatus | string | null): CargoStatus | nul
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InventarioPage() {
+  const { profile } = useUser()
   const [packages, setPackages] = useState<Pkg[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
@@ -91,6 +104,7 @@ export default function InventarioPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [updatingId, setUpdatingId]     = useState<string | null>(null)
+  const [emailingId, setEmailingId]     = useState<string | null>(null)
   const [historyPackage, setHistoryPackage] = useState<Pkg | null>(null)
   const [historyEvents, setHistoryEvents] = useState<PackageEvent[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -112,11 +126,56 @@ export default function InventarioPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('miami_packages')
-      .select('id, tracking_number, carrier, tipo_carga, cargo_status, status, weight_lbs, warehouse_number, rack_location, received_at, clientes(nombre)')
+      .select('id, tracking_number, carrier, tipo_carga, cargo_status, status, weight_lbs, warehouse_number, cliente_id, rack_location, received_at, clientes(nombre), miami_package_documents(id, file_name, file_path, status, created_at)')
       .order('received_at', { ascending: false })
     if (error) toast.error('Error al cargar inventario')
     setPackages((data || []) as unknown as Pkg[])
     setLoading(false)
+  }
+
+  const copyInvoiceUploadLink = async (pkg: Pkg) => {
+    const link = `${window.location.origin}/portal/paquetes/${pkg.id}#factura-comercial`
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success('Enlace de carga copiado', {
+        description: 'El cliente deberá iniciar sesión en el portal para adjuntar la factura.',
+      })
+    } catch {
+      toast.error('No se pudo copiar el enlace')
+    }
+  }
+
+  const openLatestCommercialInvoice = async (pkg: Pkg) => {
+    const latest = [...(pkg.miami_package_documents ?? [])]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+    if (!latest) return
+
+    const { data, error } = await supabase.storage
+      .from('miami-package-documents')
+      .createSignedUrl(latest.file_path, 60)
+
+    if (error || !data?.signedUrl) {
+      toast.error('No se pudo abrir la factura comercial')
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const sendAssignmentNotice = async (pkg: Pkg) => {
+    setEmailingId(pkg.id)
+    const result = await sendMiamiPackageAssignmentEmail(pkg.id)
+    setEmailingId(null)
+
+    if (!result.ok) {
+      toast.error('No se pudo enviar el aviso', { description: result.error })
+      return
+    }
+    if (result.skipped) {
+      toast.info('El cliente no tiene correo principal configurado')
+      return
+    }
+    toast.success(result.alreadySent ? 'El aviso ya había sido procesado' : 'Aviso enviado al contacto principal')
   }
 
   const advanceStatus = async (pkg: Pkg) => {
@@ -362,7 +421,7 @@ export default function InventarioPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-900 dark:bg-[#081120]">
-                  {['WH #', 'Tracking', 'Cliente', 'Rack', 'Tipo', 'Peso', 'Recibido', 'Estado', 'Avanzar', 'Historial'].map((h) => (
+                  {['WH #', 'Tracking', 'Cliente', 'Rack', 'Tipo', 'Peso', 'Recibido', 'Estado', 'Factura', 'Avanzar', 'Historial'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-300 whitespace-nowrap">
                       {h}
                     </th>
@@ -411,6 +470,50 @@ export default function InventarioPage() {
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_CLS[cs] || 'bg-slate-100 text-slate-600'}`}>
                           {cs}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(p.miami_package_documents?.length ?? 0) > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => openLatestCommercialInvoice(p)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              Recibida
+                              <ExternalLink className="h-3 w-3" />
+                            </button>
+                          ) : (
+                            <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                              Pendiente
+                            </span>
+                          )}
+                          {profile?.rol === 'Admin' && p.cliente_id && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => copyInvoiceUploadLink(p)}
+                                title="Copiar enlace autenticado para el cliente"
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                                Enlace
+                              </button>
+                              {p.status === 'Asignado' && (
+                                <button
+                                  type="button"
+                                  onClick={() => sendAssignmentNotice(p)}
+                                  disabled={emailingId === p.id}
+                                  title="Enviar o reintentar el aviso por correo"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
+                                >
+                                  <Mail className="h-3.5 w-3.5" />
+                                  {emailingId === p.id ? 'Enviando...' : 'Avisar'}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1.5">
