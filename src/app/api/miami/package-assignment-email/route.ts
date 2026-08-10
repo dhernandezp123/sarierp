@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { formatMiamiDateTime } from '@/src/lib/format'
 
 const EVENT_TYPE = 'miami_package_assigned'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -16,6 +17,7 @@ type PackageRow = {
   warehouse_number: string | null
   status: string
   assigned_at: string | null
+  received_at: string
   cliente_id: string | null
   clientes: ClientRow | ClientRow[] | null
 }
@@ -129,7 +131,7 @@ export async function POST(request: Request) {
 
     const { data: packageData, error: packageError } = await supabaseAdmin
       .from('miami_packages')
-      .select('id, tracking_number, warehouse_number, status, assigned_at, cliente_id, clientes(nombre, contacto, email_1)')
+      .select('id, tracking_number, warehouse_number, status, assigned_at, received_at, cliente_id, clientes(nombre, contacto, email_1)')
       .eq('id', packageId)
       .single()
 
@@ -227,10 +229,12 @@ export async function POST(request: Request) {
     }
 
     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://forwarders.app').replace(/\/$/, '')
-    const uploadUrl = `${siteUrl}/portal/paquetes/${pkg.id}#factura-comercial`
+    const uploadUrl = `${siteUrl}/portal/paquetes/${pkg.id}?section=factura-comercial#factura-comercial`
     const contactName = client?.contacto?.trim() || 'cliente'
     const tracking = escapeHtml(pkg.tracking_number)
     const warehouseNumber = escapeHtml(pkg.warehouse_number)
+    const receivedLabel = formatMiamiDateTime(pkg.received_at)
+    const safeReceivedLabel = escapeHtml(receivedLabel)
     const safeContactName = escapeHtml(contactName)
     const safeUploadUrl = escapeHtml(uploadUrl)
     const sender = process.env.RESEND_FROM_EMAIL
@@ -244,7 +248,8 @@ export async function POST(request: Request) {
         subject: `Carga recibida en Miami · ${pkg.warehouse_number}`,
         text:
           `Hola ${contactName}, recibimos tu carga ${pkg.tracking_number} en Miami. `
-          + `Número de bodega: ${pkg.warehouse_number}. Adjunta tu factura comercial aquí: ${uploadUrl}`,
+          + `Número de bodega: ${pkg.warehouse_number}. Recibida: ${receivedLabel}. `
+          + `Adjunta tu factura comercial aquí: ${uploadUrl}`,
         html: `
           <div style="background:#f4f7fb;padding:32px 16px;font-family:Arial,sans-serif;color:#0f172a">
             <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
@@ -260,6 +265,8 @@ export async function POST(request: Request) {
                   <div style="font-weight:700;margin-top:3px">${tracking}</div>
                   <div style="font-size:12px;color:#64748b;margin-top:12px">Número de bodega</div>
                   <div style="font-weight:700;margin-top:3px">${warehouseNumber}</div>
+                  <div style="font-size:12px;color:#64748b;margin-top:12px">Recibida</div>
+                  <div style="font-weight:700;margin-top:3px">${safeReceivedLabel}</div>
                 </div>
                 <p style="margin:0 0 20px;line-height:1.6">Adjunta la factura comercial de tu compra para evitar retrasos durante la consolidación y el tránsito.</p>
                 <a href="${safeUploadUrl}" style="display:inline-block;background:#155eef;color:#ffffff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:10px">Adjuntar factura comercial</a>

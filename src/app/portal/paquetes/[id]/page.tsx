@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { formatMiamiDateTime } from '@/src/lib/format'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -115,9 +116,6 @@ const ALLOWED_DOCUMENT_TYPES = new Set([
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('es-HN', { day: '2-digit', month: 'short', year: 'numeric' })
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PortalPaqueteDetailPage() {
@@ -200,7 +198,11 @@ export default function PortalPaqueteDetailPage() {
   }, [id, profile?.cliente_id])
 
   useEffect(() => {
-    if (loading || window.location.hash !== '#factura-comercial') return
+    const requestedSection = new URLSearchParams(window.location.search).get('section')
+    const shouldFocusCommercialInvoice = requestedSection === 'factura-comercial'
+      || window.location.hash === '#factura-comercial'
+
+    if (loading || !shouldFocusCommercialInvoice) return
     document.getElementById('factura-comercial')?.scrollIntoView({
       behavior: 'smooth',
       block: 'center',
@@ -344,8 +346,8 @@ export default function PortalPaqueteDetailPage() {
                 const current = idx === currentStepIdx
 
                 let dateLabel: string | null = null
-                if (idx === 0) dateLabel = fmtDate(pkg.received_at)
-                else if (current && pkg.cargo_status_updated_at) dateLabel = fmtDate(pkg.cargo_status_updated_at)
+                if (idx === 0) dateLabel = formatMiamiDateTime(pkg.received_at)
+                else if (current && pkg.cargo_status_updated_at) dateLabel = formatMiamiDateTime(pkg.cargo_status_updated_at)
 
                 return (
                   <li key={step} className="relative flex items-start gap-4 pl-7">
@@ -416,7 +418,7 @@ export default function PortalPaqueteDetailPage() {
                       )}
                     </div>
                     <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
-                      {fmtDate(event.created_at)}
+                      {formatMiamiDateTime(event.created_at)}
                     </span>
                   </div>
                 </div>
@@ -431,7 +433,7 @@ export default function PortalPaqueteDetailPage() {
         <h2 className="mb-3 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Información del paquete</h2>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3">
           <InfoRow label={pkg.tipo_carga === 'Aéreo Consolidado' ? 'AWB / Carrier' : 'Carrier'} value={pkg.carrier ?? '—'} />
-          <InfoRow label="Recibido" value={fmtDate(pkg.received_at)} />
+          <InfoRow label="Recibido" value={formatMiamiDateTime(pkg.received_at)} />
           <InfoRow label="Peso" value={pkg.weight_lbs ? `${pkg.weight_lbs} lbs${pkg.weight_kg ? ` / ${pkg.weight_kg} kg` : ''}` : '—'} />
           <InfoRow label="Descripción" value={pkg.description ?? '—'} />
           {hasDims && (
@@ -441,7 +443,7 @@ export default function PortalPaqueteDetailPage() {
             </>
           )}
           {pkg.assigned_at && (
-            <InfoRow label="Asignado" value={fmtDate(pkg.assigned_at)} />
+            <InfoRow label="Asignado" value={formatMiamiDateTime(pkg.assigned_at)} />
           )}
         </div>
       </div>
@@ -480,7 +482,7 @@ export default function PortalPaqueteDetailPage() {
                     {document.file_name}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {index === 0 ? 'Versión más reciente · ' : ''}{fmtDate(document.created_at)}
+                    {index === 0 ? 'Versión más reciente · ' : ''}{formatMiamiDateTime(document.created_at)}
                   </p>
                   {document.status === 'Requiere corrección' && document.review_notes && (
                     <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">

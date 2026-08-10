@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Package, ChevronRight } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { formatMiamiDateTime } from '@/src/lib/format'
 import {
   PortalButton,
   PortalCard,
@@ -138,7 +139,7 @@ export default function PortalPaquetesPage() {
                       {p.weight_lbs && <span> · {p.weight_lbs} lbs</span>}
                     </p>
                     <p className="text-xs text-slate-400">
-                      {new Date(p.received_at).toLocaleDateString('es-HN', { day: '2-digit', month: 'long', year: 'numeric' })}
+                      {formatMiamiDateTime(p.received_at)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

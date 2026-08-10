@@ -6,6 +6,7 @@
 // fechas sin hora se interpretan siempre en horario local.
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+const MIAMI_TIME_ZONE = 'America/New_York'
 
 /**
  * Convierte un valor de fecha (columna DATE 'YYYY-MM-DD' o timestamp ISO)
@@ -57,6 +58,53 @@ export function formatDateTime(value: string | Date | null | undefined, fallback
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+/** Fecha y hora del instante en la zona horaria de la bodega de Miami. */
+export function formatMiamiDateTime(
+  value: string | Date | null | undefined,
+  fallback = '-'
+): string {
+  const date = parseDateValue(value)
+  if (!date) return fallback
+
+  const dateLabel = date.toLocaleDateString('es-HN', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: MIAMI_TIME_ZONE,
+  })
+  const timeLabel = date.toLocaleTimeString('es-HN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: MIAMI_TIME_ZONE,
+  })
+
+  return `${dateLabel} · ${timeLabel} (hora Miami)`
+}
+
+/** Fecha YYYY-MM-DD correspondiente al calendario local de Miami. */
+export function toMiamiDateInputValue(
+  value: string | Date | null | undefined = new Date(),
+  fallback = ''
+): string {
+  const date = parseDateValue(value)
+  if (!date) return fallback
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: MIAMI_TIME_ZONE,
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value
+  const year = part('year')
+  const month = part('month')
+  const day = part('day')
+
+  return year && month && day ? `${year}-${month}-${day}` : fallback
 }
 
 /**

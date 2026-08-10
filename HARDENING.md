@@ -4,10 +4,105 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-10 - UX-052 - Hora Miami e historial de ingresos de bodega
+
+- Estado: Implementado y validado localmente; pendiente de desplegar y ejecutar
+  UAT en Producción.
+- Hallazgo: UX-052.
+- Causa raíz:
+  - El portal mostraba sólo la fecha de `miami_packages.received_at`, aunque la
+    base ya conserva el instante exacto de recepción.
+  - Inventario ordenaba toda la carga por recepción, pero no permitía consultar
+    un día o rango ni distinguir ingresos individuales de paquetes escaneados
+    dentro de un manifiesto.
+- Código:
+  - `src/lib/format.ts`.
+  - `src/app/portal/paquetes/page.tsx`.
+  - `src/app/portal/paquetes/[id]/page.tsx`.
+  - `src/app/(protected)/miami/inventario/page.tsx`.
+  - `src/app/api/miami/package-assignment-email/route.ts`.
+- SQL: ninguno; se reutilizan `received_at` y `manifest_id` existentes.
+- Cambios:
+  - La lista de paquetes, el seguimiento, la información del paquete y los
+    movimientos muestran fecha y hora rotuladas como `hora Miami`.
+  - El formato usa explícitamente `America/New_York`; no depende de la zona
+    horaria del navegador del cliente y respeta automáticamente horario de
+    verano de Miami.
+  - Los correos nuevos de carga recibida incluyen también el instante de
+    recepción en Miami.
+  - Inventario agrega accesos `Hoy`, `Ayer`, `Últimos 7 días`, rango manual y
+    filtro de origen `Ingreso individual`/`Por manifiesto`. Al consultar fechas
+    se incluyen todos los estados actuales para que una carga ya avanzada o
+    entregada no desaparezca del historial de lo recibido ese día.
+  - La tabla identifica el origen y muestra la hora exacta de recepción.
+  - No se crean manifiestos artificiales por cada ingreso individual. Un
+    manifiesto sigue representando un lote real de un transportista; el
+    historial operativo se obtiene de la tabla canónica de paquetes.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 67/67 páginas generadas.
+  - ESLint dirigido: cero errores; conserva dos advertencias preexistentes de
+    dependencias de efectos en las dos pantallas del portal de paquetes.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Riesgos o trabajo pendiente:
+  - UAT con un ingreso individual y otro por manifiesto, verificando fecha/hora
+    en correo, lista, seguimiento e Inventario para Hoy/Ayer/rango.
+  - Inventario ya cargaba el conjunto completo antes de este cambio y los
+    filtros nuevos operan sobre ese conjunto en cliente. Cuando el volumen sea
+    alto convendrá mover filtros y paginación a la consulta de Supabase.
+  - Un correo ya marcado `sent` conserva por idempotencia su plantilla original;
+    la hora aparecerá en avisos nuevos.
+- Commit: incluido en este commit.
+
+### 2026-08-10 - UX-051 - Retorno al paquete después del login del portal
+
+- Estado: Implementado y validado localmente; pendiente de desplegar y repetir
+  la prueba autenticada en Producción.
+- Hallazgo: UX-051.
+- Causa raíz:
+  - `src/proxy.ts` interceptaba la visita no autenticada antes de que el layout
+    del portal pudiera guardar el destino y redirigía a `/portal/login`
+    eliminando la ruta original.
+  - El fragmento `#factura-comercial` no forma parte de la petición HTTP que
+    recibe Proxy, por lo que no puede utilizarse por sí solo para transportar
+    la sección solicitada a través del login.
+- Código:
+  - `src/proxy.ts`.
+  - `src/app/api/miami/package-assignment-email/route.ts`.
+  - `src/app/(protected)/miami/inventario/page.tsx`.
+  - `src/app/portal/paquetes/[id]/page.tsx`.
+- SQL: ninguno.
+- Cambios:
+  - Proxy conserva `pathname` y query de cualquier ruta protegida del portal
+    en un parámetro `next` codificado antes de enviar al login.
+  - El login mantiene su allowlist existente y sólo acepta destinos locales
+    bajo `/portal`; no se amplió la superficie de redirección.
+  - Los correos nuevos y los enlaces copiados desde Inventario incluyen
+    `?section=factura-comercial` además del ancla visual.
+  - El detalle del paquete reconoce tanto la query nueva como el ancla para
+    enfocar la sección de carga al terminar la autenticación.
+- Validaciones ejecutadas:
+  - Guía local de Proxy de Next.js 16 revisada antes del cambio.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 67/67 páginas generadas.
+  - Prueba HTTP sobre el build local sin sesión: `/portal/paquetes/{id}` con
+    `section=factura-comercial` responde `307` a `/portal/login` conservando
+    exactamente el paquete y la query dentro de `next`.
+  - ESLint dirigido: cero errores; conserva dos advertencias preexistentes de
+    dependencias de efectos en las pantallas del portal de paquetes.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Riesgos o trabajo pendiente:
+  - Desplegar el commit en Producción y repetir el flujo correo → login →
+    paquete → sección de factura comercial con una sesión cerrada.
+  - Los correos emitidos antes de este cambio no contienen la query de sección;
+    Proxy sí conservará su paquete exacto, pero el desplazamiento automático
+    queda garantizado para los enlaces nuevos.
+- Commit: incluido en este commit.
+
 ### 2026-08-10 - SEC-023 - Factura comercial privada y aviso de carga Miami
 
-- Estado: Implementado y validado localmente; pendiente de aplicar SQL,
-  configurar Resend API en Producción y ejecutar UAT.
+- Estado: Aplicado y verificado en Producción; el defecto de retorno exacto
+  posterior al login se corrige separadamente en UX-051.
 - Hallazgo: SEC-023.
 - Código:
   - `src/app/api/miami/package-assignment-email/route.ts`.
@@ -58,18 +153,11 @@ Git entre computadoras y ambientes.
   - El lint global continúa fallando por 392 hallazgos preexistentes, incluidos
     archivos temporales de `.ua`; no se introdujeron como parte de SEC-023.
 - Riesgos o trabajo pendiente:
-  - Aplicar la migración a Supabase Producción antes de desplegar el código.
-  - Crear una clave nueva de Resend con permiso de envío y guardarla sólo en
-    Vercel Production como `RESEND_API_KEY`.
-  - Configurar `OUTBOUND_EMAIL_ENABLED=true` sólo en Production y redeplegar.
-    Preview/demo deben conservarla ausente o en `false`.
-  - UAT con un paquete real de prueba: asignación manual, autoasignación por
-    prealerta, recepción en `email_1`, retorno después del login, carga,
-    lectura desde Inventario y rechazo de acceso con otro cliente.
+  - Completar el redeploy y la UAT de retorno post-login documentada en UX-051.
   - No se implementó análisis antivirus del contenido; se restringieron MIME,
     tamaño, bucket y ownership, pero un escáner de malware sigue siendo una
     mejora futura antes de aceptar formatos adicionales.
-- Commit: Pendiente.
+- Commit: `50f284b`.
 
 ### 2026-08-10 - SEC-022 - SMTP transaccional y redirecciones Auth de Producción
 
