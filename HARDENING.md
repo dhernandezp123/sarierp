@@ -4,6 +4,58 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-10 - SEC-022 - SMTP transaccional y redirecciones Auth de Producción
+
+- Estado: Aplicado y verificado manualmente en Producción.
+- Hallazgo: SEC-022.
+- Código y SQL: No aplica; el cierre fue de configuración administrada en
+  Resend, Vercel DNS y Supabase Auth.
+- Configuración aplicada:
+  - Resend verificó `mail.forwarders.app` en `us-east-1` para envío
+    transaccional, con DKIM y SPF publicados mediante Vercel DNS.
+  - Los MX y SPF de ImprovMX en `forwarders.app` permanecieron intactos para
+    la recepción y el reenvío de correo.
+  - Supabase Producción `fwspgdzvlbtbgiupvrzo` quedó conectado a Resend por
+    SMTP con el remitente `Forwarders ERP <no-reply@mail.forwarders.app>`.
+  - Auth Site URL quedó en `https://forwarders.app`; la allowlist conserva
+    exclusivamente los callbacks productivos de recuperación y onboarding.
+  - Se publicó `_dmarc.mail.forwarders.app` con
+    `v=DMARC1; p=none;` como política inicial de monitoreo.
+  - Se retiró `RESEND_API_KEY` de Vercel Preview. Como Vercel la había
+    almacenado como una sola entrada compartida entre Preview y Production,
+    la operación eliminó esa entrada completa. El ERP no tenía consumidores
+    de la variable y Supabase conserva una credencial SMTP dedicada e
+    independiente, por lo que no se afectó el envío verificado.
+  - Se eliminó el archivo local no versionado `send-test.js`; no formaba parte
+    de Next.js, dependía de `dotenv` sin instalar y contenía un destinatario de
+    prueba hardcodeado.
+- Validaciones ejecutadas:
+  - Resend mostró `mail.forwarders.app` en estado `Verified` y `Ready to send`.
+  - DNS autoritativo y los resolvers públicos `1.1.1.1`/`8.8.8.8`
+    confirmaron el nuevo DMARC. DKIM y el SPF/MX de Amazon SES para
+    `send.mail.forwarders.app` permanecen publicados; ImprovMX conservó sus
+    dos MX y SPF en el dominio raíz.
+  - Un correo real de recuperación llegó desde
+    `no-reply@mail.forwarders.app`.
+  - El primer enlace reveló que Supabase aún usaba `localhost:3000`; la causa
+    se corrigió en URL Configuration y un enlace nuevo completó el callback
+    PKCE hasta `/portal/reset-password`, donde se mostró el formulario de
+    nueva contraseña.
+  - El inventario sanitizado de Vercel confirmó cero entradas
+    `RESEND_API_KEY` en Preview y Production después de la limpieza.
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Riesgos o trabajo pendiente:
+  - DMARC permanece en `p=none`; antes de elevarlo a `quarantine` o `reject`
+    debe definirse un buzón de reportes y observar alineación SPF/DKIM.
+  - Probar separadamente una invitación real y su llegada a `/onboarding`.
+  - Producción conserva signup público y autoconfirmación de email; revisar
+    esta decisión junto con el gate de aprobación de perfiles.
+  - Cotizaciones, estados de cuenta y Draft HBL siguen usando `mailto:`. Una
+    futura integración Resend API debe crear una clave nueva limitada sólo a
+    Production, con autorización, idempotencia y auditoría de entrega.
+- Commit: incluido en este commit de documentación.
+
 ### 2026-08-03 - SEC-021 - Eliminación segura de documentos de Booking
 
 - Estado: Aplicado y verificado en Producción; pendiente de UAT manual.
