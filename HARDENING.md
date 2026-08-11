@@ -31,6 +31,43 @@ Git entre computadoras y ambientes.
     mismo prospecto; para reasignar el slot se debe reprovisionar.
 - Commit de la operación documentada: `3dc45b5`.
 
+### 2026-08-10 - UX-053 - Capturas en la creación de tickets
+
+- Estado: Implementado y desplegado en Producción; integrado en Demo y
+  pendiente de UAT funcional en ambos ambientes.
+- Hallazgo: UX-053.
+- Código:
+  - `src/app/(protected)/support/new/page.tsx`.
+  - `src/app/(protected)/support/[id]/page.tsx`.
+  - `src/lib/support-attachments.ts`.
+  - `docs/support-ticketing-runbook.md`.
+- SQL: No aplica. Se reutilizan la tabla, RLS y el bucket privado
+  `support-attachments` creados por SEC-024.
+- Cambio:
+  - El formulario Nuevo ticket permite seleccionar hasta cinco capturas o
+    archivos PNG, JPG o PDF de máximo 10 MB cada uno.
+  - Los archivos seleccionados muestran nombre y tamaño y pueden quitarse
+    antes de crear el ticket.
+  - Las capturas quedan asociadas al mensaje inicial y usan paths privados por
+    ticket y usuario, igual que los adjuntos de las respuestas.
+  - La validación, subida, registro de metadata y limpieza de objetos fallidos
+    se centralizaron para evitar diferencias entre creación y conversación.
+  - Si un adjunto falla después de crear el ticket, el caso se conserva y la
+    interfaz informa la cantidad de archivos no cargados.
+- Validaciones ejecutadas:
+  - Guías locales de Next.js 16 sobre Client Components y seguridad de datos:
+    revisadas.
+  - `npm run build`: OK, 70/70 rutas.
+  - `npx tsc --noEmit`: OK después de regenerar los tipos de la rama.
+  - ESLint dirigido a los tres archivos funcionales: OK.
+  - `git diff --check`: OK; sólo avisos esperados LF/CRLF.
+- Riesgos o pendientes:
+  - Pendiente confirmar en UAT la selección, subida, descarga firmada y vista
+    móvil con capturas reales.
+  - El MVP mantiene allowlist MIME, límite, bucket privado y RLS, pero no
+    incorpora todavía análisis antimalware.
+- Commit: incluido en este commit.
+
 ### 2026-08-10 - SEC-024 - Mesa de ayuda técnica aislada por instalación
 
 - Estado: Implementado y validado localmente. Migración aplicada y módulo
