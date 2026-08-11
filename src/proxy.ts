@@ -112,6 +112,9 @@ export async function proxy(req: NextRequest) {
     const loginUrl = req.nextUrl.clone()
     loginUrl.pathname = loginPath
     loginUrl.search = ''
+    const returnTo = `${pathname}${req.nextUrl.search}`
+    loginUrl.searchParams.set('next', returnTo)
+
     return applyDemoHeaders(NextResponse.redirect(loginUrl))
   }
 

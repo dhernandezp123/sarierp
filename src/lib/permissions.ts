@@ -24,6 +24,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/operations/shipping-instructions',
     '/historico',
     '/settings/company',
+    '/support',
   ],
 
   Pricing: [
@@ -37,6 +38,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/reports',
     '/historico',
     '/settings/company',
+    '/support',
   ],
 
   Operaciones: [
@@ -54,6 +56,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/miami/inventario',
     '/miami/embarques',
     '/settings/company',
+    '/support',
   ],
 
   Contabilidad: [
@@ -68,6 +71,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/historico',
     '/settings/company',
     '/settings/cai',
+    '/support',
   ],
 
   Finanzas: [
@@ -82,6 +86,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/historico',
     '/settings/company',
     '/settings/cai',
+    '/support',
   ],
 }
 

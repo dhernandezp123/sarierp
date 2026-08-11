@@ -4,6 +4,57 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-10 - SEC-024 - Mesa de ayuda técnica aislada por instalación
+
+- Estado: Implementado y validado localmente. Pendiente de desplegar en Demo
+  y completar UAT antes de cualquier aplicación en Producción.
+- Hallazgo: SEC-024.
+- Código:
+  - `src/app/(protected)/support/layout.tsx`
+  - `src/app/(protected)/support/page.tsx`
+  - `src/app/(protected)/support/new/page.tsx`
+  - `src/app/(protected)/support/[id]/page.tsx`
+  - `src/app/api/support/notify/route.ts`
+  - `src/lib/support.ts`
+  - `src/components/layout/sidebar.tsx`
+  - `src/lib/permissions.ts`
+  - `src/types/index.ts`
+  - `src/proxy.ts`
+  - `src/app/login/page.tsx`
+  - `docs/support-ticketing-runbook.md`
+- SQL y pruebas:
+  - `supabase/migrations/20260810170000_support_ticketing_foundation.sql`
+  - `supabase/tests/support_ticketing_foundation.sql`
+- Cambios:
+  - Cada instalación conserva sus propios tickets, mensajes y adjuntos; no se
+    introduce una base central ni acceso cruzado entre proyectos de clientes.
+  - El módulo queda deshabilitado por defecto y excluye a los perfiles
+    `Cliente` del portal. El acceso global de Hernova usa
+    `profiles.is_platform_admin`, protegido contra autoelevación.
+  - Los adjuntos se guardan en un bucket privado con límite de 10 MB y tipos
+    PDF, PNG y JPEG. Las notas internas sólo son visibles para Hernova.
+  - Las notificaciones por Resend usan autorización, bloqueo en Demo y un
+    outbox idempotente. El retorno después del login conserva el enlace al
+    ticket solicitado sin permitir redirecciones externas.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido a soporte, autenticación, permisos y tipos: OK.
+  - `npm run build`: OK (70/70 rutas).
+  - Migración y prueba SQL en Supabase local: OK.
+  - `npx supabase db lint --local --level error`: OK.
+- Riesgos y pendientes:
+  - Confirmar por envío externo que `soporte@forwarders.app` reenvía
+    correctamente mediante ImprovMX.
+  - El lint aislado de `sidebar.tsx` conserva 3 errores y 2 advertencias
+    preexistentes en la rama Demo; la integración sólo añadió el acceso a
+    Mesa de ayuda y no amplió esa deuda técnica.
+  - Completar UAT visual y funcional en Demo antes de habilitar el módulo.
+  - No hay escáner antimalware; se aplican tipo MIME, tamaño, bucket privado y
+    autorización como controles iniciales.
+  - Esta integración conserva las migraciones exclusivas de Demo y debe
+    desplegarse sólo contra el project ref correspondiente a esa rama.
+- Commit: pendiente de hash para la integración de Demo.
+
 ### 2026-07-28 - CALC-005 - Retiro de Bank Transfer Fee del comparativo FCL
 
 - Estado: En validación manual.
