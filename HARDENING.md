@@ -29,7 +29,7 @@ Git entre computadoras y ambientes.
     a iniciar sesión.
   - La renovación conserva las credenciales actuales y sólo corresponde al
     mismo prospecto; para reasignar el slot se debe reprovisionar.
-- Commit: pendiente.
+- Commit de la operación documentada: `3dc45b5`.
 
 ### 2026-08-10 - SEC-024 - Mesa de ayuda técnica aislada por instalación
 
