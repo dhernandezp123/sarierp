@@ -104,9 +104,9 @@ vista del usuario interno y volver a dejar `enabled = false` al terminar.
 Como usuario interno normal:
 
 1. Abrir `Mesa de ayuda` desde el sidebar.
-2. Crear un ticket Normal y otro Crítico.
-3. Confirmar numeración con el prefijo configurado.
-4. Adjuntar un PDF y una imagen desde una respuesta.
+2. Crear un ticket Normal con una captura PNG o JPG desde el formulario inicial.
+3. Crear otro ticket Crítico y confirmar numeración con el prefijo configurado.
+4. Adjuntar un PDF y otra imagen desde una respuesta.
 5. Cerrar sesión, abrir el enlace directo y confirmar retorno al mismo ticket.
 6. Intentar abrir un ticket como usuario `Cliente`; el módulo no debe aparecer
    ni la base debe permitir crear/leer tickets.

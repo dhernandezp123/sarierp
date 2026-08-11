@@ -24,11 +24,8 @@ import {
   formatAttachmentSize,
   formatSupportDateTime,
   resolveSupportProfile,
-  sanitizeSupportFileName,
   supportProfileName,
   SUPPORT_ATTACHMENT_BUCKET,
-  SUPPORT_ATTACHMENT_MAX_BYTES,
-  SUPPORT_ATTACHMENT_MIME_TYPES,
   SUPPORT_TICKET_PRIORITIES,
   SUPPORT_TICKET_STATUSES,
   type SupportAttachment,
@@ -36,6 +33,10 @@ import {
   type SupportProfileSummary,
   type SupportTicket,
 } from '@/src/lib/support'
+import {
+  getSupportAttachmentValidationError,
+  uploadSupportAttachments as uploadSupportAttachmentFiles,
+} from '@/src/lib/support-attachments'
 import type { SupportTicketPriority, SupportTicketStatus } from '@/src/types'
 
 type SupportEvent = {
@@ -194,17 +195,11 @@ export default function SupportTicketDetailPage() {
   }, [attachments])
 
   const validateFiles = (selectedFiles: File[]) => {
-    for (const file of selectedFiles) {
-      if (!SUPPORT_ATTACHMENT_MIME_TYPES.includes(file.type as typeof SUPPORT_ATTACHMENT_MIME_TYPES[number])) {
-        toast.error(`${file.name}: formato no permitido`)
-        return false
-      }
-      if (file.size < 1 || file.size > SUPPORT_ATTACHMENT_MAX_BYTES) {
-        toast.error(`${file.name}: el archivo debe pesar menos de 10 MB`)
-        return false
-      }
-    }
-    return true
+    const validationError = getSupportAttachmentValidationError(selectedFiles)
+    if (!validationError) return true
+
+    toast.error(validationError)
+    return false
   }
 
   const handleFiles = (selected: FileList | null) => {
@@ -219,34 +214,15 @@ export default function SupportTicketDetailPage() {
   const uploadAttachments = async (messageId: string) => {
     if (!user || files.length === 0) return
 
-    for (const file of files) {
-      const safeName = sanitizeSupportFileName(file.name)
-      const filePath = `${ticketId}/${user.id}/${crypto.randomUUID()}-${safeName}`
-      const { error: uploadError } = await supabase.storage
-        .from(SUPPORT_ATTACHMENT_BUCKET)
-        .upload(filePath, file, { contentType: file.type, upsert: false })
+    const result = await uploadSupportAttachmentFiles({
+      ticketId,
+      messageId,
+      userId: user.id,
+      files,
+    })
 
-      if (uploadError) {
-        toast.error(`No se pudo subir ${file.name}`)
-        continue
-      }
-
-      const { error: metadataError } = await supabase
-        .from('support_ticket_attachments')
-        .insert({
-          ticket_id: ticketId,
-          message_id: messageId,
-          uploaded_by: user.id,
-          file_name: file.name.slice(0, 180),
-          file_path: filePath,
-          mime_type: file.type,
-          size_bytes: file.size,
-        })
-
-      if (metadataError) {
-        await supabase.storage.from(SUPPORT_ATTACHMENT_BUCKET).remove([filePath])
-        toast.error(`No se pudo registrar ${file.name}`)
-      }
+    for (const fileName of result.failedFileNames) {
+      toast.error(`No se pudo adjuntar ${fileName}`)
     }
   }
 
