@@ -5031,3 +5031,23 @@ Agregar una entrada por fix:
   - Probar políticas con usuarios Admin/Cliente y revisar que staging no
     contenga objetos reales heredados.
 - Commits: base `497a3c5`; correcciones de validación local `99956c2`.
+
+### 2026-08-10 - DEV-001 - Excluir archivos temporales de herramientas locales
+
+- Estado: Completado.
+- Hallazgo: DEV-001.
+- Archivos modificados:
+  - `.gitignore`
+  - `HARDENING.md`
+- SQL modificado: ninguno.
+- Cambios:
+  - Se excluyen los archivos temporales, papeleras y logs generados por
+    Understand Anything sin bloquear los artefactos persistentes del grafo.
+  - Se excluye la configuración local de permisos de Claude.
+- Validaciones ejecutadas:
+  - `git check-ignore` confirmó 125 archivos locales de `.ua` y un archivo
+    de `.claude` excluidos: OK.
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente avisos informativos LF/CRLF.
+- Riesgos o trabajo pendiente: ninguno.
+- Commit: pendiente.
