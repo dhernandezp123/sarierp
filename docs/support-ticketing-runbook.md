@@ -2,8 +2,10 @@
 
 ## Estado actual
 
-El módulo está preparado en `feat/support-tickets` y validado únicamente contra
-Supabase local. No aplicar en Producción hasta completar primero la UAT en Demo.
+El módulo está integrado en `feat/support-tickets-demo`. La migración
+`20260810170000` fue aplicada al proyecto Demo verificado el 10/08/2026 y
+`support_settings.enabled` quedó activo temporalmente para UAT. Producción no
+ha sido modificada. No aplicar allí hasta completar primero la UAT en Demo.
 
 El historial local contiene cuatro migraciones exclusivas de la rama `demo`
 que, por diseño, no existen en `main`:
@@ -23,9 +25,8 @@ separadas o reconstruir conscientemente la base local de la rama objetivo.
 
 ## Configuración por instalación
 
-Estado del canal: `soporte@forwarders.app` ya fue creado en ImprovMX. Antes de
-habilitar avisos reales todavía debe confirmarse su reenvío con un correo
-enviado desde una cuenta externa.
+Estado del canal: `soporte@forwarders.app` fue creado en ImprovMX y su reenvío
+se confirmó el 10/08/2026 con un correo enviado desde una cuenta externa.
 
 Antes de habilitar correos:
 

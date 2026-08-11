@@ -6,8 +6,9 @@ Git entre computadoras y ambientes.
 
 ### 2026-08-10 - SEC-024 - Mesa de ayuda técnica aislada por instalación
 
-- Estado: Implementado y validado localmente. Pendiente de desplegar en Demo
-  y completar UAT antes de cualquier aplicación en Producción.
+- Estado: Implementado y validado localmente. Migración aplicada y módulo
+  habilitado temporalmente en Demo; pendiente de desplegar la interfaz y
+  completar UAT antes de cualquier aplicación en Producción.
 - Hallazgo: SEC-024.
 - Código:
   - `src/app/(protected)/support/layout.tsx`
@@ -43,8 +44,8 @@ Git entre computadoras y ambientes.
   - Migración y prueba SQL en Supabase local: OK.
   - `npx supabase db lint --local --level error`: OK.
 - Riesgos y pendientes:
-  - Confirmar por envío externo que `soporte@forwarders.app` reenvía
-    correctamente mediante ImprovMX.
+  - Reenvío externo de `soporte@forwarders.app` mediante ImprovMX: confirmado
+    el 10/08/2026.
   - El lint aislado de `sidebar.tsx` conserva 3 errores y 2 advertencias
     preexistentes en la rama Demo; la integración sólo añadió el acceso a
     Mesa de ayuda y no amplió esa deuda técnica.
