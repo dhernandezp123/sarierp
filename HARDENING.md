@@ -53,7 +53,7 @@ Git entre computadoras y ambientes.
     autorización como controles iniciales.
   - Esta integración conserva las migraciones exclusivas de Demo y debe
     desplegarse sólo contra el project ref correspondiente a esa rama.
-- Commit: pendiente de hash para la integración de Demo.
+- Commit de implementación en la rama de integración Demo: `7c3c135`.
 
 ### 2026-07-28 - CALC-005 - Retiro de Bank Transfer Fee del comparativo FCL
 
