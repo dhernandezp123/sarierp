@@ -31,6 +31,7 @@ import {
   CreditCard,
   ShieldAlert,
   Mail,
+  LifeBuoy,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -155,6 +156,11 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       label: 'Reportes',
       href: '/reports',
       icon: BarChart3,
+    },
+    {
+      label: 'Mesa de ayuda',
+      href: '/support',
+      icon: LifeBuoy,
     },
   ]
 

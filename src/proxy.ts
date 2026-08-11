@@ -49,10 +49,8 @@ export async function proxy(req: NextRequest) {
     loginUrl.pathname = loginPath
     loginUrl.search = ''
 
-    if (loginPath === '/portal/login') {
-      const returnTo = `${pathname}${req.nextUrl.search}`
-      loginUrl.searchParams.set('next', returnTo)
-    }
+    const returnTo = `${pathname}${req.nextUrl.search}`
+    loginUrl.searchParams.set('next', returnTo)
 
     return NextResponse.redirect(loginUrl)
   }

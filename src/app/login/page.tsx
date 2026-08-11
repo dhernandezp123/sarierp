@@ -11,6 +11,7 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
+import { canAccessPath, getDefaultPathForRole } from '@/src/lib/permissions'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -69,7 +70,15 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/dashboard')
+      const requestedPath = new URLSearchParams(window.location.search).get('next')
+      const safePath = requestedPath
+        && requestedPath.startsWith('/')
+        && !requestedPath.startsWith('//')
+        && canAccessPath(profile.rol, requestedPath)
+        ? requestedPath
+        : getDefaultPathForRole(profile.rol)
+      router.push(safePath)
+      router.refresh()
     } finally {
       setLoading(false)
     }

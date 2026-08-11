@@ -4,6 +4,90 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-10 - SEC-024 - Mesa de ayuda técnica aislada por instalación
+
+- Estado: Implementado y validado localmente; pendiente de reconciliar el
+  historial de migraciones, desplegar en Demo y completar UAT antes de aplicar
+  en Producción.
+- Hallazgo: SEC-024.
+- Alcance:
+  - Cada instalación conserva sus propios tickets, mensajes y adjuntos. No se
+    introdujo una base central ni acceso cruzado entre proyectos de clientes.
+  - El canal es exclusivo para usuarios internos aprobados del ERP y Hernova
+    Systems. Los perfiles `Cliente` del portal de carga quedan excluidos.
+- Código:
+  - `src/app/(protected)/support/layout.tsx`.
+  - `src/app/(protected)/support/page.tsx`.
+  - `src/app/(protected)/support/new/page.tsx`.
+  - `src/app/(protected)/support/[id]/page.tsx`.
+  - `src/app/api/support/notify/route.ts`.
+  - `src/lib/support.ts`.
+  - `src/components/layout/sidebar.tsx`.
+  - `src/lib/permissions.ts`.
+  - `src/types/index.ts`.
+  - `src/proxy.ts`.
+  - `src/app/login/page.tsx`.
+  - `docs/support-ticketing-runbook.md`.
+- SQL:
+  - `supabase/migrations/20260810170000_support_ticketing_foundation.sql`.
+- Pruebas:
+  - `supabase/tests/support_ticketing_foundation.sql`.
+- Cambios de seguridad e integridad:
+  - `profiles.is_platform_admin` distingue a Hernova de los administradores de
+    la empresa cliente. Un trigger impide autoconceder o modificar ese acceso
+    desde una sesión autenticada; sólo una operación confiable sin JWT de
+    usuario puede configurarlo.
+  - La numeración usa una secuencia PostgreSQL y un prefijo configurable por
+    instalación, evitando la carrera de `max + 1`.
+  - El módulo queda deshabilitado por defecto. Cada instalación debe configurar
+    prefijo, buzón y cuenta Hernova antes de abrirlo explícitamente.
+  - Tickets y mensajes se crean mediante RPC con validación de rol y entrada.
+    Sólo el Administrador Supremo cambia estado, prioridad o responsable.
+  - Las notas internas se filtran por RLS y sólo son visibles para perfiles de
+    plataforma. Los eventos administrativos son append-only para usuarios.
+  - `support-attachments` es privado, limita PDF/PNG/JPEG a 10 MB y exige que
+    el path pertenezca al ticket y al usuario autenticado. Las descargas usan
+    URL firmada de 60 segundos.
+  - El endpoint de Resend vuelve a autenticar y autorizar al emisor, bloquea
+    Demo, conserva idempotencia y registra intentos, errores y `message_id` en
+    `support_notification_outbox`. Una falla de correo no revierte el ticket.
+  - Proxy y login interno conservan un destino local autorizado, permitiendo
+    abrir el ticket exacto después de iniciar sesión sin admitir open redirect.
+- Validaciones ejecutadas:
+  - Guías locales de Next.js 16 sobre Route Handlers y seguridad de datos
+    revisadas antes de implementar.
+  - Migración ejecutada en Supabase Docker local con transacción y
+    `ON_ERROR_STOP=1`: OK.
+  - Prueba SQL transaccional: OK. Confirmó exclusión de `Cliente`, bloqueo de
+    autoelevación, numeración, permisos de administración, primera respuesta,
+    historial y ocultamiento de notas internas.
+  - `npx supabase db lint --local --level error`: OK, cero errores de esquema.
+  - `npx tsc --noEmit`: OK al cierre.
+  - `npm run build`: OK; 70/70 páginas generadas y el Route Handler de
+    notificaciones quedó dinámico.
+  - ESLint dirigido a todos los archivos nuevos y al retorno del login: OK.
+  - El lint global conserva 391 hallazgos preexistentes, incluidos temporales
+    dentro de `.ua`; no forman parte de SEC-024.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Riesgos o trabajo pendiente:
+  - El Supabase local registra las migraciones exclusivas de la rama `demo`
+    `20260731190000`, `20260731213000`, `20260731214000` y `20260731215000`.
+    Por diseño no existen en `main`: no copiarlas a Producción ni ejecutar
+    `migration repair`. Cada push debe hacerse desde la rama enlazada al
+    proyecto correcto; para pruebas locales conviene separar los worktrees.
+  - El alias entrante `soporte@forwarders.app` ya fue creado en ImprovMX; falta
+    confirmar con un envío externo que el reenvío llega a la bandeja destino.
+  - Configurar manualmente el prefijo de cada instalación y marcar el perfil
+    autorizado de Hernova como `is_platform_admin = true` mediante SQL
+    confiable después de revisar el correo objetivo.
+  - El conector visual del navegador no estuvo disponible en esta sesión;
+    falta UAT de lista, creación, conversación, adjuntos, retorno post-login y
+    diseño responsive en Demo.
+  - No existe análisis antivirus de adjuntos. El MVP reduce riesgo mediante
+    bucket privado, allowlist MIME, límite de tamaño y URLs firmadas; un
+    escáner de malware queda como mejora futura.
+- Commit: incluido en este commit.
+
 ### 2026-08-10 - UX-052 - Hora Miami e historial de ingresos de bodega
 
 - Estado: Implementado y validado localmente; pendiente de desplegar y ejecutar

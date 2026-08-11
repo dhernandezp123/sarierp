@@ -21,6 +21,7 @@ export type Profile = {
   rol: UserRole
   status: UserStatus
   is_active: boolean
+  is_platform_admin?: boolean
   approved_at: string | null
   approved_by: string | null
   cliente_id: string | null
@@ -29,3 +30,21 @@ export type Profile = {
   updated_at?: string
   tutorial_completed?: boolean | null
 }
+
+export type SupportTicketStatus =
+  | 'Nuevo'
+  | 'En revisión'
+  | 'Esperando al cliente'
+  | 'En desarrollo'
+  | 'Resuelto'
+  | 'Cerrado'
+
+export type SupportTicketPriority = 'Crítica' | 'Alta' | 'Normal'
+
+export type SupportTicketCategory =
+  | 'Error del sistema'
+  | 'Consulta'
+  | 'Configuración'
+  | 'Capacitación'
+  | 'Solicitud de cambio'
+  | 'Mejora'
