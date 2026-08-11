@@ -5050,4 +5050,4 @@ Agregar una entrada por fix:
   - `npx tsc --noEmit`: OK.
   - `git diff --check`: OK; únicamente avisos informativos LF/CRLF.
 - Riesgos o trabajo pendiente: ninguno.
-- Commit: pendiente.
+- Commit: `9627303`.
