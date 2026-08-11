@@ -6,9 +6,8 @@ Git entre computadoras y ambientes.
 
 ### 2026-08-10 - SEC-024 - Mesa de ayuda técnica aislada por instalación
 
-- Estado: Implementado y validado localmente. Desplegado en Demo. La migración
-  fue aplicada en Producción, pero el módulo permanece deshabilitado hasta
-  identificar y autorizar de forma explícita la cuenta Hernova.
+- Estado: Implementado, desplegado y habilitado en Producción. Pendiente de UAT
+  funcional y de que `dher@forwarders.app` complete su invitación.
 - Hallazgo: SEC-024.
 - Alcance:
   - Cada instalación conserva sus propios tickets, mensajes y adjuntos. No se
@@ -75,25 +74,29 @@ Git entre computadoras y ambientes.
   - Producción: dry-run mostró únicamente
     `20260810170000_support_ticketing_foundation.sql`; migración aplicada sin
     incluir las cuatro migraciones exclusivas de Demo.
+  - Deployment productivo de Vercel: `Ready`, asociado a `forwarders.app`.
+  - `support_settings`: prefijo `SUP`, buzón `soporte@forwarders.app` y
+    `enabled=true` verificados después de la transacción.
+  - `admin@admin.com` y `dher@forwarders.app` quedaron como Admin aprobados,
+    activos y `is_platform_admin=true`. La cuenta `admin@admin.com` ya estaba
+    confirmada; a `dher@forwarders.app` se le envió invitación mediante
+    Supabase Auth y Resend con retorno a `/onboarding`.
 - Riesgos o trabajo pendiente:
   - El Supabase local registra las migraciones exclusivas de la rama `demo`
     `20260731190000`, `20260731213000`, `20260731214000` y `20260731215000`.
     Por diseño no existen en `main`: no copiarlas a Producción ni ejecutar
     `migration repair`. Cada push debe hacerse desde la rama enlazada al
     proyecto correcto; para pruebas locales conviene separar los worktrees.
-  - Producción conserva `support_settings.enabled = false`. No existe todavía
-    un perfil cuyo correo Auth sea `dher@forwarders.app`; los Admin activos son
-    `dennis@sari.com` y `admin@admin.com`. No se concedió acceso supremo a
-    ninguno sin una decisión explícita del propietario.
-  - Configurar el prefijo productivo y marcar únicamente la cuenta Hernova
-    aprobada como `is_platform_admin = true` antes de habilitar el módulo.
+  - `dher@forwarders.app` no podrá iniciar sesión hasta abrir la invitación y
+    completar el onboarding; `admin@admin.com` queda disponible para el UAT
+    inmediato de administración.
   - El conector visual del navegador no estuvo disponible en esta sesión;
     falta UAT de lista, creación, conversación, adjuntos, retorno post-login y
     diseño responsive en Demo.
   - No existe análisis antivirus de adjuntos. El MVP reduce riesgo mediante
     bucket privado, allowlist MIME, límite de tamaño y URLs firmadas; un
     escáner de malware queda como mejora futura.
-- Commit: incluido en este commit.
+- Commit de implementación: `88b0c6a`.
 
 ### 2026-08-10 - UX-052 - Hora Miami e historial de ingresos de bodega
 

@@ -2,8 +2,11 @@
 
 ## Estado actual
 
-El módulo está preparado en `feat/support-tickets` y validado únicamente contra
-Supabase local. No aplicar en Producción hasta completar primero la UAT en Demo.
+El módulo fue integrado en `main`, desplegado por Vercel y habilitado en
+Producción el 10/08/2026. La migración productiva se aplicó después de un
+dry-run que mostró únicamente `20260810170000`. `admin@admin.com` y
+`dher@forwarders.app` son los Administradores Supremos autorizados; la segunda
+cuenta todavía debe completar su invitación. Falta cerrar el UAT funcional.
 
 El historial local contiene cuatro migraciones exclusivas de la rama `demo`
 que, por diseño, no existen en `main`:
