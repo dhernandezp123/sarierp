@@ -23,9 +23,8 @@ separadas o reconstruir conscientemente la base local de la rama objetivo.
 
 ## Configuración por instalación
 
-Estado del canal: `soporte@forwarders.app` ya fue creado en ImprovMX. Antes de
-habilitar avisos reales todavía debe confirmarse su reenvío con un correo
-enviado desde una cuenta externa.
+Estado del canal: `soporte@forwarders.app` fue creado en ImprovMX y su reenvío
+se confirmó el 10/08/2026 mediante un correo enviado desde una cuenta externa.
 
 Antes de habilitar correos:
 

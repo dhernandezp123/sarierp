@@ -6,9 +6,9 @@ Git entre computadoras y ambientes.
 
 ### 2026-08-10 - SEC-024 - Mesa de ayuda técnica aislada por instalación
 
-- Estado: Implementado y validado localmente; pendiente de reconciliar el
-  historial de migraciones, desplegar en Demo y completar UAT antes de aplicar
-  en Producción.
+- Estado: Implementado y validado localmente. Desplegado en Demo. La migración
+  fue aplicada en Producción, pero el módulo permanece deshabilitado hasta
+  identificar y autorizar de forma explícita la cuenta Hernova.
 - Hallazgo: SEC-024.
 - Alcance:
   - Cada instalación conserva sus propios tickets, mensajes y adjuntos. No se
@@ -69,17 +69,24 @@ Git entre computadoras y ambientes.
   - El lint global conserva 391 hallazgos preexistentes, incluidos temporales
     dentro de `.ua`; no forman parte de SEC-024.
   - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Reenvío externo de `soporte@forwarders.app` mediante ImprovMX: confirmado.
+  - Demo: migración aplicada, deployment Vercel `Ready` y módulo habilitado
+    temporalmente para UAT.
+  - Producción: dry-run mostró únicamente
+    `20260810170000_support_ticketing_foundation.sql`; migración aplicada sin
+    incluir las cuatro migraciones exclusivas de Demo.
 - Riesgos o trabajo pendiente:
   - El Supabase local registra las migraciones exclusivas de la rama `demo`
     `20260731190000`, `20260731213000`, `20260731214000` y `20260731215000`.
     Por diseño no existen en `main`: no copiarlas a Producción ni ejecutar
     `migration repair`. Cada push debe hacerse desde la rama enlazada al
     proyecto correcto; para pruebas locales conviene separar los worktrees.
-  - El alias entrante `soporte@forwarders.app` ya fue creado en ImprovMX; falta
-    confirmar con un envío externo que el reenvío llega a la bandeja destino.
-  - Configurar manualmente el prefijo de cada instalación y marcar el perfil
-    autorizado de Hernova como `is_platform_admin = true` mediante SQL
-    confiable después de revisar el correo objetivo.
+  - Producción conserva `support_settings.enabled = false`. No existe todavía
+    un perfil cuyo correo Auth sea `dher@forwarders.app`; los Admin activos son
+    `dennis@sari.com` y `admin@admin.com`. No se concedió acceso supremo a
+    ninguno sin una decisión explícita del propietario.
+  - Configurar el prefijo productivo y marcar únicamente la cuenta Hernova
+    aprobada como `is_platform_admin = true` antes de habilitar el módulo.
   - El conector visual del navegador no estuvo disponible en esta sesión;
     falta UAT de lista, creación, conversación, adjuntos, retorno post-login y
     diseño responsive en Demo.
