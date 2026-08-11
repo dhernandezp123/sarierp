@@ -4,6 +4,33 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-10 - DEMO-002 - Renovación controlada del Slot 01
+
+- Estado: Aplicado y verificado en Supabase Demo.
+- Hallazgo: DEMO-002.
+- Código y SQL versionado: No aplica; operación administrativa remota.
+- Cambio:
+  - Se renovaron conjuntamente `demo-admin-01@forwarders.app` y
+    `demo-cliente-01@forwarders.app` por 7 días desde el momento de la
+    operación.
+  - Nuevo vencimiento común: 17/08/2026 09:07 p. m., hora de Honduras.
+  - Sólo se actualizó `public.profiles.demo_expires_at`; se conservaron grant,
+    contraseñas, sesiones y aceptación de términos.
+- Validaciones:
+  - Project ref enlazado: `wlssekvxpfxhwedsjhpz`.
+  - Sentinel: `environment=demo`, dataset
+    `atlas-forwarding-demo-v1`, reset desarmado.
+  - Pareja exacta, roles `Admin` y `Cliente`, Auth activo y metadata de grant
+    coincidente antes y después de la transacción.
+  - Ambos perfiles quedaron vigentes hasta
+    `2026-08-18 03:07:45.086993+00`.
+- Riesgos o pendientes:
+  - Un navegador que mantenga estado vencido en memoria debe recargar o volver
+    a iniciar sesión.
+  - La renovación conserva las credenciales actuales y sólo corresponde al
+    mismo prospecto; para reasignar el slot se debe reprovisionar.
+- Commit: pendiente.
+
 ### 2026-08-10 - SEC-024 - Mesa de ayuda técnica aislada por instalación
 
 - Estado: Implementado y validado localmente. Migración aplicada y módulo
