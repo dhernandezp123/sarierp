@@ -5190,11 +5190,11 @@ Agregar una entrada por fix:
     conserva la seccion de cargos sin inventar ni exponer montos comerciales.
   - Descripciones o condiciones excepcionalmente extensas requieren UAT con un
     caso real antes del deployment.
-- Commit: pendiente.
+- Commit: `43a62ad`.
 
 ### 2026-08-13 - UX-055 - Proteccion integral de eliminaciones y reemplazos
 
-- Estado: Implementado y validado localmente; SQL y deployment Production pendientes.
+- Estado: Implementado y validado; SQL aplicado en Production; UAT y verificacion del deployment pendientes.
 - Hallazgo: UX-055.
 - Causa raiz:
   - Varias acciones `Eliminar`, `Quitar` y `Enviar a papelera` descartaban
@@ -5232,24 +5232,30 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; 70/70 paginas generadas.
   - Migracion aplicada correctamente en Supabase local con
     `npx.cmd supabase migration up --local`.
+  - `npx.cmd supabase db push`: migracion `20260813140000` aplicada al proyecto
+    Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - `npx.cmd supabase migration list`: `20260813140000` coincide en las columnas
+    Local y Remote.
   - `npx.cmd supabase db lint --local --level error`: las funciones nuevas no
     reportan errores; permanece un hallazgo preexistente en
     `public.is_platform_admin` por `public.is_demo_environment()` ausente del
     esquema local.
+  - `npx.cmd supabase db lint --linked --level error`: las funciones nuevas no
+    reportan errores; el mismo hallazgo preexistente permanece en Production.
   - ESLint dirigido: 126 errores y 21 advertencias preexistentes en los modulos
     auditados (`any`, reglas de hooks y texto JSX); TypeScript y build pasan.
 - Verificacion manual pendiente:
   - Probar Cancelar/Confirmar en cada modal y verificar que solo se quite el
     registro seleccionado.
   - Ejecutar UAT de los tres reemplazos transaccionales contra el proyecto
-    vinculado despues de aplicar la migracion.
+    Production vinculado.
   - Verificar el deployment de Production en `https://forwarders.app`.
 - Riesgos o trabajo pendiente:
-  - El frontend que llama las RPC nuevas no debe desplegarse antes de aplicar
-    la migracion remota; hacerlo en ese orden causaria errores de guardado.
+  - La dependencia de despliegue quedo resuelta al aplicar primero la migracion
+    remota; falta confirmar el deployment del frontend y ejecutar UAT.
   - No se modificaron los borrados tecnicos de archivos subidos cuando falla su
     registro, porque son compensaciones necesarias y no acciones del usuario.
-- Commit: pendiente.
+- Commit: `43a62ad`.
 
 ### 2026-08-13 - UX-054 - Confirmación al quitar contenedores del borrador BL
 
@@ -5285,4 +5291,4 @@ Agregar una entrada por fix:
 - Riesgos o trabajo pendiente:
   - La pantalla todavía requiere guardar explícitamente el conjunto después de
     confirmar; el modal no escribe directamente en Supabase.
-- Commit: pendiente.
+- Commit: `43a62ad`.
