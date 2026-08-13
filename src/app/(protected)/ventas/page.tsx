@@ -11,6 +11,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { fieldClass } from '@/src/lib/ui-classes'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,7 @@ export default function VentasPage() {
   const [calYear, setCalYear]           = useState(() => new Date().getFullYear())
   const [calMonth, setCalMonth]         = useState(() => new Date().getMonth())
   const [selectedDay, setSelectedDay]   = useState<string | null>(null)
+  const [activityPendingDelete, setActivityPendingDelete] = useState<SalesActivity | null>(null)
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -386,7 +388,7 @@ export default function VentasPage() {
               className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200">
               <Pencil size={14} />
             </button>
-            <button type="button" onClick={() => handleDelete(a.id)}
+            <button type="button" onClick={() => setActivityPendingDelete(a)}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400">
               <Trash2 size={14} />
             </button>
@@ -891,6 +893,20 @@ export default function VentasPage() {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={activityPendingDelete !== null}
+        onOpenChange={(open) => { if (!open) setActivityPendingDelete(null) }}
+        title="Eliminar actividad de ventas"
+        description={activityPendingDelete
+          ? `¿Deseas eliminar la ${activityPendingDelete.tipo_actividad.toLowerCase()} de ${activityName(activityPendingDelete)} del ${formatDate(activityPendingDelete.fecha_actividad)}?`
+          : undefined}
+        confirmLabel="Eliminar actividad"
+        danger
+        onConfirm={() => {
+          if (activityPendingDelete) void handleDelete(activityPendingDelete.id)
+          setActivityPendingDelete(null)
+        }}
+      />
     </div>
   )
 }

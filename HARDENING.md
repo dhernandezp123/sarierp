@@ -5051,3 +5051,157 @@ Agregar una entrada por fix:
   - `git diff --check`: OK; únicamente avisos informativos LF/CRLF.
 - Riesgos o trabajo pendiente: ninguno.
 - Commit: `9627303`.
+### 2026-08-13 - UX-056 - HBL Draft alineado al formato documental real
+
+- Estado: Implementado y validado localmente; pendiente de UAT y deployment.
+- Hallazgo: UX-056.
+- Causa raiz:
+  - El HBL generado usaba una composicion moderna por tarjetas y no la reticula
+    documental de un Bill of Lading maritimo utilizado en operacion.
+  - El PDF solo podia descargarse despues de emitir el HBL y no incorporaba las
+    filas de contenedores guardadas en el borrador.
+- Codigo:
+  - `src/components/pdf/house-bl-pdf.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+- SQL: ninguno.
+- Referencia:
+  - Se reviso visualmente un BL real proporcionado por el titular solo para
+    reproducir su formato. El archivo y sus datos no se copiaron al repositorio
+    ni se incorporaron como constantes.
+- Cambios:
+  - El HBL usa una hoja Letter con encabezado corporativo, campos numerados de
+    partes y ruta, tabla central de carga, bloque inferior de flete y seccion de
+    emision/firma.
+  - Los datos siguen viniendo del formulario y de la configuracion de empresa.
+  - Los contenedores muestran numero, sello, tipo, cantidad y notas disponibles.
+  - Los estados anteriores a `Emitido`/`Liberado` muestran marca de agua
+    `DRAFT`; el documento emitido no la muestra.
+  - La descarga del HBL queda disponible durante el flujo de borrador con la
+    etiqueta `Descargar HBL Draft`.
+  - El encabezado del editor muestra una accion visible para imprimir el HBL
+    actual aun antes de guardarlo; mientras sea borrador conserva la marca de
+    agua `DRAFT`.
+  - El MBL muestra la accion `Imprimir Draft MBL`, habilitada cuando existe un
+    archivo del agente cargado. Se imprime el archivo original y no un MBL
+    reconstruido por el sistema.
+  - Ambas acciones abren el documento en el visor PDF del navegador para usar
+    su dialogo de impresion o guardarlo localmente.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK; 70/70 paginas generadas.
+  - ESLint del componente PDF: 0 errores y 0 advertencias. La pagina BL
+    conserva 8 errores y 1 advertencia preexistentes fuera de las lineas de
+    esta correccion (`any`, efecto de carga y texto JSX).
+  - ESLint dirigido despues de agregar impresion: ningun hallazgo nuevo en las
+    funciones o controles incorporados.
+  - Muestra PDF con datos ficticios: una pagina Letter, reticula completa y sin
+    desbordamiento visual.
+  - El PDF real de referencia permanecio fuera del repositorio y las capturas de
+    analisis se generaron unicamente en el directorio temporal del sistema.
+- Verificacion manual pendiente:
+  - Descargar un HBL Draft desde un booking real y revisar textos extensos,
+    multiples contenedores y condiciones configuradas.
+  - Confirmar con Operaciones los nombres definitivos de los campos numerados y
+    la informacion que debe mostrarse en la seccion de cargos.
+  - Verificar el deployment en `https://forwarders.app`.
+- Riesgos o trabajo pendiente:
+  - La pantalla no posee un importe de flete dedicado para imprimir; el formato
+    conserva la seccion de cargos sin inventar ni exponer montos comerciales.
+  - Descripciones o condiciones excepcionalmente extensas requieren UAT con un
+    caso real antes del deployment.
+- Commit: pendiente.
+
+### 2026-08-13 - UX-055 - Proteccion integral de eliminaciones y reemplazos
+
+- Estado: Implementado y validado localmente; SQL y deployment Production pendientes.
+- Hallazgo: UX-055.
+- Causa raiz:
+  - Varias acciones `Eliminar`, `Quitar` y `Enviar a papelera` descartaban
+    registros o valores ingresados sin una decision explicita del usuario.
+  - Tres flujos reemplazaban datos con operaciones separadas `delete + insert`;
+    un fallo intermedio podia dejar informacion parcial o vacia.
+- Codigo:
+  - `src/app/(protected)/clientes/[id]/page.tsx`
+  - `src/app/(protected)/ventas/page.tsx`
+  - `src/app/(protected)/suppliers/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+  - `src/app/(protected)/quotations/new/page.tsx`
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`
+  - `src/components/quotations/MiamiQuotationSection.tsx`
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/invoicing/new/page.tsx`
+  - `src/app/(protected)/settings/company/page.tsx`
+- SQL:
+  - `supabase/migrations/20260813140000_atomic_destructive_replacements.sql`
+- Cambios:
+  - Se agregaron confirmaciones identificables para papelera de clientes,
+    actividades de Ventas, reemplazo de PDF de cuentas por pagar, contenedores
+    de Booking/BL/cotizaciones, carga, cargos Miami, lineas de factura y reglas
+    globales de seguro.
+  - Las filas nuevas completamente vacias pueden quitarse sin confirmacion;
+    las filas con datos y los registros persistidos siempre piden decision.
+  - Cambiar producto, transporte o modalidad en una cotizacion nueva pide
+    confirmacion si el cambio descartara contenedores ya ingresados.
+  - `replace_client_rates`, `replace_agent_quote_container_rates` y
+    `replace_quotation_cargo_with_totals` ejecutan validacion, borrado e
+    insercion dentro de una sola transaccion PostgreSQL.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK; 70/70 paginas generadas.
+  - Migracion aplicada correctamente en Supabase local con
+    `npx.cmd supabase migration up --local`.
+  - `npx.cmd supabase db lint --local --level error`: las funciones nuevas no
+    reportan errores; permanece un hallazgo preexistente en
+    `public.is_platform_admin` por `public.is_demo_environment()` ausente del
+    esquema local.
+  - ESLint dirigido: 126 errores y 21 advertencias preexistentes en los modulos
+    auditados (`any`, reglas de hooks y texto JSX); TypeScript y build pasan.
+- Verificacion manual pendiente:
+  - Probar Cancelar/Confirmar en cada modal y verificar que solo se quite el
+    registro seleccionado.
+  - Ejecutar UAT de los tres reemplazos transaccionales contra el proyecto
+    vinculado despues de aplicar la migracion.
+  - Verificar el deployment de Production en `https://forwarders.app`.
+- Riesgos o trabajo pendiente:
+  - El frontend que llama las RPC nuevas no debe desplegarse antes de aplicar
+    la migracion remota; hacerlo en ese orden causaria errores de guardado.
+  - No se modificaron los borrados tecnicos de archivos subidos cuando falla su
+    registro, porque son compensaciones necesarias y no acciones del usuario.
+- Commit: pendiente.
+
+### 2026-08-13 - UX-054 - Confirmación al quitar contenedores del borrador BL
+
+- Estado: Implementado en código; pendiente de validación manual y deployment.
+- Hallazgo: UX-054.
+- Causa raíz:
+  - La papelera de la sección Contenedores quitaba inmediatamente la fila del
+    estado local del borrador sin pedir confirmación.
+  - Al guardar, `replace_bl_containers` reemplaza el conjunto completo, por lo
+    que una fila omitida también se elimina de forma persistente.
+- Código:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - La papelera abre un modal de confirmación antes de quitar la fila.
+  - El modal identifica el contenedor por número, tipo o posición y diferencia
+    una fila nueva de un contenedor previamente guardado.
+  - Para registros existentes se aclara que la eliminación definitiva ocurre
+    únicamente al pulsar `Guardar contenedores`.
+  - El botón de papelera ahora tiene nombre accesible y tooltip nativo.
+- Validaciones:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 70/70 páginas generadas.
+  - ESLint dirigido: el modal compartido no reporta hallazgos y la página
+    conserva 8 errores y 1 advertencia preexistentes, fuera de las líneas
+    modificadas (`any`, efecto de carga y texto JSX).
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Confirmar que `Cancelar` conserva tanto filas nuevas como persistidas.
+  - Confirmar que `Quitar contenedor` elimina solo la fila seleccionada del
+    borrador.
+  - Guardar y recargar el BL para comprobar la persistencia del cambio.
+- Riesgos o trabajo pendiente:
+  - La pantalla todavía requiere guardar explícitamente el conjunto después de
+    confirmar; el modal no escribe directamente en Supabase.
+- Commit: pendiente.

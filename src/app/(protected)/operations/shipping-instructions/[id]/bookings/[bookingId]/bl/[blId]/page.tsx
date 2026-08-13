@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { Clock, Download, FileText, History, Mail, Plus, Send, Trash2, Upload, X } from 'lucide-react'
-import { PDFDownloadLink } from '@react-pdf/renderer'
+import { Clock, Download, FileText, History, Mail, Plus, Printer, Send, Trash2, Upload, X } from 'lucide-react'
+import { PDFDownloadLink, pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
@@ -12,6 +12,7 @@ import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from 
 import HouseBLPdf, { type HBLData } from '@/src/components/pdf/house-bl-pdf'
 import AWBPdf, { type AWBData } from '@/src/components/pdf/awb-pdf'
 import CartaPortePdf, { type CartaPorteData } from '@/src/components/pdf/carta-porte-pdf'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import {
   COMPANY_BRANDING_SELECT,
@@ -21,6 +22,11 @@ import {
 import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
+const BOOKING_DOCUMENTS_STORAGE_MARKERS = [
+  `/storage/v1/object/public/${BOOKING_DOCUMENTS_BUCKET}/`,
+  `/storage/v1/object/sign/${BOOKING_DOCUMENTS_BUCKET}/`,
+  `/storage/v1/object/authenticated/${BOOKING_DOCUMENTS_BUCKET}/`,
+]
 
 type BLForm = {
   bl_type: 'MBL' | 'HBL'
@@ -185,8 +191,13 @@ type DraftSend = {
   notes: string | null
 }
 
-function formToHBLData(form: BLForm, condiciones: string | null): HBLData {
+function formToHBLData(
+  form: BLForm,
+  condiciones: string | null,
+  containers: BLContainer[]
+): HBLData {
   return {
+    status: form.status || null,
     bl_number: form.bl_number || null,
     bl_date: form.bl_date || null,
     release_type: form.release_type || null,
@@ -225,6 +236,15 @@ function formToHBLData(form: BLForm, condiciones: string | null): HBLData {
     special_instructions: form.special_instructions || null,
     printed_at_destination: form.printed_at_destination,
     condiciones,
+    containers: containers.map((container) => ({
+      container_number: container.container_number || null,
+      seal_number: container.seal_number || null,
+      container_type: container.container_type || null,
+      quantity: container.quantity === '' ? null : Number(container.quantity),
+      gross_weight_kg: container.gross_weight_kg ? Number(container.gross_weight_kg) : null,
+      measurement_cbm: container.measurement_cbm ? Number(container.measurement_cbm) : null,
+      notes: container.notes || null,
+    })),
   }
 }
 
@@ -297,6 +317,29 @@ function sanitizeFileName(name: string) {
     .replace(/-+/g, '-')
 }
 
+function normalizeBookingDocumentPath(value: string) {
+  const trimmedValue = value.trim()
+  if (!trimmedValue) return ''
+
+  const storageMarker = BOOKING_DOCUMENTS_STORAGE_MARKERS.find((marker) =>
+    trimmedValue.includes(marker)
+  )
+
+  if (storageMarker) {
+    const encodedPath = (trimmedValue.split(storageMarker)[1] || '').split(/[?#]/, 1)[0]
+
+    try {
+      return decodeURIComponent(encodedPath)
+    } catch {
+      return ''
+    }
+  }
+
+  if (/^https?:\/\//i.test(trimmedValue)) return ''
+
+  return trimmedValue.replace(/^\/+/, '')
+}
+
 function statusBadgeClass(status: string) {
   if (status === 'MBL Draft' || status === 'HBL Draft') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
   if (status === 'MBL Validado') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
@@ -329,8 +372,15 @@ export default function BLPage() {
   const [saving, setSaving] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
   const [uploadingDraft, setUploadingDraft] = useState(false)
+  const [openingDraft, setOpeningDraft] = useState(false)
+  const [printingDraft, setPrintingDraft] = useState(false)
   const [containers, setContainers] = useState<BLContainer[]>([])
   const [savingContainers, setSavingContainers] = useState(false)
+  const [containerPendingRemoval, setContainerPendingRemoval] = useState<{
+    index: number
+    label: string
+    persisted: boolean
+  } | null>(null)
   const [amendments, setAmendments] = useState<Amendment[]>([])
   const [draftSends, setDraftSends] = useState<DraftSend[]>([])
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -809,6 +859,26 @@ export default function BLPage() {
     toast.success('Contenedores guardados')
   }
 
+  const requestContainerRemoval = (container: BLContainer, index: number) => {
+    setContainerPendingRemoval({
+      index,
+      label:
+        container.container_number.trim() ||
+        container.container_type.trim() ||
+        `fila ${index + 1}`,
+      persisted: Boolean(container.id),
+    })
+  }
+
+  const confirmContainerRemoval = () => {
+    if (!containerPendingRemoval) return
+
+    setContainers((current) =>
+      current.filter((_, index) => index !== containerPendingRemoval.index)
+    )
+    setContainerPendingRemoval(null)
+  }
+
   const advanceStatus = async () => {
     const transition = STATUS_FLOW[form.status]
     if (!transition) return
@@ -901,6 +971,101 @@ export default function BLPage() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const openDraftFile = async () => {
+    const path = normalizeBookingDocumentPath(form.draft_file_url)
+
+    if (!path || !path.startsWith(`${bookingId}/`)) {
+      toast.error('La ruta del Draft MBL no es válida')
+      return
+    }
+
+    setOpeningDraft(true)
+    const { data, error } = await supabase.storage
+      .from(BOOKING_DOCUMENTS_BUCKET)
+      .createSignedUrl(path, 60)
+    setOpeningDraft(false)
+
+    if (error || !data?.signedUrl) {
+      toast.error(error?.message || 'No se pudo abrir el Draft MBL')
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const openPrintWindow = () => {
+    const printWindow = window.open('', '_blank')
+
+    if (!printWindow) {
+      toast.error('El navegador bloqueó la ventana de impresión. Habilita las ventanas emergentes e intenta nuevamente.')
+      return null
+    }
+
+    printWindow.document.title = 'Preparando documento'
+    printWindow.document.body.textContent = 'Preparando documento para imprimir...'
+    return printWindow
+  }
+
+  const sendBlobToPrintWindow = (printWindow: Window, blob: Blob) => {
+    const objectUrl = URL.createObjectURL(blob)
+
+    printWindow.location.replace(objectUrl)
+    printWindow.opener = null
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  }
+
+  const printUploadedMBLDraft = async () => {
+    const path = normalizeBookingDocumentPath(form.draft_file_url)
+
+    if (!path || !path.startsWith(`${bookingId}/`)) {
+      toast.error('Sube y guarda el Draft MBL del agente antes de imprimirlo.')
+      return
+    }
+
+    const printWindow = openPrintWindow()
+    if (!printWindow) return
+
+    setPrintingDraft(true)
+    try {
+      const { data, error } = await supabase.storage
+        .from(BOOKING_DOCUMENTS_BUCKET)
+        .createSignedUrl(path, 60)
+
+      if (error || !data?.signedUrl) {
+        throw new Error(error?.message || 'No se pudo abrir el Draft MBL')
+      }
+
+      printWindow.location.replace(data.signedUrl)
+      printWindow.opener = null
+    } catch (error) {
+      printWindow.close()
+      toast.error(error instanceof Error ? error.message : 'No se pudo imprimir el Draft MBL')
+    } finally {
+      setPrintingDraft(false)
+    }
+  }
+
+  const printGeneratedHBL = async () => {
+    const printWindow = openPrintWindow()
+    if (!printWindow) return
+
+    setPrintingDraft(true)
+    try {
+      const blob = await pdf(
+        <HouseBLPdf
+          bl={formToHBLData(form, condicionesBL, containers)}
+          company={companyBranding}
+        />
+      ).toBlob()
+
+      sendBlobToPrintWindow(printWindow, blob)
+    } catch {
+      printWindow.close()
+      toast.error('No se pudo generar el HBL para impresión.')
+    } finally {
+      setPrintingDraft(false)
+    }
+  }
   if (loading) return <PageSkeleton cards={2} rows={4} />
 
   const transition = isNew ? null : STATUS_FLOW[form.status]
@@ -1022,7 +1187,7 @@ export default function BLPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             {isNew ? `Nuevo ${blLabel}` : `${blLabel} · ${form.bl_number || 'Sin número'}`}
@@ -1033,13 +1198,43 @@ export default function BLPage() {
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => router.push(`/operations/shipping-instructions/${id}/bookings/${bookingId}`)}
-          className={secondaryButtonClass}
-        >
-          Volver al Booking
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {form.bl_type === 'MBL' && (
+            <button
+              type="button"
+              onClick={printUploadedMBLDraft}
+              disabled={printingDraft || !form.draft_file_url}
+              title={form.draft_file_url ? 'Imprimir Draft MBL' : 'Sube el Draft MBL del agente para imprimirlo'}
+              className={`${secondaryButtonClass} inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              <Printer className="h-4 w-4" />
+              {printingDraft ? 'Preparando...' : 'Imprimir Draft MBL'}
+            </button>
+          )}
+          {form.bl_type === 'HBL' && tipoTransporte !== 'Aéreo' && tipoTransporte !== 'Terrestre' && (
+            <button
+              type="button"
+              onClick={printGeneratedHBL}
+              disabled={printingDraft}
+              title="Imprimir HBL Draft"
+              className={`${secondaryButtonClass} inline-flex items-center gap-2 disabled:opacity-50`}
+            >
+              <Printer className="h-4 w-4" />
+              {printingDraft
+                ? 'Preparando...'
+                : form.status === 'Emitido' || form.status === 'Liberado'
+                  ? 'Imprimir HBL'
+                  : 'Imprimir HBL Draft'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => router.push(`/operations/shipping-instructions/${id}/bookings/${bookingId}`)}
+            className={secondaryButtonClass}
+          >
+            Volver al Booking
+          </button>
+        </div>
       </div>
 
       {/* MBL Draft Upload */}
@@ -1075,15 +1270,15 @@ export default function BLPage() {
               </p>
             )}
             {form.draft_file_url && (
-              <a
-                href={form.draft_file_url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={openDraftFile}
+                disabled={openingDraft}
                 className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:underline dark:text-blue-400"
               >
                 <FileText className="h-4 w-4" />
-                {form.draft_file_name || 'Ver archivo'}
-              </a>
+                {openingDraft ? 'Abriendo...' : form.draft_file_name || 'Ver archivo'}
+              </button>
             )}
           </div>
         </section>
@@ -1398,8 +1593,10 @@ export default function BLPage() {
                       <td className="py-1">
                         <button
                           type="button"
-                          onClick={() => setContainers((prev) => prev.filter((_, idx) => idx !== i))}
-                          className="text-red-500 hover:text-red-700"
+                          onClick={() => requestContainerRemoval(c, i)}
+                          aria-label={`Quitar contenedor ${c.container_number || i + 1}`}
+                          title="Quitar contenedor"
+                          className="inline-flex h-8 w-8 items-center justify-center text-red-500 transition hover:text-red-700"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -1412,6 +1609,26 @@ export default function BLPage() {
           )}
         </section>
       )}
+
+      <ConfirmDialog
+        open={Boolean(containerPendingRemoval)}
+        onOpenChange={(open) => {
+          if (!open) setContainerPendingRemoval(null)
+        }}
+        title="Quitar contenedor"
+        description={
+          containerPendingRemoval
+            ? `¿Deseas quitar ${containerPendingRemoval.label} del borrador? ${
+                containerPendingRemoval.persisted
+                  ? 'El contenedor se eliminará definitivamente cuando guardes los contenedores.'
+                  : 'La fila todavía no ha sido guardada.'
+              }`
+            : undefined
+        }
+        confirmLabel="Quitar contenedor"
+        danger
+        onConfirm={confirmContainerRemoval}
+      />
 
       {/* Instrucciones especiales */}
       <section className={cardClass}>
@@ -1517,16 +1734,20 @@ export default function BLPage() {
             )}
           </PDFDownloadLink>
         )}
-        {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte !== 'Aéreo' && tipoTransporte !== 'Terrestre' && (
+        {!isNew && form.bl_type === 'HBL' && tipoTransporte !== 'Aéreo' && tipoTransporte !== 'Terrestre' && (
           <PDFDownloadLink
-            document={<HouseBLPdf bl={formToHBLData(form, condicionesBL)} company={companyBranding} />}
+            document={<HouseBLPdf bl={formToHBLData(form, condicionesBL, containers)} company={companyBranding} />}
             fileName={`HBL-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
           >
             {({ loading: pdfLoading }) => (
               <>
                 <Download className="h-4 w-4" />
-                {pdfLoading ? 'Generando...' : 'Descargar HBL PDF'}
+                {pdfLoading
+                  ? 'Generando...'
+                  : form.status === 'Emitido' || form.status === 'Liberado'
+                    ? 'Descargar HBL PDF'
+                    : 'Descargar HBL Draft'}
               </>
             )}
           </PDFDownloadLink>

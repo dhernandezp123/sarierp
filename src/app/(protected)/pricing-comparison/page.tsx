@@ -96,6 +96,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 
 const AIR_VOLUMETRIC_DIVISOR_CM3 = 6000
 const AIR_VOLUMETRIC_KG_PER_CBM = 1_000_000 / AIR_VOLUMETRIC_DIVISOR_CM3
@@ -326,6 +327,7 @@ function PricingComparisonContent() {
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [containerRateLines, setContainerRateLines] = useState<any[]>([])
   const [cargoLines, setCargoLines] = useState<CargoLine[]>([])
+  const [cargoLinePendingRemoval, setCargoLinePendingRemoval] = useState<CargoLine | null>(null)
   const [savingCargo, setSavingCargo] = useState(false)
   const [clientRates, setClientRates] = useState<ClientRate[]>([])
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
@@ -1059,13 +1061,7 @@ function PricingComparisonContent() {
     }
 
     if (quotationContainers.length > 0 && containerRateLines.length > 0) {
-      await supabase
-        .from('agent_quote_container_rates')
-        .delete()
-        .eq('agent_quote_id', savedAgentQuote.id)
-
       const ratePayload = containerRateLines.map((line) => ({
-        agent_quote_id: savedAgentQuote.id,
         quotation_container_id: line.quotation_container_id,
         container_type_name: line.container_type_name,
         quantity: Number(line.quantity || 0),
@@ -1074,9 +1070,13 @@ function PricingComparisonContent() {
           Number(line.quantity || 0) * Number(line.ocean_freight || 0),
       }))
 
-      const { error: ratesError } = await supabase
-        .from('agent_quote_container_rates')
-        .insert(ratePayload)
+      const { error: ratesError } = await supabase.rpc(
+        'replace_agent_quote_container_rates',
+        {
+          p_agent_quote_id: savedAgentQuote.id,
+          p_rates: ratePayload,
+        }
+      )
 
       if (ratesError) {
         toast.error(ratesError.message)
@@ -1658,21 +1658,9 @@ function PricingComparisonContent() {
 
     setSavingCargo(true)
 
-    const { error: deleteError } = await supabase
-      .from('quotation_cargo_lines')
-      .delete()
-      .eq('quotation_id', selectedQuote.id)
-
-    if (deleteError) {
-      setSavingCargo(false)
-      toast.error('No se pudo limpiar el detalle de carga anterior')
-      return
-    }
-
     const rows = cargoLines
       .filter((line) => Number(line.quantity || 0) > 0)
       .map((line) => ({
-        quotation_id: selectedQuote.id,
         quantity: Number(line.quantity || 0),
         package_type: line.package_type || 'Caja',
         length: Number(line.length || 0),
@@ -1684,32 +1672,22 @@ function PricingComparisonContent() {
         cbm: calculateCargoLineCbm(line),
       }))
 
-    if (rows.length > 0) {
-      const { error: insertError } = await supabase
-        .from('quotation_cargo_lines')
-        .insert(rows)
-
-      if (insertError) {
-        setSavingCargo(false)
-        toast.error('No se pudo guardar el nuevo detalle de carga')
-        return
+    const { error: quoteError } = await supabase.rpc(
+      'replace_quotation_cargo_with_totals',
+      {
+        p_quotation_id: selectedQuote.id,
+        p_cargo_lines: rows,
+        p_peso_lbs: totalCargoLbs || null,
+        p_peso_kg: totalCargoKg || null,
+        p_volumen_ft3: totalCargoFt3 || null,
+        p_volumen_cbm: totalCargoCbm || null,
       }
-    }
-
-    const { error: quoteError } = await supabase
-      .from('quotations')
-      .update({
-        peso_lbs: totalCargoLbs || null,
-        peso_kg: totalCargoKg || null,
-        volumen_ft3: totalCargoFt3 || null,
-        volumen_cbm: totalCargoCbm || null,
-      })
-      .eq('id', selectedQuote.id)
+    )
 
     setSavingCargo(false)
 
     if (quoteError) {
-      toast.error('La carga se guardó, pero no se actualizaron los totales')
+      toast.error(quoteError.message || 'No se pudo guardar el detalle de carga')
       return
     }
 
@@ -5170,11 +5148,7 @@ const profitabilityColor =
                                   </p>
                                   <button
                                     type="button"
-                                    onClick={() =>
-                                      setCargoLines((prev) =>
-                                        prev.filter((item) => item.id !== line.id)
-                                      )
-                                    }
+                                    onClick={() => setCargoLinePendingRemoval(line)}
                                     disabled={isPricingActionDisabled}
                                     className="flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
                                   >
@@ -6813,6 +6787,22 @@ const profitabilityColor =
           </div>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={cargoLinePendingRemoval !== null}
+        onOpenChange={(open) => { if (!open) setCargoLinePendingRemoval(null) }}
+        title="Quitar línea de carga"
+        description={cargoLinePendingRemoval
+          ? `¿Deseas quitar ${cargoLinePendingRemoval.quantity || 0} ${cargoLinePendingRemoval.package_type || 'bultos'} del detalle? La eliminación será definitiva al guardar la carga.`
+          : undefined}
+        confirmLabel="Quitar línea"
+        danger
+        onConfirm={() => {
+          if (cargoLinePendingRemoval) {
+            setCargoLines((prev) => prev.filter((item) => item.id !== cargoLinePendingRemoval.id))
+          }
+          setCargoLinePendingRemoval(null)
+        }}
+      />
 
       {deleteAgentQuoteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm">

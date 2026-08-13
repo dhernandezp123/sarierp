@@ -1,12 +1,12 @@
 import {
   Document,
   Font,
-  Image,
   Page,
   StyleSheet,
   Text,
   View,
 } from '@react-pdf/renderer'
+import type { Style } from '@react-pdf/types'
 import {
   type CompanyBranding,
   getCompanyAddressLines,
@@ -15,7 +15,18 @@ import {
 } from '@/src/lib/company-branding'
 import { DemoPdfWatermark } from './DemoPdfWatermark'
 
+export type HBLContainerData = {
+  container_number: string | null
+  seal_number: string | null
+  container_type: string | null
+  quantity: number | null
+  gross_weight_kg: number | null
+  measurement_cbm: number | null
+  notes: string | null
+}
+
 export type HBLData = {
+  status: string | null
   bl_number: string | null
   bl_date: string | null
   release_type: string | null
@@ -54,199 +65,311 @@ export type HBLData = {
   special_instructions: string | null
   printed_at_destination: boolean | null
   condiciones: string | null
+  containers: HBLContainerData[]
 }
 
-const BRAND_RED = '#B91C1C'
-const BRAND_NAVY = '#1e3a5f'
+const FORM_RED = '#ef3340'
+const TEXT = '#151515'
 
 Font.registerHyphenationCallback((word) => [word])
 
 const styles = StyleSheet.create({
   page: {
-    padding: 22,
-    fontSize: 8.5,
+    paddingTop: 15,
+    paddingHorizontal: 17,
+    paddingBottom: 15,
+    fontSize: 7.3,
     fontFamily: 'Helvetica',
-    color: '#111827',
+    color: TEXT,
+    backgroundColor: '#ffffff',
   },
   header: {
+    height: 29,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    borderBottom: `2 solid ${BRAND_RED}`,
-    paddingBottom: 8,
-    marginBottom: 10,
+    alignItems: 'center',
+    borderBottom: `0.8 solid ${FORM_RED}`,
   },
-  logo: {
-    width: 110,
-    objectFit: 'contain',
+  headerBrand: {
+    width: '66%',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  titleBlock: {
-    alignItems: 'flex-end',
+  companyName: {
+    color: FORM_RED,
+    fontSize: 15,
+    fontFamily: 'Helvetica-Bold',
   },
-  docTitle: {
+  companyTax: {
+    color: FORM_RED,
+    fontSize: 7.5,
+    marginLeft: 6,
+    marginTop: 5,
+  },
+  title: {
+    width: '34%',
+    color: FORM_RED,
     fontSize: 18,
-    fontWeight: 700,
-    color: BRAND_RED,
+    textAlign: 'right',
   },
-  docSubtitle: {
-    marginTop: 2,
-    fontSize: 9,
-    color: '#4b5563',
+  row: { flexDirection: 'row' },
+  field: {
+    borderRight: `0.65 solid ${FORM_RED}`,
+    borderBottom: `0.65 solid ${FORM_RED}`,
+    paddingHorizontal: 4,
+    paddingTop: 3,
+    position: 'relative',
   },
-  blNumber: {
+  fieldLast: { borderRightWidth: 0 },
+  label: {
+    color: FORM_RED,
+    fontSize: 5.8,
+    lineHeight: 1.05,
+    textTransform: 'uppercase',
+  },
+  hint: {
+    fontFamily: 'Helvetica-Oblique',
+    textTransform: 'none',
+  },
+  value: {
+    marginTop: 5,
+    paddingLeft: 9,
+    fontSize: 8.4,
+    lineHeight: 1.22,
+    textTransform: 'uppercase',
+  },
+  valueCompact: {
     marginTop: 4,
-    fontSize: 11,
-    fontWeight: 700,
-    color: BRAND_NAVY,
+    fontSize: 7.5,
+    lineHeight: 1.18,
   },
-  // Two-column layout
-  twoCols: {
-    flexDirection: 'row',
-    gap: 5,
-    marginBottom: 5,
+  valueStrong: {
+    fontFamily: 'Helvetica-Bold',
   },
-  col: { flex: 1 },
-  // Section box
-  sectionBox: {
-    border: '1 solid #d1d5db',
-    marginBottom: 5,
-  },
-  sectionTitle: {
-    backgroundColor: BRAND_NAVY,
-    color: '#ffffff',
-    padding: '3 7',
-    fontSize: 8,
-    fontWeight: 700,
-    borderLeft: `3 solid ${BRAND_RED}`,
-  },
-  partyBlock: {
-    padding: '5 7',
-    minHeight: 52,
-  },
-  partyName: {
-    fontWeight: 700,
-    marginBottom: 2,
-  },
-  partyLine: {
-    color: '#374151',
-    lineHeight: 1.4,
-  },
-  // Data rows
-  dataRow: {
-    flexDirection: 'row',
-    borderTop: '1 solid #e5e7eb',
-  },
-  cellLabel: {
-    width: '30%',
-    padding: '3 6',
-    backgroundColor: '#eef1f7',
-    fontWeight: 700,
-  },
-  cellValue: {
-    flex: 1,
-    padding: '3 6',
-    lineHeight: 1.3,
-  },
-  // Cargo table
-  cargoTable: {
-    border: '1 solid #d1d5db',
-    marginBottom: 5,
-  },
+  topLeft: { width: '51%' },
+  topRight: { width: '49%' },
+  shipper: { height: 74 },
+  consignee: { height: 72 },
+  notify: { height: 72 },
+  docNumber: { width: '53%', height: 34 },
+  blNumber: { width: '47%', height: 34 },
+  exportReferences: { height: 40 },
+  forwardingAgent: { height: 61 },
+  origin: { height: 31 },
+  routing: { height: 52 },
+  routeField: { height: 28 },
+  routeHalf: { width: '50%' },
+  routeThird: { width: '33.333%' },
+  routeWide: { width: '60%' },
+  routeNarrow: { width: '40%' },
   cargoHeader: {
     flexDirection: 'row',
-    backgroundColor: BRAND_NAVY,
-    color: '#ffffff',
-    padding: '3 6',
-    fontWeight: 700,
-    fontSize: 8,
+    height: 25,
+    borderBottom: `0.65 solid ${FORM_RED}`,
   },
   cargoHeaderCell: {
-    flex: 1,
-  },
-  cargoRow: {
-    flexDirection: 'row',
-    borderTop: '1 solid #e5e7eb',
-    padding: '4 6',
-  },
-  cargoCell: {
-    flex: 1,
-    lineHeight: 1.4,
-  },
-  // Signature block
-  sigBlock: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
-    marginBottom: 5,
-  },
-  sigBox: {
-    flex: 1,
-    border: '1 solid #d1d5db',
-    padding: 8,
-    minHeight: 48,
-  },
-  sigLabel: {
-    fontSize: 7.5,
-    color: '#6b7280',
-    marginBottom: 16,
-  },
-  sigLine: {
-    borderTop: '1 solid #111827',
-    paddingTop: 3,
-    fontSize: 7.5,
-    color: '#374151',
-  },
-  conditionsBox: {
-    border: '1 solid #d1d5db',
-    marginBottom: 5,
-    padding: '5 7',
-  },
-  conditionsTitle: {
-    fontSize: 7.5,
-    fontWeight: 700,
-    color: BRAND_NAVY,
-    marginBottom: 3,
-  },
-  conditionsText: {
-    fontSize: 7,
-    color: '#6b7280',
-    lineHeight: 1.4,
-  },
-  // Footer
-  footer: {
-    position: 'absolute',
-    bottom: 14,
-    left: 22,
-    right: 22,
-    borderTop: `1 solid ${BRAND_RED}`,
-    paddingTop: 4,
-    fontSize: 7,
-    color: '#6b7280',
+    borderRight: `0.65 solid ${FORM_RED}`,
+    color: FORM_RED,
+    fontSize: 5.7,
     textAlign: 'center',
+    paddingHorizontal: 2,
+    paddingTop: 4,
+  },
+  marksCol: { width: '18.5%' },
+  packagesCol: { width: '10.5%' },
+  descriptionCol: { width: '43%' },
+  weightCol: { width: '14%' },
+  measurementCol: { width: '14%' },
+  cargoBody: {
+    flexDirection: 'row',
+    height: 209,
+    borderBottom: `0.65 solid ${FORM_RED}`,
+    position: 'relative',
+  },
+  cargoBodyCell: {
+    borderRight: `0.65 solid ${FORM_RED}`,
+    paddingHorizontal: 6,
+    paddingTop: 14,
+    fontSize: 8.3,
+    lineHeight: 1.25,
+  },
+  cargoCentered: { textAlign: 'center' },
+  containerEntry: { marginBottom: 8 },
+  totals: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 6,
+    flexDirection: 'row',
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 7.6,
+  },
+  watermark: {
+    position: 'absolute',
+    top: 112,
+    left: 18,
+    width: 420,
+    color: '#e8ebef',
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 31,
+    opacity: 0.72,
+    textAlign: 'center',
+  },
+  instructions: {
+    minHeight: 19,
+    borderBottom: `0.65 solid ${FORM_RED}`,
+    color: FORM_RED,
+    fontSize: 5.5,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+  },
+  lower: {
+    flexDirection: 'row',
+    height: 176,
+  },
+  charges: {
+    width: '51%',
+    borderRight: `0.65 solid ${FORM_RED}`,
+  },
+  legal: { width: '49%' },
+  lowerTitle: {
+    height: 20,
+    color: FORM_RED,
+    fontSize: 8.5,
+    textAlign: 'center',
+    paddingTop: 6,
+    borderBottom: `0.65 solid ${FORM_RED}`,
+  },
+  chargeColumns: {
+    flexDirection: 'row',
+    height: 22,
+    borderBottom: `0.65 solid ${FORM_RED}`,
+    color: FORM_RED,
+    fontSize: 5.8,
+    textAlign: 'center',
+  },
+  chargeDescription: { width: '64%', borderRight: `0.65 solid ${FORM_RED}`, paddingTop: 5 },
+  chargeAmount: { width: '18%', borderRight: `0.65 solid ${FORM_RED}`, paddingTop: 5 },
+  chargeAmountLast: { width: '18%', paddingTop: 5 },
+  chargeBody: {
+    flexDirection: 'row',
+    height: 113,
+    borderBottom: `0.65 solid ${FORM_RED}`,
+  },
+  chargeBodyDescription: {
+    width: '64%',
+    borderRight: `0.65 solid ${FORM_RED}`,
+    paddingHorizontal: 11,
+    paddingTop: 25,
+    fontSize: 8.4,
+  },
+  chargeBodyAmount: { width: '18%', borderRight: `0.65 solid ${FORM_RED}` },
+  chargeBodyAmountLast: { width: '18%' },
+  grandTotal: {
+    height: 21,
+    flexDirection: 'row',
+    alignItems: 'center',
+    color: FORM_RED,
+    fontSize: 6,
+  },
+  legalText: {
+    height: 78,
+    borderBottom: `0.65 solid ${FORM_RED}`,
+    padding: 7,
+    color: FORM_RED,
+    fontSize: 5.5,
+    lineHeight: 1.18,
+  },
+  signature: {
+    height: 98,
+    paddingHorizontal: 9,
+    paddingTop: 7,
+    color: FORM_RED,
+    fontSize: 6,
+  },
+  signatureValue: {
+    color: TEXT,
+    fontSize: 8.2,
+    textAlign: 'center',
+    marginTop: 5,
+    textTransform: 'uppercase',
+  },
+  signatureLine: {
+    borderBottom: `0.65 solid ${FORM_RED}`,
+    minHeight: 14,
+    marginTop: 2,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    borderBottom: `0.65 solid ${FORM_RED}`,
+    paddingHorizontal: 18,
+    paddingBottom: 3,
+  },
+  footerNumber: {
+    marginTop: 8,
+    paddingLeft: 10,
+    fontFamily: 'Helvetica-Bold',
+    color: TEXT,
+    fontSize: 8,
   },
 })
 
-const v = (x?: string | number | null): string => {
-  if (x === null || x === undefined || x === '') return '—'
-  return String(x)
+const value = (input?: string | number | null) =>
+  input === null || input === undefined || input === '' ? '' : String(input)
+
+const numberValue = (input?: number | null, decimals = 1) =>
+  input === null || input === undefined
+    ? ''
+    : Number(input).toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })
+
+const dateParts = (input?: string | null) => {
+  if (!input) return { month: '', day: '', year: '' }
+  const [year = '', month = '', day = ''] = input.split('T')[0].split('-')
+  return { month, day, year }
 }
 
-const dateV = (x?: string | null): string => {
-  if (!x) return '—'
-  try {
-    const [y, m, d] = x.split('T')[0].split('-').map(Number)
-    return new Intl.DateTimeFormat('es-HN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }).format(new Date(y, m - 1, d))
-  } catch {
-    return x
-  }
+function Field({
+  number,
+  label,
+  hint,
+  children,
+  style,
+  last = false,
+}: {
+  number: string
+  label: string
+  hint?: string
+  children?: React.ReactNode
+  style?: Style | Style[]
+  last?: boolean
+}) {
+  const fieldStyles: Style[] = [
+    styles.field,
+    ...(Array.isArray(style) ? style : style ? [style] : []),
+    ...(last ? [styles.fieldLast] : []),
+  ]
+
+  return (
+    <View style={fieldStyles}>
+      <Text style={styles.label}>
+        {number}. {label}{hint ? <Text style={styles.hint}> {hint}</Text> : null}
+      </Text>
+      {children}
+    </View>
+  )
 }
 
-function PartySection({ title, name, address, taxId, contact, email }: {
-  title: string
+function PartyValue({
+  name,
+  address,
+  taxId,
+  contact,
+  email,
+}: {
   name?: string | null
   address?: string | null
   taxId?: string | null
@@ -254,25 +377,12 @@ function PartySection({ title, name, address, taxId, contact, email }: {
   email?: string | null
 }) {
   return (
-    <View style={styles.sectionBox}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.partyBlock}>
-        {name ? <Text style={styles.partyName}>{name}</Text> : null}
-        {address ? <Text style={styles.partyLine}>{address}</Text> : null}
-        {taxId ? <Text style={styles.partyLine}>RTN: {taxId}</Text> : null}
-        {contact ? <Text style={styles.partyLine}>Contacto: {contact}</Text> : null}
-        {email ? <Text style={styles.partyLine}>Email: {email}</Text> : null}
-        {!name && !address && <Text style={{ color: '#9ca3af' }}>—</Text>}
-      </View>
-    </View>
-  )
-}
-
-function DataRow({ label, value: val }: { label: string; value: string }) {
-  return (
-    <View style={styles.dataRow}>
-      <Text style={styles.cellLabel}>{label}</Text>
-      <Text style={styles.cellValue}>{val}</Text>
+    <View style={styles.value}>
+      {name ? <Text style={styles.valueStrong}>{name}</Text> : null}
+      {address ? <Text>{address}</Text> : null}
+      {taxId ? <Text>RTN/TAX ID: {taxId}</Text> : null}
+      {contact ? <Text>CONTACT: {contact}</Text> : null}
+      {email ? <Text>EMAIL: {email}</Text> : null}
     </View>
   )
 }
@@ -284,151 +394,216 @@ export default function HouseBLPdf({
   bl: HBLData
   company?: Partial<CompanyBranding> | null
 }) {
-  const companyBranding = normalizeCompanyBranding(company)
-  const companyName = getCompanyDisplayName(companyBranding)
-  const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
-  const companyLogo = companyBranding.logo_url || '/brand/lockup-h-color.png'
-  const issuePlace = bl.printed_at_destination ? v(bl.port_of_discharge) : 'San Pedro Sula, Honduras'
+  const branding = normalizeCompanyBranding(company)
+  const companyName = getCompanyDisplayName(branding)
+  const companyAddress = getCompanyAddressLines(branding).join('\n')
+  const issuePlace = bl.printed_at_destination
+    ? value(bl.port_of_discharge)
+    : [branding.city, branding.country].filter(Boolean).join(', ')
+  const issueDate = dateParts(bl.issue_date || bl.bl_date)
+  const isDraft = !['Emitido', 'Liberado'].includes(bl.status || '')
+  const packageSummary = [value(bl.number_of_packages), value(bl.package_type)]
+    .filter(Boolean)
+    .join(' ')
+  const containerLines = bl.containers.length > 0
+    ? bl.containers
+    : [{
+        container_number: null,
+        seal_number: null,
+        container_type: null,
+        quantity: null,
+        gross_weight_kg: null,
+        measurement_cbm: null,
+        notes: null,
+      }]
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
+      <Page size="LETTER" style={styles.page}>
         <DemoPdfWatermark />
-        {/* Header */}
         <View style={styles.header}>
-          <Image src={companyLogo} style={styles.logo} />
-          <View style={styles.titleBlock}>
-            <Text style={styles.docTitle}>HOUSE BILL OF LADING</Text>
-            <Text style={styles.docSubtitle}>
-              {companyName}
-              {companyBranding.rtn ? ` · RTN ${companyBranding.rtn}` : ''}
-            </Text>
-            {companyAddress && (
-              <Text style={styles.docSubtitle}>{companyAddress}</Text>
-            )}
-            {bl.bl_number && (
-              <Text style={styles.blNumber}>HBL# {bl.bl_number}</Text>
-            )}
+          <View style={styles.headerBrand}>
+            <Text style={styles.companyName}>{companyName}</Text>
+            {branding.rtn ? <Text style={styles.companyTax}>RTN {branding.rtn}</Text> : null}
           </View>
+          <Text style={styles.title}>BILL OF LADING</Text>
         </View>
 
-        {/* Parties row */}
-        <View style={styles.twoCols}>
-          <View style={styles.col}>
-            <PartySection
-              title="SHIPPER / EXPORTER"
-              name={bl.shipper}
-              address={bl.shipper_address}
-            />
+        <View style={styles.row}>
+          <View style={styles.topLeft}>
+            <Field number="2" label="Exporter" hint="(Principal or seller - name and address including ZIP Code)" style={styles.shipper}>
+              <PartyValue name={bl.shipper} address={bl.shipper_address} />
+            </Field>
+            <Field number="3" label="Consigned to" style={styles.consignee}>
+              <PartyValue
+                name={bl.consignee}
+                address={bl.consignee_address}
+                taxId={bl.consignee_tax_id}
+                contact={bl.consignee_contact}
+                email={bl.consignee_email}
+              />
+            </Field>
+            <Field number="4" label="Notify party / intermediate consignee" hint="(Name and address)" style={styles.notify}>
+              <PartyValue
+                name={bl.notify_party}
+                address={bl.notify_party_address}
+                taxId={bl.notify_party_tax_id}
+                contact={bl.notify_party_contact}
+                email={bl.notify_party_email}
+              />
+            </Field>
           </View>
-          <View style={styles.col}>
-            <PartySection
-              title="CONSIGNEE"
-              name={bl.consignee}
-              address={bl.consignee_address}
-              taxId={bl.consignee_tax_id}
-              contact={bl.consignee_contact}
-              email={bl.consignee_email}
-            />
-          </View>
-        </View>
 
-        <PartySection
-          title="NOTIFY PARTY"
-          name={bl.notify_party}
-          address={bl.notify_party_address}
-          taxId={bl.notify_party_tax_id}
-          contact={bl.notify_party_contact}
-          email={bl.notify_party_email}
-        />
-
-        {/* Route and vessel */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionTitle}>ROUTE &amp; VESSEL</Text>
-          <View style={styles.twoCols}>
-            <View style={[styles.col, { border: 0 }]}>
-              <DataRow label="Place of Receipt" value={v(bl.place_of_receipt)} />
-              <DataRow label="Port of Loading" value={v(bl.port_of_loading)} />
-              <DataRow label="Port of Discharge" value={v(bl.port_of_discharge)} />
-              <DataRow label="Place of Delivery" value={v(bl.place_of_delivery)} />
+          <View style={styles.topRight}>
+            <View style={styles.row}>
+              <Field number="5" label="Document number" style={styles.docNumber} />
+              <Field number="5a" label="B/L number" style={styles.blNumber} last>
+                <Text style={[styles.value, styles.valueStrong]}>{value(bl.bl_number)}</Text>
+              </Field>
             </View>
-            <View style={styles.col}>
-              <DataRow label="Carrier" value={v(bl.carrier)} />
-              <DataRow label="Vessel / Flight" value={v(bl.vessel_name)} />
-              <DataRow label="Voyage / Flt No." value={v(bl.voyage)} />
-              <DataRow label="ETD" value={dateV(bl.etd)} />
-              <DataRow label="ETA" value={dateV(bl.eta)} />
-            </View>
+            <Field number="6" label="Export references" style={styles.exportReferences} last />
+            <Field number="7" label="Forwarding agent" hint="(Name and address - references)" style={styles.forwardingAgent} last>
+              <PartyValue name={companyName} address={companyAddress} taxId={branding.rtn} />
+            </Field>
+            <Field number="8" label="Point (state) of origin or FTZ number" style={styles.origin} last>
+              <Text style={styles.valueCompact}>{value(bl.place_of_receipt)}</Text>
+            </Field>
+            <Field number="9" label="Domestic routing / export instructions" style={styles.routing} last>
+              <Text style={styles.valueCompact}>{value(bl.special_instructions)}</Text>
+            </Field>
           </View>
         </View>
 
-        {/* Cargo table */}
-        <View style={styles.cargoTable}>
-          <View style={styles.cargoHeader}>
-            <Text style={[styles.cargoHeaderCell, { flex: 1.5 }]}>MARKS &amp; NUMBERS</Text>
-            <Text style={styles.cargoHeaderCell}>QTY / TYPE</Text>
-            <Text style={[styles.cargoHeaderCell, { flex: 3 }]}>DESCRIPTION OF GOODS</Text>
-            <Text style={styles.cargoHeaderCell}>GROSS WT (KG)</Text>
-            <Text style={styles.cargoHeaderCell}>MEAS. (CBM)</Text>
+        <View style={styles.row}>
+          <Field number="12" label="Pre-carriage by" style={[styles.routeField, styles.routeThird]}>
+            <Text style={styles.valueCompact}>{value(bl.carrier)}</Text>
+          </Field>
+          <Field number="13" label="Place of receipt by pre-carrier" style={[styles.routeField, styles.routeThird]}>
+            <Text style={styles.valueCompact}>{value(bl.place_of_receipt)}</Text>
+          </Field>
+          <Field number="10" label="Loading pier / terminal" style={[styles.routeField, styles.routeThird]} last>
+            <Text style={styles.valueCompact}>{value(bl.port_of_loading)}</Text>
+          </Field>
+        </View>
+        <View style={styles.row}>
+          <Field number="14" label="Exporting carrier" style={[styles.routeField, styles.routeThird]}>
+            <Text style={styles.valueCompact}>{[bl.vessel_name, bl.voyage].filter(Boolean).join(' / ')}</Text>
+          </Field>
+          <Field number="15" label="Port of loading / export" style={[styles.routeField, styles.routeThird]}>
+            <Text style={styles.valueCompact}>{value(bl.port_of_loading)}</Text>
+          </Field>
+          <Field number="11" label="Type of move" style={[styles.routeField, styles.routeThird]} last>
+            <Text style={styles.valueCompact}>{value(bl.release_type)}</Text>
+          </Field>
+        </View>
+        <View style={styles.row}>
+          <Field number="16" label="Foreign port of unloading" hint="(Vessel and air only)" style={[styles.routeField, styles.routeHalf]}>
+            <Text style={styles.valueCompact}>{value(bl.port_of_discharge)}</Text>
+          </Field>
+          <Field number="17" label="Place of delivery by on-carrier" style={[styles.routeField, styles.routeHalf]} last>
+            <Text style={styles.valueCompact}>{value(bl.place_of_delivery)}</Text>
+          </Field>
+        </View>
+
+        <View style={styles.cargoHeader}>
+          <Text style={[styles.cargoHeaderCell, styles.marksCol]}>MARKS AND NUMBERS{`\n`}(18)</Text>
+          <Text style={[styles.cargoHeaderCell, styles.packagesCol]}>NUMBER OF PACKAGES{`\n`}(19)</Text>
+          <Text style={[styles.cargoHeaderCell, styles.descriptionCol]}>DESCRIPTION OF COMMODITIES{`\n`}(20)</Text>
+          <Text style={[styles.cargoHeaderCell, styles.weightCol]}>GROSS WEIGHT{`\n`}(Kilos) (21)</Text>
+          <Text style={[styles.cargoHeaderCell, styles.measurementCol, styles.fieldLast]}>MEASUREMENT{`\n`}(22)</Text>
+        </View>
+
+        <View style={styles.cargoBody}>
+          {isDraft ? <Text style={styles.watermark}>DRAFT  DRAFT  DRAFT</Text> : null}
+          <View style={[styles.cargoBodyCell, styles.marksCol]}>
+            {containerLines.map((container, index) => (
+              <View key={`${container.container_number || 'container'}-${index}`} style={styles.containerEntry}>
+                {container.container_number ? <Text style={styles.valueStrong}>{container.container_number}</Text> : null}
+                {container.seal_number ? <Text>SEAL / {container.seal_number}</Text> : null}
+                {container.notes ? <Text>{container.notes}</Text> : null}
+              </View>
+            ))}
+            {bl.marks_and_numbers ? <Text>{bl.marks_and_numbers}</Text> : null}
           </View>
-          <View style={styles.cargoRow}>
-            <Text style={[styles.cargoCell, { flex: 1.5 }]}>{v(bl.marks_and_numbers)}</Text>
-            <Text style={styles.cargoCell}>
-              {bl.number_of_packages ? `${bl.number_of_packages} ${v(bl.package_type)}` : v(bl.package_type)}
-            </Text>
-            <Text style={[styles.cargoCell, { flex: 3 }]}>{v(bl.description_of_goods)}</Text>
-            <Text style={styles.cargoCell}>{v(bl.gross_weight_kg)}</Text>
-            <Text style={styles.cargoCell}>{v(bl.measurement_cbm)}</Text>
+          <View style={[styles.cargoBodyCell, styles.packagesCol, styles.cargoCentered]}>
+            <Text>{value(bl.number_of_packages)}</Text>
+          </View>
+          <View style={[styles.cargoBodyCell, styles.descriptionCol]}>
+            {containerLines.map((container, index) => (
+              container.container_type ? (
+                <Text key={`${container.container_type}-${index}`} style={styles.valueStrong}>
+                  {container.quantity && container.quantity > 1 ? `${container.quantity} X ` : ''}{container.container_type} S.T.C
+                </Text>
+              ) : null
+            ))}
+            {packageSummary ? <Text style={[styles.valueStrong, { marginTop: 3 }]}>{packageSummary}</Text> : null}
+            <Text style={{ marginTop: 3 }}>{value(bl.description_of_goods)}</Text>
+          </View>
+          <View style={[styles.cargoBodyCell, styles.weightCol, styles.cargoCentered]}>
+            <Text>{numberValue(bl.gross_weight_kg)}{bl.gross_weight_kg != null ? ' Kgs' : ''}</Text>
+          </View>
+          <View style={[styles.cargoBodyCell, styles.measurementCol, styles.cargoCentered, styles.fieldLast]}>
+            <Text>{numberValue(bl.measurement_cbm)}{bl.measurement_cbm != null ? ' Cbm' : ''}</Text>
+          </View>
+          <View style={styles.totals}>
+            <Text style={[styles.marksCol, { paddingLeft: 15 }]}>TOTALS</Text>
+            <Text style={[styles.packagesCol, styles.cargoCentered]}>{value(bl.number_of_packages)}</Text>
+            <Text style={styles.descriptionCol} />
+            <Text style={[styles.weightCol, styles.cargoCentered]}>{numberValue(bl.gross_weight_kg)}{bl.gross_weight_kg != null ? ' Kgs' : ''}</Text>
+            <Text style={[styles.measurementCol, styles.cargoCentered]}>{numberValue(bl.measurement_cbm)}{bl.measurement_cbm != null ? ' Cbm' : ''}</Text>
           </View>
         </View>
 
-        {/* Terms */}
-        <View style={styles.sectionBox}>
-          <Text style={styles.sectionTitle}>TERMS &amp; CONDITIONS</Text>
-          <View style={[styles.twoCols, { padding: '4 0' }]}>
-            <DataRow label="Freight Terms" value={v(bl.freight_terms)} />
-            <DataRow label="Freight Visibility" value={v(bl.hbl_freight_visibility)} />
-          </View>
-          <DataRow label="Release Type" value={v(bl.release_type)} />
-          <DataRow
-            label="Originals / Copies"
-            value={`${bl.originals_count ?? 3} Original(s) / ${bl.copies_count ?? 3} Copy(ies)`}
-          />
-          {bl.special_instructions ? (
-            <DataRow label="Special Instructions" value={bl.special_instructions} />
-          ) : null}
-        </View>
-
-        {bl.condiciones && (
-          <View style={styles.conditionsBox} wrap={false}>
-            <Text style={styles.conditionsTitle}>GENERAL TERMS &amp; CONDITIONS</Text>
-            <Text style={styles.conditionsText}>{bl.condiciones}</Text>
-          </View>
-        )}
-
-        {/* Signature */}
-        <View style={styles.sigBlock}>
-          <View style={styles.sigBox}>
-            <Text style={styles.sigLabel}>
-              Place and Date of Issue: {issuePlace}, {dateV(bl.issue_date || bl.bl_date)}
-            </Text>
-            <Text style={styles.sigLine}>Signature &amp; Stamp — As Agent for the Carrier</Text>
-            <Text style={[styles.sigLine, { marginTop: 4, fontWeight: 700 }]}>{companyName}</Text>
-          </View>
-          <View style={styles.sigBox}>
-            <Text style={styles.sigLabel}>
-              Original BL: {bl.originals_count ?? 3} — One of which being accomplished, the others to stand void.
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.footer}>
-          {[
-            companyName,
-            companyBranding.rtn ? `RTN ${companyBranding.rtn}` : null,
-            companyAddress,
-          ].filter(Boolean).join(' · ')}
+        <Text style={styles.instructions}>
+          {bl.special_instructions || 'CARRIER LIABILITY AND CARGO CONDITIONS ARE SUBJECT TO THE TERMS SHOWN ON THIS BILL OF LADING.'}
         </Text>
+
+        <View style={styles.lower}>
+          <View style={styles.charges}>
+            <Text style={styles.lowerTitle}>FREIGHT RATES, CHARGES, WEIGHTS AND/OR MEASUREMENTS</Text>
+            <View style={styles.chargeColumns}>
+              <Text style={styles.chargeDescription}>SUBJECT TO CORRECTION</Text>
+              <Text style={styles.chargeAmount}>PREPAID</Text>
+              <Text style={styles.chargeAmountLast}>COLLECT</Text>
+            </View>
+            <View style={styles.chargeBody}>
+              <Text style={styles.chargeBodyDescription}>
+                {bl.hbl_freight_visibility === 'Freight Amount' ? 'FREIGHT CHARGES AS AGREED' : 'FREIGHT AS PER AGREEMENT'}
+              </Text>
+              <View style={styles.chargeBodyAmount} />
+              <View style={styles.chargeBodyAmountLast} />
+            </View>
+            <View style={styles.grandTotal}>
+              <Text style={{ width: '64%', textAlign: 'right', paddingRight: 28 }}>GRAND TOTAL:</Text>
+              <Text style={{ width: '36%', color: TEXT, textAlign: 'center' }}>{value(bl.freight_terms)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.legal}>
+            <Text style={styles.legalText}>
+              {bl.condiciones || 'Received by the Carrier for shipment between the port of loading and port of discharge, and for arrangement or procurement of pre-carriage and on-carriage to place of delivery, the goods as specified above in apparent good order and condition unless otherwise stated. The goods are subject to the terms, exceptions, limitations and conditions of this Bill of Lading.'}
+            </Text>
+            <View style={styles.signature}>
+              <Text>Dated at</Text>
+              <View style={styles.signatureLine}>
+                <Text style={styles.signatureValue}>{issuePlace}</Text>
+              </View>
+              <View style={styles.signatureLine}>
+                <Text style={styles.signatureValue}>{companyName}</Text>
+              </View>
+              <Text style={{ textAlign: 'center', marginTop: 2 }}>AGENT FOR THE CARRIER</Text>
+              <View style={styles.dateRow}>
+                <Text>{issueDate.month}</Text>
+                <Text>{issueDate.day}</Text>
+                <Text>{issueDate.year}</Text>
+              </View>
+              <Text style={[styles.label, { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 18 }]}>
+                MO.                         DAY                         YEAR
+              </Text>
+              <Text style={styles.footerNumber}>B/L {value(bl.bl_number)}</Text>
+            </View>
+          </View>
+        </View>
       </Page>
     </Document>
   )

@@ -11,6 +11,7 @@ import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from 
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
 import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 
 type Proveedor = {
   id: string
@@ -99,6 +100,11 @@ export default function SupplierDetailPage() {
   const [saving, setSaving] = useState(false)
   const [showCPForm, setShowCPForm] = useState(false)
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null)
+  const [documentReplacement, setDocumentReplacement] = useState<{
+    cuentaId: string
+    label: string
+    file: File
+  } | null>(null)
 
   const [cpForm, setCpForm] = useState({
     descripcion: '',
@@ -549,7 +555,20 @@ export default function SupplierDetailPage() {
                               className="hidden"
                               accept="application/pdf,.pdf"
                               disabled={uploadingDocId !== null}
-                              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDocumento(c.id, f) }}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                e.currentTarget.value = ''
+                                if (!file) return
+                                if (c.documento_url) {
+                                  setDocumentReplacement({
+                                    cuentaId: c.id,
+                                    label: c.numero_factura_proveedor || c.descripcion,
+                                    file,
+                                  })
+                                  return
+                                }
+                                void uploadDocumento(c.id, file)
+                              }}
                             />
                           </label>}
                         </div>
@@ -568,6 +587,22 @@ export default function SupplierDetailPage() {
           </div>
         )}
       </section>
+      <ConfirmDialog
+        open={documentReplacement !== null}
+        onOpenChange={(open) => { if (!open) setDocumentReplacement(null) }}
+        title="Reemplazar documento"
+        description={documentReplacement
+          ? `La cuenta ${documentReplacement.label} ya tiene un PDF. El archivo anterior se eliminará permanentemente al cargar ${documentReplacement.file.name}.`
+          : undefined}
+        confirmLabel="Reemplazar PDF"
+        danger
+        onConfirm={() => {
+          if (documentReplacement) {
+            void uploadDocumento(documentReplacement.cuentaId, documentReplacement.file)
+          }
+          setDocumentReplacement(null)
+        }}
+      />
     </div>
   )
 }
