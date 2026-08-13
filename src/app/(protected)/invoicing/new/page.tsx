@@ -6,6 +6,7 @@ import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon
 import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -113,6 +114,7 @@ export default function NewInvoicePage() {
   const [notes, setNotes] = useState('')
   const [motivo, setMotivo] = useState('')
   const [items, setItems] = useState<InvoiceItem[]>([newItem()])
+  const [itemPendingRemoval, setItemPendingRemoval] = useState<InvoiceItem | null>(null)
 
   // SAR fields
   const [activeCai, setActiveCai] = useState<CaiRange | null>(null)
@@ -246,6 +248,17 @@ export default function NewInvoicePage() {
 
   const removeItem = (id: string) => {
     setItems((prev) => prev.filter((it) => it.id !== id))
+  }
+
+  const requestItemRemoval = (item: InvoiceItem) => {
+    const hasMeaningfulData = Boolean(
+      item.description.trim() || Number(item.unit_price || 0) > 0 || item.amount > 0
+    )
+    if (!hasMeaningfulData) {
+      removeItem(item.id)
+      return
+    }
+    setItemPendingRemoval(item)
   }
 
   // Totals
@@ -709,7 +722,7 @@ export default function NewInvoicePage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeItem(it.id)}
+                    onClick={() => requestItemRemoval(it)}
                     disabled={items.length === 1}
                     className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-30 dark:hover:bg-rose-950/30"
                   >
@@ -827,6 +840,20 @@ export default function NewInvoicePage() {
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={itemPendingRemoval !== null}
+        onOpenChange={(open) => { if (!open) setItemPendingRemoval(null) }}
+        title="Quitar línea de factura"
+        description={itemPendingRemoval
+          ? `¿Deseas descartar ${itemPendingRemoval.description || 'esta línea'} por USD ${itemPendingRemoval.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}?`
+          : undefined}
+        confirmLabel="Quitar línea"
+        danger
+        onConfirm={() => {
+          if (itemPendingRemoval) removeItem(itemPendingRemoval.id)
+          setItemPendingRemoval(null)
+        }}
+      />
     </div>
   )
 }

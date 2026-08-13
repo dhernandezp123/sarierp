@@ -6,6 +6,7 @@ import { Building2, Fuel, MapPin, Plus, Save, ShieldCheck, X } from 'lucide-reac
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
 import {
@@ -123,6 +124,10 @@ export default function CompanySettingsPage() {
   const [bunkerDirty, setBunkerDirty] = useState(false)
   const [insuranceExclusionInput, setInsuranceExclusionInput] = useState('')
   const [insuranceInclusionInput, setInsuranceInclusionInput] = useState('')
+  const [insurancePatternPendingRemoval, setInsurancePatternPendingRemoval] = useState<{
+    kind: 'inclusion' | 'exclusion'
+    pattern: string
+  } | null>(null)
 
   const isAdmin = profile?.rol === 'Admin'
 
@@ -684,7 +689,7 @@ export default function CompanySettingsPage() {
                 {isAdmin && (
                   <button
                     type="button"
-                    onClick={() => removeInsuranceInclusion(pattern)}
+                    onClick={() => setInsurancePatternPendingRemoval({ kind: 'inclusion', pattern })}
                     aria-label={`Quitar ${pattern} de la regla general`}
                     className="rounded-full p-0.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
                   >
@@ -741,7 +746,7 @@ export default function CompanySettingsPage() {
                   {isAdmin && (
                     <button
                       type="button"
-                      onClick={() => removeInsuranceExclusion(pattern)}
+                      onClick={() => setInsurancePatternPendingRemoval({ kind: 'exclusion', pattern })}
                       aria-label={`Incluir nuevamente ${pattern}`}
                       className="rounded-full p-0.5 hover:bg-amber-100 dark:hover:bg-amber-900/50"
                     >
@@ -1031,6 +1036,24 @@ export default function CompanySettingsPage() {
           </button>
         </div>
       )}
+      <ConfirmDialog
+        open={insurancePatternPendingRemoval !== null}
+        onOpenChange={(open) => { if (!open) setInsurancePatternPendingRemoval(null) }}
+        title="Quitar regla global de seguro"
+        description={insurancePatternPendingRemoval
+          ? `¿Deseas quitar “${insurancePatternPendingRemoval.pattern}” de los servicios ${insurancePatternPendingRemoval.kind === 'inclusion' ? 'incluidos' : 'excluidos'}? El cambio afectará el cálculo de seguro después de guardar la configuración.`
+          : undefined}
+        confirmLabel="Quitar regla"
+        danger
+        onConfirm={() => {
+          if (insurancePatternPendingRemoval?.kind === 'inclusion') {
+            removeInsuranceInclusion(insurancePatternPendingRemoval.pattern)
+          } else if (insurancePatternPendingRemoval) {
+            removeInsuranceExclusion(insurancePatternPendingRemoval.pattern)
+          }
+          setInsurancePatternPendingRemoval(null)
+        }}
+      />
     </div>
   )
 }

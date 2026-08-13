@@ -1,9 +1,10 @@
 'use client'
 
 import type React from 'react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { MiamiQuotationState } from '@/src/hooks/useMiamiQuotation'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 
 export type MiamiCargoDimensionLine = {
   id: string
@@ -70,6 +71,11 @@ export function MiamiQuotationSection({
   formatNumber,
   miami,
 }: MiamiQuotationSectionProps) {
+  const [pendingRemoval, setPendingRemoval] = useState<{
+    kind: 'cargo' | 'origin' | 'destination'
+    id: string
+    label: string
+  } | null>(null)
   const fieldLabelClass =
     'text-xs font-medium text-slate-500 dark:text-slate-400'
   const compactFieldClass = `${fieldClass} md:max-w-[180px]`
@@ -95,6 +101,33 @@ export function MiamiQuotationSection({
 
   const getCargoDimensionUnit = (line: MiamiCargoDimensionLine) =>
     line.dimensionUnit ?? line.dimension_unit ?? 'm'
+
+  const removeCargoLine = (line: MiamiCargoDimensionLine) => {
+    const hasMeaningfulData = Boolean(
+      line.length || line.width || line.height || line.weight || line.manualCbm
+    )
+    if (!hasMeaningfulData) {
+      setCargoLines((prev) => prev.filter((item) => item.id !== line.id))
+      return
+    }
+    setPendingRemoval({
+      kind: 'cargo',
+      id: line.id,
+      label: `${line.quantity || 1} ${line.packageType}`,
+    })
+  }
+
+  const confirmRemoval = () => {
+    if (!pendingRemoval) return
+    if (pendingRemoval.kind === 'cargo') {
+      setCargoLines((prev) => prev.filter((item) => item.id !== pendingRemoval.id))
+    } else if (pendingRemoval.kind === 'origin') {
+      miami.setOriginCharges((prev) => prev.filter((item) => item.id !== pendingRemoval.id))
+    } else {
+      miami.setDestinationCharges((prev) => prev.filter((item) => item.id !== pendingRemoval.id))
+    }
+    setPendingRemoval(null)
+  }
 
   useEffect(() => {
     setCargoLines((prev) => {
@@ -483,11 +516,7 @@ export function MiamiQuotationSection({
 
                         <button
                           type="button"
-                          onClick={() =>
-                            setCargoLines((prev) =>
-                              prev.filter((item) => item.id !== line.id)
-                            )
-                          }
+                          onClick={() => removeCargoLine(line)}
                           className="ml-auto flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1362,11 +1391,11 @@ export function MiamiQuotationSection({
 
                       <button
                         type="button"
-                        onClick={() =>
-                          miami.setOriginCharges((prev) =>
-                            prev.filter((item) => item.id !== charge.id)
-                          )
-                        }
+                        onClick={() => setPendingRemoval({
+                          kind: 'origin',
+                          id: charge.id,
+                          label: charge.description || 'cargo de origen',
+                        })}
                         className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
                       >
                         Quitar
@@ -1493,11 +1522,11 @@ export function MiamiQuotationSection({
 
                       <button
                         type="button"
-                        onClick={() =>
-                          miami.setDestinationCharges((prev) =>
-                            prev.filter((item) => item.id !== charge.id)
-                          )
-                        }
+                        onClick={() => setPendingRemoval({
+                          kind: 'destination',
+                          id: charge.id,
+                          label: charge.description || 'cargo de destino',
+                        })}
                         className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/40"
                       >
                         Quitar
@@ -1510,6 +1539,17 @@ export function MiamiQuotationSection({
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => { if (!open) setPendingRemoval(null) }}
+        title={pendingRemoval?.kind === 'cargo' ? 'Quitar línea de carga' : 'Quitar cargo adicional'}
+        description={pendingRemoval
+          ? `¿Deseas quitar ${pendingRemoval.label}? Se descartarán todos los valores ingresados en esta línea.`
+          : undefined}
+        confirmLabel="Quitar"
+        danger
+        onConfirm={confirmRemoval}
+      />
     </>
   )
 }

@@ -11,6 +11,7 @@ import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { UnsavedChangesGuard, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { MiamiQuotationSection } from '@/src/components/quotations/MiamiQuotationSection'
 import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
@@ -87,6 +88,15 @@ export default function NewQuotationPage() {
     createEmptyCargoLine(),
   ])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
+  const [containerLinePendingRemoval, setContainerLinePendingRemoval] = useState<{
+    index: number
+    line: ContainerLine
+  } | null>(null)
+  const [cargoLinePendingRemoval, setCargoLinePendingRemoval] = useState<CargoDimensionLine | null>(null)
+  const [containerResetPending, setContainerResetPending] = useState<{
+    kind: 'service_product' | 'tipo_transporte' | 'quote_type'
+    value: string
+  } | null>(null)
   const [duplicateSource, setDuplicateSource] = useState<{
     id: string
     quotation_number: string | null
@@ -473,10 +483,7 @@ export default function NewQuotationPage() {
     setFormData(updatedData)
   }
 
-  const handleServiceProductChange = (
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    const serviceProduct = e.target.value
+  const applyServiceProductChange = (serviceProduct: string) => {
     const isMiamiProduct = usesClientRatesFromCatalog(serviceProductOptions, serviceProduct)
 
     setFormData((prev) => ({
@@ -511,6 +518,18 @@ export default function NewQuotationPage() {
           : [createEmptyCargoLine()]
       )
     }
+  }
+
+  const handleServiceProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const serviceProduct = e.target.value
+    const willClearContainers =
+      usesClientRatesFromCatalog(serviceProductOptions, serviceProduct) &&
+      containerLines.length > 0
+    if (willClearContainers) {
+      setContainerResetPending({ kind: 'service_product', value: serviceProduct })
+      return
+    }
+    applyServiceProductChange(serviceProduct)
   }
 
   const handleClienteChange = (
@@ -609,6 +628,40 @@ export default function NewQuotationPage() {
     setContainerLines([])
     setEditingContainerLineIndex(null)
     resetContainerLineForm()
+  }
+
+  const requestTransportChange = (value: string) => {
+    if (containerLines.length > 0) {
+      setContainerResetPending({ kind: 'tipo_transporte', value })
+      return
+    }
+    setFormData((prev) => ({ ...prev, tipo_transporte: value, quote_type: '' }))
+  }
+
+  const requestQuoteTypeChange = (value: string) => {
+    if (value !== 'FCL' && value !== 'FTL' && containerLines.length > 0) {
+      setContainerResetPending({ kind: 'quote_type', value })
+      return
+    }
+    setFormData((prev) => ({ ...prev, quote_type: value }))
+  }
+
+  const confirmContainerReset = () => {
+    if (!containerResetPending) return
+    if (containerResetPending.kind === 'service_product') {
+      applyServiceProductChange(containerResetPending.value)
+    } else if (containerResetPending.kind === 'tipo_transporte') {
+      setFormData((prev) => ({
+        ...prev,
+        tipo_transporte: containerResetPending.value,
+        quote_type: '',
+      }))
+      clearContainerLines()
+    } else {
+      setFormData((prev) => ({ ...prev, quote_type: containerResetPending.value }))
+      clearContainerLines()
+    }
+    setContainerResetPending(null)
   }
 
   const handleSubmit = async (status: string) => {
@@ -1538,14 +1591,7 @@ export default function NewQuotationPage() {
                   <select
                     className={`${fieldClass} ${reqClass(formData.tipo_transporte)}`}
                     value={formData.tipo_transporte}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        tipo_transporte: e.target.value,
-                        quote_type: '',
-                      })
-                      clearContainerLines()
-                    }}
+                    onChange={(e) => requestTransportChange(e.target.value)}
                   >
                     <option value="">Seleccionar transporte</option>
                     <option value="Aéreo">Aéreo</option>
@@ -1561,13 +1607,7 @@ export default function NewQuotationPage() {
                   <select
                     className={`${fieldClass} ${reqClass(formData.quote_type)}`}
                     value={formData.quote_type}
-                    onChange={(e) => {
-                      setFormData({ ...formData, quote_type: e.target.value })
-
-                      if (e.target.value !== 'FCL' && e.target.value !== 'FTL') {
-                        clearContainerLines()
-                      }
-                    }}
+                    onChange={(e) => requestQuoteTypeChange(e.target.value)}
                     disabled={!formData.tipo_transporte}
                   >
                     <option value="">Seleccionar tipo</option>
@@ -1806,7 +1846,7 @@ export default function NewQuotationPage() {
 
                             <button
                               type="button"
-                              onClick={() => handleRemoveContainerLine(index)}
+                              onClick={() => setContainerLinePendingRemoval({ index, line })}
                               className="text-sm font-semibold text-red-700 dark:text-red-300"
                             >
                               Eliminar
@@ -1912,11 +1952,16 @@ export default function NewQuotationPage() {
 
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setCargoLines((prev) =>
-                                    prev.filter((item) => item.id !== line.id)
+                                onClick={() => {
+                                  const hasMeaningfulData = Boolean(
+                                    line.length || line.width || line.height || line.weight || line.manualCbm
                                   )
-                                }
+                                  if (!hasMeaningfulData) {
+                                    setCargoLines((prev) => prev.filter((item) => item.id !== line.id))
+                                    return
+                                  }
+                                  setCargoLinePendingRemoval(line)
+                                }}
                                 className="ml-auto flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -2442,6 +2487,45 @@ export default function NewQuotationPage() {
             </div>
           </div>
       </div>
+      <ConfirmDialog
+        open={containerLinePendingRemoval !== null}
+        onOpenChange={(open) => { if (!open) setContainerLinePendingRemoval(null) }}
+        title="Quitar contenedor"
+        description={containerLinePendingRemoval
+          ? `¿Deseas descartar ${containerLinePendingRemoval.line.quantity} × ${containerLinePendingRemoval.line.container_type_name} de esta cotización?`
+          : undefined}
+        confirmLabel="Quitar contenedor"
+        danger
+        onConfirm={() => {
+          if (containerLinePendingRemoval) handleRemoveContainerLine(containerLinePendingRemoval.index)
+          setContainerLinePendingRemoval(null)
+        }}
+      />
+      <ConfirmDialog
+        open={containerResetPending !== null}
+        onOpenChange={(open) => { if (!open) setContainerResetPending(null) }}
+        title="Cambiar modalidad de carga"
+        description={`Este cambio quitará ${containerLines.length} ${containerLines.length === 1 ? 'línea de contenedor ingresada' : 'líneas de contenedores ingresadas'}. ¿Deseas continuar?`}
+        confirmLabel="Cambiar y quitar contenedores"
+        danger
+        onConfirm={confirmContainerReset}
+      />
+      <ConfirmDialog
+        open={cargoLinePendingRemoval !== null}
+        onOpenChange={(open) => { if (!open) setCargoLinePendingRemoval(null) }}
+        title="Quitar línea de carga"
+        description={cargoLinePendingRemoval
+          ? `¿Deseas descartar ${cargoLinePendingRemoval.quantity || 0} ${cargoLinePendingRemoval.packageType} y todos sus valores?`
+          : undefined}
+        confirmLabel="Quitar línea"
+        danger
+        onConfirm={() => {
+          if (cargoLinePendingRemoval) {
+            setCargoLines((prev) => prev.filter((item) => item.id !== cargoLinePendingRemoval.id))
+          }
+          setCargoLinePendingRemoval(null)
+        }}
+      />
     </>
   )
 }

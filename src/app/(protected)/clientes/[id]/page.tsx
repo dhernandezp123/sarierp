@@ -10,6 +10,7 @@ import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
   defaultClientRateCatalog,
   fetchActiveClientRateCatalog,
@@ -52,6 +53,7 @@ export default function ClienteProfilePage() {
   const [newNote, setNewNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('resumen')
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -231,53 +233,16 @@ export default function ClienteProfilePage() {
     const globalRateCodes = clientRateCatalog
       .filter((item) => !item.isDestinationRate)
       .map((item) => item.code)
-    const destinationRows = rows.filter(
-      (row) => row.miami_rate_destination === activeDestination
-    )
-    const globalRows = rows.filter((row) => row.miami_rate_destination === null)
+    const { error: replaceRatesError } = await supabase.rpc('replace_client_rates', {
+      p_cliente_id: id,
+      p_destination: activeDestination,
+      p_destination_rate_codes: destinationRateCodes,
+      p_global_rate_codes: globalRateCodes,
+      p_rows: rows,
+    })
 
-    const { error: deleteDestinationError } = await supabase
-      .from('client_rates')
-      .delete()
-      .eq('cliente_id', id)
-      .eq('miami_rate_destination', activeDestination)
-      .in('rate_code', destinationRateCodes)
-
-    if (deleteDestinationError) {
-      toast.error(deleteDestinationError.message || 'No se pudieron guardar las tarifas')
-      setSavingRates(false)
-      return
-    }
-
-    const { error: deleteGlobalError } = await supabase
-      .from('client_rates')
-      .delete()
-      .eq('cliente_id', id)
-      .is('miami_rate_destination', null)
-      .in('rate_code', globalRateCodes)
-
-    if (deleteGlobalError) {
-      toast.error(deleteGlobalError.message || 'No se pudieron guardar las tarifas')
-      setSavingRates(false)
-      return
-    }
-
-    const { error: insertDestinationError } = await supabase
-      .from('client_rates')
-      .insert(destinationRows)
-
-    if (insertDestinationError) {
-      toast.error(insertDestinationError.message || 'No se pudieron guardar las tarifas')
-      setSavingRates(false)
-      return
-    }
-
-    const { error: insertGlobalError } = await supabase
-      .from('client_rates')
-      .insert(globalRows)
-
-    if (insertGlobalError) {
-      toast.error(insertGlobalError.message || 'No se pudieron guardar las tarifas')
+    if (replaceRatesError) {
+      toast.error(replaceRatesError.message || 'No se pudieron guardar las tarifas')
       setSavingRates(false)
       return
     }
@@ -410,7 +375,7 @@ export default function ClienteProfilePage() {
 
           <button
             type="button"
-            onClick={archiveClient}
+            onClick={() => setArchiveDialogOpen(true)}
             className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
           >
             <Trash2 className="h-4 w-4" />
@@ -964,6 +929,15 @@ export default function ClienteProfilePage() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        title="Enviar cliente a papelera"
+        description={`¿Deseas enviar a ${cliente.nombre} a la papelera? Dejará de aparecer en los flujos activos del ERP.`}
+        confirmLabel="Enviar a papelera"
+        danger
+        onConfirm={() => { void archiveClient() }}
+      />
     </>
   )
 }

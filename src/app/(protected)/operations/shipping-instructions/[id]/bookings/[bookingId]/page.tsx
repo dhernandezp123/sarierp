@@ -38,6 +38,7 @@ import {
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
   COMPANY_BRANDING_SELECT,
   type CompanyBranding,
@@ -406,6 +407,10 @@ export default function RoutingBookingChildPage() {
   const [availableContainers, setAvailableContainers] = useState<ContainerAllocation[]>([])
   const [assignedInOtherBookings, setAssignedInOtherBookings] = useState<ContainerAllocation[]>([])
   const [containerRows, setContainerRows] = useState<BookingContainerRow[]>([])
+  const [containerPendingRemoval, setContainerPendingRemoval] = useState<{
+    index: number
+    row: BookingContainerRow
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingContainers, setSavingContainers] = useState(false)
@@ -1010,6 +1015,17 @@ export default function RoutingBookingChildPage() {
     setContainerRows((currentRows) =>
       currentRows.filter((_, rowIndex) => rowIndex !== index)
     )
+  }
+
+  const requestContainerRemoval = (row: BookingContainerRow, index: number) => {
+    const hasMeaningfulData = Boolean(
+      row.id || row.container_type.trim() || Number(row.quantity || 0) > 0 || row.notes.trim()
+    )
+    if (!hasMeaningfulData) {
+      removeContainerRow(index)
+      return
+    }
+    setContainerPendingRemoval({ index, row })
   }
 
   const validateContainerRows = () => {
@@ -1823,7 +1839,7 @@ export default function RoutingBookingChildPage() {
                       <td className="text-right">
                         <button
                           type="button"
-                          onClick={() => removeContainerRow(index)}
+                          onClick={() => requestContainerRemoval(row, index)}
                           className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                         >
                           Quitar
@@ -2300,6 +2316,20 @@ export default function RoutingBookingChildPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={containerPendingRemoval !== null}
+        onOpenChange={(open) => { if (!open) setContainerPendingRemoval(null) }}
+        title="Quitar contenedor del booking"
+        description={containerPendingRemoval
+          ? `¿Deseas quitar ${containerPendingRemoval.row.container_type || `la fila ${containerPendingRemoval.index + 1}`} del booking? ${containerPendingRemoval.row.id ? 'La eliminación será definitiva al guardar los contenedores.' : 'Se descartarán los datos ingresados en esta fila.'}`
+          : undefined}
+        confirmLabel="Quitar contenedor"
+        danger
+        onConfirm={() => {
+          if (containerPendingRemoval) removeContainerRow(containerPendingRemoval.index)
+          setContainerPendingRemoval(null)
+        }}
+      />
 
       <Dialog
         open={canManageBookingDocuments && Boolean(documentPendingDelete)}
