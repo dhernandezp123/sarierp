@@ -1,6 +1,7 @@
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer'
 
 export type ReciboPagoData = {
+  recibo_numero: string
   empresa: string
   empresa_rtn: string | null
   empresa_dir: string | null
@@ -59,6 +60,10 @@ export function ReciboPagoPdf({ data }: { data: ReciboPagoData }) {
 
         <View style={styles.divider} />
 
+        <View style={styles.row}>
+          <Text style={styles.label}>Recibo:</Text>
+          <Text style={styles.value}>{data.recibo_numero}</Text>
+        </View>
         <View style={styles.row}>
           <Text style={styles.label}>Factura:</Text>
           <Text style={styles.value}>{data.factura_numero || '—'} ({data.factura_tipo})</Text>

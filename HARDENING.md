@@ -5455,6 +5455,119 @@ Agregar una entrada por fix:
     caso real antes del deployment.
 - Commit: `43a62ad`.
 
+### 2026-08-14 - FIN-060 - Factura trazable desde cotizacion validada
+
+- Estado: Implementado y validado localmente; SQL de Production, UAT y
+  deployment pendientes.
+- Hallazgo: FIN-060.
+- Causa raiz:
+  - `Facturar` permitia guardar un `quotation_id`, pero no cargaba las lineas
+    comerciales ni verificaba que coincidieran con la cotizacion.
+  - La base no exigia que la cotizacion estuviera ganada y validada por
+    Finanzas, que perteneciera al mismo cliente o que no tuviera otra factura
+    activa.
+  - Cambiar precios o costos despues de una validacion no devolvia la
+    cotizacion a estado pendiente.
+- Codigo:
+  - `src/app/(protected)/invoicing/new/page.tsx`
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `src/app/(protected)/cost-validation/[id]/page.tsx`
+- SQL:
+  - `supabase/migrations/20260814100000_invoice_from_validated_quotation.sql`
+- Cambios:
+  - Validacion de Costos ofrece `Generar factura` al quedar validada y abre la
+    factura existente cuando la cotizacion ya fue facturada.
+  - `Facturar` permite seleccionar una cotizacion ganada del cliente, carga
+    `pricing_items` y bloquea descripcion, cantidad, precio, moneda e ISV como
+    datos de origen.
+  - `invoice_items.source_pricing_item_id` conserva la trazabilidad de cada
+    linea importada; la factura mantiene su snapshot aunque posteriormente se
+    elimine una linea fuente.
+  - `create_invoice_from_quotation` vuelve a leer las lineas en PostgreSQL y
+    valida rol, cliente, estado, aprobacion financiera, moneda, tasas y
+    duplicados antes de consumir CAI y crear factura/items en una transaccion.
+  - El RPC manual rechaza cualquier `quotation_id`; el RPC anterior dejo de
+    estar expuesto a `authenticated`, evitando saltar el flujo validado.
+  - Cambios en precios cotizados o costos reales invalidan automaticamente la
+    aprobacion financiera. Solo Admin, Finanzas o Contabilidad puede volver a
+    validarla.
+  - Solo puede existir una Factura activa por cotizacion. Proformas y facturas
+    anuladas no bloquean el flujo.
+  - La factura se crea como `Borrador` y conserva el flujo existente: al pasar
+    a emitida/enviada entra en `invoice_receivables`; los borradores no crean
+    saldo en Cuentas por cobrar.
+  - El PDF de factura usa ahora el ISV real de cada linea, incluido 0% y 18%,
+    en lugar de asumir 15% para todas.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK; 70/70 paginas generadas.
+  - ESLint dirigido para nueva factura, detalle de factura y PDF de recibo: 0
+    errores y 0 advertencias.
+  - La pagina preexistente de Validacion de Costos conserva 13 errores y 4
+    advertencias de ESLint (`any` y reglas de hooks), sin hallazgos nuevos en
+    las lineas incorporadas.
+  - `npx.cmd supabase migration up --local`: migracion aplicada sobre el
+    esquema local existente, sin reconstruir el historial.
+  - Prueba SQL transaccional local con datos ficticios y `ROLLBACK`: creo la
+    factura y su linea trazable, rechazo una segunda factura activa e invalido
+    la aprobacion al cambiar el precio.
+  - Permisos locales: `authenticated` no puede ejecutar
+    `create_invoice_with_items`; si puede ejecutar los dos wrappers validados.
+  - `npx.cmd supabase db lint --local --level error`: la migracion nueva no
+    reporta errores; permanece el hallazgo preexistente de
+    `is_platform_admin()` por `is_demo_environment()` ausente, documentado en
+    FIN-058.
+  - `git diff --check`: OK; solo avisos esperados LF/CRLF de Git.
+- Verificacion manual pendiente:
+  - UAT con cotizacion ganada/validada, lineas gravadas, exentas y 18%, y
+    monedas USD/HNL.
+  - Confirmar que cotizaciones pendientes y ya facturadas no puedan elegirse.
+  - Emitir la factura y comprobar su aparicion y saldo en Cuentas por cobrar.
+  - Probar anulacion seguida de una nueva factura para la misma cotizacion.
+- Riesgos o trabajo pendiente:
+  - Antes de aplicar SQL en Production se debe comprobar que no existan dos
+    Facturas activas historicas para una misma cotizacion; el indice unico
+    detendra la migracion si detecta esa inconsistencia.
+  - La migracion no se ha aplicado al proyecto remoto y el frontend no se ha
+    desplegado en `https://forwarders.app`.
+- Commit: pendiente.
+
+### 2026-08-14 - FIN-061 - Recibo asociado al pago de contado
+
+- Estado: Implementado y validado localmente; UAT y deployment pendientes.
+- Hallazgo: FIN-061.
+- Causa raiz:
+  - El recibo ya podia descargarse mediante un icono pequeno en el historial,
+    pero no existia una decision visible al terminar de registrar un pago de
+    contado.
+- Codigo:
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `src/components/pdf/recibo-pago-pdf.tsx`
+- SQL: ninguno adicional; utiliza el pago persistido por
+  `register_invoice_payment_v2`.
+- Cambios:
+  - Al registrar un pago de una factura de contado se ofrece inmediatamente
+    `Generar recibo` con el monto recibido.
+  - Cada pago aplicado conserva una accion textual `Generar recibo` en el
+    historial; los pagos reversados no pueden generar recibos vigentes.
+  - El PDF incluye un identificador deterministico basado en el UUID del pago,
+    numero y tipo de factura, cliente, monto, fecha, metodo, referencia,
+    clasificacion fiscal, punto de venta y desglose mixto.
+  - El recibo se genera desde el pago ya persistido y no crea un segundo
+    movimiento contable ni altera el saldo de Cuentas por cobrar.
+- Validaciones:
+  - Cubiertas por TypeScript, ESLint dirigido y build de FIN-060.
+- Verificacion manual pendiente:
+  - Registrar pagos de contado por cheque, deposito, transferencia, tarjetas y
+    mixto; generar y revisar cada PDF.
+  - Reversar un pago y confirmar que el recibo deje de estar disponible como
+    documento vigente.
+- Riesgos o trabajo pendiente:
+  - El identificador `REC-XXXXXXXX` es una referencia operativa deterministica,
+    no un rango fiscal independiente. Si SAR o la politica contable exige un
+    correlativo formal de recibos, debera modelarse como una serie documental.
+- Commit: pendiente.
+
 ### 2026-08-13 - UX-055 - Proteccion integral de eliminaciones y reemplazos
 
 - Estado: Implementado y validado; SQL aplicado en Production; UAT y verificacion del deployment pendientes.

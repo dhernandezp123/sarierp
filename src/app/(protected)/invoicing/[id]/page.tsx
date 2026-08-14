@@ -91,6 +91,7 @@ type InvoiceItem = {
   unit_price: number
   amount: number
   sort_order: number
+  isv_rate: number
 }
 
 type Payment = {
@@ -248,6 +249,7 @@ export default function InvoiceDetailPage() {
   const [reversalReason, setReversalReason] = useState('')
   const [reversingPayment, setReversingPayment] = useState(false)
   const [pointsOfSale, setPointsOfSale] = useState<string[]>([])
+  const [receiptPayment, setReceiptPayment] = useState<Payment | null>(null)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -364,7 +366,7 @@ export default function InvoiceDetailPage() {
     }
 
     setSavingPayment(true)
-    const { error } = await supabase.rpc('register_invoice_payment_v2', {
+    const { data, error } = await supabase.rpc('register_invoice_payment_v2', {
       p_invoice_id: invoice.id,
       p_amount: amount,
       p_currency: invoice.currency,
@@ -381,7 +383,21 @@ export default function InvoiceDetailPage() {
     toast.success('Pago registrado')
     setShowPaymentModal(false)
     setPayAmount(''); setPayMethod(''); setPaySplits(emptyPaymentSplits()); setPayRef(''); setPayNotes('')
-    fetchAll()
+    const paymentId = (data as { payment_id: string }[] | null)?.[0]?.payment_id
+    if (invoice.payment_condition === 'Contado' && paymentId) {
+      const { data: paymentData } = await supabase
+        .from('invoice_payments')
+        .select('*, invoice_payment_splits(*)')
+        .eq('id', paymentId)
+        .single()
+      if (paymentData) {
+        setReceiptPayment({
+          ...paymentData,
+          invoice_payment_splits: paymentData.invoice_payment_splits || [],
+        } as Payment)
+      }
+    }
+    await fetchAll()
     setSavingPayment(false)
   }
 
@@ -425,6 +441,7 @@ export default function InvoiceDetailPage() {
   if (loading || !invoice) return <PageSkeleton cards={2} rows={4} />
 
   const makeReceiptData = (p: Payment): ReciboPagoData => ({
+    recibo_numero: `REC-${p.id.split('-')[0].toUpperCase()}`,
     empresa: companySetting?.legal_name || companySetting?.trade_name || 'Sari Express',
     empresa_rtn: companySetting?.rtn ?? null,
     empresa_dir: companySetting?.address ?? null,
@@ -480,7 +497,13 @@ export default function InvoiceDetailPage() {
     cliente_rtn: invoice.cliente_rtn,
     cliente_direccion: invoice.cliente_direccion,
     cliente_email: invoice.cliente_email,
-    items: items.map((it) => ({ description: it.description, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, isv_rate: 15 })),
+    items: items.map((it) => ({
+      description: it.description,
+      quantity: it.quantity,
+      unit_price: it.unit_price,
+      amount: it.amount,
+      isv_rate: Number(it.isv_rate || 0) as 0 | 15 | 18,
+    })),
     subtotal: invoice.subtotal,
     tax_amount: invoice.tax_amount,
     total: invoice.total,
@@ -734,11 +757,12 @@ export default function InvoiceDetailPage() {
                                   {({ loading: pdfLoading }) => (
                                     <button
                                       type="button"
-                                      title="Descargar recibo"
-                                      className="rounded p-1 text-slate-400 hover:text-blue-500"
+                                      title="Generar recibo de este pago"
+                                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
                                       disabled={pdfLoading}
                                     >
                                       <Printer className="h-3.5 w-3.5" />
+                                      {pdfLoading ? 'Generando...' : 'Generar recibo'}
                                     </button>
                                   )}
                                 </PDFDownloadLink>
@@ -1108,6 +1132,51 @@ export default function InvoiceDetailPage() {
               >
                 {savingPayment ? 'Guardando...' : 'Registrar pago'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {receiptPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl dark:bg-[#0b1220]">
+            <div className="border-b border-slate-200 p-5 dark:border-slate-700">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Pago de contado registrado</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                El recibo quedará vinculado a la factura {invoice.invoice_number || 'sin número'} y a este pago.
+              </p>
+            </div>
+            <div className="p-5">
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4 dark:bg-slate-800/60">
+                <span className="text-sm text-slate-500 dark:text-slate-400">Monto recibido</span>
+                <strong className="text-lg text-emerald-700 dark:text-emerald-400">
+                  {receiptPayment.currency} {Number(receiptPayment.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </strong>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-200 p-5 dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setReceiptPayment(null)}
+                className={secondaryButtonClass}
+              >
+                Cerrar
+              </button>
+              <PDFDownloadLink
+                document={<ReciboPagoPdf data={makeReceiptData(receiptPayment)} />}
+                fileName={`recibo-${invoice.invoice_number || 'pago'}-${receiptPayment.payment_date}.pdf`}
+              >
+                {({ loading: pdfLoading }) => (
+                  <button
+                    type="button"
+                    disabled={pdfLoading}
+                    className={primaryButtonClass}
+                  >
+                    <Printer className="h-4 w-4" />
+                    {pdfLoading ? 'Generando...' : 'Generar recibo'}
+                  </button>
+                )}
+              </PDFDownloadLink>
             </div>
           </div>
         </div>
