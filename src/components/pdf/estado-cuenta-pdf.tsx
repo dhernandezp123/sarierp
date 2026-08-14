@@ -6,6 +6,8 @@ export type EstadoCuentaItem = {
   status: string
   issue_date: string | null
   due_date: string | null
+  payment_condition: string | null
+  credit_days: number | null
   total_original: number
   notas_credito: number
   notas_debito: number
@@ -52,13 +54,14 @@ const styles = StyleSheet.create({
   tableRowAlt: { flexDirection: 'row', padding: '5 6', borderBottom: '1 solid #f1f5f9', backgroundColor: '#fafafa' },
 
   // Column widths
-  colNum: { width: '14%' },
-  colStatus: { width: '12%' },
-  colEmision: { width: '11%' },
-  colVence: { width: '11%' },
-  colTotal: { width: '15%', textAlign: 'right' },
-  colAjustes: { width: '15%', textAlign: 'right' },
-  colPagado: { width: '11%', textAlign: 'right' },
+  colNum: { width: '12%' },
+  colStatus: { width: '10%' },
+  colCondition: { width: '11%' },
+  colEmision: { width: '9%' },
+  colVence: { width: '9%' },
+  colTotal: { width: '14%', textAlign: 'right' },
+  colAjustes: { width: '14%', textAlign: 'right' },
+  colPagado: { width: '10%', textAlign: 'right' },
   colSaldo: { width: '11%', textAlign: 'right' },
 
   textGray: { color: '#64748b' },
@@ -141,6 +144,7 @@ export function EstadoCuentaPdf({ data }: { data: EstadoCuentaData }) {
             <View style={styles.tableHeader} fixed={totalesPorMoneda.length === 1}>
               <Text style={[styles.tableHeaderCell, styles.colNum]}>Factura</Text>
               <Text style={[styles.tableHeaderCell, styles.colStatus]}>Estado</Text>
+              <Text style={[styles.tableHeaderCell, styles.colCondition]}>Condición</Text>
               <Text style={[styles.tableHeaderCell, styles.colEmision]}>Emisión</Text>
               <Text style={[styles.tableHeaderCell, styles.colVence]}>Vencimiento</Text>
               <Text style={[styles.tableHeaderCell, styles.colTotal]}>Original</Text>
@@ -156,6 +160,11 @@ export function EstadoCuentaPdf({ data }: { data: EstadoCuentaData }) {
                 <View key={`${item.invoice_number}-${idx}`} style={isAlt ? styles.tableRowAlt : styles.tableRow} wrap={false}>
                   <Text style={[styles.colNum, styles.textBold]}>{item.invoice_number || '—'}</Text>
                   <Text style={[styles.colStatus, item.status === 'Vencida' ? styles.textRed : styles.textGray]}>{item.status}</Text>
+                  <Text style={[styles.colCondition, styles.textGray]}>
+                    {item.payment_condition === 'Credito'
+                      ? `Crédito · ${item.credit_days || 0} días`
+                      : item.payment_condition || '—'}
+                  </Text>
                   <Text style={[styles.colEmision, styles.textGray]}>{fmtDate(item.issue_date)}</Text>
                   <Text style={[styles.colVence, item.status === 'Vencida' ? styles.textRed : styles.textGray]}>{fmtDate(item.due_date)}</Text>
                   <Text style={styles.colTotal}>{fmtMoney(item.total_original, currency)}</Text>

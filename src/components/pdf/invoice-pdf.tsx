@@ -24,6 +24,8 @@ export type InvoicePdfData = {
   status: string
   issue_date: string
   due_date: string | null
+  payment_condition: string | null
+  credit_days: number | null
   currency: string
   exchange_rate: number
   notes: string | null
@@ -236,6 +238,11 @@ export function InvoicePdf({ data }: { data: InvoicePdfData }) {
             <Text style={s.docNumber}>{data.invoice_number}</Text>
             <Text style={s.docDate}>Emisión: {fmtDate(data.issue_date)}</Text>
             {data.due_date && <Text style={s.docDate}>Vence: {fmtDate(data.due_date)}</Text>}
+            {data.payment_condition && (
+              <Text style={s.docDate}>
+                Pago: {data.payment_condition}{data.payment_condition === 'Crédito' ? ` · ${data.credit_days || 0} días` : ''}
+              </Text>
+            )}
           </View>
         </View>
 

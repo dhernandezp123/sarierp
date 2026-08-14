@@ -29,6 +29,8 @@ type Invoice = {
   cliente_email: string | null
   issue_date: string | null
   due_date: string | null
+  payment_condition: string | null
+  credit_days: number | null
   total: number
   currency: string
   quotation_id: string | null
@@ -43,8 +45,14 @@ type Invoice = {
 
 type ReceivableSummary = {
   invoice_id: string
+  currency: string
+  original_total: number
+  credit_notes: number
+  debit_notes: number
+  adjusted_total: number
   balance: number
   paid_total: number
+  stored_status: string
   receivable_status: string
   days_overdue: number
 }
@@ -116,12 +124,12 @@ export default function InvoicingPage() {
     const [invoicesResult, receivablesResult] = await Promise.all([
       supabase
         .from('invoices')
-        .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date, status)')
+        .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, payment_condition, credit_days, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date, status)')
         .is('deleted_at', null)
         .order('created_at', { ascending: false }),
       supabase
         .from('invoice_receivables')
-        .select('invoice_id, balance, paid_total, receivable_status, days_overdue'),
+        .select('invoice_id, currency, original_total, credit_notes, debit_notes, adjusted_total, balance, paid_total, stored_status, receivable_status, days_overdue'),
     ])
 
     if (invoicesResult.error || receivablesResult.error) {
@@ -159,13 +167,22 @@ export default function InvoicingPage() {
 
   const paginatedInvoices = filtered.slice((page - 1) * pageSize, page * pageSize)
 
-  const totals = {
-    pendiente: receivables.reduce((sum, row) => sum + Number(row.balance || 0), 0),
-    pagado: receivables.reduce((sum, row) => sum + Number(row.paid_total || 0), 0),
-    vencido: receivables
-      .filter((row) => row.days_overdue > 0)
-      .reduce((sum, row) => sum + Number(row.balance || 0), 0),
-  }
+  const totalsByCurrency = Array.from(receivables
+    .filter((row) => !['Borrador', 'Anulada'].includes(row.stored_status))
+    .reduce((totals, row) => {
+      const currency = row.currency || 'USD'
+      const current = totals.get(currency) || { pendiente: 0, pagado: 0, vencido: 0 }
+      current.pendiente += Number(row.balance || 0)
+      current.pagado += Number(row.paid_total || 0)
+      if (row.days_overdue > 0) current.vencido += Number(row.balance || 0)
+      totals.set(currency, current)
+      return totals
+    }, new Map<string, { pendiente: number; pagado: number; vencido: number }>()).entries())
+
+  const formatReceivableTotal = (key: 'pendiente' | 'pagado' | 'vencido') =>
+    totalsByCurrency.length > 0
+      ? totalsByCurrency.map(([currency, totals]) => formatUSD(totals[key], currency)).join(' · ')
+      : formatUSD(0)
 
   const computeCierre = () => {
     const inPeriod = (dateValue: string | null) => {
@@ -180,7 +197,7 @@ export default function InvoicingPage() {
       }
       return amountByCurrency.get(currency)!
     }
-    const activeInvoices = invoices.filter((invoice) => invoice.status !== 'Anulada')
+    const activeInvoices = invoices.filter((invoice) => !['Borrador', 'Anulada'].includes(invoice.status))
     const periodDocuments = activeInvoices.filter((invoice) => inPeriod(invoice.issue_date))
 
     periodDocuments.forEach((invoice) => {
@@ -198,31 +215,15 @@ export default function InvoicingPage() {
       }
     })
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const receivableByInvoice = new Map(receivables.map((row) => [row.invoice_id, row]))
     periodDocuments
       .filter((invoice) => invoice.invoice_type === 'Factura')
       .forEach((invoice) => {
-        const linkedNotes = activeInvoices.filter((note) => note.parent_invoice_id === invoice.id)
-        const creditNotes = linkedNotes
-          .filter((note) => note.invoice_type === 'Nota de Crédito')
-          .reduce((sum, note) => sum + Number(note.total || 0), 0)
-        const debitNotes = linkedNotes
-          .filter((note) => note.invoice_type === 'Nota de Débito')
-          .reduce((sum, note) => sum + Number(note.total || 0), 0)
-        const paid = (invoice.invoice_payments || []).reduce(
-          (sum, payment) => sum + (payment.status === 'Aplicado' ? Number(payment.amount || 0) : 0),
-          0
-        )
-        const balance = Math.max(0, Number(invoice.total || 0) - creditNotes + debitNotes - paid)
+        const receivable = receivableByInvoice.get(invoice.id)
+        const balance = Number(receivable?.balance || 0)
         const summary = ensureCurrency(invoice.currency || 'USD')
         summary.porCobrar += balance
-
-        if (balance > 0 && invoice.due_date) {
-          const [year, month, day] = invoice.due_date.split('T')[0].split('-').map(Number)
-          const dueDate = new Date(year, month - 1, day)
-          if (dueDate < today) summary.vencido += balance
-        }
+        if (Number(receivable?.days_overdue || 0) > 0) summary.vencido += balance
       })
 
     return {
@@ -296,41 +297,29 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
   const buildEcPdf = (clienteId: string) => {
     const cliente = ecClientes.find((c) => c.id === clienteId)
     if (!cliente) return
-    const clientDocuments = invoices.filter((invoice) => invoice.cliente_id === clienteId && invoice.status !== 'Anulada')
     const issuedStatuses = new Set(['Enviada', 'Aprobada', 'Parcialmente Pagada', 'Pagada', 'Vencida'])
-    const todayString = new Date().toISOString().split('T')[0]
-    const items: EstadoCuentaItem[] = clientDocuments
+    const receivableByInvoice = new Map(receivables.map((row) => [row.invoice_id, row]))
+    const items: EstadoCuentaItem[] = invoices
+      .filter((invoice) => invoice.cliente_id === clienteId && invoice.status !== 'Anulada')
       .filter((invoice) => invoice.invoice_type === 'Factura' && issuedStatuses.has(invoice.status))
       .map((invoice) => {
-        const linkedNotes = clientDocuments.filter(
-          (note) => note.parent_invoice_id === invoice.id && issuedStatuses.has(note.status)
-        )
-        const notasCredito = linkedNotes
-          .filter((note) => note.invoice_type === 'Nota de Crédito')
-          .reduce((sum, note) => sum + Number(note.total || 0), 0)
-        const notasDebito = linkedNotes
-          .filter((note) => note.invoice_type === 'Nota de Débito')
-          .reduce((sum, note) => sum + Number(note.total || 0), 0)
-        const pagado = (invoice.invoice_payments || []).reduce(
-          (sum, payment) => sum + (payment.status === 'Aplicado' ? Number(payment.amount || 0) : 0),
-          0
-        )
-        const totalAjustado = Math.max(0, Number(invoice.total || 0) - notasCredito + notasDebito)
-        const saldo = Math.max(0, totalAjustado - pagado)
-        const vencida = Boolean(invoice.due_date && invoice.due_date.split('T')[0] < todayString && saldo > 0)
+        const receivable = receivableByInvoice.get(invoice.id)
+        const saldo = Number(receivable?.balance || 0)
 
         return {
           invoice_number: invoice.invoice_number,
           invoice_type: invoice.invoice_type,
-          status: vencida ? 'Vencida' : 'Por vencer',
+          status: Number(receivable?.days_overdue || 0) > 0 ? 'Vencida' : 'Por vencer',
           issue_date: invoice.issue_date,
           due_date: invoice.due_date,
-          total_original: Number(invoice.total || 0),
-          notas_credito: notasCredito,
-          notas_debito: notasDebito,
-          total_ajustado: totalAjustado,
+          payment_condition: invoice.payment_condition,
+          credit_days: invoice.credit_days,
+          total_original: Number(receivable?.original_total || invoice.total || 0),
+          notas_credito: Number(receivable?.credit_notes || 0),
+          notas_debito: Number(receivable?.debit_notes || 0),
+          total_ajustado: Number(receivable?.adjusted_total || invoice.total || 0),
           currency: invoice.currency,
-          pagado,
+          pagado: Number(receivable?.paid_total || 0),
           saldo,
         }
       })
@@ -604,15 +593,15 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <p className="text-xs text-slate-500 dark:text-slate-400">Por cobrar</p>
-          <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{formatUSD(totals.pendiente)}</p>
+          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-white">{formatReceivableTotal('pendiente')}</p>
         </div>
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800/50 dark:bg-emerald-950/30">
           <p className="text-xs text-slate-500 dark:text-slate-400">Cobrado</p>
-          <p className="mt-1 text-xl font-bold text-emerald-700 dark:text-emerald-300">{formatUSD(totals.pagado)}</p>
+          <p className="mt-1 text-lg font-bold text-emerald-700 dark:text-emerald-300">{formatReceivableTotal('pagado')}</p>
         </div>
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm dark:border-rose-800/50 dark:bg-rose-950/30">
           <p className="text-xs text-slate-500 dark:text-slate-400">Vencido</p>
-          <p className="mt-1 text-xl font-bold text-rose-700 dark:text-rose-300">{formatUSD(totals.vencido)}</p>
+          <p className="mt-1 text-lg font-bold text-rose-700 dark:text-rose-300">{formatReceivableTotal('vencido')}</p>
         </div>
       </div>
 
@@ -680,6 +669,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                   <th className="pb-3 pr-4">Número</th>
                   <th className="pb-3 pr-4">Tipo</th>
                   <th className="pb-3 pr-4">Cliente</th>
+                  <th className="pb-3 pr-4">Condición</th>
                   <th className="pb-3 pr-4">Emisión</th>
                   <th className="pb-3 pr-4">Vencimiento</th>
                   <th className="pb-3 pr-4">Estado</th>
@@ -689,7 +679,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
               <tbody>
                 {paginatedInvoices.map((inv) => {
                   const sc = STATUS_CONFIG[inv.status] || STATUS_CONFIG['Borrador']
-                  const isOverdue = inv.status === 'Enviada' && inv.due_date && inv.due_date < new Date().toISOString().slice(0, 10)
+                  const isOverdue = inv.status === 'Vencida'
                   return (
                     <tr
                       key={inv.id}
@@ -711,6 +701,11 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                       </td>
                       <td className="pr-4 text-slate-700 dark:text-slate-300">
                         {inv.cliente_nombre || '—'}
+                      </td>
+                      <td className="pr-4 text-slate-600 dark:text-slate-400">
+                        {inv.payment_condition === 'Credito'
+                          ? `Crédito · ${inv.credit_days || 0} días`
+                          : inv.payment_condition || '—'}
                       </td>
                       <td className="pr-4 text-slate-600 dark:text-slate-400">
                         {formatDate(inv.issue_date)}

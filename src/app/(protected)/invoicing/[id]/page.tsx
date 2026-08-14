@@ -19,7 +19,7 @@ import {
 type Invoice = {
   id: string
   invoice_number: string | null
-  invoice_type: 'Proforma' | 'Factura'
+  invoice_type: 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
   status: string
   quotation_id: string | null
   cliente_id: string | null
@@ -29,6 +29,8 @@ type Invoice = {
   cliente_email: string | null
   issue_date: string | null
   due_date: string | null
+  payment_condition: 'Contado' | 'Credito' | null
+  credit_days: number | null
   paid_date: string | null
   subtotal: number
   tax_rate: number
@@ -77,6 +79,8 @@ type CompanySettings = {
   address: string | null
   phone: string | null
   email: string | null
+  city: string | null
+  lugar_emision_defecto: string | null
   invoice_footer_note: string | null
 }
 
@@ -101,6 +105,74 @@ type Payment = {
   reversed_at: string | null
   reversed_by: string | null
   reversal_reason: string | null
+  invoice_fiscal_type: InvoiceFiscalType | null
+  point_of_sale: string | null
+  invoice_payment_splits: PaymentSplit[]
+}
+
+type InvoiceFiscalType = 'Gravada' | 'Mixta' | 'Exenta' | 'Exonerada' | 'No aplica'
+type PaymentMethod = 'Cheque' | 'Deposito' | 'Transferencia' | 'Tarjeta debito' | 'Tarjeta credito' | 'Mixto'
+type SplitMethod = Exclude<PaymentMethod, 'Mixto'>
+
+type PaymentSplit = {
+  id: string
+  payment_method: SplitMethod
+  amount: number
+  reference: string | null
+}
+
+type PaymentSplitInput = {
+  enabled: boolean
+  amount: string
+  reference: string
+}
+
+const PAYMENT_METHODS: Array<{ value: PaymentMethod; label: string }> = [
+  { value: 'Cheque', label: 'Cheque' },
+  { value: 'Deposito', label: 'Depósito' },
+  { value: 'Transferencia', label: 'Transferencia' },
+  { value: 'Tarjeta debito', label: 'Tarjeta de débito' },
+  { value: 'Tarjeta credito', label: 'Tarjeta de crédito' },
+  { value: 'Mixto', label: 'Mixto' },
+]
+
+const SPLIT_METHODS: Array<{ value: SplitMethod; label: string }> = PAYMENT_METHODS
+  .filter((method): method is { value: SplitMethod; label: string } => method.value !== 'Mixto')
+
+const emptyPaymentSplits = (): Record<SplitMethod, PaymentSplitInput> => ({
+  Cheque: { enabled: false, amount: '', reference: '' },
+  Deposito: { enabled: false, amount: '', reference: '' },
+  Transferencia: { enabled: false, amount: '', reference: '' },
+  'Tarjeta debito': { enabled: false, amount: '', reference: '' },
+  'Tarjeta credito': { enabled: false, amount: '', reference: '' },
+})
+
+function getInvoiceFiscalType(invoice: Invoice): InvoiceFiscalType {
+  if (invoice.invoice_type === 'Proforma') return 'No aplica'
+  const fiscalComponentCount = [
+    Number(invoice.tax_amount) > 0,
+    Number(invoice.importe_exento) > 0,
+    Number(invoice.importe_exonerado) > 0,
+  ].filter(Boolean).length
+
+  if (fiscalComponentCount > 1) return 'Mixta'
+  if (invoice.es_exonerado || Number(invoice.importe_exonerado) > 0) return 'Exonerada'
+  if (Number(invoice.tax_amount) === 0 && Number(invoice.importe_exento) > 0) return 'Exenta'
+  return 'Gravada'
+}
+
+function paymentMethodLabel(method: string | null) {
+  return PAYMENT_METHODS.find((option) => option.value === method)?.label || method || '—'
+}
+
+function paymentReferenceLabel(method: PaymentMethod | SplitMethod | '') {
+  if (method === 'Cheque') return 'Número de cheque'
+  if (method === 'Deposito') return 'Número de depósito / referencia'
+  if (method === 'Transferencia') return 'Número de referencia de transferencia'
+  if (method === 'Tarjeta debito' || method === 'Tarjeta credito') {
+    return 'Número de voucher / referencia'
+  }
+  return 'Referencia'
 }
 
 type ReceivableSummary = {
@@ -165,23 +237,28 @@ export default function InvoiceDetailPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [payAmount, setPayAmount] = useState('')
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
-  const [payMethod, setPayMethod] = useState('')
+  const [payFiscalType, setPayFiscalType] = useState<InvoiceFiscalType>('Gravada')
+  const [payPointOfSale, setPayPointOfSale] = useState('')
+  const [payMethod, setPayMethod] = useState<PaymentMethod | ''>('')
+  const [paySplits, setPaySplits] = useState<Record<SplitMethod, PaymentSplitInput>>(emptyPaymentSplits)
   const [payRef, setPayRef] = useState('')
   const [payNotes, setPayNotes] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
   const [paymentToReverse, setPaymentToReverse] = useState<Payment | null>(null)
   const [reversalReason, setReversalReason] = useState('')
   const [reversingPayment, setReversingPayment] = useState(false)
+  const [pointsOfSale, setPointsOfSale] = useState<string[]>([])
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [invRes, itemsRes, paymentsRes, settingsRes, notesRes, receivableRes] = await Promise.all([
+    const [invRes, itemsRes, paymentsRes, settingsRes, notesRes, receivableRes, caiRes] = await Promise.all([
       supabase.from('invoices').select('*, parent_invoice:parent_invoice_id(invoice_number)').eq('id', id).single(),
       supabase.from('invoice_items').select('*').eq('invoice_id', id).order('sort_order'),
-      supabase.from('invoice_payments').select('*').eq('invoice_id', id).order('payment_date', { ascending: false }),
-      supabase.from('company_settings').select('legal_name, trade_name, rtn, address, phone, email, invoice_footer_note').limit(1).single(),
+      supabase.from('invoice_payments').select('*, invoice_payment_splits(*)').eq('invoice_id', id).order('payment_date', { ascending: false }),
+      supabase.from('company_settings').select('legal_name, trade_name, rtn, address, city, lugar_emision_defecto, phone, email, invoice_footer_note').limit(1).single(),
       supabase.from('invoices').select('id, invoice_number, invoice_type, status, total, currency, issue_date, motivo').eq('parent_invoice_id', id).order('created_at'),
       supabase.from('invoice_receivables').select('adjusted_total, paid_total, balance, receivable_status, days_overdue').eq('invoice_id', id).maybeSingle(),
+      supabase.from('cai_ranges').select('lugar_emision').eq('is_active', true).not('lugar_emision', 'is', null),
     ])
 
     if (invRes.error) { toast.error('Factura no encontrada'); router.push('/invoicing'); return }
@@ -191,10 +268,22 @@ export default function InvoiceDetailPage() {
       status: receivableData?.receivable_status || invRes.data.status,
     })
     setItems((itemsRes.data || []) as InvoiceItem[])
-    setPayments((paymentsRes.data || []) as Payment[])
+    setPayments((paymentsRes.data || []).map((payment) => ({
+      ...payment,
+      invoice_payment_splits: payment.invoice_payment_splits || [],
+    })) as Payment[])
     setLinkedNotes((notesRes.data || []) as LinkedNote[])
     setReceivable(receivableData)
-    if (!settingsRes.error) setCompanySetting(settingsRes.data as CompanySettings)
+    const settings = settingsRes.error ? null : settingsRes.data as CompanySettings
+    if (!settingsRes.error) {
+      setCompanySetting(settings)
+    }
+    setPointsOfSale(Array.from(new Set([
+      invRes.data.lugar_emision,
+      ...(caiRes.data || []).map((range) => range.lugar_emision),
+      settings?.lugar_emision_defecto,
+      settings?.city,
+    ].filter((value): value is string => Boolean(value?.trim())))))
     setLoading(false)
   }, [id, router])
 
@@ -228,12 +317,16 @@ export default function InvoiceDetailPage() {
   }
 
   const savePayment = async () => {
-    if (!invoice || !payAmount || !payDate) { toast.error('Monto y fecha son requeridos'); return }
+    if (!invoice || !payAmount || !payDate || !payFiscalType || !payPointOfSale || !payMethod) {
+      toast.error('Completa monto, fecha, tipo fiscal, punto de venta y forma de pago')
+      return
+    }
     const amount = Number(payAmount)
     const currentPaid = payments
       .filter((payment) => payment.status === 'Aplicado')
       .reduce((sum, payment) => sum + Number(payment.amount), 0)
-    const currentPending = Math.max(0, Number(invoice.total) - currentPaid)
+    const currentPending = receivable?.balance
+      ?? Math.max(0, Number(invoice.total) - currentPaid)
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error('Ingresa un monto de pago válido')
       return
@@ -243,23 +336,66 @@ export default function InvoiceDetailPage() {
       return
     }
 
+    const selectedSplits = SPLIT_METHODS
+      .filter(({ value }) => paySplits[value].enabled)
+      .map(({ value }) => ({
+        payment_method: value,
+        amount: Number(paySplits[value].amount),
+        reference: paySplits[value].reference.trim() || null,
+      }))
+
+    if (payMethod === 'Mixto') {
+      if (selectedSplits.length < 2 || selectedSplits.some((split) => !Number.isFinite(split.amount) || split.amount <= 0)) {
+        toast.error('El pago mixto requiere al menos dos formas con montos válidos')
+        return
+      }
+      if (selectedSplits.some((split) => !split.reference)) {
+        toast.error('Cada forma del pago mixto requiere referencia o voucher')
+        return
+      }
+      const splitTotal = selectedSplits.reduce((sum, split) => sum + split.amount, 0)
+      if (Math.abs(splitTotal - amount) > 0.005) {
+        toast.error('La suma del desglose mixto debe coincidir con el monto recibido')
+        return
+      }
+    } else if (!payRef.trim()) {
+      toast.error(`${paymentReferenceLabel(payMethod)} es requerido`)
+      return
+    }
+
     setSavingPayment(true)
-    const { error } = await supabase.rpc('register_invoice_payment', {
+    const { error } = await supabase.rpc('register_invoice_payment_v2', {
       p_invoice_id: invoice.id,
       p_amount: amount,
       p_currency: invoice.currency,
       p_payment_date: payDate,
-      p_payment_method: payMethod || null,
+      p_invoice_fiscal_type: payFiscalType,
+      p_point_of_sale: payPointOfSale,
+      p_payment_method: payMethod,
       p_reference: payRef || null,
       p_notes: payNotes || null,
+      p_payment_splits: payMethod === 'Mixto' ? selectedSplits : [],
     })
     if (error) { toast.error(error.message); setSavingPayment(false); return }
 
     toast.success('Pago registrado')
     setShowPaymentModal(false)
-    setPayAmount(''); setPayMethod(''); setPayRef(''); setPayNotes('')
+    setPayAmount(''); setPayMethod(''); setPaySplits(emptyPaymentSplits()); setPayRef(''); setPayNotes('')
     fetchAll()
     setSavingPayment(false)
+  }
+
+  const openPaymentModal = () => {
+    if (!invoice) return
+
+    setPayFiscalType(getInvoiceFiscalType(invoice))
+    setPayPointOfSale(invoice.lugar_emision || pointsOfSale[0] || '')
+    setPayAmount('')
+    setPayMethod('')
+    setPaySplits(emptyPaymentSplits())
+    setPayRef('')
+    setPayNotes('')
+    setShowPaymentModal(true)
   }
 
   const reversePayment = async () => {
@@ -300,15 +436,29 @@ export default function InvoiceDetailPage() {
     monto: p.amount,
     currency: p.currency,
     fecha_pago: p.payment_date,
-    metodo: p.payment_method,
+    metodo: paymentMethodLabel(p.payment_method),
     referencia: p.reference,
     notas: p.notes,
+    tipo_fiscal: p.invoice_fiscal_type,
+    punto_venta: p.point_of_sale,
+    condicion_pago: invoice.payment_condition === 'Credito' ? 'Crédito' : invoice.payment_condition,
+    dias_credito: invoice.credit_days,
+    desglose: p.invoice_payment_splits.map((split) => ({
+      ...split,
+      payment_method: paymentMethodLabel(split.payment_method),
+    })),
   })
 
-  const flow = STATUS_FLOW[invoice.status]
+  const isAdjustmentNote = ['Nota de Crédito', 'Nota de Débito'].includes(invoice.invoice_type)
+  const flow = isAdjustmentNote && invoice.status === 'Aprobada'
+    ? null
+    : STATUS_FLOW[invoice.status]
   const activePayments = payments.filter((payment) => payment.status === 'Aplicado')
   const paidTotal = activePayments.reduce((sum, payment) => sum + Number(payment.amount), 0)
   const pending = receivable?.balance ?? (invoice.total - paidTotal)
+  const appliedLinkedNotes = linkedNotes.filter(
+    (note) => !['Borrador', 'Anulada'].includes(note.status)
+  )
 
   const isv15 = invoice.tax_amount - invoice.isv_18_amount
   const gravado15 = isv15 > 0 ? isv15 / 0.15 : (invoice.subtotal - invoice.importe_exento - invoice.importe_exonerado)
@@ -321,6 +471,8 @@ export default function InvoiceDetailPage() {
     status: invoice.status,
     issue_date: invoice.issue_date || '',
     due_date: invoice.due_date,
+    payment_condition: invoice.payment_condition === 'Credito' ? 'Crédito' : invoice.payment_condition,
+    credit_days: invoice.credit_days,
     currency: invoice.currency,
     exchange_rate: invoice.exchange_rate,
     notes: invoice.notes,
@@ -393,7 +545,7 @@ export default function InvoiceDetailPage() {
           {flow && (
             <button
               type="button"
-              onClick={flow.next === 'Pagada' ? () => setShowPaymentModal(true) : advanceStatus}
+              onClick={flow.next === 'Pagada' ? openPaymentModal : advanceStatus}
               disabled={advancing}
               className={primaryButtonClass}
             >
@@ -416,12 +568,15 @@ export default function InvoiceDetailPage() {
               </button>
             )}
           </PDFDownloadLink>
-          {invoice.invoice_type === 'Factura' && !['Anulada'].includes(invoice.status) && (
+          {invoice.invoice_type === 'Factura'
+            && !['Borrador', 'Anulada'].includes(invoice.status) && (
             <>
               <button
                 type="button"
                 onClick={() => router.push(`/invoicing/new?parent=${invoice.id}&doc_type=nc`)}
-                className="inline-flex items-center gap-2 rounded-xl border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30"
+                disabled={pending <= 0}
+                title={pending <= 0 ? 'La factura no tiene saldo pendiente' : 'Crear nota de crédito'}
+                className="inline-flex items-center gap-2 rounded-xl border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/30"
               >
                 <MinusCircle className="h-4 w-4" />
                 Nota de Crédito
@@ -512,7 +667,7 @@ export default function InvoiceDetailPage() {
                 && ['Factura', 'Proforma'].includes(invoice.invoice_type) && (
                 <button
                   type="button"
-                  onClick={() => setShowPaymentModal(true)}
+                  onClick={openPaymentModal}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -530,6 +685,7 @@ export default function InvoiceDetailPage() {
                     <tr className="border-b border-slate-200 dark:border-slate-700">
                       <th className="pb-2 pr-4">Fecha</th>
                       <th className="pb-2 pr-4">Método</th>
+                      <th className="pb-2 pr-4">Punto de venta</th>
                       <th className="pb-2 pr-4">Referencia</th>
                       <th className="pb-2 text-right">Monto</th>
                       <th className="pb-2" />
@@ -539,7 +695,23 @@ export default function InvoiceDetailPage() {
                     {payments.map((p) => (
                       <tr key={p.id} className={`border-b border-slate-100 dark:border-slate-800 ${p.status === 'Reversado' ? 'opacity-60' : ''}`}>
                         <td className="py-2.5 pr-4">{formatDate(p.payment_date)}</td>
-                        <td className="pr-4 text-slate-600 dark:text-slate-400">{p.payment_method || '—'}</td>
+                        <td className="pr-4 text-slate-600 dark:text-slate-400">
+                          <div>{paymentMethodLabel(p.payment_method)}</div>
+                          {p.invoice_fiscal_type && (
+                            <div className="mt-1 text-xs text-slate-400">{p.invoice_fiscal_type}</div>
+                          )}
+                          {p.invoice_payment_splits.length > 1 && (
+                            <div className="mt-1 space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                              {p.invoice_payment_splits.map((split) => (
+                                <div key={split.id}>
+                                  {paymentMethodLabel(split.payment_method)}: {p.currency}{' '}
+                                  {Number(split.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="pr-4 text-slate-600 dark:text-slate-400">{p.point_of_sale || '—'}</td>
                         <td className="pr-4 text-slate-600 dark:text-slate-400">
                           <div>{p.reference || '—'}</div>
                           {p.status === 'Reversado' && (
@@ -617,6 +789,12 @@ export default function InvoiceDetailPage() {
             <InfoRow label="Estado" value={invoice.status} />
             <InfoRow label="Emisión" value={formatDate(invoice.issue_date)} />
             <InfoRow label="Vencimiento" value={formatDate(invoice.due_date)} />
+            <InfoRow
+              label="Condición de pago"
+              value={invoice.payment_condition === 'Credito'
+                ? `Crédito · ${invoice.credit_days || 0} días`
+                : invoice.payment_condition}
+            />
             {invoice.paid_date && <InfoRow label="Pagado el" value={formatDate(invoice.paid_date)} />}
           </section>
 
@@ -681,6 +859,7 @@ export default function InvoiceDetailPage() {
                         {note.invoice_number || 'Sin número'}
                       </span>
                       <span className="ml-2 text-xs text-slate-500">{formatDate(note.issue_date)}</span>
+                      <span className="ml-2 text-xs text-slate-400">{note.status}</span>
                     </div>
                     <span className={`font-semibold ${note.invoice_type === 'Nota de Crédito' ? 'text-rose-600 dark:text-rose-400' : 'text-orange-600 dark:text-orange-400'}`}>
                       {note.invoice_type === 'Nota de Crédito' ? '-' : '+'}{note.currency} {note.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
@@ -695,7 +874,7 @@ export default function InvoiceDetailPage() {
                     <span className="text-slate-500 dark:text-slate-400">Factura original</span>
                     <span>{invoice.currency} {invoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
-                  {linkedNotes.map((note) => (
+                  {appliedLinkedNotes.map((note) => (
                     <div key={note.id} className="flex justify-between text-sm">
                       <span className="text-slate-500 dark:text-slate-400">{note.invoice_type === 'Nota de Crédito' ? 'Crédito' : 'Débito'}</span>
                       <span className={note.invoice_type === 'Nota de Crédito' ? 'text-rose-600' : 'text-orange-600'}>
@@ -708,7 +887,7 @@ export default function InvoiceDetailPage() {
                     <span className="text-slate-900 dark:text-white">
                       {invoice.currency} {(
                         invoice.total +
-                        linkedNotes.reduce((s, n) => s + (n.invoice_type === 'Nota de Débito' ? n.total : -n.total), 0)
+                        appliedLinkedNotes.reduce((s, n) => s + (n.invoice_type === 'Nota de Débito' ? n.total : -n.total), 0)
                       ).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -732,7 +911,7 @@ export default function InvoiceDetailPage() {
       {/* Payment modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-[#0b1220]">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-2xl dark:bg-[#0b1220]">
             <div className="border-b border-slate-200 p-5 dark:border-slate-700">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Registrar pago</h2>
             </div>
@@ -752,6 +931,44 @@ export default function InvoiceDetailPage() {
                   className={fieldClass}
                 />
               </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Tipo fiscal de factura <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={payFiscalType}
+                    onChange={(e) => setPayFiscalType(e.target.value as InvoiceFiscalType)}
+                    className={fieldClass}
+                  >
+                    {invoice.invoice_type === 'Proforma' ? (
+                      <option value="No aplica">No aplica</option>
+                    ) : (
+                      <>
+                        <option value="Gravada">Gravada</option>
+                        <option value="Mixta">Mixta</option>
+                        <option value="Exenta">Exenta</option>
+                        <option value="Exonerada">Exonerada</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Punto de venta <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={payPointOfSale}
+                    onChange={(e) => setPayPointOfSale(e.target.value)}
+                    className={fieldClass}
+                  >
+                    <option value="">Seleccionar ciudad...</option>
+                    {pointsOfSale.map((point) => (
+                      <option key={point} value={point}>{point}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                   Fecha de pago <span className="text-red-500">*</span>
@@ -766,27 +983,103 @@ export default function InvoiceDetailPage() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Método de pago
+                  Forma de pago <span className="text-red-500">*</span>
                 </label>
-                <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className={fieldClass}>
-                  <option value="">Seleccionar...</option>
-                  <option value="Transferencia">Transferencia bancaria</option>
-                  <option value="Cheque">Cheque</option>
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Otro">Otro</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Referencia / No. de transacción
-                </label>
-                <input
-                  type="text"
-                  value={payRef}
-                  onChange={(e) => setPayRef(e.target.value)}
+                <select
+                  value={payMethod}
+                  onChange={(e) => {
+                    const method = e.target.value as PaymentMethod | ''
+                    setPayMethod(method)
+                    setPayRef('')
+                    if (method !== 'Mixto') setPaySplits(emptyPaymentSplits())
+                  }}
                   className={fieldClass}
-                />
+                >
+                  <option value="">Seleccionar...</option>
+                  {PAYMENT_METHODS.map((method) => (
+                    <option key={method.value} value={method.value}>{method.label}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Condición de la factura: {invoice.payment_condition === 'Credito'
+                    ? `Crédito · ${invoice.credit_days || 0} días`
+                    : 'Contado'}
+                </p>
               </div>
+              {payMethod === 'Mixto' && (
+                <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Desglose mixto</h3>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      Total: {invoice.currency}{' '}
+                      {SPLIT_METHODS.reduce((sum, method) => (
+                        sum + (paySplits[method.value].enabled ? Number(paySplits[method.value].amount || 0) : 0)
+                      ), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {SPLIT_METHODS.map((method) => {
+                      const split = paySplits[method.value]
+                      return (
+                        <div key={method.value} className="grid items-center gap-2 sm:grid-cols-[120px_1fr_1.4fr]">
+                          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={split.enabled}
+                              onChange={(e) => setPaySplits((current) => ({
+                                ...current,
+                                [method.value]: {
+                                  ...current[method.value],
+                                  enabled: e.target.checked,
+                                  amount: e.target.checked ? current[method.value].amount : '',
+                                  reference: e.target.checked ? current[method.value].reference : '',
+                                },
+                              }))}
+                            />
+                            {method.label}
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={split.amount}
+                            disabled={!split.enabled}
+                            onChange={(e) => setPaySplits((current) => ({
+                              ...current,
+                              [method.value]: { ...current[method.value], amount: e.target.value },
+                            }))}
+                            placeholder="Monto"
+                            className={`${fieldClass} disabled:opacity-50`}
+                          />
+                          <input
+                            value={split.reference}
+                            disabled={!split.enabled}
+                            onChange={(e) => setPaySplits((current) => ({
+                              ...current,
+                              [method.value]: { ...current[method.value], reference: e.target.value },
+                            }))}
+                            placeholder={paymentReferenceLabel(method.value)}
+                            className={`${fieldClass} disabled:opacity-50`}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {payMethod && payMethod !== 'Mixto' && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    {paymentReferenceLabel(payMethod)} <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={payRef}
+                    onChange={(e) => setPayRef(e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
+              )}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                   Notas

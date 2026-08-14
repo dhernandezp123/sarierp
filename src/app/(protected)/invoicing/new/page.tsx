@@ -31,6 +31,8 @@ type Cliente = {
   rtn: string | null
   direccion: string | null
   email: string | null
+  condicion_pago?: string | null
+  dias_credito?: number | null
 }
 
 type Quotation = {
@@ -61,6 +63,7 @@ type ParentInvoice = {
   cliente_email: string | null
   total: number
   currency: string
+  balance: number
 }
 
 function newItem(): InvoiceItem {
@@ -82,6 +85,30 @@ function fmtDate(iso: string) {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
+}
+
+function getClientPaymentTerms(client: Cliente | null) {
+  const normalizedCondition = (client?.condicion_pago || 'Contado')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+  const creditDays = Number(client?.dias_credito || 0)
+  const isCredit = normalizedCondition.startsWith('credito') || creditDays > 0
+
+  return {
+    condition: isCredit ? 'Credito' as const : 'Contado' as const,
+    creditDays: isCredit ? creditDays : 0,
+  }
+}
+
+function calculateDueDate(issueDate: string, client: Cliente | null, type: InvoiceType) {
+  if (!issueDate || !client || IS_NOTE[type]) return ''
+  const { condition, creditDays } = getClientPaymentTerms(client)
+  if (condition === 'Credito' && creditDays <= 0) return ''
+
+  const date = new Date(`${issueDate}T00:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + creditDays)
+  return date.toISOString().slice(0, 10)
 }
 
 const IS_FISCAL: Record<InvoiceType, boolean> = {
@@ -143,7 +170,7 @@ export default function NewInvoicePage() {
   useEffect(() => {
     const init = async () => {
       const [clientesRes, settingsRes] = await Promise.all([
-        supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1').order('nombre'),
+        supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito').order('nombre'),
         supabase.from('company_settings').select('exchange_rate_usd_hnl').limit(1).single(),
       ])
 
@@ -157,14 +184,25 @@ export default function NewInvoicePage() {
         const type: InvoiceType = docType === 'nd' ? 'Nota de Débito' : 'Nota de Crédito'
         setInvoiceType(type)
 
-        const { data: parent } = await supabase
-          .from('invoices')
-          .select('id, invoice_number, invoice_type, cliente_id, cliente_nombre, cliente_rtn, cliente_direccion, cliente_email, total, currency')
-          .eq('id', parentId)
-          .single()
+        const [parentResult, receivableResult] = await Promise.all([
+          supabase
+            .from('invoices')
+            .select('id, invoice_number, invoice_type, cliente_id, cliente_nombre, cliente_rtn, cliente_direccion, cliente_email, total, currency')
+            .eq('id', parentId)
+            .single(),
+          supabase
+            .from('invoice_receivables')
+            .select('balance')
+            .eq('invoice_id', parentId)
+            .maybeSingle(),
+        ])
+        const parent = parentResult.data
 
         if (parent) {
-          setParentInvoice(parent as ParentInvoice)
+          setParentInvoice({
+            ...parent,
+            balance: Number(receivableResult.data?.balance ?? parent.total),
+          } as ParentInvoice)
           setCurrency(parent.currency)
           if (parent.cliente_id) {
             setClienteId(parent.cliente_id)
@@ -272,6 +310,7 @@ export default function NewInvoicePage() {
   const taxAmount = isv15Amount + isv18Amount
   const total = subtotal + taxAmount
   const totalLps = currency === 'USD' ? total * (parseFloat(exchangeRate) || 1) : total
+  const paymentTerms = getClientPaymentTerms(selectedCliente)
 
   const handleSave = async () => {
     setSubmitted(true)
@@ -285,6 +324,16 @@ export default function NewInvoicePage() {
     }
     if (IS_NOTE[invoiceType] && !motivo) {
       toast.error('El motivo es requerido para notas de crédito / débito')
+      return
+    }
+    if (invoiceType === 'Nota de Crédito'
+      && parentInvoice
+      && total > parentInvoice.balance + 0.005) {
+      toast.error('La nota de crédito no puede superar el saldo pendiente de la factura')
+      return
+    }
+    if (!IS_NOTE[invoiceType] && paymentTerms.condition === 'Credito' && paymentTerms.creditDays <= 0) {
+      toast.error('El cliente está configurado a crédito pero no tiene días de crédito válidos')
       return
     }
     // SAR: RTN obligatorio en documentos fiscales (compra > L.100, que aplica a todos los servicios de forwarding)
@@ -405,6 +454,9 @@ export default function NewInvoicePage() {
             <p className="text-blue-600 dark:text-blue-400">
               Cliente: {parentInvoice.cliente_nombre} · Total: {parentInvoice.currency} {parentInvoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </p>
+            <p className="text-blue-600 dark:text-blue-400">
+              Saldo pendiente: {parentInvoice.currency} {parentInvoice.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
           </div>
         </div>
       )}
@@ -422,7 +474,11 @@ export default function NewInvoicePage() {
                 </label>
                 <select
                   value={invoiceType}
-                  onChange={(e) => setInvoiceType(e.target.value as InvoiceType)}
+                  onChange={(e) => {
+                    const nextType = e.target.value as InvoiceType
+                    setInvoiceType(nextType)
+                    setDueDate(calculateDueDate(issueDate, selectedCliente, nextType))
+                  }}
                   disabled={!!parentInvoice}
                   className={`${fieldClass} ${reqClass(submitted, invoiceType)} disabled:opacity-60`}
                 >
@@ -445,7 +501,12 @@ export default function NewInvoicePage() {
                 ) : (
                   <select
                     value={clienteId}
-                    onChange={(e) => setClienteId(e.target.value)}
+                    onChange={(e) => {
+                      const nextClientId = e.target.value
+                      const nextClient = clientes.find((client) => client.id === nextClientId) || null
+                      setClienteId(nextClientId)
+                      setDueDate(calculateDueDate(issueDate, nextClient, invoiceType))
+                    }}
                     className={`${fieldClass} ${reqClass(submitted, clienteId)}`}
                   >
                     <option value="">Seleccionar cliente...</option>
@@ -486,7 +547,11 @@ export default function NewInvoicePage() {
                 <input
                   type="date"
                   value={issueDate}
-                  onChange={(e) => setIssueDate(e.target.value)}
+                  onChange={(e) => {
+                    const nextIssueDate = e.target.value
+                    setIssueDate(nextIssueDate)
+                    setDueDate(calculateDueDate(nextIssueDate, selectedCliente, invoiceType))
+                  }}
                   className={`${fieldClass} ${reqClass(submitted, issueDate)}`}
                 />
               </div>
@@ -495,13 +560,13 @@ export default function NewInvoicePage() {
               {!isNote && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Fecha de vencimiento
+                    Fecha de vencimiento ({paymentTerms.condition === 'Credito' ? `Crédito · ${paymentTerms.creditDays} días` : 'Contado'})
                   </label>
                   <input
                     type="date"
                     value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className={fieldClass}
+                    readOnly
+                    className={`${fieldClass} bg-slate-50 dark:bg-slate-800`}
                   />
                 </div>
               )}
