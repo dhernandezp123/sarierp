@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon } from 'lucide-react'
+import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon, LockKeyhole } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
@@ -18,6 +18,7 @@ type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débit
 
 type InvoiceItem = {
   id: string
+  source_pricing_item_id?: string
   description: string
   quantity: string
   unit_price: string
@@ -38,8 +39,26 @@ type Cliente = {
 type Quotation = {
   id: string
   quotation_number: string | null
+  cliente_id: string | null
+  status: string | null
+  financial_validation_status: string | null
   clientes: { nombre: string | null }[] | { nombre: string | null } | null
   total_sale: number | null
+  invoices?: Array<{
+    id: string
+    status: string
+    invoice_type: string
+  }> | null
+}
+
+type PricingItem = {
+  id: string
+  description: string
+  quantity: number | null
+  sale_amount: number | null
+  currency: string | null
+  taxable: boolean | null
+  tax_rate: number | null
 }
 
 type CaiRange = {
@@ -64,6 +83,22 @@ type ParentInvoice = {
   total: number
   currency: string
   balance: number
+}
+
+function quotationHasActiveInvoice(quotation: Quotation) {
+  return Boolean(quotation.invoices?.some((invoice) => (
+    invoice.invoice_type === 'Factura' && invoice.status !== 'Anulada'
+  )))
+}
+
+async function fetchQuotationPricingItems(quotationId: string) {
+  return supabase
+    .from('pricing_items')
+    .select('id, description, quantity, sale_amount, currency, taxable, tax_rate')
+    .eq('quotation_id', quotationId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 }
 
 function newItem(): InvoiceItem {
@@ -142,6 +177,8 @@ export default function NewInvoicePage() {
   const [motivo, setMotivo] = useState('')
   const [items, setItems] = useState<InvoiceItem[]>([newItem()])
   const [itemPendingRemoval, setItemPendingRemoval] = useState<InvoiceItem | null>(null)
+  const [quotationChangePending, setQuotationChangePending] = useState<string | null>(null)
+  const [loadingQuotation, setLoadingQuotation] = useState(false)
 
   // SAR fields
   const [activeCai, setActiveCai] = useState<CaiRange | null>(null)
@@ -154,9 +191,11 @@ export default function NewInvoicePage() {
   const [parentInvoice, setParentInvoice] = useState<ParentInvoice | null>(null)
   const parentId = searchParams.get('parent')
   const docType = searchParams.get('doc_type') // 'nc' | 'nd'
+  const requestedQuotationId = searchParams.get('quotation')
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [quotations, setQuotations] = useState<Quotation[]>([])
+  const selectedQuotation = quotations.find((quotation) => quotation.id === quotationId) || null
   const selectedCliente: Cliente | null = parentInvoice?.cliente_id
     ? {
         id: parentInvoice.cliente_id,
@@ -166,6 +205,76 @@ export default function NewInvoicePage() {
         email: parentInvoice.cliente_email,
       }
     : clientes.find((client) => client.id === clienteId) || null
+
+  const applyQuotation = useCallback(async (quotation: Quotation) => {
+    if (quotation.status !== 'Ganada') {
+      toast.error('La cotización debe estar Ganada antes de facturar')
+      return false
+    }
+    if (quotation.financial_validation_status !== 'Validado') {
+      toast.error('La cotización debe tener sus costos validados antes de facturar')
+      return false
+    }
+    if (quotationHasActiveInvoice(quotation)) {
+      toast.error('Esta cotización ya tiene una factura activa')
+      return false
+    }
+
+    setLoadingQuotation(true)
+    const { data, error } = await fetchQuotationPricingItems(quotation.id)
+    if (error) {
+      toast.error('No se pudieron cargar las líneas de la cotización', { description: error.message })
+      setLoadingQuotation(false)
+      return false
+    }
+
+    const pricingItems = (data || []) as PricingItem[]
+    if (pricingItems.length === 0) {
+      toast.error('La cotización no tiene líneas comerciales para facturar')
+      setLoadingQuotation(false)
+      return false
+    }
+
+    const currencies = Array.from(new Set(
+      pricingItems.map((item) => item.currency || 'USD')
+    ))
+    if (currencies.length !== 1 || !['USD', 'HNL'].includes(currencies[0])) {
+      toast.error('Todas las líneas de la cotización deben usar una sola moneda válida')
+      setLoadingQuotation(false)
+      return false
+    }
+
+    const invalidItem = pricingItems.some((item) => {
+      const rate = item.taxable ? Number(item.tax_rate || 0) : 0
+      return !item.description.trim()
+        || Number(item.quantity || 0) <= 0
+        || Number(item.sale_amount ?? -1) < 0
+        || ![0, 15, 18].includes(rate)
+    })
+    if (invalidItem) {
+      toast.error('La cotización contiene líneas no facturables; revisa cantidad, precio e ISV')
+      setLoadingQuotation(false)
+      return false
+    }
+
+    setQuotationId(quotation.id)
+    setCurrency(currencies[0])
+    setItems(pricingItems.map((item) => {
+      const quantity = Number(item.quantity || 0)
+      const unitPrice = Number(item.sale_amount || 0)
+      return {
+        id: crypto.randomUUID(),
+        source_pricing_item_id: item.id,
+        description: item.description,
+        quantity: String(quantity),
+        unit_price: String(unitPrice),
+        amount: quantity * unitPrice,
+        isv_rate: (item.taxable ? Number(item.tax_rate || 0) : 0) as 0 | 15 | 18,
+      }
+    }))
+    setLoadingQuotation(false)
+    return true
+  }, [])
 
   useEffect(() => {
     const init = async () => {
@@ -177,6 +286,32 @@ export default function NewInvoicePage() {
       setClientes((clientesRes.data || []) as Cliente[])
       if (settingsRes.data?.exchange_rate_usd_hnl) {
         setExchangeRate(String(settingsRes.data.exchange_rate_usd_hnl))
+      }
+
+      if (requestedQuotationId && !parentId) {
+        const { data: requestedQuotation, error: quotationError } = await supabase
+          .from('quotations')
+          .select('id, quotation_number, cliente_id, status, financial_validation_status, clientes(nombre), total_sale, invoices(id, status, invoice_type)')
+          .eq('id', requestedQuotationId)
+          .is('deleted_at', null)
+          .single()
+
+        if (quotationError || !requestedQuotation) {
+          toast.error('No se encontró la cotización solicitada')
+        } else {
+          const quotation = requestedQuotation as Quotation
+          const requestedClient = (clientesRes.data || []).find(
+            (client) => client.id === quotation.cliente_id
+          ) as Cliente | undefined
+          setClienteId(quotation.cliente_id || '')
+          setDueDate(calculateDueDate(
+            new Date().toISOString().slice(0, 10),
+            requestedClient || null,
+            'Factura'
+          ))
+          setQuotations([quotation])
+          await applyQuotation(quotation)
+        }
       }
 
       // If creating NC/ND from a parent invoice
@@ -211,7 +346,7 @@ export default function NewInvoicePage() {
           // Pre-fill items from parent
           const { data: parentItems } = await supabase
             .from('invoice_items')
-            .select('description, quantity, unit_price, amount, sort_order')
+            .select('description, quantity, unit_price, amount, sort_order, isv_rate')
             .eq('invoice_id', parentId)
             .order('sort_order')
 
@@ -222,7 +357,7 @@ export default function NewInvoicePage() {
               quantity: String(it.quantity),
               unit_price: String(it.unit_price),
               amount: it.amount,
-              isv_rate: 15 as const,
+              isv_rate: Number(it.isv_rate || 0) as 0 | 15 | 18,
             })))
           }
         }
@@ -234,7 +369,7 @@ export default function NewInvoicePage() {
     }
 
     init()
-  }, [parentId, docType])
+  }, [parentId, docType, requestedQuotationId, applyQuotation])
 
   useEffect(() => {
     const timeout = window.setTimeout(async () => {
@@ -260,16 +395,43 @@ export default function NewInvoicePage() {
   }, [invoiceType])
 
   useEffect(() => {
-    if (!clienteId || parentId) return
+    if (!clienteId || parentId || invoiceType !== 'Factura') {
+      return
+    }
     supabase
       .from('quotations')
-      .select('id, quotation_number, clientes(nombre), total_sale')
+      .select('id, quotation_number, cliente_id, status, financial_validation_status, clientes(nombre), total_sale, invoices(id, status, invoice_type)')
       .eq('cliente_id', clienteId)
       .eq('status', 'Ganada')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .then(({ data }) => setQuotations((data || []) as Quotation[]))
-  }, [clienteId, parentId])
+  }, [clienteId, parentId, invoiceType])
+
+  const requestQuotationChange = (nextQuotationId: string) => {
+    if (nextQuotationId === quotationId) return
+    const hasMeaningfulData = items.some((item) => (
+      item.description.trim() || Number(item.unit_price || 0) > 0 || item.amount > 0
+    ))
+    if (hasMeaningfulData) {
+      setQuotationChangePending(nextQuotationId)
+      return
+    }
+    const quotation = quotations.find((option) => option.id === nextQuotationId)
+    if (quotation) void applyQuotation(quotation)
+  }
+
+  const applyPendingQuotationChange = async () => {
+    const nextQuotationId = quotationChangePending
+    setQuotationChangePending(null)
+    if (!nextQuotationId) {
+      setQuotationId('')
+      setItems([newItem()])
+      return
+    }
+    const quotation = quotations.find((option) => option.id === nextQuotationId)
+    if (quotation) await applyQuotation(quotation)
+  }
 
   const updateItem = (id: string, field: keyof InvoiceItem, value: string | number) => {
     setItems((prev) =>
@@ -363,34 +525,44 @@ export default function NewInvoicePage() {
       toast.error('Ingresa el número de Orden de Compra Exenta')
       return
     }
+    if (quotationId && selectedQuotation?.financial_validation_status !== 'Validado') {
+      toast.error('Los costos de la cotización deben estar validados antes de facturar')
+      return
+    }
 
     setSaving(true)
 
-    const { data, error } = await supabase.rpc('create_invoice_with_items', {
-      p_invoice: {
-        invoice_type: invoiceType,
-        quotation_id: quotationId || null,
-        cliente_id: clienteId,
-        issue_date: issueDate,
-        due_date: dueDate || null,
-        currency,
-        exchange_rate: parseFloat(exchangeRate) || 1,
-        notes: notes || null,
-        motivo: IS_NOTE[invoiceType] ? motivo : null,
-        parent_invoice_id: parentId || null,
-        es_exonerado: esExonerado,
-        orden_compra_exenta: esExonerado ? ordenCompraExenta || null : null,
-        no_constancia_exonerado: esExonerado ? noConstanciaExonerado || null : null,
-        no_registro_sag: esExonerado ? noRegistroSag || null : null,
-      },
-      p_items: items.map((item, index) => ({
+    const invoicePayload = {
+      invoice_type: invoiceType,
+      cliente_id: clienteId,
+      issue_date: issueDate,
+      due_date: dueDate || null,
+      currency,
+      exchange_rate: parseFloat(exchangeRate) || 1,
+      notes: notes || null,
+      motivo: IS_NOTE[invoiceType] ? motivo : null,
+      parent_invoice_id: parentId || null,
+      es_exonerado: esExonerado,
+      orden_compra_exenta: esExonerado ? ordenCompraExenta || null : null,
+      no_constancia_exonerado: esExonerado ? noConstanciaExonerado || null : null,
+      no_registro_sag: esExonerado ? noRegistroSag || null : null,
+    }
+    const itemPayload = items.map((item, index) => ({
         description: item.description.trim(),
         quantity: parseFloat(item.quantity) || 0,
         unit_price: parseFloat(item.unit_price) || 0,
         isv_rate: item.isv_rate,
         sort_order: index,
-      })),
-    })
+      }))
+    const { data, error } = quotationId
+      ? await supabase.rpc('create_invoice_from_quotation', {
+          p_invoice: invoicePayload,
+          p_quotation_id: quotationId,
+        })
+      : await supabase.rpc('create_manual_invoice_with_items', {
+          p_invoice: invoicePayload,
+          p_items: itemPayload,
+        })
 
     const invoice = (data as { invoice_id: string; invoice_number: string }[] | null)?.[0]
 
@@ -479,7 +651,7 @@ export default function NewInvoicePage() {
                     setInvoiceType(nextType)
                     setDueDate(calculateDueDate(issueDate, selectedCliente, nextType))
                   }}
-                  disabled={!!parentInvoice}
+                  disabled={!!parentInvoice || Boolean(quotationId)}
                   className={`${fieldClass} ${reqClass(submitted, invoiceType)} disabled:opacity-60`}
                 >
                   <option value="Factura">Factura</option>
@@ -505,9 +677,11 @@ export default function NewInvoicePage() {
                       const nextClientId = e.target.value
                       const nextClient = clientes.find((client) => client.id === nextClientId) || null
                       setClienteId(nextClientId)
+                      setQuotations([])
                       setDueDate(calculateDueDate(issueDate, nextClient, invoiceType))
                     }}
-                    className={`${fieldClass} ${reqClass(submitted, clienteId)}`}
+                    disabled={Boolean(quotationId)}
+                    className={`${fieldClass} ${reqClass(submitted, clienteId)} disabled:bg-slate-50 disabled:opacity-70 dark:disabled:bg-slate-800`}
                   >
                     <option value="">Seleccionar cliente...</option>
                     {clientes.map((c) => (
@@ -517,25 +691,48 @@ export default function NewInvoicePage() {
                 )}
               </div>
 
-              {/* Cotización (solo sin parent y sin nota) */}
-              {!parentId && !isNote && quotations.length > 0 && (
+              {/* Cotización validada (solo Factura) */}
+              {!parentId && invoiceType === 'Factura' && clienteId && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Cotización vinculada (opcional)
+                    Cotización validada (opcional)
                   </label>
-                  <select
-                    value={quotationId}
-                    onChange={(e) => setQuotationId(e.target.value)}
-                    className={fieldClass}
-                  >
-                    <option value="">Sin vinculación</option>
-                    {quotations.map((q) => (
-                      <option key={q.id} value={q.id}>
-                        {q.quotation_number || q.id}
-                        {q.total_sale ? ` — USD ${Number(q.total_sale).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={quotationId}
+                      onChange={(e) => requestQuotationChange(e.target.value)}
+                      disabled={Boolean(quotationId) || loadingQuotation}
+                      className={`${fieldClass} disabled:bg-slate-50 disabled:opacity-70 dark:disabled:bg-slate-800`}
+                    >
+                      <option value="">Factura manual</option>
+                      {quotations.map((q) => {
+                        const alreadyInvoiced = quotationHasActiveInvoice(q)
+                        const validated = q.financial_validation_status === 'Validado'
+                        return (
+                          <option key={q.id} value={q.id} disabled={!validated || alreadyInvoiced}>
+                            {q.quotation_number || q.id}
+                            {q.total_sale ? ` · Total cotizado ${Number(q.total_sale).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : ''}
+                            {!validated ? ' · Costos pendientes' : ''}
+                            {alreadyInvoiced ? ' · Ya facturada' : ''}
+                          </option>
+                        )
+                      })}
+                    </select>
+                    {quotationId && (
+                      <button
+                        type="button"
+                        onClick={() => setQuotationChangePending('')}
+                        className={secondaryButtonClass}
+                      >
+                        Desvincular
+                      </button>
+                    )}
+                  </div>
+                  {quotations.length === 0 && (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Este cliente no tiene cotizaciones ganadas disponibles.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -579,7 +776,7 @@ export default function NewInvoicePage() {
                 <select
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
-                  disabled={clienteLocked}
+                  disabled={clienteLocked || Boolean(quotationId)}
                   className={`${fieldClass} disabled:opacity-60`}
                 >
                   <option value="USD">USD</option>
@@ -719,18 +916,39 @@ export default function NewInvoicePage() {
             </section>
           )}
 
+          {selectedQuotation && (
+            <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/20">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div className="text-sm">
+                <p className="font-semibold text-emerald-800 dark:text-emerald-200">
+                  Cotización {selectedQuotation.quotation_number || selectedQuotation.id} validada
+                </p>
+                <p className="text-emerald-700 dark:text-emerald-300">
+                  Las líneas, moneda, cantidades, precios e ISV se tomarán de la cotización y se verificarán nuevamente al generar la factura.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Line items */}
           <section className={cardClass}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">Líneas del documento</h2>
-              <button
-                type="button"
-                onClick={() => setItems((prev) => [...prev, newItem()])}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Agregar línea
-              </button>
+              {quotationId ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                  <LockKeyhole className="h-3.5 w-3.5" />
+                  Origen protegido
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setItems((prev) => [...prev, newItem()])}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Agregar línea
+                </button>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -753,7 +971,8 @@ export default function NewInvoicePage() {
                     placeholder="Descripción del servicio..."
                     value={it.description}
                     onChange={(e) => updateItem(it.id, 'description', e.target.value)}
-                    className={`${fieldClass} text-sm ${submitted && !it.description ? 'border-red-400' : ''}`}
+                    readOnly={Boolean(it.source_pricing_item_id)}
+                    className={`${fieldClass} text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800 ${submitted && !it.description ? 'border-red-400' : ''}`}
                   />
                   <input
                     type="number"
@@ -761,7 +980,8 @@ export default function NewInvoicePage() {
                     onChange={(e) => updateItem(it.id, 'quantity', e.target.value)}
                     min="0"
                     step="1"
-                    className={`${fieldClass} text-right text-sm`}
+                    readOnly={Boolean(it.source_pricing_item_id)}
+                    className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
                   />
                   <input
                     type="number"
@@ -769,13 +989,15 @@ export default function NewInvoicePage() {
                     onChange={(e) => updateItem(it.id, 'unit_price', e.target.value)}
                     min="0"
                     step="0.01"
-                    className={`${fieldClass} text-right text-sm`}
+                    readOnly={Boolean(it.source_pricing_item_id)}
+                    className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
                   />
                   {isFiscal && (
                     <select
                       value={it.isv_rate}
                       onChange={(e) => updateItem(it.id, 'isv_rate', Number(e.target.value) as 0 | 15 | 18)}
-                      className={`${fieldClass} text-center text-sm`}
+                      disabled={Boolean(it.source_pricing_item_id)}
+                      className={`${fieldClass} text-center text-sm disabled:bg-slate-50 disabled:text-slate-600 dark:disabled:bg-slate-800`}
                     >
                       <option value={15}>15%</option>
                       <option value={18}>18%</option>
@@ -785,14 +1007,23 @@ export default function NewInvoicePage() {
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-sm font-medium dark:border-slate-700 dark:bg-slate-800 dark:text-white">
                     {it.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => requestItemRemoval(it)}
-                    disabled={items.length === 1}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-30 dark:hover:bg-rose-950/30"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {it.source_pricing_item_id ? (
+                    <span
+                      title="Línea vinculada a la cotización"
+                      className="flex h-9 w-9 items-center justify-center text-emerald-600 dark:text-emerald-400"
+                    >
+                      <LockKeyhole className="h-4 w-4" />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => requestItemRemoval(it)}
+                      disabled={items.length === 1}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-30 dark:hover:bg-rose-950/30"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -891,10 +1122,10 @@ export default function NewInvoicePage() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || loadingQuotation}
             className={`w-full ${primaryButtonClass}`}
           >
-            {saving ? 'Guardando...' : `Crear ${docLabel}`}
+            {saving ? 'Generando...' : `Generar ${docLabel}`}
           </button>
           <button
             type="button"
@@ -905,6 +1136,17 @@ export default function NewInvoicePage() {
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={quotationChangePending !== null}
+        onOpenChange={(open) => { if (!open) setQuotationChangePending(null) }}
+        title={quotationChangePending ? 'Cargar líneas de cotización' : 'Desvincular cotización'}
+        description={quotationChangePending
+          ? 'Se reemplazarán las líneas actuales por las líneas comerciales validadas de la cotización.'
+          : 'Se descartarán las líneas importadas y la factura volverá al modo manual.'}
+        confirmLabel={quotationChangePending ? 'Cargar cotización' : 'Desvincular'}
+        danger={!quotationChangePending}
+        onConfirm={applyPendingQuotationChange}
+      />
       <ConfirmDialog
         open={itemPendingRemoval !== null}
         onOpenChange={(open) => { if (!open) setItemPendingRemoval(null) }}

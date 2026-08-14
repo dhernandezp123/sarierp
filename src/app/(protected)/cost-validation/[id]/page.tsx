@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { FilePlus2, ReceiptText } from 'lucide-react'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
@@ -23,6 +24,12 @@ type CostValidationBooking = {
   eta: string | null
   shipment_status: string | null
   booking_containers: CostValidationBookingContainer[] | null
+}
+
+type LinkedCustomerInvoice = {
+  id: string
+  invoice_number: string | null
+  status: string
 }
 
 export default function CostValidationDetailPage() {
@@ -50,6 +57,7 @@ export default function CostValidationDetailPage() {
   const [shipmentContext, setShipmentContext] = useState<any>(null)
   const [pricingItems, setPricingItems] = useState<any[]>([])
   const [invoiceItems, setInvoiceItems] = useState<any[]>([])
+  const [linkedCustomerInvoice, setLinkedCustomerInvoice] = useState<LinkedCustomerInvoice | null>(null)
   const [taxRates, setTaxRates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
@@ -202,10 +210,27 @@ export default function CostValidationDetailPage() {
       return
     }
 
+    const { data: customerInvoiceData, error: customerInvoiceError } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, status')
+      .eq('quotation_id', quotationId)
+      .eq('invoice_type', 'Factura')
+      .neq('status', 'Anulada')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (customerInvoiceError) {
+      toast.error(customerInvoiceError.message)
+      return
+    }
+
     setQuotation(quotationData)
     setShipmentContext(normalizedShipmentContext)
     setPricingItems(pricingData || [])
     setInvoiceItems(invoiceData || [])
+    setLinkedCustomerInvoice((customerInvoiceData as LinkedCustomerInvoice | null) ?? null)
     setLoading(false)
   }
 
@@ -483,13 +508,34 @@ export default function CostValidationDetailPage() {
               {financialStatus.label}
             </div>
 
-            {canEditCostValidation && (
+            {canEditCostValidation && quotation?.financial_validation_status !== 'Validado' && (
               <button
                 type="button"
                 onClick={() => setConfirmValidateOpen(true)}
                 className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
               >
                 Marcar como Validado
+              </button>
+            )}
+
+            {canEditCostValidation && quotation?.financial_validation_status === 'Validado' && (
+              <button
+                type="button"
+                onClick={() => router.push(
+                  linkedCustomerInvoice
+                    ? `/invoicing/${linkedCustomerInvoice.id}`
+                    : `/invoicing/new?quotation=${quotation.id}`
+                )}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800"
+              >
+                {linkedCustomerInvoice ? (
+                  <ReceiptText className="h-4 w-4" />
+                ) : (
+                  <FilePlus2 className="h-4 w-4" />
+                )}
+                {linkedCustomerInvoice
+                  ? `Ver factura ${linkedCustomerInvoice.invoice_number || ''}`.trim()
+                  : 'Generar factura'}
               </button>
             )}
           </div>
