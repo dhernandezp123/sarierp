@@ -5579,8 +5579,8 @@ Agregar una entrada por fix:
 
 ### 2026-08-14 - DEMO-002 - Flujos recientes adaptados al sandbox
 
-- Estado: Implementado y validado localmente; staging verificado en preflight,
-  con SQL, deployment Preview y UAT pendientes.
+- Estado: Implementado, migrado y desplegado en Demo; pendiente de UAT
+  autenticado con una cuenta Demo vigente.
 - Hallazgo: DEMO-002.
 - Código:
   - `src/app/(protected)/invoicing/new/page.tsx`.
@@ -5616,10 +5616,20 @@ Agregar una entrada por fix:
     desde `20260813140000` hasta `20260814110000`.
   - Preflight staging: sentinel `demo`, project ref correcto, cero duplicados
     incompatibles con índices y cero documentos sin cliente.
+  - `npx.cmd supabase db push --linked`: las seis migraciones se aplicaron
+    exclusivamente a staging, desde `20260813140000` hasta `20260814110000`.
+  - Historial local/remoto de staging alineado hasta `20260814110000` y
+    `npx.cmd supabase db lint --linked --level error`: cero errores.
+  - Verificación remota: RPC de cotización disponible para `authenticated`,
+    RPC cruda anterior revocada, tabla de desgloses e índice Demo presentes.
+  - GitHub `demo` actualizado a `48c0dd5`; Vercel Preview
+    `dpl_CExH5rXzn9mtTw23VhrvRcuSja8e` quedó `Ready` y asociado a
+    `demo.forwarders.app`.
+  - HTTP de `https://demo.forwarders.app`: `307` a `/login`, HSTS y
+    `X-Robots-Tag: noindex, nofollow, noarchive` confirmados.
 - Riesgos o trabajo pendiente:
-  - Aplicar las seis migraciones a staging, publicar la rama `demo` y confirmar
-    el deployment `Preview` asociado a `demo.forwarders.app`.
   - Ejecutar UAT autenticado de confirmaciones, impresión BL, Proforma desde
     cotización, pago/recibo y reportes. No reiniciar el dataset si un prospecto
     está utilizando actualmente el sandbox compartido.
-- Commit: incluido en este commit.
+- Commit de implementación: `48c0dd5`; evidencia operativa incluida en este
+  commit de documentación.
