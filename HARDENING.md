@@ -5134,8 +5134,8 @@ Agregar una entrada por fix:
 
 ### 2026-08-13 - UX-057 - Guardado de BL bloqueado por consulta ambigua del booking
 
-- Estado: Corregido y validado contra Production en modo solo lectura; pendiente
-  de UAT y deployment.
+- Estado: Corregido, validado y desplegado en Production; UAT de escritura
+  pendiente.
 - Hallazgo: UX-057.
 - Causa raiz:
   - La carga del editor de BL embebia `shipping_instructions` sin indicar la
@@ -5168,20 +5168,21 @@ Agregar una entrada por fix:
     `bookings.updated_at` sin exponer datos del registro.
   - `npx.cmd tsc --noEmit`: OK.
   - `npm.cmd run build`: OK; 70/70 paginas generadas.
+  - Vercel Production `dpl_BV6gvvF8JxE3Prby1kcoRfnjxC6T`: `Ready`, con alias
+    `https://forwarders.app`.
   - ESLint dirigido: no se agregaron hallazgos; la pagina conserva 8 errores y
     1 advertencia preexistentes (`any`, efecto de carga y texto JSX).
 - Verificacion manual pendiente:
   - Guardar el HBL afectado, confirmar `BL guardado` y revisar que el numero se
     refleje en el resumen del booking.
-  - Verificar el deployment en `https://forwarders.app`.
+  - Verificar manualmente el guardado con un BL real en `https://forwarders.app`.
 - Riesgos o trabajo pendiente:
   - No se ejecuto una escritura de prueba contra un BL real de Production.
-- Commit: pendiente.
+- Commit: `f2b8878`.
 
 ### 2026-08-13 - FIN-058 - Registro estructurado de pagos de factura
 
-- Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
-  pendientes.
+- Estado: Implementado, migrado y desplegado en Production; UAT pendiente.
 - Hallazgo: FIN-058.
 - Causa raiz:
   - El pago de una factura solo guardaba monto, fecha, moneda, un metodo de
@@ -5231,24 +5232,25 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; build de produccion de Next.js completado.
   - `npx.cmd supabase db push --linked`: migracion `20260813180000` aplicada al
     proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - Vercel Production `dpl_BV6gvvF8JxE3Prby1kcoRfnjxC6T`: `Ready`, con alias
+    `https://forwarders.app`.
   - `npx.cmd supabase db lint --local --level error`: conserva un hallazgo
     preexistente en `is_platform_admin()` por referencia a
     `is_demo_environment()` inexistente; no fue introducido por FIN-058.
 - Verificacion manual pendiente:
   - Registrar y reversar un pago simple y uno mixto desde la interfaz local.
   - Confirmar con Contabilidad los nombres finales de los puntos de venta.
-  - Desplegar el frontend y ejecutar UAT en Production.
+  - Ejecutar UAT en Production.
 - Riesgos o trabajo pendiente:
   - `Exenta` y `Exonerada` se validan contra la composicion fiscal ya emitida;
     registrar un pago no reclasifica ni altera los impuestos de la factura.
   - La condicion `Credito` no crea un pago ni reduce cuentas por cobrar; los
     cobros posteriores requieren un medio real y su referencia.
-- Commit: pendiente.
+- Commit: `f2b8878`.
 
 ### 2026-08-13 - FIN-059 - Condiciones de credito y aplicacion integra de notas
 
-- Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
-  pendientes.
+- Estado: Implementado, migrado y desplegado en Production; UAT pendiente.
 - Hallazgo: FIN-059.
 - Causa raiz:
   - La factura permitia editar manualmente el vencimiento y no conservaba la
@@ -5298,6 +5300,10 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; build de produccion de Next.js completado.
   - `npx.cmd supabase db push --linked`: migracion `20260813200000` aplicada al
     proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - Preflight Production de solo lectura: 55 clientes activos, 0 clientes de
+    credito sin dias validos, 0 facturas emitidas y 0 sobrepagos ajustados.
+  - Vercel Production `dpl_BV6gvvF8JxE3Prby1kcoRfnjxC6T`: `Ready`, con alias
+    `https://forwarders.app`.
   - `npx.cmd supabase db lint --local --level error`: solo conserva el hallazgo
     preexistente de `is_platform_admin()` documentado en FIN-058.
 - Verificacion manual pendiente:
@@ -5306,18 +5312,13 @@ Agregar una entrada por fix:
     mixto.
   - UAT de emision/anulacion de NC y ND desde la interfaz.
 - Riesgos o trabajo pendiente:
-  - Antes de migrar Production se debe listar clientes cuya condicion sea
-    credito y `dias_credito <= 0`; el trigger bloqueara nuevas facturas para
-    esos perfiles hasta corregirlos.
-  - Auditar si ya existen facturas donde pagos aplicados superen el total
-    ajustado por notas. La migracion protege cambios futuros, pero no inventa
-    movimientos compensatorios para datos historicos.
-- Commit: pendiente.
+  - La migracion protege cambios futuros; el UAT debe confirmar el flujo con
+    facturas nuevas porque Production todavia no tenia facturas emitidas.
+- Commit: `f2b8878`.
 
 ### 2026-08-13 - REP-010 - Reportes de facturacion y pagos completos
 
-- Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
-  pendientes.
+- Estado: Implementado, migrado y desplegado en Production; UAT pendiente.
 - Hallazgo: REP-010.
 - Causa raiz:
   - Los reportes de facturacion no consultaban condicion ni dias de credito,
@@ -5371,6 +5372,10 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; 70/70 paginas generadas.
   - `npx.cmd supabase db push --linked`: migracion `20260813210000` aplicada al
     proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - Vercel Production `dpl_BV6gvvF8JxE3Prby1kcoRfnjxC6T`: `Ready`, con alias
+    `https://forwarders.app`.
+  - Smoke HTTP: `/` y `/login` respondieron 200; `/reports` redirigio a
+    `/login?next=%2Freports` y respondio 200.
   - `git diff --check`: OK; solo avisos esperados LF/CRLF de Git.
   - `npx.cmd supabase db lint --local --level error`: la vista nueva no reporta
     errores; permanece el hallazgo preexistente de `is_platform_admin()` por
@@ -5388,7 +5393,7 @@ Agregar una entrada por fix:
   - Los pagos historicos anteriores a FIN-058 pueden no tener clasificacion,
     punto de venta o desglose; el reporte los mostrara con `-` y no inventara
     datos retroactivos.
-- Commit: pendiente.
+- Commit: `f2b8878`.
 
 ### 2026-08-13 - UX-056 - HBL Draft alineado al formato documental real
 
