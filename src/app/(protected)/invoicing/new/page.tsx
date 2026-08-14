@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -85,9 +86,13 @@ type ParentInvoice = {
   balance: number
 }
 
+const QUOTATION_DOCUMENT_TYPE: InvoiceType = IS_DEMO_ENVIRONMENT
+  ? 'Proforma'
+  : 'Factura'
+
 function quotationHasActiveInvoice(quotation: Quotation) {
   return Boolean(quotation.invoices?.some((invoice) => (
-    invoice.invoice_type === 'Factura' && invoice.status !== 'Anulada'
+    invoice.invoice_type === QUOTATION_DOCUMENT_TYPE && invoice.status !== 'Anulada'
   )))
 }
 
@@ -166,7 +171,7 @@ export default function NewInvoicePage() {
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  const [invoiceType, setInvoiceType] = useState<InvoiceType>('Factura')
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>(QUOTATION_DOCUMENT_TYPE)
   const [clienteId, setClienteId] = useState('')
   const [quotationId, setQuotationId] = useState('')
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10))
@@ -307,7 +312,7 @@ export default function NewInvoicePage() {
           setDueDate(calculateDueDate(
             new Date().toISOString().slice(0, 10),
             requestedClient || null,
-            'Factura'
+            QUOTATION_DOCUMENT_TYPE
           ))
           setQuotations([quotation])
           await applyQuotation(quotation)
@@ -395,7 +400,7 @@ export default function NewInvoicePage() {
   }, [invoiceType])
 
   useEffect(() => {
-    if (!clienteId || parentId || invoiceType !== 'Factura') {
+    if (!clienteId || parentId || invoiceType !== QUOTATION_DOCUMENT_TYPE) {
       return
     }
     supabase
@@ -654,10 +659,16 @@ export default function NewInvoicePage() {
                   disabled={!!parentInvoice || Boolean(quotationId)}
                   className={`${fieldClass} ${reqClass(submitted, invoiceType)} disabled:opacity-60`}
                 >
-                  <option value="Factura">Factura</option>
-                  <option value="Proforma">Proforma</option>
-                  <option value="Nota de Crédito">Nota de Crédito</option>
-                  <option value="Nota de Débito">Nota de Débito</option>
+                  {IS_DEMO_ENVIRONMENT ? (
+                    <option value="Proforma">Proforma Demo</option>
+                  ) : (
+                    <>
+                      <option value="Factura">Factura</option>
+                      <option value="Proforma">Proforma</option>
+                      <option value="Nota de Crédito">Nota de Crédito</option>
+                      <option value="Nota de Débito">Nota de Débito</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -691,8 +702,8 @@ export default function NewInvoicePage() {
                 )}
               </div>
 
-              {/* Cotización validada (solo Factura) */}
-              {!parentId && invoiceType === 'Factura' && clienteId && (
+              {/* Cotización validada */}
+              {!parentId && invoiceType === QUOTATION_DOCUMENT_TYPE && clienteId && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Cotización validada (opcional)
@@ -704,7 +715,9 @@ export default function NewInvoicePage() {
                       disabled={Boolean(quotationId) || loadingQuotation}
                       className={`${fieldClass} disabled:bg-slate-50 disabled:opacity-70 dark:disabled:bg-slate-800`}
                     >
-                      <option value="">Factura manual</option>
+                      <option value="">
+                        {IS_DEMO_ENVIRONMENT ? 'Proforma manual' : 'Factura manual'}
+                      </option>
                       {quotations.map((q) => {
                         const alreadyInvoiced = quotationHasActiveInvoice(q)
                         const validated = q.financial_validation_status === 'Validado'
@@ -713,7 +726,11 @@ export default function NewInvoicePage() {
                             {q.quotation_number || q.id}
                             {q.total_sale ? ` · Total cotizado ${Number(q.total_sale).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : ''}
                             {!validated ? ' · Costos pendientes' : ''}
-                            {alreadyInvoiced ? ' · Ya facturada' : ''}
+                            {alreadyInvoiced
+                              ? IS_DEMO_ENVIRONMENT
+                                ? ' · Ya vinculada'
+                                : ' · Ya facturada'
+                              : ''}
                           </option>
                         )
                       })}

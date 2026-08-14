@@ -8,6 +8,7 @@ import { FilePlus2, ReceiptText } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 import { aggregateBookingStatus } from '@/src/lib/booking-status'
 
 type CostValidationBookingContainer = {
@@ -214,7 +215,7 @@ export default function CostValidationDetailPage() {
       .from('invoices')
       .select('id, invoice_number, status')
       .eq('quotation_id', quotationId)
-      .eq('invoice_type', 'Factura')
+      .eq('invoice_type', IS_DEMO_ENVIRONMENT ? 'Proforma' : 'Factura')
       .neq('status', 'Anulada')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -534,8 +535,10 @@ export default function CostValidationDetailPage() {
                   <FilePlus2 className="h-4 w-4" />
                 )}
                 {linkedCustomerInvoice
-                  ? `Ver factura ${linkedCustomerInvoice.invoice_number || ''}`.trim()
-                  : 'Generar factura'}
+                  ? `${IS_DEMO_ENVIRONMENT ? 'Ver proforma' : 'Ver factura'} ${linkedCustomerInvoice.invoice_number || ''}`.trim()
+                  : IS_DEMO_ENVIRONMENT
+                    ? 'Generar proforma demo'
+                    : 'Generar factura'}
               </button>
             )}
           </div>

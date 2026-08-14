@@ -5576,3 +5576,50 @@ Agregar una entrada por fix:
   - La pantalla todavía requiere guardar explícitamente el conjunto después de
     confirmar; el modal no escribe directamente en Supabase.
 - Commit: pendiente.
+
+### 2026-08-14 - DEMO-002 - Flujos recientes adaptados al sandbox
+
+- Estado: Implementado y validado localmente; staging verificado en preflight,
+  con SQL, deployment Preview y UAT pendientes.
+- Hallazgo: DEMO-002.
+- Código:
+  - `src/app/(protected)/invoicing/new/page.tsx`.
+  - `src/app/(protected)/cost-validation/[id]/page.tsx`.
+- SQL:
+  - `supabase/migrations/20260814110000_demo_validated_quotation_proforma.sql`.
+- Prueba:
+  - `supabase/tests/demo_validated_quotation_proforma.sql`.
+- Cambio:
+  - Se integraron en `demo` las correcciones UX-054/055/056/057, FIN-058/059,
+    REP-010 y FIN-060/061 de los commits funcionales del 13 y 14 de agosto.
+  - Demo conserva su prohibición de documentos fiscales: una cotización ganada
+    y validada genera una `Proforma Demo`, nunca una `Factura`.
+  - La Proforma copia en servidor las líneas comerciales de `pricing_items`,
+    conserva `source_pricing_item_id`, impide duplicados activos y participa en
+    pagos ficticios y recibos sin relajar el guard de documentos fiscales.
+  - Producción no fue modificada; el CLI quedó enlazado explícitamente al
+    proyecto staging `wlssekvxpfxhwedsjhpz` antes del preflight remoto.
+- Validaciones ejecutadas:
+  - Guía local de Next.js 16 sobre Server y Client Components: revisada.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a facturación, reportes y PDFs: OK. La pantalla histórica
+    de validación de costos conserva 12 errores y 4 advertencias preexistentes.
+  - Build Demo con variables efímeras y claves ficticias de formato moderno:
+    OK, 71/71 rutas.
+  - Las cuatro protecciones Demo se restauraron directamente en PostgreSQL
+    local sin reset; la migración nueva aplicó atómicamente.
+  - Prueba SQL con datos ficticios y `ROLLBACK`: creación de Proforma desde
+    cotización validada, vínculo de pricing, pago por cheque, referencia y
+    saldo parcial OK; Factura fiscal y segundo documento activo rechazados.
+  - `npx.cmd supabase db lint --local --level error`: cero errores.
+  - `supabase db push --linked --dry-run`: únicamente seis migraciones nuevas,
+    desde `20260813140000` hasta `20260814110000`.
+  - Preflight staging: sentinel `demo`, project ref correcto, cero duplicados
+    incompatibles con índices y cero documentos sin cliente.
+- Riesgos o trabajo pendiente:
+  - Aplicar las seis migraciones a staging, publicar la rama `demo` y confirmar
+    el deployment `Preview` asociado a `demo.forwarders.app`.
+  - Ejecutar UAT autenticado de confirmaciones, impresión BL, Proforma desde
+    cotización, pago/recibo y reportes. No reiniciar el dataset si un prospecto
+    está utilizando actualmente el sandbox compartido.
+- Commit: incluido en este commit.
