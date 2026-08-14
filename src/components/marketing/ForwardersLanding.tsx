@@ -65,6 +65,7 @@ const stagger: Variants = {
 
 const navigation = [
   { label: 'Beneficios', href: '#beneficios' },
+  { label: 'Producto', href: '#producto' },
   { label: 'Funcionalidades', href: '#funcionalidades' },
   { label: 'Workflow', href: '#workflow' },
   { label: 'Portal Cliente', href: '#portal' },
@@ -153,6 +154,70 @@ const features = [
     ],
   },
 ]
+
+const productViews = [
+  {
+    id: 'comercial',
+    label: 'Comercial',
+    title: 'Pipeline y rentabilidad comercial',
+    description:
+      'Cotizaciones creadas, enviadas, ganadas y perdidas con venta, profit y tasa de cierre en una sola vista.',
+    image: '/product/dashboard-comercial.webp',
+    alt: 'Dashboard comercial de Forwarders ERP con indicadores de cotizaciones, ventas y margen',
+    icon: BarChart3,
+  },
+  {
+    id: 'cotizacion',
+    label: 'Cotización',
+    title: 'Margen visible antes de aprobar',
+    description:
+      'Costo, venta, profit y GP de cada cotización junto con los datos comerciales y operativos del embarque.',
+    image: '/product/cotizacion-rentabilidad.webp',
+    alt: 'Detalle de una cotización demo con costo, venta, profit y porcentaje de margen',
+    icon: FileText,
+  },
+  {
+    id: 'booking',
+    label: 'Booking y BL',
+    title: 'Documentación conectada a la operación',
+    description:
+      'Booking, routing, shipper, consignee, MBL y HBL permanecen vinculados al mismo expediente operativo.',
+    image: '/product/booking-bl.webp',
+    alt: 'Booking demo de Forwarders ERP con información de routing, MBL y HBL',
+    icon: Ship,
+  },
+  {
+    id: 'inventario',
+    label: 'Bodega Miami',
+    title: 'Inventario y estados de carga',
+    description:
+      'Control por tracking, warehouse, rack, peso y estado para seguir cada paquete desde Miami hasta su entrega.',
+    image: '/product/inventario-miami.webp',
+    alt: 'Inventario demo de bodega Miami con filtros, ubicación en rack y estado de paquetes',
+    icon: Warehouse,
+  },
+  {
+    id: 'finanzas',
+    label: 'Finanzas',
+    title: 'Costo cotizado contra resultado real',
+    description:
+      'Venta, GP cotizado, GP real y pérdidas detectadas para evaluar la rentabilidad final de cada operación.',
+    image: '/product/dashboard-financiero.webp',
+    alt: 'Dashboard financiero demo con venta cotizada, margen bruto y pérdidas detectadas',
+    icon: Activity,
+  },
+  {
+    id: 'portal',
+    label: 'Portal cliente',
+    title: 'Tracking claro para el cliente final',
+    description:
+      'El cliente consulta hitos, movimientos y datos de su carga desde un portal separado del ERP interno.',
+    image: '/product/portal-tracking.webp',
+    alt: 'Portal demo Mi Carga con seguimiento e historial de un paquete',
+    icon: Smartphone,
+  },
+]
+
 const workflow = [
   'Cliente',
   'Cotización',
@@ -283,6 +348,94 @@ function SectionHeading({
         </p>
       )}
     </motion.div>
+  )
+}
+
+function ProductShowcase() {
+  const [activeId, setActiveId] = useState(productViews[0].id)
+  const activeView = productViews.find((view) => view.id === activeId) ?? productViews[0]
+
+  return (
+    <section id="producto" className="bg-white px-5 py-20 sm:px-8 lg:py-24">
+      <div className="mx-auto max-w-7xl">
+        <SectionHeading
+          eyebrow="Producto real"
+          title="Una operación completa, no módulos aislados."
+          description="Estas vistas corresponden al ambiente demostrativo de Forwarders ERP. Los datos son ficticios y muestran cómo comercial, operaciones, bodega, finanzas y clientes trabajan sobre el mismo flujo."
+          prominent
+        />
+
+        <div
+          role="tablist"
+          aria-label="Vistas del producto"
+          className="mt-10 flex gap-2 overflow-x-auto pb-2"
+        >
+          {productViews.map((view) => {
+            const Icon = view.icon
+            const isActive = view.id === activeView.id
+
+            return (
+              <button
+                key={view.id}
+                id={`product-tab-${view.id}`}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                aria-controls="product-view"
+                onClick={() => setActiveId(view.id)}
+                className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-lg border px-4 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0038BD] focus-visible:ring-offset-2 ${
+                  isActive
+                    ? 'border-[#0038BD] bg-[#0038BD] text-white shadow-md shadow-[#0038BD]/20'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-[#0038BD]/30 hover:text-[#0038BD]'
+                }`}
+              >
+                <Icon size={16} aria-hidden="true" />
+                {view.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-[#07111F] shadow-2xl shadow-slate-300/60 ring-1 ring-slate-900/5">
+          <div className="flex h-11 items-center justify-between border-b border-white/10 px-4 sm:px-5">
+            <div className="flex items-center gap-2" aria-hidden="true">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+            </div>
+            <span className="text-[11px] font-semibold uppercase text-slate-400">
+              Ambiente demo · Datos ficticios
+            </span>
+          </div>
+
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.figure
+              key={activeView.id}
+              id="product-view"
+              role="tabpanel"
+              aria-labelledby={`product-tab-${activeView.id}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Image
+                src={activeView.image}
+                alt={activeView.alt}
+                width={1920}
+                height={1080}
+                sizes="(max-width: 1280px) 100vw, 1280px"
+                className="aspect-video h-auto w-full bg-slate-100 object-contain"
+              />
+              <figcaption className="grid gap-2 border-t border-white/10 px-5 py-5 sm:grid-cols-[0.7fr_1.3fr] sm:items-center sm:px-7">
+                <p className="font-semibold text-white">{activeView.title}</p>
+                <p className="text-sm leading-6 text-slate-400">{activeView.description}</p>
+              </figcaption>
+            </motion.figure>
+          </AnimatePresence>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -829,9 +982,12 @@ export function ForwardersLanding() {
                   <div className="h-2.5 w-2.5 rounded-full bg-slate-300" />
                 </div>
 
-                <img
+                <Image
                   src="/excel-desktop-image.png"
                   alt="Escritorio operativo con procesos log&iacute;sticos gestionados en Excel"
+                  width={1537}
+                  height={1023}
+                  sizes="(max-width: 1024px) 100vw, 50vw"
                   className="h-auto w-full rounded-xl border border-slate-200/50 bg-white object-contain"
                 />
               </div>
@@ -985,6 +1141,8 @@ export function ForwardersLanding() {
           </motion.div>
         </div>
       </section>
+
+      <ProductShowcase />
 
       {/* ── Funcionalidades ──────────────────────────────────────────────── */}
       <section className="bg-white px-5 py-14 sm:px-8 lg:py-16">
@@ -1463,6 +1621,7 @@ export function ForwardersLanding() {
               <div className="flex flex-wrap gap-2">
                 {[
                   { label: 'Beneficios', href: '#beneficios' },
+                  { label: 'Producto', href: '#producto' },
                   { label: 'Funcionalidades', href: '#funcionalidades' },
                   { label: 'Workflow', href: '#workflow' },
                   { label: 'Portal Cliente', href: '#portal' },

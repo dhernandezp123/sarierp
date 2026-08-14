@@ -4,6 +4,51 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-08-14 - UX-056 - Recorrido visual real en la landing
+
+- Estado: Implementado y validado localmente; pendiente de UAT y deployment en
+  Producción.
+- Hallazgo: UX-056.
+- Código y assets:
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `public/product/dashboard-comercial.webp`.
+  - `public/product/cotizacion-rentabilidad.webp`.
+  - `public/product/booking-bl.webp`.
+  - `public/product/inventario-miami.webp`.
+  - `public/product/dashboard-financiero.webp`.
+  - `public/product/portal-tracking.webp`.
+- SQL: No aplica.
+- Cambios:
+  - La landing incorpora un recorrido por pestañas con vistas reales del
+    dashboard comercial, cotización, booking/BL, bodega Miami, finanzas y
+    portal del cliente.
+  - Sólo se publican capturas del ambiente Demo con nombres, correos,
+    identificadores y montos ficticios. Se excluyeron las capturas de
+    Producción por contener datos operativos o personales y las vistas vacías
+    que no explicaban el valor del producto.
+  - Las seis imágenes se normalizaron a WebP de 1920 x 1080; el conjunto pesa
+    menos de 0.5 MB y se sirve mediante `next/image` con dimensiones estables.
+  - La navegación principal y el footer enlazan directamente al nuevo
+    recorrido; los controles usan semántica accesible `tab`/`tabpanel`.
+  - La imagen comparativa de Excel también pasó a `next/image`, eliminando el
+    warning de rendimiento de la landing.
+- Validaciones ejecutadas:
+  - Guía local de Next.js 16 sobre optimización de imágenes: revisada.
+  - Inspección visual de las capturas fuente y de los WebP finales: OK.
+  - `npx.cmd next typegen`: OK.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a la landing: OK.
+  - Revisión headless en Chrome a 1440 x 1200 y 390 x 844: OK; pestañas
+    desplazables en móvil, imagen estable y sin desborde horizontal de página.
+  - `git diff --check`: OK; sólo aviso esperado LF/CRLF.
+- Riesgos o pendientes:
+  - En pantallas móviles las capturas conservan el contexto completo, por lo
+    que los textos internos se leen mejor al ampliar; la leyenda exterior
+    comunica el contenido sin depender de ese texto.
+  - Pendiente desplegar la rama `main` y verificar la landing pública en
+    `https://forwarders.app`.
+- Commit: incluido en este commit.
+
 ### 2026-08-10 - UX-053 - Capturas en la creación de tickets
 
 - Estado: Implementado y validado localmente; pendiente de UAT en Producción.
