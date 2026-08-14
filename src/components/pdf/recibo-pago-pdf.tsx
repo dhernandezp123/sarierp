@@ -16,6 +16,15 @@ export type ReciboPagoData = {
   metodo: string | null
   referencia: string | null
   notas: string | null
+  tipo_fiscal: string | null
+  punto_venta: string | null
+  condicion_pago: string | null
+  dias_credito: number | null
+  desglose: Array<{
+    payment_method: string
+    amount: number
+    reference: string | null
+  }>
 }
 
 const styles = StyleSheet.create({
@@ -56,6 +65,26 @@ export function ReciboPagoPdf({ data }: { data: ReciboPagoData }) {
           <Text style={styles.label}>Factura:</Text>
           <Text style={styles.value}>{data.factura_numero || '—'} ({data.factura_tipo})</Text>
         </View>
+        {data.tipo_fiscal ? (
+          <View style={styles.row}>
+            <Text style={styles.label}>Tipo fiscal:</Text>
+            <Text style={styles.value}>{data.tipo_fiscal}</Text>
+          </View>
+        ) : null}
+        {data.punto_venta ? (
+          <View style={styles.row}>
+            <Text style={styles.label}>Punto de venta:</Text>
+            <Text style={styles.value}>{data.punto_venta}</Text>
+          </View>
+        ) : null}
+        {data.condicion_pago ? (
+          <View style={styles.row}>
+            <Text style={styles.label}>Condición:</Text>
+            <Text style={styles.value}>
+              {data.condicion_pago}{data.condicion_pago === 'Crédito' ? ` · ${data.dias_credito || 0} días` : ''}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.row}>
           <Text style={styles.label}>Cliente:</Text>
           <Text style={styles.value}>{data.cliente_nombre || '—'}</Text>
@@ -88,6 +117,16 @@ export function ReciboPagoPdf({ data }: { data: ReciboPagoData }) {
           <View style={styles.row}>
             <Text style={styles.label}>Referencia:</Text>
             <Text style={styles.value}>{data.referencia}</Text>
+          </View>
+        ) : null}
+        {data.desglose.length > 1 ? (
+          <View style={styles.row}>
+            <Text style={styles.label}>Desglose:</Text>
+            <Text style={styles.value}>
+              {data.desglose.map((split) => (
+                `${split.payment_method}: ${data.currency} ${Number(split.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}${split.reference ? ` (${split.reference})` : ''}`
+              )).join('\n')}
+            </Text>
           </View>
         ) : null}
         {data.notas ? (

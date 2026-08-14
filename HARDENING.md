@@ -5051,6 +5051,264 @@ Agregar una entrada por fix:
   - `git diff --check`: OK; únicamente avisos informativos LF/CRLF.
 - Riesgos o trabajo pendiente: ninguno.
 - Commit: `9627303`.
+### 2026-08-13 - UX-057 - Guardado de BL bloqueado por consulta ambigua del booking
+
+- Estado: Corregido y validado contra Production en modo solo lectura; pendiente
+  de UAT y deployment.
+- Hallazgo: UX-057.
+- Causa raiz:
+  - La carga del editor de BL embebia `shipping_instructions` sin indicar la
+    relacion. Al existir dos llaves foraneas entre esa tabla y `bookings`,
+    PostgREST respondia `PGRST201` y no devolvia `bookings.updated_at`.
+  - La misma consulta solicitaba `quotations.origin_port` y
+    `quotations.destination_port`, columnas que no existen en Production; las
+    columnas canonicas son `puerto_origen` y `puerto_destino`.
+  - El error de carga se descartaba y el guardado posterior mostraba que no
+    podia validar la version del booking, aunque el BL ya podia haberse
+    actualizado antes de fallar la sincronizacion heredada.
+- Codigo:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - La consulta usa explicitamente
+    `shipping_instructions!bookings_shipping_instruction_id_fkey`.
+  - El prellenado usa `puerto_origen` y `puerto_destino`.
+  - La sincronizacion de `master_bl`/`house_bl` conserva la version leida al
+    abrir el editor para detectar cambios concurrentes. Si esa version falta,
+    intenta recuperarla mediante una consulta directa antes de llamar
+    `update_booking_canonical`.
+  - Si falla esa sincronizacion secundaria, la interfaz informa que el BL si
+    fue guardado y presenta una advertencia separada sobre el resumen del
+    booking.
+- Validaciones:
+  - Consulta original contra Production: reprodujo `PGRST201` por relacion
+    ambigua; al especificar la FK revelo `42703` por columnas inexistentes.
+  - Consulta corregida contra Production: OK, devolvio una fila y
+    `bookings.updated_at` sin exponer datos del registro.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK; 70/70 paginas generadas.
+  - ESLint dirigido: no se agregaron hallazgos; la pagina conserva 8 errores y
+    1 advertencia preexistentes (`any`, efecto de carga y texto JSX).
+- Verificacion manual pendiente:
+  - Guardar el HBL afectado, confirmar `BL guardado` y revisar que el numero se
+    refleje en el resumen del booking.
+  - Verificar el deployment en `https://forwarders.app`.
+- Riesgos o trabajo pendiente:
+  - No se ejecuto una escritura de prueba contra un BL real de Production.
+- Commit: pendiente.
+
+### 2026-08-13 - FIN-058 - Registro estructurado de pagos de factura
+
+- Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
+  pendientes.
+- Hallazgo: FIN-058.
+- Causa raiz:
+  - El pago de una factura solo guardaba monto, fecha, moneda, un metodo de
+    texto libre, referencia y notas.
+  - No existian campos estructurados para clasificacion fiscal, punto de venta
+    ni desglose verificable de pagos mixtos.
+- Codigo:
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `src/components/pdf/recibo-pago-pdf.tsx`
+- SQL:
+  - `supabase/migrations/20260813180000_invoice_payment_classification_and_splits.sql`
+- Cambios:
+  - El modal requiere clasificacion fiscal (`Gravada`, `Mixta`, `Exenta`,
+    `Exonerada`; `No aplica` para proformas), punto de venta y forma de pago.
+  - `Mixta` requiere al menos dos componentes entre importe gravado, exento y
+    exonerado; la clasificacion se deriva de la factura y se valida de nuevo en
+    PostgreSQL.
+  - Los puntos de venta se obtienen del lugar de emision de la factura, rangos
+    CAI activos, lugar de emision por defecto y ciudad corporativa, sin
+    codificar ciudades en el frontend; la RPC rechaza valores fuera de ese
+    catalogo.
+  - Los medios disponibles son `Cheque`, `Deposito`, `Transferencia`,
+    `Tarjeta debito`, `Tarjeta credito` y `Mixto`; `Contado`/`Credito` se
+    manejan como condicion de la factura y no como dinero recibido.
+  - El pago mixto requiere por lo menos dos componentes y la suma debe coincidir
+    exactamente con el monto recibido.
+  - Cheques requieren numero de cheque; depositos y transferencias requieren
+    numero de referencia; tarjetas requieren voucher o referencia. La misma
+    regla aplica a cada componente de un pago mixto y se valida tambien en
+    PostgreSQL.
+  - `invoice_payment_splits` conserva metodo, monto y referencia por componente;
+    el historial y el recibo PDF muestran el desglose.
+  - `register_invoice_payment_v2` valida permisos, estado, saldo, fecha, moneda,
+    coherencia fiscal y desglose dentro de una sola transaccion.
+  - La RPC anterior permanece disponible para que el frontend publicado siga
+    funcionando si la migracion se aplica antes del nuevo deployment.
+- Validaciones:
+  - `npx.cmd supabase db reset --local --no-seed`: OK; todas las migraciones,
+    incluidas `20260813180000` y `20260813200000`, aplicaron desde cero.
+  - Pruebas SQL ficticias con `ROLLBACK`: pago simple parcial y pago mixto
+    completo OK; suma mixta incorrecta, punto de venta desconocido y
+    clasificacion fiscal incompatible rechazados correctamente.
+  - Prueba SQL ficticia con `ROLLBACK`: cheque sin numero rechazado y cheque con
+    numero guardado en el desglose y aplicado a la factura: OK.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a la pantalla y recibo: 0 errores y 0 advertencias.
+  - `npm.cmd run build`: OK; build de produccion de Next.js completado.
+  - `npx.cmd supabase db push --linked`: migracion `20260813180000` aplicada al
+    proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - `npx.cmd supabase db lint --local --level error`: conserva un hallazgo
+    preexistente en `is_platform_admin()` por referencia a
+    `is_demo_environment()` inexistente; no fue introducido por FIN-058.
+- Verificacion manual pendiente:
+  - Registrar y reversar un pago simple y uno mixto desde la interfaz local.
+  - Confirmar con Contabilidad los nombres finales de los puntos de venta.
+  - Desplegar el frontend y ejecutar UAT en Production.
+- Riesgos o trabajo pendiente:
+  - `Exenta` y `Exonerada` se validan contra la composicion fiscal ya emitida;
+    registrar un pago no reclasifica ni altera los impuestos de la factura.
+  - La condicion `Credito` no crea un pago ni reduce cuentas por cobrar; los
+    cobros posteriores requieren un medio real y su referencia.
+- Commit: pendiente.
+
+### 2026-08-13 - FIN-059 - Condiciones de credito y aplicacion integra de notas
+
+- Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
+  pendientes.
+- Hallazgo: FIN-059.
+- Causa raiz:
+  - La factura permitia editar manualmente el vencimiento y no conservaba la
+    condicion ni los dias de credito configurados en el perfil del cliente.
+  - Las notas ya ajustaban cuentas por cobrar mediante
+    `invoice_adjusted_total` e `invoice_receivables`, pero no existia un bloqueo
+    transaccional para impedir que una nota dejara pagos aplicados por encima
+    del nuevo total.
+  - El detalle calculaba su balance visual incluyendo notas `Borrador` y
+    `Anulada`, aunque la vista contable correctamente las excluia.
+- Codigo:
+  - `src/app/(protected)/invoicing/new/page.tsx`
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `src/components/pdf/invoice-pdf.tsx`
+  - `src/components/pdf/recibo-pago-pdf.tsx`
+- SQL:
+  - `supabase/migrations/20260813200000_invoice_credit_terms_and_note_integrity.sql`
+- Cambios:
+  - Cada factura conserva `payment_condition` y `credit_days` como fotografia
+    del perfil del cliente al emitirse.
+  - `Contado` vence en la fecha de emision; `Credito` vence en fecha de emision
+    mas los dias configurados. El trigger de PostgreSQL es la fuente canonica.
+  - Un cliente configurado a credito sin dias validos no puede generar nuevas
+    facturas hasta corregir su perfil.
+  - Una nota de credito resta y una nota de debito suma al total ajustado solo
+    cuando no estan en `Borrador` ni `Anulada`.
+  - El bloqueo por fila de la factura serializa pagos y notas concurrentes. Una
+    nota no puede dejar el total ajustado por debajo de los pagos aplicados.
+  - No se puede aplicar una nota antes de emitir la factura, cambiar el tipo de
+    una nota existente ni anular una factura con notas emitidas activas.
+  - La UI limita la nota de credito al saldo pendiente, muestra el estado de
+    cada nota y excluye borradores/anuladas del balance efectivo.
+  - Las notas de credito/debito dejan de ofrecer la accion de registrar pago al
+    alcanzar `Aprobada`; el cobro solo pertenece a facturas o proformas.
+  - La factura y el recibo PDF muestran la condicion de pago y los dias de
+    credito conservados.
+- Validaciones:
+  - `npx.cmd supabase db reset --local --no-seed`: OK; migracion aplicada desde
+    cero junto con toda la historia.
+  - Prueba SQL ficticia con `ROLLBACK`: credito a 30 dias, contado al mismo dia,
+    tarjeta con voucher, pago mixto con referencias, ND sumando saldo, NC
+    limitada al pendiente y anulaciones inconsistentes rechazadas: OK.
+  - Prueba SQL con `ROLLBACK` de modificacion directa: el trigger restauro
+    `Contado`, `0` dias y vencimiento igual a emision: OK.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a facturacion y PDFs: 0 errores y 0 advertencias.
+  - `npm.cmd run build`: OK; build de produccion de Next.js completado.
+  - `npx.cmd supabase db push --linked`: migracion `20260813200000` aplicada al
+    proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - `npx.cmd supabase db lint --local --level error`: solo conserva el hallazgo
+    preexistente de `is_platform_admin()` documentado en FIN-058.
+- Verificacion manual pendiente:
+  - UAT de emision para un cliente de contado y otro con credito a 30 dias.
+  - UAT de recibos por cheque, transferencia, deposito, ambas tarjetas y pago
+    mixto.
+  - UAT de emision/anulacion de NC y ND desde la interfaz.
+- Riesgos o trabajo pendiente:
+  - Antes de migrar Production se debe listar clientes cuya condicion sea
+    credito y `dias_credito <= 0`; el trigger bloqueara nuevas facturas para
+    esos perfiles hasta corregirlos.
+  - Auditar si ya existen facturas donde pagos aplicados superen el total
+    ajustado por notas. La migracion protege cambios futuros, pero no inventa
+    movimientos compensatorios para datos historicos.
+- Commit: pendiente.
+
+### 2026-08-13 - REP-010 - Reportes de facturacion y pagos completos
+
+- Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
+  pendientes.
+- Hallazgo: REP-010.
+- Causa raiz:
+  - Los reportes de facturacion no consultaban condicion ni dias de credito,
+    clasificacion fiscal, punto de venta, formas de pago, referencias o el
+    desglose de pagos mixtos.
+  - `invoice_receivables` se cargaba dentro del bloque de roles comerciales;
+    Finanzas y Contabilidad podian abrir Cuentas por cobrar, pero recibirlo
+    vacio.
+  - La vista de cuentas por cobrar incluia facturas `Borrador` y `Anulada`; si
+    su fecha habia vencido podia reclasificarlas incorrectamente como
+    `Vencida`.
+  - El listado de Facturacion mezclaba USD y HNL en un solo KPI y el cierre y
+    estado de cuenta reconstruian NC, ND y pagos con logica paralela a la vista
+    canonica.
+- Codigo:
+  - `src/app/(protected)/reports/page.tsx`
+  - `src/app/(protected)/invoicing/page.tsx`
+  - `src/components/pdf/estado-cuenta-pdf.tsx`
+- SQL:
+  - `supabase/migrations/20260813210000_exclude_nonissued_invoice_receivables.sql`
+- Cambios:
+  - Se agrego el reporte exportable `Pagos de clientes` con fecha, factura,
+    cliente, condicion/plazo, clasificacion fiscal, punto de venta, forma,
+    referencia o desglose mixto, estado y monto.
+  - El reporte permite filtrar por cliente, forma de pago, tipo fiscal, punto
+    de venta, estado, moneda y periodo. Un pago mixto puede localizarse por
+    cualquiera de sus componentes, incluidos cheque, deposito, transferencia
+    y tarjetas.
+  - `Facturacion` muestra condicion, vencimiento, formas utilizadas, tipo
+    fiscal, estado canonico, impacto neto, pagado y saldo. Borradores,
+    anulaciones y proformas aportan cero al neto; las notas de credito restan.
+  - `Cuentas por cobrar` y el PDF de estado de cuenta muestran la condicion y
+    los dias de credito junto al vencimiento, NC/ND, pagos y saldo.
+  - Cuentas por cobrar ahora se consulta para los roles financieros correctos.
+  - La vista canonica excluye desde su origen facturas `Borrador` y `Anulada`;
+    la interfaz conserva filtros defensivos basados en `stored_status`.
+  - El cierre y estado de cuenta consumen `invoice_receivables` para ajustes,
+    pagos, saldo y mora, evitando resultados distintos entre pantallas.
+  - Los KPIs de Facturacion se agrupan por moneda y ya no suman USD con HNL.
+- Validaciones:
+  - `npx.cmd supabase db reset --local --no-seed`: OK; toda la historia y la
+    migracion `20260813210000` aplicaron desde cero.
+  - Prueba SQL ficticia con `ROLLBACK`: entre una factura `Borrador`, una
+    `Anulada` y una `Aprobada` vencidas, la vista devolvio solo la aprobada con
+    estado `Vencida` y saldo correcto: OK.
+  - Consulta de control local: cero filas de `invoice_receivables` con
+    `stored_status` Borrador o Anulada: OK.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a reportes, listado de facturacion y estado de cuenta: 0
+    errores y 0 advertencias.
+  - `npm.cmd run build`: OK; 70/70 paginas generadas.
+  - `npx.cmd supabase db push --linked`: migracion `20260813210000` aplicada al
+    proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - `git diff --check`: OK; solo avisos esperados LF/CRLF de Git.
+  - `npx.cmd supabase db lint --local --level error`: la vista nueva no reporta
+    errores; permanece el hallazgo preexistente de `is_platform_admin()` por
+    `is_demo_environment()` ausente, ya documentado en FIN-058.
+- Verificacion manual pendiente:
+  - UAT del reporte con un pago por cheque, deposito, transferencia, cada tipo
+    de tarjeta y uno mixto; revisar filtros, CSV y PDF.
+  - UAT de estado de cuenta para clientes de contado y credito, con NC, ND,
+    pago parcial, pago completo y factura vencida.
+  - Comparar cierre mensual, Cuentas por cobrar y detalle de una misma factura
+    despues del deployment.
+- Riesgos o trabajo pendiente:
+  - Production ya excluye borradores y anuladas desde la vista; falta UAT del
+    frontend publicado con los roles Finanzas y Contabilidad.
+  - Los pagos historicos anteriores a FIN-058 pueden no tener clasificacion,
+    punto de venta o desglose; el reporte los mostrara con `-` y no inventara
+    datos retroactivos.
+- Commit: pendiente.
+
 ### 2026-08-13 - UX-056 - HBL Draft alineado al formato documental real
 
 - Estado: Implementado y validado localmente; pendiente de UAT y deployment.

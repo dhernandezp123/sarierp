@@ -398,29 +398,35 @@ export default function BLPage() {
   const syncBookingBlCache = async (
     changes: { master_bl?: string; house_bl?: string }
   ) => {
-    if (!bookingUpdatedAt) {
-      toast.error('No se pudo validar la versión actual del booking. Recarga la página.')
-      return false
+    let expectedUpdatedAt = bookingUpdatedAt
+
+    if (!expectedUpdatedAt) {
+      const { data: currentBooking, error: bookingVersionError } = await supabase
+        .from('bookings')
+        .select('updated_at')
+        .eq('id', bookingId)
+        .eq('shipping_instruction_id', id)
+        .single()
+
+      if (bookingVersionError || !currentBooking?.updated_at) return false
+      expectedUpdatedAt = currentBooking.updated_at
     }
 
     const { data, error } = await supabase.rpc('update_booking_canonical', {
       p_booking_id: bookingId,
       p_shipping_instruction_id: id,
-      p_expected_updated_at: bookingUpdatedAt,
+      p_expected_updated_at: expectedUpdatedAt,
       p_changes: changes,
     })
 
     if (error) {
-      toast.error(
-        error.code === '40001'
-          ? 'El booking cambió mientras editabas el BL. Recarga la página antes de continuar.'
-          : error.message || 'No se pudo actualizar la referencia temporal del BL en el booking'
-      )
       return false
     }
 
     const updatedBooking = Array.isArray(data) ? data[0] : data
-    setBookingUpdatedAt(updatedBooking?.updated_at || null)
+    if (!updatedBooking?.updated_at) return false
+
+    setBookingUpdatedAt(updatedBooking.updated_at)
     return true
   }
 
@@ -428,15 +434,18 @@ export default function BLPage() {
     setLoading(true)
 
     // Load booking + SI for pre-fill
-    const [{ data: bookingData }, { data: settingsData }] = await Promise.all([
+    const [
+      { data: bookingData, error: bookingError },
+      { data: settingsData },
+    ] = await Promise.all([
       supabase
         .from('bookings')
         .select(`
           id, booking_number, carrier, vessel_name, voyage, etd, eta, freight_terms, release_type, updated_at,
-          shipping_instruction:shipping_instructions (
+          shipping_instruction:shipping_instructions!bookings_shipping_instruction_id_fkey (
             id, routing_number, supplier_name, supplier_contact, supplier_email, origin_address, destination_address,
             quotation:quotations (
-              id, incoterm, origin_port, destination_port, tipo_transporte,
+              id, incoterm, puerto_origen, puerto_destino, tipo_transporte,
               cliente:clientes (nombre, direccion, ciudad, pais, rtn, contacto, email_1)
             )
           )
@@ -450,6 +459,12 @@ export default function BLPage() {
         .maybeSingle(),
     ])
 
+    if (bookingError || !bookingData) {
+      toast.error(bookingError?.message || 'Booking no encontrado')
+      setLoading(false)
+      return
+    }
+
     if (settingsData) {
       setCompanyBranding(normalizeCompanyBranding(settingsData))
       setCondicionesBL((settingsData as any).condiciones_bl ?? null)
@@ -457,7 +472,7 @@ export default function BLPage() {
       setCondicionesCP((settingsData as any).condiciones_carta_porte ?? null)
     }
 
-    setBookingUpdatedAt(bookingData?.updated_at || null)
+    setBookingUpdatedAt(bookingData.updated_at)
 
     // Extract tipo_transporte from quotation
     const siForType = Array.isArray(bookingData?.shipping_instruction) ? bookingData.shipping_instruction[0] : bookingData?.shipping_instruction
@@ -581,8 +596,8 @@ export default function BLPage() {
       consignee_tax_id: client?.rtn || '',
       consignee_contact: client?.contacto || '',
       consignee_email: client?.email_1 || '',
-      port_of_loading: (quotation?.origin_port as string) || si?.origin_address || '',
-      port_of_discharge: (quotation?.destination_port as string) || si?.destination_address || '',
+      port_of_loading: (quotation?.puerto_origen as string) || si?.origin_address || '',
+      port_of_discharge: (quotation?.puerto_destino as string) || si?.destination_address || '',
     }
 
     if (typeParam === 'HBL' && parentBlIdParam) {
@@ -749,16 +764,21 @@ export default function BLPage() {
       return
     }
 
-    // Sync bl_number back to bookings for legacy display
+    // Sync bl_number back to bookings for legacy display.
+    let bookingCacheSynced = true
     if (form.bl_number) {
       if (form.bl_type === 'MBL') {
-        if (!(await syncBookingBlCache({ master_bl: form.bl_number }))) return
+        bookingCacheSynced = await syncBookingBlCache({ master_bl: form.bl_number })
       } else if (form.bl_type === 'HBL' && ['Emitido', 'Liberado'].includes(form.status)) {
-        if (!(await syncBookingBlCache({ house_bl: form.bl_number }))) return
+        bookingCacheSynced = await syncBookingBlCache({ house_bl: form.bl_number })
       }
     }
 
-    toast.success('BL guardado')
+    if (bookingCacheSynced) {
+      toast.success('BL guardado')
+    } else {
+      toast.warning('BL guardado. No se pudo actualizar su referencia en el resumen del booking; recarga la página e intenta guardar nuevamente.')
+    }
     await createActivityLog({
       module: 'operations_bl',
       action: 'update',
@@ -920,11 +940,16 @@ export default function BLPage() {
     setForm((prev) => ({ ...prev, status: newStatus, ...Object.fromEntries(Object.entries(extraFields).filter(([k]) => k !== 'updated_at')) }))
 
     // Sync HBL number to bookings when issued
+    let bookingCacheSynced = true
     if (newStatus === 'Emitido' && form.bl_type === 'HBL' && form.bl_number) {
-      if (!(await syncBookingBlCache({ house_bl: form.bl_number }))) return
+      bookingCacheSynced = await syncBookingBlCache({ house_bl: form.bl_number })
     }
 
-    toast.success(`Estado actualizado: ${newStatus}`)
+    if (bookingCacheSynced) {
+      toast.success(`Estado actualizado: ${newStatus}`)
+    } else {
+      toast.warning(`Estado actualizado: ${newStatus}. La referencia del HBL no pudo sincronizarse con el resumen del booking.`)
+    }
 
     await createActivityLog({
       module: 'operations_bl',
