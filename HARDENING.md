@@ -5652,10 +5652,10 @@ Agregar una entrada por fix:
   - En Demo el catálogo se muestra, pero sus controles de escritura respetan
     el modo de solo lectura del sandbox.
 - Validaciones:
-  - `npx.cmd tsc --noEmit`: OK en `main`; validación de la integración Demo
-    registrada antes de publicar la rama.
+  - `npx.cmd next typegen` y `npx.cmd tsc --noEmit`: OK en Demo con variables
+    efímeras validadas para el proyecto staging.
   - Migración `20260826120000` aplicada y registrada en Production
     (`fwspgdzvlbtbgiupvrzo`) y Demo (`wlssekvxpfxhwedsjhpz`).
 - Riesgos o trabajo pendiente:
   - Falta UAT funcional con perfiles Admin, Pricing, Ventas y usuario Demo.
-- Commit de implementación en main: `6a640b1`.
+- Commits de implementación: main `6a640b1`; demo `3ebca62`.
