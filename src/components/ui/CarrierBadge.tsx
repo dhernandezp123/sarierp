@@ -4,7 +4,7 @@
 // Badge visual con colores de marca del carrier.
 // Uso: <CarrierBadge code="MSC" /> o <CarrierBadge code="MSC" showName />
 
-import { getCarrier } from "@/src/lib/constants/carriers"
+import { useCarrierCatalog } from "@/src/hooks/useCarrierCatalog"
 import { cn } from "@/src/lib/utils"
 
 interface CarrierBadgeProps {
@@ -20,6 +20,7 @@ export function CarrierBadge({
   size = "md",
   className,
 }: CarrierBadgeProps) {
+  const { getCarrier } = useCarrierCatalog()
   const carrier = getCarrier(code)
   const shouldShowName =
     showName &&

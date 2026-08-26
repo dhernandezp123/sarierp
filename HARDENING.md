@@ -5633,3 +5633,29 @@ Agregar una entrada por fix:
     está utilizando actualmente el sandbox compartido.
 - Commit de implementación: `48c0dd5`; evidencia operativa incluida en este
   commit de documentación.
+
+### 2026-08-26 - UX-056 - Catálogo editable de navieras y colores
+
+- Estado: Implementado; SQL aplicado en Production y Demo; UAT pendiente.
+- Hallazgo: UX-056.
+- Código:
+  - `src/app/(protected)/catalogs/page.tsx`
+  - `src/components/ui/CarrierBadge.tsx`
+  - `src/components/ui/CarrierCombobox.tsx`
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+  - `src/hooks/useCarrierCatalog.ts`
+- SQL: `supabase/migrations/20260826120000_carrier_catalog.sql`.
+- Cambios:
+  - Navieras, tipos, visibilidad y colores ahora se administran desde
+    `carrier_catalog`; la lista de código queda únicamente como respaldo.
+  - Selectores, badges e impresión comparativa consumen el catálogo activo.
+  - En Demo el catálogo se muestra, pero sus controles de escritura respetan
+    el modo de solo lectura del sandbox.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK en `main`; validación de la integración Demo
+    registrada antes de publicar la rama.
+  - Migración `20260826120000` aplicada y registrada en Production
+    (`fwspgdzvlbtbgiupvrzo`) y Demo (`wlssekvxpfxhwedsjhpz`).
+- Riesgos o trabajo pendiente:
+  - Falta UAT funcional con perfiles Admin, Pricing, Ventas y usuario Demo.
+- Commit de implementación en main: `6a640b1`.
