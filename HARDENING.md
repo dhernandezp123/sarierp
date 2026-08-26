@@ -5761,4 +5761,4 @@ Agregar una entrada por fix:
     selector, badges y vista de impresión.
 - Riesgos o trabajo pendiente:
   - Falta UAT funcional de creación, edición, visibilidad y consumo del catálogo.
-- Commit: pendiente.
+- Commit: `6a640b1`.
