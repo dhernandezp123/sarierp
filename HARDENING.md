@@ -5713,3 +5713,52 @@ Agregar una entrada por fix:
   - La pantalla todavía requiere guardar explícitamente el conjunto después de
     confirmar; el modal no escribe directamente en Supabase.
 - Commit: `43a62ad`.
+### 2026-08-26 - UX-056 - Catálogo editable de navieras y colores
+
+- Estado: Implementado en código; SQL aplicado en Production y Demo; UAT pendiente.
+- Hallazgo: UX-056.
+- Causa raíz:
+  - Las navieras, sus tipos y colores de badge estaban definidos en
+    `src/lib/constants/carriers.ts`, por lo que agregar o modificar una opción
+    requería un cambio de código y un nuevo deployment.
+- Código:
+  - `src/app/(protected)/catalogs/page.tsx`
+  - `src/components/ui/CarrierBadge.tsx`
+  - `src/components/ui/CarrierCombobox.tsx`
+  - `src/components/pricing/FclAgentComparisonTable.tsx`
+  - `src/hooks/useCarrierCatalog.ts`
+- SQL:
+  - `supabase/migrations/20260826120000_carrier_catalog.sql`
+- Cambios:
+  - Se agregó `carrier_catalog` con código, nombre, tipo, colores, visibilidad
+    y orden; la migración conserva como semilla todas las opciones actuales.
+  - Catálogos permite crear, editar y ocultar navieras, incluida la selección
+    visual de color de fondo y texto.
+  - El selector, los badges y la impresión comparativa consumen el catálogo
+    activo; la lista anterior queda como respaldo si la consulta no está
+    disponible durante el despliegue.
+  - RLS permite lectura a usuarios internos aprobados y escritura únicamente
+    a Admin/Pricing mediante `can_manage_pricing_catalogs()`.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - `npx.cmd supabase migration list --local`: no ejecutable porque la instancia
+    local de PostgreSQL no está iniciada en `127.0.0.1:54322`.
+  - `npx.cmd supabase db push`: migración `20260826120000` aplicada a Demo
+    (`sarierp-staging`, `wlssekvxpfxhwedsjhpz`) sin ejecutar las tres
+    migraciones históricas locales pendientes.
+  - `npx.cmd supabase db push --dry-run --include-all` contra Production
+    (`fwspgdzvlbtbgiupvrzo`): propuso únicamente `20260826120000`.
+  - `npx.cmd supabase db push`: migración `20260826120000` aplicada a Production.
+  - `npx.cmd supabase migration list --linked`: `20260826120000` coincide en
+    Local y Remote en ambos proyectos.
+  - ESLint dirigido: el hook y los componentes modificados no agregan hallazgos;
+    permanecen errores preexistentes de efectos/`any` en Catálogos,
+    `CarrierCombobox` y la tabla comparativa.
+- Verificación manual pendiente:
+  - Verificar RLS con perfiles Admin, Pricing y Ventas.
+  - Crear una naviera, modificar sus colores y confirmar su aparición en el
+    selector, badges y vista de impresión.
+- Riesgos o trabajo pendiente:
+  - Falta UAT funcional de creación, edición, visibilidad y consumo del catálogo.
+- Commit: pendiente.

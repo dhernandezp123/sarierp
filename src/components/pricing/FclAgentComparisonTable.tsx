@@ -6,7 +6,7 @@ import { Printer } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
-import { getCarrier } from '@/src/lib/constants/carriers'
+import { useCarrierCatalog } from '@/src/hooks/useCarrierCatalog'
 import { formatDateTime } from '@/src/lib/format'
 import { cn } from '@/src/lib/utils'
 
@@ -115,6 +115,7 @@ export function FclAgentComparisonTable({
   onSelectQuote,
 }: FclAgentComparisonTableProps) {
   const printableTableRef = useRef<HTMLDivElement>(null)
+  const { getCarrier } = useCarrierCatalog()
 
   const getRouteValue = (quote: AgentQuote, type: 'pol' | 'pod') => {
     if (type === 'pol') {

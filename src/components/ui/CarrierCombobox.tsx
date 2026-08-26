@@ -9,7 +9,8 @@ import { createPortal } from "react-dom"
 import { Check, ChevronsUpDown, Search } from "lucide-react"
 import { cn } from "@/src/lib/utils"
 import { useDropdownPosition } from "./useComboboxPortal"
-import { CARRIERS, getCarrier, type Carrier, type CarrierType } from "@/src/lib/constants/carriers"
+import { type Carrier, type CarrierType } from "@/src/lib/constants/carriers"
+import { useCarrierCatalog } from "@/src/hooks/useCarrierCatalog"
 
 interface CarrierComboboxProps {
   value: string                          // code del carrier seleccionado, ej: "MSC"
@@ -44,6 +45,7 @@ export function CarrierCombobox({
   const [query, setQuery]             = useState("")
   const [highlighted, setHighlighted] = useState(0)
   const [mounted, setMounted]         = useState(false)
+  const { carriers: catalogCarriers, getCarrier } = useCarrierCatalog()
 
   const triggerRef = useRef<HTMLButtonElement>(null)
   const inputRef   = useRef<HTMLInputElement>(null)
@@ -53,8 +55,8 @@ export function CarrierCombobox({
   useEffect(() => { setMounted(true) }, [])
 
   const carriers = filterType
-    ? CARRIERS.filter((c) => c.type === filterType)
-    : CARRIERS
+    ? catalogCarriers.filter((c) => c.type === filterType)
+    : catalogCarriers
 
   const selectedCarrier = getCarrier(value)
   const selected =
