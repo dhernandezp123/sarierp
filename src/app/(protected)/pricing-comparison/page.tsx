@@ -314,6 +314,7 @@ function PricingComparisonContent() {
     useState(false)
   const [insuranceAdditionalItemIds, setInsuranceAdditionalItemIds] =
     useState<string[]>([])
+  const [quotationInsuranceCostRate, setQuotationInsuranceCostRate] = useState('')
   const [applyingCargoInsurance, setApplyingCargoInsurance] = useState(false)
   const defaultSupplierName = getCompanyTradeName(companyBranding)
 
@@ -3257,6 +3258,14 @@ const profitabilityColor =
         .map((item) => item.id)
         .filter((itemId) => itemId && candidateIds.has(itemId))
     )
+    const savedCostRate = Number(selectedQuote?.insurance_cost_rate_percent)
+    setQuotationInsuranceCostRate(
+      String(
+        Number.isFinite(savedCostRate) && savedCostRate > 0
+          ? savedCostRate
+          : insuranceCostRatePercent
+      )
+    )
     setInsuranceCoverageDialogOpen(true)
   }
 
@@ -3284,6 +3293,12 @@ const profitabilityColor =
     )
     if (saleRatePercent <= 0) {
       toast.error('El cliente no tiene porcentaje de seguro configurado')
+      return
+    }
+
+    const costRatePercent = Number(quotationInsuranceCostRate)
+    if (!Number.isFinite(costRatePercent) || costRatePercent <= 0 || costRatePercent > 5) {
+      toast.error('Ingresa un porcentaje de costo mayor a 0% y hasta 5%')
       return
     }
 
@@ -3325,7 +3340,7 @@ const profitabilityColor =
     const insuredValueCost = insuredBaseCost * insuranceMarkupMultiplier
     const insuranceSale = insuredValueSale * (saleRatePercent / 100)
     const insuranceCost =
-      insuredValueCost * (insuranceCostRatePercent / 100)
+      insuredValueCost * (costRatePercent / 100)
     const insuranceTaxAmount = calculateTaxAmount(
       insuranceTaxable,
       insuranceSale,
@@ -3356,7 +3371,7 @@ const profitabilityColor =
       }`,
       `Valor asegurado costo: (FOB + costos) × 1.10 = USD ${formatCurrency(insuredValueCost)}`,
       `Valor asegurado venta: (FOB + ventas) × 1.10 = USD ${formatCurrency(insuredValueSale)}`,
-      `Seguro costo: USD ${formatCurrency(insuredValueCost)} × ${insuranceCostRatePercent}% = USD ${formatCurrency(insuranceCost)}`,
+      `Seguro costo: USD ${formatCurrency(insuredValueCost)} × ${costRatePercent}% = USD ${formatCurrency(insuranceCost)}`,
       `Seguro venta: USD ${formatCurrency(insuredValueSale)} × ${saleRatePercent}% = USD ${formatCurrency(insuranceSale)}`,
       `ISV ${defaultTaxRate}% aplicado: ${insuranceTaxable ? 'Sí' : 'No'}`,
     ].join('\n')
@@ -3408,6 +3423,22 @@ const profitabilityColor =
         return
       }
     }
+
+    const { error: quotationRateError } = await supabase
+      .from('quotations')
+      .update({ insurance_cost_rate_percent: costRatePercent })
+      .eq('id', selectedQuote.id)
+
+    if (quotationRateError) {
+      toast.error('No se pudo guardar la tasa de costo en la cotización')
+      setApplyingCargoInsurance(false)
+      return
+    }
+
+    setSelectedQuote({
+      ...selectedQuote,
+      insurance_cost_rate_percent: costRatePercent,
+    })
 
     const { error } = existingInsuranceItem
       ? await supabase
@@ -6570,6 +6601,25 @@ const profitabilityColor =
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/60 dark:bg-blue-950/30">
+              <label className="block text-sm font-semibold text-blue-950 dark:text-blue-100">
+                Porcentaje de costo de la aseguradora (%)
+                <input
+                  type="number"
+                  min="0.0001"
+                  max="5"
+                  step="0.01"
+                  value={quotationInsuranceCostRate}
+                  onChange={(event) => setQuotationInsuranceCostRate(event.target.value)}
+                  disabled={applyingCargoInsurance}
+                  className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-slate-950 dark:border-blue-800 dark:bg-slate-950 dark:text-white"
+                />
+              </label>
+              <p className="mt-2 text-xs text-blue-800 dark:text-blue-200">
+                Predeterminado corporativo: {insuranceCostRatePercent}%. Ajusta este valor únicamente cuando la aseguradora aplique una tasa especial para esta cotización.
+              </p>
+            </div>
+
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
               <p className="font-semibold">Incluidos por la regla general</p>
               <ul className="mt-1 list-inside list-disc text-xs">

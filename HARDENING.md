@@ -4,6 +4,36 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-09-02 - INS-027 - Tasa excepcional de costo de seguro por cotización
+
+- Estado: Implementado, migrado y validado; pendiente de UAT y deployment de
+  la interfaz en Producción.
+- Hallazgo: INS-027.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/components/quotations/InsuranceCalculationDialog.tsx`.
+- SQL:
+  - `supabase/migrations/20260902120000_quotation_insurance_cost_rate.sql`.
+- Cambios:
+  - Pricing puede ajustar la tasa de costo de la aseguradora al aplicar el
+    seguro, sin modificar el porcentaje comercial configurado para el cliente.
+  - La tasa corporativa continúa siendo el valor predeterminado; una tasa
+    excepcional se guarda en la cotización y se reutiliza al recalcular o
+    consultar el detalle histórico.
+  - Se valida que la tasa sea mayor que 0% y no exceda 5%, tanto en la interfaz
+    como en la base de datos.
+- Validaciones ejecutadas:
+  - `npx.cmd next typegen` exitoso.
+  - `npx.cmd tsc --noEmit` exitoso.
+  - Migración `20260902120000` aplicada y registrada en la base remota.
+  - Columna remota verificada como `numeric(7,4)` nullable.
+  - ESLint dirigido ejecutado; conserva deuda previa del módulo (`any`, estados
+    dentro de efectos y variables no usadas), sin errores nuevos del cambio.
+- Riesgos o trabajo pendiente:
+  - Validar en UAT un caso con costo 0.33% y venta 0.40%, confirmando línea de
+    pricing, margen y detalle para aseguradora.
+- Commit: pendiente.
+
 ### 2026-08-14 - UX-056 - Recorrido visual real en la landing
 
 - Estado: Implementado y validado localmente; pendiente de UAT y deployment en

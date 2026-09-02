@@ -51,6 +51,10 @@ export function InsuranceCalculationDialog({
   insuranceExclusionPatterns = [],
   insuranceInclusionPatterns,
 }: InsuranceCalculationDialogProps) {
+  const savedCostRate = toAmount(quotation?.insurance_cost_rate_percent)
+  const effectiveCostRate = savedCostRate > 0
+    ? savedCostRate
+    : insuranceCostRatePercent
   const insuranceItem = pricingItems.find(isInsurancePricingItem)
   const insuranceCoverage = useMemo(
     () =>
@@ -99,7 +103,7 @@ export function InsuranceCalculationDialog({
     nationalTaxes: 0,
     includeAdditionalExpenses,
     includeOperationalExpenses,
-    costRatePercent: insuranceCostRatePercent,
+    costRatePercent: effectiveCostRate,
     saleRatePercent: clientSaleRate,
   })
   const costDeclaration = calculateInsuranceDeclaration({
@@ -108,7 +112,7 @@ export function InsuranceCalculationDialog({
     nationalTaxes: 0,
     includeAdditionalExpenses,
     includeOperationalExpenses,
-    costRatePercent: insuranceCostRatePercent,
+    costRatePercent: effectiveCostRate,
     saleRatePercent: clientSaleRate,
   })
   const {
@@ -390,7 +394,7 @@ export function InsuranceCalculationDialog({
     setText('cost-insured-base', money(costDeclaration.insuredValue))
     setText(
       'cost-premium-label',
-      `Costo del seguro (${insuranceCostRatePercent}%)`
+      `Costo del seguro (${effectiveCostRate}%)`
     )
     setText('cost-premium', money(insuranceCost))
     setText(
@@ -398,7 +402,7 @@ export function InsuranceCalculationDialog({
       `Base: (${money(invoice)} + ${money(commercialServiceCost)}) + ` +
         `${money(costDeclaration.additionalExpenses)} + ${money(costDeclaration.operationalExpenses)} ` +
         `= ${money(costDeclaration.insuredValue)}. Prima: ${money(costDeclaration.insuredValue)} × ` +
-        `${insuranceCostRatePercent}% = ${money(insuranceCost)}.`
+        `${effectiveCostRate}% = ${money(insuranceCost)}.`
     )
 
     setText('sale-invoice', money(invoice))
@@ -570,7 +574,7 @@ export function InsuranceCalculationDialog({
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-            <p className="text-xs text-slate-500">Costo aseguradora ({insuranceCostRatePercent}%)</p>
+            <p className="text-xs text-slate-500">Costo aseguradora ({effectiveCostRate}%)</p>
             <p className="mt-1 text-xl font-bold">USD {formatAmount(insuranceCost)}</p>
             <p className="mt-1 text-[11px] text-slate-500">
               Base: USD {formatAmount(commercialCostInsuredBase)}
