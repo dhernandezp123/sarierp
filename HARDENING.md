@@ -5795,7 +5795,7 @@ Agregar una entrada por fix:
 
 ### 2026-09-03 - FLOW-021 - Opciones comerciales múltiples por cotización
 
-- Estado: Implementado y validado; SQL aplicado en Production. Deployment del frontend y UAT pendientes.
+- Estado: Implementado, validado y desplegado en Production; UAT funcional pendiente.
 - Hallazgo: FLOW-021.
 - Causa raíz:
   - `agent_quotes` permitía comparar varias tarifas, pero el índice de selección y
@@ -5838,6 +5838,9 @@ Agregar una entrada por fix:
     `20260903120000`.
   - `npm.cmd run build`: OK; 70/70 páginas generadas.
   - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Supabase Production: migración `20260903120000` aplicada y confirmada en Remote.
+  - Vercel Production: deployment `dpl_HiUdcT5yAggJuRxmUNDEeF5bLD5s` en estado
+    `Ready`, con alias `https://forwarders.app`.
   - ESLint dirigido: los archivos nuevos no agregan hallazgos; las páginas y el
     PDF conservan errores preexistentes de `any`, hooks y accesibilidad.
 - Verificación manual pendiente:
@@ -5845,11 +5848,11 @@ Agregar una entrada por fix:
   - Repetir con carga suelta/Aéreo Consolidado, ISV, seguro y multicontenedor.
   - Confirmar con perfiles Pricing y Ventas que publicación, selección y permisos
     coincidan con el flujo definido.
-  - Desplegar el frontend y completar UAT con perfiles Pricing y Ventas.
+  - Completar UAT con perfiles Pricing y Ventas.
 - Riesgos o trabajo pendiente:
   - El flujo multiópción se habilita para cotizaciones comerciales previas a
     operación. El repricing de una cotización que ya tiene SI/Booking continúa con
     el mecanismo legacy y requiere una fase posterior si debe reenviar opciones.
   - Falta revisión visual del PDF con datos reales y UAT del correo; el correo
     informa que las condiciones por opción se encuentran en el PDF adjunto.
-- Commit: pendiente.
+- Commit: `47c3467`.
