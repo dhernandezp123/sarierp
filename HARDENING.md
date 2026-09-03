@@ -5918,7 +5918,7 @@ Agregar una entrada por fix:
 
 ### 2026-09-03 - FLOW-023 - Trazabilidad visual entre opción y tarifa de agente
 
-- Estado: Implementado y validado localmente; deployment y UAT pendientes.
+- Estado: Implementado, validado y desplegado en Production; UAT funcional pendiente.
 - Hallazgo: FLOW-023.
 - Causa raíz:
   - Cada `quotation_option` conservaba `agent_quote_id` y `agent_name`, pero la
@@ -5942,6 +5942,8 @@ Agregar una entrada por fix:
   - ESLint dirigido a `QuotationOptionsPanel.tsx`: OK.
   - `npm.cmd run build`: OK; 70/70 páginas generadas.
   - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Vercel Production: deployment `dpl_3HJQzz2k8zfcDa43AtBrXC3wC4KW`
+    en estado `Ready`, con alias `https://forwarders.app`.
 - Verificación manual pendiente:
   - Abrir opciones A/B ligadas a agentes distintos y confirmar nombre, scroll y
     resaltado tanto desde vista Cards como desde Tabla FCL.
@@ -5949,4 +5951,4 @@ Agregar una entrada por fix:
 - Riesgos o trabajo pendiente:
   - Opciones históricas sin `agent_name` mostrarán `No especificado`, pero el
     vínculo a su tarifa seguirá disponible mediante `agent_quote_id`.
-- Commit: pendiente.
+- Commit: `f438837`.
