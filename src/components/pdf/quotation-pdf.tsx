@@ -721,15 +721,19 @@ function QuotationPDFPages({
   cargoLines = [],
   company,
   optionLabel,
+  optionClientNotes,
   includeTerms = true,
 }: QuotationPdfBaseProps & {
   optionLabel?: string
+  optionClientNotes?: string | null
   includeTerms?: boolean
 }) {
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
   const companyAddressLines = getCompanyAddressLines(companyBranding)
   const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
+  const generalClientNotes = String(quotation.client_notes || '').trim()
+  const specificOptionNotes = String(optionClientNotes || '').trim()
   const quoteTitle = getQuoteTitleByProduct(quotation)
   const freightItems = filterItems(pricingItems, ['freight', 'Flete'])
   const knownGroupedTypes = [
@@ -1236,12 +1240,21 @@ function QuotationPDFPages({
           </View>
         </View>
 
-        <View style={styles.observationNotes} wrap={false}>
-          <Text style={styles.sectionTitle}>Observaciones</Text>
-          <Text>
-            {quotation.client_notes || 'Sin observaciones'}
-          </Text>
-        </View>
+        {(!optionLabel || generalClientNotes) && (
+          <View style={styles.observationNotes} wrap={false}>
+            <Text style={styles.sectionTitle}>
+              {optionLabel ? 'Observaciones generales' : 'Observaciones'}
+            </Text>
+            <Text>{generalClientNotes || 'Sin observaciones'}</Text>
+          </View>
+        )}
+
+        {optionLabel && (
+          <View style={styles.observationNotes} wrap={false}>
+            <Text style={styles.sectionTitle}>Observaciones de esta opción</Text>
+            <Text>{specificOptionNotes || 'Sin observaciones específicas'}</Text>
+          </View>
+        )}
 
         {useCargoAnnex && (
           <View wrap={false}>
@@ -1341,6 +1354,7 @@ export default function QuotationPDF({
           optionLabel={`OPCIÓN ${option.option_code} · ${option.label}${
             option.is_recommended ? ' · RECOMENDADA' : ''
           }`}
+          optionClientNotes={option.client_notes}
           includeTerms={index === commercialOptions.length - 1}
         />
       ))}

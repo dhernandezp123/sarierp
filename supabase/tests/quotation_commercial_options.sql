@@ -86,8 +86,23 @@ select set_config(
   true
 );
 
-select * from public.save_current_pricing_as_option(
-  '6c200000-0000-0000-0000-000000000001', 'Salida rápida', true, null
+select * from public.save_current_pricing_as_option_v2(
+  '6c200000-0000-0000-0000-000000000001',
+  'Salida rápida',
+  true,
+  null,
+  'Salida directa; incluye 10 días libres.'
+);
+
+select * from public.update_draft_quotation_option_details(
+  (
+    select id from public.quotation_options
+    where quotation_id = '6c200000-0000-0000-0000-000000000001'
+      and option_code = 'A'
+  ),
+  'Salida rápida actualizada',
+  true,
+  'Salida directa; incluye 12 días libres.'
 );
 
 select * from public.select_agent_quote_and_replace_pricing(
@@ -97,15 +112,30 @@ select * from public.select_agent_quote_and_replace_pricing(
   'Preparar segunda opción'
 );
 
-select * from public.save_current_pricing_as_option(
-  '6c200000-0000-0000-0000-000000000001', 'Mejor precio', false, null
+select * from public.save_current_pricing_as_option_v2(
+  '6c200000-0000-0000-0000-000000000001',
+  'Mejor precio',
+  false,
+  null,
+  'Con transbordo en Panamá; sujeta a espacio.'
 );
 
 select pg_temp.assert_true(
   (
     select count(*) = 2
-      and count(*) filter (where option_code = 'A' and carrier = 'NAVIERA A' and grand_total = 1200) = 1
-      and count(*) filter (where option_code = 'B' and carrier = 'NAVIERA B' and grand_total = 1150) = 1
+      and count(*) filter (
+        where option_code = 'A'
+          and carrier = 'NAVIERA A'
+          and grand_total = 1200
+          and label = 'Salida rápida actualizada'
+          and client_notes = 'Salida directa; incluye 12 días libres.'
+      ) = 1
+      and count(*) filter (
+        where option_code = 'B'
+          and carrier = 'NAVIERA B'
+          and grand_total = 1150
+          and client_notes = 'Con transbordo en Panamá; sujeta a espacio.'
+      ) = 1
     from public.quotation_options
     where quotation_id = '6c200000-0000-0000-0000-000000000001'
   ),
@@ -145,6 +175,20 @@ select pg_temp.expect_denied(
     '6c200000-0000-0000-0000-000000000001', 'No permitido', false, null
   )$$,
   'Una opción publicada no debe poder reemplazarse mediante un nuevo guardado tras el envío'
+);
+
+select pg_temp.expect_denied(
+  $$select public.update_draft_quotation_option_details(
+    (
+      select id from public.quotation_options
+      where quotation_id = '6c200000-0000-0000-0000-000000000001'
+        and option_code = 'A'
+    ),
+    'Cambio no permitido',
+    true,
+    'Esta nota no debe guardarse'
+  )$$,
+  'Una opción ofrecida no debe permitir editar sus detalles comerciales'
 );
 
 reset role;

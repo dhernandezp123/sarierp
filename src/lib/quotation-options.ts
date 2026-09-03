@@ -32,6 +32,7 @@ export type QuotationCommercialOption = {
   agent_quote_id: string
   option_code: string
   label: string
+  client_notes: string
   status: QuotationOptionStatus
   is_recommended: boolean
   sort_order: number

@@ -2583,31 +2583,34 @@ function PricingComparisonContent() {
   const saveCurrentPricingAsOption = async ({
     label,
     isRecommended,
+    clientNotes: optionClientNotes,
     optionId,
   }: {
     label: string
     isRecommended: boolean
+    clientNotes: string
     optionId?: string
-  }) => {
-    if (!selectedQuote?.id || savingCommercialOption) return
-    if (!ensureQuoteIsEditable()) return
+  }): Promise<boolean> => {
+    if (!selectedQuote?.id || savingCommercialOption) return false
+    if (!ensureQuoteIsEditable()) return false
 
     setSavingCommercialOption(true)
 
     try {
       const { data, error } = await supabase.rpc(
-        'save_current_pricing_as_option',
+        'save_current_pricing_as_option_v2',
         {
           p_quotation_id: selectedQuote.id,
           p_label: label.trim() || null,
           p_is_recommended: isRecommended,
           p_option_id: optionId || null,
+          p_client_notes: optionClientNotes,
         }
       )
 
       if (error) {
         toast.error(error.message)
-        return
+        return false
       }
 
       const saved = Array.isArray(data) ? data[0] : data
@@ -2617,6 +2620,46 @@ function PricingComparisonContent() {
           : `Opción ${saved?.option_code || ''} guardada`
       )
       await fetchCommercialOptions(selectedQuote.id)
+      return true
+    } finally {
+      setSavingCommercialOption(false)
+    }
+  }
+
+  const updateDraftCommercialOptionDetails = async ({
+    optionId,
+    label,
+    isRecommended,
+    clientNotes: optionClientNotes,
+  }: {
+    optionId: string
+    label: string
+    isRecommended: boolean
+    clientNotes: string
+  }): Promise<boolean> => {
+    if (!selectedQuote?.id || savingCommercialOption) return false
+    if (!ensureQuoteIsEditable()) return false
+
+    setSavingCommercialOption(true)
+    try {
+      const { error } = await supabase.rpc(
+        'update_draft_quotation_option_details',
+        {
+          p_option_id: optionId,
+          p_label: label.trim(),
+          p_is_recommended: isRecommended,
+          p_client_notes: optionClientNotes,
+        }
+      )
+
+      if (error) {
+        toast.error(error.message)
+        return false
+      }
+
+      toast.success('Detalles de la opción actualizados')
+      await fetchCommercialOptions(selectedQuote.id)
+      return true
     } finally {
       setSavingCommercialOption(false)
     }
@@ -5913,17 +5956,19 @@ const profitabilityColor =
                   saving={savingCommercialOption}
                   formatCurrency={formatCurrency}
                   onSave={saveCurrentPricingAsOption}
+                  onEdit={updateDraftCommercialOptionDetails}
                   onDelete={deleteDraftCommercialOption}
                   onPreview={previewQuotationPdf}
                 />
 
                 <div className={cn(cardClass, 'p-6')}>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                    Observaciones para Cliente (PDF)
+                    Observaciones generales para Cliente (PDF)
                   </h3>
 
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Estas observaciones aparecerán en la cotización enviada al cliente.
+                    Se mostrarán en todas las opciones. Las condiciones exclusivas se
+                    editan dentro de cada opción comercial.
                   </p>
 
                   <textarea

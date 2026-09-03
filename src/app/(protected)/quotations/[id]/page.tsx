@@ -2081,6 +2081,17 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     <div><span className="block text-xs text-slate-500">Vigencia</span>{formatDisplayDate(option.valid_until)}</div>
                   </div>
 
+                  {option.client_notes?.trim() && (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950/60">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Observaciones de esta opción
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+                        {option.client_notes}
+                      </p>
+                    </div>
+                  )}
+
                   {canAccept && (
                     <button
                       type="button"

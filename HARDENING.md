@@ -5856,3 +5856,61 @@ Agregar una entrada por fix:
   - Falta revisión visual del PDF con datos reales y UAT del correo; el correo
     informa que las condiciones por opción se encuentran en el PDF adjunto.
 - Commit: `47c3467`.
+
+### 2026-09-03 - FLOW-022 - Notas comerciales específicas por opción
+
+- Estado: Implementado y validado; SQL aplicado en Production. Deployment del frontend y UAT pendientes.
+- Hallazgo: FLOW-022.
+- Causa raíz:
+  - `quotations.client_notes` era la única fuente de observaciones comerciales,
+    por lo que el mismo texto se repetía en todas las opciones del PDF.
+  - Las opciones en borrador solo podían reemplazarse con el pricing actual; no
+    existía una edición aislada de nombre, recomendación o notas.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pricing/QuotationOptionsPanel.tsx`
+  - `src/components/pdf/quotation-pdf.tsx`
+  - `src/lib/quotation-options.ts`
+- SQL:
+  - `supabase/migrations/20260903190000_quotation_option_client_notes.sql`
+  - `supabase/tests/quotation_commercial_options.sql`
+- Cambios:
+  - Se agregó `quotation_options.client_notes` para conservar hasta 4000
+    caracteres de observaciones comerciales exclusivas de cada alternativa.
+  - `save_current_pricing_as_option_v2` guarda o reemplaza el snapshot y sus
+    notas dentro de la misma transacción, manteniendo disponible la RPC anterior
+    durante el despliegue para no romper clientes abiertos.
+  - `update_draft_quotation_option_details` permite editar nombre, recomendación
+    y notas sin alterar tarifa, cargos, costo, venta, profit o GP.
+  - La edición y el reemplazo solo están disponibles para opciones `Borrador`;
+    las opciones ofrecidas continúan congeladas.
+  - El PDF separa observaciones generales de la cotización y observaciones de
+    cada opción. Ventas también puede leer la nota antes de registrar la elección.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npx.cmd supabase migration up --local`: migración aplicada correctamente.
+  - `npx.cmd supabase test db supabase/tests/quotation_commercial_options.sql`: PASS.
+  - `npx.cmd supabase db lint --local --level warning`: sin hallazgos.
+  - `npx.cmd supabase migration list --local`: historial local actualizado hasta
+    `20260903190000`.
+  - `npx.cmd supabase db push --dry-run`: Production propone únicamente
+    `20260903190000_quotation_option_client_notes.sql`.
+  - `npx.cmd supabase db push`: migración aplicada correctamente en Production.
+  - `npx.cmd supabase migration list --linked`: Local y Remote coinciden hasta
+    `20260903190000`.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - ESLint dirigido a `QuotationOptionsPanel.tsx` y `quotation-options.ts`: OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Crear dos opciones con notas distintas y confirmar que cada página del PDF
+    muestre únicamente la nota específica correspondiente.
+  - Editar solo nombre/notas de una opción borrador y confirmar que sus líneas y
+    totales no cambien.
+  - Confirmar con una opción ofrecida que los controles de edición permanezcan
+    ocultos y que la RPC rechace una modificación directa.
+- Riesgos o trabajo pendiente:
+  - Las opciones creadas antes de esta migración comienzan sin nota específica;
+    conservan las observaciones generales y pueden completarse mientras sean borrador.
+  - Falta desplegar el frontend en Production.
+- Commit: pendiente.

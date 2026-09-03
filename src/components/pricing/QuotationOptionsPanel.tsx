@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, RefreshCw, Save, Star, Trash2 } from 'lucide-react'
+import { FileText, Pencil, RefreshCw, Save, Star, Trash2, X } from 'lucide-react'
 
 import type { QuotationCommercialOption } from '@/src/lib/quotation-options'
 import { cn } from '@/src/lib/utils'
@@ -30,8 +30,15 @@ type Props = {
   onSave: (input: {
     label: string
     isRecommended: boolean
+    clientNotes: string
     optionId?: string
-  }) => Promise<void>
+  }) => Promise<boolean>
+  onEdit: (input: {
+    optionId: string
+    label: string
+    isRecommended: boolean
+    clientNotes: string
+  }) => Promise<boolean>
   onDelete: (optionId: string) => Promise<void>
   onPreview: () => void
 }
@@ -42,20 +49,45 @@ export function QuotationOptionsPanel({
   saving = false,
   formatCurrency,
   onSave,
+  onEdit,
   onDelete,
   onPreview,
 }: Props) {
   const [label, setLabel] = useState('')
   const [isRecommended, setIsRecommended] = useState(false)
+  const [clientNotes, setClientNotes] = useState('')
+  const [editingOption, setEditingOption] = useState<{
+    optionId: string
+    label: string
+    isRecommended: boolean
+    clientNotes: string
+  } | null>(null)
   const [optionToRefresh, setOptionToRefresh] =
     useState<QuotationCommercialOption | null>(null)
   const [optionToDelete, setOptionToDelete] =
     useState<QuotationCommercialOption | null>(null)
 
   const handleCreate = async () => {
-    await onSave({ label, isRecommended })
+    const saved = await onSave({ label, isRecommended, clientNotes })
+    if (!saved) return
     setLabel('')
     setIsRecommended(false)
+    setClientNotes('')
+  }
+
+  const beginEditing = (option: QuotationCommercialOption) => {
+    setEditingOption({
+      optionId: option.id,
+      label: option.label,
+      isRecommended: option.is_recommended,
+      clientNotes: option.client_notes || '',
+    })
+  }
+
+  const saveOptionDetails = async () => {
+    if (!editingOption) return
+    const saved = await onEdit(editingOption)
+    if (saved) setEditingOption(null)
   }
 
   return (
@@ -84,7 +116,7 @@ export function QuotationOptionsPanel({
         )}
       </div>
 
-      <div className="mt-5 grid gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end dark:border-slate-700 dark:bg-slate-900/50">
+      <div className="mt-5 grid gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end dark:border-slate-700 dark:bg-slate-900/50">
         <label className="block">
           <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Nombre opcional
@@ -109,11 +141,32 @@ export function QuotationOptionsPanel({
           Recomendada
         </label>
 
+        <label className="block md:col-span-2">
+          <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Notas de esta opción para el cliente
+          </span>
+          <textarea
+            value={clientNotes}
+            onChange={(event) => setClientNotes(event.target.value)}
+            disabled={disabled || saving}
+            maxLength={4000}
+            rows={3}
+            placeholder="Ej: Sujeta a espacio; salida semanal; incluye 14 días libres."
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+          />
+          <span className="mt-1 block text-right text-[11px] text-slate-400">
+            {clientNotes.length}/4000
+          </span>
+        </label>
+
         <button
           type="button"
           onClick={handleCreate}
           disabled={disabled || saving}
-          className={cn(primaryButtonClass, 'inline-flex h-10 items-center justify-center gap-2')}
+          className={cn(
+            primaryButtonClass,
+            'inline-flex h-10 items-center justify-center gap-2 md:col-span-2 md:justify-self-end'
+          )}
         >
           <Save className="h-4 w-4" />
           {saving ? 'Guardando...' : 'Guardar pricing actual'}
@@ -195,8 +248,104 @@ export function QuotationOptionsPanel({
                 </div>
               </div>
 
-              {option.status === 'Borrador' && (
+              {editingOption?.optionId === option.id ? (
+                <div className="mt-4 space-y-3 rounded-xl border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      Nombre de la opción
+                    </span>
+                    <input
+                      value={editingOption.label}
+                      onChange={(event) =>
+                        setEditingOption({ ...editingOption, label: event.target.value })
+                      }
+                      disabled={disabled || saving}
+                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      Notas de esta opción para el cliente
+                    </span>
+                    <textarea
+                      value={editingOption.clientNotes}
+                      onChange={(event) =>
+                        setEditingOption({
+                          ...editingOption,
+                          clientNotes: event.target.value,
+                        })
+                      }
+                      disabled={disabled || saving}
+                      maxLength={4000}
+                      rows={4}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    />
+                    <span className="mt-1 block text-right text-[11px] text-slate-400">
+                      {editingOption.clientNotes.length}/4000
+                    </span>
+                  </label>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={editingOption.isRecommended}
+                        onChange={(event) =>
+                          setEditingOption({
+                            ...editingOption,
+                            isRecommended: event.target.checked,
+                          })
+                        }
+                        disabled={disabled || saving}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      Recomendada
+                    </label>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingOption(null)}
+                        disabled={saving}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200"
+                      >
+                        <X className="h-3.5 w-3.5" /> Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveOptionDetails}
+                        disabled={disabled || saving}
+                        className={cn(primaryButtonClass, 'inline-flex items-center gap-1.5 px-3 py-2 text-xs')}
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        {saving ? 'Guardando...' : 'Guardar cambios'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : option.client_notes?.trim() ? (
+                <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2.5 text-sm dark:bg-slate-900">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Notas para esta opción
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+                    {option.client_notes}
+                  </p>
+                </div>
+              ) : null}
+
+              {option.status === 'Borrador' && editingOption?.optionId !== option.id && (
                 <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => beginEditing(option)}
+                    disabled={disabled || saving}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Editar opción
+                  </button>
                   <button
                     type="button"
                     onClick={() => setOptionToRefresh(option)}
@@ -230,12 +379,13 @@ export function QuotationOptionsPanel({
         confirmLabel="Reemplazar snapshot"
         onConfirm={async () => {
           if (!optionToRefresh) return
-          await onSave({
+          const saved = await onSave({
             optionId: optionToRefresh.id,
             label: optionToRefresh.label,
             isRecommended: optionToRefresh.is_recommended,
+            clientNotes: optionToRefresh.client_notes || '',
           })
-          setOptionToRefresh(null)
+          if (saved) setOptionToRefresh(null)
         }}
       />
 
