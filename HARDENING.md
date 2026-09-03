@@ -5859,7 +5859,7 @@ Agregar una entrada por fix:
 
 ### 2026-09-03 - FLOW-022 - Notas comerciales específicas por opción
 
-- Estado: Implementado y validado; SQL aplicado en Production. Deployment del frontend y UAT pendientes.
+- Estado: Implementado, validado y desplegado en Production; UAT funcional pendiente.
 - Hallazgo: FLOW-022.
 - Causa raíz:
   - `quotations.client_notes` era la única fuente de observaciones comerciales,
@@ -5902,6 +5902,8 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; 70/70 páginas generadas.
   - ESLint dirigido a `QuotationOptionsPanel.tsx` y `quotation-options.ts`: OK.
   - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Vercel Production: deployment `dpl_93GGHp5EEcRxpjGi6Z6VhuvNYLMM` en estado
+    `Ready`, con alias `https://forwarders.app`.
 - Verificación manual pendiente:
   - Crear dos opciones con notas distintas y confirmar que cada página del PDF
     muestre únicamente la nota específica correspondiente.
@@ -5912,5 +5914,4 @@ Agregar una entrada por fix:
 - Riesgos o trabajo pendiente:
   - Las opciones creadas antes de esta migración comienzan sin nota específica;
     conservan las observaciones generales y pueden completarse mientras sean borrador.
-  - Falta desplegar el frontend en Production.
-- Commit: pendiente.
+- Commit: `54f33f1`.
