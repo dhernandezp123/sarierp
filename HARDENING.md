@@ -5792,3 +5792,64 @@ Agregar una entrada por fix:
 - Riesgos o trabajo pendiente:
   - Falta UAT funcional de creación, edición, visibilidad y consumo del catálogo.
 - Commit: `6a640b1`.
+
+### 2026-09-03 - FLOW-021 - Opciones comerciales múltiples por cotización
+
+- Estado: Implementado y validado; SQL aplicado en Production. Deployment del frontend y UAT pendientes.
+- Hallazgo: FLOW-021.
+- Causa raíz:
+  - `agent_quotes` permitía comparar varias tarifas, pero el índice de selección y
+    `pricing_items` conservaban solamente una alternativa comercial final.
+  - Cambiar de naviera reemplazaba el pricing visible, por lo que enviar dos
+    opciones requería duplicar la cotización o perder el cálculo anterior.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pricing/QuotationOptionsPanel.tsx`
+  - `src/components/pdf/quotation-pdf.tsx`
+  - `src/lib/quotation-options.ts`
+- SQL:
+  - `supabase/migrations/20260903120000_quotation_commercial_options.sql`
+  - `supabase/tests/quotation_commercial_options.sql`
+- Cambios:
+  - Se agregaron `quotation_options` y `quotation_option_items` como snapshots
+    independientes de tarifa, condiciones, costos, venta, ISV, profit y GP.
+  - Pricing puede guardar el pricing actual como Opción A/B, marcar una
+    recomendada, reemplazar un borrador y cambiar de tarifa sin perder snapshots.
+  - Enviar al cliente publica y congela las opciones junto con el cambio de estado
+    dentro de una sola RPC transaccional.
+  - El PDF comercial genera una sección completa por opción bajo el mismo número
+    de cotización y conserva una sola sección de términos y condiciones.
+  - Ventas/Admin registra mediante confirmación la opción elegida; la RPC restaura
+    exclusivamente sus líneas en `pricing_items`, selecciona su `agent_quote` y
+    sincroniza totales y datos comerciales de la cotización.
+  - Guards PostgreSQL impiden marcar la cotización como `Ganada` o crear Shipping
+    Instructions cuando existen opciones pero ninguna ha sido aceptada.
+  - Cotizaciones sin opciones conservan íntegramente el flujo legacy.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npx.cmd supabase migration up --local`: migración aplicada correctamente.
+  - `npx.cmd supabase test db supabase/tests/quotation_commercial_options.sql`: PASS.
+  - `npx.cmd supabase db lint --local --level warning`: sin hallazgos.
+  - `npx.cmd supabase db push --dry-run`: Production propone únicamente
+    `20260903120000_quotation_commercial_options.sql`.
+  - `npx.cmd supabase db push`: migración aplicada correctamente en Production.
+  - `npx.cmd supabase migration list --linked`: Local y Remote coinciden hasta
+    `20260903120000`.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - ESLint dirigido: los archivos nuevos no agregan hallazgos; las páginas y el
+    PDF conservan errores preexistentes de `any`, hooks y accesibilidad.
+- Verificación manual pendiente:
+  - Crear dos opciones FCL con navieras y profits distintos y revisar el PDF.
+  - Repetir con carga suelta/Aéreo Consolidado, ISV, seguro y multicontenedor.
+  - Confirmar con perfiles Pricing y Ventas que publicación, selección y permisos
+    coincidan con el flujo definido.
+  - Desplegar el frontend y completar UAT con perfiles Pricing y Ventas.
+- Riesgos o trabajo pendiente:
+  - El flujo multiópción se habilita para cotizaciones comerciales previas a
+    operación. El repricing de una cotización que ya tiene SI/Booking continúa con
+    el mecanismo legacy y requiere una fase posterior si debe reenviar opciones.
+  - Falta revisión visual del PDF con datos reales y UAT del correo; el correo
+    informa que las condiciones por opción se encuentran en el PDF adjunto.
+- Commit: pendiente.

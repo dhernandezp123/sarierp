@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronDown,
+  CheckCircle2,
   Copy,
   CreditCard,
   Download,
@@ -17,6 +18,7 @@ import {
   Route,
   Scale,
   ShieldCheck,
+  Star,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -57,6 +59,10 @@ import {
   normalizeTaxRatePercent,
 } from '@/src/lib/tax'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
+import {
+  getClientVisibleQuotationOptions,
+  type QuotationCommercialOption,
+} from '@/src/lib/quotation-options'
 import {
   DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS,
   normalizeInsuranceCoveragePatterns,
@@ -310,6 +316,9 @@ const formatCommercialMetadata = (metadata?: Record<string, unknown> | null) => 
     ['confirmed_bookings_count', 'Bookings confirmados'],
     ['routingCode', 'SI'],
     ['routing_number', 'SI'],
+    ['option_code', 'Opción'],
+    ['carrier', 'Naviera'],
+    ['grand_total', 'Total opción'],
   ]
 
   fields.forEach(([key, label]) => {
@@ -339,6 +348,11 @@ const getCommercialActivityTitle = (action: string) => {
     post_approval_change: '✏️ Cambio posterior a aprobación',
     send_to_pricing: '📄 Cotización enviada a Pricing',
     shipping_instruction_created: '🚢 Shipping Instruction creada',
+    quotation_option_created: '🧩 Opción comercial creada',
+    quotation_option_updated: '🧩 Opción comercial actualizada',
+    quotation_option_deleted: '🗑️ Opción comercial eliminada',
+    quotation_options_sent: '📤 Opciones comerciales enviadas',
+    quotation_option_accepted: '✅ Opción comercial elegida',
   }
 
   return titleByAction[action] || action
@@ -378,6 +392,11 @@ export default function QuotationDetailPage() {
 
   const [agentQuotes, setAgentQuotes] = useState<any[]>([])
   const [pricingItems, setPricingItems] = useState<any[]>([])
+  const [commercialOptions, setCommercialOptions] =
+    useState<QuotationCommercialOption[]>([])
+  const [optionPendingAcceptance, setOptionPendingAcceptance] =
+    useState<QuotationCommercialOption | null>(null)
+  const [acceptingCommercialOption, setAcceptingCommercialOption] = useState(false)
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [cargoLines, setCargoLines] = useState<CargoLine[]>([])
   const [validations, setValidations] = useState<any[]>([])
@@ -500,6 +519,13 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', id)
       .order('created_at', { ascending: true })
 
+    const { data: commercialOptionsData, error: commercialOptionsError } =
+      await supabase
+        .from('quotation_options')
+        .select('*, items:quotation_option_items(*)')
+        .eq('quotation_id', id)
+        .order('sort_order', { ascending: true })
+
     const { data: quotationContainersData } = await supabase
       .from('quotation_containers')
       .select('*')
@@ -547,6 +573,21 @@ export default function QuotationDetailPage() {
         : null
     )
     setPricingItems(pricingItemsData || [])
+    if (commercialOptionsError) {
+      toast.error(commercialOptionsError.message)
+      setCommercialOptions([])
+    } else {
+      setCommercialOptions(
+        ((commercialOptionsData || []) as QuotationCommercialOption[]).map(
+          (option) => ({
+            ...option,
+            items: [...(option.items || [])].sort(
+              (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)
+            ),
+          })
+        )
+      )
+    }
     setQuotationContainers(quotationContainersData || [])
     setActivityLogs(
       (logsData || []).map((log) => ({
@@ -671,6 +712,15 @@ export default function QuotationDetailPage() {
 
     const oldStatus = quotation.status || 'Borrador'
 
+    if (
+      newStatus === 'Ganada' &&
+      commercialOptions.length > 0 &&
+      !commercialOptions.some((option) => option.status === 'Aceptada')
+    ) {
+      toast.error('Selecciona primero la opción elegida por el cliente.')
+      return
+    }
+
     if (oldStatus === 'Ganada' && newStatus === 'Pendiente de Fijar Precios') {
       await openRepricingDialog()
       return
@@ -760,6 +810,39 @@ export default function QuotationDetailPage() {
     await fetchStatusHistory()
     await loadChangeLogs()
     return true
+  }
+
+  const confirmCommercialOptionAcceptance = async () => {
+    if (!quotation?.id || !optionPendingAcceptance || acceptingCommercialOption) {
+      return
+    }
+
+    setAcceptingCommercialOption(true)
+    try {
+      const { error } = await supabase.rpc('accept_quotation_option', {
+        p_option_id: optionPendingAcceptance.id,
+      })
+
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      const statusUpdated = await updateQuotationStatus('Ganada')
+      if (!statusUpdated) {
+        toast.warning(
+          'La opción quedó seleccionada, pero falta completar el cambio a Ganada.'
+        )
+        await fetchData(quotation.id)
+        return
+      }
+
+      toast.success(`Opción ${optionPendingAcceptance.option_code} seleccionada`)
+      setOptionPendingAcceptance(null)
+      await fetchData(quotation.id)
+    } finally {
+      setAcceptingCommercialOption(false)
+    }
   }
 
   const confirmQuotationLoss = async () => {
@@ -942,6 +1025,7 @@ export default function QuotationDetailPage() {
         quotation={quotation}
         selectedAgent={selectedAgent}
         pricingItems={pricingItems}
+        commercialOptions={getClientVisibleQuotationOptions(commercialOptions)}
         quotationContainers={quotationContainers}
         cargoLines={cargoLines}
         company={companyBranding}
@@ -1477,6 +1561,8 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       : ''
 
   const showMiamiRate = !selectedAgent && isMiamiEmailFlow && commercialTotal > 0
+  const clientVisibleOptions = getClientVisibleQuotationOptions(commercialOptions)
+  const hasCommercialOptions = clientVisibleOptions.length > 0
 
   const emailVarsQ = {
     cliente: clienteNombre,
@@ -1490,23 +1576,48 @@ const combinedTimeline: CommercialTimelineEvent[] = [
     destino: destinationPort,
     commodity: quotation?.commodity || '—',
     contenedores: containerEmailSummary || '',
-    titulo_tarifa: selectedAgent
-      ? 'TARIFA SELECCIONADA'
-      : showMiamiRate
-        ? 'TARIFA'
+    titulo_tarifa: hasCommercialOptions
+      ? `${clientVisibleOptions.length} OPCIÓN${clientVisibleOptions.length === 1 ? '' : 'ES'} COMERCIAL${clientVisibleOptions.length === 1 ? '' : 'ES'}`
+      : selectedAgent
+        ? 'TARIFA SELECCIONADA'
+        : showMiamiRate
+          ? 'TARIFA'
+          : '',
+    etiqueta_carrier: hasCommercialOptions
+      ? ''
+      : selectedAgent
+        ? carrierEmailLabel
         : '',
-    etiqueta_carrier: selectedAgent ? carrierEmailLabel : '',
-    carrier: selectedAgent ? carrierLabel : '',
-    transito: selectedAgent ? (transitDays ? `${transitDays} días` : '—') : '',
-    etd: selectedAgent ? etdLabel : '',
-    dias_libres: selectedAgent && freeDays ? `${freeDays} días` : '',
-    tarifa_comercial:
-      selectedAgent || showMiamiRate ? commercialTotalLabel : '',
-    valida_hasta: selectedAgent
-      ? formatDisplayDate(selectedAgent.valid_until || quotation?.valid_until)
-      : showMiamiRate
-        ? formatDisplayDate(quotation?.valid_until)
+    carrier: hasCommercialOptions
+      ? 'Ver alternativas en el PDF adjunto'
+      : selectedAgent
+        ? carrierLabel
         : '',
+    transito: hasCommercialOptions
+      ? ''
+      : selectedAgent
+        ? transitDays
+          ? `${transitDays} días`
+          : '—'
+        : '',
+    etd: hasCommercialOptions ? '' : selectedAgent ? etdLabel : '',
+    dias_libres: hasCommercialOptions
+      ? ''
+      : selectedAgent && freeDays
+        ? `${freeDays} días`
+        : '',
+    tarifa_comercial: hasCommercialOptions
+      ? 'Cada opción conserva su precio, vigencia y condiciones en el PDF adjunto.'
+      : selectedAgent || showMiamiRate
+        ? commercialTotalLabel
+        : '',
+    valida_hasta: hasCommercialOptions
+      ? ''
+      : selectedAgent
+        ? formatDisplayDate(selectedAgent.valid_until || quotation?.valid_until)
+        : showMiamiRate
+          ? formatDisplayDate(quotation?.valid_until)
+          : '',
     cierre:
       plantillaCotizacion || 'Saludos cordiales,\nSari Express — Equipo Comercial',
   }
@@ -1699,6 +1810,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 quotation={quotation}
                 selectedAgent={selectedAgent}
                 pricingItems={pricingItems}
+                commercialOptions={getClientVisibleQuotationOptions(commercialOptions)}
                 quotationContainers={quotationContainers}
                 cargoLines={cargoLines}
                 company={companyBranding}
@@ -1891,6 +2003,99 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             {quotation.duplicated_from_quote?.quotation_number || 'otra cotización'}
           </span>.
         </div>
+      )}
+
+      {commercialOptions.length > 0 && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                Opciones comerciales
+              </h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Alternativas incluidas bajo el mismo número de cotización.
+              </p>
+            </div>
+            {quotation.status === 'Enviada al Cliente' &&
+              !commercialOptions.some((option) => option.status === 'Aceptada') && (
+                <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+                  Pendiente de elección del cliente
+                </span>
+              )}
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {commercialOptions.map((option) => {
+              const isAccepted = option.status === 'Aceptada'
+              const canAccept =
+                canGenerateSI &&
+                quotation.status === 'Enviada al Cliente' &&
+                option.status === 'Ofrecida'
+
+              return (
+                <article
+                  key={option.id}
+                  className={`rounded-xl border p-4 ${
+                    isAccepted
+                      ? 'border-emerald-300 bg-emerald-50/50 dark:border-emerald-800 dark:bg-emerald-950/20'
+                      : 'border-slate-200 bg-slate-50/60 dark:border-slate-700 dark:bg-slate-900/40'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md bg-slate-900 px-2 py-1 text-xs font-bold text-white dark:bg-white dark:text-slate-900">
+                          Opción {option.option_code}
+                        </span>
+                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          isAccepted
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                            : option.status === 'Ofrecida'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'
+                              : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                        }`}>
+                          {option.status}
+                        </span>
+                        {option.is_recommended && (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                            <Star className="h-3.5 w-3.5 fill-current" /> Recomendada
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-2 font-semibold text-slate-900 dark:text-white">
+                        {option.label}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-500">Total</p>
+                      <p className="text-lg font-bold text-slate-900 dark:text-white">
+                        {option.currency || 'USD'} {formatCurrency(Number(option.grand_total || 0))}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-4">
+                    <div><span className="block text-xs text-slate-500">Naviera</span>{option.carrier || 'N/A'}</div>
+                    <div><span className="block text-xs text-slate-500">ETD</span>{formatDisplayDate(option.etd)}</div>
+                    <div><span className="block text-xs text-slate-500">Tránsito</span>{option.transit_time || 'N/A'}</div>
+                    <div><span className="block text-xs text-slate-500">Vigencia</span>{formatDisplayDate(option.valid_until)}</div>
+                  </div>
+
+                  {canAccept && (
+                    <button
+                      type="button"
+                      onClick={() => setOptionPendingAcceptance(option)}
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Cliente eligió esta opción
+                    </button>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+        </section>
       )}
 
       <Tabs defaultValue="resumen" className="space-y-6">
@@ -2618,6 +2823,19 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <ConfirmDialog
+      open={Boolean(optionPendingAcceptance)}
+      onOpenChange={(open) => {
+        if (!open && !acceptingCommercialOption) {
+          setOptionPendingAcceptance(null)
+        }
+      }}
+      title={`¿El cliente eligió la opción ${optionPendingAcceptance?.option_code || ''}?`}
+      description={`Se restaurarán los precios de “${optionPendingAcceptance?.label || ''}”, se marcarán las demás opciones como no seleccionadas y la cotización pasará a Ganada.`}
+      confirmLabel={acceptingCommercialOption ? 'Registrando...' : 'Confirmar elección'}
+      onConfirm={confirmCommercialOptionAcceptance}
+    />
 
     <ConfirmDialog
       open={duplicateDialogOpen}

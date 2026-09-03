@@ -56,6 +56,11 @@ import {
   FclAgentComparisonTable,
   type FclTableChargeOverrides,
 } from '@/src/components/pricing/FclAgentComparisonTable'
+import { QuotationOptionsPanel } from '@/src/components/pricing/QuotationOptionsPanel'
+import {
+  getClientVisibleQuotationOptions,
+  type QuotationCommercialOption,
+} from '@/src/lib/quotation-options'
 import { cn } from '../../../lib/utils'
 import {
   cardClass,
@@ -325,6 +330,9 @@ function PricingComparisonContent() {
   const [fclTableChargeOverrides, setFclTableChargeOverrides] =
     useState<FclTableChargeOverrides>({})
   const [pricingItems, setPricingItems] = useState<any[]>([])
+  const [commercialOptions, setCommercialOptions] =
+    useState<QuotationCommercialOption[]>([])
+  const [savingCommercialOption, setSavingCommercialOption] = useState(false)
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [containerRateLines, setContainerRateLines] = useState<any[]>([])
   const [cargoLines, setCargoLines] = useState<CargoLine[]>([])
@@ -592,6 +600,31 @@ function PricingComparisonContent() {
     setPricingItems(data || [])
   }
 
+  const fetchCommercialOptions = async (quotationId: string) => {
+    const { data, error } = await supabase
+      .from('quotation_options')
+      .select('*, items:quotation_option_items(*)')
+      .eq('quotation_id', quotationId)
+      .order('sort_order', { ascending: true })
+
+    if (error) {
+      toast.error(error.message)
+      setCommercialOptions([])
+      return
+    }
+
+    const normalizedOptions = ((data || []) as QuotationCommercialOption[]).map(
+      (option) => ({
+        ...option,
+        items: [...(option.items || [])].sort(
+          (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)
+        ),
+      })
+    )
+
+    setCommercialOptions(normalizedOptions)
+  }
+
   const fetchQuotationContainers = async (quotationId: string) => {
     const { data, error } = await supabase
       .from('quotation_containers')
@@ -669,6 +702,7 @@ function PricingComparisonContent() {
     setClientNotes(quote.client_notes || '')
     await fetchAgentQuotes(quote.id)
     await fetchPricingItems(quote.id)
+    await fetchCommercialOptions(quote.id)
     await fetchQuotationContainers(quote.id)
     await loadCargoLines(quote.id)
     await loadMiamiRates(quote)
@@ -2546,6 +2580,69 @@ function PricingComparisonContent() {
     toast.success('Observaciones guardadas')
   }
 
+  const saveCurrentPricingAsOption = async ({
+    label,
+    isRecommended,
+    optionId,
+  }: {
+    label: string
+    isRecommended: boolean
+    optionId?: string
+  }) => {
+    if (!selectedQuote?.id || savingCommercialOption) return
+    if (!ensureQuoteIsEditable()) return
+
+    setSavingCommercialOption(true)
+
+    try {
+      const { data, error } = await supabase.rpc(
+        'save_current_pricing_as_option',
+        {
+          p_quotation_id: selectedQuote.id,
+          p_label: label.trim() || null,
+          p_is_recommended: isRecommended,
+          p_option_id: optionId || null,
+        }
+      )
+
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      const saved = Array.isArray(data) ? data[0] : data
+      toast.success(
+        optionId
+          ? `Opción ${saved?.option_code || ''} actualizada`
+          : `Opción ${saved?.option_code || ''} guardada`
+      )
+      await fetchCommercialOptions(selectedQuote.id)
+    } finally {
+      setSavingCommercialOption(false)
+    }
+  }
+
+  const deleteDraftCommercialOption = async (optionId: string) => {
+    if (!selectedQuote?.id || savingCommercialOption) return
+
+    setSavingCommercialOption(true)
+    try {
+      const { error } = await supabase.rpc('delete_draft_quotation_option', {
+        p_option_id: optionId,
+      })
+
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      toast.success('Opción eliminada')
+      await fetchCommercialOptions(selectedQuote.id)
+    } finally {
+      setSavingCommercialOption(false)
+    }
+  }
+
   const previewQuotationPdf = async () => {
     if (!selectedQuote) {
       toast.error('Selecciona una cotización primero')
@@ -2596,6 +2693,7 @@ function PricingComparisonContent() {
           }}
           selectedAgent={selectedAgentQuote || null}
           pricingItems={pricingItems}
+          commercialOptions={getClientVisibleQuotationOptions(commercialOptions)}
           quotationContainers={quotationContainers}
           cargoLines={normalizedCargoLines}
           company={companyBranding}
@@ -2697,6 +2795,36 @@ function PricingComparisonContent() {
       return
     }
 
+    if (commercialOptions.length > 0) {
+      const { error: publishOptionsError } = await supabase.rpc(
+        'send_quotation_with_options',
+        { p_quotation_id: selectedQuote.id }
+      )
+
+      if (publishOptionsError) {
+        toast.error(publishOptionsError.message)
+        return
+      }
+
+      toast.success('Cotización marcada como Enviada al Cliente')
+
+      if (selectedQuote.created_by) {
+        await createNotification({
+          userId: selectedQuote.created_by,
+          title: 'Cotización enviada al cliente',
+          message: `La cotización ${
+            selectedQuote.quotation_number || ''
+          } fue marcada como enviada al cliente.`,
+          type: 'info',
+        })
+      }
+
+      setSelectedQuote({ ...selectedQuote, status: nextStatus })
+      await fetchCommercialOptions(selectedQuote.id)
+      await fetchQuotations()
+      return
+    }
+
     const { error } = await supabase
       .from('quotations')
       .update({ status: nextStatus })
@@ -2745,6 +2873,10 @@ function PricingComparisonContent() {
       ...selectedQuote,
       status: nextStatus,
     })
+
+    if (commercialOptions.length > 0) {
+      await fetchCommercialOptions(selectedQuote.id)
+    }
   }
 
   const totalCost = pricingItems.reduce(
@@ -5774,6 +5906,16 @@ const profitabilityColor =
                     )}
                   </CardContent>
                 </Card>
+
+                <QuotationOptionsPanel
+                  options={commercialOptions}
+                  disabled={isPricingActionDisabled}
+                  saving={savingCommercialOption}
+                  formatCurrency={formatCurrency}
+                  onSave={saveCurrentPricingAsOption}
+                  onDelete={deleteDraftCommercialOption}
+                  onPreview={previewQuotationPdf}
+                />
 
                 <div className={cn(cardClass, 'p-6')}>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
