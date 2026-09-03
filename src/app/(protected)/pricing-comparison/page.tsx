@@ -2665,6 +2665,31 @@ function PricingComparisonContent() {
     }
   }
 
+  const viewSourceAgentQuote = (agentQuoteId: string) => {
+    if (!agentQuotes.some((quote) => quote.id === agentQuoteId)) {
+      toast.error('No se encontró la tarifa de origen vinculada a esta opción')
+      return
+    }
+
+    setAgentQuotesViewMode('cards')
+    setHighlightedAgentQuoteId(agentQuoteId)
+
+    window.setTimeout(() => {
+      const sourceCard = document.getElementById(`agent-quote-${agentQuoteId}`)
+      const scrollTarget = sourceCard || agentQuotesSectionRef.current
+      scrollTarget?.scrollIntoView({
+        behavior: 'smooth',
+        block: sourceCard ? 'center' : 'start',
+      })
+    }, 50)
+
+    window.setTimeout(() => {
+      setHighlightedAgentQuoteId((current) =>
+        current === agentQuoteId ? null : current
+      )
+    }, 2200)
+  }
+
   const deleteDraftCommercialOption = async (optionId: string) => {
     if (!selectedQuote?.id || savingCommercialOption) return
 
@@ -4807,9 +4832,10 @@ const profitabilityColor =
                               return (
                                 <div
                                   key={quote.id}
+                                  id={`agent-quote-${quote.id}`}
                                   className={`rounded-2xl border p-6 shadow-sm transition ${getAgentQuoteCardClass(
                                     quote
-                                  )} ${isNew && !isSelected ? 'ring-2 ring-green-400' : ''}`}
+                                  )} ${isNew ? 'ring-2 ring-green-400 ring-offset-2 dark:ring-offset-slate-950' : ''}`}
                                 >
                                   <div className="mb-4 flex items-start justify-between gap-3">
                                     <div>
@@ -5958,6 +5984,7 @@ const profitabilityColor =
                   onSave={saveCurrentPricingAsOption}
                   onEdit={updateDraftCommercialOptionDetails}
                   onDelete={deleteDraftCommercialOption}
+                  onViewSource={viewSourceAgentQuote}
                   onPreview={previewQuotationPdf}
                 />
 

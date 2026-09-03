@@ -2074,7 +2074,8 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-4">
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-5">
+                    <div><span className="block text-xs text-slate-500">Agente/Proveedor</span>{option.agent_name || 'N/A'}</div>
                     <div><span className="block text-xs text-slate-500">Naviera</span>{option.carrier || 'N/A'}</div>
                     <div><span className="block text-xs text-slate-500">ETD</span>{formatDisplayDate(option.etd)}</div>
                     <div><span className="block text-xs text-slate-500">Tránsito</span>{option.transit_time || 'N/A'}</div>

@@ -5915,3 +5915,38 @@ Agregar una entrada por fix:
   - Las opciones creadas antes de esta migración comienzan sin nota específica;
     conservan las observaciones generales y pueden completarse mientras sean borrador.
 - Commit: `54f33f1`.
+
+### 2026-09-03 - FLOW-023 - Trazabilidad visual entre opción y tarifa de agente
+
+- Estado: Implementado y validado localmente; deployment y UAT pendientes.
+- Hallazgo: FLOW-023.
+- Causa raíz:
+  - Cada `quotation_option` conservaba `agent_quote_id` y `agent_name`, pero la
+    tarjeta solo mostraba carrier, tránsito y ETD.
+  - Pricing y Ventas no podían identificar visualmente qué agente proporcionó
+    cada alternativa ni navegar a su tarifa original.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pricing/QuotationOptionsPanel.tsx`
+- SQL: no aplica; se reutiliza la relación persistida `agent_quote_id`.
+- Cambios:
+  - Cada opción muestra internamente `Agente/Proveedor` usando el nombre
+    congelado al crear el snapshot.
+  - `Ver tarifa de origen` cambia la comparación FCL a vista Cards cuando es
+    necesario, desplaza hasta la tarifa exacta y la resalta temporalmente.
+  - La vista de detalle para Ventas/Admin también muestra el agente de cada opción.
+  - El PDF comercial no fue modificado y continúa ocultando el proveedor interno.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a `QuotationOptionsPanel.tsx`: OK.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Abrir opciones A/B ligadas a agentes distintos y confirmar nombre, scroll y
+    resaltado tanto desde vista Cards como desde Tabla FCL.
+  - Confirmar en Ventas que el agente sea visible y que no aparezca en el PDF.
+- Riesgos o trabajo pendiente:
+  - Opciones históricas sin `agent_name` mostrarán `No especificado`, pero el
+    vínculo a su tarifa seguirá disponible mediante `agent_quote_id`.
+- Commit: pendiente.

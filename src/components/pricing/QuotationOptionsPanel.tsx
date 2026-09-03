@@ -1,7 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, Pencil, RefreshCw, Save, Star, Trash2, X } from 'lucide-react'
+import {
+  ArrowUp,
+  FileText,
+  Pencil,
+  RefreshCw,
+  Save,
+  Star,
+  Trash2,
+  X,
+} from 'lucide-react'
 
 import type { QuotationCommercialOption } from '@/src/lib/quotation-options'
 import { cn } from '@/src/lib/utils'
@@ -40,6 +49,7 @@ type Props = {
     clientNotes: string
   }) => Promise<boolean>
   onDelete: (optionId: string) => Promise<void>
+  onViewSource: (agentQuoteId: string) => void
   onPreview: () => void
 }
 
@@ -51,6 +61,7 @@ export function QuotationOptionsPanel({
   onSave,
   onEdit,
   onDelete,
+  onViewSource,
   onPreview,
 }: Props) {
   const [label, setLabel] = useState('')
@@ -211,6 +222,12 @@ export function QuotationOptionsPanel({
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     {option.carrier || 'Sin naviera'} · {option.transit_time || 'Tránsito N/A'} · ETD {formatDate(option.etd)}
                   </p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    Agente/Proveedor:{' '}
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">
+                      {option.agent_name || 'No especificado'}
+                    </span>
+                  </p>
                 </div>
 
                 <div className="text-right">
@@ -335,37 +352,48 @@ export function QuotationOptionsPanel({
                 </div>
               ) : null}
 
-              {option.status === 'Borrador' && editingOption?.optionId !== option.id && (
-                <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => beginEditing(option)}
-                    disabled={disabled || saving}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Editar opción
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOptionToRefresh(option)}
-                    disabled={disabled || saving}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Reemplazar con pricing actual
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOptionToDelete(option)}
-                    disabled={disabled || saving}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Eliminar
-                  </button>
-                </div>
-              )}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => onViewSource(option.agent_quote_id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                  Ver tarifa de origen
+                </button>
+
+                {option.status === 'Borrador' && editingOption?.optionId !== option.id && (
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => beginEditing(option)}
+                      disabled={disabled || saving}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Editar opción
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOptionToRefresh(option)}
+                      disabled={disabled || saving}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Reemplazar con pricing actual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOptionToDelete(option)}
+                      disabled={disabled || saving}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Eliminar
+                    </button>
+                  </div>
+                )}
+              </div>
             </article>
           ))}
         </div>
