@@ -32,7 +32,7 @@ Git entre computadoras y ambientes.
 - Riesgos o trabajo pendiente:
   - Validar en UAT un caso con costo 0.33% y venta 0.40%, confirmando línea de
     pricing, margen y detalle para aseguradora.
-- Commit: pendiente.
+- Commit: `4365234`.
 
 ### 2026-08-14 - UX-056 - Recorrido visual real en la landing
 
