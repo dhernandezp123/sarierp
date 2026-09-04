@@ -5955,7 +5955,7 @@ Agregar una entrada por fix:
 
 ### 2026-09-04 - FLOW-024 - Repricing con opciones y operación existente
 
-- Estado: Implementado y validado localmente; migración, deployment y UAT pendientes.
+- Estado: Implementado, migrado y desplegado en Production; UAT funcional pendiente.
 - Hallazgo: FLOW-024.
 - Causa raíz:
   - Al aprobar un repricing con Shipping Instruction, Pricing intentaba devolver
@@ -5994,6 +5994,13 @@ Agregar una entrada por fix:
   - `npx.cmd supabase db lint --local --level warning`: sin hallazgos.
   - `npm.cmd run build`: OK; 70/70 páginas generadas.
   - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - `npx.cmd supabase db push --dry-run`: Production propuso únicamente
+    `20260904120000_quotation_option_repricing_flow.sql`.
+  - `npx.cmd supabase db push`: migración aplicada correctamente en Production.
+  - `npx.cmd supabase migration list --linked`: Local y Remote coinciden hasta
+    `20260904120000`.
+  - Vercel Production: deployment `dpl_2vjFt3oUkidCat363ERo7FzkeuJn` en estado
+    `Ready`, con alias `https://forwarders.app`.
 - Verificación manual pendiente:
   - Repetir el caso real con una cotización reabierta y SI sin bookings: aprobar,
     publicar, elegir A y confirmar `Aceptar y propagar`.
@@ -6002,7 +6009,8 @@ Agregar una entrada por fix:
   - Probar `Aceptar sin actualizar operación` y un booking confirmado para
     verificar que no se sobrescriban datos operativos consolidados.
 - Riesgos o trabajo pendiente:
-  - La migración debe aplicarse antes del frontend para que la nueva RPC exista.
+  - La migración se aplicó antes del frontend para evitar llamadas a una RPC
+    inexistente durante el rollout.
   - El flujo de rondas múltiples después de una opción ya aceptada no forma parte
     de este ajuste y requiere versionado explícito de rondas si se habilita.
-- Commit: pendiente.
+- Commit: `627650b`.
