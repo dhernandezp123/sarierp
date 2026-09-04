@@ -2742,6 +2742,69 @@ function PricingComparisonContent() {
     }
   }
 
+  const getNormalizedPdfCargoLines = () =>
+    cargoLines.map((line) => ({
+      quantity: Number(line.quantity || 0),
+      package_type: line.package_type || 'Caja',
+      length:
+        line.length === null || line.length === undefined
+          ? null
+          : Number(line.length || 0),
+      width:
+        line.width === null || line.width === undefined
+          ? null
+          : Number(line.width || 0),
+      height:
+        line.height === null || line.height === undefined
+          ? null
+          : Number(line.height || 0),
+      dimension_unit: line.dimension_unit || 'in',
+      weight_lbs:
+        line.weight_lbs === null || line.weight_lbs === undefined
+          ? null
+          : Number(line.weight_lbs || 0),
+      ft3:
+        line.ft3 === null || line.ft3 === undefined
+          ? calculateCargoLineFt3(line)
+          : Number(line.ft3 || 0),
+      cbm:
+        line.cbm === null || line.cbm === undefined
+          ? calculateCargoLineCbm(line)
+          : Number(line.cbm || 0),
+    }))
+
+  const printCommercialOption = async (option: QuotationCommercialOption) => {
+    if (!selectedQuote) {
+      toast.error('Selecciona una cotización primero')
+      return
+    }
+
+    try {
+      const blob = await pdf(
+        <QuotationPDF
+          quotation={{
+            ...selectedQuote,
+            client_notes: clientNotes || selectedQuote.client_notes,
+          }}
+          selectedAgent={option}
+          pricingItems={option.items || []}
+          commercialOptions={[option]}
+          quotationContainers={quotationContainers}
+          cargoLines={getNormalizedPdfCargoLines()}
+          company={companyBranding}
+        />
+      ).toBlob()
+
+      window.open(URL.createObjectURL(blob), '_blank')
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `No se pudo generar la opción ${option.option_code}`
+      )
+    }
+  }
+
   const previewQuotationPdf = async () => {
     if (!selectedQuote) {
       toast.error('Selecciona una cotización primero')
@@ -2754,36 +2817,6 @@ function PricingComparisonContent() {
     }
 
     try {
-      const normalizedCargoLines = cargoLines.map((line) => ({
-        quantity: Number(line.quantity || 0),
-        package_type: line.package_type || 'Caja',
-        length:
-          line.length === null || line.length === undefined
-            ? null
-            : Number(line.length || 0),
-        width:
-          line.width === null || line.width === undefined
-            ? null
-            : Number(line.width || 0),
-        height:
-          line.height === null || line.height === undefined
-            ? null
-            : Number(line.height || 0),
-        dimension_unit: line.dimension_unit || 'in',
-        weight_lbs:
-          line.weight_lbs === null || line.weight_lbs === undefined
-            ? null
-            : Number(line.weight_lbs || 0),
-        ft3:
-          line.ft3 === null || line.ft3 === undefined
-            ? calculateCargoLineFt3(line)
-            : Number(line.ft3 || 0),
-        cbm:
-          line.cbm === null || line.cbm === undefined
-            ? calculateCargoLineCbm(line)
-            : Number(line.cbm || 0),
-      }))
-
       const blob = await pdf(
         <QuotationPDF
           quotation={{
@@ -2794,7 +2827,7 @@ function PricingComparisonContent() {
           pricingItems={pricingItems}
           commercialOptions={getClientVisibleQuotationOptions(commercialOptions)}
           quotationContainers={quotationContainers}
-          cargoLines={normalizedCargoLines}
+          cargoLines={getNormalizedPdfCargoLines()}
           company={companyBranding}
         />
       ).toBlob()
@@ -6022,6 +6055,7 @@ const profitabilityColor =
                   onDelete={deleteDraftCommercialOption}
                   onViewSource={viewSourceAgentQuote}
                   onPreview={previewQuotationPdf}
+                  onPrintOption={printCommercialOption}
                 />
 
                 <div className={cn(cardClass, 'p-6')}>

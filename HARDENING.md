@@ -6014,3 +6014,41 @@ Agregar una entrada por fix:
   - El flujo de rondas múltiples después de una opción ya aceptada no forma parte
     de este ajuste y requiere versionado explícito de rondas si se habilita.
 - Commit: `627650b`.
+
+### 2026-09-04 - FLOW-025 - Fechas seguras e impresión individual de opciones comerciales
+
+- Estado: Implementado y validado localmente; despliegue y UAT pendientes.
+- Hallazgo: FLOW-025.
+- Causa raíz:
+  - El detalle de la cotización convertía columnas `DATE` mediante
+    `new Date('YYYY-MM-DD')`; en Honduras esto desplazaba visualmente ETD y
+    vigencia al día anterior.
+  - El PDF comercial agrupaba todas las opciones visibles en un solo documento,
+    sin una acción para generar y compartir cada alternativa por separado.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pricing/QuotationOptionsPanel.tsx`
+- SQL: no aplica.
+- Cambios:
+  - El detalle reutiliza el helper central `formatDate`, que interpreta fechas
+    sin hora en el calendario local y conserva el formato `DD/MM/YYYY`.
+  - Cuando existen varias opciones, cada tarjeta muestra `Imprimir opción A/B`.
+  - La impresión individual usa exclusivamente el snapshot de la opción elegida:
+    tarifa, cargos, impuestos, naviera, ETD, vigencia y notas comerciales.
+  - `Previsualizar opciones` y la impresión general permanecen disponibles para
+    generar el documento conjunto, preservando el flujo existente.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a `QuotationOptionsPanel.tsx`: OK.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Confirmar en Pricing Comparison y `quotations/[id]` que A y B abran PDFs
+    independientes y que cada archivo contenga solamente sus cargos y condiciones.
+  - Confirmar ETD/vigencia 12/09/2026 y 18/09/2026 sin desplazamiento de zona
+    horaria en las tarjetas del caso real.
+- Riesgos o trabajo pendiente:
+  - La apertura del PDF conserva el comportamiento actual del navegador; un
+    bloqueador de ventanas emergentes puede requerir autorizar el dominio.
+- Commit: pendiente.

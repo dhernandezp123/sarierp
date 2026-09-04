@@ -59,6 +59,7 @@ import {
   normalizeTaxRatePercent,
 } from '@/src/lib/tax'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
+import { formatDate } from '@/src/lib/format'
 import {
   getClientVisibleQuotationOptions,
   type QuotationCommercialOption,
@@ -202,13 +203,7 @@ type CargoLine = {
 }
 
 const formatDisplayDate = (date?: string | null) => {
-  if (!date) return 'N/A'
-
-  return new Intl.DateTimeFormat('es-HN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(date))
+  return formatDate(date, 'N/A')
 }
 
 const looksLikeUuid = (value: unknown) =>
@@ -410,6 +405,8 @@ export default function QuotationDetailPage() {
     useState<QuotationCommercialOption | null>(null)
   const [acceptingCommercialOption, setAcceptingCommercialOption] = useState(false)
   const [preparingCommercialOptionId, setPreparingCommercialOptionId] =
+    useState<string | null>(null)
+  const [printingCommercialOptionId, setPrintingCommercialOptionId] =
     useState<string | null>(null)
   const [optionAcceptanceOperationImpact, setOptionAcceptanceOperationImpact] =
     useState<OptionAcceptanceOperationImpact | null>(null)
@@ -1117,6 +1114,38 @@ export default function QuotationDetailPage() {
 
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
+  }
+
+  const handlePrintCommercialOption = async (
+    option: QuotationCommercialOption
+  ) => {
+    if (!quotation || printingCommercialOptionId) return
+
+    setPrintingCommercialOptionId(option.id)
+    try {
+      const blob = await pdf(
+        <QuotationPDF
+          quotation={quotation}
+          selectedAgent={option}
+          pricingItems={option.items || []}
+          commercialOptions={[option]}
+          quotationContainers={quotationContainers}
+          cargoLines={cargoLines}
+          company={companyBranding}
+        />
+      ).toBlob()
+
+      window.open(URL.createObjectURL(blob), '_blank')
+    } catch (error) {
+      toast.error('No se pudo generar la opción comercial.', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Intenta nuevamente o revisa los datos de la opción.',
+      })
+    } finally {
+      setPrintingCommercialOptionId(null)
+    }
   }
 
   const handlePrintCostDetail = async () => {
@@ -2174,6 +2203,20 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                         {option.client_notes}
                       </p>
                     </div>
+                  )}
+
+                  {commercialOptions.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handlePrintCommercialOption(option)}
+                      disabled={Boolean(printingCommercialOptionId)}
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Printer className="h-4 w-4" />
+                      {printingCommercialOptionId === option.id
+                        ? 'Generando PDF...'
+                        : `Imprimir opción ${option.option_code}`}
+                    </button>
                   )}
 
                   {canAccept && (

@@ -5,6 +5,7 @@ import {
   ArrowUp,
   FileText,
   Pencil,
+  Printer,
   RefreshCw,
   Save,
   Star,
@@ -51,6 +52,7 @@ type Props = {
   onDelete: (optionId: string) => Promise<void>
   onViewSource: (agentQuoteId: string) => void
   onPreview: () => void
+  onPrintOption: (option: QuotationCommercialOption) => Promise<void>
 }
 
 export function QuotationOptionsPanel({
@@ -63,6 +65,7 @@ export function QuotationOptionsPanel({
   onDelete,
   onViewSource,
   onPreview,
+  onPrintOption,
 }: Props) {
   const [label, setLabel] = useState('')
   const [isRecommended, setIsRecommended] = useState(false)
@@ -77,6 +80,7 @@ export function QuotationOptionsPanel({
     useState<QuotationCommercialOption | null>(null)
   const [optionToDelete, setOptionToDelete] =
     useState<QuotationCommercialOption | null>(null)
+  const [printingOptionId, setPrintingOptionId] = useState<string | null>(null)
 
   const handleCreate = async () => {
     const saved = await onSave({ label, isRecommended, clientNotes })
@@ -99,6 +103,17 @@ export function QuotationOptionsPanel({
     if (!editingOption) return
     const saved = await onEdit(editingOption)
     if (saved) setEditingOption(null)
+  }
+
+  const printOption = async (option: QuotationCommercialOption) => {
+    if (printingOptionId) return
+
+    setPrintingOptionId(option.id)
+    try {
+      await onPrintOption(option)
+    } finally {
+      setPrintingOptionId(null)
+    }
   }
 
   return (
@@ -362,8 +377,23 @@ export function QuotationOptionsPanel({
                   Ver tarifa de origen
                 </button>
 
-                {option.status === 'Borrador' && editingOption?.optionId !== option.id && (
-                  <div className="flex flex-wrap justify-end gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
+                  {options.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => printOption(option)}
+                      disabled={Boolean(printingOptionId)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                      {printingOptionId === option.id
+                        ? 'Generando...'
+                        : `Imprimir opción ${option.option_code}`}
+                    </button>
+                  )}
+
+                  {option.status === 'Borrador' && editingOption?.optionId !== option.id && (
+                    <>
                     <button
                       type="button"
                       onClick={() => beginEditing(option)}
@@ -391,8 +421,9 @@ export function QuotationOptionsPanel({
                       <Trash2 className="h-3.5 w-3.5" />
                       Eliminar
                     </button>
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
             </article>
           ))}
