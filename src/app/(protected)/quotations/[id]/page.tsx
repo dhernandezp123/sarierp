@@ -169,6 +169,12 @@ type FinancialComparison = {
   delta: FinancialTotals
 }
 
+type OptionAcceptanceOperationImpact = {
+  shippingInstructionIds: string[]
+  routingNumbers: string[]
+  bookingsCount: number
+}
+
 // QuotationDetail is intentionally typed as `any` — the quotation object carries
 // a large number of joined fields that vary by query context. A full type is
 // tracked under FASE 4 (centralized DB types via supabase gen types).
@@ -314,6 +320,9 @@ const formatCommercialMetadata = (metadata?: Record<string, unknown> | null) => 
     ['reason', 'Motivo'],
     ['bookings_count', 'Bookings asociados'],
     ['confirmed_bookings_count', 'Bookings confirmados'],
+    ['synced_shipping_instructions', 'SI actualizadas'],
+    ['updated_bookings', 'Bookings actualizados'],
+    ['skipped_bookings', 'Bookings conservados'],
     ['routingCode', 'SI'],
     ['routing_number', 'SI'],
     ['option_code', 'Opción'],
@@ -345,6 +354,7 @@ const getCommercialActivityTitle = (action: string) => {
     quotation_reopened_for_repricing: '📄 Cotización reabierta para repricing',
     repricing_approved_with_operational_sync: '💰 Repricing aprobado y operación actualizada',
     repricing_approved_without_operational_sync: '💰 Repricing aprobado sin actualizar operación',
+    repricing_options_approved_for_client: '💰 Repricing aprobado para enviar opciones',
     post_approval_change: '✏️ Cambio posterior a aprobación',
     send_to_pricing: '📄 Cotización enviada a Pricing',
     shipping_instruction_created: '🚢 Shipping Instruction creada',
@@ -353,6 +363,8 @@ const getCommercialActivityTitle = (action: string) => {
     quotation_option_deleted: '🗑️ Opción comercial eliminada',
     quotation_options_sent: '📤 Opciones comerciales enviadas',
     quotation_option_accepted: '✅ Opción comercial elegida',
+    quotation_option_finalized_with_operational_sync: '✅ Opción elegida y operación actualizada',
+    quotation_option_finalized_without_operational_sync: '✅ Opción elegida sin actualizar operación',
   }
 
   return titleByAction[action] || action
@@ -397,6 +409,10 @@ export default function QuotationDetailPage() {
   const [optionPendingAcceptance, setOptionPendingAcceptance] =
     useState<QuotationCommercialOption | null>(null)
   const [acceptingCommercialOption, setAcceptingCommercialOption] = useState(false)
+  const [preparingCommercialOptionId, setPreparingCommercialOptionId] =
+    useState<string | null>(null)
+  const [optionAcceptanceOperationImpact, setOptionAcceptanceOperationImpact] =
+    useState<OptionAcceptanceOperationImpact | null>(null)
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [cargoLines, setCargoLines] = useState<CargoLine[]>([])
   const [validations, setValidations] = useState<any[]>([])
@@ -712,6 +728,13 @@ export default function QuotationDetailPage() {
 
     const oldStatus = quotation.status || 'Borrador'
 
+    if (newStatus === 'Enviada al Cliente' && commercialOptions.length > 0) {
+      toast.error(
+        'Envía la cotización desde Pricing Comparison para publicar sus opciones comerciales.'
+      )
+      return
+    }
+
     if (
       newStatus === 'Ganada' &&
       commercialOptions.length > 0 &&
@@ -812,33 +835,93 @@ export default function QuotationDetailPage() {
     return true
   }
 
-  const confirmCommercialOptionAcceptance = async () => {
+  const prepareCommercialOptionAcceptance = async (
+    option: QuotationCommercialOption
+  ) => {
+    if (!quotation?.id || preparingCommercialOptionId) return
+
+    setPreparingCommercialOptionId(option.id)
+
+    try {
+      const { data: shippingInstructions, error: shippingInstructionsError } =
+        await supabase
+          .from('shipping_instructions')
+          .select('id, routing_number, operational_status')
+          .eq('quotation_id', quotation.id)
+          .is('deleted_at', null)
+
+      if (shippingInstructionsError) {
+        toast.error(shippingInstructionsError.message)
+        return
+      }
+
+      const activeShippingInstructions = (shippingInstructions || []).filter(
+        (shippingInstruction) =>
+          !['Finalizado', 'Cancelada'].includes(
+            shippingInstruction.operational_status || ''
+          )
+      )
+      const shippingInstructionIds = activeShippingInstructions.map(
+        (shippingInstruction) => shippingInstruction.id
+      )
+      let bookingsCount = 0
+
+      if (shippingInstructionIds.length > 0) {
+        const { count, error: bookingsError } = await supabase
+          .from('bookings')
+          .select('id', { count: 'exact', head: true })
+          .in('shipping_instruction_id', shippingInstructionIds)
+
+        if (bookingsError) {
+          toast.error(bookingsError.message)
+          return
+        }
+
+        bookingsCount = count || 0
+      }
+
+      setOptionAcceptanceOperationImpact({
+        shippingInstructionIds,
+        routingNumbers: activeShippingInstructions
+          .map((shippingInstruction) => shippingInstruction.routing_number)
+          .filter((routingNumber): routingNumber is string => Boolean(routingNumber)),
+        bookingsCount,
+      })
+      setOptionPendingAcceptance(option)
+    } finally {
+      setPreparingCommercialOptionId(null)
+    }
+  }
+
+  const confirmCommercialOptionAcceptance = async (
+    syncOperation: boolean
+  ) => {
     if (!quotation?.id || !optionPendingAcceptance || acceptingCommercialOption) {
       return
     }
 
     setAcceptingCommercialOption(true)
     try {
-      const { error } = await supabase.rpc('accept_quotation_option', {
-        p_option_id: optionPendingAcceptance.id,
-      })
+      const { error } = await supabase.rpc(
+        'finalize_quotation_option_selection',
+        {
+          p_option_id: optionPendingAcceptance.id,
+          p_sync_operation: syncOperation,
+        }
+      )
 
       if (error) {
         toast.error(error.message)
         return
       }
 
-      const statusUpdated = await updateQuotationStatus('Ganada')
-      if (!statusUpdated) {
-        toast.warning(
-          'La opción quedó seleccionada, pero falta completar el cambio a Ganada.'
-        )
-        await fetchData(quotation.id)
-        return
-      }
-
-      toast.success(`Opción ${optionPendingAcceptance.option_code} seleccionada`)
+      toast.success(
+        syncOperation
+          ? `Opción ${optionPendingAcceptance.option_code} seleccionada y propagada a la operación`
+          : `Opción ${optionPendingAcceptance.option_code} seleccionada`
+      )
       setOptionPendingAcceptance(null)
+      setOptionAcceptanceOperationImpact(null)
       await fetchData(quotation.id)
     } finally {
       setAcceptingCommercialOption(false)
@@ -2096,11 +2179,14 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   {canAccept && (
                     <button
                       type="button"
-                      onClick={() => setOptionPendingAcceptance(option)}
-                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700"
+                      onClick={() => prepareCommercialOptionAcceptance(option)}
+                      disabled={Boolean(preparingCommercialOptionId)}
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      Cliente eligió esta opción
+                      {preparingCommercialOptionId === option.id
+                        ? 'Revisando operación...'
+                        : 'Cliente eligió esta opción'}
                     </button>
                   )}
                 </article>
@@ -2836,18 +2922,88 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       </DialogContent>
     </Dialog>
 
-    <ConfirmDialog
+    <Dialog
       open={Boolean(optionPendingAcceptance)}
       onOpenChange={(open) => {
         if (!open && !acceptingCommercialOption) {
           setOptionPendingAcceptance(null)
+          setOptionAcceptanceOperationImpact(null)
         }
       }}
-      title={`¿El cliente eligió la opción ${optionPendingAcceptance?.option_code || ''}?`}
-      description={`Se restaurarán los precios de “${optionPendingAcceptance?.label || ''}”, se marcarán las demás opciones como no seleccionadas y la cotización pasará a Ganada.`}
-      confirmLabel={acceptingCommercialOption ? 'Registrando...' : 'Confirmar elección'}
-      onConfirm={confirmCommercialOptionAcceptance}
-    />
+    >
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            ¿El cliente eligió la opción {optionPendingAcceptance?.option_code || ''}?
+          </DialogTitle>
+          <DialogDescription>
+            Se restaurarán los precios de “{optionPendingAcceptance?.label || ''}”,
+            se marcarán las demás opciones como no seleccionadas y la cotización
+            pasará a Ganada.
+          </DialogDescription>
+        </DialogHeader>
+
+        {optionAcceptanceOperationImpact?.shippingInstructionIds.length ? (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+              <p className="font-semibold">Esta cotización tiene operación asociada.</p>
+              <p className="mt-1">
+                Shipping Instruction:{' '}
+                {optionAcceptanceOperationImpact.routingNumbers.join(', ') ||
+                  `${optionAcceptanceOperationImpact.shippingInstructionIds.length} vinculada(s)`}
+                {' · '}Bookings: {optionAcceptanceOperationImpact.bookingsCount}
+              </p>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Si propagas, se actualizarán agente, carrier, ETD, tránsito y días
+              libres en la operación. Los bookings con datos confirmados se conservarán.
+            </p>
+          </div>
+        ) : null}
+
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setOptionPendingAcceptance(null)
+              setOptionAcceptanceOperationImpact(null)
+            }}
+            disabled={acceptingCommercialOption}
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
+          >
+            Cancelar
+          </button>
+
+          {optionAcceptanceOperationImpact?.shippingInstructionIds.length ? (
+            <button
+              type="button"
+              onClick={() => confirmCommercialOptionAcceptance(false)}
+              disabled={acceptingCommercialOption}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200"
+            >
+              Aceptar sin actualizar operación
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() =>
+              confirmCommercialOptionAcceptance(
+                Boolean(optionAcceptanceOperationImpact?.shippingInstructionIds.length)
+              )
+            }
+            disabled={acceptingCommercialOption}
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {acceptingCommercialOption
+              ? 'Registrando...'
+              : optionAcceptanceOperationImpact?.shippingInstructionIds.length
+                ? 'Aceptar y propagar'
+                : 'Confirmar elección'}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <ConfirmDialog
       open={duplicateDialogOpen}

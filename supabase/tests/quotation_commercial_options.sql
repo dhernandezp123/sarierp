@@ -157,6 +157,14 @@ reset role;
 update public.quotations
 set status = 'Pricing Aprobado'
 where id = '6c200000-0000-0000-0000-000000000001';
+
+select pg_temp.expect_denied(
+  $$update public.quotations
+    set status = 'Enviada al Cliente'
+    where id = '6c200000-0000-0000-0000-000000000001'$$,
+  'No debe enviarse una cotización con opciones que continúan en Borrador'
+);
+
 set local role authenticated;
 
 select public.send_quotation_with_options('6c200000-0000-0000-0000-000000000001');
@@ -218,12 +226,13 @@ select set_config(
   true
 );
 
-select * from public.accept_quotation_option(
+select * from public.finalize_quotation_option_selection(
   (
     select id from public.quotation_options
     where quotation_id = '6c200000-0000-0000-0000-000000000001'
       and option_code = 'A'
-  )
+  ),
+  false
 );
 
 select pg_temp.assert_true(
@@ -266,6 +275,117 @@ select pg_temp.assert_true(
     where id = '6c200000-0000-0000-0000-000000000001'
   ),
   'La cotización debe reflejar los valores de la opción ganadora'
+);
+
+select pg_temp.assert_true(
+  (
+    select status = 'Ganada'
+    from public.quotations
+    where id = '6c200000-0000-0000-0000-000000000001'
+  ),
+  'Finalizar la elección debe cambiar la cotización a Ganada'
+);
+
+reset role;
+
+insert into public.quotations (
+  id, cliente_id, created_by, status, quotation_number, origen, destino
+) values (
+  '6c200000-0000-0000-0000-000000000002',
+  '6c100000-0000-0000-0000-000000000001',
+  '6c000000-0000-0000-0000-000000000002',
+  'Ganada', 'Q-OPTIONS-REPRICING', 'Shanghai', 'Puerto Cortés'
+);
+
+insert into public.shipping_instructions (
+  id, routing_number, quotation_id, client_id, created_by,
+  status, shipment_status, operational_status, agent_name
+) values (
+  '6c500000-0000-0000-0000-000000000002', 'RT-OPTIONS-REPRICING',
+  '6c200000-0000-0000-0000-000000000002',
+  '6c100000-0000-0000-0000-000000000001',
+  '6c000000-0000-0000-0000-000000000002',
+  'Validada', 'Booking Solicitado', 'Listo para Booking', 'Agente anterior'
+);
+
+update public.quotations
+set status = 'Pendiente de Fijar Precios'
+where id = '6c200000-0000-0000-0000-000000000002';
+
+insert into public.agent_quotes (
+  id, quotation_id, agente_nombre, ocean_freight, carrier, transit_time,
+  free_days_destination, transshipment, valid_until, etd, is_selected
+) values (
+  '6c300000-0000-0000-0000-000000000003',
+  '6c200000-0000-0000-0000-000000000002',
+  'Agente Repricing', 1300, 'NAVIERA REPRICING', '18', 14, 'Directo',
+  current_date + 30, current_date + 8, true
+);
+
+insert into public.pricing_items (
+  id, quotation_id, item_type, description, cost_amount, sale_amount,
+  quantity, taxable, tax_rate, tax_amount, total_amount, currency
+) values (
+  '6c400000-0000-0000-0000-000000000002',
+  '6c200000-0000-0000-0000-000000000002',
+  'Flete', 'Flete repricing', 1300, 1500, 1, false, 0, 0, 1500, 'USD'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"6c000000-0000-0000-0000-000000000001","role":"authenticated"}',
+  true
+);
+
+select * from public.save_current_pricing_as_option_v2(
+  '6c200000-0000-0000-0000-000000000002',
+  'Repricing con operación', true, null, 'Opción elegible'
+);
+
+reset role;
+update public.quotations
+set status = 'Pricing Aprobado'
+where id = '6c200000-0000-0000-0000-000000000002';
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"6c000000-0000-0000-0000-000000000001","role":"authenticated"}',
+  true
+);
+
+select public.send_quotation_with_options(
+  '6c200000-0000-0000-0000-000000000002'
+);
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"6c000000-0000-0000-0000-000000000002","role":"authenticated"}',
+  true
+);
+
+select * from public.finalize_quotation_option_selection(
+  (
+    select id from public.quotation_options
+    where quotation_id = '6c200000-0000-0000-0000-000000000002'
+      and option_code = 'A'
+  ),
+  true
+);
+
+select pg_temp.assert_true(
+  (
+    select q.status = 'Ganada'
+      and qo.status = 'Aceptada'
+      and si.agent_name = 'Agente Repricing'
+    from public.quotations q
+    join public.quotation_options qo on qo.quotation_id = q.id
+    join public.shipping_instructions si on si.quotation_id = q.id
+    where q.id = '6c200000-0000-0000-0000-000000000002'
+      and qo.option_code = 'A'
+  ),
+  'Ventas debe aceptar y propagar atómicamente una opción de repricing con SI'
 );
 
 select extensions.pass(

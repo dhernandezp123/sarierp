@@ -2385,9 +2385,18 @@ function PricingComparisonContent() {
     const oldStatus = selectedQuote.status || 'Borrador'
     const activeAgentQuote = agentQuotes.find((quote) => quote.is_selected) || null
     const impact = await getOperationalImpact(activeAgentQuote)
+    const hasPendingCommercialOptionSelection =
+      commercialOptions.some((option) =>
+        option.status === 'Borrador' || option.status === 'Ofrecida'
+      ) &&
+      !commercialOptions.some((option) => option.status === 'Aceptada')
+    const isCommercialOptionRepricing = Boolean(
+      impact?.isRepricing && hasPendingCommercialOptionSelection
+    )
     const shouldAskOperationalAction =
       impact &&
       (impact.hasShippingInstruction || impact.bookings.length > 0) &&
+      !isCommercialOptionRepricing &&
       !operationalSyncMode
 
     if (shouldAskOperationalAction) {
@@ -2398,7 +2407,8 @@ function PricingComparisonContent() {
     }
 
     const isRepricing = Boolean(impact?.isRepricing)
-    const nextStatus = isRepricing ? 'Ganada' : 'Pricing Aprobado'
+    const closesRepricing = isRepricing && !isCommercialOptionRepricing
+    const nextStatus = closesRepricing ? 'Ganada' : 'Pricing Aprobado'
     const isReapproval = oldStatus === 'Pricing Aprobado'
     const previousFinancialTotals = shouldCreateFinancialSnapshot(
       selectedQuote,
@@ -2429,7 +2439,7 @@ function PricingComparisonContent() {
             change_type: changeType,
           }
 
-    if (!isRepricing && !isReapproval && !canTransition(oldStatus, nextStatus)) {
+    if (!closesRepricing && !isReapproval && !canTransition(oldStatus, nextStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
       return false
     }
@@ -2455,7 +2465,7 @@ function PricingComparisonContent() {
       return false
     }
 
-    if (operationalSyncMode === 'sync' && impact) {
+    if (operationalSyncMode === 'sync' && impact && closesRepricing) {
       try {
         await syncOperationalRepricing(impact)
       } catch (syncError: any) {
@@ -2484,7 +2494,7 @@ function PricingComparisonContent() {
       metadata: getFinancialSnapshotMetadata('pricing_approved'),
     })
 
-    if (isRepricing && operationalSyncMode) {
+    if (closesRepricing && operationalSyncMode) {
       const repricingAction =
         operationalSyncMode === 'sync'
           ? 'repricing_approved_with_operational_sync'
@@ -2514,6 +2524,25 @@ function PricingComparisonContent() {
       })
     }
 
+    if (isCommercialOptionRepricing) {
+      await createActivityLog({
+        module: 'pricing',
+        action: 'repricing_options_approved_for_client',
+        entityType: 'quotation',
+        entityId: selectedQuote.id,
+        description: `Repricing aprobado para enviar opciones al cliente en ${
+          selectedQuote.quotation_number || selectedQuote.id
+        }`,
+        metadata: {
+          ...getFinancialSnapshotMetadata('repricing_options_approved_for_client'),
+          previous_status: oldStatus,
+          new_status: nextStatus,
+          commercial_options_count: commercialOptions.length,
+          operational_sync_deferred: true,
+        },
+      })
+    }
+
     if (selectedQuote.created_by) {
       await createNotification({
         userId: selectedQuote.created_by,
@@ -2526,9 +2555,11 @@ function PricingComparisonContent() {
     }
 
     toast.success(
-      isRepricing
-        ? 'Repricing aprobado. La cotización volvió a Ganada.'
-        : 'Pricing aprobado correctamente'
+      isCommercialOptionRepricing
+        ? 'Repricing aprobado. Envía las opciones y registra la elección del cliente.'
+        : isRepricing
+          ? 'Repricing aprobado. La cotización volvió a Ganada.'
+          : 'Pricing aprobado correctamente'
     )
 
     await fetchPricingItems(selectedQuote.id)
@@ -2961,6 +2992,11 @@ function PricingComparisonContent() {
 
   const totalSaleWithTax = pricingItems.reduce(
     (sum, item) => sum + Number(item.total_amount || 0),
+    0
+  )
+
+  const totalTax = pricingItems.reduce(
+    (sum, item) => sum + Number(item.tax_amount || 0),
     0
   )
 
@@ -6432,11 +6468,11 @@ const profitabilityColor =
         open={costReviewDialogOpen}
         onOpenChange={setCostReviewDialogOpen}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle>Revisión de costos antes de aprobar</DialogTitle>
             <DialogDescription>
-              Confirma las cantidades y los totales que quedarán aprobados en Pricing.
+              Confirma cantidades, venta sin ISV, impuesto y total final para el cliente.
             </DialogDescription>
           </DialogHeader>
 
@@ -6480,7 +6516,7 @@ const profitabilityColor =
           )}
 
           <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="bg-slate-950 text-white dark:bg-slate-900">
                 <tr>
                   <th className="px-3 py-2">Descripción</th>
@@ -6488,12 +6524,17 @@ const profitabilityColor =
                   <th className="px-3 py-2 text-right">QTY</th>
                   <th className="px-3 py-2 text-right">Costo unit.</th>
                   <th className="px-3 py-2 text-right">Costo total</th>
-                  <th className="px-3 py-2 text-right">Venta total</th>
+                  <th className="px-3 py-2 text-right">Venta sin ISV</th>
+                  <th className="px-3 py-2 text-right">ISV</th>
+                  <th className="px-3 py-2 text-right">Total cliente</th>
                 </tr>
               </thead>
               <tbody>
                 {pricingItems.map((item) => {
                   const quantity = Number(item.quantity || 0)
+                  const saleSubtotal = Number(item.sale_amount || 0) * quantity
+                  const tax = Number(item.tax_amount || 0)
+                  const clientTotal = Number(item.total_amount || saleSubtotal + tax)
                   const hasQuantityIssue = fclQuantityReview.some(
                     (review) => review.itemId === String(item.id)
                   )
@@ -6520,7 +6561,13 @@ const profitabilityColor =
                         {item.currency || 'USD'} {formatCurrency(Number(item.cost_amount || 0) * quantity)}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {item.currency || 'USD'} {formatCurrency(Number(item.sale_amount || 0) * quantity)}
+                        {item.currency || 'USD'} {formatCurrency(saleSubtotal)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {item.currency || 'USD'} {formatCurrency(tax)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold">
+                        {item.currency || 'USD'} {formatCurrency(clientTotal)}
                       </td>
                     </tr>
                   )
@@ -6531,6 +6578,8 @@ const profitabilityColor =
                   <td colSpan={4} className="px-3 py-2 text-right">Totales</td>
                   <td className="px-3 py-2 text-right">USD {formatCurrency(totalCost)}</td>
                   <td className="px-3 py-2 text-right">USD {formatCurrency(totalSale)}</td>
+                  <td className="px-3 py-2 text-right">USD {formatCurrency(totalTax)}</td>
+                  <td className="px-3 py-2 text-right">USD {formatCurrency(totalSaleWithTax)}</td>
                 </tr>
               </tfoot>
             </table>

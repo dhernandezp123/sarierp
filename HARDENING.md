@@ -5952,3 +5952,57 @@ Agregar una entrada por fix:
   - Opciones históricas sin `agent_name` mostrarán `No especificado`, pero el
     vínculo a su tarifa seguirá disponible mediante `agent_quote_id`.
 - Commit: `f438837`.
+
+### 2026-09-04 - FLOW-024 - Repricing con opciones y operación existente
+
+- Estado: Implementado y validado localmente; migración, deployment y UAT pendientes.
+- Hallazgo: FLOW-024.
+- Causa raíz:
+  - Al aprobar un repricing con Shipping Instruction, Pricing intentaba devolver
+    inmediatamente la cotización a `Ganada` y abrir la propagación operativa.
+  - El guard de integridad impedía `Ganada` hasta registrar una opción `Aceptada`,
+    pero la elección solo era posible después de publicar las opciones como
+    `Ofrecida`; el flujo quedaba en una dependencia circular.
+  - El selector general también permitía marcar la cotización como enviada sin
+    ejecutar la RPC que publica los snapshots, dejándolos en `Borrador`.
+  - El modal de revisión llamaba `Venta total` al subtotal sin ISV.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+- SQL:
+  - `supabase/migrations/20260904120000_quotation_option_repricing_flow.sql`
+  - `supabase/tests/quotation_commercial_options.sql`
+- Cambios:
+  - Un repricing con opciones pendientes se aprueba como `Pricing Aprobado` sin
+    modificar todavía la operación; luego se publica mediante el botón dedicado.
+  - Ventas/Admin registra la opción elegida desde el detalle y decide si desea
+    propagarla a las Shipping Instructions vinculadas.
+  - La nueva RPC `finalize_quotation_option_selection` acepta la opción, restaura
+    sus líneas y tarifa, sincroniza opcionalmente la operación y cambia la
+    cotización a `Ganada` dentro de una sola transacción.
+  - Ventas solo puede ejecutar la sincronización canónica para una SI cuya
+    cotización ya tenga una opción `Aceptada`; bookings confirmados y BL continúan
+    protegidos por las reglas existentes.
+  - El cambio manual a `Enviada al Cliente` queda bloqueado en UI y mediante un
+    trigger de integridad cuando existen opciones sin publicar; debe usarse
+    Pricing Comparison para publicarlas transaccionalmente.
+  - El modal de aprobación ahora separa costo, venta sin ISV, ISV y total cliente.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npx.cmd supabase migration up --local`: migración aplicada correctamente.
+  - `npx.cmd supabase test db supabase/tests/quotation_commercial_options.sql`: PASS.
+  - `npx.cmd supabase db lint --local --level warning`: sin hallazgos.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Repetir el caso real con una cotización reabierta y SI sin bookings: aprobar,
+    publicar, elegir A y confirmar `Aceptar y propagar`.
+  - Confirmar que la opción ganadora quede `Aceptada`, la otra `No seleccionada`,
+    la cotización `Ganada` y la SI con agente/ETD/días libres de la opción A.
+  - Probar `Aceptar sin actualizar operación` y un booking confirmado para
+    verificar que no se sobrescriban datos operativos consolidados.
+- Riesgos o trabajo pendiente:
+  - La migración debe aplicarse antes del frontend para que la nueva RPC exista.
+  - El flujo de rondas múltiples después de una opción ya aceptada no forma parte
+    de este ajuste y requiere versionado explícito de rondas si se habilita.
+- Commit: pendiente.
