@@ -1,0 +1,123 @@
+{
+  "title": "Términos de Uso y Aviso de Privacidad",
+  "version": "2026-09-07",
+  "edition": "07/09/2026",
+  "effective": "Aplicable desde su publicación, sin efecto retroactivo.",
+  "sections": [
+    {
+      "id": "alcance",
+      "title": "Alcance, proveedor y aceptación",
+      "body": "Forwarders ERP es un servicio empresarial de software desarrollado bajo el nombre comercial Hernova Systems. Hernova Systems es un nombre comercial utilizado por su titular, no una sociedad constituida ni una persona jurídica distinta. El proveedor contractual es la persona natural titular, que debe identificarse con su nombre legal, identificación tributaria y domicilio en la propuesta u orden de servicio antes de contratar. El nombre comercial y el correo de contacto no sustituyen esa identificación.\n\nEstos términos regulan el uso del software. La prestación de transporte, almacenamiento y gestión de carga corresponde al operador logístico contratado, no al nombre comercial del software. Las condiciones del portal de Sari Express se consultan por separado en /terminos-logisticos.\n\nAl solicitar acceso, el usuario acepta las condiciones de uso que se le presentan y declara haber leído el aviso de privacidad. Esa solicitud no contrata un plan de pago, no acredita facultades para obligar a una organización ni sustituye la firma del contrato por su representante autorizado. La navegación por la web no constituye aceptación de nuevas condiciones comerciales.\n\nLa orden de servicio, el contrato, el acuerdo de nivel de servicio (SLA) y el acuerdo de tratamiento de datos que se suscriban prevalecen sobre esta página en lo pactado válidamente, sin limitar derechos que la ley no permita excluir. Estas políticas aplican a usuarios internos y clientes según el servicio y su rol."
+    },
+    {
+      "id": "acceso",
+      "title": "Acceso y credenciales",
+      "body": "Cada usuario recibe credenciales de acceso personales e intransferibles. El usuario es responsable de:\n\n• Mantener la confidencialidad de su contraseña.\n• No compartir su sesión con terceros.\n• Notificar de inmediato al administrador del sistema ante cualquier uso no autorizado de su cuenta.\n• Cerrar sesión al finalizar cada jornada de trabajo.\n\nEl acceso otorgado corresponde exclusivamente al rol y permisos definidos por el administrador de la organización. Cualquier intento de acceder a módulos o funcionalidades fuera del alcance del rol asignado está prohibido."
+    },
+    {
+      "id": "uso-permitido",
+      "title": "Uso permitido",
+      "body": "El Sistema está diseñado exclusivamente para la gestión operativa y comercial de empresas de carga internacional, freight forwarding y logística. Los usos permitidos incluyen:\n\n• Registro y seguimiento de cotizaciones, embarques y documentos.\n• Gestión de clientes, proveedores y agentes de carga.\n• Emisión de documentos de transporte: HBL, AWB, Carta Porte.\n• Control de facturación, cuentas por cobrar y cuentas por pagar.\n• Operaciones de bodega y consolidación de carga.\n• Generación de reportes financieros y operativos.\n\nQueda expresamente prohibido utilizar el Sistema para fines distintos a los señalados, incluyendo actividades ilícitas o que contravengan la legislación hondureña o centroamericana aplicable."
+    },
+    {
+      "id": "usos-prohibidos",
+      "title": "Usos prohibidos",
+      "body": "Está terminantemente prohibido:\n\n• Manipular, alterar o eliminar registros históricos con el propósito de ocultar información operativa o financiera.\n• Introducir información falsa, incompleta o engañosa en cualquier módulo del Sistema.\n• Intentar acceder, descifrar o explotar vulnerabilidades de seguridad del Sistema.\n• Realizar ingeniería inversa, descompilar o copiar el código fuente de la plataforma.\n• Compartir acceso con personas no autorizadas por la organización.\n• Usar el Sistema para extraer datos de clientes o proveedores con fines comerciales no autorizados.\n• Automatizar consultas o accesos masivos sin autorización expresa del proveedor.\n\nEl incumplimiento de estas restricciones podrá resultar en la suspensión inmediata del acceso y, de corresponder, en acciones legales."
+    },
+    {
+      "id": "datos",
+      "title": "Propiedad, licencia y gestión de los datos",
+      "body": "La organización contratante conserva sus derechos sobre los datos operativos ingresados al Sistema: clientes, contactos, cotizaciones, embarques, documentos, facturas y archivos. La organización concede al titular de Hernova Systems una autorización limitada, no exclusiva y temporal para alojar, respaldar, transmitir y procesar esos datos únicamente con el fin de prestar, proteger y mantener el servicio.\n\nEl titular de Hernova Systems no adquiere derecho de comercialización sobre los datos de la organización. Los datos agregados o anonimizados solo podrán utilizarse para seguridad, métricas y mejora del servicio cuando no permitan identificar a una persona, cliente u operación.\n\nLa organización contratante es responsable de:\n\n• La exactitud e integridad de la información ingresada.\n• El cumplimiento de las obligaciones fiscales y legales derivadas de los datos registrados.\n• La gestión de los accesos y roles de sus usuarios.\n\nEl titular de Hernova Systems aplica medidas técnicas y organizativas razonables según el riesgo, incluyendo cifrado en tránsito, controles de acceso por rol, segregación lógica y mecanismos de registro disponibles. Ningún sistema es absolutamente seguro; las medidas específicas, respaldos, objetivos de recuperación y retención se definirán en el contrato o SLA vigente."
+    },
+    {
+      "id": "privacidad",
+      "title": "Aviso de privacidad y categorías de datos",
+      "body": "El Sistema puede tratar datos de usuarios, clientes, contactos, proveedores, transportistas y consignatarios: nombre, correo, teléfono, dirección, identificación fiscal, rol, identificadores de autenticación, registros técnicos, comunicaciones, documentos de transporte, fotografías, facturación y detalles de operaciones logísticas.\n\nLa organización contratante determina los fines de los datos personales que carga y actúa como responsable frente a sus titulares. El titular de Hernova Systems los trata por cuenta de esa organización para prestar, mantener y proteger el servicio conforme a sus instrucciones y al acuerdo aplicable. El uso para fines propios distintos requiere su evaluación e información separadas; no queda autorizado de forma general por la mejora del producto.\n\nLa organización debe contar con una base legítima para recopilar los datos, informar a sus titulares y limitar la información a la necesaria. No deben cargarse contraseñas ajenas, datos de tarjetas de pago ni datos sensibles que no sean necesarios y estén expresamente contemplados en el servicio.\n\nLas solicitudes de acceso, corrección, actualización, confidencialidad, eliminación, oposición o portabilidad se evaluarán conforme a la ley aplicable y a las obligaciones de conservación. La mención de un derecho no implica que tenga el mismo alcance en todas las jurisdicciones. El canal de atención se describe en la sección Ejercicio de derechos."
+    },
+    {
+      "id": "solicitudes-demo",
+      "title": "Visitantes y solicitudes de demostración",
+      "body": "Cuando solicitas una demostración, el titular de Hernova Systems decide el tratamiento de tu nombre, empresa, correo y, si lo facilitas, teléfono para responder y coordinar la solicitud. Nombre, empresa y correo son necesarios para tramitarla; el teléfono es opcional. No se contrata un servicio ni se autoriza publicidad por enviar el formulario.\n\nEstos datos se almacenan mediante Supabase y pueden ser tratados por proveedores tecnológicos necesarios para gestionar la solicitud. No se venden ni se incorporan por este formulario a una suscripción publicitaria. Cualquier finalidad comercial adicional deberá informarse y contar con la base jurídica que corresponda.\n\nSe conservarán mientras sea necesario para atender la solicitud y su seguimiento solicitado. Al cesar esa finalidad se evaluará su eliminación o anonimización, salvo información que deba conservarse para obligaciones legales o reclamaciones. Puedes solicitar el cierre del seguimiento o ejercer tus derechos en contacto@forwarders.app. El plazo operativo y los ciclos de respaldo se informarán al atender la solicitud; no se promete un borrado automático inmediato."
+    },
+    {
+      "id": "derechos",
+      "title": "Ejercicio de derechos y consultas de privacidad",
+      "body": "Escribe a contacto@forwarders.app indicando el derecho o consulta, el correo vinculado al servicio y la organización u operación relacionada si corresponde. No envíes contraseñas ni documentos de identidad completos en el primer mensaje. Solo se solicitará información adicional proporcional cuando sea necesaria para verificar identidad o representación.\n\nPara solicitudes sobre prospectos, el titular de Hernova Systems gestionará la respuesta. Para datos que se tratan por cuenta de un operador logístico, la solicitud se canalizará al responsable correspondiente y se le prestará asistencia. Se informará el resultado, las limitaciones aplicables y, cuando proceda, los motivos de conservación. El canal no restringe la posibilidad de acudir a la autoridad competente.\n\nLa respuesta se atenderá según la normativa aplicable y los plazos acordados. Las solicitudes de privacidad no dependen de contratar un plan de soporte."
+    },
+    {
+      "id": "proveedores-transferencias",
+      "title": "Proveedores tecnológicos y transferencias",
+      "body": "El Sistema utiliza Supabase para base de datos, autenticación y almacenamiento. Las integraciones de correo utilizan Resend cuando están habilitadas. El alojamiento y despliegue pueden realizarse mediante Vercel u otro proveedor contratado. Solo deben comunicarse los datos necesarios para cada función.\n\nLos datos pueden alojarse o procesarse fuera de Honduras. Los proveedores, servicios activos, regiones y salvaguardas aplicables al ambiente contratado deben identificarse en el acuerdo de tratamiento de datos o comunicarse a la organización antes de iniciar ese tratamiento. No se garantiza una región concreta ni que todos los servicios mencionados estén activos en cada ambiente.\n\nEl tratamiento por proveedores debe estar sujeto a instrucciones, confidencialidad y salvaguardas acordes al servicio. Sus políticas propias no sustituyen los compromisos del titular de Hernova Systems ni la evaluación de transferencias aplicable. Puede solicitarse información sobre proveedores en contacto@forwarders.app.\n\nPodrá revelarse información por obligación legal u orden de autoridad competente, limitándola a lo necesario e informando a la organización cuando la ley lo permita."
+    },
+    {
+      "id": "cookies",
+      "title": "Cookies y almacenamiento técnico",
+      "body": "El Sistema utiliza cookies de sesión de Supabase y almacenamiento del navegador para autenticación, seguridad y continuidad de sesión. También conserva preferencias de interfaz, como tema, estado de avisos y configuración de tablas. Su duración depende de la sesión y la configuración correspondiente; algunas preferencias permanecen hasta que se cambian o se borra el almacenamiento del sitio.\n\nEl formulario de demo no incorpora una suscripción publicitaria. No se añadirán cookies publicitarias ni analítica no esencial sin informar y, cuando corresponda, obtener consentimiento previo. Las preferencias opcionales no autorizan un seguimiento publicitario.\n\nPuedes cerrar sesión y gestionar el almacenamiento desde tu navegador. Borrarlo puede cerrar tu sesión o restablecer preferencias; no elimina los datos operativos almacenados en el servicio. Para estos datos utiliza el canal de privacidad."
+    },
+    {
+      "id": "retencion",
+      "title": "Retención, exportación y eliminación",
+      "body": "Los datos operativos se conservarán durante el servicio y posteriormente según los períodos acordados, las obligaciones legales aplicables y las necesidades justificadas de resolución de controversias. Los datos de prospectos siguen el criterio específico del apartado de demostraciones. Los registros de aceptación documentan la versión presentada y la declaración del solicitante; no se utilizan como consentimiento publicitario.\n\nLa organización puede solicitar una exportación de sus datos mediante el canal de contacto. El alcance, formato técnicamente disponible, asistencia, costos si corresponden y plazo de entrega se acordarán por escrito. La salida debe contemplar acceso a la información necesaria y las obligaciones legales de cada parte.\n\nLa eliminación o anonimización se realizará cuando termine la finalidad y no exista una obligación válida de conservación. Las copias de respaldo pueden mantener datos hasta su rotación; una restauración debe contemplar las solicitudes de eliminación atendidas. Los plazos de transición, conservación y respaldo deben quedar definidos en el acuerdo aplicable. No se promete eliminación instantánea, respaldo continuo ni recuperación garantizada por esta página."
+    },
+    {
+      "id": "roles",
+      "title": "Roles y responsabilidades",
+      "body": "El Sistema opera bajo un modelo de control de acceso basado en roles (RBAC). Cada rol tiene permisos específicos:\n\n• Administrador: acceso total. Responsable de gestionar usuarios, configuración y datos maestros.\n• Ventas: gestión de cotizaciones y clientes. No puede modificar tarifas aprobadas ni datos financieros.\n• Pricing: gestión de tarifas y comparativos de agentes. No puede aprobar operaciones.\n• Operaciones: gestión de shipping instructions, bookings y documentos de transporte.\n• Finanzas / Contabilidad: acceso a facturación, cuentas por cobrar, cuentas por pagar y reportes.\n• Cliente: acceso exclusivo al portal de seguimiento de paquetes y documentos propios.\n\nNingún usuario puede actuar fuera de los permisos de su rol. El administrador es responsable de asignar roles acordes a las funciones reales de cada persona."
+    },
+    {
+      "id": "disponibilidad",
+      "title": "Disponibilidad, soporte y seguridad",
+      "body": "La disponibilidad, horarios de soporte, mantenimiento, objetivos de recuperación y tiempos de respuesta serán los establecidos en el plan contratado o SLA. Si no existe un SLA firmado, el servicio se presta bajo esfuerzos comercialmente razonables, sin garantía de disponibilidad ininterrumpida.\n\nLos mantenimientos programados se comunicarán con antelación razonable cuando sea posible. Los incidentes de seguridad que afecten datos de la organización se comunicarán sin demora indebida, conforme al contrato y a la ley aplicable.\n\nNo se garantiza disponibilidad continua en casos de:\n\n• Fuerza mayor o causas fuera del control del titular de Hernova Systems.\n• Fallas en servicios de infraestructura de terceros (Supabase, Vercel u otros proveedores).\n• Incidentes de seguridad que requieran intervención inmediata.\n\nEn caso de interrupción no programada, el titular de Hernova Systems comunicará la información disponible por los canales acordados, sin que una estimación inicial constituya garantía de restablecimiento."
+    },
+    {
+      "id": "documentos-logisticos",
+      "title": "Documentos logísticos y carga",
+      "body": "El Sistema facilita la preparación de HBL, AWB, cartas porte, shipping instructions, bookings, manifiestos y reportes. No actúa como transportista, agente aduanero, aseguradora, autoridad portuaria ni sustituto del documento oficial emitido por el carrier o la autoridad competente.\n\nLa organización debe revisar y autorizar cada documento antes de emitirlo o enviarlo. Es responsable de pesos, medidas, clasificación, valor, mercancías peligrosas o restringidas, licencias, sanciones, controles de exportación, origen, destino y declaraciones aduaneras.\n\nEl titular de Hernova Systems no controla pérdidas, daños, demoras, almacenajes, demurrage, detention, inspecciones, rechazos, actos del carrier ni eventos propios del transporte. Las responsabilidades por la carga se rigen por los contratos de transporte y la normativa aplicable."
+    },
+    {
+      "id": "documentos-fiscales",
+      "title": "Documentos fiscales y responsabilidad tributaria",
+      "body": "Los documentos generados por el Sistema (facturas, notas de crédito, notas de débito, proformas) son responsabilidad de la organización contratante en cuanto a su correcta emisión, numeración y cumplimiento ante el Servicio de Administración de Rentas (SAR) de Honduras.\n\nEl Sistema provee herramientas para facilitar el cumplimiento fiscal (cálculo de ISV, generación de documentos con número correlativo), pero no reemplaza la responsabilidad del contador o representante legal de la organización ante las autoridades tributarias.\n\nEl titular de Hernova Systems no presta asesoría tributaria, contable o legal y no garantiza que una configuración sea suficiente para cada operación. La organización debe validar rangos CAI, correlativos, tasas, exoneraciones, retenciones, cierres y conservación documental con su profesional responsable."
+    },
+    {
+      "id": "propiedad-intelectual",
+      "title": "Propiedad intelectual",
+      "body": "El titular de Hernova Systems conserva los derechos sobre el software, diseño, documentación, marcas, componentes, mejoras y código del Sistema. La contratación concede únicamente un derecho limitado, revocable, no transferible y no sublicenciable de uso durante la vigencia del servicio.\n\nLa organización no podrá copiar, revender, sublicenciar, descompilar, intentar obtener el código fuente ni crear un servicio competidor a partir del Sistema, salvo lo que una norma imperativa permita. Los comentarios o sugerencias podrán utilizarse para mejorar el producto sin revelar información confidencial."
+    },
+    {
+      "id": "confidencialidad",
+      "title": "Confidencialidad",
+      "body": "Cada parte protegerá la información confidencial de la otra con un grado de cuidado razonable y la usará solo para ejecutar la relación contractual. No se considera confidencial la información pública, obtenida legítimamente de un tercero, desarrollada de forma independiente o cuya divulgación sea exigida por autoridad competente.\n\nEl personal y los proveedores que requieran acceso estarán sujetos a deberes de confidencialidad acordes con su función. Las obligaciones específicas y su duración podrán ampliarse mediante contrato o acuerdo de confidencialidad."
+    },
+    {
+      "id": "responsabilidad",
+      "title": "Garantías y limitación de responsabilidad",
+      "body": "El Sistema es una herramienta de apoyo y sus resultados dependen de los datos, reglas y decisiones de la organización. Salvo garantías expresas del contrato y aquellas que legalmente no puedan excluirse, se presta sin garantías implícitas de idoneidad para una operación particular.\n\nLa asignación de riesgos, exclusiones y límite económico de responsabilidad se establecerán en el contrato. Ninguna cláusula pretende excluir responsabilidad que no pueda limitarse legalmente, incluyendo fraude, dolo o culpa grave cuando corresponda.\n\nLa organización será responsable por el uso indebido de sus cuentas, por instrucciones autorizadas desde ellas y por reclamaciones derivadas de datos o documentos que haya cargado, salvo que resulten directamente de un incumplimiento atribuible al titular de Hernova Systems."
+    },
+    {
+      "id": "suspension-terminacion",
+      "title": "Suspensión y terminación",
+      "body": "El titular de Hernova Systems podrá suspender temporalmente el acceso por riesgo de seguridad, uso ilícito, incumplimiento material, mora conforme al contrato o requerimiento de autoridad. Cuando sea razonablemente posible, notificará y permitirá subsanar antes de la suspensión.\n\nLa terminación, preavisos, pagos pendientes, asistencia de salida y acceso a exportaciones se regirán por la orden de servicio. La terminación no elimina obligaciones devengadas, confidencialidad, propiedad intelectual ni aquellas que por su naturaleza deban sobrevivir."
+    },
+    {
+      "id": "pruebas",
+      "title": "Ambientes de prueba y demostración",
+      "body": "Las cuentas de demostración o prueba tienen duración, capacidad y funcionalidades limitadas; pueden suspenderse o expirar automáticamente y no incluyen SLA salvo pacto escrito. No deben utilizarse para operaciones reales, documentos fiscales válidos, datos personales sensibles ni información confidencial de clientes.\n\nLos datos ficticios del ambiente de prueba podrán reiniciarse o eliminarse al finalizar el período. La conversión a un plan contratado y cualquier migración de datos deberán confirmarse por escrito."
+    },
+    {
+      "id": "ley-aplicable",
+      "title": "Ley aplicable y controversias",
+      "body": "La relación se regirá por las leyes de la República de Honduras, sin perjuicio de normas imperativas aplicables en otros territorios. Las partes procurarán resolver de buena fe cualquier controversia mediante negociación y escalamiento entre representantes autorizados.\n\nEl tribunal competente, arbitraje, ciudad, idioma y distribución de costos deberán quedar definidos en el contrato u orden de servicio. Nada en esta sección limita el derecho de acudir a una autoridad cuando una norma imperativa lo reconozca."
+    },
+    {
+      "id": "modificaciones",
+      "title": "Modificaciones a las políticas",
+      "body": "El titular de Hernova Systems podrá actualizar estos textos por cambios legales, técnicos o del servicio. Los cambios materiales se comunicarán con antelación razonable por los canales acordados; las medidas urgentes de seguridad o cumplimiento se comunicarán tan pronto como resulte posible.\n\nCada edición identifica su versión y fecha de preparación y se aplica desde su publicación, sin efecto retroactivo sobre condiciones comerciales ya pactadas. Las versiones anteriores quedan disponibles para consulta. Los cambios que requieran acuerdo se someterán a aceptación expresa; el uso continuado no sustituye ese acuerdo ni la firma de un representante autorizado."
+    },
+    {
+      "id": "contacto",
+      "title": "Contacto y soporte",
+      "body": "Para consultas sobre estas políticas, reportes de incidentes de seguridad o solicitudes relacionadas con la privacidad de datos, comunicarse a:\n\nCorreo contractual y privacidad: contacto@forwarders.app\nSitio web: forwarders.app\n\nEl titular de Hernova Systems acusará recibo y atenderá la solicitud en un plazo razonable según su naturaleza, la ley aplicable y el SLA contratado. Para proteger los datos, podrá solicitar verificación de identidad y canalizar solicitudes de titulares a través de la organización responsable."
+    }
+  ]
+}

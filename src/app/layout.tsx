@@ -20,7 +20,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Forwarders ERP by DHer",
+  title: "Forwarders ERP by Hernova Systems",
   description:
     "ERP para freight forwarders: cotizaciones, pricing, operaciones, documentos y margenes en una sola plataforma.",
   icons: {

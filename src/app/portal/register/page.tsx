@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Package } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import { TermsAcknowledgement } from '@/src/components/legal/TermsAcknowledgement'
+import { signupLegalAcceptance } from '@/src/lib/legal-documents'
 
 export default function PortalRegisterPage() {
   const router = useRouter()
@@ -17,10 +19,16 @@ export default function PortalRegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const submittingRef = useRef(false)
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (loading) return
+    if (submittingRef.current) return
+    if (!termsAccepted) {
+      toast.info('Lee y acepta las condiciones antes de solicitar acceso.')
+      return
+    }
 
     if (!nombre.trim() || !apellido.trim() || !company.trim() || !email.trim()) {
       toast.info('Completa nombre, apellido, empresa y correo.')
@@ -38,6 +46,7 @@ export default function PortalRegisterPage() {
     }
 
     setLoading(true)
+    submittingRef.current = true
     try {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
@@ -45,6 +54,7 @@ export default function PortalRegisterPage() {
         options: {
           data: {
             requested_role: 'Cliente',
+            legal_acceptance: signupLegalAcceptance('portal', termsAccepted),
             nombre: nombre.trim(),
             apellido: apellido.trim(),
             company: company.trim(),
@@ -64,7 +74,10 @@ export default function PortalRegisterPage() {
         description: 'Un administrador debe vincular y aprobar tu cuenta.',
       })
       router.replace('/portal/login')
+    } catch {
+      toast.error('No se pudo completar la solicitud. Revisa tu conexión e intenta nuevamente.')
     } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }
@@ -97,6 +110,7 @@ export default function PortalRegisterPage() {
             <input className={fieldClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Correo electrónico" autoComplete="email" required />
             <input className={fieldClass} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Contraseña (mínimo 8 caracteres)" autoComplete="new-password" required />
             <input className={fieldClass} type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Confirmar contraseña" autoComplete="new-password" required />
+            <div className="text-slate-700 dark:text-slate-200"><TermsAcknowledgement audience="portal" checked={termsAccepted} onChange={setTermsAccepted} /></div>
             <button type="submit" disabled={loading} className="h-11 w-full rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60">
               {loading ? 'Enviando solicitud...' : 'Solicitar acceso'}
             </button>

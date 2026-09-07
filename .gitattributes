@@ -1,0 +1,2 @@
+# Los hashes legales se calculan sobre bytes UTF-8 con saltos LF en todo entorno.
+public/legal/*.json text eol=lf

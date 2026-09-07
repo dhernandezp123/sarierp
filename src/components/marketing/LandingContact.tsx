@@ -135,8 +135,8 @@ export function LandingContact() {
                   {!submitting && <ArrowRight className="ml-2" size={16} />}
                 </button>
                 <p className="text-center text-[11px] text-slate-300">
-                  Usaremos tus datos para responder a tu solicitud.{' '}
-                  <Link href="/politicas" className="text-slate-300 underline underline-offset-2">Consulta nuestra política de privacidad.</Link>
+                  Usaremos tus datos para responder y coordinar tu demo. No te suscribes a publicidad.{' '}
+                  <Link href="/politicas#solicitudes-demo" className="text-slate-300 underline underline-offset-2">Consulta cómo tratamos tus datos.</Link>
                 </p>
                 <p className="text-center text-xs text-slate-300">
                   O escríbenos a{' '}

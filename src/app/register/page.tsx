@@ -4,9 +4,11 @@ import type React from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import { TermsAcknowledgement } from '@/src/components/legal/TermsAcknowledgement'
+import { signupLegalAcceptance } from '@/src/lib/legal-documents'
 import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
@@ -21,9 +23,16 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const submittingRef = useRef(false)
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (submittingRef.current) return
+    if (!termsAccepted) {
+      toast.info('Lee y acepta las condiciones antes de solicitar acceso.')
+      return
+    }
 
     if (!nombre.trim() || !apellido.trim() || !email.trim() || !password) {
       toast.info('Completa todos los campos.')
@@ -36,59 +45,68 @@ export default function RegisterPage() {
     }
 
     setLoading(true)
+    submittingRef.current = true
+    try {
 
-    const normalizedNombre = nombre.trim()
-    const normalizedApellido = apellido.trim()
-    const normalizedEmail = email.trim().toLowerCase()
+      const normalizedNombre = nombre.trim()
+      const normalizedApellido = apellido.trim()
+      const normalizedEmail = email.trim().toLowerCase()
 
-    const { data, error } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        data: {
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: {
+            nombre: normalizedNombre,
+            apellido: normalizedApellido,
+            email: normalizedEmail,
+            legal_acceptance: signupLegalAcceptance('erp', termsAccepted),
+          },
+        },
+      })
+
+      if (error || !data.user) {
+        setLoading(false)
+        toast.error(error?.message || 'No se pudo crear la solicitud.')
+        return
+      }
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: data.user.id,
           nombre: normalizedNombre,
           apellido: normalizedApellido,
           email: normalizedEmail,
-        },
-      },
-    })
+          rol: 'Ventas',
+          status: 'Pendiente',
+          is_active: true,
+        })
 
-    if (error || !data.user) {
+      if (profileError) {
+        setLoading(false)
+        toast.error('No se pudo crear el perfil', {
+          description: profileError.message,
+        })
+        return
+      }
+
+      await supabase.auth.signOut()
+
       setLoading(false)
-      toast.error(error?.message || 'No se pudo crear la solicitud.')
-      return
-    }
-
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert({
-        id: data.user.id,
-        nombre: normalizedNombre,
-        apellido: normalizedApellido,
-        email: normalizedEmail,
-        rol: 'Ventas',
-        status: 'Pendiente',
-        is_active: true,
+      toast.success('Solicitud enviada', {
+        description: 'Un administrador debe aprobar tu acceso.',
       })
 
-    if (profileError) {
+      setTimeout(() => {
+        router.push('/login')
+      }, 1200)
+    } catch {
+      toast.error('No se pudo completar la solicitud. Revisa tu conexión e intenta nuevamente.')
+    } finally {
+      submittingRef.current = false
       setLoading(false)
-      toast.error('No se pudo crear el perfil', {
-        description: profileError.message,
-      })
-      return
     }
-
-    await supabase.auth.signOut()
-
-    setLoading(false)
-    toast.success('Solicitud enviada', {
-      description: 'Un administrador debe aprobar tu acceso.',
-    })
-
-    setTimeout(() => {
-      router.push('/login')
-    }, 1200)
   }
 
   return (
@@ -168,6 +186,7 @@ export default function RegisterPage() {
                 className="h-14 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-white placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
               />
 
+              <div className="text-slate-200"><TermsAcknowledgement audience="erp" checked={termsAccepted} onChange={setTermsAccepted} /></div>
               <button
                 type="submit"
                 disabled={loading}

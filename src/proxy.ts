@@ -9,6 +9,7 @@ const PUBLIC_ROUTES = new Set([
   '/register',
   '/onboarding',
   '/politicas',
+  '/terminos-logisticos',
   '/portal/login',
   '/portal/register',
   '/portal/forgot-password',
@@ -41,7 +42,7 @@ export async function proxy(req: NextRequest) {
   const { data } = await supabase.auth.getClaims()
   const isAuthenticated = Boolean(data?.claims?.sub)
   const pathname = req.nextUrl.pathname
-  const isPublicRoute = PUBLIC_ROUTES.has(pathname)
+  const isPublicRoute = PUBLIC_ROUTES.has(pathname) || /^\/legal\/(platform-2026-06-22|platform-2026-09-07|logistics-2026-06|logistics-2026-09-07)\.json$/.test(pathname)
 
   if (!isAuthenticated && !isPublicRoute) {
     const loginPath = pathname.startsWith('/portal') ? '/portal/login' : '/login'

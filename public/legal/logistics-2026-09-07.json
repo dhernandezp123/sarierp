@@ -1,0 +1,53 @@
+{
+  "title": "Condiciones del portal y servicio logístico",
+  "version": "2026-09-07",
+  "edition": "07/09/2026",
+  "effective": "Aplicable desde su publicación, sin modificar condiciones ya contratadas.",
+  "sections": [
+    {
+      "id": "operador",
+      "title": "Operador y alcance",
+      "body": "El portal permite a clientes de Sari Express solicitar acceso, consultar paquetes, envíos y documentos, y comunicar instrucciones. Sari Express es el operador logístico identificado en tu cotización o contrato; su identificación legal, domicilio y canal de atención deben constar en esos documentos. Hernova Systems es el nombre comercial del proveedor de software y no presta el transporte ni asegura la carga. Solicitar una cuenta no contrata por sí solo un envío ni un seguro."
+    },
+    {
+      "id": "contratacion",
+      "title": "Contratación y condiciones aplicables",
+      "body": "Antes de confirmar una operación, el operador debe informar alcance, ruta, modalidad, tarifas y cargos aplicables. La cotización aceptada y el contrato de transporte determinan las condiciones de esa operación, sujetos a las normas imperativas. Aceptar las condiciones de acceso al portal no autoriza cargos no informados ni acredita representación para contratar por otra persona."
+    },
+    {
+      "id": "cuenta",
+      "title": "Acceso y exactitud de las instrucciones",
+      "body": "El acceso requiere revisión y vinculación de la cuenta por el operador. Usa credenciales personales y protege tu sesión. Declara correctamente mercancía, valor, cantidades, pesos, dimensiones, destinatarios e instrucciones y comunica errores cuanto antes. Las notificaciones y estados del portal no sustituyen la confirmación de recepción, documentos del transportista ni comprobantes oficiales."
+    },
+    {
+      "id": "aduanas",
+      "title": "Mercancías restringidas y aduana",
+      "body": "Consulta las restricciones y requisitos de origen, tránsito y destino antes de enviar mercancías. El operador podrá rechazar o suspender la gestión de carga incompatible con el servicio o la normativa, informando según corresponda. Retenciones, inspecciones y actuaciones de autoridades se atenderán conforme a la ley; esta página no establece entrega automática de cualquier artículo restringido a las autoridades. Impuestos, aranceles y gastos se asignan según el contrato y la normativa aplicable."
+    },
+    {
+      "id": "tarifas",
+      "title": "Tarifas, pagos y cambios",
+      "body": "El método de cálculo, peso facturable, cargos, moneda, impuestos y vigencia deben figurar en la cotización o tarifa informada antes de confirmar el servicio. Los cambios para futuras operaciones se comunicarán antes de contratar. Esta página no autoriza modificar unilateralmente precios ya aceptados; cualquier ajuste debe sustentarse en las condiciones acordadas y la normativa aplicable."
+    },
+    {
+      "id": "almacenamiento",
+      "title": "Almacenamiento y carga no reclamada",
+      "body": "Los días libres y cargos posteriores deben comunicarse por escrito antes de contratar el almacenamiento. No se fija aquí un período general gratuito ni una autorización automática para disponer de mercancías a los 90 días. Ante carga no reclamada, el operador debe aplicar los avisos, plazos y procedimientos previstos en el contrato y la normativa. Las condiciones ya pactadas se conservan en lo que legalmente corresponda."
+    },
+    {
+      "id": "reclamaciones",
+      "title": "Responsabilidad, reclamaciones y seguro",
+      "body": "La responsabilidad por pérdida, daño o demora se determina según la operación, la custodia, el contrato y la normativa aplicable. No se establece una exención absoluta ni un límite basado en una tarifa interna no informada. Comunica una incidencia al operador con tu referencia, descripción y comprobantes disponibles; solicita el procedimiento y los plazos aplicables antes de contratar. El seguro requiere confirmación de contratación, cobertura, exclusiones, deducible y aseguradora; declarar un valor no acredita por sí solo una póliza. No se limitan derechos que la ley no permita excluir."
+    },
+    {
+      "id": "privacidad",
+      "title": "Privacidad del cliente y de la carga",
+      "body": "El operador logístico determina el tratamiento de datos de clientes, remitentes, destinatarios y contactos para gestionar cuentas, instrucciones, transporte, facturación, atención e incidencias y cumplir obligaciones legales. Pueden tratarse nombre, contacto, dirección, identificación fiscal, documentos, fotos y datos de la mercancía. Debe informarse a las personas cuyos datos se faciliten y limitarse la información a la necesaria.\n\nLos datos necesarios pueden comunicarse a transportistas, agentes, bodegas, destinatarios y autoridades vinculados a la operación y tratarse mediante proveedores tecnológicos, incluidos Supabase y el proveedor del software; los avisos por correo pueden utilizar Resend cuando estén habilitados. Pueden existir tratamientos fuera de Honduras por la ruta o la infraestructura. No se afirma que el servicio funcione sin terceros ni que toda comunicación dependa del consentimiento: debe aplicarse la base jurídica correspondiente.\n\nPara consultas, corrección u otros derechos, contacta al operador mediante el canal de tu cotización o contrato. Si necesitas canalizar una solicitud relativa al portal, escribe a contacto@forwarders.app indicando el operador y tu referencia, sin contraseñas ni documentos completos de identidad. El proveedor de software asistirá y canalizará al responsable; no sustituye al operador en sus decisiones comerciales. Los datos se conservan durante la operación y por las obligaciones contractuales, fiscales o de reclamación aplicables; las limitaciones de eliminación deben explicarse al solicitante."
+    },
+    {
+      "id": "cambios",
+      "title": "Versiones, consultas y controversias",
+      "body": "Las modificaciones materiales se informarán por los canales acordados y se solicitará aceptación cuando corresponda. No modifican retroactivamente operaciones contratadas ni sustituyen los acuerdos que requieran consentimiento expreso. Las consultas comerciales y reclamaciones se atienden por el operador identificado en el contrato, conforme a la ley y jurisdicción aplicables, sin impedir acudir a la autoridad competente."
+    }
+  ]
+}

@@ -6262,3 +6262,88 @@ Agregar una entrada por fix:
   - No se verificó conformidad WCAG completa ni se modificaron las condiciones
     comerciales. Los flujos autenticados del ERP conservan sus UAT pendientes.
 - Commit: `48080c4`; cambios locales sin despliegue.
+
+### 2026-09-07 - POL-REVIEW-01 - Revisión de privacidad y términos
+
+- Estado: revisión documental realizada; propuestas sin implementar ni publicar.
+  Cobertura jurídica pendiente; LEG-001 a LEG-004 no se cierran.
+- Archivos: `docs/privacy-terms-review-2026-09-07.md`, `HARDENING.md`.
+- Código / SQL: sin cambios. RLS fuera del alcance solicitado.
+- Hallazgos: POL-01 a POL-08 en el informe: identidad y marcas, plazo de contacto
+  contradictorio, aviso para prospectos, destinatarios/proveedores, acceso previo
+  y aceptación versionada, condiciones logísticas, anexos operativos y versiones.
+- Validaciones: contraste de políticas, branding, formulario de demo, registros,
+  proxy/layout de portal e integraciones de correo; consulta de fuentes jurídicas
+  públicas con límites documentados. No se verificó el sitio desplegado ni contratos.
+- Riesgos / pendientes: confirmar identidad y condiciones con el titular; aprobación
+  jurídica, inventario de proveedores/regiones, conservación y prueba de derechos;
+  implementación y validación de acceso público/aceptación después de definir textos.
+- Commit: pendiente; informe local sin despliegue.
+
+### 2026-09-07 - POL-IMPLEMENT-01 - Privacidad, condiciones y declaración versionada
+
+- Estado: implementado y validado localmente. Migración remota, publicación y
+  validación jurídica pendientes; no se declara cobertura legal completa.
+- Decisión del titular: Hernova Systems es nombre comercial sin sociedad constituida;
+  dominio `forwarders.app`, correo `contacto@forwarders.app`. No se aportó identidad
+  personal/domicilio/RTN; LEG-001 conserva ese pendiente.
+- Archivos:
+  - `.gitattributes`, `public/legal/platform-2026-06-22.json`,
+    `public/legal/platform-2026-09-07.json`, `public/legal/logistics-2026-06.json`,
+    `public/legal/logistics-2026-09-07.json`.
+  - `src/app/layout.tsx`, `src/app/politicas/page.tsx`,
+    `src/app/terminos-logisticos/page.tsx`, `src/app/portal/info/terminos/page.tsx`.
+  - `src/components/legal/LogisticsTerms.tsx`,
+    `src/components/legal/TermsAcknowledgement.tsx`, `src/lib/legal-documents.ts`.
+  - `src/app/register/page.tsx`, `src/app/portal/register/page.tsx`, `src/proxy.ts`,
+    `src/components/marketing/LandingContact.tsx`.
+  - `tests/legal-documents.test.mjs`, `docs/privacy-operations-runbook.md`,
+    `docs/privacy-terms-review-2026-09-07.md`, `HARDENING.md`.
+- SQL: `supabase/migrations/20260907160000_signup_legal_acceptance.sql`;
+  suite `supabase/tests/signup_legal_acceptance.sql`.
+- Cambios: POL-01 a POL-08: marca/dominio corregidos, eliminación de promesa de
+  tres días y condiciones logísticas no confirmadas, finalidad de prospectos,
+  proveedores/derechos/conservación, textos separados y archivos versionados.
+  Ruta pública específica sin abrir módulos privados. Índice móvil y lectura
+  sin justificación forzada. Casilla de uso/lectura sin consentimiento publicitario.
+- Integridad: captura de declaración en trigger independiente de perfiles, fecha
+  del servidor, catálogo con hash SHA-256, sin permisos API para modificar evidencia.
+  Se conserva aprobación/roles; altas legacy sin declaración no se inventan como
+  aceptaciones. No se da por probado correo ni representación de organización.
+- Validaciones:
+  - TypeScript y ESLint dirigido: OK; 21 pruebas Node: PASS; build: 71/71 páginas.
+  - Migración y suite en PostgreSQL local `supabase_db_sarierp`, transacción con
+    rollback: PASS. Declaraciones inválidas rechazadas, fecha no falsificable,
+    lectura propia por RLS, anon sin lectura, usuarios sin inserción/update/delete,
+    cambios de metadata sin alterar evidencia, perfiles Pendiente conservados.
+  - Chrome: 320/390/1440 sin overflow, archivos y páginas públicas, módulos del
+    portal protegidos; casilla no premarcada/obligatoria, fallo/reintento/doble
+    submit y payload de ambos registros. Solicitudes interceptadas, cero cuentas,
+    leads o correos reales. Capturas locales `.ua/intermediate/legal-*-mobile.png`.
+  - `git diff --check`: OK.
+- Riesgos / acciones pendientes:
+  - Aplicar migración en staging y producción antes de publicar frontend; probar
+    altas con confirmación de correo e invitaciones autorizadas en staging.
+  - Las pruebas de navegador simulan Supabase; no sustituyen UAT de extremo a extremo.
+  - Acreditar identidad jurídica, condiciones del operador, atención del buzón,
+    acuerdos/proveedores/regiones y conservación/exportación/eliminación/restauración.
+  - La evidencia se elimina al borrar la cuenta; resolver antes cualquier deber
+    de conservación legal. No existe aceptación retrospectiva ni universal.
+  - LEG-002/003/004 no se cierran hasta resolver anexos, revisión jurídica y rollout.
+- Commit: pendiente; cambios locales sin despliegue ni SQL remoto.
+
+### 2026-09-07 - POL-RELEASE-01 - Publicación de políticas y registro de aceptación
+
+- Estado: migración aplicada en Production; despliegue frontend en curso.
+- Autorización: titular solicitó migración, commit y despliegue juntos.
+- SQL: `20260907160000_signup_legal_acceptance.sql` aplicada mediante Supabase CLI
+  al proyecto Production vinculado `fwspgdzvlbtbgiupvrzo`.
+- Archivos: los de POL-IMPLEMENT-01 y documentación de esta publicación.
+- Validaciones: dry-run mostró únicamente esta migración; `db push --yes`: OK.
+  Se conservan TypeScript, lint dirigido, build 71/71, 21 pruebas Node, pruebas
+  SQL/RLS locales y navegador registradas en POL-IMPLEMENT-01.
+- Pendientes: comprobar esquema remoto, publicar Vercel y verificar páginas y
+  documentos servidos. UAT de alta real/correo y validación jurídica permanecen
+  abiertas; no se crean cuentas ni correos de prueba en producción.
+- Commit: pendiente de creación; hash y resultado de despliegue se registrarán
+  al finalizar la publicación.
