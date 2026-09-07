@@ -6081,7 +6081,7 @@ Agregar una entrada por fix:
 - Riesgos / acción manual: probar altas, fechas de pago, filtros de Ventas,
   vencimiento de tarifa y alertas de ETA con usuarios reales. El dashboard Miami
   aún requiere un intervalo propio para sus filtros «hoy» sobre timestamps.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit: `48080c4`; cambios locales sin despliegue.
 
 ### 2026-09-07 - REV-20260907-02 - Sesión obsoleta y destinos de login
 
@@ -6101,7 +6101,7 @@ Agregar una entrada por fix:
   rutas externas y normalización de segmentos; TypeScript y ESLint dirigido.
 - Riesgos / acción manual: verificar login ERP/portal, refresco de token,
   recuperación de contraseña y cambio de sesión con cuentas reales de cada rol.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit: `48080c4`; cambios locales sin despliegue.
 
 ### 2026-09-07 - REV-20260907-03 - Tasa ausente distinta de exención explícita
 
@@ -6115,7 +6115,7 @@ Agregar una entrada por fix:
   conservan sus resultados; TypeScript y ESLint dirigido.
 - Riesgos / acción manual: verificar cotización Miami, Pricing y PDF de costos
   con default ausente y con 0 explícito. No constituye revisión normativa fiscal.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit: `48080c4`; cambios locales sin despliegue.
 
 ### 2026-09-07 - REV-20260907-04 - Autoridad del documento BL estructurado
 
@@ -6129,7 +6129,7 @@ Agregar una entrada por fix:
   no existe registro estructurado de ese tipo; TypeScript y ESLint dirigido.
 - Riesgos / acción manual: comprobar reportes y detalle del envío en el portal
   con documentos nuevos sin número y expedientes históricos.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit: `48080c4`; cambios locales sin despliegue.
 
 ### 2026-09-07 - REV-20260907-05 - Landing accesible y formulario recuperable
 
@@ -6152,7 +6152,7 @@ Agregar una entrada por fix:
 - Riesgos / acción manual: verificar la recepción de un lead autorizado en un
   ambiente de prueba; auditoría completa de contraste, zoom y lector de pantalla
   pendiente. La reorganización visual/comercial se propone en el informe.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit: `48080c4`; cambios locales sin despliegue.
 
 ### 2026-09-07 - REV-20260907-06 - Guía específica y validaciones reproducibles
 
@@ -6171,7 +6171,7 @@ Agregar una entrada por fix:
   `quick_validate.py`; se ejecutaron comprobaciones estructurales equivalentes.
 - Riesgos / trabajo pendiente: ESLint global conserva 307 errores y 69 advertencias
   preexistentes. Revisarlos por módulo; no confundir build verde con UAT/RLS.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit: `48080c4`; cambios locales sin despliegue.
 
 ### 2026-09-07 - REV-20260907-07 - Respuestas inválidas del proveedor de correo
 
@@ -6190,7 +6190,7 @@ Agregar una entrada por fix:
 - Riesgos / acción manual: probar en staging la auditoría y el reintento autorizado.
   La conciliación si falla la BD tras confirmación del proveedor y los fallos al
   consultar el ambiente siguen pendientes de revisión; no hay reintento automático nuevo.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit: `48080c4`; cambios locales sin despliegue.
 
 ### Validación conjunta de REV-20260907-01 a REV-20260907-07
 
@@ -6201,8 +6201,8 @@ Agregar una entrada por fix:
   (307 errores / 69 advertencias).
 - `npm.cmd run build`: OK, 70/70 páginas generadas en la compilación final.
 - `git diff --check`: OK; solo avisos de conversión LF/CRLF del entorno Windows.
-- No se ejecutó SQL ni se verificó RLS en una base activa. No se hizo deploy ni
-  commit; la UAT autenticada y las acciones manuales indicadas siguen abiertas.
+- No se ejecutó SQL ni se verificó RLS en una base activa. No se hizo deploy;
+  la UAT autenticada y las acciones manuales indicadas siguen abiertas.
 
 ### 2026-09-07 - REV-20260907-08 - Rediseño de landing orientado a producto y demo
 
@@ -6261,4 +6261,4 @@ Agregar una entrada por fix:
     No se añadió seguimiento ni se recolectan datos adicionales.
   - No se verificó conformidad WCAG completa ni se modificaron las condiciones
     comerciales. Los flujos autenticados del ERP conservan sus UAT pendientes.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit: `48080c4`; cambios locales sin despliegue.
