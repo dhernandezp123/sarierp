@@ -6334,7 +6334,8 @@ Agregar una entrada por fix:
 
 ### 2026-09-07 - POL-RELEASE-01 - Publicación de políticas y registro de aceptación
 
-- Estado: migración aplicada en Production; despliegue frontend en curso.
+- Estado: migración aplicada y frontend publicado en Production; comprobaciones
+  públicas completadas. UAT de altas reales y validación jurídica pendientes.
 - Autorización: titular solicitó migración, commit y despliegue juntos.
 - SQL: `20260907160000_signup_legal_acceptance.sql` aplicada mediante Supabase CLI
   al proyecto Production vinculado `fwspgdzvlbtbgiupvrzo`.
@@ -6342,8 +6343,19 @@ Agregar una entrada por fix:
 - Validaciones: dry-run mostró únicamente esta migración; `db push --yes`: OK.
   Se conservan TypeScript, lint dirigido, build 71/71, 21 pruebas Node, pruebas
   SQL/RLS locales y navegador registradas en POL-IMPLEMENT-01.
-- Pendientes: comprobar esquema remoto, publicar Vercel y verificar páginas y
-  documentos servidos. UAT de alta real/correo y validación jurídica permanecen
-  abiertas; no se crean cuentas ni correos de prueba en producción.
-- Commit: pendiente de creación; hash y resultado de despliegue se registrarán
-  al finalizar la publicación.
+- Esquema remoto: dump de estructura `public,auth` confirmó tablas, claves,
+  RLS habilitado, SELECT propio para authenticated, ausencia de permisos de
+  escritura de usuarios y trigger `on_auth_user_created_legal_acceptance`.
+  Evidencia temporal ignorada: `.ua/intermediate/legal-prod-schema.sql`.
+- GitHub: commit `44cda8c` publicado en `origin/main`.
+- Vercel: despliegue automático del push `dpl_4ZwZV1E6KCDhbKxqT95PegY4e4de`,
+  estado `Ready`, Production, alias `https://forwarders.app`.
+- Comprobación pública: `/politicas`, `/terminos-logisticos`, `/register` y
+  `/portal/register`: HTTP 200 y contenido nuevo; cuatro archivos legales con
+  SHA-256 idéntico al commit; `/portal/paquetes` conserva redirección a login.
+  Solo solicitudes GET; no se crearon cuentas ni se enviaron correos reales.
+- Pendientes: UAT de alta real/correo e invitaciones con cuentas autorizadas,
+  identidad legal, condiciones comerciales y procesos señalados anteriormente.
+  La publicación no cierra LEG-001 a LEG-004 como cobertura jurídica completa.
+- Commit de implementación: `44cda8c`. Esta actualización documental registra
+  el resultado de publicación sin modificar código ni SQL aplicado.

@@ -136,7 +136,9 @@ Chrome 320/390/1440, descargas públicas, portal protegido, casilla obligatoria,
 fallo/reintento/doble submit y declaración ERP/portal con solicitudes interceptadas.
 SQL y RLS de las nuevas tablas probados en PostgreSQL local con rollback.
 
-No se aplicó la migración en remoto ni se publicó esta edición. La identidad,
+Actualización posterior: migración aplicada en Production y edición publicada en
+`https://forwarders.app`, commit `44cda8c`; ver POL-RELEASE-01 en HARDENING.md.
+Las páginas y los hashes de los documentos se verificaron en producción. La identidad,
 validación jurídica, condiciones comerciales, regiones/proveedores efectivos y
 procesos operativos siguen pendientes. El alta legacy sin declaración permanece
 compatible y no crea evidencia ficticia; no se acredita aceptación universal,
