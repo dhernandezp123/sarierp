@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, CheckCircle, Clock, Plus, X } from 'lucide-react'
@@ -69,7 +71,7 @@ const INITIAL_FORM = {
   bl_number: '',
   monto: '',
   moneda: 'USD',
-  fecha_deposito: new Date().toISOString().split('T')[0],
+  fecha_deposito: toDateInputValue(),
   fecha_vencimiento_libre: '',
   notas: '',
 }
@@ -139,7 +141,7 @@ export default function GarantiasNavierasPage() {
   }
 
   const marcarRecuperada = async (g: Garantia) => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = toDateInputValue()
     const { error } = await supabase
       .from('garantias_navieras')
       .update({ status: 'Recuperada', fecha_recuperacion: today })

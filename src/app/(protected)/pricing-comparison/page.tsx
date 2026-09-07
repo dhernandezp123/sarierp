@@ -73,7 +73,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
-import { formatDateTime } from '@/src/lib/format'
+import { formatDateTime, toDateInputValue } from '@/src/lib/format'
 
 import { Badge } from '../../../components/ui/badge'
 import {
@@ -4215,7 +4215,7 @@ const profitabilityColor =
                                 </p>
                                 <div className="space-y-1">
                                   {toShow.map((r: any) => {
-                                    const expired = r.valid_until && r.valid_until < new Date().toISOString().slice(0, 10)
+                                    const expired = r.valid_until && r.valid_until < toDateInputValue()
                                     return (
                                       <button
                                         key={r.id}

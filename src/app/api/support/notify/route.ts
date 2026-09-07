@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { readEmailProviderResponse } from '@/src/lib/email-provider-response'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const SUPPORTED_EVENTS = ['ticket_created', 'message_added', 'ticket_updated'] as const
@@ -325,13 +326,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'No se pudo conectar con Resend' }, { status: 502 })
     }
 
-    const resendPayload = await resendResponse.json() as {
-      id?: string
-      message?: string
-      error?: { message?: string }
-    }
+    const resendPayload = await readEmailProviderResponse(resendResponse)
     if (!resendResponse.ok || !resendPayload.id) {
-      const errorMessage = resendPayload.message || resendPayload.error?.message || `Resend respondió ${resendResponse.status}`
+      const errorMessage = resendPayload.message
       await adminClient
         .from('support_notification_outbox')
         .update({ status: 'failed', error_message: errorMessage.slice(0, 500), updated_at: new Date().toISOString() })

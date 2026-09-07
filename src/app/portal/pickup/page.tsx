@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Truck, Plus, Clock } from 'lucide-react'
 import { toast } from 'sonner'
-import { formatDateShort } from '@/src/lib/format'
+import { formatDateShort, toDateInputValue } from '@/src/lib/format'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 
@@ -153,7 +153,7 @@ export default function PickupPage() {
                 type="date"
                 value={form.scheduled_date}
                 onChange={set('scheduled_date')}
-                min={new Date().toISOString().split('T')[0]}
+                min={toDateInputValue()}
                 className={fieldClass}
               />
             </div>

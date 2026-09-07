@@ -1,6 +1,9 @@
 export const DEFAULT_TAX_RATE_PERCENT = 15
 
 export const normalizeTaxRatePercent = (value?: number | string | null) => {
+  if (value == null || (typeof value === 'string' && value.trim() === '')) {
+    return DEFAULT_TAX_RATE_PERCENT
+  }
   const numericValue = Number(value)
   return Number.isFinite(numericValue) && numericValue >= 0
     ? numericValue

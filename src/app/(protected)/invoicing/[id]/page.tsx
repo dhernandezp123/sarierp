@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
@@ -237,7 +239,7 @@ export default function InvoiceDetailPage() {
   // Payment modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [payAmount, setPayAmount] = useState('')
-  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
+  const [payDate, setPayDate] = useState(toDateInputValue())
   const [payFiscalType, setPayFiscalType] = useState<InvoiceFiscalType>('Gravada')
   const [payPointOfSale, setPayPointOfSale] = useState('')
   const [payMethod, setPayMethod] = useState<PaymentMethod | ''>('')
@@ -300,7 +302,7 @@ export default function InvoiceDetailPage() {
     if (!flow) return
     setAdvancing(true)
     const updateData: Record<string, string | null> = { status: flow.next }
-    if (flow.next === 'Pagada') updateData.paid_date = new Date().toISOString().slice(0, 10)
+    if (flow.next === 'Pagada') updateData.paid_date = toDateInputValue()
     const { error } = await supabase.from('invoices').update(updateData).eq('id', invoice.id)
     if (error) { toast.error(error.message); setAdvancing(false); return }
     toast.success(`Estado actualizado: ${flow.next}`)
@@ -1001,7 +1003,7 @@ export default function InvoiceDetailPage() {
                   type="date"
                   value={payDate}
                   onChange={(e) => setPayDate(e.target.value)}
-                  max={new Date().toISOString().slice(0, 10)}
+                  max={toDateInputValue()}
                   className={fieldClass}
                 />
               </div>

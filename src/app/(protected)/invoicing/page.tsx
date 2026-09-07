@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, FileText, CheckCircle2, Clock, XCircle, AlertCircle, DollarSign, BarChart2, BookOpen, Mail } from 'lucide-react'
@@ -332,7 +334,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       cliente_nombre: cliente.nombre,
       cliente_rtn: cliente.rtn ?? null,
       cliente_email: cliente.email ?? null,
-      fecha_generacion: new Date().toISOString().split('T')[0],
+      fecha_generacion: toDateInputValue(),
       items,
     })
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { readEmailProviderResponse } from '@/src/lib/email-provider-response'
 import { formatMiamiDateTime } from '@/src/lib/format'
 
 const EVENT_TYPE = 'miami_package_assigned'
@@ -308,16 +309,10 @@ export async function POST(request: Request) {
       )
     }
 
-    const resendPayload = await resendResponse.json() as {
-      id?: string
-      message?: string
-      error?: { message?: string }
-    }
+    const resendPayload = await readEmailProviderResponse(resendResponse)
 
     if (!resendResponse.ok || !resendPayload.id) {
       const errorMessage = resendPayload.message
-        || resendPayload.error?.message
-        || `Resend respondió ${resendResponse.status}`
       await supabaseAdmin
         .from('client_email_deliveries')
         .update({

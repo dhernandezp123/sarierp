@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
@@ -117,7 +119,7 @@ const blankForm = (date?: string) => ({
   cliente_id:           '',
   nombre_prospecto:     '',
   empresa_prospecto:    '',
-  fecha_actividad:      date ?? new Date().toISOString().split('T')[0],
+  fecha_actividad:      date ?? toDateInputValue(),
   hora_inicio:          '',
   hora_fin:             '',
   etapa_captacion:      '' as EtapaCaptacion | '',
@@ -148,7 +150,7 @@ export default function VentasPage() {
   const [selectedDay, setSelectedDay]   = useState<string | null>(null)
   const [activityPendingDelete, setActivityPendingDelete] = useState<SalesActivity | null>(null)
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = toDateInputValue()
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -175,10 +177,10 @@ export default function VentasPage() {
         query = query.eq('fecha_actividad', today)
       } else if (filterPeriod === 'semana') {
         const d = new Date(); d.setDate(d.getDate() - 7)
-        query = query.gte('fecha_actividad', d.toISOString().split('T')[0])
+        query = query.gte('fecha_actividad', toDateInputValue(d))
       } else if (filterPeriod === 'mes') {
         const d = new Date(); d.setDate(d.getDate() - 30)
-        query = query.gte('fecha_actividad', d.toISOString().split('T')[0])
+        query = query.gte('fecha_actividad', toDateInputValue(d))
       }
       if (filterTipo)  query = query.eq('tipo_actividad', filterTipo)
       if (filterEtapa) query = query.eq('etapa_captacion', filterEtapa)

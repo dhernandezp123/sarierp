@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Artefactos locales de revisión; también están excluidos en .gitignore.
+    ".ua/intermediate/**",
   ]),
 ]);
 

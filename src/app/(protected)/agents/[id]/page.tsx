@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -79,7 +81,7 @@ function formatDate(d: string | null) {
 
 function isExpired(d: string | null) {
   if (!d) return false
-  return d < new Date().toISOString().slice(0, 10)
+  return d < toDateInputValue()
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────

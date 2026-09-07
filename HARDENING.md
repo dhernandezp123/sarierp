@@ -6052,3 +6052,213 @@ Agregar una entrada por fix:
   - La apertura del PDF conserva el comportamiento actual del navegador; un
     bloqueador de ventanas emergentes puede requerir autorizar el dominio.
 - Commit: pendiente.
+
+### 2026-09-07 - REV-20260907-01 - Fechas locales y vencimientos de calendario
+
+- Estado: Implementado y validado con pruebas locales; UAT autenticado pendiente.
+- Hallazgo: Fechas de formularios, pagos y vencimientos usaban el día UTC, que
+  cambia a las 18:00 en Honduras. Las alertas de ETA interpretaban DATE como UTC;
+  el parser aceptaba fechas imposibles trasladándolas silenciosamente a otro mes.
+- Archivos:
+  - `src/lib/format.ts`, `src/lib/alerts.ts`, `src/lib/tarifa-expiry-check.ts`.
+  - `src/app/(protected)/ventas/page.tsx`.
+  - `src/app/(protected)/agents/[id]/page.tsx`.
+  - `src/app/(protected)/invoicing/page.tsx`.
+  - `src/app/(protected)/invoicing/new/page.tsx`.
+  - `src/app/(protected)/invoicing/[id]/page.tsx`.
+  - `src/app/(protected)/accounts-payable/[id]/page.tsx`.
+  - `src/app/(protected)/quotations/new/page.tsx`.
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`.
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/app/(protected)/operations/garantias/page.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `src/app/portal/pickup/page.tsx`, `src/app/portal/pre-alertas/nueva/page.tsx`.
+  - `tests/calendar-and-auth.test.mjs`.
+- SQL: no aplica; no modifica fechas persistidas, timestamps de auditoría ni
+  aritmética UTC explícita de vencimientos por plazo.
+- Validación: pruebas en Honduras después de las 18:00, DATE, fechas imposibles,
+  año bisiesto y diferencia de días durante cambios de horario de Miami; TypeScript.
+- Riesgos / acción manual: probar altas, fechas de pago, filtros de Ventas,
+  vencimiento de tarifa y alertas de ETA con usuarios reales. El dashboard Miami
+  aún requiere un intervalo propio para sus filtros «hoy» sobre timestamps.
+- Commit: pendiente; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-02 - Sesión obsoleta y destinos de login
+
+- Estado: Implementado y validado con dependencias simuladas; UAT de sesión pendiente.
+- Hallazgo: una consulta de perfil tardía podía restaurar información del usuario
+  anterior. El login validaba la ruta junto con sus filtros, perdiendo algunos
+  destinos permitidos, y no capturaba excepciones de conexión.
+- Archivos: `src/hooks/useUser.tsx`, `src/lib/auth-redirect.ts`,
+  `src/app/login/page.tsx`, `src/app/portal/login/page.tsx`,
+  `tests/user-session.test.mjs`, `tests/calendar-and-auth.test.mjs`.
+- SQL: no aplica; permisos de roles y RLS conservados.
+- Cambios: invalidación de respuestas obsoletas, limpieza del perfil al cambiar
+  sesión, consulta diferida fuera del callback de auth, salida de loading ante
+  fallos y normalización del destino antes de comprobar permisos.
+- Validación: logout con consulta pendiente, A→B con respuestas invertidas,
+  bootstrap antiguo, reintento tras fallo, desmontaje, sesión SSR, filtros/hash,
+  rutas externas y normalización de segmentos; TypeScript y ESLint dirigido.
+- Riesgos / acción manual: verificar login ERP/portal, refresco de token,
+  recuperación de contraseña y cambio de sesión con cuentas reales de cada rol.
+- Commit: pendiente; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-03 - Tasa ausente distinta de exención explícita
+
+- Estado: Implementado y validado con regresiones; UAT comercial/financiero pendiente.
+- Hallazgo: `Number(null)` y `Number('')` generaban 0, evitando el default existente
+  de la aplicación para una tasa no configurada.
+- Archivos: `src/lib/tax.ts`, `tests/tax-and-documents.test.mjs`.
+- SQL: no aplica; no se reescribieron facturas ni snapshots.
+- Validación: prueba que falló antes del fix; null/undefined/vacío/inválido usan
+  default, 0 y '0' permanecen exentos, tasa personalizada y cargo no gravable
+  conservan sus resultados; TypeScript y ESLint dirigido.
+- Riesgos / acción manual: verificar cotización Miami, Pricing y PDF de costos
+  con default ausente y con 0 explícito. No constituye revisión normativa fiscal.
+- Commit: pendiente; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-04 - Autoridad del documento BL estructurado
+
+- Estado: Implementado y validado con regresiones; UAT de reportes/portal pendiente.
+- Hallazgo: un MBL/HBL estructurado sin número podía mostrar el número antiguo
+  almacenado en el cache del booking, contradiciendo la autoridad documental.
+- Archivos: `src/lib/booking-document-summary.ts`, `tests/tax-and-documents.test.mjs`.
+- SQL: no aplica; no se modifica la numeración ni se eliminan documentos.
+- Validación: prueba que falló antes del fix; documento vacío no resucita cache,
+  documento numerado tiene prioridad y fallback legacy sigue disponible cuando
+  no existe registro estructurado de ese tipo; TypeScript y ESLint dirigido.
+- Riesgos / acción manual: comprobar reportes y detalle del envío en el portal
+  con documentos nuevos sin número y expedientes históricos.
+- Commit: pendiente; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-05 - Landing accesible y formulario recuperable
+
+- Estado: Implementado y probado en navegador local; verificación de recepción real pendiente.
+- Hallazgo: intro obligatoria retrasaba el contenido; tabs carecían de manejo de
+  teclado; formulario sin labels persistentes ni captura de excepciones; menú
+  móvil sin estado accesible y comparativa demasiado ancha para móvil.
+- Archivos: `src/components/marketing/ForwardersLanding.tsx`,
+  `docs/review-2026-09-07.md`.
+- SQL: no aplica; se conserva la inserción de leads y sus políticas actuales.
+- Cambios: retirada de la intro en la landing; reutilización de Tabs; CTA hacia
+  capturas del producto; scroll/márgenes para cabecera fija; labels/autocomplete;
+  validación de espacios, exclusión de doble envío, try/catch/finally y errores
+  visibles; privacidad enlazada; menú con Escape y retorno de foco; tabla con
+  desplazamiento horizontal accesible.
+- Validación: Chrome 1440×1000 y 390×844, teclado en tabs, panel único, labels,
+  menú/Escape/foco, ancho móvil y cabecera fija; fallo de conexión, reintento,
+  doble submit y éxito con solicitudes interceptadas. Cero leads reales y sin
+  excepciones JS. Capturas locales en `.ua/intermediate/landing-*.png`.
+- Riesgos / acción manual: verificar la recepción de un lead autorizado en un
+  ambiente de prueba; auditoría completa de contraste, zoom y lector de pantalla
+  pendiente. La reorganización visual/comercial se propone en el informe.
+- Commit: pendiente; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-06 - Guía específica y validaciones reproducibles
+
+- Estado: Implementado y validado estructuralmente; sin evaluación conductual independiente.
+- Hallazgo: AGENTS enumeraba estados históricos; no existía skill específica del
+  ERP. Los artefactos temporales ignorados por Git eran recorridos por ESLint.
+- Archivos: `AGENTS.md`, `skills/sari-erp-maintenance/SKILL.md`,
+  `skills/sari-erp-maintenance/references/module-map.md`, `package.json`,
+  `tests/load-ts.mjs`, `eslint.config.mjs`, `docs/review-2026-09-07.md`.
+- SQL: no aplica; no se modificaron skills globales ni permisos locales de Codex.
+- Cambios: fuente actual de estados, skill cargable desde AGENTS con invariantes
+  y mapa de módulos, comando `npm.cmd test` con Node/TypeScript instalados y
+  exclusión de `.ua/intermediate/**` del lint. No se desactivaron reglas del código.
+- Validación: parser YAML instalado, nombre/descripción, campos admitidos,
+  ausencia de placeholders y enlaces existentes. Python no está disponible para
+  `quick_validate.py`; se ejecutaron comprobaciones estructurales equivalentes.
+- Riesgos / trabajo pendiente: ESLint global conserva 307 errores y 69 advertencias
+  preexistentes. Revisarlos por módulo; no confundir build verde con UAT/RLS.
+- Commit: pendiente; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-07 - Respuestas inválidas del proveedor de correo
+
+- Estado: Implementado y validado con proveedor/base simulados; UAT de correo pendiente.
+- Hallazgo: `response.json()` podía lanzar antes de actualizar la auditoría,
+  dejando el aviso en `processing` e impidiendo el reintento previsto por el flujo.
+- Archivos: `src/lib/email-provider-response.ts`,
+  `src/app/api/miami/package-assignment-email/route.ts`,
+  `src/app/api/support/notify/route.ts`, `tests/email-notifications.test.mjs`.
+- SQL: no aplica; las tablas de auditoría y claves de idempotencia se conservan.
+- Cambios: parser compartido para respuestas vacías, HTML, null y JSON inválido;
+  la ausencia de confirmación pasa por el registro existente de fallo.
+- Validación: ambos handlers devuelven 502 y actualizan `failed` ante HTML;
+  respuesta válida conserva `sent` e ID del proveedor; demo no llama al proveedor
+  ni crea auditorías de envío. No se enviaron correos reales.
+- Riesgos / acción manual: probar en staging la auditoría y el reintento autorizado.
+  La conciliación si falla la BD tras confirmación del proveedor y los fallos al
+  consultar el ambiente siguen pendientes de revisión; no hay reintento automático nuevo.
+- Commit: pendiente; cambios locales sin despliegue.
+
+### Validación conjunta de REV-20260907-01 a REV-20260907-07
+
+- `npm.cmd test`: PASS, 19 pruebas.
+- `npx.cmd tsc --noEmit`: OK después del último cambio de código.
+- ESLint dirigido a helpers, sesión, login, landing, APIs, pruebas y configuración:
+  OK, sin errores ni advertencias. Global: deuda inicial sin incremento
+  (307 errores / 69 advertencias).
+- `npm.cmd run build`: OK, 70/70 páginas generadas en la compilación final.
+- `git diff --check`: OK; solo avisos de conversión LF/CRLF del entorno Windows.
+- No se ejecutó SQL ni se verificó RLS en una base activa. No se hizo deploy ni
+  commit; la UAT autenticada y las acciones manuales indicadas siguen abiertas.
+
+### 2026-09-07 - REV-20260907-08 - Rediseño de landing orientado a producto y demo
+
+- Estado: Implementado; validado localmente en navegador. Despliegue y recepción
+  real de un lead autorizado pendientes.
+- Hallazgo: la landing repetía beneficios en varias secciones, relegaba las
+  capturas reales y no permitía leerlas con ampliación. Todo el contenido se
+  incluía en un componente cliente grande y había cifras/promesas no verificadas.
+- Archivos:
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `src/components/marketing/LandingHeader.tsx`.
+  - `src/components/marketing/LandingContact.tsx`.
+  - `src/components/marketing/ProductShowcase.tsx`.
+  - `src/components/marketing/landing-content.ts`.
+  - `src/components/marketing/landing.module.css`.
+  - `skills/sari-erp-maintenance/references/module-map.md`.
+  - `docs/review-2026-09-07.md`.
+- SQL: no aplica. No se modifican registro de leads, permisos ni rutas del ERP.
+- Cambios:
+  - Hero centrado en cotizar, coordinar y controlar márgenes junto a una captura
+    real identificada como demostración; prioridad de carga para esa imagen.
+  - Seis vistas del producto con Tabs existentes, visor Dialog, tamaño original,
+    desplazamiento, cierre con Escape y retorno de foco al disparador exacto.
+  - Flujo de cuatro etapas, tres áreas internas y acceso al portal del cliente.
+    Se conservan destinos anteriores `#beneficios`, `#funcionalidades`, `#workflow`,
+    `#portal`, `#producto` y `#demo`.
+  - FAQ nativa con información verificable y alcance por definir para migración,
+    implementación y precio. Se retiran «+70 cotizaciones» y «menos de 24h».
+  - Secciones estáticas de servidor y componentes cliente para menú, visor y
+    formulario. Se conserva trim, guard de doble envío, validación y recuperación
+    de errores. Sin nuevas librerías ni servicios de analítica.
+  - Mayor contraste del texto secundario, foco visible y movimiento reducido
+    acotado a la landing; no hay animaciones continuas ni contenido oculto al entrar.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a `src/components/marketing`: OK.
+  - `npm.cmd test`: PASS, 19 regresiones existentes.
+  - `npm.cmd run build`: OK, 70/70 páginas generadas.
+  - Chrome: anchos 320, 390, 768, 1024 y 1440 sin overflow global; tabs por teclado;
+    zoom al 100%; foco contenido en modal y restituido al botón correcto; FAQ;
+    movimiento reducido; enlaces internos; menú/Escape y cabecera fija.
+  - Formulario con campos vacíos/espacios, fallo de conexión, reintento, doble
+    submit y éxito simulados. Cero leads o correos reales.
+  - Medición puntual local en build de producción, 1440×1000 y cache de navegador
+    desactivada: JS inicial (`encodedBodySize`) 310,690 → 271,657 bytes (~12.6%
+    menos); altura 9,300 → 4,742 px. LCP observado 968 → 432 ms. Son observaciones
+    locales, no métricas de campo ni una garantía de rendimiento o conversión.
+  - Evidencia temporal en `.ua/intermediate/redesign-*.png` y
+    `.ua/intermediate/landing-metrics-{before,after}.json`.
+  - La suite de navegador se repitió sobre el build final de producción: PASS,
+    sin excepciones JS. `git diff --check`: OK.
+- Riesgos / trabajo pendiente:
+  - Confirmar recepción real del formulario en un ambiente autorizado antes de
+    cerrar el flujo de contacto como validado de extremo a extremo.
+  - Analítica de conversión pendiente de elegir/configurar proveedor aprobado.
+    No se añadió seguimiento ni se recolectan datos adicionales.
+  - No se verificó conformidad WCAG completa ni se modificaron las condiciones
+    comerciales. Los flujos autenticados del ERP conservan sus UAT pendientes.
+- Commit: pendiente; cambios locales sin despliegue.

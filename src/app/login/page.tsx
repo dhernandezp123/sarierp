@@ -11,7 +11,7 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
-import { canAccessPath, getDefaultPathForRole } from '@/src/lib/permissions'
+import { getLoginDestination } from '@/src/lib/auth-redirect'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -71,14 +71,11 @@ export default function LoginPage() {
       }
 
       const requestedPath = new URLSearchParams(window.location.search).get('next')
-      const safePath = requestedPath
-        && requestedPath.startsWith('/')
-        && !requestedPath.startsWith('//')
-        && canAccessPath(profile.rol, requestedPath)
-        ? requestedPath
-        : getDefaultPathForRole(profile.rol)
+      const safePath = getLoginDestination(profile.rol, requestedPath)
       router.push(safePath)
       router.refresh()
+    } catch {
+      toast.error('No se pudo conectar. Revisa tu conexión e intenta de nuevo.')
     } finally {
       setLoading(false)
     }

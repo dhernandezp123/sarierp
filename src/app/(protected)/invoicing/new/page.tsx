@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon, LockKeyhole } from 'lucide-react'
@@ -169,7 +171,7 @@ export default function NewInvoicePage() {
   const [invoiceType, setInvoiceType] = useState<InvoiceType>('Factura')
   const [clienteId, setClienteId] = useState('')
   const [quotationId, setQuotationId] = useState('')
-  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10))
+  const [issueDate, setIssueDate] = useState(toDateInputValue())
   const [dueDate, setDueDate] = useState('')
   const [currency, setCurrency] = useState('USD')
   const [exchangeRate, setExchangeRate] = useState('25.30')
@@ -305,7 +307,7 @@ export default function NewInvoicePage() {
           ) as Cliente | undefined
           setClienteId(quotation.cliente_id || '')
           setDueDate(calculateDueDate(
-            new Date().toISOString().slice(0, 10),
+            toDateInputValue(),
             requestedClient || null,
             'Factura'
           ))

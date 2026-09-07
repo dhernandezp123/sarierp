@@ -18,7 +18,12 @@ export function parseDateValue(value: string | Date | null | undefined): Date | 
 
   if (DATE_ONLY_RE.test(value)) {
     const [year, month, day] = value.split('-').map(Number)
-    return new Date(year, month - 1, day)
+    const date = new Date(0)
+    date.setFullYear(year, month - 1, day)
+    date.setHours(0, 0, 0, 0)
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+      ? date
+      : null
   }
 
   const parsed = new Date(value)
@@ -117,6 +122,14 @@ export function toDateInputValue(date: Date = new Date()): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+/** Diferencia de días de calendario; no depende de horas UTC ni del cambio de horario. */
+export function calendarDaysUntil(value: string | Date | null | undefined, today = new Date()): number | null {
+  const target = parseDateValue(value)
+  if (!target || Number.isNaN(today.getTime())) return null
+  const calendarTime = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  return Math.round((calendarTime(target) - calendarTime(today)) / 86_400_000)
 }
 
 /** Formato monetario estándar del ERP: 'USD 5,865.00'. */

@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import { getLoginDestination } from '@/src/lib/auth-redirect'
 
 const emailInputId = 'portal-login-email'
 const passwordInputId = 'portal-login-password'
@@ -39,17 +40,12 @@ export default function PortalLoginPage() {
       }
 
       const requestedNext = new URLSearchParams(window.location.search).get('next')
-      const safePortalDestination = requestedNext
-        && (requestedNext === '/portal' || requestedNext.startsWith('/portal/'))
-        && !requestedNext.startsWith('/portal/login')
-        && !requestedNext.startsWith('/portal/register')
-        && !requestedNext.startsWith('/portal/forgot-password')
-        && !requestedNext.startsWith('/portal/reset-password')
-          ? requestedNext
-          : '/portal'
+      const safePortalDestination = getLoginDestination('Cliente', requestedNext)
 
       // Staff goes to ERP; clients return to the authenticated portal link.
       router.replace(profile.rol === 'Cliente' ? safePortalDestination : '/dashboard')
+    } catch {
+      toast.error('No se pudo conectar. Revisa tu conexión e intenta de nuevo.')
     } finally {
       setLoading(false)
     }

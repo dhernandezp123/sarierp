@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, ScanLine } from 'lucide-react'
@@ -130,7 +132,7 @@ export default function NuevaPreAlertaPage() {
               type="date"
               value={form.expected_date}
               onChange={set('expected_date')}
-              min={new Date().toISOString().split('T')[0]}
+              min={toDateInputValue()}
               className={fieldClass}
             />
           </div>

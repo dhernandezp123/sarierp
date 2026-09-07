@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -83,7 +85,7 @@ export default function APDetailPage() {
     monto: '',
     metodo_pago: 'Transferencia',
     referencia: '',
-    fecha_pago: new Date().toISOString().split('T')[0],
+    fecha_pago: toDateInputValue(),
     notas: '',
   })
 
@@ -171,7 +173,7 @@ export default function APDetailPage() {
 
     toast.success('Pago registrado')
     setShowPagoForm(false)
-    setPagoForm({ monto: '', metodo_pago: 'Transferencia', referencia: '', fecha_pago: new Date().toISOString().split('T')[0], notas: '' })
+    setPagoForm({ monto: '', metodo_pago: 'Transferencia', referencia: '', fecha_pago: toDateInputValue(), notas: '' })
     setSaving(false)
     load()
   }

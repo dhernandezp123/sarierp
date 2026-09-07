@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Clock, Download, FileText, History, Mail, Plus, Printer, Send, Trash2, Upload, X } from 'lucide-react'
@@ -650,7 +652,7 @@ export default function BLPage() {
   }, [id, bookingId, blId])
 
   const generateHBLNumber = async (): Promise<string> => {
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const dateStr = toDateInputValue().replace(/-/g, '')
     const prefix = `SARI-HBL-${dateStr}-`
     const { data } = await supabase
       .from('bills_of_lading')
@@ -911,11 +913,11 @@ export default function BLPage() {
 
     if (transition.next === 'Emitido') {
       extraFields.issued_by = user?.id || null
-      extraFields.issue_date = new Date().toISOString().split('T')[0]
+      extraFields.issue_date = toDateInputValue()
     }
 
     if (transition.next === 'Liberado') {
-      extraFields.release_date = new Date().toISOString().split('T')[0]
+      extraFields.release_date = toDateInputValue()
     }
 
     if (transition.next === 'Aprobado por Cliente') {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { aggregateBookingStatus } from '@/src/lib/booking-status'
+import { calendarDaysUntil } from '@/src/lib/format'
 
 export type SystemAlertCategory = 'Comercial' | 'Operativa' | 'Gerencial'
 export type SystemAlertSeverity = 'Alta' | 'Media' | 'Baja'
@@ -223,17 +224,6 @@ function hoursSince(value?: string | null) {
 
 function daysSince(value?: string | null) {
   return hoursSince(value) / 24
-}
-
-function daysUntil(value?: string | null) {
-  if (!value) return null
-
-  const target = new Date(value)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  target.setHours(0, 0, 0, 0)
-
-  return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 }
 
 function ageLabelFromHours(hours: number) {
@@ -732,7 +722,7 @@ export async function getSystemAlerts(
   bookings.forEach((booking) => {
     const routing = resolveJoin(booking.shipment)
     const missingDocs = missingDocuments(booking)
-    const etaDays = daysUntil(booking.actual_eta || booking.eta)
+    const etaDays = calendarDaysUntil(booking.actual_eta || booking.eta)
     const remainingFreeDays = Number(booking.remaining_free_days)
     const assignedContainers = (booking.booking_containers || []).reduce(
       (sum, container) => sum + Number(container.quantity || 0),

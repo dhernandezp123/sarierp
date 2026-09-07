@@ -76,14 +76,15 @@ Tabla principal:
 quotations
 ```
 
-Estados principales:
+Estados actuales (fuente de transiciones: `src/lib/quotation-status.ts`):
 
 ```txt
+Borrador
 Pendiente de Fijar Precios
-Cotizada
-Aprobada
-Rechazada
-Convertida a Shipment
+Pricing Aprobado
+Enviada al Cliente
+Ganada
+Perdida
 ```
 
 ### Pricing
@@ -250,3 +251,14 @@ Buscar primero:
 * Componentes reutilizables
 
 Evitar duplicar lógica.
+
+## Skill de mantenimiento del proyecto
+
+Para revisar o modificar flujos del ERP, usar
+[`skills/sari-erp-maintenance/SKILL.md`](skills/sari-erp-maintenance/SKILL.md).
+Esta guía está versionada en el repositorio y se carga mediante esta referencia;
+no requiere modificar skills globales ni instalar plugins.
+
+Los estados históricos no deben reintroducirse como transiciones actuales.
+Las opciones comerciales tienen su propio ciclo en `src/lib/quotation-options.ts`.
+Consultar el código y las migraciones vigentes antes de cambiar cualquiera de ambos.

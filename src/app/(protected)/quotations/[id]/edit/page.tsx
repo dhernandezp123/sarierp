@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -1944,7 +1946,7 @@ export default function EditQuotationPage() {
                 handleChange={handleChange}
                 fieldClass={fieldClass}
                 cardClass={cardClass}
-                todayString={new Date().toISOString().split('T')[0]}
+                todayString={toDateInputValue()}
                 cargoLines={cargoLines}
                 setCargoLines={setCargoLines}
                 calculateLineCbm={calculateLineCbm}
