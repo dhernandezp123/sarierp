@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import { useCarrierCatalog } from '@/src/hooks/useCarrierCatalog'
 import { formatDateTime } from '@/src/lib/format'
+import { getAgentMblTotal, getFclMblTotal, getMblQuantity, getMblSource } from '@/src/lib/agent-mbl-cost'
 import { cn } from '@/src/lib/utils'
 
 type AgentQuote = any
@@ -43,6 +44,7 @@ type Row = {
 
 export type FclEditableChargeKey =
   | 'mbl'
+  | 'mblSource'
   | 'ps'
   | 'dthc'
   | 'localDelivery'
@@ -146,9 +148,9 @@ export function FclAgentComparisonTable({
   const editableCharges: EditableChargeConfig[] = [
     {
       key: 'mbl',
-      label: 'MBL',
+      label: 'MBL (total documentación)',
       getInitialValue: (quote) =>
-        firstNumericValue(quote.mbl_amount, quote.mbl_cost, quote.mbl_fee),
+        getAgentMblTotal(quote),
       distributeAcrossContainers: true,
     },
     {
@@ -208,6 +210,7 @@ export function FclAgentComparisonTable({
     quote: AgentQuote,
     config: EditableChargeConfig
   ) => {
+    if (config.key === 'mbl') return getFclMblTotal(quote, chargeOverrides[quote.id])
     const overrideValue = chargeOverrides[quote.id]?.[config.key]
     if (overrideValue !== undefined) return toFiniteNumber(overrideValue)
 
@@ -304,6 +307,7 @@ export function FclAgentComparisonTable({
             [quoteId]: {
               ...current[quoteId],
               [chargeKey]: value,
+              ...(chargeKey === 'mbl' ? { mblSource: getMblSource(agentQuotes.find((quote) => quote.id === quoteId) || {}) } : {}),
             },
           }),
     }))
@@ -315,7 +319,9 @@ export function FclAgentComparisonTable({
   ) => {
     const currentValue = chargeOverrides[quote.id]?.[config.key]
     const displayValue =
-      currentValue ?? String(config.getInitialValue(quote) || '')
+      config.key === 'mbl'
+        ? String(getFclMblTotal(quote, chargeOverrides[quote.id]))
+        : currentValue ?? String(config.getInitialValue(quote) || '')
     const isTransshipment = config.key === 'transshipment'
     const isLocalDelivery = config.key === 'localDelivery'
     const isRedestination = config.key === 'redestination'
@@ -352,6 +358,8 @@ export function FclAgentComparisonTable({
         )}
         {config.distributeAcrossContainers && (
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            {getMblQuantity(quote)} MBL × USD {formatCurrency(Number(quote.mbl_fee || 0))} · Total ajustable
+            <br />
             ÷ {containersQty} cont. = USD{' '}
             {formatCurrency(numericValue / containersQty)} por cont.
           </p>
@@ -735,7 +743,7 @@ export function FclAgentComparisonTable({
                 >
                   <button
                     type="button"
-                    disabled={isPricingActionDisabled || isSelected}
+                    disabled={isPricingActionDisabled}
                     onClick={() => onSelectQuote(quote)}
                     className={cn(
                       'w-full rounded-xl px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
@@ -744,7 +752,7 @@ export function FclAgentComparisonTable({
                         : 'bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100'
                     )}
                   >
-                    {isSelected ? 'Tarifa seleccionada' : 'Seleccionar tarifa'}
+                    {isSelected ? 'Aplicar costo' : 'Seleccionar tarifa'}
                   </button>
                 </td>
               )

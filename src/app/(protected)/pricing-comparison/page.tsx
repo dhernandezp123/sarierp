@@ -10,6 +10,7 @@ import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import QuotationPDF from '../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
+import { getAgentMblTotal, getFclMblTotal, getMblQuantity, isValidMblQuantity } from '@/src/lib/agent-mbl-cost'
 import { createNotification } from '@/src/lib/notifications'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import {
@@ -395,6 +396,7 @@ function PricingComparisonContent() {
     ocean_freight: '',
     exw_cost: '',
     mbl_fee: '',
+    mbl_quantity: '1',
     profit_per_container: '',
     containers_qty: '1',
     free_days_destination: '',
@@ -699,6 +701,7 @@ function PricingComparisonContent() {
 
   const handleSelectQuote = async (quote: any) => {
     setSelectedQuote(quote)
+    setAgentForm((current) => ({ ...current, mbl_quantity: '1' }))
     setClientNotes(quote.client_notes || '')
     await fetchAgentQuotes(quote.id)
     await fetchPricingItems(quote.id)
@@ -892,6 +895,7 @@ function PricingComparisonContent() {
       ),
       exw_cost: String(quote.exw_cost || ''),
       mbl_fee: String(quote.mbl_fee || ''),
+      mbl_quantity: String(getMblQuantity(quote)),
       profit_per_container: String(quote.profit_per_container || ''),
       containers_qty: String(quote.containers_qty || '1'),
       free_days_destination: String(quote.free_days_destination || ''),
@@ -955,6 +959,10 @@ function PricingComparisonContent() {
     if (!ensureAgentQuoteCanBeModified()) return
 
     const oldStatus = selectedQuote.status || 'Borrador'
+    if (!isValidMblQuantity(agentForm.mbl_quantity)) {
+      toast.error('La cantidad de MBL debe ser un número entero mayor o igual a 1.')
+      return
+    }
     const nextStatus = 'Pendiente de Fijar Precios'
 
     if (oldStatus !== nextStatus && !canTransition(oldStatus, nextStatus)) {
@@ -976,6 +984,7 @@ function PricingComparisonContent() {
       Boolean(editingAgentQuote) &&
       (Number(editingAgentQuote?.mbl_fee || 0) !==
         Number(agentForm.mbl_fee || 0) ||
+        getMblQuantity(editingAgentQuote || {}) !== Number(agentForm.mbl_quantity) ||
         Number(editingAgentQuote?.profit_per_container || 0) !==
           Number(agentForm.profit_per_container || 0))
 
@@ -1017,7 +1026,7 @@ function PricingComparisonContent() {
     const suggestedSale =
       baseFreight +
       Number(agentForm.exw_cost || 0) +
-      Number(agentForm.mbl_fee || 0) +
+      getAgentMblTotal(agentForm) +
       Number(agentForm.profit_per_container || 0) * totalContainersQty
 
     const agentQuotePayload = {
@@ -1027,6 +1036,7 @@ function PricingComparisonContent() {
       ocean_freight: baseFreight,
       exw_cost: Number(agentForm.exw_cost || 0),
       mbl_fee: Number(agentForm.mbl_fee || 0),
+      mbl_quantity: normalizeText(selectedQuote.quote_type) === 'fcl' ? Number(agentForm.mbl_quantity) : 1,
       profit_per_container: Number(agentForm.profit_per_container || 0),
       containers_qty: Number(agentForm.containers_qty || 1),
       free_days_destination: Number(agentForm.free_days_destination || 0),
@@ -1152,6 +1162,7 @@ function PricingComparisonContent() {
       if (currentQuoteOverrides) {
         const nextQuoteOverrides = { ...currentQuoteOverrides }
         delete nextQuoteOverrides.mbl
+        delete nextQuoteOverrides.mblSource
         delete nextQuoteOverrides.ps
 
         const nextOverrides = { ...fclTableChargeOverrides }
@@ -1212,7 +1223,9 @@ function PricingComparisonContent() {
 
       if (pricingItems.length > 0) {
         toast.warning(
-          'La tarifa seleccionada fue actualizada. Revisa o regenera las líneas de venta para reflejar los cambios.'
+          normalizeText(selectedQuote.quote_type) === 'fcl'
+            ? 'Tarifa guardada. Usa «Aplicar costo» para actualizar el flete conservando la venta y los demás cargos.'
+            : 'La tarifa seleccionada fue actualizada. Revisa o regenera las líneas de venta para reflejar los cambios.'
         )
       }
     }
@@ -1223,6 +1236,7 @@ function PricingComparisonContent() {
       ocean_freight: '',
       exw_cost: '',
       mbl_fee: '',
+      mbl_quantity: '1',
       profit_per_container: '',
       containers_qty: '1',
       free_days_destination: '',
@@ -1276,7 +1290,11 @@ function PricingComparisonContent() {
       selectedAgentQuote = data
     }
 
-    const reason = await requestChangeReason('Regenerar pricing')
+    const reason = await requestChangeReason(
+      normalizeText(selectedQuote.quote_type) === 'fcl' && pricingItems.length > 0
+        ? 'Actualizar costos FCL conservando venta'
+        : 'Regenerar pricing'
+    )
 
     if (reason === null) return
 
@@ -1313,7 +1331,7 @@ function PricingComparisonContent() {
         : Math.max(Number.isFinite(fallbackAmount) ? fallbackAmount : 0, 0)
     }
     const mblFee = isFclSelection
-      ? getSelectedFclAmount('mbl', selectedAgentQuote.mbl_fee)
+      ? getFclMblTotal(selectedAgentQuote, selectedFclOverrides)
       : Number(selectedAgentQuote.mbl_fee || 0)
     const agentProfitPerContainer = isFclSelection
       ? getSelectedFclAmount(
@@ -3129,7 +3147,7 @@ const profitabilityColor =
   const agentTotalCost =
     totalOceanFreight +
     Number(agentForm.exw_cost || 0) +
-    Number(agentForm.mbl_fee || 0) +
+    getAgentMblTotal(agentForm) +
     Number(agentForm.profit_per_container || 0) * totalContainersQty
 
   const suggestedSales = [8, 10, 15, 20, 25].map((margin) => ({
@@ -3160,7 +3178,7 @@ const profitabilityColor =
     return (
       Number(quote.ocean_freight || 0) +
       Number(quote.exw_cost || 0) +
-      Number(quote.mbl_fee || 0) +
+      getAgentMblTotal(quote) +
       Number(quote.profit_per_container || 0) * containersQty
     )
   }
@@ -4592,6 +4610,27 @@ const profitabilityColor =
                         </div>
                       )}
 
+                      {normalizeText(selectedQuote.quote_type) === 'fcl' && (
+                        <div>
+                          <label htmlFor="agent-mbl-quantity" className={labelClass}>Cantidad de MBL</label>
+                          <input
+                            id="agent-mbl-quantity"
+                            type="number"
+                            name="mbl_quantity"
+                            min="1"
+                            step="1"
+                            required
+                            value={agentForm.mbl_quantity}
+                            onChange={handleAgentChange}
+                            className={cn(fieldClass, 'mt-1 w-full')}
+                          />
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            {getMblQuantity(agentForm)} MBL × {agentForm.moneda || 'USD'} {formatCurrency(Number(agentForm.mbl_fee || 0))} por MBL.
+                            {' '}Se prorratea entre los {totalContainersQty} contenedores de esta cotización.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="col-span-full w-full max-w-4xl">
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-slate-900/60">
                           <div className="flex items-center justify-between gap-4">
@@ -4683,9 +4722,9 @@ const profitabilityColor =
                                 </span>
                               </div>
                               <div className="flex items-center justify-between gap-4">
-                                <span className="text-slate-600 dark:text-slate-300">MBL / Documentación del agente</span>
+                                <span className="text-slate-600 dark:text-slate-300">MBL / Documentación del agente ({getMblQuantity(agentForm)} × {formatCurrency(Number(agentForm.mbl_fee || 0))})</span>
                                 <span className="font-medium tabular-nums text-slate-900 dark:text-white">
-                                  {agentForm.moneda || 'USD'} {formatCurrency(Number(agentForm.mbl_fee || 0))}
+                                  {agentForm.moneda || 'USD'} {formatCurrency(getAgentMblTotal(agentForm))}
                                 </span>
                               </div>
                               <div className="flex items-center justify-between gap-4">
@@ -5084,12 +5123,10 @@ const profitabilityColor =
 
                                     <div>
                                       <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                        MBL:
+                                        MBL ({getMblQuantity(quote)} × {formatCurrency(Number(quote.mbl_fee || 0))}):
                                       </span>{' '}
                                       USD{' '}
-                                      {Number(
-                                        quote.mbl_amount || quote.mbl_cost || quote.mbl_fee || 0
-                                      ).toFixed(2)}
+                                      {getAgentMblTotal(quote).toFixed(2)}
                                     </div>
 
                                     <div>
@@ -5124,7 +5161,7 @@ const profitabilityColor =
 
                                     <button
                                       type="button"
-                                      disabled={isPricingActionDisabled || isSelected}
+                                      disabled={isPricingActionDisabled || (isSelected && normalizeText(selectedQuote.quote_type) !== 'fcl')}
                                       onClick={() => {
                                         setSelectedRateForConfirm(quote)
                                         setConfirmSelectRateOpen(true)
@@ -5136,7 +5173,7 @@ const profitabilityColor =
                                       }
                                     >
                                       {isSelected
-                                        ? 'Tarifa seleccionada'
+                                        ? normalizeText(selectedQuote.quote_type) === 'fcl' ? 'Aplicar costo' : 'Tarifa seleccionada'
                                         : 'Seleccionar tarifa'}
                                     </button>
                                   </div>
@@ -6455,7 +6492,9 @@ const profitabilityColor =
           <DialogHeader>
             <DialogTitle>Seleccionar tarifa de agente</DialogTitle>
             <DialogDescription>
-              Esta acción marcará esta tarifa como la opción seleccionada para pricing.
+              {normalizeText(selectedQuote?.quote_type) === 'fcl' && pricingItems.length > 0
+                ? 'Se seleccionará esta tarifa y se actualizarán los costos de flete y EXW existentes. Se conservarán los precios de venta, impuestos y demás cargos.'
+                : 'Esta acción marcará esta tarifa como la opción seleccionada para pricing.'}
             </DialogDescription>
           </DialogHeader>
 

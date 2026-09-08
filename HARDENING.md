@@ -4,6 +4,58 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-09-08 - CALC-007 - Cantidad de MBL y aplicación de costo FCL
+
+- Estado: Implementado, validado localmente y migrado en Producción; despliegue de interfaz y UAT pendientes.
+- Hallazgo: CALC-007. El costo base sumaba un solo importe de MBL. Al volver a
+  seleccionar una tarifa se reemplazaban las líneas de venta existentes.
+- Archivos:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/components/pricing/FclAgentComparisonTable.tsx`.
+  - `src/lib/agent-mbl-cost.ts`.
+  - `tests/agent-mbl-cost.test.mjs`.
+  - `supabase/tests/agent_quote_mbl_quantity.sql`.
+- SQL: `supabase/migrations/20260908150000_agent_quote_mbl_quantity.sql`.
+- Cambios:
+  - `agent_quotes.mbl_quantity`: entero positivo, obligatorio, default 1.
+    El importe unitario del catálogo de agentes no cambia. Cada tarifa conserva
+    su cantidad; guardar, editar, Cards y Tabla usan el total de documentación.
+  - El total MBL se prorratea entre los contenedores canónicos. Los overrides
+    de Tabla siguen siendo totales y se descartan si su cantidad/costo fuente
+    quedó obsoleto; los ajustes legacy de un MBL conservan compatibilidad.
+  - La RPC atómica existente conserva IDs, precios de venta, cantidades,
+    impuestos, notas y cargos adicionales cuando aplica costos FCL existentes.
+    Coincidencias ambiguas, cambios de moneda/cantidad/composición EXW y
+    cotizaciones bloqueadas se rechazan sin escrituras parciales.
+  - Botón «Aplicar costo» para volver a aplicar la tarifa seleccionada.
+    Guardar una tarifa por sí solo no modifica las líneas comerciales.
+  - Se mantienen la selección única, la auditoría y los snapshots comerciales.
+    La primera selección y el reemplazo de modalidades no FCL conservan su flujo.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 29 pruebas exitosas.
+  - `npx.cmd tsc --noEmit` y `npm.cmd run build`: exitosos.
+  - SQL local: migración aplicada; pruebas `agent_quote_mbl_quantity.sql` y
+    `phase5_atomic_agent_selection.sql` exitosas, con rollback de fixtures.
+  - RLS local: Pricing guarda cantidad; Cliente no puede cambiarla ni ejecutar
+    la selección; anon sin permiso RPC. Políticas remotas revisadas, sin cambios.
+  - SQL local verifica 10 × 40HC, 3 MBL × USD 50.00, costo USD 8,601.00,
+    venta USD 9,365.00 intacta, destino intacto y opción ofrecida congelada.
+  - ESLint dirigido comparado con HEAD: mismos hallazgos previos; helpers y
+    pruebas nuevos sin hallazgos. `git diff --check` exitoso.
+  - Dry-run remoto: únicamente esta migración pendiente.
+  - Migración `20260908150000` aplicada y registrada en Producción. Verificados
+    tipo integer, NOT NULL, default 1, check positivo, RLS activo, RPC autenticada
+    y anon sin ejecución. Las tarifas existentes mantienen cantidad 1.
+- Riesgos / acciones pendientes:
+  - UAT autenticado de Cards/Tabla, móvil, guardado/recarga y aplicación del
+    costo; no se dispuso de navegador para verificación visual.
+  - En `SARIHN-2609-0266-AP`, configurar 3 MBL en la tarifa MSK y aplicar su
+    costo. La consulta previa encontró COSCO seleccionada con flete a costo MSK.
+    No se modificaron los datos comerciales de esta cotización desde scripts.
+  - Líneas renombradas, carga o moneda distinta requieren revisión explícita;
+    la aplicación de costos no adivina correspondencias ni agrega/elimina cargos.
+- Commit: pendiente.
+
 ### 2026-09-08 - UX-057 - Última conexión de usuarios
 
 - Estado: Implementado, validado localmente y desplegado en Producción; UAT pendiente.
