@@ -6,7 +6,7 @@ Git entre computadoras y ambientes.
 
 ### 2026-09-08 - UX-057 - Última conexión de usuarios
 
-- Estado: Implementado y validado localmente; UAT y despliegue pendientes.
+- Estado: Implementado, validado localmente y desplegado en Producción; UAT pendiente.
 - Hallazgo: UX-057. El perfil y Administración de usuarios no mostraban la fecha
   del último inicio de sesión disponible en Supabase Auth.
 - Archivos:
@@ -29,6 +29,9 @@ Git entre computadoras y ambientes.
   - ESLint dirigido: sin hallazgos nuevos; conserva un error previo de
     `react-hooks/set-state-in-effect` y un warning de `no-img-element` en perfil.
   - `git diff --check`: exitoso.
+  - GitHub/Vercel: deployment `6335900546`, ambiente `Production`, commit
+    `e233ea37e9f1f3b51bd4f472f809e975057de615`, completado exitosamente el
+    08/09/2026.
 - Riesgos / acciones pendientes:
   - UAT autenticado: revisar ambas pantallas, fecha/hora, usuario sin registro,
     acceso denegado por rol y recuperación tras fallo de red; comprobar móvil.
@@ -38,7 +41,7 @@ Git entre computadoras y ambientes.
     ya utilizada por invitaciones. Verificarla en el ambiente de despliegue.
   - El dato representa último inicio de sesión, no presencia ni última actividad
     de una sesión persistente. Se consulta al cargar/refrescar la lista.
-- Commit: pendiente; cambios locales sin despliegue.
+- Commit de implementación: `e233ea3`; enviado a `origin/main` y desplegado.
 
 ### 2026-09-02 - INS-027 - Tasa excepcional de costo de seguro por cotización
 
