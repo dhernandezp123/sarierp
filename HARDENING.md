@@ -6,7 +6,7 @@ Git entre computadoras y ambientes.
 
 ### 2026-09-08 - CALC-007 - Cantidad de MBL y aplicación de costo FCL
 
-- Estado: Implementado, validado localmente y migrado en Producción; despliegue de interfaz y UAT pendientes.
+- Estado: Implementado, validado localmente, migrado y desplegado en Producción; UAT pendiente.
 - Hallazgo: CALC-007. El costo base sumaba un solo importe de MBL. Al volver a
   seleccionar una tarifa se reemplazaban las líneas de venta existentes.
 - Archivos:
@@ -46,6 +46,8 @@ Git entre computadoras y ambientes.
   - Migración `20260908150000` aplicada y registrada en Producción. Verificados
     tipo integer, NOT NULL, default 1, check positivo, RLS activo, RPC autenticada
     y anon sin ejecución. Las tarifas existentes mantienen cantidad 1.
+  - Vercel confirmó `success / Deployment has completed` para `98ad579` el
+    08/09/2026; interfaz publicada desde `origin/main`.
 - Riesgos / acciones pendientes:
   - UAT autenticado de Cards/Tabla, móvil, guardado/recarga y aplicación del
     costo; no se dispuso de navegador para verificación visual.
@@ -54,7 +56,7 @@ Git entre computadoras y ambientes.
     No se modificaron los datos comerciales de esta cotización desde scripts.
   - Líneas renombradas, carga o moneda distinta requieren revisión explícita;
     la aplicación de costos no adivina correspondencias ni agrega/elimina cargos.
-- Commit: pendiente.
+- Commit de implementación: `98ad579`.
 
 ### 2026-09-08 - UX-057 - Última conexión de usuarios
 
