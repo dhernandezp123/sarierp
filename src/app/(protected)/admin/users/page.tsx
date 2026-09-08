@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { Mail, Search, Link2, UserPlus } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
+import { formatDateTime } from '@/src/lib/format'
 import AdminGuard from '@/src/components/auth/AdminGuard'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
@@ -71,6 +72,8 @@ const getStatusBadgeClass = (status: string) => {
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
+  const [lastSignIns, setLastSignIns] = useState<Record<string, string | null>>({})
+  const [connectionsError, setConnectionsError] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('Todos')
 
@@ -96,20 +99,32 @@ export default function AdminUsersPage() {
 
   const fetchUsers = async () => {
     setLoading(true)
+    const [profilesResult, connectionsResult] = await Promise.allSettled([
+      supabase
+        .from('profiles')
+        .select('id, nombre, apellido, email, rol, status, is_active, approved_at, cliente_id, registration_company, registration_phone, clientes!cliente_id(id, nombre, codigo_cliente)')
+        .order('created_at', { ascending: false }),
+      fetch('/api/admin/users/last-sign-in', { cache: 'no-store' }).then(async (response) => {
+        if (!response.ok) throw new Error('No se pudieron consultar las conexiones')
+        return await response.json() as { users: { id: string; last_sign_in_at: string | null }[] }
+      }),
+    ])
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, nombre, apellido, email, rol, status, is_active, approved_at, cliente_id, registration_company, registration_phone, clientes!cliente_id(id, nombre, codigo_cliente)')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      toast.error(error.message)
+    if (profilesResult.status === 'fulfilled') {
+      const { data, error } = profilesResult.value
+      if (error) toast.error(error.message)
+      if (data) setUsers(data as unknown as Profile[])
+    } else {
+      toast.error('No se pudieron cargar los usuarios')
     }
 
-    if (data) {
-      setUsers(data as unknown as Profile[])
+    if (connectionsResult.status === 'fulfilled') {
+      setLastSignIns(Object.fromEntries(connectionsResult.value.users.map((user) => [user.id, user.last_sign_in_at])))
+      setConnectionsError(false)
+    } else {
+      setLastSignIns({})
+      setConnectionsError(true)
     }
-
     setLoading(false)
   }
 
@@ -457,17 +472,29 @@ export default function AdminUsersPage() {
           </select>
         </div>
 
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Última conexión corresponde al último inicio de sesión, en hora local.
+        </p>
+        {connectionsError && (
+          <div role="status" className="flex flex-wrap items-center gap-3 text-sm text-amber-700 dark:text-amber-300">
+            <p>No se pudieron cargar las últimas conexiones.</p>
+            <button type="button" onClick={() => void fetchUsers()} disabled={loading} className="rounded-lg border border-current px-3 py-1 font-medium disabled:opacity-50">
+              Reintentar
+            </button>
+          </div>
+        )}
+
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           {loading ? (
             <div className="p-6">
-              <TableSkeleton rows={5} cols={5} />
+              <TableSkeleton rows={5} cols={6} />
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-900 dark:bg-[#081120]">
-                    {['Usuario', 'Rol', 'Estado', 'Acceso', 'Acciones'].map((heading) => (
+                    {['Usuario', 'Rol', 'Estado', 'Acceso', 'Última conexión', 'Acciones'].map((heading) => (
                       <th
                         key={heading}
                         className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-300"
@@ -482,7 +509,7 @@ export default function AdminUsersPage() {
                   {filteredUsers.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500"
                       >
                         No hay usuarios registrados.
@@ -569,6 +596,12 @@ export default function AdminUsersPage() {
                           >
                             {user.is_active ? 'Activo' : 'Inactivo'}
                           </span>
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-500 dark:text-slate-400">
+                          {lastSignIns[user.id] === undefined
+                            ? 'No disponible'
+                            : formatDateTime(lastSignIns[user.id], 'Sin registro')}
                         </td>
 
                         <td className="px-4 py-3">

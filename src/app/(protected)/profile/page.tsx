@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
+import { formatDateTime } from '@/src/lib/format'
 
 const compressImage = async (file: File) => {
   return new Promise<File>((resolve) => {
@@ -257,6 +258,12 @@ export default function ProfilePage() {
               </p>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 {profile?.rol || 'Sin rol'} · {profile?.email || user?.email}
+              </p>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                Última conexión: {formatDateTime(user?.last_sign_in_at, 'Sin registro')}
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                Último inicio de sesión · hora local
               </p>
             </div>
 

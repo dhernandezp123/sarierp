@@ -4,6 +4,42 @@ Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
 
+### 2026-09-08 - UX-057 - Última conexión de usuarios
+
+- Estado: Implementado y validado localmente; UAT y despliegue pendientes.
+- Hallazgo: UX-057. El perfil y Administración de usuarios no mostraban la fecha
+  del último inicio de sesión disponible en Supabase Auth.
+- Archivos:
+  - `src/app/(protected)/profile/page.tsx`.
+  - `src/app/(protected)/admin/users/page.tsx`.
+  - `src/app/api/admin/users/last-sign-in/route.ts`.
+  - `tests/user-last-sign-in.test.mjs`.
+- SQL: No aplica; sin cambios de esquema, políticas RLS ni escrituras en Auth.
+- Cambios:
+  - Fecha y hora local del último inicio de sesión en Mi perfil y columna en
+    Administración, reutilizando `formatDateTime` y `last_sign_in_at` de Auth.
+  - Consulta administrativa paginada desde servidor, sin caché, con sesión
+    validada y perfil Admin/Aprobado/activo. Solo devuelve ID y fecha.
+  - Diferencia entre ausencia de registro y consulta fallida, con reintento.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 26 pruebas exitosas; incluye permisos, paginación,
+    exclusión de metadata privada, ausencia de registro y fallos del proveedor.
+  - `npx.cmd tsc --noEmit`: exitoso.
+  - `npm.cmd run build`: exitoso, incluida la nueva ruta administrativa.
+  - ESLint dirigido: sin hallazgos nuevos; conserva un error previo de
+    `react-hooks/set-state-in-effect` y un warning de `no-img-element` en perfil.
+  - `git diff --check`: exitoso.
+- Riesgos / acciones pendientes:
+  - UAT autenticado: revisar ambas pantallas, fecha/hora, usuario sin registro,
+    acceso denegado por rol y recuperación tras fallo de red; comprobar móvil.
+  - No hubo navegador disponible; la UI se revisó en código y los controles de
+    servidor se probaron con dependencias simuladas, sin certificar RLS remoto.
+  - La consulta administrativa requiere `SUPABASE_SERVICE_ROLE_KEY` en servidor,
+    ya utilizada por invitaciones. Verificarla en el ambiente de despliegue.
+  - El dato representa último inicio de sesión, no presencia ni última actividad
+    de una sesión persistente. Se consulta al cargar/refrescar la lista.
+- Commit: pendiente; cambios locales sin despliegue.
+
 ### 2026-09-02 - INS-027 - Tasa excepcional de costo de seguro por cotización
 
 - Estado: Implementado, migrado y validado; pendiente de UAT y deployment de
