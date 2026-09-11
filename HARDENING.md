@@ -6455,8 +6455,8 @@ Agregar una entrada por fix:
 
 ### 2026-09-11 — UX-DASH-01 / REP-DASH-01 — Prioridades y métricas comerciales
 
-- Estado: implementado y validado técnicamente en local. Pendiente UAT
-  autenticado por rol y publicación. No se declara cerrado el flujo en Production.
+- Estado: implementado, validado técnicamente en local y publicado en Production.
+  Pendiente UAT autenticado por rol; no se declara cerrado el flujo completo.
 - Hallazgos:
   - Los pendientes de pricing heredaban el período comercial y mostraban primero
     los más recientes, ocultando pendientes antiguos.
@@ -6514,5 +6514,16 @@ Agregar una entrada por fix:
   - Las comparaciones no reconstruyen el estado histórico de una cotización.
   - El cálculo monetario conserva la fuente cotizada y sus fallbacks existentes;
     no sustituye reportes contables. Validar rendimiento con grandes históricos.
-  - Sin despliegue ni cambios remotos. Harness temporal retirado.
-- Commit: pendiente; cambios locales.
+  - Frontend publicado; sin SQL ni cambios de datos remotos. Harness temporal retirado.
+- Publicación autorizada por el titular el 11/09/2026:
+  - Commit de implementación `ea408c6f26efa17f809a4a3981043705eee1547b`,
+    publicado en `origin/main` mediante Git; integración automática de Vercel.
+  - GitHub deployment `6403164833`, entorno `Production`; estado Vercel
+    `success` / `Deployment has completed` para ese commit.
+  - Vercel: `https://vercel.com/claudherhn-5641s-projects/sarierp/4VFy4YQB2Ubfx3aE13Q5JN72JwuR`.
+  - Comprobaciones HTTPS en `https://forwarders.app` tras completar el despliegue:
+    `/dashboard` devuelve 307 a `/login?next=%2Fdashboard`, `/login` devuelve 200
+    y `/api/dashboard-review` devuelve 404. Sin sesiones ni datos reales de prueba.
+  - La publicación no sustituye el UAT autenticado ni verifica RLS de extremo
+    a extremo; se conservan los pendientes descritos arriba.
+- Commit de implementación: `ea408c6`. Registro de publicación en commit documental posterior.
