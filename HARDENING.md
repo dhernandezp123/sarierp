@@ -6452,3 +6452,67 @@ Agregar una entrada por fix:
   La publicación no cierra LEG-001 a LEG-004 como cobertura jurídica completa.
 - Commit de implementación: `44cda8c`. Esta actualización documental registra
   el resultado de publicación sin modificar código ni SQL aplicado.
+
+### 2026-09-11 — UX-DASH-01 / REP-DASH-01 — Prioridades y métricas comerciales
+
+- Estado: implementado y validado técnicamente en local. Pendiente UAT
+  autenticado por rol y publicación. No se declara cerrado el flujo en Production.
+- Hallazgos:
+  - Los pendientes de pricing heredaban el período comercial y mostraban primero
+    los más recientes, ocultando pendientes antiguos.
+  - El contador de creadas seguía restringido al mes actual al elegir otro rango;
+    el margen global se presentaba como media de porcentajes individuales.
+  - El embudo infería transiciones históricas a partir del estado actual.
+  - Indicadores sin acceso a su detalle, tablas estrechas y rankings agrupados
+    por nombre en lugar de identificador.
+- Archivos:
+  - `src/app/(protected)/dashboard/page.tsx`.
+  - `src/lib/commercial-dashboard.ts`.
+  - `tests/commercial-dashboard.test.mjs`.
+  - `HARDENING.md`.
+- SQL: no aplica; sin cambios de esquema, RLS ni transiciones de negocio.
+- Cambios:
+  - Prioridades de todos los períodos: pricing y respuestas por antigüedad de
+    creación, tarifas seleccionadas vencidas o con vencimiento en siete días,
+    y tareas vencidas. Se aclara que la antigüedad es desde creación, no un SLA.
+  - Cuatro indicadores con detalle: venta y utilidad cotizadas ganadas, tasa de
+    cierre y valor abierto. Margen global = utilidad ganada / venta ganada.
+    Sin denominador se muestra ausencia de base, no una tasa de cero.
+  - Períodos por fecha local de creación y comparación con igual cantidad de
+    días inmediatamente anteriores. Ambos grupos usan estados actuales; no se
+    presentan como cierres históricos, facturación o cobros.
+  - Distribución actual por estados canónicos, incluidos borradores, en lugar
+    del embudo estimado. Borradores excluidos del valor de oportunidades abiertas.
+  - Detalle paginado a ancho completo y filtros por estado, cliente y vendedor
+    conservando el período; rankings agrupados por ID. Pestañas reutilizadas.
+  - Pricing abre con pendientes; Ventas conserva su ámbito y no ve rankings de
+    otros vendedores; los accesos respetan permisos existentes por rol.
+  - Lectura paginada de cotizaciones, pricing y tareas para evitar totales
+    truncados; errores de carga con reintento y descarte de respuestas obsoletas.
+    Las mutaciones de tareas mantienen filtro explícito de propietario.
+  - Fechas de tareas con helper compartido, etiquetas visibles/accesibles,
+    vistas de pendientes/vencidas/completadas y contraste de botones en oscuro.
+- Validaciones:
+  - Pruebas Node: 33/33, incluidas cuatro regresiones nuevas para fechas locales,
+    año completo, intervalos comparables, margen ponderado y base de comparación.
+  - Lint dirigido tras el último ajuste: sin errores ni advertencias.
+  - `npx.cmd tsc --noEmit`: OK tras retirar la vista de pruebas.
+  - `npm.cmd run build`: OK, 72/72 páginas, sin la ruta temporal de revisión.
+  - Navegador con datos simulados: PASS en 1440/768/390/320 px, sin overflow
+    del documento; inspección visual en claro y oscuro. Se corrigió una etiqueta
+    `sr-only` de la tabla que escapaba del contenedor con scroll.
+  - Navegador: margen global, filtros de indicadores y estados, pricing antiguo
+    fuera del período, tarifa vencida, paginación, tareas vencidas, foco y
+    recuperación de un fallo de pricing sin mostrar importes falsos de cero.
+    Sin peticiones a Supabase real ni escritura de datos remotos.
+  - `git diff --check`: OK. Harness temporal retirado y caché de tipos de esa
+    ruta eliminada antes de la compilación definitiva.
+- Riesgos y pendientes:
+  - UAT autenticado de Admin, Ventas, Pricing y Operaciones, RLS real, enlaces a
+    destinos y CRUD de tareas; los mocks de navegador no certifican esos flujos.
+  - Vigencia visible según tarifas seleccionadas accesibles mediante RLS.
+  - Las comparaciones no reconstruyen el estado histórico de una cotización.
+  - El cálculo monetario conserva la fuente cotizada y sus fallbacks existentes;
+    no sustituye reportes contables. Validar rendimiento con grandes históricos.
+  - Sin despliegue ni cambios remotos. Harness temporal retirado.
+- Commit: pendiente; cambios locales.
