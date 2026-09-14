@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
@@ -186,15 +186,23 @@ function getExpiryDisplay(quote: any): ExpiryDisplay | null {
 
 export default function HistoricoPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('Todos')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(25)
+  const [statusFilter, setStatusFilter] = useState(() => statusFilterOptions.some((option) => option.value === searchParams.get('status')) ? searchParams.get('status')! : 'Todos')
+  const [dateFrom, setDateFrom] = useState(() => /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get('from') || '') ? searchParams.get('from')! : '')
+  const [dateTo, setDateTo] = useState(() => /^\d{4}-\d{2}-\d{2}$/.test(searchParams.get('to') || '') ? searchParams.get('to')! : '')
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '')
+  const [page, setPage] = useState(() => Math.max(1, Math.min(100000, Number.parseInt(searchParams.get('page') || '1', 10) || 1)))
+  const [pageSize, setPageSize] = useState(() => [25, 50, 100].includes(Number(searchParams.get('pageSize'))) ? Number(searchParams.get('pageSize')) : 25)
+
+  const openQuotation = (id: string) => {
+    const query = new URLSearchParams({ status: statusFilter, from: dateFrom, to: dateTo, search: searchTerm, page: String(page), pageSize: String(pageSize) })
+    const returnTo = '/historico?' + query.toString()
+    window.history.replaceState(null, '', returnTo)
+    router.push('/quotations/' + id + '?returnTo=' + encodeURIComponent(returnTo))
+  }
 
   const fetchQuotations = async () => {
     // Temporal: Ventas tambien ve todo.
@@ -469,7 +477,7 @@ export default function HistoricoPage() {
 
                   <TableRow
                     key={quote.id}
-                    onClick={() => router.push(`/quotations/${quote.id}`)}
+                    onClick={() => openQuotation(quote.id)}
                     className="cursor-pointer transition-all duration-150 hover:bg-slate-100/80"
                   >
 

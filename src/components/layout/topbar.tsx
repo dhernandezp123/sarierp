@@ -82,7 +82,7 @@ function saveSeenAlertIds(userId: string, ids: Set<string>) {
   }
 }
 
-export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
+export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onOpenMobileNav?: () => void; mobileNavOpen?: boolean }) {
   const { theme, setTheme } = useTheme()
   const { user, profile, loading: userLoading } = useUser()
   const pathname = usePathname()
@@ -178,6 +178,10 @@ export default function Topbar({ onOpenMobileNav }: { onOpenMobileNav?: () => vo
           <button
             type="button"
             onClick={onOpenMobileNav}
+            id="mobile-nav-trigger"
+            aria-label="Abrir menú principal"
+            aria-expanded={mobileNavOpen}
+            aria-haspopup="dialog"
             title="Abrir menú"
             className="rounded-xl p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 lg:hidden dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           >

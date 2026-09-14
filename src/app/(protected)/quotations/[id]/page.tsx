@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronDown,
@@ -29,6 +29,7 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { createNotification } from '@/src/lib/notifications'
 import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
+import { quotationListHref, quotationTransitionHint } from '@/src/lib/quotation-detail-ux'
 import {
   QUOTATION_LOSS_REASONS,
   type QuotationLossReason,
@@ -59,7 +60,7 @@ import {
   normalizeTaxRatePercent,
 } from '@/src/lib/tax'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
-import { formatDate } from '@/src/lib/format'
+import { formatDate, formatDateTime } from '@/src/lib/format'
 import {
   getClientVisibleQuotationOptions,
   type QuotationCommercialOption,
@@ -374,9 +375,24 @@ const getCommercialChangeTitle = (changeType: string) => {
 }
 
 export default function QuotationDetailPage() {
+  const params = useParams()
+  const { user } = useUser()
+  return <QuotationDetail key={String(params.id) + ':' + user?.id} />
+}
+
+function QuotationDetail() {
   const { profile } = useUser()
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const listHref = quotationListHref(searchParams.get('returnTo'))
+  const [activeTab, setActiveTab] = useState('resumen')
+  const [summarySource, setSummarySource] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [historyErrors, setHistoryErrors] = useState<Record<string, boolean>>({})
+  const loadVersion = useRef(0)
+  const [emailLoading, setEmailLoading] = useState(false)
+  const emailTriggerRef = useRef<HTMLButtonElement>(null)
   const userRole = profile?.rol
   const canManagePricing = ['Admin', 'Pricing'].includes(userRole || '')
   const canPrintCostDetail = canManagePricing
@@ -460,19 +476,27 @@ export default function QuotationDetailPage() {
       }
     }
 
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      for (const ref of [statusMenuRef, moreMenuRef]) {
+        if (ref.current?.querySelector('[aria-expanded="true"]')) ref.current.querySelector('button')?.focus()
+      }
+      setOpenMoreMenu(false)
+      setOpenStatusMenu(false)
+    }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
   }, [])
 
-  useEffect(() => {
-    if (params.id) {
-      fetchData(params.id as string)
-      fetchStatusHistory()
-      loadChangeLogs()
-    }
-  }, [params.id])
-
-  const fetchData = async (id: string) => {
+  const fetchData = useCallback(async (id: string) => {
+    const version = ++loadVersion.current
+    setLoading(true)
+    setLoadError(null)
+    try {
     const { data: quoteData, error: quoteError } = await supabase
       .from('quotations')
       .select(`
@@ -492,15 +516,11 @@ export default function QuotationDetailPage() {
       `)
       .eq('id', id)
       .is('deleted_at', null)
-      .single()
+      .maybeSingle()
 
-    if (quoteError) {
-      toast.error('Error cargando cotización', {
-        description: quoteError.message,
-      })
-      setLoading(false)
-      return
-    }
+    if (quoteError) throw new Error('No se pudo cargar la cotización. Revisa tu conexión e intenta nuevamente.')
+    if (version !== loadVersion.current) return
+    if (!quoteData) { setQuotation(null); return }
 
     let duplicatedFromQuote = null
 
@@ -514,19 +534,19 @@ export default function QuotationDetailPage() {
       duplicatedFromQuote = data
     }
 
-    const { data: agentData } = await supabase
+    const { data: agentData, error: agentError } = await supabase
       .from('agent_quotes')
       .select('*')
       .eq('quotation_id', id)
       .order('created_at', { ascending: false })
 
-    const { data: validationData } = await supabase
+    const { data: validationData, error: validationError } = await supabase
       .from('cost_validations')
       .select('*')
       .eq('quotation_id', id)
       .order('created_at', { ascending: false })
 
-    const { data: pricingItemsData } = await supabase
+    const { data: pricingItemsData, error: pricingError } = await supabase
       .from('pricing_items')
       .select('*')
       .eq('quotation_id', id)
@@ -539,7 +559,7 @@ export default function QuotationDetailPage() {
         .eq('quotation_id', id)
         .order('sort_order', { ascending: true })
 
-    const { data: quotationContainersData } = await supabase
+    const { data: quotationContainersData, error: containersError } = await supabase
       .from('quotation_containers')
       .select('*')
       .eq('quotation_id', id)
@@ -551,7 +571,7 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', id)
       .order('created_at', { ascending: true })
 
-    const { data: logsData } = await supabase
+    const { data: logsData, error: logsError } = await supabase
       .from('activity_logs')
       .select(`
         id,
@@ -570,12 +590,20 @@ export default function QuotationDetailPage() {
       .eq('entity_id', id)
       .order('created_at', { ascending: false })
 
-    const { data: companyData } = await supabase
+    const { data: companyData, error: companyError } = await supabase
       .from('company_settings')
       .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent, insurance_included_service_patterns, insurance_excluded_service_patterns`)
       .limit(1)
       .maybeSingle()
 
+    if (version !== loadVersion.current) return
+    const failed = [
+      [agentError, 'tarifas'], [pricingError, 'cargos de pricing'],
+      [commercialOptionsError, 'opciones comerciales'], [containersError, 'contenedores'],
+      [cargoError, 'detalle de carga'], [companyError, 'configuración comercial'],
+    ].filter(([error]) => Boolean(error)).map(([, label]) => label)
+    if (failed.length) throw new Error('No se pudieron cargar: ' + failed.join(', ') + '. Reintenta para ver importes y documentos completos.')
+    setHistoryErrors((previous) => ({ ...previous, activity: Boolean(logsError), validations: Boolean(validationError) }))
     setQuotation(
       quoteData
         ? {
@@ -586,21 +614,12 @@ export default function QuotationDetailPage() {
         : null
     )
     setPricingItems(pricingItemsData || [])
-    if (commercialOptionsError) {
-      toast.error(commercialOptionsError.message)
-      setCommercialOptions([])
-    } else {
-      setCommercialOptions(
-        ((commercialOptionsData || []) as QuotationCommercialOption[]).map(
-          (option) => ({
-            ...option,
-            items: [...(option.items || [])].sort(
-              (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)
-            ),
-          })
-        )
-      )
-    }
+    setCommercialOptions(
+      ((commercialOptionsData || []) as QuotationCommercialOption[]).map((option) => ({
+        ...option,
+        items: [...(option.items || [])].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)),
+      }))
+    )
     setQuotationContainers(quotationContainersData || [])
     setActivityLogs(
       (logsData || []).map((log) => ({
@@ -610,21 +629,12 @@ export default function QuotationDetailPage() {
           : log.created_by_profile,
       }))
     )
-    if (!cargoError && cargoData) {
-      setCargoLines(cargoData)
-    }
-    const { data: selectedPricing } = await supabase
-      .from('agent_quotes')
-      .select('*')
-      .eq('quotation_id', id)
-      .eq('is_selected', true)
-      .single()
-
-    setSelectedAgent(selectedPricing)
+    setCargoLines(cargoData || [])
+    setSelectedAgent(agentData?.find((agent) => agent.is_selected) || null)
     setCompanyBranding(normalizeCompanyBranding(companyData))
-    setDefaultTaxRate(normalizeTaxRatePercent((companyData as any)?.default_tax_rate))
+    setDefaultTaxRate(normalizeTaxRatePercent(companyData?.default_tax_rate))
     const configuredInsuranceCostRate = Number(
-      (companyData as any)?.insurance_cost_rate_percent
+      companyData?.insurance_cost_rate_percent
     )
     setInsuranceCostRatePercent(
       Number.isFinite(configuredInsuranceCostRate) && configuredInsuranceCostRate > 0
@@ -633,19 +643,23 @@ export default function QuotationDetailPage() {
     )
     setInsuranceExclusionPatterns(
       normalizeInsuranceExclusionPatterns(
-        (companyData as any)?.insurance_excluded_service_patterns
+        companyData?.insurance_excluded_service_patterns
       )
     )
     setInsuranceInclusionPatterns(
       normalizeInsuranceCoveragePatterns(
-        (companyData as any)?.insurance_included_service_patterns ??
+        companyData?.insurance_included_service_patterns ??
           DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS
       )
     )
     setAgentQuotes(agentData || [])
     setValidations(validationData || [])
-    setLoading(false)
-  }
+    } catch (error) {
+      if (version === loadVersion.current) setLoadError(error instanceof Error ? error.message : 'No se pudo cargar la cotización. Intenta nuevamente.')
+    } finally {
+      if (version === loadVersion.current) setLoading(false)
+    }
+  }, [])
 
   const loadActivityLogs = async (quotationId: string) => {
     const { data } = await supabase
@@ -677,7 +691,7 @@ export default function QuotationDetailPage() {
     )
   }
 
-  const fetchStatusHistory = async () => {
+  const fetchStatusHistory = useCallback(async () => {
     const { data, error } = await supabase
       .from('quotation_status_history')
       .select(`
@@ -690,15 +704,11 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', params.id)
       .order('created_at', { ascending: true })
 
-    if (error) {
-      toast.error(error.message)
-      return
-    }
+    setHistoryErrors((previous) => ({ ...previous, status: Boolean(error) }))
+    setStatusHistory(error ? [] : data || [])
+  }, [params.id])
 
-    setStatusHistory(data || [])
-  }
-
-  const loadChangeLogs = async () => {
+  const loadChangeLogs = useCallback(async () => {
     const quotationId = params.id as string | undefined
 
     if (!quotationId) return
@@ -715,10 +725,22 @@ export default function QuotationDetailPage() {
       .eq('quotation_id', quotationId)
       .order('created_at', { ascending: false })
 
-    if (error) return
+    setHistoryErrors((previous) => ({ ...previous, changes: Boolean(error) }))
+    setChangeLogs(error ? [] : (data || []) as QuotationChangeLog[])
+  }, [params.id])
 
-    setChangeLogs((data || []) as QuotationChangeLog[])
-  }
+  useEffect(() => {
+    if (!params.id) return
+    let active = true
+    // Skip requests from an effect that is cleaned up before its initial load starts.
+    queueMicrotask(() => {
+      if (!active) return
+      void fetchData(params.id as string)
+      void fetchStatusHistory().catch(() => setHistoryErrors((previous) => ({ ...previous, status: true })))
+      void loadChangeLogs().catch(() => setHistoryErrors((previous) => ({ ...previous, changes: true })))
+    })
+    return () => { active = false; loadVersion.current += 1 }
+  }, [params.id, fetchData, fetchStatusHistory, loadChangeLogs])
 
   const handleStatusChange = async (newStatus: string) => {
     if (!quotation) return
@@ -1418,6 +1440,26 @@ export default function QuotationDetailPage() {
     }
   }
 
+  const openEmailComposer = async () => {
+    setEmailLoading(true)
+    try {
+              if (!plantillaCotizacion) {
+                const { data } = await supabase
+                  .from('company_settings')
+                  .select('plantilla_cotizacion')
+                  .limit(1)
+                  .maybeSingle()
+                setPlantillaCotizacion(data?.plantilla_cotizacion ?? '')
+              }
+              if (emailTemplates.length === 0) {
+                setEmailTemplates(await fetchActiveEmailTemplates(supabase))
+              }
+              setShowEmailModal(true)
+
+    } catch { toast.error('No se pudieron cargar las plantillas. Intenta nuevamente.') }
+    finally { setEmailLoading(false) }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6 p-1 animate-pulse">
@@ -1462,8 +1504,15 @@ export default function QuotationDetailPage() {
     )
   }
 
-  if (!quotation) {
-    return <p className="p-8">Cotización no encontrada.</p>
+  if (loadError || !quotation) {
+    return <section role="alert" className="space-y-4 rounded-2xl border bg-white p-6 dark:bg-slate-900">
+      <h1 className="text-xl font-semibold">{loadError ? 'Cotización no disponible' : 'No encontramos esta cotización'}</h1>
+      <p className="text-sm text-slate-500">{loadError || 'El enlace puede haber cambiado o la cotización no está disponible para tu usuario.'}</p>
+      <div className="flex flex-wrap gap-3">
+        <button onClick={() => void fetchData(params.id as string)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Reintentar</button>
+        <Link href={listHref} className="rounded-lg border px-4 py-2 text-sm">Volver a cotizaciones</Link>
+      </div>
+    </section>
   }
 
   const formatCurrency = (value: number) =>
@@ -1502,6 +1551,11 @@ const pricingTotals = pricingItems.reduce(
 )
 
 const hasPricingItems = pricingItems.length > 0
+const statusActions = statusOptions.filter((status) =>
+  canTransition(quotation.status || 'Borrador', status) &&
+  !(quotation.status === 'Ganada' && status === 'Pendiente de Fijar Precios')
+)
+const hasStatusActions = canEditQuotation && (statusActions.length > 0 || quotation.status === 'Perdida')
 const hasCargoInsurance = pricingItems.some((item) => {
   const itemType = String(item.item_type || '').trim().toLowerCase()
   const description = String(item.description || '').trim().toLowerCase()
@@ -1511,10 +1565,15 @@ const canViewInsuranceCalculation = ['Admin', 'Pricing', 'Ventas', 'Operaciones'
   userRole || ''
 )
 
-const gpPercent =
-  pricingTotals.subtotal > 0
-    ? (pricingTotals.profit / pricingTotals.subtotal) * 100
-    : 0
+const summaryOption = commercialOptions.find((option) => option.id === summarySource) ||
+  (summarySource === '' ? commercialOptions.find((option) => option.status === 'Aceptada') : undefined)
+const summaryTotals = summaryOption ? {
+  subtotal: Number(summaryOption.sale_subtotal), tax: Number(summaryOption.tax_total),
+  total: Number(summaryOption.grand_total), cost: Number(summaryOption.cost_total), profit: Number(summaryOption.profit_amount),
+} : pricingTotals
+const hasSummary = Boolean(summaryOption || hasPricingItems)
+const summaryCurrency = summaryOption?.currency || 'USD'
+const gpPercent = summaryTotals.subtotal > 0 ? (summaryTotals.profit / summaryTotals.subtotal) * 100 : null
 
 const isLooseCargo = ['LCL', 'LTL', 'Consolidado', 'Courier'].includes(
   quotation?.quote_type || ''
@@ -1653,7 +1712,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
   const containerEmailSummary =
     (quoteType === 'FCL' || quoteType === 'FTL') && quotationContainers.length > 0
       ? quotationContainers
-          .map((c: any) => `${c.quantity}x ${c.container_type_name || c.container_type || ''}`)
+          .map((c) => `${c.quantity}x ${c.container_type_name || c.container_type || ''}`)
           .join(', ')
       : null
 
@@ -1747,11 +1806,11 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
   return (
   <>
-    {showEmailModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-[#0b1220]">
+    <Dialog open={showEmailModal} onOpenChange={setShowEmailModal}>
+      <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); emailTriggerRef.current?.focus() }} className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+        <div className="min-w-0 break-words">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Enviar Cotización por Correo</h2>
+            <DialogTitle className="text-lg font-bold">Preparar correo</DialogTitle>
             <div className="flex items-center gap-2">
               {profile?.rol === 'Admin' && (
                 <Link
@@ -1763,12 +1822,16 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   <span className="sr-only">Editar plantilla</span>
                 </Link>
               )}
-              <button type="button" onClick={() => setShowEmailModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+              <button type="button" aria-label="Cerrar correo" onClick={() => setShowEmailModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                 <X className="h-5 w-5" />
               </button>
             </div>
           </div>
 
+          <DialogDescription className="mb-4">Descarga el PDF, abre tu aplicación de correo y adjúntalo manualmente antes de enviar. Preparar este mensaje no cambia el estado de la cotización.</DialogDescription>
+          <PDFDownloadLink document={<QuotationPDF quotation={quotation} selectedAgent={selectedAgent} pricingItems={pricingItems} commercialOptions={getClientVisibleQuotationOptions(commercialOptions)} quotationContainers={quotationContainers} cargoLines={cargoLines} company={companyBranding} />} fileName={(quotation.quotation_number || 'cotizacion') + '.pdf'} className="mb-4 inline-flex rounded-lg border px-3 py-2 text-sm font-semibold">
+            {({ loading: generating }) => generating ? 'Generando PDF…' : '1. Descargar PDF'}
+          </PDFDownloadLink>
           {emailTemplates.length > 1 && (
             <div className="mb-3 flex flex-wrap gap-2">
               {emailTemplates.map((template) => (
@@ -1804,7 +1867,8 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
           <textarea
             readOnly
-            rows={18}
+            aria-label="Mensaje de correo"
+            rows={10}
             value={emailBodyQ}
             className="mb-4 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           />
@@ -1816,14 +1880,16 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
               >
                 <Mail className="h-4 w-4" />
-                Abrir en correo
+                2. Abrir en correo
               </a>
             )}
             <button
               type="button"
               onClick={async () => {
-                await navigator.clipboard.writeText(emailBodyQ)
-                toast.success('Mensaje copiado al portapapeles')
+                try {
+                  await navigator.clipboard.writeText(emailBodyQ)
+                  toast.success('Mensaje copiado al portapapeles')
+                } catch { toast.error('No se pudo copiar. Selecciona y copia el texto del mensaje.') }
               }}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
             >
@@ -1838,18 +1904,18 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             </button>
           </div>
         </div>
-      </div>
-    )}
+      </DialogContent>
+    </Dialog>
 
-    <div className="space-y-6 !font-sans [&_*]:!font-sans">
+    <div className="min-w-0 space-y-6 break-words !font-sans [&_*]:!font-sans">
       <Breadcrumbs
         items={[
-          { label: 'Cotizaciones', href: '/quotations' },
+          { label: 'Cotizaciones', href: listHref },
           { label: quotation.quotation_number || 'Detalle' },
         ]}
       />
 
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col items-start justify-between gap-4 xl:flex-row">
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white !font-sans">
@@ -1857,9 +1923,11 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             </h1>
 
             <div ref={statusMenuRef} className="relative">
-              {canEditQuotation ? (
+              {hasStatusActions ? (
                 <button
                   type="button"
+                  aria-expanded={openStatusMenu}
+                  aria-controls="quotation-status-actions"
                   onClick={() => setOpenStatusMenu(!openStatusMenu)}
                   className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
                 >
@@ -1870,8 +1938,8 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 <Badge>{quotation?.status || 'Sin estado'}</Badge>
               )}
 
-              {canEditQuotation && openStatusMenu && (
-                <div className="absolute left-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
+              {hasStatusActions && openStatusMenu && (
+                <div id="quotation-status-actions" className="absolute left-0 z-30 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
                   {quotation?.status === 'Perdida' && (
                     <button
                       type="button"
@@ -1884,25 +1952,20 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                         : 'Reactivar como nueva cotización'}
                     </button>
                   )}
-                  {statusOptions
-                    .filter((status) =>
-                      canTransition(quotation?.status || 'Borrador', status) &&
-                      !(
-                        quotation?.status === 'Ganada' &&
-                        status === 'Pendiente de Fijar Precios'
-                      )
-                    )
+                  {statusActions
                     .map((status) => (
                       <button
                         key={status}
                         type="button"
+                        disabled={Boolean(quotationTransitionHint(status, commercialOptions))}
                         onClick={async () => {
                           await handleStatusChange(status)
                           setOpenStatusMenu(false)
                         }}
-                        className="block w-full px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                        className="block w-full px-4 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 dark:text-slate-200 dark:hover:bg-slate-800 dark:disabled:bg-slate-900"
                       >
                         {status}
+                        {quotationTransitionHint(status, commercialOptions) && <span className="mt-1 block text-xs font-normal text-slate-500">{quotationTransitionHint(status, commercialOptions)}</span>}
                       </button>
                     ))}
                 </div>
@@ -1911,11 +1974,13 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           </div>
 
           <p className="text-gray-500 mt-2 dark:text-slate-400">
-            Detalle de Cotización
+            <span className="block font-medium text-slate-700 dark:text-slate-200">{quotation.clientes?.nombre || 'Sin cliente'}</span>
+            <span className="mt-1 block text-sm">{quotation.origen || 'Origen por definir'} → {quotation.destino || 'Destino por definir'} · {serviceProductLabel}</span>
+            <span className="mt-1 block text-xs">Vigencia de cotización: {formatDisplayDate(quotation.valid_until)}{commercialOptions.length > 0 ? ' · Consulta la vigencia de cada opción debajo.' : ''}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex max-w-full flex-wrap items-center gap-2">
           <PDFDownloadLink
             document={
               <QuotationPDF
@@ -1934,7 +1999,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           >
             {({ loading }) => (
               <>
-                <Download className="h-4 w-4" />
+                <Download className={loading ? "h-4 w-4 animate-pulse" : "h-4 w-4"} />
                 <span className="sr-only">
                   {loading ? 'Generando PDF...' : 'Descargar PDF'}
                 </span>
@@ -1954,25 +2019,14 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
           <button
             type="button"
-            title="Enviar cotización por correo"
-            onClick={async () => {
-              if (!plantillaCotizacion) {
-                const { data } = await supabase
-                  .from('company_settings')
-                  .select('plantilla_cotizacion')
-                  .limit(1)
-                  .maybeSingle()
-                setPlantillaCotizacion((data as any)?.plantilla_cotizacion ?? '')
-              }
-              if (emailTemplates.length === 0) {
-                setEmailTemplates(await fetchActiveEmailTemplates(supabase))
-              }
-              setShowEmailModal(true)
-            }}
+            title="Preparar correo"
+            ref={emailTriggerRef}
+            disabled={emailLoading}
+            onClick={openEmailComposer}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <Mail className="h-4 w-4" />
-            <span className="sr-only">Enviar por correo</span>
+            <span className="sr-only">{emailLoading ? 'Cargando correo…' : 'Preparar correo'}</span>
           </button>
 
           {(canManagePricing ||
@@ -1982,6 +2036,8 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             <div ref={moreMenuRef} className="relative">
               <button
                 type="button"
+                aria-expanded={openMoreMenu}
+                aria-controls="quotation-more-actions"
                 onClick={() => setOpenMoreMenu(!openMoreMenu)}
                 title="Más acciones"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
@@ -1991,7 +2047,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
               </button>
 
               {openMoreMenu && (
-                <div className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
+                <div id="quotation-more-actions" className="absolute left-0 z-30 mt-2 w-60 sm:left-auto sm:right-0 sm:w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-[#0b1220]">
                   {canManagePricing && (
                     <Link
                       href={`/pricing-comparison?quotation=${quotation.id}`}
@@ -2099,7 +2155,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           {canEditQuotation && (
             <Link
               href={`/quotations/${quotation.id}/edit`}
-              className="flex h-9 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+              className="flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold shadow-sm transition hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800"
             >
               <Pencil className="h-4 w-4" />
               Editar
@@ -2107,6 +2163,31 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           )}
         </div>
       </div>
+
+      <section aria-label="Siguiente paso" className="flex flex-col items-start justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/30 sm:flex-row sm:items-center">
+        <div>
+          <p className="font-semibold">Siguiente paso</p>
+          <p className="mt-1 text-slate-600 dark:text-slate-300">{
+            quotation.status === 'Borrador' ? 'Completa los datos del embarque y solicita pricing.' :
+            quotation.status === 'Pendiente de Fijar Precios' ? 'Pricing debe revisar costos y preparar las tarifas comerciales.' :
+            quotation.status === 'Pricing Aprobado' ? (commercialOptions.length ? 'Pricing debe ofrecer las opciones antes de compartirlas con el cliente.' : 'Revisa el PDF y prepara la comunicación al cliente.') :
+            quotation.status === 'Enviada al Cliente' ? (commercialOptions.length && !commercialOptions.some((option) => option.status === 'Aceptada') ? 'Registra cuál de las opciones ofrecidas eligió el cliente para confirmar la venta.' : 'Registra la respuesta del cliente desde el estado de la cotización.') :
+            quotation.status === 'Ganada' ? 'Continúa con las Shipping Instructions de esta cotización.' :
+            quotation.status === 'Perdida' ? 'Puedes reactivarla creando una nueva cotización vinculada.' : 'Consulta las acciones disponibles según tu rol.'
+          }</p>
+        </div>
+        {quotation.status === 'Borrador' && canEditQuotation ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/quotations/' + quotation.id + '/edit'}>Completar cotización</Link> :
+          ['Pendiente de Fijar Precios', 'Pricing Aprobado'].includes(quotation.status) && canManagePricing ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/pricing-comparison?quotation=' + quotation.id}>Revisar pricing</Link> :
+          quotation.status === 'Pricing Aprobado' && !commercialOptions.length ? <button disabled={emailLoading} onClick={openEmailComposer} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Preparar correo</button> :
+          quotation.status === 'Enviada al Cliente' && canGenerateSI && commercialOptions.some((option) => option.status === 'Ofrecida') ? <button onClick={() => { document.getElementById('commercial-options')?.focus(); document.getElementById('commercial-options')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Elegir opción del cliente</button> :
+          quotation.status === 'Ganada' && canGenerateSI ? <button disabled={creatingRouting} onClick={createRoutingInstruction} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">{creatingRouting ? 'Abriendo operación…' : 'Abrir / generar operación'}</button> :
+          quotation.status === 'Perdida' && canEditQuotation ? <button disabled={duplicating} onClick={requestDuplicateQuotation} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Reactivar cotización</button> : null}
+      </section>
+
+      {Object.values(historyErrors).some(Boolean) && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+        No se pudo cargar parte del historial o las validaciones. Las secciones afectadas se indican debajo.
+        <button className="ml-2 font-semibold underline" onClick={() => { void fetchData(params.id as string); void fetchStatusHistory(); void loadChangeLogs() }}>Reintentar carga</button>
+      </div>}
 
       {quotation.duplicated_from && (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
@@ -2118,7 +2199,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       )}
 
       {commercialOptions.length > 0 && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
+        <section id="commercial-options" tabIndex={-1} aria-label="Opciones comerciales" className="scroll-mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm outline-offset-4 dark:border-slate-700 dark:bg-[#0b1220] sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -2186,7 +2267,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-5">
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-3 2xl:grid-cols-5">
                     <div><span className="block text-xs text-slate-500">Agente/Proveedor</span>{option.agent_name || 'N/A'}</div>
                     <div><span className="block text-xs text-slate-500">Naviera</span>{option.carrier || 'N/A'}</div>
                     <div><span className="block text-xs text-slate-500">ETD</span>{formatDisplayDate(option.etd)}</div>
@@ -2239,63 +2320,35 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         </section>
       )}
 
-      <Tabs defaultValue="resumen" className="space-y-6">
-  <TabsList className="bg-white border rounded-xl p-1 dark:border-slate-700 dark:bg-[#0b1220]">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0 space-y-6">
+  <div className="max-w-full overflow-x-auto pb-1">
+  <TabsList aria-label="Detalle de cotización" className="w-max bg-white border rounded-xl p-1 dark:border-slate-700 dark:bg-[#0b1220]">
     <TabsTrigger value="resumen">Resumen</TabsTrigger>
     <TabsTrigger value="tarifas">Tarifas</TabsTrigger>
     <TabsTrigger value="validaciones">Validaciones</TabsTrigger>
     <TabsTrigger value="historial">Historial</TabsTrigger>
   </TabsList>
+  </div>
 
   <TabsContent value="resumen">
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <Card className="border border-slate-200 shadow-sm dark:border-slate-700/60">
-              <CardContent className="p-5">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Venta Total</p>
-                <p className="text-2xl font-bold text-red-700 !font-sans">
-                  {hasPricingItems
-                    ? `USD ${formatCurrency(pricingTotals.total)}`
-                    : 'N/A'}
-                </p>
-                <p className="text-xs text-gray-500 mt-1 dark:text-slate-400">
-                  Incluye ISV
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border border-slate-200 shadow-sm dark:border-slate-700/60">
-              <CardContent className="p-5">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Costo Total</p>
-                <p className="text-2xl font-bold !font-sans">
-                  {hasPricingItems
-                    ? `USD ${formatCurrency(pricingTotals.cost)}`
-                    : 'N/A'}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border border-slate-200 shadow-sm dark:border-slate-700/60">
-              <CardContent className="p-5">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Profit</p>
-                <p className="text-2xl font-bold text-green-700 !font-sans">
-                  {hasPricingItems
-                    ? `USD ${formatCurrency(pricingTotals.profit)}`
-                    : 'N/A'}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="border border-slate-200 shadow-sm dark:border-slate-700/60">
-              <CardContent className="p-5">
-                <p className="text-sm text-gray-500 dark:text-slate-400">GP%</p>
-                <p className="text-2xl font-bold !font-sans">
-                  {hasPricingItems ? `${gpPercent.toFixed(2)}%` : 'N/A'}
-                </p>
-                <p className="text-xs text-gray-500 mt-1 dark:text-slate-400">
-                  Sobre venta sin ISV
-                </p>
-              </CardContent>
-            </Card>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="font-semibold">Resumen económico</h2><p className="mt-1 text-xs text-slate-500">{summaryOption ? 'Importes guardados de la opción ' + summaryOption.option_code + ' · ' + summaryOption.status : 'Cargos actuales de pricing. No suma las alternativas comerciales.'}</p></div>
+            {commercialOptions.length > 0 && <label className="flex flex-wrap items-center gap-2 text-sm">Ver importes de
+              <select aria-label="Fuente del resumen económico" value={summaryOption?.id || 'pricing'} onChange={(event) => setSummarySource(event.target.value)} className="max-w-full rounded-lg border bg-white p-2 dark:bg-slate-900">
+                <option value="pricing">Pricing actual</option>
+                {commercialOptions.map((option) => <option key={option.id} value={option.id}>Opción {option.option_code} · {option.status}</option>)}
+              </select>
+            </label>}
+          </div>
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Card><CardContent className="p-4">
+              <p className="text-sm text-slate-500">Total al cliente</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{hasSummary ? summaryCurrency + ' ' + formatCurrency(summaryTotals.total) : 'Sin pricing'}</p>
+              {hasSummary && <div className="mt-2 space-y-1 text-xs text-slate-500"><p>Subtotal: {summaryCurrency} {formatCurrency(summaryTotals.subtotal)}</p><p>ISV: {summaryCurrency} {formatCurrency(summaryTotals.tax)}</p></div>}
+            </CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-slate-500">Costo total</p><p className="mt-1 text-2xl font-bold tabular-nums">{hasSummary ? summaryCurrency + ' ' + formatCurrency(summaryTotals.cost) : 'Sin pricing'}</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-slate-500">Utilidad</p><p className={'mt-1 text-2xl font-bold tabular-nums ' + (summaryTotals.profit < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400')}>{hasSummary ? summaryCurrency + ' ' + formatCurrency(summaryTotals.profit) : 'Sin pricing'}</p><p className="mt-2 text-xs text-slate-500">Venta sin ISV menos costo</p></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-sm text-slate-500">Margen</p><p className="mt-1 text-2xl font-bold tabular-nums">{hasSummary && gpPercent !== null ? gpPercent.toFixed(2) + '%' : 'Sin base'}</p><p className="mt-2 text-xs text-slate-500">Sobre venta sin ISV</p></CardContent></Card>
           </div>
 
           {changeLogs.length > 0 && (
@@ -2312,7 +2365,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -2320,13 +2373,8 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 </CardTitle>
               </CardHeader>
 
-              <CardContent className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Estado</p>
-                  <p className="font-semibold text-slate-900 dark:text-white">
-                    <Badge>{quotation.status || 'Sin estado'}</Badge>
-                  </p>
-                </div>
+              <CardContent className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+
 
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Cliente</p>
@@ -2386,7 +2434,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 </CardTitle>
               </CardHeader>
 
-              <CardContent className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+              <CardContent className="grid min-w-0 grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Producto / Servicio</p>
                   <p className="font-semibold text-slate-900 dark:text-white">
@@ -2569,7 +2617,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             </Card>
 
             {cargoLines.length > 0 && (
-              <section className="col-span-2 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <section className="min-w-0 lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
                   Detalle de carga
                 </h2>
@@ -2618,7 +2666,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
               </section>
             )}
 
-            <Card className="col-span-2">
+            <Card className="min-w-0 lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
                   Observaciones internas
@@ -2635,7 +2683,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
               </CardContent>
             </Card>
 
-            <Card className="col-span-2">
+            <Card className="min-w-0 lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
                   Observaciones para Cliente (PDF)
@@ -2652,14 +2700,16 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
           </div>
 
-          {activityLogs.length > 0 && (
+          {historyErrors.activity && <p className="mt-4 text-sm text-amber-700">Actividad reciente no disponible. Reintenta la carga.</p>}
+          {!historyErrors.activity && activityLogs.length > 0 && (
             <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
               <h2 className="text-lg font-semibold text-slate-950 dark:text-white">
-                Activity Timeline
+                Actividad reciente
               </h2>
+              <button onClick={() => { setActiveTab('historial'); document.querySelector<HTMLButtonElement>('[role="tab"][data-state="inactive"][id$="trigger-historial"]')?.focus() }} className="mt-2 text-sm font-semibold text-blue-600 underline dark:text-blue-400">Ver historial completo</button>
 
               <div className="mt-5 space-y-4">
-                {activityLogs.map((log) => {
+                {activityLogs.slice(0, 3).map((log) => {
                   const userName = log.created_by_profile?.nombre
                     ? `${log.created_by_profile.nombre} ${
                         log.created_by_profile.apellido || ''
@@ -2676,7 +2726,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                         </p>
 
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          {userName} · {new Date(log.created_at).toLocaleString()}
+                          {userName} · {formatDateTime(log.created_at)}
                         </p>
                       </div>
                     </div>
@@ -2701,7 +2751,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   No hay tarifas registradas.
                 </p>
               ) : (
-                <table className="w-full text-left">
+                <div role="region" aria-label="Tabla de detalle" tabIndex={0} className="max-w-full overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm">
                   <thead className="bg-zinc-950 text-white">
                     <tr>
                       <th className="p-3">Agente</th>
@@ -2716,7 +2766,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     {agentQuotes.map((agent) => (
                       <tr key={agent.id} className="border-b dark:border-slate-800">
                         <td className="p-3">{agent.agente_nombre}</td>
-                        <td className="p-3">{agent.costo}</td>
+                        <td className="p-3">{agent.costo == null ? 'N/A' : `${agent.moneda || 'USD'} ${formatCurrency(Number(agent.costo))}`}</td>
                         <td className="p-3">{agent.moneda}</td>
                         <td className="p-3">{agent.transit_time}</td>
                         <td className="p-3">
@@ -2729,7 +2779,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               )}
             </CardContent>
           </Card>
@@ -2744,12 +2794,12 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             </CardHeader>
 
             <CardContent>
-              {validations.length === 0 ? (
+              {historyErrors.validations ? <p className="text-amber-700">Validaciones no disponibles. Reintenta la carga.</p> : validations.length === 0 ? (
                 <p className="text-gray-500 dark:text-slate-400">
                   No hay validaciones registradas.
                 </p>
               ) : (
-                <table className="w-full text-left">
+                <div role="region" aria-label="Tabla de detalle" tabIndex={0} className="max-w-full overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm">
                   <thead className="bg-zinc-950 text-white">
                     <tr>
                       <th className="p-3">Cotizado</th>
@@ -2763,15 +2813,15 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   <tbody>
                     {validations.map((validation) => (
                       <tr key={validation.id} className="border-b dark:border-slate-800">
-                        <td className="p-3">{validation.quoted_cost}</td>
-                        <td className="p-3">{validation.invoiced_cost}</td>
-                        <td className="p-3">{validation.difference}</td>
+                        <td className="p-3">{validation.quoted_cost == null ? 'N/A' : formatCurrencyValue(validation.quoted_cost)}</td>
+                        <td className="p-3">{validation.invoiced_cost == null ? 'N/A' : formatCurrencyValue(validation.invoiced_cost)}</td>
+                        <td className="p-3">{validation.difference == null ? 'N/A' : formatCurrencyValue(validation.difference)}</td>
                         <td className="p-3">{validation.status}</td>
                         <td className="p-3">{validation.observations}</td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               )}
             </CardContent>
           </Card>
@@ -2787,6 +2837,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             </CardHeader>
 
             <CardContent>
+              {(historyErrors.status || historyErrors.changes || historyErrors.activity) && <p className="mb-4 text-sm text-amber-700">Historial incompleto por un error de carga. Reintenta para consultar todos los eventos.</p>}
               {combinedTimeline.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-slate-400">
                   No hay movimientos registrados.

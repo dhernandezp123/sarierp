@@ -6527,3 +6527,76 @@ Agregar una entrada por fix:
   - La publicación no sustituye el UAT autenticado ni verifica RLS de extremo
     a extremo; se conservan los pendientes descritos arriba.
 - Commit de implementación: `ea408c6`. Registro de publicación en commit documental posterior.
+
+### 2026-09-14 — UX-NAV-02 / UX-QUOTE-02 — Sidebar y detalle de cotización
+
+- Estado: implementado; validación local de navegador, regresiones y compilación
+  definitiva completadas. Pendiente UAT autenticado por rol y
+  publicación; no se declara cerrado el flujo comercial de extremo a extremo.
+- Hallazgos: menú extenso sin jerarquía por rol, selección incorrecta en detalle
+  y actividad, drawer móvil sin control de foco, breadcrumb incorrecto, acciones
+  de estado que fallaban después del clic, resumen económico ambiguo, correo sin
+  aclarar el adjunto manual y consultas fallidas presentadas como datos vacíos.
+- Archivos:
+  - `src/components/layout/sidebar.tsx`, `protected-shell.tsx`, `topbar.tsx`.
+  - `src/components/ui/Breadcrumbs.tsx`.
+  - `src/app/(protected)/quotations/[id]/page.tsx`.
+  - `src/app/(protected)/historico/page.tsx`.
+  - `src/lib/sidebar-navigation.ts`, `src/lib/quotation-detail-ux.ts`.
+  - `tests/quotation-navigation.test.mjs`, `HARDENING.md`.
+- SQL: no aplica; sin migraciones, cambios de RLS, transiciones canónicas ni RPC.
+- Cambios:
+  - Inicio, Alertas y Reportes como accesos generales; CTA de nueva cotización
+    según permisos. Compras integrada en Finanzas, soporte y perfil al pie.
+  - Grupos plegables, preferencia por usuario/rol, orden por rol y apertura del
+    grupo activo al navegar. Etiquetas completas y un solo badge de notificaciones
+    sin leer; no se fusionaron los sistemas de alertas y notificaciones existentes.
+  - Perfil del sidebar obtenido de `useUser`; descarte de conteos obsoletos al
+    cambiar usuario o marcar notificaciones como leídas. Logout informa fallos.
+  - Dialog existente para navegación móvil: foco contenido, Escape, restitución
+    de foco al botón del menú y cierre al pasar al ancho de escritorio.
+  - Detalle y edición activan Cotizaciones; Registro de actividad y Nueva
+    cotización conservan selección independiente. Breadcrumb a `/historico` con
+    filtros/paginación de origen y validación de la ruta de regreso.
+  - Encabezado con cliente, ruta, servicio y vigencia; siguiente paso según estado
+    y capacidades existentes. Editar queda como acción secundaria. Los requisitos
+    de opciones se explican antes de intentar cambiar a Enviada o Ganada.
+  - Resumen distingue subtotal, ISV, total al cliente, costo, utilidad y margen.
+    Selector de fuente; una opción aceptada usa sus importes guardados por defecto,
+    sin recalcular ni modificar snapshots. Utilidad negativa con color de pérdida;
+    margen sin denominador muestra «Sin base».
+  - Diseño adaptable, pestañas desplazables y tablas con scroll propio. Actividad
+    reciente limitada a tres eventos; historial completo en su pestaña.
+  - Correo en Dialog accesible: descargar PDF, abrir aplicación de correo y adjuntar
+    manualmente. Prepararlo no registra un envío ni cambia el estado. Fallo de
+    portapapeles con mensaje y alternativa manual.
+  - Errores críticos de carga bloquean importes/documentos parciales y ofrecen
+    reintento. Historial y validaciones distinguen errores de ausencia de registros.
+    Versionado de cargas y componente por cotización/usuario evitan mezclar datos.
+- Validaciones:
+  - `npm.cmd test`: 37/37, incluidas selección de rutas, orden por rol, conservación
+    y validación del regreso al listado y requisitos de opciones comerciales.
+  - Navegador Chrome con fixtures locales, sin peticiones a Supabase real:
+    1440/768/390/320 px sin overflow del documento ni del contenedor principal;
+    capturas revisadas en escritorio/móvil y captura en oscuro.
+  - Navegador: selección de Cotizaciones, breadcrumb con filtros, transición Ganada
+    deshabilitada con explicación, correo y adjunto manual, Escape y restitución
+    de foco, 35 tabulaciones dentro del menú móvil, utilidad negativa, fuente de
+    opción aceptada y fallo de pricing con reintento. Sin excepciones de ejecución.
+  - Harness temporal retirado; evidencias locales ignoradas en `.ua/intermediate`.
+  - Lint: sidebar, shell, topbar, Breadcrumbs y helpers sin errores ni advertencias.
+    Detalle pasa de 15 errores/1 advertencia a 6 errores previos de `any`; listado
+    conserva 9 errores/2 advertencias previos (tipado, efecto y código sin uso).
+    No se desactivaron reglas ni se añadieron errores de lint.
+  - `npx.cmd tsc --noEmit`: OK tras retirar el harness y sus tipos temporales.
+  - `npm.cmd run build`: OK, 72/72 páginas; sin la ruta temporal de revisión.
+  - `git diff --check`: OK tras corregir un espacio final en el bloque de correo.
+- Riesgos y pendientes:
+  - UAT autenticado por rol, visibilidad real mediante RLS, vuelta al listado tras
+    cambios de datos, emisión de PDF, correo en clientes instalados y aceptación/
+    repricing/operación con cuentas autorizadas. Los mocks no certifican esas acciones.
+  - Preferencias del menú locales al navegador; no se sincronizan entre dispositivos.
+  - Se conserva la deuda de tipado del listado/detalle y las fuentes monetarias
+    existentes. Sin escrituras en datos remotos durante las pruebas.
+- Publicación: commit y despliegue autorizados por el titular el 14/09/2026.
+  En preparación; se registrarán el hash y el resultado del despliegue al finalizar.

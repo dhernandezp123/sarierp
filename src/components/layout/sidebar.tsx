@@ -3,127 +3,85 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState, useSyncExternalStore } from 'react'
+import { toast } from 'sonner'
+import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath } from '@/src/lib/permissions'
+import { isSidebarItemActive, sidebarGroupOrder } from '@/src/lib/sidebar-navigation'
 import { NOTIFICATIONS_READ_EVENT } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
 import {
-  LayoutDashboard,
-  LogOut,
-  Users,
-  FileText,
-  History,
-  ActivitySquare,
-  CalendarClock,
-  Scale,
-  DollarSign,
-  BarChart3,
-  Building2,
-  Database,
-  Route,
-  Bell,
-  Receipt,
-  Package,
-  ClipboardList,
-  Warehouse,
-  ShieldCheck,
-  ShoppingBag,
-  CreditCard,
-  ShieldAlert,
-  Mail,
-  LifeBuoy,
+  LayoutDashboard, LogOut, Users, FileText, ActivitySquare, CalendarClock,
+  Scale, DollarSign, BarChart3, Building2, Database, Route, Bell, Receipt,
+  Package, ClipboardList, Warehouse, ShieldCheck, ShoppingBag, CreditCard,
+  ShieldAlert, Mail, LifeBuoy, ChevronDown, Plus, type LucideIcon,
 } from 'lucide-react'
 
-interface SidebarProps {
-  role?: string
+type NavItem = { label: string; href: string; icon: LucideIcon; exact?: boolean }
+const preferenceEvent = 'forwarders:sidebar-preferences'
+const memoryPreferences = new Map<string, string>()
+function subscribePreferences(callback: () => void) {
+  const onStorage = (event: StorageEvent) => { if (event.key) memoryPreferences.delete(event.key); else memoryPreferences.clear(); callback() }
+  window.addEventListener('storage', onStorage)
+  window.addEventListener(preferenceEvent, callback)
+  return () => {
+    window.removeEventListener('storage', onStorage)
+    window.removeEventListener(preferenceEvent, callback)
+  }
+}
+function readPreferences(key: string) {
+  try { return memoryPreferences.get(key) || window.localStorage.getItem(key) || '{}' }
+  catch { return memoryPreferences.get(key) || '{}' }
 }
 
-type ProfileSummary = {
-  nombre: string | null
-  apellido: string | null
-  email: string | null
-  rol: string | null
-  avatar_url: string | null
-}
-
-export default function Sidebar({ role: profileRole }: SidebarProps) {
+export default function Sidebar({ role }: { role?: string }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [currentRole, setCurrentRole] = useState<string | null>(profileRole ?? null)
-  const [profile, setProfile] = useState<ProfileSummary | null>(null)
-  const [unreadCount, setUnreadCount] = useState(0)
+  const { profile, user } = useUser()
+  const currentRole = profile?.rol ?? role
+  const navId = useId()
+  const [unread, setUnread] = useState({ userId: '', count: 0 })
+  const unreadCount = unread.userId === user?.id ? unread.count : 0
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [collapsedActivePath, setCollapsedActivePath] = useState<string | null>(null)
+  const preferenceKey = 'forwarders:sidebar:' + (user?.id || 'anonymous') + ':' + currentRole
+  const preferenceValue = useSyncExternalStore(subscribePreferences, () => readPreferences(preferenceKey), () => '{}')
+  let collapsed: Record<string, boolean> = {}
+  try {
+    const parsed: unknown = JSON.parse(preferenceValue)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) collapsed = parsed as Record<string, boolean>
+  } catch { /* Ignore an obsolete or invalid preference. */ }
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
+    setLoggingOut(true)
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      router.push('/login')
+    } catch { toast.error('No se pudo cerrar la sesión. Intenta nuevamente.') }
+    finally { setLoggingOut(false) }
   }
 
   useEffect(() => {
-    if (profileRole) {
-      setCurrentRole(profileRole)
-    }
-
-    const fetchRole = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) return
-
-      const profileResult = await supabase
-        .from('profiles')
-        .select('nombre, apellido, email, rol, avatar_url')
-        .eq('id', user.id)
-        .single()
-
-      setProfile(profileResult.data)
-      setCurrentRole(profileResult.data?.rol ?? profileRole ?? null)
-    }
-
-    fetchRole()
-  }, [profileRole])
-
-  useEffect(() => {
+    const userId = user?.id
+    if (!userId) return
     let cancelled = false
-
-    const refreshUnreadCount = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user || cancelled) return
-
-      const { count } = await supabase
-        .from('notifications')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('is_read', false)
-
-      if (!cancelled) setUnreadCount(count ?? 0)
+    let readVersion = 0
+    const refresh = async () => {
+      const version = readVersion
+      const { count, error } = await supabase.from('notifications')
+        .select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('is_read', false)
+      if (!cancelled && !error && version === readVersion) setUnread({ userId, count: count ?? 0 })
     }
-
-    void refreshUnreadCount()
-
-    const onNotificationsRead = () => setUnreadCount(0)
-    window.addEventListener(NOTIFICATIONS_READ_EVENT, onNotificationsRead)
-    return () => {
-      cancelled = true
-      window.removeEventListener(NOTIFICATIONS_READ_EVENT, onNotificationsRead)
-    }
-  }, [pathname])
-
-  const isAdmin = currentRole === 'Admin'
-  const isSales = currentRole === 'Ventas'
-  const isPricing = currentRole === 'Pricing'
-  const isFinance = currentRole === 'Finanzas' || currentRole === 'Contabilidad'
-  const isOperations = currentRole === 'Operaciones'
-
-  const canViewCommercial =
-    isAdmin || isSales || isPricing || isFinance || isOperations
+    void refresh().catch(() => { /* Keep the last successful count on network failure. */ })
+    const onRead = () => { readVersion += 1; setUnread({ userId, count: 0 }) }
+    window.addEventListener(NOTIFICATIONS_READ_EVENT, onRead)
+    return () => { cancelled = true; window.removeEventListener(NOTIFICATIONS_READ_EVENT, onRead) }
+  }, [pathname, user?.id])
 
   const navItems = [
     {
-      label: 'Dashboard',
+      label: 'Inicio',
       href: '/dashboard',
       icon: LayoutDashboard,
     },
@@ -166,7 +124,7 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
 
   const costItems = [
     {
-      label: 'Comparativo',
+      label: 'Comparativo de tarifas',
       href: '/pricing-comparison',
       icon: Scale,
     },
@@ -272,12 +230,12 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
       icon: Users,
     },
     {
-      label: 'Activity Center',
+      label: 'Registro de actividad',
       href: '/historico/activity',
       icon: ActivitySquare,
     },
     {
-      label: 'Config. Empresa',
+      label: 'Configuración de empresa',
       href: '/settings/company',
       icon: Building2,
     },
@@ -293,71 +251,38 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
     },
   ]
 
-  const filterVisibleItems = (items: any[]) =>
-    items.filter((item) => canAccessPath(currentRole, item.href))
 
-  const visibleNavItems = filterVisibleItems(navItems)
-  const visibleCostItems = filterVisibleItems(costItems)
-  const visibleFinancialItems = filterVisibleItems(financialItems)
-  const visibleOperationsItems = filterVisibleItems(operationsItems)
-  const visibleMiamiItems = filterVisibleItems(miamiItems)
-  const visibleAdminItems = filterVisibleItems(adminItems)
-  const visiblePurchaseItems = filterVisibleItems(purchaseItems)
-  const displayName = profile?.nombre
-    ? `${profile.nombre} ${profile.apellido || ''}`.trim()
-    : 'Usuario'
+  const generalPaths = ['/dashboard', '/alerts', '/reports']
+  const groups = [
+    { id: 'commercial', label: 'Comercial', items: navItems.filter((item) => ![...generalPaths, '/quotations/new', '/support'].includes(item.href)) },
+    { id: 'pricing', label: 'Pricing', items: costItems },
+    { id: 'operations', label: 'Operaciones', items: operationsItems },
+    { id: 'miami', label: 'Bodega Miami', items: miamiItems },
+    { id: 'finance', label: 'Finanzas', items: [...financialItems, ...purchaseItems] },
+    { id: 'admin', label: 'Administración', items: adminItems },
+  ].map((group) => ({ ...group, items: group.items.filter((item) => canAccessPath(currentRole, item.href)) }))
+    .filter((group) => group.items.length)
+    .sort((a, b) => sidebarGroupOrder(currentRole).indexOf(a.id) - sidebarGroupOrder(currentRole).indexOf(b.id))
+  const displayName = profile?.nombre ? [profile.nombre, profile.apellido].filter(Boolean).join(' ') : 'Usuario'
 
-  const renderItem = (item: any) => {
+  const renderItem = (item: NavItem) => {
     const Icon = item.icon
-    const isActive = item.exact
-      ? pathname === item.href
-      : pathname === item.href || pathname.startsWith(item.href + '/')
-    const isAlerts = item.href === '/alerts'
-    const showBadge = isAlerts && unreadCount > 0
-
+    const active = isSidebarItemActive(pathname, item.href, item.exact)
     return (
-      <Link
-        key={item.href}
-        href={item.href}
-        className={`group relative flex items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5 text-sm font-medium transition-all duration-300 ${
-          isActive
-            ? 'border-white/15 bg-white/[0.075] text-white shadow-md shadow-[#0038BD]/10'
-            : 'border-transparent text-slate-300 hover:-translate-y-0.5 hover:border-white/10 hover:bg-white/[0.06] hover:text-white hover:shadow-lg hover:shadow-[#0038BD]/5'
-        }`}
-      >
-        {isActive && (
-          <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-gradient-to-b from-[#0038BD] to-[#EF8E01]" />
-        )}
-        <span
-          className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition ${
-            isActive
-              ? 'bg-white/10 text-[#EF8E01]'
-              : 'bg-white/[0.03] text-slate-400 group-hover:bg-white/10 group-hover:text-[#EF8E01]'
-          }`}
-        >
-          <Icon size={17} />
-          {showBadge && (
-            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </span>
-        <span className="relative z-10 flex-1 truncate">{item.label}</span>
-        {showBadge && (
-          <span className="ml-auto shrink-0 rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-300">
-            {unreadCount}
-          </span>
-        )}
+      <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined}
+        className={'group relative flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400 ' + (active ? 'border-white/15 bg-white/10 text-white' : 'border-transparent text-slate-300 hover:bg-white/[0.06] hover:text-white')}>
+        {active && <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-gradient-to-b from-[#0038BD] to-[#EF8E01]" />}
+        <Icon aria-hidden="true" size={17} className={'shrink-0 ' + (active ? 'text-[#EF8E01]' : 'text-slate-400')} />
+        <span className="min-w-0 flex-1">{item.label}</span>
+        {item.href === '/alerts' && unreadCount > 0 && <span title="Notificaciones sin leer" aria-label={unreadCount + ' notificaciones sin leer'} className="shrink-0 rounded-full bg-rose-500/20 px-1.5 py-0.5 text-xs text-rose-200">{unreadCount > 99 ? '99+' : unreadCount}</span>}
       </Link>
     )
   }
 
   return (
-    <aside className="relative flex h-full min-h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#07111F] text-white shadow-2xl shadow-slate-950/20">
+    <aside aria-label="Navegación principal" className="relative flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#07111F] text-white shadow-2xl">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,56,189,0.24),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(239,142,1,0.16),transparent_32%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:28px_28px] opacity-40 [mask-image:linear-gradient(to_bottom,white,transparent_88%)]" />
-
-      <div className="relative mb-6 border-b border-white/10 px-4 pb-5 pt-5">
+      <div className="relative shrink-0 border-b border-white/10 px-4 pb-3 pt-3">
         <Link
           href="/dashboard"
           className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-lg shadow-slate-950/10 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.09]"
@@ -383,126 +308,44 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
         </Link>
       </div>
 
-      <div className="relative flex-1 overflow-y-auto pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {canViewCommercial && visibleNavItems.length > 0 && (
-          <nav className="space-y-1 px-4">
-            <div className="mb-2 flex items-center gap-2 px-3">
-              <span className="h-px flex-1 bg-white/10" />
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                Comercial
-              </p>
-            </div>
 
-            {visibleNavItems.map(renderItem)}
-          </nav>
+      <nav aria-label="Módulos" className="relative min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3 [scrollbar-width:thin]">
+        {canAccessPath(currentRole, '/quotations/new') && (
+          <Link href="/quotations/new" aria-current={pathname === '/quotations/new' ? 'page' : undefined} className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-[#0038BD] px-3 py-3 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400">
+            <Plus size={17} aria-hidden="true" /> Nueva cotización
+          </Link>
         )}
-
-      {(visibleCostItems.length > 0 ||
-        visibleFinancialItems.length > 0 ||
-        visiblePurchaseItems.length > 0 ||
-        visibleOperationsItems.length > 0) && (
-        <div className="mt-8 px-4">
-          {visibleCostItems.length > 0 && (
-            <>
-              <div className="mb-2 flex items-center gap-2 px-3">
-                <span className="h-px flex-1 bg-white/10" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  Pricing
-                </p>
-              </div>
-
-              <nav className="space-y-1">
-                {visibleCostItems.map(renderItem)}
-              </nav>
-            </>
-          )}
-
-          {visibleFinancialItems.length > 0 && (
-            <>
-              <div className="mb-2 mt-6 flex items-center gap-2 px-3">
-                <span className="h-px flex-1 bg-white/10" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  Finanzas
-                </p>
-              </div>
-
-              <nav className="space-y-1">
-                {visibleFinancialItems.map(renderItem)}
-              </nav>
-            </>
-          )}
-
-          {visiblePurchaseItems.length > 0 && (
-            <>
-              <div className="mb-2 mt-6 flex items-center gap-2 px-3">
-                <span className="h-px flex-1 bg-white/10" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  Compras
-                </p>
-              </div>
-
-              <nav className="space-y-1">
-                {visiblePurchaseItems.map(renderItem)}
-              </nav>
-            </>
-          )}
-
-          {visibleOperationsItems.length > 0 && (
-            <>
-              <div className="mb-2 mt-6 flex items-center gap-2 px-3">
-                <span className="h-px flex-1 bg-white/10" />
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  Operaciones
-                </p>
-              </div>
-
-              <nav className="space-y-1">
-                {visibleOperationsItems.map(renderItem)}
-              </nav>
-            </>
-          )}
-        </div>
-      )}
-
-      {visibleMiamiItems.length > 0 && (
-        <div className="mt-8 px-4">
-          <div className="mb-2 flex items-center gap-2 px-3">
-            <span className="h-px flex-1 bg-white/10" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-              Miami Bodega
-            </p>
+        <div className="space-y-1">{navItems.filter((item) => generalPaths.includes(item.href) && canAccessPath(currentRole, item.href)).map(renderItem)}</div>
+        {groups.map((group, index) => {
+          const active = group.items.some((item: NavItem) => isSidebarItemActive(pathname, item.href, item.exact))
+          const open = active ? collapsedActivePath !== pathname : !(collapsed[group.id] ?? index > 0)
+          const id = navId + '-' + group.id
+          return <div key={group.id}>
+            <button type="button" aria-expanded={open} aria-controls={id} onClick={() => {
+              if (active) setCollapsedActivePath(open ? pathname : null)
+              const value = JSON.stringify({ ...collapsed, [group.id]: open })
+              memoryPreferences.set(preferenceKey, value)
+              try { window.localStorage.setItem(preferenceKey, value) } catch { /* Preferences remain available for this session. */ }
+              window.dispatchEvent(new Event(preferenceEvent))
+            }} className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold tracking-wide text-slate-400 hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-orange-400">
+              {group.label}<ChevronDown size={14} aria-hidden="true" className={open ? '' : '-rotate-90'} />
+            </button>
+            <div id={id} hidden={!open} className="space-y-1">{group.items.map(renderItem)}</div>
           </div>
-
-          <nav className="space-y-1">
-            {visibleMiamiItems.map(renderItem)}
-          </nav>
-        </div>
-      )}
-
-      {visibleAdminItems.length > 0 && (
-        <div className="mt-8 px-4">
-          <div className="mb-2 flex items-center gap-2 px-3">
-            <span className="h-px flex-1 bg-white/10" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-              Administración
-            </p>
-          </div>
-
-          <nav className="space-y-1">
-            {visibleAdminItems.map(renderItem)}
-          </nav>
-        </div>
-      )}
-
-      </div>
-
-      <div className="relative border-t border-white/10 bg-[#07111F]/65 p-4 backdrop-blur-xl">
+        })}
+      </nav>
+      <div className="relative shrink-0 border-t border-white/10 bg-[#07111F]/65 p-3 backdrop-blur-xl">
+        {canAccessPath(currentRole, '/support') && renderItem({ label: 'Mesa de ayuda', href: '/support', icon: LifeBuoy })}
         <Link
           href="/profile"
+          aria-current={pathname === '/profile' ? 'page' : undefined}
           className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] p-3 shadow-sm shadow-slate-950/10 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.085] hover:shadow-lg hover:shadow-[#0038BD]/10"
         >
           {profile?.avatar_url ? (
-            <img
+            <Image
+              width={36}
+              height={36}
+              unoptimized
               src={profile.avatar_url}
               alt={displayName}
               className="h-9 w-9 rounded-full object-cover"
@@ -518,17 +361,18 @@ export default function Sidebar({ role: profileRole }: SidebarProps) {
               {displayName}
             </p>
             <p className="text-xs text-slate-400">
-              {currentRole || 'Ventas'}
+              {currentRole || 'Usuario'}
             </p>
           </div>
         </Link>
 
         <button
           onClick={handleLogout}
+          disabled={loggingOut}
           className="mt-3 flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/10 hover:bg-white/[0.06] hover:text-white"
         >
           <LogOut className="h-4 w-4" />
-          Cerrar sesión
+          {loggingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}
         </button>
       </div>
     </aside>
