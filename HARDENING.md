@@ -6610,3 +6610,77 @@ Agregar una entrada por fix:
   - Se conservan los pendientes de UAT/RLS y la deuda histórica de lint anteriores.
     La publicación no sustituye una prueba autenticada de los flujos comerciales.
 - Commit de implementación: `898e38a`. Resultado de publicación en commit documental posterior.
+
+### 2026-09-14 — REP-011 / UX-REP-01 — Consulta y exportación de reportes
+
+- Estado: implementado y validado con pruebas locales, navegador simulado y
+  compilación definitiva. UAT autenticado y publicación pendientes.
+- Hallazgos: Vencidas heredaba el mes actual y ocultaba deudas anteriores; errores
+  de consulta terminaban como datos vacíos, los SELECT no recorrían todas las
+  páginas y la tabla estaba limitada a 120 filas. Filtros mezclaban estados y
+  campos de distintos módulos; indicadores operativos mostraban un monto sin base.
+- Archivos: `src/app/(protected)/reports/page.tsx`, `src/lib/report-query.ts`,
+  `src/lib/report-view.ts`, `src/components/ui/Pagination.tsx`,
+  `tests/reports.test.mjs`, `HARDENING.md`.
+- SQL: no aplica. Se conservan fuentes financieras canónicas y RPC de readiness;
+  no se modifican permisos, RLS, snapshots, facturas, pagos ni estados de negocio.
+- Cambios:
+  - Lectura paginada por fuente con orden estable y desempate por ID. Avanza por
+    la cantidad realmente recibida hasta una página vacía, incluso si el servidor
+    limita las respuestas por debajo del tamaño solicitado. Detecta IDs repetidos.
+  - Carga solamente las fuentes del reporte seleccionado. Errores persistentes
+    con reintento, descarte de cargas obsoletas y aislamiento por usuario/rol.
+    Importes y exportación bloqueados hasta completar todas sus dependencias.
+  - Vencidas abre con todas las fechas; aclara que muestra saldos actuales, no una
+    reconstrucción histórica. Cada reporte indica su fecha de filtrado. Trimestre
+    corresponde al trimestre calendario hasta hoy; validación de rangos invertidos.
+  - Estados derivados del reporte y filtros aplicables al módulo; los parámetros
+    de campos ajenos se ignoran. Selección inicial por rol, grupos por área y
+    selector móvil. Fechas, filtros, búsqueda, página y orden se conservan en URL;
+    al cambiar de reporte se recuerda su selección durante la visita.
+  - Búsqueda, orden numérico/monetario y cronológico, paginación 25/50/100 y enlaces
+    al documento original condicionados a permisos. Totales sobre todas las filas
+    filtradas; CSV/PDF incluyen todas, independientemente de la página visible.
+  - Indicadores propios para operaciones y preparación de embarques, sin montos
+    ficticios. Comercial usa Venta cotizada, Utilidad cotizada y Margen global;
+    se mantiene la separación de monedas y la fuente de importes existente.
+  - Exportaciones con etiquetas visibles y PDF generado a petición. Apertura de
+    pestaña asociada al clic, alternativa de descarga y mensajes de error. CSV
+    con BOM UTF-8, campos entrecomillados y neutralización de fórmulas de planilla.
+  - Filtros plegables en móvil, tablas con scroll propio y paginación adaptable.
+    Botones y selector de la paginación compartida reciben nombres accesibles.
+- Validaciones:
+  - `npm.cmd test`: 45/45. Ocho pruebas nuevas cubren lectura completa con límite
+    menor, error en página posterior, duplicados/respuestas obsoletas, deuda
+    anterior, trimestre calendario, filtros/URL/permisos, CSV y orden por valores.
+  - ESLint dirigido a los cinco archivos de código/pruebas: sin errores ni avisos.
+  - Navegador Chrome con 1,302 cotizaciones simuladas y API limitada a 100 filas:
+    total USD 130,200.00, 1,302 filas en CSV, búsqueda de la última cotización,
+    tamaño de página, persistencia de filtros entre reportes y al recargar URL.
+  - Navegador: Vencidas incluye CxC/CxP de agosto; USD y HNL separados; campos de
+    pago solo donde aplican; indicadores operativos; enlaces al documento; fallo
+    en la segunda página sin exportación parcial ni ceros falsos y reintento.
+  - Navegador en 1440/768/390/320 px sin overflow del documento o main. Revisión
+    visual en escritorio/móvil y oscuro; filtros móviles expanden/colapsan.
+    Se corrigió un desbordamiento de los controles de paginación a 320 px.
+  - PDF generado efectivamente con fixture de una fila: 7,109 bytes y cabecera PDF
+    válida; rango invertido bloquea exportaciones. Sin excepciones en las pruebas
+    finales y sin peticiones a Supabase real ni mutaciones de datos remotos.
+  - Caché local de Turbopack invalidaba una ruta temporal antigua; se limpió y
+    se repitieron las pruebas correctamente. Harness retirado; evidencias locales
+    ignoradas en `.ua/intermediate`. Caché de desarrollo retirada antes del build.
+  - `npx.cmd tsc --noEmit`: OK tras retirar la ruta de revisión y su caché.
+  - `npm.cmd run build`: OK, 72/72 páginas; ruta temporal ausente del build.
+  - `git diff --check`: OK.
+- Riesgos y pendientes:
+  - UAT autenticado por rol y RLS real, enlaces completos a destinos, revisión de
+    PDF con tablas anchas y grandes volúmenes, compatibilidad CSV con Excel y
+    conciliación con datos reales. Los fixtures no certifican estos flujos.
+  - Los saldos son actuales. El filtro de vencimiento no calcula saldos históricos.
+    Consultas paginadas no son un snapshot transaccional entre múltiples tablas;
+    conviene actualizar tras cambios concurrentes. Validar rendimiento/memoria
+    de reportes muy grandes y de exportaciones PDF extensas.
+  - Nombres de cliente/vendedor y cálculos financieros mantienen sus fuentes
+    existentes; no se introduce conversión de monedas ni se recalculan documentos.
+- Commit: pendiente de asignación. Commit y despliegue autorizados por el usuario;
+  resultado de publicación pendiente de verificar.

@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PDFDownloadLink, pdf } from '@react-pdf/renderer'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { pdf } from '@react-pdf/renderer'
 import {
   BarChart3,
-  CalendarDays,
   Download,
   FileDown,
   Filter,
@@ -12,7 +13,11 @@ import {
   RefreshCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { toDateInputValue } from '@/src/lib/format'
+import { calendarDaysUntil, formatDate, formatDateTime, toDateInputValue } from '@/src/lib/format'
+import { canAccessPath } from '@/src/lib/permissions'
+import { Pagination } from '@/src/components/ui/Pagination'
+import { readAllReportRows } from '@/src/lib/report-query'
+import { defaultReportView, readReportView, reportCsvCell, reportDateBasis, reportDateMatches, reportDateRange, reportRangeLabel, reportSortValue, reportViewQuery, type ReportView, type ReportId, type DatePreset } from '@/src/lib/report-view'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
@@ -30,9 +35,6 @@ import {
   type StructuredBillOfLading,
 } from '@/src/lib/booking-document-summary'
 
-type ReportId = 'commercial' | 'pricing' | 'operations' | 'billing' | 'customer_payments' | 'receivable' | 'payable' | 'overdue' | 'supplier_payments'
-type DatePreset = 'month' | 'quarter' | 'year' | 'all' | 'custom'
-type OperationsGranularity = 'operations' | 'bookings' | 'readiness'
 
 type Join<T> = T | T[] | null
 
@@ -71,6 +73,7 @@ type ShipmentRow = {
   shipment_number: string
   operational_status: string | null
   created_at: string | null
+  shipping_instruction: Join<{ id: string }>
   bookings: Array<{
     id: string
     shipment_status: string | null
@@ -94,6 +97,7 @@ type ShipmentRow = {
 
 type BookingRow = {
   id: string
+  shipping_instruction_id: string | null
   shipment_id: string | null
   booking_number: string | null
   carrier_booking: string | null
@@ -212,6 +216,7 @@ type ReceivableRow = {
 
 type ProveedorPaymentRow = {
   id: string
+  cuenta_pagar_id: string | null
   monto: number | string
   moneda: string
   fecha_pago: string | null
@@ -237,6 +242,7 @@ type PayableRow = {
 }
 
 type ReportRow = ReportPdfRow & {
+  __href?: string
   __date?: string
   __client?: string
   __seller?: string
@@ -257,9 +263,9 @@ type ReportRow = ReportPdfRow & {
 }
 
 const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[] = [
-  { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones, ventas, GP y vendedores', roles: ['Admin', 'Ventas', 'Pricing'] },
+  { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones por estado actual, venta cotizada y utilidad; no equivale a facturación', roles: ['Admin', 'Ventas', 'Pricing'] },
   { id: 'pricing', label: 'Pricing', scope: 'Entradas, aprobaciones, pendientes al cierre y tiempos de respuesta', roles: ['Admin', 'Pricing'] },
-  { id: 'operations', label: 'Cargas', scope: 'Shipping instructions, bookings, carrier y ETA', roles: ['Admin', 'Operaciones'] },
+  { id: 'operations', label: 'Operaciones', scope: 'Shipping instructions, bookings, carrier y ETA', roles: ['Admin', 'Operaciones'] },
   { id: 'billing', label: 'Facturación', scope: 'Documentos, condiciones de pago, ajustes, cobros y saldos', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'customer_payments', label: 'Pagos de clientes', scope: 'Cobros por forma de pago, referencia, tipo fiscal y punto de venta', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'receivable', label: 'Cuentas por cobrar', scope: 'Facturas enviadas/aprobadas/vencidas pendientes', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
@@ -268,9 +274,8 @@ const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[]
   { id: 'supplier_payments', label: 'Pagos a Proveedores', scope: 'Pagos por proveedor/tipo: mensual, trimestral, anual', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
 ]
 
-const STATUS_OPTIONS = ['Todos', 'Pendiente de Fijar Precios', 'Pricing Aprobado', 'Enviada al Cliente', 'Ganada', 'Perdida', 'Pendiente', 'Parcialmente Pagada', 'Pagada', 'Vencida', 'Enviada', 'Aprobada', 'Anulada', 'Aplicado', 'Reversado']
 const ALL = 'Todos'
-const actionIconButtonClass = 'flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800'
+const actionIconButtonClass = 'inline-flex min-h-10 items-center justify-center gap-2 px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800'
 
 function resolveJoin<T>(value: Join<T> | undefined): T | null {
   if (!value) return null
@@ -281,13 +286,7 @@ function fmtMoney(value: number, currency = 'USD') {
   return `${currency} ${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function fmtDate(value?: string | null) {
-  if (!value) return '-'
-  const datePart = value.slice(0, 10)
-  const [year, month, day] = datePart.split('-')
-  if (!year || !month || !day) return '-'
-  return `${day}/${month}/${year}`
-}
+const fmtDate = formatDate
 
 function paymentConditionLabel(condition?: string | null, creditDays?: number | null) {
   if (!condition) return '-'
@@ -315,11 +314,7 @@ function guatemalaDateKey(value: string) {
 }
 
 function daysOverdue(value?: string | null) {
-  if (!value) return 0
-  const due = new Date(value.slice(0, 10) + 'T00:00:00')
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return Math.max(0, Math.floor((today.getTime() - due.getTime()) / 86400000))
+  return Math.max(0, -(calendarDaysUntil(value) ?? 0))
 }
 
 function clientName(value: Join<ClientJoin> | undefined) {
@@ -358,13 +353,13 @@ function exportCSV(rows: ReportRow[], columns: ReportPdfColumn[], filename: stri
   }
 
   const csv = [
-    columns.map((c) => c.label).join(','),
+    columns.map((c) => reportCsvCell(c.label)).join(','),
     ...rows.map((row) =>
-      columns.map((column) => `"${String(row[column.key] ?? '').replace(/"/g, '""')}"`).join(',')
+      columns.map((column) => reportCsvCell(row[column.key])).join(','),
     ),
   ].join('\n')
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -373,22 +368,7 @@ function exportCSV(rows: ReportRow[], columns: ReportPdfColumn[], filename: stri
   URL.revokeObjectURL(url)
 }
 
-function presetRange(preset: Exclude<DatePreset, 'custom'>) {
-  const now = new Date()
-  const to = toDateInputValue(now)
-
-  if (preset === 'month') {
-    return { from: toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)), to }
-  }
-  if (preset === 'quarter') {
-    return { from: toDateInputValue(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to }
-  }
-  if (preset === 'year') {
-    return { from: `${now.getFullYear()}-01-01`, to }
-  }
-
-  return { from: '', to: '' }
-}
+const presetRange = reportDateRange
 
 function resolveDatePreset(dateFrom: string, dateTo: string): DatePreset {
   const presets: Exclude<DatePreset, 'custom'>[] = ['month', 'quarter', 'year', 'all']
@@ -400,30 +380,44 @@ function resolveDatePreset(dateFrom: string, dateTo: string): DatePreset {
   return match || 'custom'
 }
 
-function applyPreset(setDateFrom: (v: string) => void, setDateTo: (v: string) => void, preset: Exclude<DatePreset, 'custom'>) {
-  const range = presetRange(preset)
-  setDateFrom(range.from)
-  setDateTo(range.to)
+export default function ReportsPage() {
+  const { user, profile } = useUser()
+  return <ReportsContent key={(user?.id || '') + ':' + profile?.rol} />
 }
 
-export default function ReportsPage() {
+function ReportsContent() {
   const { profile, loading: userLoading } = useUser()
   const role = profile?.rol || ''
-  const today = new Date()
-  const [activeReport, setActiveReport] = useState<ReportId>('commercial')
-  const [operationsGranularity, setOperationsGranularity] =
-    useState<OperationsGranularity>('operations')
-  const [dateFrom, setDateFrom] = useState(toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)))
-  const [dateTo, setDateTo] = useState(toDateInputValue(today))
-  const [clientFilter, setClientFilter] = useState(ALL)
-  const [sellerFilter, setSellerFilter] = useState(ALL)
-  const [serviceFilter, setServiceFilter] = useState(ALL)
-  const [statusFilter, setStatusFilter] = useState(ALL)
-  const [currencyFilter, setCurrencyFilter] = useState(ALL)
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState(ALL)
-  const [fiscalTypeFilter, setFiscalTypeFilter] = useState(ALL)
-  const [pointOfSaleFilter, setPointOfSaleFilter] = useState(ALL)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const availableReports = useMemo(() => {
+    const allowed = REPORTS.filter((report) => report.roles.includes(role))
+    const preferred = role === 'Pricing' ? 'pricing' : role === 'Operaciones' ? 'operations' : role === 'Finanzas' || role === 'Contabilidad' ? 'billing' : 'commercial'
+    return [...allowed.filter((report) => report.id === preferred), ...allowed.filter((report) => report.id !== preferred)]
+  }, [role])
+  const view = readReportView(searchParams, availableReports.map((report) => report.id))
+  const { report: activeReport, level: operationsGranularity, from: dateFrom, to: dateTo,
+    client: clientFilter, seller: sellerFilter, service: serviceFilter, status: statusFilter,
+    currency: currencyFilter, method: paymentMethodFilter, fiscal: fiscalTypeFilter, pos: pointOfSaleFilter } = view
+  const savedViews = useRef(new Map<ReportId, ReportView>())
+  const updateView = (patch: Partial<ReportView>) => {
+    // Pagination may change page size and page in the same event.
+    const current = readReportView(new URLSearchParams(window.location.search), availableReports.map((report) => report.id))
+    const next = { ...current, ...patch, page: patch.page ?? 1 }
+    window.history.replaceState(null, '', pathname + '?' + reportViewQuery(next))
+  }
+  const selectReport = (report: ReportId) => {
+    savedViews.current.set(activeReport, view)
+    updateView(savedViews.current.get(report) || defaultReportView(report))
+  }
   const [loading, setLoading] = useState(true)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadedFor, setLoadedFor] = useState('')
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null)
+  const loadVersion = useRef(0)
+  const contextKey = activeReport + ':' + operationsGranularity
+  const invalidRange = Boolean(dateFrom && dateTo && dateFrom > dateTo)
 
   const [quotations, setQuotations] = useState<QuotationRow[]>([])
   const [pricingHistory, setPricingHistory] = useState<PricingHistoryRow[]>([])
@@ -439,57 +433,20 @@ export default function ReportsPage() {
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
 
-  const availableReports = useMemo(
-    () => REPORTS.filter((report) => report.roles.includes(role)),
-    [role]
-  )
-
-  useEffect(() => {
-    if (userLoading) return
-    if (availableReports.length > 0 && !availableReports.some((r) => r.id === activeReport)) {
-      const timeout = window.setTimeout(() => setActiveReport(availableReports[0].id), 0)
-      return () => window.clearTimeout(timeout)
-    }
-  }, [activeReport, availableReports, userLoading])
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setClientFilter(ALL)
-      setSellerFilter(ALL)
-      setServiceFilter(ALL)
-      setStatusFilter(ALL)
-      setCurrencyFilter(ALL)
-      setPaymentMethodFilter(ALL)
-      setFiscalTypeFilter(ALL)
-      setPointOfSaleFilter(ALL)
-    }, 0)
-    return () => window.clearTimeout(timeout)
-  }, [activeReport])
-
   const loadReports = useCallback(async () => {
-    if (!role) return
+    if (!role || !REPORTS.some((report) => report.id === activeReport && report.roles.includes(role))) return
+    const version = ++loadVersion.current
+    const isCurrent = () => loadVersion.current === version
     setLoading(true)
-
-    const wantsCommercial = role === 'Admin' || role === 'Ventas' || role === 'Pricing'
-    const wantsOperations = role === 'Admin' || role === 'Operaciones'
-    const wantsFinance = role === 'Admin' || role === 'Finanzas' || role === 'Contabilidad'
-
-    const tasks: PromiseLike<void>[] = []
-
-    tasks.push(
-      supabase
-        .from('company_settings')
-        .select(COMPANY_BRANDING_SELECT)
-        .limit(1)
-        .maybeSingle()
-        .then(({ data }) => {
-          setCompanyBranding(normalizeCompanyBranding(data))
-        })
-    )
-
-    if (wantsCommercial) {
-      tasks.push(
-        supabase
+    setLoadError(null)
+    try {
+      const tasks: PromiseLike<void>[] = []
+      tasks.push(supabase.from('company_settings').select(COMPANY_BRANDING_SELECT).limit(1).maybeSingle().then(({ data, error }) => {
+        if (error) throw new Error('No se pudo cargar la configuración del reporte. Reintenta la consulta.')
+        if (isCurrent()) setCompanyBranding(normalizeCompanyBranding(data))
+      }))
+      if (activeReport === 'pricing') tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('quotation_status_history')
           .select(`
             id,
@@ -518,14 +475,11 @@ export default function ReportsPage() {
             )
           `)
           .in('new_status', ['Pendiente de Fijar Precios', 'Pricing Aprobado', 'Perdida'])
-          .order('created_at', { ascending: true })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudo cargar el historial de Pricing')
-            setPricingHistory((data || []) as unknown as PricingHistoryRow[])
-          })
+          .order('created_at', { ascending: true }).order('id').range(from, to), { label: 'historial de Pricing', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setPricingHistory(data as unknown as PricingHistoryRow[]) })
       )
-      tasks.push(
-        supabase
+      if (activeReport === 'commercial') tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('quotations')
           .select(`
             id,
@@ -542,17 +496,11 @@ export default function ReportsPage() {
             created_by_profile:profiles!quotations_created_by_fkey ( id, nombre, apellido, email )
           `)
           .is('deleted_at', null)
-          .order('created_at', { ascending: false })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudieron cargar cotizaciones')
-            setQuotations((data || []) as unknown as QuotationRow[])
-          })
+          .order('created_at', { ascending: false }).order('id').range(from, to), { label: 'cotizaciones', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setQuotations(data as unknown as QuotationRow[]) })
       )
-    }
-
-    if (wantsOperations) {
-      tasks.push(
-        supabase
+      if (activeReport === 'operations' && operationsGranularity === 'operations') tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('shipments')
           .select(`
             id,
@@ -560,7 +508,7 @@ export default function ReportsPage() {
             operational_status,
             created_at,
             shipping_instruction:shipping_instructions!inner (
-              deleted_at
+              id, deleted_at
             ),
             bookings (
               id,
@@ -583,18 +531,16 @@ export default function ReportsPage() {
             )
           `)
           .is('shipping_instruction.deleted_at', null)
-          .order('created_at', { ascending: false })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudieron cargar cargas')
-            setShipments((data || []) as unknown as ShipmentRow[])
-          })
+          .order('created_at', { ascending: false }).order('id').range(from, to), { label: 'operaciones', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setShipments(data as unknown as ShipmentRow[]) })
       )
-      tasks.push(
-        supabase
+      if (activeReport === 'operations' && operationsGranularity !== 'operations') tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('bookings')
           .select(`
             id,
             shipment_id,
+            shipping_instruction_id,
             booking_number,
             carrier_booking,
             master_bl,
@@ -636,33 +582,22 @@ export default function ReportsPage() {
               created_at
             )
           `)
-          .order('created_at', { ascending: false })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudieron cargar bookings')
-            setBookings((data || []) as unknown as BookingRow[])
-          })
+          .order('created_at', { ascending: false }).order('id').range(from, to), { label: 'bookings', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setBookings(data as unknown as BookingRow[]) })
       )
-      tasks.push(
-        supabase.rpc('get_booking_readiness_report_v1').then(({ data, error }) => {
-          if (error) toast.error('No se pudo cargar readiness operativo')
-          setBookingReadiness((data || []) as BookingReadinessReportRow[])
-        })
+      if (activeReport === 'operations' && operationsGranularity === 'readiness') tasks.push(
+        readAllReportRows((from, to) => supabase.rpc('get_booking_readiness_report_v1').order('booking_id').range(from, to), { label: 'preparación de embarques', key: 'booking_id', isCurrent })
+          .then((data) => { if (isCurrent()) setBookingReadiness(data as unknown as BookingReadinessReportRow[]) })
       )
-    }
-
-    if (wantsFinance) {
-      tasks.push(
-        supabase
+      if (['billing', 'receivable', 'overdue'].includes(activeReport)) tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('invoice_receivables')
           .select('*')
-          .order('due_date', { ascending: true, nullsFirst: false })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudieron cargar cuentas por cobrar')
-            setReceivables((data || []) as ReceivableRow[])
-          })
+          .order('due_date', { ascending: true, nullsFirst: false }).order('invoice_id').range(from, to), { label: 'cuentas por cobrar', key: 'invoice_id', isCurrent })
+          .then((data) => { if (isCurrent()) setReceivables(data as unknown as ReceivableRow[]) })
       )
-      tasks.push(
-        supabase
+      if (['billing', 'receivable'].includes(activeReport)) tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('invoices')
           .select(`
             id, invoice_number, invoice_type, status,
@@ -675,14 +610,11 @@ export default function ReportsPage() {
             )
           `)
           .is('deleted_at', null)
-          .order('issue_date', { ascending: false })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudieron cargar facturas')
-            setInvoices((data || []) as unknown as InvoiceRow[])
-          })
+          .order('issue_date', { ascending: false }).order('id').range(from, to), { label: 'facturas', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setInvoices(data as unknown as InvoiceRow[]) })
       )
-      tasks.push(
-        supabase
+      if (['billing', 'customer_payments'].includes(activeReport)) tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('invoice_payments')
           .select(`
             id, invoice_id, amount, currency, payment_date, payment_method,
@@ -693,48 +625,44 @@ export default function ReportsPage() {
               payment_condition, credit_days
             )
           `)
-          .order('payment_date', { ascending: false })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudieron cargar pagos de clientes')
-            setCustomerPayments((data || []) as unknown as CustomerPaymentRow[])
-          })
+          .order('payment_date', { ascending: false }).order('id').range(from, to), { label: 'pagos de clientes', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setCustomerPayments(data as unknown as CustomerPaymentRow[]) })
       )
-      tasks.push(
-        supabase
+      if (['payable', 'overdue'].includes(activeReport)) tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('cuentas_pagar')
           .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, pagos_proveedor(monto, fecha_pago), proveedores(id, nombre, tipo), quotations(quotation_number)')
-          .order('fecha_vencimiento', { ascending: true })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudieron cargar cuentas por pagar')
-            setPayables((data || []) as unknown as PayableRow[])
-          })
+          .order('fecha_vencimiento', { ascending: true }).order('id').range(from, to), { label: 'cuentas por pagar', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setPayables(data as unknown as PayableRow[]) })
       )
-      tasks.push(
-        supabase
+      if (activeReport === 'supplier_payments') tasks.push(
+        readAllReportRows((from, to) => supabase
           .from('pagos_proveedor')
           .select(`
-            id, monto, moneda, fecha_pago, metodo_pago,
+            id, cuenta_pagar_id, monto, moneda, fecha_pago, metodo_pago,
             cuentas_pagar(
               descripcion,
               proveedores(nombre, tipo)
             )
           `)
-          .order('fecha_pago', { ascending: false })
-          .then(({ data, error }) => {
-            if (error) toast.error('No se pudieron cargar pagos a proveedores')
-            setProveedorPayments((data || []) as unknown as ProveedorPaymentRow[])
-          })
+          .order('fecha_pago', { ascending: false }).order('id').range(from, to), { label: 'pagos a proveedores', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setProveedorPayments(data as unknown as ProveedorPaymentRow[]) })
       )
+      await Promise.all(tasks)
+      if (isCurrent()) { setLoadedFor(contextKey); setLoadedAt(new Date()); setLoading(false) }
+    } catch (error) {
+      if (isCurrent()) {
+        loadVersion.current += 1
+        setLoadError(error instanceof Error ? error.message : 'No se pudo completar la consulta. Reintenta el reporte.')
+        setLoading(false)
+      }
     }
-
-    await Promise.all(tasks)
-    setLoading(false)
-  }, [role])
+  }, [role, activeReport, operationsGranularity, contextKey])
 
   useEffect(() => {
     if (userLoading) return
     const timeout = window.setTimeout(() => { void loadReports() }, 0)
-    return () => window.clearTimeout(timeout)
+    return () => { window.clearTimeout(timeout); loadVersion.current += 1 }
   }, [loadReports, userLoading])
 
   const reportConfig = REPORTS.find((report) => report.id === activeReport) || REPORTS[0]
@@ -784,7 +712,7 @@ export default function ReportsPage() {
       })
 
       const rangeFrom = dateFrom || '0000-01-01'
-      const rangeTo = dateTo || new Date().toISOString().slice(0, 10)
+      const rangeTo = dateTo || toDateInputValue(new Date())
 
       return cycles.flatMap((cycle, index) => {
         const quotation = resolveJoin(cycle.entry.quotation)
@@ -842,6 +770,7 @@ export default function ReportsPage() {
 
         return [{
           __key: `${quotation.id}-${cycle.entry.id}-${index}`,
+          __href: '/pricing-comparison?quotation=' + quotation.id,
           __date: '',
           __client: client,
           __seller: responsible,
@@ -887,7 +816,8 @@ export default function ReportsPage() {
         const gp = sale > 0 ? (profit / sale) * 100 : Number(q.gp_percentage || 0)
         return {
           __key: q.id,
-          __date: q.created_at?.slice(0, 10) || '',
+          __href: role === 'Pricing' ? '/pricing-comparison?quotation=' + q.id : '/quotations/' + q.id,
+          __date: q.created_at ? guatemalaDateKey(q.created_at) : '',
           __client: client,
           __seller: seller,
           __service: service,
@@ -897,7 +827,7 @@ export default function ReportsPage() {
           __cost: cost,
           __gp: profit,
           numero: quoteNumber(q),
-          fecha: fmtDate(q.created_at),
+          fecha: fmtDate(q.created_at ? guatemalaDateKey(q.created_at) : null),
           cliente: client,
           vendedor: seller,
           servicio: service,
@@ -943,13 +873,14 @@ export default function ReportsPage() {
 
           return {
             __key: shipment.id,
-            __date: shipment.created_at?.slice(0, 10) || '',
+            __href: resolveJoin(shipment.shipping_instruction)?.id ? '/operations/shipping-instructions/' + resolveJoin(shipment.shipping_instruction)!.id : '',
+            __date: shipment.created_at ? guatemalaDateKey(shipment.created_at) : '',
             __client: client,
             __seller: seller,
             __service: service,
             __status: status,
             routing: shipment.shipment_number || '-',
-            fecha: fmtDate(shipment.created_at),
+            fecha: fmtDate(shipment.created_at ? guatemalaDateKey(shipment.created_at) : null),
             cliente: client,
             servicio: service,
             bookings: String(operationBookings.length),
@@ -978,7 +909,8 @@ export default function ReportsPage() {
 
           return {
             __key: readiness.booking_id,
-            __date: readiness.next_cutoff?.slice(0, 10) || '',
+            __href: booking?.shipping_instruction_id ? '/operations/shipping-instructions/' + booking.shipping_instruction_id + '/bookings/' + booking.id : '',
+            __date: readiness.next_cutoff ? guatemalaDateKey(readiness.next_cutoff) : '',
             __client: client,
             __seller: seller,
             __service: service,
@@ -1036,7 +968,8 @@ export default function ReportsPage() {
 
         return {
           __key: booking.id,
-          __date: booking.created_at?.slice(0, 10) || '',
+          __href: booking.shipping_instruction_id ? '/operations/shipping-instructions/' + booking.shipping_instruction_id + '/bookings/' + booking.id : '',
+          __date: booking.created_at ? guatemalaDateKey(booking.created_at) : '',
           __client: client,
           __seller: seller,
           __service: service,
@@ -1097,6 +1030,7 @@ export default function ReportsPage() {
         const netAmount = isIssued ? sign * Number(invoice.total || 0) : 0
         return {
           __key: invoice.id,
+          __href: '/invoicing/' + invoice.id,
           __date: invoice.issue_date || '',
           __client: invoice.cliente_nombre || 'Sin cliente',
           __seller: vendedor,
@@ -1144,6 +1078,7 @@ export default function ReportsPage() {
 
         return {
           __key: payment.id,
+          __href: '/invoicing/' + payment.invoice_id,
           __date: payment.payment_date,
           __client: invoice?.cliente_nombre || 'Sin cliente',
           __status: payment.status,
@@ -1180,6 +1115,7 @@ export default function ReportsPage() {
           const invoice = invoiceById.get(receivable.invoice_id)
           return {
           __key: receivable.invoice_id,
+          __href: '/invoicing/' + receivable.invoice_id,
           __date: receivable.due_date || receivable.issue_date || '',
           __client: receivable.cliente_nombre || 'Sin cliente',
           __status: receivable.receivable_status,
@@ -1207,6 +1143,7 @@ export default function ReportsPage() {
         const balance = payableBalance(payable)
         return {
           __key: payable.id,
+          __href: '/accounts-payable/' + payable.id,
           __date: payable.fecha_vencimiento || payable.fecha_factura || '',
           __client: supplier?.nombre || 'Sin proveedor',
           __status: payable.status,
@@ -1234,6 +1171,7 @@ export default function ReportsPage() {
         )
         .map((receivable) => ({
           __key: `ar-${receivable.invoice_id}`,
+          __href: '/invoicing/' + receivable.invoice_id,
           __date: receivable.due_date || '',
           __client: receivable.cliente_nombre || 'Sin cliente',
           __status: receivable.receivable_status,
@@ -1254,6 +1192,7 @@ export default function ReportsPage() {
           const balance = payableBalance(payable)
           return {
             __key: `ap-${payable.id}`,
+            __href: '/accounts-payable/' + payable.id,
             __date: payable.fecha_vencimiento || '',
             __client: supplier?.nombre || 'Sin proveedor',
             __status: payable.status,
@@ -1281,6 +1220,8 @@ export default function ReportsPage() {
         const monto = Number(pago.monto || 0)
         return {
           __key: pago.id,
+          __href: pago.cuenta_pagar_id ? '/accounts-payable/' + pago.cuenta_pagar_id : '',
+          __paymentMethod: paymentMethodLabel(pago.metodo_pago),
           __date: pago.fecha_pago || '',
           __client: proveedor?.nombre || 'Sin proveedor',
           __currency: pago.moneda,
@@ -1297,13 +1238,13 @@ export default function ReportsPage() {
     }
 
     return []
-  }, [activeReport, bookingReadiness, bookings, customerPayments, dateFrom, dateTo, shipments, invoices, operationsGranularity, payables, pricingHistory, proveedorPayments, quotations, receivables])
+  }, [role, activeReport, bookingReadiness, bookings, customerPayments, dateFrom, dateTo, shipments, invoices, operationsGranularity, payables, pricingHistory, proveedorPayments, quotations, receivables])
 
   const rows = useMemo(() => {
     return baseRows.filter((row) => {
       const rowDate = row.__date || ''
-      if (dateFrom && rowDate && rowDate < dateFrom) return false
-      if (dateTo && rowDate && rowDate > dateTo) return false
+      if (activeReport !== 'pricing' && !reportDateMatches(rowDate, dateFrom, dateTo)) return false
+      if (view.search.trim() && !Object.entries(row).some(([key, value]) => !key.startsWith('__') && String(value).toLocaleLowerCase().includes(view.search.trim().toLocaleLowerCase()))) return false
       if (clientFilter !== ALL && row.__client !== clientFilter) return false
       if (sellerFilter !== ALL && row.__seller !== sellerFilter) return false
       if (serviceFilter !== ALL && row.__service !== serviceFilter) return false
@@ -1313,8 +1254,13 @@ export default function ReportsPage() {
       if (fiscalTypeFilter !== ALL && row.__fiscalType !== fiscalTypeFilter) return false
       if (pointOfSaleFilter !== ALL && row.__pointOfSale !== pointOfSaleFilter) return false
       return true
+    }).sort((a, b) => {
+      if (!view.sort) return 0
+      const left = reportSortValue(a[view.sort]), right = reportSortValue(b[view.sort])
+      const result = typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right), 'es', { numeric: true })
+      return (view.direction === 'desc' ? -1 : 1) * result
     })
-  }, [baseRows, clientFilter, currencyFilter, dateFrom, dateTo, fiscalTypeFilter, paymentMethodFilter, pointOfSaleFilter, sellerFilter, serviceFilter, statusFilter])
+  }, [activeReport, view.search, view.sort, view.direction, baseRows, clientFilter, currencyFilter, dateFrom, dateTo, fiscalTypeFilter, paymentMethodFilter, pointOfSaleFilter, sellerFilter, serviceFilter, statusFilter])
 
   const columns = useMemo<ReportPdfColumn[]>(() => {
     if (activeReport === 'pricing') {
@@ -1328,8 +1274,8 @@ export default function ReportsPage() {
         { key: 'motivo', label: 'Motivo pérdida', width: '12%' },
         { key: 'responsable', label: 'Responsable', width: '10%' },
         { key: 'respuesta', label: 'Respuesta', width: '7%', align: 'right' },
-        { key: 'venta', label: 'Venta', width: '7%', align: 'right' },
-        { key: 'gp', label: 'GP', width: '6%', align: 'right' },
+        { key: 'venta', label: 'Venta cotizada', width: '7%', align: 'right' },
+        { key: 'gp', label: 'Utilidad', width: '6%', align: 'right' },
       ]
     }
 
@@ -1342,9 +1288,9 @@ export default function ReportsPage() {
         { key: 'servicio', label: 'Servicio', width: '12%' },
         { key: 'estado', label: 'Estado', width: '10%' },
         { key: 'costo', label: 'Costo', width: '10%', align: 'right' },
-        { key: 'venta', label: 'Venta', width: '10%', align: 'right' },
-        { key: 'gp', label: 'GP', width: '8%', align: 'right' },
-        { key: 'margen', label: 'GP%', width: '5%', align: 'right' },
+        { key: 'venta', label: 'Venta cotizada', width: '10%', align: 'right' },
+        { key: 'gp', label: 'Utilidad', width: '8%', align: 'right' },
+        { key: 'margen', label: 'Margen', width: '5%', align: 'right' },
       ]
     }
     if (activeReport === 'operations') {
@@ -1489,15 +1435,13 @@ export default function ReportsPage() {
       clients: unique(baseRows.map((row) => row.__client)),
       sellers: unique(baseRows.map((row) => row.__seller)),
       services: unique(baseRows.map((row) => row.__service)),
-      statuses: activeReport === 'pricing' || activeReport === 'customer_payments'
-        ? unique(baseRows.map((row) => row.__status))
-        : unique([...baseRows.map((row) => row.__status), ...STATUS_OPTIONS.filter((s) => s !== ALL)]),
+      statuses: unique(baseRows.map((row) => row.__status)),
       currencies: unique(baseRows.map((row) => row.__currency)),
       paymentMethods: unique(baseRows.flatMap((row) => row.__paymentMethod?.split('|') || [])),
       fiscalTypes: unique(baseRows.map((row) => row.__fiscalType)),
       pointsOfSale: unique(baseRows.map((row) => row.__pointOfSale)),
     }
-  }, [activeReport, baseRows])
+  }, [baseRows])
 
   // REP-001: los totales se agrupan por moneda; nunca sumar USD y HNL juntos.
   const totalsByCurrency = useMemo(() => {
@@ -1528,7 +1472,7 @@ export default function ReportsPage() {
     : null
   const avgMargen = singleCurrencyTotals && singleCurrencyTotals.amount > 0
     ? (singleCurrencyTotals.gp / singleCurrencyTotals.amount) * 100
-    : 0
+    : null
   const activeDatePreset = resolveDatePreset(dateFrom, dateTo)
   const activeFilterCount = [
     clientFilter,
@@ -1539,7 +1483,7 @@ export default function ReportsPage() {
     paymentMethodFilter,
     fiscalTypeFilter,
     pointOfSaleFilter,
-  ].filter((value) => value !== ALL).length + (activeDatePreset === 'custom' ? 1 : 0)
+  ].filter((value) => value !== ALL).length + (view.search ? 1 : 0) + (activeDatePreset === 'custom' ? 1 : 0)
   const presetButtonClass = (preset: Exclude<DatePreset, 'custom'>) =>
     `rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
       activeDatePreset === preset
@@ -1570,7 +1514,7 @@ export default function ReportsPage() {
       } else if (col.key === 'gp') {
         pdfTotals[col.key] = fmtTotalsByCurrency('gp')
       } else if (col.key === 'margen') {
-        pdfTotals[col.key] = rows.length > 0 && singleCurrencyTotals ? `${avgMargen.toFixed(1)}% prom.` : '-'
+        pdfTotals[col.key] = rows.length > 0 && singleCurrencyTotals && avgMargen !== null ? `${avgMargen.toFixed(1)}% global` : '-'
       } else if (activeTotalColumns.includes(col.key)) {
         pdfTotals[col.key] = fmtTotalsByCurrency('amount')
       } else if (idx === 0) {
@@ -1581,7 +1525,8 @@ export default function ReportsPage() {
     })
   }
 
-  const dateRangeLabel = `${dateFrom ? fmtDate(dateFrom) : 'Inicio'} – ${dateTo ? fmtDate(dateTo) : 'Hoy'}`
+  const dateRangeLabel = reportRangeLabel(dateFrom, dateTo)
+  const dateBasis = reportDateBasis(activeReport, operationsGranularity)
 
   const pricingMetrics = activeReport === 'pricing'
     ? {
@@ -1603,9 +1548,12 @@ export default function ReportsPage() {
     title: `Reporte ${reportTitle}`,
     subtitle: reportScope,
     dateRange: dateRangeLabel,
-    generatedAt: new Date().toLocaleString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    generatedAt: formatDateTime(loadedAt),
     filters: [
       `Período: ${dateRangeLabel}`,
+      dateBasis,
+      view.search ? 'Búsqueda: ' + view.search : '',
+      ['receivable', 'payable', 'overdue'].includes(activeReport) ? 'Saldos actuales a la fecha de consulta: ' + formatDateTime(loadedAt) : '',
       clientFilter !== ALL ? `Cliente/Proveedor: ${clientFilter}` : '',
       sellerFilter !== ALL
         ? `${activeReport === 'pricing' ? 'Responsable Pricing' : 'Vendedor'}: ${sellerFilter}`
@@ -1625,6 +1573,19 @@ export default function ReportsPage() {
           { label: 'Perdidas en Pricing', value: String(pricingMetrics.lost) },
           { label: 'Respuesta promedio', value: formatResponseTime(averagePricingResponse) },
         ]
+      : activeReport === 'operations'
+      ? operationsGranularity === 'readiness'
+        ? [
+            { label: 'Bookings activos', value: String(rows.length) },
+            { label: 'Listos para embarcar', value: String(rows.filter((row) => row.readiness === 'Listo').length) },
+            { label: 'Con bloqueos', value: String(rows.filter((row) => row.readiness === 'Bloqueado').length) },
+            { label: 'Cutoffs vencidos', value: String(rows.reduce((total, row) => total + Number(row.vencidos || 0), 0)) },
+          ]
+        : [
+            { label: operationsGranularity === 'operations' ? 'Operaciones' : 'Bookings', value: String(rows.length) },
+            { label: 'Contenedores', value: String(rows.reduce((total, row) => total + Number(row.contenedores || 0), 0)) },
+            { label: operationsGranularity === 'operations' ? 'Sin bookings activos' : 'Sin ETA', value: String(rows.filter((row) => operationsGranularity === 'operations' ? Number(row.bookings) === 0 : row.eta === '-').length) },
+          ]
       : activeReport === 'customer_payments'
       ? [
           { label: 'Pagos aplicados', value: String(rows.filter((row) => row.__status === 'Aplicado').length) },
@@ -1636,13 +1597,13 @@ export default function ReportsPage() {
       ? [
           { label: 'Cotizaciones', value: String(rows.length) },
           { label: 'Costo total', value: fmtTotalsByCurrency('cost') },
-          { label: 'Venta total', value: fmtTotalsByCurrency('amount') },
-          { label: 'GP total', value: fmtTotalsByCurrency('gp') },
-          { label: 'Margen promedio', value: rows.length > 0 && singleCurrencyTotals ? `${avgMargen.toFixed(1)}%` : '-' },
+          { label: 'Venta cotizada', value: fmtTotalsByCurrency('amount') },
+          { label: 'Utilidad cotizada', value: fmtTotalsByCurrency('gp') },
+          { label: 'Margen global', value: rows.length > 0 && singleCurrencyTotals && avgMargen !== null ? `${avgMargen.toFixed(1)}%` : '-' },
         ]
       : [
           { label: 'Registros', value: String(rows.length) },
-          { label: 'Monto total', value: fmtTotalsByCurrency('amount') },
+          { label: activeReport === 'billing' ? 'Facturación neta' : ['receivable', 'payable', 'overdue'].includes(activeReport) ? 'Saldo pendiente actual' : 'Monto pagado', value: fmtTotalsByCurrency('amount') },
           { label: 'Período', value: dateRangeLabel },
         ],
     columns,
@@ -1652,19 +1613,34 @@ export default function ReportsPage() {
 
   const [generatingPdf, setGeneratingPdf] = useState(false)
 
-  const handleOpenPdf = async () => {
+  const busy = loading || loadedFor !== contextKey
+  const canExport = !busy && !loadError && !invalidRange && rows.length > 0
+  const exportFilename = 'reporte-' + activeReport + '-' + (dateFrom || 'inicio') + '-' + (dateTo || 'todas')
+  const handlePdf = async (open: boolean) => {
+    if (!canExport || generatingPdf) return
+    // Open synchronously to keep this user action compatible with popup blockers.
+    const preview = open ? window.open('about:blank', '_blank') : null
+    if (open && !preview) { toast.error('El navegador bloqueó la pestaña. Usa Descargar PDF.'); return }
+    if (preview) preview.opener = null
     setGeneratingPdf(true)
     try {
       const blob = await pdf(<ReportPdf data={pdfData} company={companyBranding} />).toBlob()
       const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 30000)
-    } finally {
-      setGeneratingPdf(false)
-    }
+      if (preview) preview.location.href = url
+      else { const anchor = document.createElement('a'); anchor.href = url; anchor.download = exportFilename + '.pdf'; anchor.click() }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } catch { preview?.close(); toast.error('No se pudo generar el PDF. Intenta nuevamente.') }
+    finally { setGeneratingPdf(false) }
   }
+  const page = Math.min(view.page, Math.max(1, Math.ceil(rows.length / view.pageSize)))
+  const visibleRows = rows.slice((page - 1) * view.pageSize, page * view.pageSize)
+  const showSeller = ['commercial', 'pricing', 'operations', 'billing'].includes(activeReport)
+  const showService = ['commercial', 'pricing', 'operations'].includes(activeReport)
+  const showCurrency = !['operations', 'pricing'].includes(activeReport)
+  const showStatus = activeReport !== 'supplier_payments'
+  const showPaymentMethod = ['customer_payments', 'supplier_payments'].includes(activeReport)
 
-  if (userLoading || loading) return <PageSkeleton cards={3} rows={7} />
+  if (userLoading) return <PageSkeleton cards={3} rows={7} />
 
   if (availableReports.length === 0) {
     return (
@@ -1704,268 +1680,115 @@ export default function ReportsPage() {
         }
       `}</style>
 
-      <div className="report-print-hidden flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-            Reporterias
-          </p>
-          <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">Reportes exportables</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Comercial, cargas, facturacion, cuentas por cobrar y cuentas por pagar.
-          </p>
+      <div className="report-print-hidden flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Reportes</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Consulta resultados y exporta el detalle con los filtros seleccionados.</p>
+          {loadedAt && !busy && !loadError && <p className="mt-2 text-xs text-slate-500">Última consulta: {formatDateTime(loadedAt)}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={loadReports} title="Actualizar" className={actionIconButtonClass}>
-            <RefreshCcw className="h-4 w-4" />
-            <span className="sr-only">Actualizar</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => exportCSV(rows, columns, `reporte-${activeReport}.csv`)}
-            title="Exportar CSV"
-            className={actionIconButtonClass}
-          >
-            <Download className="h-4 w-4" />
-            <span className="sr-only">Exportar CSV</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleOpenPdf}
-            title={generatingPdf ? 'Generando PDF...' : 'Abrir PDF en nueva pestaña'}
-            disabled={generatingPdf}
-            className={`${actionIconButtonClass} disabled:opacity-40`}
-          >
-            {generatingPdf
-              ? <RefreshCcw className="h-4 w-4 animate-spin" />
-              : <Printer className="h-4 w-4" />}
-            <span className="sr-only">Abrir PDF</span>
-          </button>
-          <PDFDownloadLink
-            document={<ReportPdf data={pdfData} company={companyBranding} />}
-            fileName={`reporte-${activeReport}.pdf`}
-            title="Descargar PDF"
-            className={actionIconButtonClass}
-          >
-            {({ loading: pdfLoading }) => (
-              <>
-                <FileDown className="h-4 w-4" />
-                <span className="sr-only">{pdfLoading ? 'Generando PDF...' : 'Descargar PDF'}</span>
-              </>
-            )}
-          </PDFDownloadLink>
+          <button type="button" onClick={() => void loadReports()} disabled={loading} className={actionIconButtonClass}><RefreshCcw aria-hidden="true" className="h-4 w-4" />Actualizar</button>
+          <button type="button" onClick={() => exportCSV(rows, columns, exportFilename + '.csv')} disabled={!canExport} className={actionIconButtonClass}><Download aria-hidden="true" className="h-4 w-4" />Exportar CSV</button>
+          <button type="button" onClick={() => void handlePdf(false)} disabled={!canExport || generatingPdf} className={actionIconButtonClass}><FileDown aria-hidden="true" className="h-4 w-4" />{generatingPdf ? 'Generando PDF…' : 'Descargar PDF'}</button>
+          <button type="button" onClick={() => void handlePdf(true)} disabled={!canExport || generatingPdf} title="Abrir PDF para imprimir" className={actionIconButtonClass}><Printer aria-hidden="true" className="h-4 w-4" /><span className="sr-only">Abrir PDF para imprimir</span></button>
         </div>
       </div>
 
-      <div className="report-print-hidden flex gap-2 overflow-x-auto pb-1">
-        {availableReports.map((report) => (
-          <button
-            key={report.id}
-            type="button"
-            onClick={() => setActiveReport(report.id)}
-            className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition ${
-              activeReport === report.id
-                ? 'border-slate-950 bg-slate-950 text-white dark:border-white dark:bg-white dark:text-slate-950'
-                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-            }`}
-          >
-            {report.label}
-          </button>
-        ))}
-      </div>
-
-      {activeReport === 'operations' && (
-        <div className="report-print-hidden flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Nivel del reporte
-          </span>
-          {([
-            ['operations', 'Operaciones'],
-            ['bookings', 'Bookings'],
-            ['readiness', 'Readiness'],
-          ] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setOperationsGranularity(value)}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
-                operationsGranularity === value
-                  ? 'border-blue-600 bg-blue-600 text-white'
-                  : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-              }`}
-            >
-              {label}
-            </button>
+      <nav aria-label="Tipo de reporte" className="report-print-hidden space-y-3">
+        <div className="sm:hidden">
+          <label htmlFor="report-mobile" className="mb-1 block text-sm font-semibold">Reporte</label>
+          <select id="report-mobile" value={activeReport} onChange={(event) => selectReport(event.target.value as ReportId)} className={`${fieldClass} w-full`}>
+            {[
+              { label: 'Comercial y Pricing', ids: ['commercial', 'pricing'] },
+              { label: 'Operaciones', ids: ['operations'] },
+              { label: 'Finanzas', ids: ['billing', 'customer_payments', 'receivable', 'payable', 'overdue', 'supplier_payments'] },
+            ].map((group) => availableReports.some((report) => group.ids.includes(report.id)) && <optgroup key={group.label} label={group.label}>{availableReports.filter((report) => group.ids.includes(report.id)).map((report) => <option key={report.id} value={report.id}>{report.label}</option>)}</optgroup>)}
+          </select>
+        </div>
+        <div className="hidden flex-wrap gap-x-6 gap-y-3 sm:flex">
+          {[
+            { label: 'Comercial y Pricing', ids: ['commercial', 'pricing'] },
+            { label: 'Operaciones', ids: ['operations'] },
+            { label: 'Finanzas', ids: ['billing', 'customer_payments', 'receivable', 'payable', 'overdue', 'supplier_payments'] },
+          ].map((group) => availableReports.some((report) => group.ids.includes(report.id)) && (
+            <div key={group.label} className="min-w-0">
+              <p className="mb-2 text-xs font-semibold text-slate-500">{group.label}</p>
+              <div className="flex flex-wrap gap-2">{availableReports.filter((report) => group.ids.includes(report.id)).map((report) => (
+                <button key={report.id} type="button" aria-pressed={activeReport === report.id} onClick={() => selectReport(report.id)} className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${activeReport === report.id ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}`}>{report.label}</button>
+              ))}</div>
+            </div>
           ))}
         </div>
-      )}
+      </nav>
 
-      <section className={`${cardClass} report-print-hidden`}>
-        <div className="mb-4 flex items-center gap-2">
-          <Filter className="h-4 w-4 text-slate-400" />
-          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Filtros</h2>
-          {activeFilterCount > 0 && (
-            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-              {activeFilterCount} activo{activeFilterCount !== 1 ? 's' : ''}
-            </span>
-          )}
+      {activeReport === 'operations' && <div className="report-print-hidden flex flex-wrap items-center gap-2" aria-label="Nivel de detalle">
+        {([['operations', 'Operaciones'], ['bookings', 'Bookings'], ['readiness', 'Preparación de embarques']] as const).map(([level, label]) => <button key={level} type="button" aria-pressed={operationsGranularity === level} onClick={() => updateView({ level, status: ALL, sort: '' })} className={`rounded-lg border px-3 py-2 text-sm ${operationsGranularity === level ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'}`}>{label}</button>)}
+      </div>}
+
+      <section className={`${cardClass} report-print-hidden min-w-0`} aria-label="Filtros del reporte">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold"><Filter aria-hidden="true" className="h-4 w-4" />Filtros{activeFilterCount > 0 && <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">{activeFilterCount} activos</span>}</h2>
+          <button type="button" aria-expanded={mobileFiltersOpen} aria-controls="report-filter-fields" onClick={() => setMobileFiltersOpen((open) => !open)} className="rounded-lg px-2 py-2 text-sm font-semibold text-blue-700 dark:text-blue-300 sm:hidden">{mobileFiltersOpen ? 'Ocultar filtros' : 'Mostrar filtros'}</button>
+          <button type="button" onClick={() => updateView({ ...defaultReportView(activeReport), level: operationsGranularity })} className="rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950">Restablecer filtros</button>
         </div>
-        <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Desde</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={fieldClass} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={fieldClass} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Cliente / proveedor</label>
-            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className={fieldClass}>
-              {options.clients.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">
-              {activeReport === 'customer_payments'
-                ? 'Forma de pago'
-                : activeReport === 'pricing'
-                  ? 'Responsable Pricing'
-                  : 'Vendedor'}
-            </label>
-            {activeReport === 'customer_payments' ? (
-              <select value={paymentMethodFilter} onChange={(e) => setPaymentMethodFilter(e.target.value)} className={fieldClass}>
-                {options.paymentMethods.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            ) : (
-              <select value={sellerFilter} onChange={(e) => setSellerFilter(e.target.value)} className={fieldClass}>
-                {options.sellers.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            )}
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">
-              {activeReport === 'customer_payments' ? 'Tipo fiscal' : 'Servicio'}
-            </label>
-            {activeReport === 'customer_payments' ? (
-              <select value={fiscalTypeFilter} onChange={(e) => setFiscalTypeFilter(e.target.value)} className={fieldClass}>
-                {options.fiscalTypes.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            ) : (
-              <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className={fieldClass}>
-                {options.services.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            )}
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={fieldClass}>
-              {options.statuses.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
+        <p className="mb-3 text-sm text-slate-600 dark:text-slate-300"><strong>Filtra por:</strong> {dateBasis}.</p>
+        <p className="mb-3 text-xs text-slate-500">Período: {dateRangeLabel}</p>
+        {['receivable', 'payable', 'overdue'].includes(activeReport) && <p className="mb-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-100">{activeReport === 'overdue' ? 'Se incluyen las deudas vencidas pendientes de todos los períodos al restablecer los filtros. ' : ''}Los saldos son actuales; elegir fechas de vencimiento no reconstruye un cierre histórico.</p>}
+        <div id="report-filter-fields" className={mobileFiltersOpen ? '' : 'hidden sm:block'}>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="min-w-0"><label htmlFor="report-from" className="mb-1 block text-xs font-medium text-slate-500">Desde</label><input id="report-from" type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => updateView({ from: event.target.value })} className={`${fieldClass} min-w-0 w-full`} /></div>
+          <div className="min-w-0"><label htmlFor="report-to" className="mb-1 block text-xs font-medium text-slate-500">Hasta</label><input id="report-to" type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => updateView({ to: event.target.value })} className={`${fieldClass} min-w-0 w-full`} /></div>
+          <div className="min-w-0"><label htmlFor="report-client" className="mb-1 block text-xs font-medium text-slate-500">{['payable', 'supplier_payments'].includes(activeReport) ? 'Proveedor' : activeReport === 'overdue' ? 'Cliente / proveedor' : 'Cliente'}</label><select id="report-client" value={clientFilter} onChange={(event) => updateView({ client: event.target.value })} className={`${fieldClass} w-full`}>{options.clients.map((option) => <option key={option}>{option}</option>)}</select></div>
+          {showSeller && <div className="min-w-0"><label htmlFor="report-seller" className="mb-1 block text-xs font-medium text-slate-500">{activeReport === 'pricing' ? 'Responsable Pricing' : 'Vendedor'}</label><select id="report-seller" value={sellerFilter} onChange={(event) => updateView({ seller: event.target.value })} className={`${fieldClass} w-full`}>{options.sellers.map((option) => <option key={option}>{option}</option>)}</select></div>}
+          {showService && <div className="min-w-0"><label htmlFor="report-service" className="mb-1 block text-xs font-medium text-slate-500">Servicio</label><select id="report-service" value={serviceFilter} onChange={(event) => updateView({ service: event.target.value })} className={`${fieldClass} w-full`}>{options.services.map((option) => <option key={option}>{option}</option>)}</select></div>}
+          {showStatus && <div className="min-w-0"><label htmlFor="report-status" className="mb-1 block text-xs font-medium text-slate-500">Estado</label><select id="report-status" value={statusFilter} onChange={(event) => updateView({ status: event.target.value })} className={`${fieldClass} w-full`}>{options.statuses.map((option) => <option key={option}>{option}</option>)}</select></div>}
+          {showCurrency && <div className="min-w-0"><label htmlFor="report-currency" className="mb-1 block text-xs font-medium text-slate-500">Moneda</label><select id="report-currency" value={currencyFilter} onChange={(event) => updateView({ currency: event.target.value })} className={`${fieldClass} w-full`}>{options.currencies.map((option) => <option key={option}>{option}</option>)}</select></div>}
+          {showPaymentMethod && <div className="min-w-0"><label htmlFor="report-method" className="mb-1 block text-xs font-medium text-slate-500">Forma de pago</label><select id="report-method" value={paymentMethodFilter} onChange={(event) => updateView({ method: event.target.value })} className={`${fieldClass} w-full`}>{options.paymentMethods.map((option) => <option key={option}>{option}</option>)}</select></div>}
+          {activeReport === 'customer_payments' && <>
+            <div className="min-w-0"><label htmlFor="report-fiscal" className="mb-1 block text-xs font-medium text-slate-500">Tipo fiscal</label><select id="report-fiscal" value={fiscalTypeFilter} onChange={(event) => updateView({ fiscal: event.target.value })} className={`${fieldClass} w-full`}>{options.fiscalTypes.map((option) => <option key={option}>{option}</option>)}</select></div>
+            <div className="min-w-0"><label htmlFor="report-pos" className="mb-1 block text-xs font-medium text-slate-500">Punto de venta</label><select id="report-pos" value={pointOfSaleFilter} onChange={(event) => updateView({ pos: event.target.value })} className={`${fieldClass} w-full`}>{options.pointsOfSale.map((option) => <option key={option}>{option}</option>)}</select></div>
+          </>}
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'month')} className={presetButtonClass('month')} aria-pressed={activeDatePreset === 'month'}>
-            Mes
-          </button>
-          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'quarter')} className={presetButtonClass('quarter')} aria-pressed={activeDatePreset === 'quarter'}>
-            Trimestre
-          </button>
-          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'year')} className={presetButtonClass('year')} aria-pressed={activeDatePreset === 'year'}>
-            Año
-          </button>
-          <button type="button" onClick={() => applyPreset(setDateFrom, setDateTo, 'all')} className={presetButtonClass('all')} aria-pressed={activeDatePreset === 'all'}>
-            Todo
-          </button>
-          {activeDatePreset === 'custom' && (
-            <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-              Personalizado
-            </span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 text-slate-400" />
-            {activeReport === 'customer_payments' && (
-              <select
-                value={pointOfSaleFilter}
-                onChange={(e) => setPointOfSaleFilter(e.target.value)}
-                aria-label="Punto de venta"
-                className={`${fieldClass} h-10 w-48`}
-              >
-                {options.pointsOfSale.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            )}
-            <select value={currencyFilter} onChange={(e) => setCurrencyFilter(e.target.value)} className={`${fieldClass} h-10 w-28`}>
-              {options.currencies.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {([['month', 'Este mes'], ['quarter', 'Trimestre actual'], ['year', 'Este año'], ['all', 'Todas las fechas']] as const).map(([preset, label]) => <button key={preset} type="button" onClick={() => updateView(presetRange(preset))} aria-pressed={activeDatePreset === preset} className={presetButtonClass(preset)}>{label}</button>)}
+          {activeDatePreset === 'custom' && <span className="self-center text-xs text-amber-700 dark:text-amber-300">Período personalizado</span>}
         </div>
+        </div>
+        {invalidRange && <p role="alert" className="mt-3 text-sm text-rose-700 dark:text-rose-300">La fecha inicial debe ser anterior o igual a la fecha final.</p>}
       </section>
 
-      <div className="report-print-section grid gap-3 md:grid-cols-3">
-        {pdfData.metrics.map((metric) => (
-          <div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
-            <p className="text-xs text-slate-500 dark:text-slate-400">{metric.label}</p>
-            <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{metric.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <section className={`${cardClass} report-print-section`}>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{reportTitle}</h2>
-            <p className="text-xs text-slate-500">{reportScope}</p>
-          </div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-            {rows.length} filas
-          </span>
+      {loadError ? <section role="alert" className={`${cardClass} space-y-3`}>
+        <h2 className="text-lg font-semibold">Reporte no disponible</h2><p className="text-sm text-slate-600 dark:text-slate-300">{loadError}</p>
+        <button type="button" onClick={() => void loadReports()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Reintentar</button>
+      </section> : busy ? <div role="status" aria-label="Cargando reporte"><PageSkeleton cards={3} rows={7} /></div> : invalidRange ? null : <>
+        <div className="report-print-section grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {pdfData.metrics.map((metric) => <div key={metric.label} className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-[#0b1220]"><p className="text-xs text-slate-500 dark:text-slate-400">{metric.label}</p><p className="mt-1 break-words text-xl font-bold tabular-nums text-slate-900 dark:text-white">{rows.length ? metric.value : 'Sin datos'}</p></div>)}
         </div>
-
-        {rows.length === 0 ? (
-          <EmptyState icon={<BarChart3 className="h-6 w-6" />} title="Sin datos" description="Ajusta los filtros para ver resultados." />
-        ) : (
-          <div className="report-print-table overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                  {columns.map((column) => (
-                    <th key={column.key} className={`px-3 py-3 ${column.align === 'right' ? 'text-right' : ''}`}>{column.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 120).map((row) => (
-                  <tr key={String(row.__key)} className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/30">
-                    {columns.map((column) => (
-                      <td key={column.key} className={`px-3 py-2.5 text-slate-700 dark:text-slate-300 ${column.align === 'right' ? 'text-right font-semibold' : ''}`}>
-                        {row[column.key]}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-              {activeTotalColumns.length > 0 && rows.length > 0 && (
-                <tfoot>
-                  <tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/60">
-                    {columns.map((col) => (
-                      <td
-                        key={col.key}
-                        className={`px-3 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-100 ${col.align === 'right' ? 'text-right' : ''}`}
-                      >
-                        {pdfTotals[col.key] || ''}
-                      </td>
-                    ))}
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-            {rows.length > 120 && (
-              <p className="border-t border-slate-100 px-3 py-2 text-xs text-slate-400 dark:border-slate-800">
-                Vista previa: 120 de {rows.length} filas. El CSV y PDF incluyen todas.
-              </p>
-            )}
+        <section className={`${cardClass} report-print-section min-w-0`}>
+          <div className="mb-4 flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
+            <div className="min-w-0"><h2 className="font-semibold">{reportTitle}</h2><p className="mt-1 text-xs text-slate-500">{reportScope}</p><p className="mt-1 text-xs text-slate-500">{dateRangeLabel} · {rows.length} registros</p></div>
+            <div className="report-print-hidden min-w-0 lg:w-72 lg:shrink-0"><label htmlFor="report-search" className="mb-1 block text-xs font-medium text-slate-500">Buscar en el reporte</label><input id="report-search" type="search" placeholder="Documento, cliente o descripción" value={view.search} onChange={(event) => updateView({ search: event.target.value })} className={`${fieldClass} w-full`} /></div>
           </div>
-        )}
-      </section>
+          {rows.length === 0 ? <EmptyState icon={<BarChart3 className="h-6 w-6" />} title="Sin resultados para estos filtros" description="Prueba otro período o restablece los filtros. No se encontraron registros que coincidan." /> : <>
+            <p className="mb-2 text-xs text-slate-500">Ordena con los encabezados. Los totales y las exportaciones incluyen los {rows.length} registros filtrados.</p>
+            <div role="region" aria-label="Resultados del reporte" tabIndex={0} className="report-print-table max-w-full overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+                  {columns.map((column) => <th key={column.key} scope="col" aria-sort={view.sort === column.key ? view.direction === 'asc' ? 'ascending' : 'descending' : 'none'} className={`px-3 py-2 ${column.align === 'right' ? 'text-right' : ''}`}><button type="button" className="min-h-9 whitespace-nowrap font-semibold hover:text-blue-600" onClick={() => updateView({ sort: column.key, direction: view.sort === column.key && view.direction === 'asc' ? 'desc' : 'asc' })}>{column.label} {view.sort === column.key ? view.direction === 'asc' ? '↑' : '↓' : '↕'}</button></th>)}
+                  <th scope="col" className="report-print-hidden px-3 py-2">Documento</th>
+                </tr></thead>
+                <tbody>{visibleRows.map((row) => <tr key={String(row.__key)} className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/30">
+                  {columns.map((column) => <td key={column.key} className={`px-3 py-3 text-slate-700 dark:text-slate-300 ${column.align === 'right' ? 'text-right font-semibold tabular-nums' : ''}`}>{row[column.key]}</td>)}
+                  <td className="report-print-hidden px-3 py-3">{row.__href && canAccessPath(role, row.__href.split('?')[0]) ? <Link href={row.__href} className="whitespace-nowrap font-semibold text-blue-700 underline dark:text-blue-300" aria-label={'Abrir documento ' + (row.numero || row.documento || row.booking || row.routing || row.factura || '')}>Ver documento</Link> : '—'}</td>
+                </tr>)}</tbody>
+                {activeTotalColumns.length > 0 && <tfoot><tr className="border-t-2 border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/60">{columns.map((column) => <td key={column.key} className={`px-3 py-3 text-xs font-bold ${column.align === 'right' ? 'text-right' : ''}`}>{pdfTotals[column.key] || ''}</td>)}<td className="report-print-hidden" /></tr></tfoot>}
+              </table>
+            </div>
+            <div className="report-print-hidden"><Pagination page={page} pageSize={view.pageSize} total={rows.length} onPageChange={(next) => updateView({ page: next })} onPageSizeChange={(pageSize) => updateView({ pageSize })} /></div>
+          </>}
+        </section>
+      </>}
+
     </div>
   )
 }
