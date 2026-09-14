@@ -6698,7 +6698,7 @@ Agregar una entrada por fix:
 ### 2026-09-14 — REP-012 / UX-FIN-01 — Rentabilidad y cobertura del Dashboard Financiero
 
 - Estado: implementado y validado con pruebas locales, navegador y build final.
-  UAT autenticado, verificación de RLS desplegado y publicación pendientes.
+  Publicado en producción; UAT autenticado y verificación de RLS desplegado pendientes.
 - Hallazgos: consultas sin paginación y errores de costos ignorados; suma de
   monedas distintas bajo USD; utilidad presentada como real con costos parciales;
   CSV limitado a ocho nombres truncados y montos redondeados. Filtros sin
@@ -6772,12 +6772,16 @@ Agregar una entrada por fix:
     revisar esa comprobación si se introduce autorización por cotización.
   - No es facturación, caja ni utilidad contable definitiva. No se convierten
     monedas, no se reconstruyen costos históricos y no se recalculan documentos.
-- Commit: pendiente de asignación. Commit y despliegue autorizados por el usuario;
-  resultado de publicación pendiente de verificar.
+- Publicación (14/09/2026): implementación `e800cc7` publicada junto con el portal.
+  GitHub Production `6447587170` y Vercel `FYn7fkF1fdr6ojnF18WViVcqESgi`
+  confirman `success`. `/financial-dashboard` en `https://forwarders.app`
+  devuelve 307 a `/login?next=%2Ffinancial-dashboard` sin sesión.
+  Se mantienen pendientes la conciliación y el UAT/RLS con cuentas reales.
+- Commit de implementación: `e800cc7`. Registro de publicación en commit documental posterior.
 
 ### 2026-09-14 - UX-PORTAL-20260914 - Navegación y autoservicio del cliente
 
-- Estado: implementado localmente y validado con fixtures; UAT autenticado pendiente.
+- Estado: publicado en producción y validado localmente con fixtures; UAT autenticado pendiente.
 - Hallazgos de origen: UX-PORTAL-01 a UX-PORTAL-12 en
   `docs/portal-ux-review-2026-09-14.md`. UX-PORTAL-06 se atiende con acceso a
   soporte tras entrega; la elegibilidad de reclamaciones queda pendiente de
@@ -6841,6 +6845,16 @@ Agregar una entrada por fix:
   - Incidencias, recogidas y RPC de envíos conservan su alcance de lectura actual;
     revisar límites con volúmenes altos. Validar horarios y contenido operativo.
   - Guion de aceptación completo: `docs/uat/portal-ux-2026-09-14.md`.
-- Commit: pendiente de asignación. Commit y despliegue autorizados por el usuario,
-  junto con los cambios previos del Dashboard Financiero. Publicación pendiente
-  de verificar.
+- Publicación (14/09/2026):
+  - Commit y despliegue autorizados por el usuario, incluyendo Dashboard Financiero.
+    Implementación `e800cc7` publicada en `main`; GitHub y Vercel confirman Production `success`.
+  - Deployment GitHub `6447587170`, Vercel `FYn7fkF1fdr6ojnF18WViVcqESgi`.
+    URL: `https://sarierp-ak8s6oypw-claudherhn-5641s-projects.vercel.app`.
+  - Verificación pública en `https://forwarders.app`: `/portal/login` y
+    `/portal/register` devuelven 200; `/portal/solicitudes` devuelve 307 a
+    `/portal/login?next=%2Fportal%2Fsolicitudes`. `/api/portal-review/inicio`
+    y `/api/financial-review` devuelven 404. Solo GET, sin mutaciones de datos.
+  - Suite conjunta antes del commit: 59/59 pruebas, TypeScript, ESLint dirigido
+    y build de 73/73 páginas correctos. La publicación no certifica UAT autenticado
+    ni RLS; se conservan los pendientes anteriores.
+- Commit de implementación: `e800cc7`. Registro de publicación en commit documental posterior.
