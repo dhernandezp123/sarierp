@@ -32,6 +32,8 @@ function ForgotPasswordForm() {
       }
 
       setSent(true)
+    } catch {
+      toast.error('No se pudo conectar. Revisa tu conexión e intenta nuevamente.')
     } finally {
       setLoading(false)
     }
@@ -71,7 +73,7 @@ function ForgotPasswordForm() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <input
+              <label className="block space-y-1.5"><span className="block text-sm font-medium text-slate-700 dark:text-slate-300">Correo electrónico</span><input aria-label="Correo electrónico"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -80,7 +82,7 @@ function ForgotPasswordForm() {
                 required
                 autoFocus
                 className="h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-              />
+              /></label>
               <button type="submit" disabled={loading} className="h-11 w-full rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
                 {loading ? 'Enviando...' : 'Enviar enlace'}
               </button>

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Calculator, RotateCcw } from 'lucide-react'
 
+import { convertPortalDimension, positivePortalNumber } from '@/src/lib/portal'
+
 type Unit = 'in' | 'cm'
 
 export default function CalculadoraPage() {
@@ -11,32 +13,34 @@ export default function CalculadoraPage() {
   const [unit, setUnit] = useState<Unit>('in')
   const [dims, setDims] = useState({ l: '', w: '', h: '', weight: '' })
 
-  const l = parseFloat(dims.l) || 0
-  const w = parseFloat(dims.w) || 0
-  const h = parseFloat(dims.h) || 0
-  const weightLbs = parseFloat(dims.weight) || 0
+  const l = positivePortalNumber(dims.l)
+  const w = positivePortalNumber(dims.w)
+  const h = positivePortalNumber(dims.h)
+  const weightLbs = positivePortalNumber(dims.weight)
 
   // Conversions
   const toIn = (v: number) => unit === 'cm' ? v / 2.54 : v
   const li = toIn(l), wi = toIn(w), hi = toIn(h)
 
-  const ft3  = li && wi && hi ? (li * wi * hi) / 1728 : null
-  const cbm  = li && wi && hi ? (li * wi * hi) * 0.000016387064 : null
+  const cubicInches = li * wi * hi
+  const validVolume = Number.isFinite(cubicInches) && cubicInches > 0
+  const ft3 = validVolume ? cubicInches / 1728 : null
+  const cbm = validVolume ? cubicInches * 0.000016387064 : null
   const weightKg = weightLbs ? weightLbs * 0.453592 : null
 
-  // Dimensional weight (using 139 divisor standard for air)
+  // Reference only; the contracted service determines billing.
   const dimWeightKg = cbm ? cbm * 167 : null
 
   const reset = () => setDims({ l: '', w: '', h: '', weight: '' })
 
-  const fieldClass = 'h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-center text-lg font-semibold text-slate-900 outline-none placeholder:text-slate-300 placeholder:font-normal focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400'
+  const fieldClass = 'h-12 w-full rounded-xl border border-slate-300 bg-white px-2 text-center text-base font-semibold text-slate-900 outline-none placeholder:text-slate-300 placeholder:font-normal focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400'
 
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          aria-label="Volver" onClick={() => router.push('/portal/solicitudes')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -53,7 +57,8 @@ export default function CalculadoraPage() {
           <button
             key={u}
             type="button"
-            onClick={() => setUnit(u)}
+            aria-pressed={unit === u}
+            onClick={() => { setDims(prev => ({ ...prev, l: convertPortalDimension(prev.l, unit, u), w: convertPortalDimension(prev.w, unit, u), h: convertPortalDimension(prev.h, unit, u) })); setUnit(u) }}
             className={`flex-1 rounded-xl py-2 text-sm font-semibold transition ${
               unit === u
                 ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white'
@@ -73,10 +78,11 @@ export default function CalculadoraPage() {
         <div className="grid grid-cols-3 gap-3">
           {(['l', 'w', 'h'] as const).map((key, i) => (
             <div key={key}>
-              <label className="mb-1.5 block text-center text-xs font-medium text-slate-500 dark:text-slate-400">
+              <label htmlFor={`dimension-${key}`} className="mb-1.5 block text-center text-xs font-medium text-slate-500 dark:text-slate-400">
                 {['Largo', 'Ancho', 'Alto'][i]}
               </label>
               <input
+                id={`dimension-${key}`}
                 type="number"
                 inputMode="decimal"
                 min="0"
@@ -91,10 +97,11 @@ export default function CalculadoraPage() {
         </div>
 
         <div className="mt-4">
-          <label className="mb-1.5 block text-center text-xs font-medium text-slate-500 dark:text-slate-400">
+          <label htmlFor="actual-weight" className="mb-1.5 block text-center text-xs font-medium text-slate-500 dark:text-slate-400">
             Peso real (lbs)
           </label>
           <input
+            id="actual-weight"
             type="number"
             inputMode="decimal"
             min="0"
@@ -163,14 +170,14 @@ export default function CalculadoraPage() {
                   : 'text-emerald-800 dark:text-emerald-200'
               }`}>
                 {dimWeightKg > weightKg
-                  ? `⚠ Se cobrará peso volumétrico (${dimWeightKg.toFixed(2)} kg)`
-                  : `✓ Se cobrará peso real (${weightKg.toFixed(2)} kg)`
+                  ? `Referencia por volumen (${dimWeightKg.toFixed(2)} kg)`
+                  : `Referencia por peso real (${weightKg.toFixed(2)} kg)`
                 }
               </p>
               <p className={`mt-0.5 text-xs ${
                 dimWeightKg > weightKg ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
               }`}>
-                Se factura el mayor entre peso real y peso volumétrico
+                Estimación con factor 167. El peso facturable y la tarifa dependen del servicio contratado.
               </p>
             </div>
           )}
@@ -188,7 +195,7 @@ export default function CalculadoraPage() {
         <div className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
           <p><strong className="text-slate-700 dark:text-slate-300">FT³</strong> = (L × W × H en pulgadas) ÷ 1,728</p>
           <p><strong className="text-slate-700 dark:text-slate-300">CBM</strong> = (L × W × H en pulgadas) × 0.0000164</p>
-          <p><strong className="text-slate-700 dark:text-slate-300">Peso vol.</strong> = CBM × 167 (kg) — estándar aéreo IATA</p>
+          <p><strong className="text-slate-700 dark:text-slate-300">Peso vol.</strong> = CBM × 167 (kg) — factor de referencia</p>
           <p><strong className="text-slate-700 dark:text-slate-300">1 pulgada</strong> = 2.54 cm &nbsp;|&nbsp; <strong className="text-slate-700 dark:text-slate-300">1 lb</strong> = 0.4536 kg</p>
         </div>
       </div>
@@ -204,7 +211,7 @@ function ResultCard({ label, value, sub, highlight }: { label: string; value: st
         : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
     }`}>
       <p className={`text-xs font-medium ${highlight ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>{label}</p>
-      <p className={`mt-1 text-2xl font-semibold ${highlight ? 'text-blue-900 dark:text-blue-100' : 'text-slate-900 dark:text-white'}`}>{value}</p>
+      <p className={`mt-1 break-words text-xl font-semibold ${highlight ? 'text-blue-900 dark:text-blue-100' : 'text-slate-900 dark:text-white'}`}>{value}</p>
       {sub && <p className={`mt-0.5 text-xs ${highlight ? 'text-blue-500 dark:text-blue-400' : 'text-slate-400'}`}>{sub}</p>}
     </div>
   )

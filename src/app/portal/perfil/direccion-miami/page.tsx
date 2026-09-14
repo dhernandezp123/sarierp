@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { useRouter } from 'next/navigation'
 import { MapPin, Copy, CheckCircle2, ChevronLeft, Info } from 'lucide-react'
 import { toast } from 'sonner'
@@ -24,16 +26,16 @@ export default function DireccionMiamiPage() {
   const [address, setAddress] = useState<MiamiAddress | null>(null)
   const [codigoCliente, setCodigoCliente] = useState<string | null>(null)
   const [clienteNombre, setClienteNombre] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
-    if (!profile) return
-    void loadData()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.cliente_id])
 
-  const loadData = async () => {
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
     const [settingsResult, clienteResult] = await Promise.all([
       supabase
         .from('company_settings')
@@ -49,8 +51,9 @@ export default function DireccionMiamiPage() {
         : Promise.resolve({ data: null, error: null }),
     ])
 
+    if (settingsResult.error || clienteResult.error) throw settingsResult.error || clienteResult.error
     if (settingsResult.data) {
-      const d = settingsResult.data as any
+      const d = settingsResult.data
       setAddress({
         consignee:    d.miami_consignee    ?? '',
         address_line: d.miami_address_line ?? '',
@@ -64,12 +67,15 @@ export default function DireccionMiamiPage() {
     }
 
     if (clienteResult.data) {
-      setCodigoCliente((clienteResult.data as any).codigo_cliente ?? null)
-      setClienteNombre((clienteResult.data as any).nombre ?? null)
+      setCodigoCliente(clienteResult.data.codigo_cliente ?? null)
+      setClienteNombre(clienteResult.data.nombre ?? null)
     }
 
-    setLoading(false)
-  }
+    } catch { setLoadError(true) } finally { setLoading(false) }
+  }, [profile])
+
+  useEffect(() => { if (!profile?.cliente_id) return; const timer = window.setTimeout(() => void loadData(), 0); return () => window.clearTimeout(timer) }, [profile?.cliente_id, loadData])
+
 
   const buildLines = (): string[] => {
     if (!address) return []
@@ -89,17 +95,17 @@ export default function DireccionMiamiPage() {
     ].filter((l): l is string => !!l && l.trim() !== '')
   }
 
-  const copyAddress = () => {
+  const copyAddress = async () => {
     const text = buildLines().join('\n')
     if (!text) return
-    navigator.clipboard.writeText(text)
+    try { await navigator.clipboard.writeText(text) } catch { toast.error("No se pudo copiar. Selecciona el texto de la dirección."); return }
     setCopied(true)
     toast.success('Dirección copiada al portapapeles')
     setTimeout(() => setCopied(false), 2000)
   }
 
   const lines = buildLines()
-  const isReady = address && address.address_line
+  const isReady = Boolean(address?.address_line.trim() && address?.zip.trim() && codigoCliente?.trim())
 
   if (loading) return (
     <div className="space-y-4">
@@ -109,19 +115,20 @@ export default function DireccionMiamiPage() {
     </div>
   )
 
+  if (loadError) return <PortalError onRetry={() => void loadData()} />
   return (
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          aria-label="Volver" onClick={() => router.push('/portal/perfil')}
           className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Dirección en Miami</h1>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Tu dirección para compras</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">Usa esta dirección para tus compras en EE.UU.</p>
         </div>
       </div>
@@ -154,6 +161,7 @@ export default function DireccionMiamiPage() {
             ))}
           </div>
 
+          {address && <dl className="mt-4 space-y-3">{[['Dirección', address.address_line], ['Suite / código', address.suite_prefix + codigoCliente], ['Ciudad', address.city], ['Estado', address.state], ['Código postal', address.zip], ['País', address.country]].map(([label, value]) => <div key={label} className="flex items-start justify-between gap-3"><div className="min-w-0"><dt className="text-xs text-slate-500">{label}</dt><dd className="break-words text-sm font-medium">{value}</dd></div><button type="button" aria-label={`Copiar ${label}`} onClick={async () => { try { await navigator.clipboard.writeText(value); toast.success(label + ' copiado') } catch { toast.error('No se pudo copiar') } }} className="shrink-0 rounded-lg p-2 text-blue-600"><Copy className="h-4 w-4" /></button></div>)}</dl>}
           {codigoCliente && (
             <p className="mt-2 text-xs text-blue-500 dark:text-blue-400">
               Tu código de cliente es <span className="font-semibold">{codigoCliente}</span>. Aparece en la dirección como identificador de suite.
@@ -176,6 +184,7 @@ export default function DireccionMiamiPage() {
         </div>
       )}
 
+      <Link href="/portal/contacto" className="block text-center text-sm font-semibold text-blue-600 dark:text-blue-400">Ayuda con mi dirección o código de cliente</Link>
       <p className="text-center text-xs text-slate-400 dark:text-slate-600">
         Esta dirección es administrada por Sari Express. Úsala para indicar a tus proveedores dónde enviar tus paquetes.
       </p>

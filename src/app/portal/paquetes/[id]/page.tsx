@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   AlertTriangle,
@@ -13,8 +13,11 @@ import {
   Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import Link from 'next/link'
+import { portalPackageStatus } from '@/src/lib/portal'
 import { formatMiamiDateTime } from '@/src/lib/format'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -127,18 +130,21 @@ export default function PortalPaqueteDetailPage() {
   const [events, setEvents] = useState<PackageEvent[]>([])
   const [documents, setDocuments] = useState<PackageDocument[]>([])
   const [photoUrls, setPhotoUrls] = useState<string[]>([])
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadInputKey, setUploadInputKey] = useState(0)
 
-  const loadData = async (clientId: string) => {
+  const loadData = useCallback(async (clientId: string) => {
+    setLoadError(false)
+    try {
     setLoading(true)
     const [
       { data: pkgData, error },
-      { data: incData },
-      { data: eventData },
-      { data: documentData },
+      { data: incData, error: incError },
+      { data: eventData, error: eventError },
+      { data: documentData, error: documentError },
     ] = await Promise.all([
       supabase
         .from('miami_packages')
@@ -164,11 +170,10 @@ export default function PortalPaqueteDetailPage() {
     ])
 
     if (error || !pkgData) {
-      toast.error('Paquete no encontrado')
-      router.replace('/portal/paquetes')
-      return
+      throw error || new Error('Paquete no disponible')
     }
 
+    if (incError || eventError || documentError) throw incError || eventError || documentError
     setPkg(pkgData as PackageDetail)
     setIncidencias((incData ?? []) as Incidencia[])
     setEvents((eventData ?? []) as PackageEvent[])
@@ -188,14 +193,18 @@ export default function PortalPaqueteDetailPage() {
     }
 
     setLoading(false)
-  }
+    } catch { setLoadError(true) } finally { setLoading(false) }
+  }, [id])
 
   useEffect(() => {
     const clientId = profile?.cliente_id
     if (!clientId) return
     const timeout = window.setTimeout(() => void loadData(clientId), 0)
     return () => window.clearTimeout(timeout)
-  }, [id, profile?.cliente_id])
+  }, [profile?.cliente_id, loadData])
+
+
+
 
   useEffect(() => {
     const requestedSection = new URLSearchParams(window.location.search).get('section')
@@ -294,14 +303,15 @@ export default function PortalPaqueteDetailPage() {
     </div>
   )
 
+  if (loadError) return <PortalError onRetry={() => profile?.cliente_id && void loadData(profile.cliente_id)} />
   if (!pkg) return null
 
+  const currentDocument = documents.find(document => document.status !== 'Reemplazada')
+  const needsInvoice = !currentDocument || currentDocument.status === 'Requiere corrección'
   const cfg = statusConfig[pkg.status] ?? { label: pkg.status, color: 'bg-slate-100 text-slate-600' }
   const hasDims = pkg.length_in && pkg.width_in && pkg.height_in
   const tipoCargaColor = TIPO_CARGA_COLOR[pkg.tipo_carga ?? ''] ?? TIPO_CARGA_COLOR['Paquetería']
-  const currentStepIdx = pkg.cargo_status
-    ? CARGO_STEPS.indexOf(pkg.cargo_status as CargoStep)
-    : -1
+  const currentStepIdx = CARGO_STEPS.indexOf(portalPackageStatus(pkg) as CargoStep)
 
   return (
     <div className="space-y-5">
@@ -309,15 +319,16 @@ export default function PortalPaqueteDetailPage() {
       <div className="flex items-start gap-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          aria-label="Volver a mis paquetes"
+          onClick={() => { const back = new URLSearchParams(window.location.search).get('returnTo'); router.push(back?.startsWith('/portal/paquetes?') ? back : '/portal/paquetes') }}
           className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="flex-1 min-w-0">
-          <p className="truncate font-mono text-lg font-semibold text-slate-900 dark:text-white">{pkg.tracking_number}</p>
+          <h1 className="break-all font-mono text-lg font-semibold text-slate-900 dark:text-white">{pkg.tracking_number}</h1><button type="button" onClick={async () => { try { await navigator.clipboard.writeText(pkg.tracking_number); toast.success("Tracking copiado") } catch { toast.error("No se pudo copiar. Selecciona el tracking para copiarlo.") } }} className="py-2 text-xs font-semibold text-blue-600 dark:text-blue-400">Copiar tracking</button>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.color}`}>{cfg.label}</span>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.color}`}>{portalPackageStatus(pkg)}</span>
             {pkg.warehouse_number && (
               <span className="rounded-full bg-slate-100 px-2.5 py-0.5 font-mono text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 {pkg.warehouse_number}
@@ -332,6 +343,8 @@ export default function PortalPaqueteDetailPage() {
         </div>
       </div>
 
+      {needsInvoice && <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"><p className="font-semibold">{currentDocument ? 'Tu factura requiere corrección' : 'Adjunta la factura de tu compra'}</p><p className="mt-1">{currentDocument?.review_notes || 'Abre la sección de factura para adjuntar el documento.'}</p><a href="#factura-comercial" className="mt-3 inline-block font-semibold underline">{currentDocument ? 'Corregir factura' : 'Adjuntar factura'}</a></div>}
+      {pkg.status === 'Con incidencia' && <Link href="/portal/incidencias" className="block text-sm font-semibold text-red-600">Consultar incidencia del paquete</Link>}
       {/* Cargo status timeline */}
       {currentStepIdx >= 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -385,53 +398,10 @@ export default function PortalPaqueteDetailPage() {
         </div>
       )}
 
-      {events.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Historial de movimientos
-          </h2>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {events.map((event) => {
-              const shipmentNumber =
-                typeof event.metadata?.shipment_number === 'string'
-                  ? event.metadata.shipment_number
-                  : null
-              return (
-                <div key={event.id} className="py-3 first:pt-0 last:pb-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                        {event.new_status || event.event_type}
-                      </p>
-                      {event.old_status && event.new_status && (
-                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          {event.old_status} &gt; {event.new_status}
-                        </p>
-                      )}
-                      {shipmentNumber && (
-                        <p className="mt-0.5 font-mono text-xs text-blue-600 dark:text-blue-300">
-                          {shipmentNumber}
-                        </p>
-                      )}
-                      {event.notes && (
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{event.notes}</p>
-                      )}
-                    </div>
-                    <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
-                      {formatMiamiDateTime(event.created_at)}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Main info */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="mb-3 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Información del paquete</h2>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
           <InfoRow label={pkg.tipo_carga === 'Aéreo Consolidado' ? 'AWB / Carrier' : 'Carrier'} value={pkg.carrier ?? '—'} />
           <InfoRow label="Recibido" value={formatMiamiDateTime(pkg.received_at)} />
           <InfoRow label="Peso" value={pkg.weight_lbs ? `${pkg.weight_lbs} lbs${pkg.weight_kg ? ` / ${pkg.weight_kg} kg` : ''}` : '—'} />
@@ -452,7 +422,7 @@ export default function PortalPaqueteDetailPage() {
         id="factura-comercial"
         className="rounded-2xl border border-slate-200 bg-white p-5 transition target:border-blue-400 target:ring-4 target:ring-blue-100 dark:border-slate-800 dark:bg-slate-900 dark:target:border-blue-500 dark:target:ring-blue-950/50"
       >
-        <div className="flex items-start gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <div className="rounded-xl bg-blue-50 p-2.5 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
             <FileText className="h-5 w-5" />
           </div>
@@ -462,9 +432,9 @@ export default function PortalPaqueteDetailPage() {
               Adjunta la factura de tu compra para evitar retrasos durante la consolidación y el tránsito.
             </p>
           </div>
-          {documents.length > 0 && (
-            <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-              Recibida
+          {currentDocument && (
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${needsInvoice ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}>
+              {currentDocument.status}
             </span>
           )}
         </div>
@@ -503,10 +473,11 @@ export default function PortalPaqueteDetailPage() {
         )}
 
         <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-4 dark:border-slate-700">
-          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            {documents.length > 0 ? 'Adjuntar una nueva versión' : 'Adjuntar documento'}
+          <label htmlFor="commercial-invoice" className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {documents.length > 0 ? currentDocument?.status === 'Requiere corrección' ? 'Adjuntar factura corregida' : 'Adjuntar una nueva versión' : 'Adjuntar documento'}
           </label>
           <input
+            id="commercial-invoice"
             key={uploadInputKey}
             type="file"
             accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png"
@@ -528,6 +499,49 @@ export default function PortalPaqueteDetailPage() {
           </div>
         </div>
       </div>
+
+      {events.length > 0 && (
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <summary className="cursor-pointer mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            Historial de movimientos
+          </summary>
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {events.map((event) => {
+              const shipmentNumber =
+                typeof event.metadata?.shipment_number === 'string'
+                  ? event.metadata.shipment_number
+                  : null
+              return (
+                <div key={event.id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {event.new_status || event.event_type}
+                      </p>
+                      {event.old_status && event.new_status && (
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          {event.old_status} &gt; {event.new_status}
+                        </p>
+                      )}
+                      {shipmentNumber && (
+                        <p className="mt-0.5 font-mono text-xs text-blue-600 dark:text-blue-300">
+                          {shipmentNumber}
+                        </p>
+                      )}
+                      {event.notes && (
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{event.notes}</p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+                      {formatMiamiDateTime(event.created_at)}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </details>
+      )}
 
       {/* Photos */}
       {photoUrls.length > 0 && (
@@ -583,6 +597,7 @@ export default function PortalPaqueteDetailPage() {
         </div>
       )}
 
+      {pkg.status === 'Entregado' && <Link href="/portal/contacto" className="block rounded-xl border border-slate-200 p-4 text-sm font-semibold text-blue-600 dark:border-slate-700 dark:text-blue-400">¿Daño o faltante después de recibirlo? Contactar al equipo con este tracking</Link>}
       {/* Report incident CTA */}
       {pkg.status !== 'Entregado' && incidencias.filter(i => i.status === 'Abierta' || i.status === 'En revisión').length === 0 && (
         <button

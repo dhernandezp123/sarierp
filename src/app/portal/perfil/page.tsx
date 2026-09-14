@@ -4,26 +4,26 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
-  MapPin, KeyRound, User, ChevronRight, Calculator, Truck,
-  Phone, FileText, ShieldAlert, Info, LogOut, Smartphone, BookOpen,
+  MapPin, KeyRound, User, ChevronRight, Calculator,
+  Phone, FileText, ShieldAlert, Info, LogOut,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 
-const APP_VERSION = '1.0.0'
 
 export default function PortalPerfilPage() {
   const { user, profile } = useUser()
   const router = useRouter()
   const [changingPwd, setChangingPwd] = useState(false)
   const [pwd, setPwd] = useState({ new: '', confirm: '' })
+  const [showPassword, setShowPassword] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (pwd.new !== pwd.confirm) { toast.error('Las contraseñas no coinciden'); return }
-    if (pwd.new.length < 6) { toast.error('Mínimo 6 caracteres'); return }
+    if (pwd.new.length < 8) { toast.error('Mínimo 8 caracteres'); return }
     setSaving(true)
     try {
       const { error } = await supabase.auth.updateUser({ password: pwd.new })
@@ -31,8 +31,8 @@ export default function PortalPerfilPage() {
       toast.success('Contraseña actualizada correctamente')
       setChangingPwd(false)
       setPwd({ new: '', confirm: '' })
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al cambiar contraseña')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al cambiar contraseña')
     } finally {
       setSaving(false)
     }
@@ -48,8 +48,8 @@ export default function PortalPerfilPage() {
   return (
     <div className="space-y-5 pb-4">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Perfil</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Cuenta, herramientas e información</p>
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Mi cuenta</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Tus datos, seguridad e información de servicio</p>
       </div>
 
       {/* Account info */}
@@ -67,20 +67,14 @@ export default function PortalPerfilPage() {
         </div>
       </Section>
 
+      <Link href="/portal/contacto" className="block text-sm font-semibold text-blue-600 dark:text-blue-400">Solicitar corrección de mis datos</Link>
       {/* Address */}
       <Section>
         <SectionHeader icon={<MapPin className="h-4 w-4" />} title="Dirección Miami" />
-        <NavLink href="/portal/perfil/direccion-miami" label="Mi dirección de consignación" sub="Gestiona tu casillero en Miami" />
+        <NavLink href="/portal/perfil/direccion-miami" label="Mi dirección de consignación" sub="Consulta y copia tu dirección para compras" />
       </Section>
 
-      {/* Tools */}
-      <Section>
-        <SectionHeader icon={<Calculator className="h-4 w-4" />} title="Herramientas" />
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          <NavLink href="/portal/calculadora" label="Calculadora de Volumen" sub="FT³ y CBM en tiempo real" />
-          <NavLink href="/portal/pickup" label="Solicitud de Recogida" sub="Coordina recolección de paquetes" />
-        </div>
-      </Section>
+      <Section><SectionHeader icon={<Calculator className="h-4 w-4" />} title="Gestiones" /><NavLink href="/portal/solicitudes" label="Mis solicitudes y herramientas" sub="Prealertas, recogidas, incidencias y calculadora" /></Section>
 
       {/* Contact & Info */}
       <Section>
@@ -110,14 +104,14 @@ export default function PortalPerfilPage() {
             )}
           </div>
           {changingPwd ? (
-            <form onSubmit={handleChangePassword} className="space-y-3">
+            <form onSubmit={handleChangePassword} className="space-y-3"><p className="text-xs text-slate-500">Usa al menos 8 caracteres.</p>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Nueva contraseña</label>
-                <input type="password" value={pwd.new} onChange={e => setPwd(p => ({ ...p, new: e.target.value }))} placeholder="••••••••" required className={fieldClass} />
+                <label htmlFor="account-password" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Nueva contraseña</label>
+                <input id="account-password" autoComplete="new-password" minLength={8} type={showPassword ? "text" : "password"} value={pwd.new} onChange={e => setPwd(p => ({ ...p, new: e.target.value }))} placeholder="••••••••" required className={fieldClass} />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Confirmar nueva contraseña</label>
-                <input type="password" value={pwd.confirm} onChange={e => setPwd(p => ({ ...p, confirm: e.target.value }))} placeholder="••••••••" required className={fieldClass} />
+                <label htmlFor="account-confirm-password" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Confirmar nueva contraseña</label>
+                <input id="account-confirm-password" autoComplete="new-password" minLength={8} type={showPassword ? "text" : "password"} value={pwd.confirm} onChange={e => setPwd(p => ({ ...p, confirm: e.target.value }))} placeholder="••••••••" required className={fieldClass} />
               </div>
               <div className="flex justify-end gap-2 pt-1">
                 <button type="button" onClick={() => { setChangingPwd(false); setPwd({ new: '', confirm: '' }) }} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300">
@@ -127,24 +121,10 @@ export default function PortalPerfilPage() {
                   {saving ? 'Guardando...' : 'Actualizar'}
                 </button>
               </div>
-            </form>
+            <button type="button" aria-pressed={showPassword} onClick={() => setShowPassword(v => !v)} className="py-2 text-sm font-semibold text-blue-600 dark:text-blue-400">{showPassword ? "Ocultar contraseñas" : "Mostrar contraseñas"}</button></form>
           ) : (
             <p className="text-sm text-slate-400 dark:text-slate-500">••••••••••••</p>
           )}
-        </div>
-      </Section>
-
-      {/* App settings (placeholders) */}
-      <Section>
-        <SectionHeader icon={<Smartphone className="h-4 w-4" />} title="Aplicación" />
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          <PlaceholderItem label="Autenticación biométrica" badge="Próximamente en app móvil" />
-          <PlaceholderItem label="Buscar actualizaciones" badge="Próximamente en app móvil" />
-          <NavLinkDisabled icon={<BookOpen className="h-4 w-4 text-slate-300 dark:text-slate-600" />} label="Tutoriales de uso" />
-          <NavLinkDisabled label="Restablecer tutoriales" />
-        </div>
-        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800">
-          <p className="text-xs text-slate-400 dark:text-slate-500">Versión {APP_VERSION}</p>
         </div>
       </Section>
 
@@ -190,24 +170,5 @@ function NavLink({ href, label, sub, icon }: { href: string; label: string; sub?
       </div>
       <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 dark:text-slate-600" />
     </Link>
-  )
-}
-
-function NavLinkDisabled({ label, icon }: { label: string; icon?: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3 px-5 py-4 opacity-40">
-      {icon && <span className="shrink-0">{icon}</span>}
-      <p className="flex-1 text-sm font-medium text-slate-900 dark:text-white">{label}</p>
-      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-    </div>
-  )
-}
-
-function PlaceholderItem({ label, badge }: { label: string; badge: string }) {
-  return (
-    <div className="flex items-center justify-between px-5 py-4">
-      <p className="text-sm font-medium text-slate-900 dark:text-white">{label}</p>
-      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">{badge}</span>
-    </div>
   )
 }

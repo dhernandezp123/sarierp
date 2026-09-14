@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, Package, AlertTriangle, Info, CheckCheck } from 'lucide-react'
 import { toast } from 'sonner'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import {
+  PortalFilterPills,
   PortalButton,
   PortalCard,
   PortalEmptyState,
@@ -45,47 +47,55 @@ export default function NotificacionesPage() {
   const [loading, setLoading] = useState(true)
   const [marking, setMarking] = useState(false)
 
+  const [loadError, setLoadError] = useState(false)
+  const [page, setPage] = useState(0)
+  const [filter, setFilter] = useState<'Todas' | 'Sin leer'>('Todas')
+  const [total, setTotal] = useState(0)
+  const [revision, setRevision] = useState(0)
   useEffect(() => {
-    if (!user) return
-    loadNotifications()
-  }, [user])
-
-  const loadNotifications = async () => {
-    if (!user) return
-    setLoading(true)
-    const { data } = await supabase
-      .from('client_notifications')
-      .select('id, title, body, type, entity_type, entity_id, read_at, created_at')
-      .eq('profile_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    setNotifications((data ?? []) as Notification[])
-    setLoading(false)
-  }
+    if (!user?.id) return
+    const controller = new AbortController()
+    const profileId = user.id
+    const timer = window.setTimeout(async () => {
+      setLoading(true)
+      setLoadError(false)
+      try {
+        let query = supabase.from('client_notifications').select('id, title, body, type, entity_type, entity_id, read_at, created_at', { count: 'exact' }).eq('profile_id', profileId)
+        if (filter === 'Sin leer') query = query.is('read_at', null)
+        const { data, error, count } = await query.order('created_at', { ascending: false }).order('id', { ascending: false }).range(page * 50, (page + 1) * 50 - 1).abortSignal(controller.signal)
+        if (error) throw error
+        if (!controller.signal.aborted) { setNotifications((data || []) as Notification[]); setTotal(count || 0) }
+      } catch { if (!controller.signal.aborted) setLoadError(true) }
+      finally { if (!controller.signal.aborted) setLoading(false) }
+    }, 0)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [user?.id, page, filter, revision])
 
   const markAsRead = async (id: string) => {
-    await supabase
-      .from('client_notifications')
-      .update({ read_at: new Date().toISOString() })
-      .eq('id', id)
-    setNotifications(prev =>
-      prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n)
-    )
+    if (!user || marking) return
+    const readAt = new Date().toISOString()
+    setMarking(true)
+    try {
+      const { data, error } = await supabase.from('client_notifications').update({ read_at: readAt }).eq('id', id).eq('profile_id', user.id).select('id')
+      if (error || !data?.length) throw error || new Error('Aviso no disponible')
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read_at: readAt } : n))
+      window.dispatchEvent(new Event('portal-notifications-changed'))
+      if (filter === 'Sin leer') { setPage(0); setRevision(v => v + 1) }
+    } catch { toast.error('No se pudo marcar como leído. Intenta nuevamente.') }
+    finally { setMarking(false) }
   }
 
   const markAllRead = async () => {
-    if (!user) return
-    const unread = notifications.filter(n => !n.read_at)
-    if (unread.length === 0) return
+    if (!user || marking) return
     setMarking(true)
-    await supabase
-      .from('client_notifications')
-      .update({ read_at: new Date().toISOString() })
-      .eq('profile_id', user.id)
-      .is('read_at', null)
-    setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })))
-    toast.success('Todas las notificaciones marcadas como leídas')
-    setMarking(false)
+    try {
+      const { error } = await supabase.from('client_notifications').update({ read_at: new Date().toISOString() }).eq('profile_id', user.id).is('read_at', null)
+      if (error) throw error
+      setPage(0); setRevision(v => v + 1)
+      window.dispatchEvent(new Event('portal-notifications-changed'))
+      toast.success('Notificaciones marcadas como leídas')
+    } catch { toast.error('No se pudieron marcar como leídas. Intenta nuevamente.') }
+    finally { setMarking(false) }
   }
 
   const handleClick = async (n: Notification) => {
@@ -94,8 +104,10 @@ export default function NotificacionesPage() {
     // Navigate to related entity
     if (n.entity_type === 'miami_packages' && n.entity_id) {
       router.push(`/portal/paquetes/${n.entity_id}`)
+    } else if (n.entity_type === 'shipments' && n.entity_id) {
+      router.push(`/portal/envios/${n.entity_id}`)
     } else if (n.entity_type === 'miami_incidencias' && n.entity_id) {
-      router.push('/portal/incidencias')
+      router.push(`/portal/incidencias#caso-${n.entity_id}`)
     }
   }
 
@@ -105,7 +117,7 @@ export default function NotificacionesPage() {
     <div className="space-y-5">
       <PortalPageHeader
         title="Notificaciones"
-        subtitle={unreadCount > 0 ? `${unreadCount} sin leer` : undefined}
+        subtitle={unreadCount > 0 ? `${unreadCount} sin leer en esta página` : undefined}
         action={unreadCount > 0 ? (
           <PortalButton variant="secondary" onClick={markAllRead} disabled={marking}>
             <CheckCheck className="h-3.5 w-3.5" />
@@ -114,7 +126,8 @@ export default function NotificacionesPage() {
         ) : undefined}
       />
 
-      <PortalCard>
+      <PortalFilterPills options={['Todas', 'Sin leer'] as const} value={filter} onChange={value => { setFilter(value); setPage(0) }} />
+      {loadError ? <PortalError onRetry={() => setRevision(v => v + 1)} /> : <PortalCard>
         {loading ? (
           <div className="space-y-3 p-4">
             {[...Array(4)].map((_, i) => (
@@ -138,6 +151,7 @@ export default function NotificacionesPage() {
                 <button
                   key={n.id}
                   type="button"
+                  disabled={marking}
                   onClick={() => handleClick(n)}
                   className={`flex w-full items-start gap-3 px-5 py-4 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/60 ${bg}`}
                 >
@@ -156,7 +170,7 @@ export default function NotificacionesPage() {
                       {n.title}
                     </p>
                     {n.body && (
-                      <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400 line-clamp-2">
+                      <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400 whitespace-pre-wrap break-words">
                         {n.body}
                       </p>
                     )}
@@ -177,7 +191,8 @@ export default function NotificacionesPage() {
             })}
           </div>
         )}
-      </PortalCard>
+      </PortalCard>}
+      {!loading && !loadError && <div className="flex flex-wrap justify-between gap-3"><p className="text-xs text-slate-500">{total} avisos · Página {page + 1}</p><div className="flex gap-2"><PortalButton variant="secondary" disabled={page === 0} onClick={() => setPage(v => v - 1)}>Anterior</PortalButton><PortalButton variant="secondary" disabled={(page + 1) * 50 >= total} onClick={() => setPage(v => v + 1)}>Siguiente</PortalButton></div></div>}
     </div>
   )
 }

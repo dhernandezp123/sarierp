@@ -7,6 +7,8 @@ import {
   CheckCircle2, Clock, AlertTriangle, Ship, Plane, Truck,
 } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
+import { portalPackageStatus } from '@/src/lib/portal'
 import { useUser } from '@/src/hooks/useUser'
 
 type PackageRow = {
@@ -15,6 +17,8 @@ type PackageRow = {
   carrier: string | null
   warehouse_number: string | null
   status: string
+  cargo_status: string | null
+  miami_package_documents: { status: string; review_notes: string | null; created_at: string }[]
   received_at: string
 }
 
@@ -77,15 +81,17 @@ export default function PortalDashboard() {
   const [shipments, setShipments]   = useState<ShipmentRow[]>([])
   const [packageCount, setPackageCount] = useState(0)
   const [preAlertCount, setPreAlertCount] = useState(0)
-  const [hasAddress, setHasAddress] = useState<boolean | null>(null)
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading]       = useState(true)
 
   const loadData = async (clientId: string) => {
     setLoading(true)
-    const [packagesResult, warehouseCountResult, alertsResult, addressResult, shipmentsResult] = await Promise.all([
+    setLoadError(false)
+    try {
+    const [packagesResult, warehouseCountResult, alertsResult, shipmentsResult] = await Promise.all([
       supabase
         .from('miami_packages')
-        .select('id, tracking_number, carrier, warehouse_number, status, received_at')
+        .select('id, tracking_number, carrier, warehouse_number, status, cargo_status, received_at, miami_package_documents(status, review_notes, created_at)')
         .eq('cliente_id', clientId)
         .order('received_at', { ascending: false })
         .limit(3),
@@ -93,7 +99,7 @@ export default function PortalDashboard() {
         .from('miami_packages')
         .select('id', { count: 'exact', head: true })
         .eq('cliente_id', clientId)
-        .eq('status', 'Asignado'),
+        .neq('status', 'Entregado'),
       supabase
         .from('miami_pre_alerts')
         .select('id, tracking_number, carrier, description, expected_date', { count: 'exact' })
@@ -102,24 +108,18 @@ export default function PortalDashboard() {
         .order('created_at', { ascending: false })
         .limit(5),
       supabase
-        .from('client_addresses')
-        .select('id')
-        .eq('cliente_id', clientId)
-        .eq('is_active', true)
-        .limit(1),
-      supabase
         .rpc('get_client_shipments_v2', {
           p_include_completed: false,
         }),
     ])
 
+    if ([packagesResult, warehouseCountResult, alertsResult, shipmentsResult].some(result => result.error)) throw new Error("Portal load failed")
     setPackages((packagesResult.data ?? []) as PackageRow[])
     setPackageCount(warehouseCountResult.count ?? 0)
     setPreAlerts((alertsResult.data ?? []) as PreAlertRow[])
     setPreAlertCount(alertsResult.count ?? 0)
-    setHasAddress((addressResult.data ?? []).length > 0)
     setShipments((shipmentsResult.data ?? []) as ShipmentRow[])
-    setLoading(false)
+    } catch { setLoadError(true) } finally { setLoading(false) }
   }
 
   useEffect(() => {
@@ -129,6 +129,8 @@ export default function PortalDashboard() {
     return () => window.clearTimeout(timeout)
   }, [profile?.cliente_id])
 
+  if (loadError) return <PortalError onRetry={() => profile?.cliente_id && void loadData(profile.cliente_id)} />
+  const corrections = packages.filter(pkg => [...(pkg.miami_package_documents || [])].sort((a,b) => b.created_at.localeCompare(a.created_at)).find(doc => doc.status !== 'Reemplazada')?.status === 'Requiere corrección')
   return (
     <div className="space-y-5">
       {/* Welcome */}
@@ -139,26 +141,27 @@ export default function PortalDashboard() {
         </h1>
       </div>
 
-      {/* No address banner */}
-      {hasAddress === false && (
+      {!loading && corrections.length > 0 && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900 dark:bg-amber-950/30"><h2 className="font-semibold">Requiere tu atención</h2><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Facturas por corregir en tus paquetes recientes.</p>{corrections.map(pkg => <Link key={pkg.id} href={`/portal/paquetes/${pkg.id}?section=factura-comercial`} className="mt-3 block break-all text-sm font-semibold text-blue-700 underline dark:text-blue-300">Corregir factura · {pkg.tracking_number}</Link>)}</section>}
+      {/* Address shortcut */}
+      {(
         <Link
           href="/portal/perfil/direccion-miami"
-          className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 dark:border-amber-900/40 dark:bg-amber-950/20"
+          className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 dark:border-blue-900/40 dark:bg-blue-950/20"
         >
-          <MapPin className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <MapPin className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Configura tu dirección en Miami</p>
-            <p className="text-xs text-amber-600 dark:text-amber-400">Necesitas una dirección para recibir tus paquetes</p>
+            <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">Tu dirección para compras</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400">Ver y copiar tu dirección y código de cliente</p>
           </div>
-          <ArrowRight className="h-4 w-4 text-amber-500" />
+          <ArrowRight className="h-4 w-4 text-blue-500" />
         </Link>
       )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Envíos activos" value={shipments.length} sublabel="en tránsito" loading={loading} />
-        <StatCard label="En bodega Miami" value={packageCount} sublabel="paquetes listos" loading={loading} />
-        <StatCard label="Pre-alertas" value={preAlertCount} sublabel="pendientes" loading={loading} />
+        <StatCard href="/portal/envios" label="Envíos activos" value={shipments.length} sublabel="en seguimiento" loading={loading} />
+        <StatCard href="/portal/paquetes?estado=Activos" label="Paquetes activos" value={packageCount} sublabel="por entregar" loading={loading} />
+        <StatCard href="/portal/pre-alertas" label="Pre-alertas" value={preAlertCount} sublabel="pendientes" loading={loading} />
       </div>
 
       {/* Active shipments */}
@@ -207,7 +210,7 @@ export default function PortalDashboard() {
                             · {s.booking_count} booking{s.booking_count === 1 ? '' : 's'}
                           </span>
                         )}
-                        {s.max_eta && <span className="ml-1">· ETA {fmt(s.max_eta)}</span>}
+                        {s.max_eta && <span className="ml-1">· Llegada estimada {fmt(s.max_eta)}</span>}
                       </p>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${shipmentStatusColor(s.aggregate_status)}`}>
@@ -221,6 +224,7 @@ export default function PortalDashboard() {
         </div>
       )}
 
+      <Link href="/portal/solicitudes" className="block text-sm font-semibold text-blue-600 dark:text-blue-400">Solicitudes y ayuda →</Link>
       {/* Quick actions */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
@@ -282,7 +286,7 @@ export default function PortalDashboard() {
             {packages.map(p => {
               const cfg = pkgStatusConfig[p.status] ?? { label: p.status, color: 'bg-slate-100 text-slate-600', icon: null }
               return (
-                <div key={p.id} className="flex items-center gap-3 px-5 py-3.5">
+                <Link href={`/portal/paquetes/${p.id}`} key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800">
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-mono text-sm font-semibold text-slate-900 dark:text-white">{p.tracking_number}</p>
                     <p className="text-xs text-slate-400">
@@ -292,9 +296,9 @@ export default function PortalDashboard() {
                   </div>
                   <span className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.color}`}>
                     {cfg.icon}
-                    {cfg.label}
+                    {portalPackageStatus(p)}
                   </span>
-                </div>
+                </Link>
               )
             })}
           </div>
@@ -335,18 +339,20 @@ export default function PortalDashboard() {
 }
 
 function StatCard({
+  href,
   label,
   value,
   sublabel,
   loading,
 }: {
+  href: string
   label: string
   value: number
   sublabel: string
   loading: boolean
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <Link href={href} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 font-display text-2xl font-semibold text-slate-900 dark:text-white">
         {loading ? (
@@ -356,6 +362,6 @@ function StatCard({
         )}
       </p>
       <p className="mt-1 text-xs text-slate-400">{sublabel}</p>
-    </div>
+    </Link>
   )
 }

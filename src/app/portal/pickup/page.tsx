@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Truck, Plus, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDateShort, toDateInputValue } from '@/src/lib/format'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 
@@ -30,8 +31,10 @@ export default function PickupPage() {
   const { user, profile } = useUser()
   const router = useRouter()
   const [requests, setRequests] = useState<PickupRequest[]>([])
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [sent, setSent] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     pickup_address: '',
@@ -41,25 +44,30 @@ export default function PickupPage() {
     description: '',
   })
 
-  useEffect(() => {
-    if (!user) return
-    loadRequests()
-  }, [user])
 
-  const loadRequests = async () => {
-    if (!user) return
+
+  const loadRequests = useCallback(async () => {
+    setLoadError(false)
+    try {
+    if (!user?.id) return
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('client_pickup_requests')
       .select('id, pickup_address, contact_name, contact_phone, scheduled_date, description, status, created_at')
       .eq('profile_id', user.id)
       .order('created_at', { ascending: false })
+    if (error) throw error
     setRequests((data ?? []) as PickupRequest[])
     setLoading(false)
-  }
+    } catch { setLoadError(true) } finally { setLoading(false) }
+  }, [user])
+
+  useEffect(() => { if (!user?.id) return; const timer = window.setTimeout(() => void loadRequests(), 0); return () => window.clearTimeout(timer) }, [user?.id, loadRequests])
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return
     if (!user) return
     if (!form.pickup_address.trim()) { toast.error('La dirección de recogida es requerida'); return }
     setSaving(true)
@@ -75,12 +83,13 @@ export default function PickupPage() {
         status:          'Pendiente',
       })
       if (error) throw error
-      toast.success('Solicitud de recogida enviada. Te confirmaremos pronto.')
+      toast.success('Solicitud de recogida enviada')
+      setSent(true)
       setShowForm(false)
       setForm({ pickup_address: '', contact_name: '', contact_phone: '', scheduled_date: '', description: '' })
       await loadRequests()
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al enviar solicitud')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al enviar solicitud')
     } finally {
       setSaving(false)
     }
@@ -91,13 +100,15 @@ export default function PickupPage() {
 
   const fieldClass = 'h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-950'
 
+  if (loadError) return <PortalError onRetry={() => void loadRequests()} />
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => router.back()}
+            aria-label="Volver" onClick={() => router.push('/portal/solicitudes')}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -119,6 +130,7 @@ export default function PickupPage() {
         )}
       </div>
 
+      {sent && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">Solicitud recibida. La fecha es una preferencia; consulta aquí la confirmación del equipo antes de preparar la entrega.</p>}
       {/* New request form */}
       {showForm && (
         <form onSubmit={handleSubmit} className="rounded-2xl border border-blue-200 bg-white p-5 dark:border-blue-900/40 dark:bg-slate-900">
@@ -128,28 +140,28 @@ export default function PickupPage() {
               <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">
                 Dirección de recogida <span className="text-red-500">*</span>
               </label>
-              <textarea
+              <textarea aria-label="Dirección de recogida"
                 value={form.pickup_address}
                 onChange={set('pickup_address')}
                 rows={2}
-                placeholder="Dirección completa donde recogeremos los paquetes..."
+                placeholder="País, ciudad, calle, número y referencias para recoger…"
                 required
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-950"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Nombre de contacto</label>
-                <input value={form.contact_name} onChange={set('contact_name')} placeholder="Quien entrega" className={fieldClass} />
+                <input aria-label="Nombre de contacto" value={form.contact_name} onChange={set('contact_name')} placeholder="Quien entrega" className={fieldClass} />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Teléfono de contacto</label>
-                <input type="tel" value={form.contact_phone} onChange={set('contact_phone')} placeholder="+504 0000-0000" className={fieldClass} />
+                <input aria-label="Teléfono de contacto" type="tel" value={form.contact_phone} onChange={set('contact_phone')} placeholder="+504 0000-0000" className={fieldClass} />
               </div>
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Fecha preferida</label>
-              <input
+              <input aria-label="Fecha preferida"
                 type="date"
                 value={form.scheduled_date}
                 onChange={set('scheduled_date')}
@@ -159,7 +171,7 @@ export default function PickupPage() {
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Descripción de la carga</label>
-              <textarea
+              <textarea aria-label="Descripción del contenido"
                 value={form.description}
                 onChange={set('description')}
                 rows={2}
@@ -199,12 +211,12 @@ export default function PickupPage() {
               <div key={r.id} className="px-5 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{r.pickup_address}</p>
-                    {r.description && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate">{r.description}</p>}
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white break-words">{r.pickup_address}</p>
+                    {r.description && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 break-words">{r.description}</p>}
                     <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
                       <Clock className="h-3 w-3" />
                       {r.scheduled_date
-                        ? formatDateShort(r.scheduled_date, { year: true })
+                        ? `${r.status === "Pendiente" ? "Solicitada" : "Programada"}: ${formatDateShort(r.scheduled_date, { year: true })}`
                         : `Creada ${new Date(r.created_at).toLocaleDateString('es-HN', { day: '2-digit', month: 'short' })}`
                       }
                     </div>

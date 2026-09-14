@@ -9,16 +9,18 @@ export function useClientNotifications(profileId: string | undefined) {
   useEffect(() => {
     if (!profileId) return
 
+    let active = true
     const fetchUnread = async () => {
-      const { count } = await supabase
+      const { count, error } = await supabase
         .from('client_notifications')
         .select('id', { count: 'exact', head: true })
         .eq('profile_id', profileId)
         .is('read_at', null)
-      setUnreadCount(count ?? 0)
+      if (active && !error) setUnreadCount(count ?? 0)
     }
 
-    fetchUnread()
+    void fetchUnread()
+    window.addEventListener("portal-notifications-changed", fetchUnread)
 
     // Real-time: re-fetch when a notification is inserted or updated for this profile
     const channel = supabase
@@ -35,7 +37,7 @@ export function useClientNotifications(profileId: string | undefined) {
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    return () => { active = false; window.removeEventListener("portal-notifications-changed", fetchUnread); supabase.removeChannel(channel) }
   }, [profileId])
 
   return { unreadCount }

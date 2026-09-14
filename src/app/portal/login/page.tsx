@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
+import { PLATFORM_CONTACT_EMAIL } from '@/src/lib/platform-branding'
 import { getLoginDestination } from '@/src/lib/auth-redirect'
 
 const emailInputId = 'portal-login-email'
@@ -222,7 +223,7 @@ export default function PortalLoginPage() {
             </Link>
           </p>
           <p className="mt-4.5 text-center text-xs leading-relaxed text-[#9AA3B2] dark:text-slate-500">
-            ¿Problemas para ingresar? Contacta a tu agente de carga.
+            ¿Problemas de acceso? <a href={`mailto:${PLATFORM_CONTACT_EMAIL}`} className="font-medium text-blue-600 underline dark:text-blue-400">Contactar al soporte de la plataforma</a>. Para aprobar tu cuenta, contacta a tu agente de carga.
           </p>
         </div>
       </div>

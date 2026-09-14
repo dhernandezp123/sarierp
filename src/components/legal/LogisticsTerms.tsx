@@ -19,8 +19,8 @@ export function LogisticsTerms() {
       ))}
       <footer className="flex flex-wrap gap-4 text-sm text-blue-700 underline underline-offset-4 dark:text-blue-300">
         <Link href="/politicas">Privacidad y términos del software</Link>
-        <a href="/legal/logistics-2026-09-07.json" download>Descargar esta versión</a>
-        <a href="/legal/logistics-2026-06.json" download>Consultar versión anterior (junio de 2026)</a>
+        <a href="/legal/logistics-2026-09-07.json" download>Descargar registro de esta versión (JSON)</a>
+        <a href="/legal/logistics-2026-06.json" download>Versión anterior (junio de 2026, JSON)</a>
       </footer>
     </article>
   )

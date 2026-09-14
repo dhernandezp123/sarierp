@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ChevronLeft,
@@ -11,6 +11,7 @@ import {
   Phone,
 } from 'lucide-react'
 
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   COMPANY_BRANDING_SELECT,
@@ -58,8 +59,8 @@ const buildOffices = (company: CompanyBranding): Office[] => {
       mapsUrl: buildMapUrl(miamiAddress),
       wazeUrl: buildWazeUrl(miamiAddress),
       hours: [
-        { day: 'Lunes - Viernes', time: '8:00 AM - 5:00 PM EST' },
-        { day: 'Sabado', time: '9:00 AM - 1:00 PM EST' },
+        { day: 'Lunes - Viernes', time: '8:00 AM - 5:00 PM (hora Miami)' },
+        { day: 'Sabado', time: '9:00 AM - 1:00 PM (hora Miami)' },
         { day: 'Domingo', time: 'Cerrado' },
       ],
       phone: company.miami_phone,
@@ -93,43 +94,53 @@ const buildOffices = (company: CompanyBranding): Office[] => {
 export default function ContactoPage() {
   const router = useRouter()
   const [offices, setOffices] = useState<Office[]>([])
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    void loadCompanySettings()
-  }, [])
 
-  const loadCompanySettings = async () => {
-    const { data } = await supabase
+
+  const loadCompanySettings = useCallback(async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
+    const { data, error } = await supabase
       .from('company_settings')
       .select(COMPANY_BRANDING_SELECT)
       .limit(1)
       .maybeSingle()
 
+    if (error) throw error
     setOffices(buildOffices(normalizeCompanyBranding(data)))
     setLoading(false)
-  }
+    } catch { setLoadError(true) } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { const timer = window.setTimeout(() => void loadCompanySettings(), 0); return () => window.clearTimeout(timer) }, [loadCompanySettings])
+
+
+  if (loadError) return <PortalError onRetry={() => void loadCompanySettings()} />
 
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          aria-label="Volver" onClick={() => router.push('/portal/solicitudes')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div>
           <h1 className="text-xl font-semibold text-slate-900 dark:text-white">
-            Contactanos
+            Contáctanos
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Nuestras oficinas y horarios de atencion
+            Nuestras oficinas y horarios de atención
           </p>
         </div>
       </div>
 
+      <p className="text-xs text-slate-500">Confirma con el equipo la disponibilidad antes de visitar una oficina o enviar carga.</p>
       {loading && (
         <div className="space-y-4">
           {[...Array(2)].map((_, index) => (

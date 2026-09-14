@@ -6694,3 +6694,153 @@ Agregar una entrada por fix:
     La publicación no certifica el flujo autenticado con datos reales.
 - Commit de implementación: `305f605`. Resultado de publicación en commit
   documental posterior.
+
+### 2026-09-14 — REP-012 / UX-FIN-01 — Rentabilidad y cobertura del Dashboard Financiero
+
+- Estado: implementado y validado con pruebas locales, navegador y build final.
+  UAT autenticado, verificación de RLS desplegado y publicación pendientes.
+- Hallazgos: consultas sin paginación y errores de costos ignorados; suma de
+  monedas distintas bajo USD; utilidad presentada como real con costos parciales;
+  CSV limitado a ocho nombres truncados y montos redondeados. Filtros sin
+  persistencia ni etiquetas de fecha, pérdidas sin enlace al detalle y baja
+  visibilidad de registros pendientes de revisar.
+- Archivos: `src/app/(protected)/financial-dashboard/page.tsx`,
+  `src/lib/financial-dashboard.ts`, `tests/financial-dashboard.test.mjs`,
+  `HARDENING.md`.
+- SQL: no aplica. No se modifican políticas, permisos, documentos ni estados.
+- Cambios:
+  - Lectura completa con `readAllReportRows`, orden por ID, cláusulas IN de hasta
+    100 cotizaciones y exclusión de líneas eliminadas. Publicación del resultado
+    solo al completar todas las fuentes; errores persistentes, reintento,
+    invalidación de consultas obsoletas y aislamiento por usuario/rol.
+  - Comprobación de acceso mediante `can_select_provider_invoice_item` para una
+    cotización ganada visible. Si devuelve false, el costo y la detección de
+    pérdidas quedan explícitamente no disponibles; una restricción RLS no se
+    interpreta como ausencia de costos. Un error en esa comprobación bloquea
+    la consulta. No se sustituye la política RLS ni se amplían permisos.
+  - Registro por cotización y moneda. La venta de cabecera existente se conserva
+    cuando Pricing identifica una sola moneda; para Pricing multimoneda se usan
+    sus ventas por moneda sin duplicar ni consolidar la cabecera. Sin Pricing o
+    sin moneda identificable se exige revisión y no se inventa una base USD.
+  - Costos registrados incluyen los impuestos de proveedor existentes. Utilidad
+    y variación comparan importes de la misma moneda. Costos cero son válidos;
+    cantidades cero no se reemplazan por uno. Importes inválidos no son ceros.
+    Margen ponderado sobre ventas/costos comparables, con cobertura visible.
+  - “Utilidad con costos registrados” declara su carácter provisional. Alertas
+    de pérdidas, ausencia de costos, validación pendiente y datos por revisar
+    filtran el detalle y llevan el foco al encabezado. Enlaces a validación de
+    costos por cotización, Facturación, CxC y CxP.
+  - Fechas locales de creación, trimestre calendario, rangos invertidos
+    bloqueados, moneda/búsqueda/revisión/orden/paginación en URL. Filtros plegables
+    en móvil; etiquetas Desde/Hasta y calendarios legibles en oscuro.
+  - Gráficos con leyenda, centavos conservados, márgenes negativos permitidos y
+    nombres completos de cliente; agrupación por ID de cliente. El ranking
+    muestra ocho clientes y se identifica como tal. Meses sin datos no se
+    reconstruyen ni se presentan como ventas cero.
+  - CSV de todo el detalle filtrado, independiente de la página visible: moneda,
+    importes a dos decimales, nombres completos, estado de validación y cobertura.
+    BOM UTF-8 y neutralización de fórmulas; campos vacíos distinguen falta de
+    base de un monto cero. Tabla paginada 25/50/100 con desplazamiento propio.
+- Validaciones:
+  - `npm.cmd test`: 55/55, incluidas diez regresiones del dashboard financiero.
+    Monedas, cobertura parcial/costo cero, importes inválidos, eliminados,
+    margen ponderado, CSV, URL/orden, lectura completa, errores y permiso denegado.
+  - ESLint dirigido: sin errores ni avisos tras corregir el inicio de la carga.
+  - Chrome local con 1,302 cotizaciones simuladas y respuestas limitadas a 100:
+    1,300 registros USD, venta USD 130,715.00 y CSV de 1,300 filas con centavos y
+    nombres completos. Separación de HNL y registros sin moneda; paginación,
+    búsqueda del último registro, enlace de pérdida a su validación y URL al
+    recargar. Error en página posterior de Pricing/proveedor bloquea resultados
+    y CSV; reintento recupera. Permiso denegado se muestra sin falsas pérdidas.
+  - Navegador 1440/768/390/320 px sin desbordamiento de documento/main;
+    filtros móviles, etiquetas de fecha, rango inválido y oscuro comprobados.
+    Sin excepciones en la ejecución final. Solo fixtures; Supabase bloqueado.
+  - Harness temporal retirado; caché dev retirada con ruta absoluta verificada.
+    Evidencias locales ignoradas en `.ua/intermediate/financial-adjusted-*.png`.
+  - `npx.cmd tsc --noEmit`: OK después de retirar el harness y la caché dev.
+  - `npm.cmd run build`: OK, 72/72 páginas; la ruta de revisión no está incluida.
+  - ESLint final y `git diff --check`: OK.
+- Riesgos y pendientes:
+  - La función de lectura versionada no incluye Finanzas, aunque la página sí.
+    No se comprobó la definición desplegada con una sesión real. La interfaz
+    respeta la respuesta del servidor y muestra la limitación. Revisar el rol,
+    la visibilidad de Pricing y RLS en UAT antes de cerrar este hallazgo.
+  - Conciliar importes contra datos reales y validar navegación completa por rol,
+    Excel y volúmenes grandes. Las lecturas paginadas no son un snapshot
+    transaccional; actualizar tras cambios concurrentes. La muestra consultada
+    de permiso usa la política actual, uniforme para cotizaciones ganadas visibles;
+    revisar esa comprobación si se introduce autorización por cotización.
+  - No es facturación, caja ni utilidad contable definitiva. No se convierten
+    monedas, no se reconstruyen costos históricos y no se recalculan documentos.
+- Commit: pendiente de asignación. Commit y despliegue autorizados por el usuario;
+  resultado de publicación pendiente de verificar.
+
+### 2026-09-14 - UX-PORTAL-20260914 - Navegación y autoservicio del cliente
+
+- Estado: implementado localmente y validado con fixtures; UAT autenticado pendiente.
+- Hallazgos de origen: UX-PORTAL-01 a UX-PORTAL-12 en
+  `docs/portal-ux-review-2026-09-14.md`. UX-PORTAL-06 se atiende con acceso a
+  soporte tras entrega; la elegibilidad de reclamaciones queda pendiente de
+  definición operativa, sin modificar transiciones.
+- Archivos:
+  - Las 22 páginas existentes de `src/app/portal/**/page.tsx`, su `layout.tsx`
+    y la nueva `src/app/portal/solicitudes/page.tsx`.
+  - `src/components/portal/PortalUI.tsx`, `PortalFeedback.tsx`,
+    `PortalConfirmation.tsx`, `PortalPrintButton.tsx`.
+  - `src/lib/portal.ts`, `src/hooks/useClientNotifications.ts`,
+    `src/components/legal/LogisticsTerms.tsx`, `src/app/globals.css`.
+  - `tests/portal-ux.test.mjs`, documento de análisis y
+    `docs/uat/portal-ux-2026-09-14.md`.
+- SQL: ninguno. No se modifican políticas RLS, estados comerciales,
+  condiciones legales ni cálculos de facturación.
+- Cambios:
+  - Cinco destinos móviles y Solicitudes; regreso predecible, acceso a ayuda,
+    cuenta sin herramientas deshabilitadas y carga explícita de sesión/vinculación.
+  - Búsqueda de paquetes sobre el conjunto autorizado, filtros y paginación
+    en servidor, URL persistente y descarte de consultas obsoletas. Prealertas
+    con búsqueda/páginas; avisos con historial paginado y filtro sin leer.
+  - Errores de consultas separados de listas vacías. Los avisos y el
+    portapapeles solo confirman éxito tras completar su operación.
+  - Transporte y asignación diferenciados; factura vigente con corrección
+    visible; historial plegable y detalle móvil sin desbordamiento. Inicio
+    enlaza indicadores/paquetes y muestra correcciones de paquetes recientes.
+  - Historial de envíos finalizados/cancelados, fechas estimadas visibles,
+    plazos convertidos a la zona indicada y contacto para documentos pendientes.
+  - Confirmaciones persistentes, etiquetas accesibles, contraseñas consistentes,
+    dirección copiable por campo y conversión física de unidades en calculadora.
+  - Ayuda y búsqueda de materiales, retiro de métricas/promesas no verificadas
+    de Nosotros e impresión de términos conservando versiones y registro JSON.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 59/59 OK; incluye cuatro regresiones de portal sobre estados,
+    escape de tracking, zonas horarias de verano/invierno y cambio de unidades.
+  - ESLint de las rutas, componentes, hook y helper afectados: sin errores ni avisos.
+  - Chrome local: 23 pantallas a 1280/390/320 px, sin desbordamiento de documento
+    ni campos/botones sin nombre en las pantallas examinadas. Comprobación
+    adicional oscura en Inicio, Paquetes, detalle de Envío y Solicitudes.
+  - 18 comprobaciones de interacción con respuestas simuladas: búsqueda del
+    paquete 25, página 2, error/reintento, unidades, historial, zona horaria,
+    fallo/éxito de avisos, portapapeles denegado y confirmaciones de prealerta,
+    incidencia, recogida y acceso pendiente. Sin excepciones durante los recorridos.
+  - Harness temporal retirado. Caché dev eliminada tras verificar ruta absoluta
+    dentro del workspace. Evidencias locales ignoradas en `.ua/intermediate/`.
+  - `npm.cmd run build`: OK, 73/73 páginas; incluye Solicitudes y excluye el harness.
+  - `npx.cmd tsc --noEmit`: OK después de retirar el harness y del último ajuste.
+  - `git diff --check`: OK con la configuración de finales de línea del repositorio.
+- Riesgos / acciones pendientes:
+  - Validar cuentas reales y aislamiento RLS, carga de facturas privadas, enlaces
+    firmados, correos y recuperación de contraseña. Mocks no certifican estos flujos.
+  - Verificar la consulta de documentos anidados de Inicio contra esquema/RLS
+    desplegados. Las correcciones del Inicio abarcan los tres paquetes recientes;
+    no se presentan como inventario completo de tareas del cliente.
+  - Elegibilidad después de entrega, edición/cancelación de solicitudes,
+    adjuntos de incidencias y publicación de documentos requieren definición
+    operativa y permisos antes de ampliar el flujo.
+  - Incidencia y estado de paquete siguen siendo escrituras separadas: ante
+    fallo de la segunda se conserva la confirmación del caso y se informa del
+    pendiente, evitando duplicarlo. Atomicidad futura requiere migración propia.
+  - Incidencias, recogidas y RPC de envíos conservan su alcance de lectura actual;
+    revisar límites con volúmenes altos. Validar horarios y contenido operativo.
+  - Guion de aceptación completo: `docs/uat/portal-ux-2026-09-14.md`.
+- Commit: pendiente de asignación. Commit y despliegue autorizados por el usuario,
+  junto con los cambios previos del Dashboard Financiero. Publicación pendiente
+  de verificar.

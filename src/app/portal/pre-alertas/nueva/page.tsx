@@ -1,6 +1,6 @@
 'use client'
 
-import { toDateInputValue } from '@/src/lib/format'
+import { PortalConfirmation } from '@/src/components/portal/PortalConfirmation'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -14,6 +14,8 @@ const CARRIERS = ['UPS', 'FedEx', 'DHL', 'USPS', 'Amazon Logistics', 'OnTrac', '
 export default function NuevaPreAlertaPage() {
   const { profile } = useUser()
   const router = useRouter()
+  const [sent, setSent] = useState(false)
+  const [otherCarrier, setOtherCarrier] = useState('')
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     tracking_number: '',
@@ -27,6 +29,8 @@ export default function NuevaPreAlertaPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return
+    if (form.carrier === "Otro" && !otherCarrier.trim()) { toast.error("Indica el nombre del transportista"); return }
     if (!form.tracking_number.trim()) { toast.error('El tracking es requerido'); return }
     if (!profile?.cliente_id) { toast.error('Error de sesión'); return }
 
@@ -35,7 +39,7 @@ export default function NuevaPreAlertaPage() {
       const { error } = await supabase.from('miami_pre_alerts').insert({
         cliente_id:      profile.cliente_id,
         tracking_number: form.tracking_number.trim().toUpperCase(),
-        carrier:         form.carrier || null,
+        carrier:         (form.carrier === "Otro" ? otherCarrier.trim() : form.carrier) || null,
         description:     form.description.trim() || null,
         expected_date:   form.expected_date || null,
         status:          'Pendiente',
@@ -44,9 +48,9 @@ export default function NuevaPreAlertaPage() {
       if (error) throw error
 
       toast.success('Pre-alerta registrada correctamente')
-      router.replace('/portal/pre-alertas')
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al guardar')
+      setSent(true)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setSaving(false)
     }
@@ -54,12 +58,13 @@ export default function NuevaPreAlertaPage() {
 
   const fieldClass = 'h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-950'
 
+  if (sent) return <PortalConfirmation title="Prealerta registrada" description="Cuando recibamos tu compra en Miami podrás consultar el paquete desde tus prealertas." reference={form.tracking_number.trim().toUpperCase()} href="/portal/pre-alertas" />
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          aria-label="Volver" onClick={() => router.push('/portal/pre-alertas')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -72,7 +77,7 @@ export default function NuevaPreAlertaPage() {
 
       <div className="rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 dark:border-blue-900/30 dark:bg-blue-950/20">
         <p className="text-sm text-blue-800 dark:text-blue-200">
-          <strong>¿Para qué sirve?</strong> Al registrar el tracking de tu compra, el equipo de bodega puede identificar tu paquete cuando llegue y asignarlo a tu cuenta automáticamente.
+          Registra el tracking de tu compra para que bodega pueda identificarla cuando llegue a Miami.
         </p>
       </div>
 
@@ -85,7 +90,7 @@ export default function NuevaPreAlertaPage() {
             </label>
             <div className="relative">
               <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
+              <input aria-label="Número de tracking"
                 value={form.tracking_number}
                 onChange={set('tracking_number')}
                 placeholder="Copia el tracking de tu compra..."
@@ -103,18 +108,19 @@ export default function NuevaPreAlertaPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
               Courier / Transportista
             </label>
-            <select value={form.carrier} onChange={set('carrier')} className={fieldClass}>
+            <select aria-label="Transportista" value={form.carrier} onChange={set('carrier')} className={fieldClass}>
               <option value="">Seleccionar (opcional)...</option>
               {CARRIERS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
 
+          {form.carrier === "Otro" && <label className="block text-sm font-medium">Nombre del transportista<input aria-label="Campo de formulario" className={fieldClass} value={otherCarrier} onChange={event => setOtherCarrier(event.target.value)} required /></label>}
           {/* Description */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
               ¿Qué es? (descripción del contenido)
             </label>
-            <textarea
+            <textarea aria-label="Descripción del contenido"
               value={form.description}
               onChange={set('description')}
               rows={2}
@@ -126,13 +132,12 @@ export default function NuevaPreAlertaPage() {
           {/* Expected date */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Fecha estimada de llegada
+              Llegada prevista a Miami (opcional)
             </label>
-            <input
+            <input aria-label="Llegada prevista a Miami"
               type="date"
               value={form.expected_date}
               onChange={set('expected_date')}
-              min={toDateInputValue()}
               className={fieldClass}
             />
           </div>
@@ -140,7 +145,7 @@ export default function NuevaPreAlertaPage() {
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={() => router.back()}
+              aria-label="Volver" onClick={() => router.push('/portal/pre-alertas')}
               className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               Cancelar

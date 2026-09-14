@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, Plus, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { formatDateShort } from '@/src/lib/format'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import {
+  PortalSearchInput,
   PortalButton,
   PortalCard,
   PortalEmptyState,
@@ -39,29 +41,46 @@ export default function PortalPreAlertasPage() {
   const { profile } = useUser()
   const router = useRouter()
   const [alerts, setAlerts] = useState<PreAlert[]>([])
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Todos')
 
-  const loadAlerts = async (clientId: string) => {
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
+  const [total, setTotal] = useState(0)
+  const loadVersion = useRef(0)
+  const loadAlerts = useCallback(async (clientId: string) => {
+    const version = ++loadVersion.current
+    setLoadError(false)
+    try {
     setLoading(true)
-    const { data } = await supabase
+    let query = supabase
       .from('miami_pre_alerts')
-      .select('id, tracking_number, carrier, description, expected_date, status, created_at, matched_package_id')
+      .select('id, tracking_number, carrier, description, expected_date, status, created_at, matched_package_id', { count: 'exact' })
       .eq('cliente_id', clientId)
       .order('created_at', { ascending: false })
 
+    if (statusFilter !== 'Todos') query = query.eq('status', statusFilter)
+    if (search.trim()) query = query.ilike('tracking_number', `%${search.trim().replace(/[\\%_]/g, char => '\\' + char)}%`)
+    const { data, error, count } = await query.range(page * 20, (page + 1) * 20 - 1)
+    if (version !== loadVersion.current) return
+    if (error) throw error
+    setTotal(count || 0)
     setAlerts((data ?? []) as PreAlert[])
     setLoading(false)
-  }
+    } catch { if (version === loadVersion.current) setLoadError(true) } finally { if (version === loadVersion.current) setLoading(false) }
+  }, [page, statusFilter, search])
 
   useEffect(() => {
     const clientId = profile?.cliente_id
     if (!clientId) return
     const timeout = window.setTimeout(() => void loadAlerts(clientId), 0)
-    return () => window.clearTimeout(timeout)
-  }, [profile?.cliente_id])
+    return () => { window.clearTimeout(timeout); loadVersion.current += 1 }
+  }, [profile?.cliente_id, loadAlerts])
 
   const filtered = statusFilter === 'Todos' ? alerts : alerts.filter(a => a.status === statusFilter)
+
+  if (loadError) return <PortalError onRetry={() => profile?.cliente_id && void loadAlerts(profile.cliente_id)} />
 
   return (
     <div className="space-y-5">
@@ -76,7 +95,8 @@ export default function PortalPreAlertasPage() {
         )}
       />
 
-      <PortalFilterPills options={STATUS_FILTERS} value={statusFilter} onChange={setStatusFilter} />
+      <PortalSearchInput value={search} onChange={value => { setSearch(value); setPage(0) }} placeholder="Buscar prealerta por tracking" />
+      <PortalFilterPills options={STATUS_FILTERS} value={statusFilter} onChange={value => { setStatusFilter(value); setPage(0) }} />
 
       {/* List */}
       <PortalCard>
@@ -89,7 +109,7 @@ export default function PortalPreAlertasPage() {
         ) : filtered.length === 0 ? (
           <PortalEmptyState
             icon={<Bell className="h-8 w-8" />}
-            title={alerts.length === 0 ? 'No tienes pre-alertas registradas' : 'Sin resultados'}
+            title={search || statusFilter !== 'Todos' ? 'Sin resultados' : 'No tienes pre-alertas registradas'}
             description={alerts.length === 0 ? 'Registra una pre-alerta para notificar que un paquete viene en camino.' : undefined}
             action={alerts.length === 0 ? (
               <PortalButton onClick={() => router.push('/portal/pre-alertas/nueva')}>
@@ -138,6 +158,7 @@ export default function PortalPreAlertasPage() {
           </div>
         )}
       </PortalCard>
+      {!loading && <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">{total} prealertas · Página {page + 1}</p><div className="flex gap-2"><PortalButton variant="secondary" disabled={!page} onClick={() => setPage(v => v - 1)}>Anterior</PortalButton><PortalButton variant="secondary" disabled={(page + 1) * 20 >= total} onClick={() => setPage(v => v + 1)}>Siguiente</PortalButton></div></div>}
     </div>
   )
 }

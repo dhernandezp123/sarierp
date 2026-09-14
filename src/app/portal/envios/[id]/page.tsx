@@ -18,6 +18,8 @@ import {
   Ship,
   Truck,
 } from 'lucide-react'
+import { portalDeadline } from '@/src/lib/portal'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   resolveBookingDocumentSummary,
@@ -143,7 +145,7 @@ const TIMELINE = [
   },
   {
     key: 'arribado',
-    label: 'Llegó a Honduras',
+    label: 'Llegó a destino',
     internal: ['Arribado', 'Finalizado'],
   },
 ]
@@ -181,7 +183,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5">
       <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{label}</span>
-      <span className="text-right text-sm font-medium text-slate-900 dark:text-white">{value}</span>
+      <span className="min-w-0 break-words text-right text-sm font-medium text-slate-900 dark:text-white">{value}</span>
     </div>
   )
 }
@@ -241,9 +243,10 @@ function BookingCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs text-slate-400">Booking {index + 1}</p>
-            <h2 className="font-mono text-lg font-bold text-slate-900 dark:text-white">
+            <h2 className="break-all font-mono text-lg font-bold text-slate-900 dark:text-white">
               {bookingLabel}
             </h2>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Salida estimada: {fmt(booking.etd)} · Llegada estimada: {fmt(booking.eta)}</p>
             {booking.container_count > 0 && (
               <p className="mt-1 text-xs text-slate-500">
                 {booking.container_count} contenedor{booking.container_count === 1 ? '' : 'es'} asignado{booking.container_count === 1 ? '' : 's'}
@@ -304,9 +307,10 @@ function BookingCard({
                         request.status !== 'NOT_APPLICABLE'
                     )
                     .map((request) => (
-                      <li key={request.code}>• {request.label}</li>
+                      <li key={request.code}>• {request.label}{request.due_at && <span className="block pl-3">Antes de {portalDeadline(request.due_at)}</span>}</li>
                     ))}
                 </ul>
+                <Link href="/portal/contacto" className="mt-3 inline-block text-sm font-semibold text-blue-700 underline dark:text-blue-300">Coordinar entrega de documentos con el equipo</Link>
               </div>
             )}
 
@@ -318,8 +322,7 @@ function BookingCard({
                 <div className="mt-1 space-y-1 text-xs text-slate-600 dark:text-slate-300">
                   {readiness.client_cutoffs.map((cutoff) => (
                     <p key={`${cutoff.code}-${cutoff.due_at}`}>
-                      {cutoff.label}: {fmtDateTime(cutoff.due_at)}
-                      {cutoff.timezone ? ` · ${cutoff.timezone}` : ''}
+                      {cutoff.label}: {portalDeadline(cutoff.due_at, cutoff.timezone)}
                     </p>
                   ))}
                 </div>
@@ -345,19 +348,19 @@ function BookingCard({
         )}
         <BookingTimeline status={booking.shipment_status} />
 
-        <div className="grid gap-4 lg:grid-cols-3">
+        <details className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><summary className="cursor-pointer text-sm font-semibold">Fechas, transporte y documentos</summary><div className="mt-3 grid gap-4 lg:grid-cols-3">
           <section className="rounded-xl bg-slate-50 px-4 dark:bg-slate-800/40">
             <div className="flex items-center gap-2 border-b border-slate-200 py-3 dark:border-slate-700">
               <Calendar className="h-4 w-4 text-slate-400" />
               <h3 className="text-sm font-semibold">Fechas</h3>
             </div>
-            <InfoRow label="ETD original" value={fmt(booking.original_etd)} />
-            <InfoRow label="ETD estimado" value={fmt(booking.etd)} />
-            <InfoRow label="ETA original" value={fmt(booking.original_eta)} />
-            <InfoRow label="ETA estimado" value={fmt(booking.eta)} />
-            {booking.actual_etd && <InfoRow label="ETD real" value={fmt(booking.actual_etd)} />}
-            {booking.actual_eta && <InfoRow label="ETA real" value={fmt(booking.actual_eta)} />}
-            <InfoRow label="Free days" value={booking.free_days} />
+            <InfoRow label="Salida original" value={fmt(booking.original_etd)} />
+            <InfoRow label="Salida estimada" value={fmt(booking.etd)} />
+            <InfoRow label="Llegada original" value={fmt(booking.original_eta)} />
+            <InfoRow label="Llegada estimada" value={fmt(booking.eta)} />
+            {booking.actual_etd && <InfoRow label="Salida real" value={fmt(booking.actual_etd)} />}
+            {booking.actual_eta && <InfoRow label="Llegada real" value={fmt(booking.actual_eta)} />}
+            <InfoRow label="Días libres" value={booking.free_days} />
             <InfoRow label="Free days restantes" value={booking.remaining_free_days} />
           </section>
 
@@ -366,10 +369,10 @@ function BookingCard({
               <Anchor className="h-4 w-4 text-slate-400" />
               <h3 className="text-sm font-semibold">Transporte</h3>
             </div>
-            <InfoRow label="Carrier" value={booking.carrier} />
+            <InfoRow label="Transportista" value={booking.carrier} />
             <InfoRow label="Carrier booking" value={booking.carrier_booking} />
             <InfoRow label="Vessel / Vuelo" value={booking.vessel_name} />
-            <InfoRow label="Voyage" value={booking.voyage} />
+            <InfoRow label="Viaje" value={booking.voyage} />
             <InfoRow label="Flete" value={booking.freight_terms} />
           </section>
 
@@ -402,6 +405,7 @@ function BookingCard({
           </section>
         </div>
 
+        </details>
         {booking.tracking_url && (
           <a
             href={booking.tracking_url}
@@ -423,13 +427,18 @@ export default function ShipmentDetailPage() {
   const [shipment, setShipment] = useState<ShipmentDetail | null>(null)
   const [readiness, setReadiness] = useState<PortalReadiness | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [revision, setRevision] = useState(0)
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
     if (!id) return
+    let active = true
 
     async function load() {
       setLoading(true)
+      setLoadError(false)
+      try {
       const [{ data, error }, readinessResult] = await Promise.all([
         supabase.rpc('get_client_shipment_detail_v2', {
           p_shipment_id: id,
@@ -438,6 +447,8 @@ export default function ShipmentDetailPage() {
           p_shipment_id: id,
         }),
       ])
+      if (!active) return
+      if (error || readinessResult.error) throw error || readinessResult.error
       const row = (data as ShipmentDetail[] | null)?.[0]
 
       if (error || !row) {
@@ -452,11 +463,12 @@ export default function ShipmentDetailPage() {
         )
         setNotFound(false)
       }
-      setLoading(false)
+      } catch { if (active) setLoadError(true) } finally { if (active) setLoading(false) }
     }
 
-    void load()
-  }, [id])
+    const timer = window.setTimeout(() => void load(), 0)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [id, revision])
 
   if (loading) {
     return (
@@ -468,6 +480,7 @@ export default function ShipmentDetailPage() {
     )
   }
 
+  if (loadError) return <PortalError onRetry={() => setRevision(v => v + 1)} />
   if (notFound || !shipment) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -493,15 +506,15 @@ export default function ShipmentDetailPage() {
       </Link>
 
       <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-start gap-4">
+        <div className="flex flex-wrap items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300">
             {SERVICE_ICON[service] || <Ship className="h-5 w-5" />}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-48">
             <p className="text-xs font-medium text-slate-400">
               {SERVICE_LABELS[service] || 'Envío'} · {shipment.quotation_number || shipment.routing_number}
             </p>
-            <h1 className="mt-0.5 font-mono text-xl font-bold text-slate-900 dark:text-white">
+            <h1 className="mt-0.5 break-all font-mono text-xl font-bold text-slate-900 dark:text-white">
               {shipment.routing_number}
             </h1>
             <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
