@@ -6614,7 +6614,7 @@ Agregar una entrada por fix:
 ### 2026-09-14 — REP-011 / UX-REP-01 — Consulta y exportación de reportes
 
 - Estado: implementado y validado con pruebas locales, navegador simulado y
-  compilación definitiva. UAT autenticado y publicación pendientes.
+  compilación definitiva. Publicado en producción; UAT autenticado pendiente.
 - Hallazgos: Vencidas heredaba el mes actual y ocultaba deudas anteriores; errores
   de consulta terminaban como datos vacíos, los SELECT no recorrían todas las
   páginas y la tabla estaba limitada a 120 filas. Filtros mezclaban estados y
@@ -6682,5 +6682,15 @@ Agregar una entrada por fix:
     de reportes muy grandes y de exportaciones PDF extensas.
   - Nombres de cliente/vendedor y cálculos financieros mantienen sus fuentes
     existentes; no se introduce conversión de monedas ni se recalculan documentos.
-- Commit: pendiente de asignación. Commit y despliegue autorizados por el usuario;
-  resultado de publicación pendiente de verificar.
+- Publicación (14/09/2026):
+  - Commit y despliegue autorizados por el usuario. Implementación `305f605`
+    publicada en `main`; Vercel y GitHub confirman Production `success`.
+  - Deployment GitHub `6444275867`, Vercel `FXqzYFhuQiaw4LVGvuU6mEeAUa3a`.
+    URL: `https://sarierp-ed9sfzifv-claudherhn-5641s-projects.vercel.app`.
+  - Verificación pública en `https://forwarders.app`: `/reports` devuelve 307
+    a `/login?next=%2Freports`, `/login` devuelve 200 y `/api/reports-review`
+    devuelve 404. Solo solicitudes GET, sin sesiones ni mutaciones de datos.
+  - Se conservan los pendientes de UAT/RLS, conciliación y exportaciones extensas.
+    La publicación no certifica el flujo autenticado con datos reales.
+- Commit de implementación: `305f605`. Resultado de publicación en commit
+  documental posterior.
