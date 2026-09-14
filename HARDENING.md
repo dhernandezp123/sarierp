@@ -6531,8 +6531,8 @@ Agregar una entrada por fix:
 ### 2026-09-14 — UX-NAV-02 / UX-QUOTE-02 — Sidebar y detalle de cotización
 
 - Estado: implementado; validación local de navegador, regresiones y compilación
-  definitiva completadas. Pendiente UAT autenticado por rol y
-  publicación; no se declara cerrado el flujo comercial de extremo a extremo.
+  definitiva completadas y frontend publicado en Production. Pendiente UAT
+  autenticado por rol; no se declara cerrado el flujo comercial de extremo a extremo.
 - Hallazgos: menú extenso sin jerarquía por rol, selección incorrecta en detalle
   y actividad, drawer móvil sin control de foco, breadcrumb incorrecto, acciones
   de estado que fallaban después del clic, resumen económico ambiguo, correo sin
@@ -6599,4 +6599,14 @@ Agregar una entrada por fix:
   - Se conserva la deuda de tipado del listado/detalle y las fuentes monetarias
     existentes. Sin escrituras en datos remotos durante las pruebas.
 - Publicación: commit y despliegue autorizados por el titular el 14/09/2026.
-  En preparación; se registrarán el hash y el resultado del despliegue al finalizar.
+  - Commit de implementación `898e38a0aba19dac6bb69bb9219e74bbd472c381`, publicado
+    en `origin/main` mediante Git; despliegue automático de Vercel.
+  - GitHub deployment `6443547683`, entorno `Production`, estado `success` /
+    `Deployment has completed` para ese commit.
+  - Vercel: `https://vercel.com/claudherhn-5641s-projects/sarierp/6tfTefNU7yBJ9p4ivvMFCUYUgZq5`.
+  - Comprobaciones públicas HTTPS del 14/09/2026: `/dashboard` y `/quotations/id`
+    devuelven 307 al login con su ruta de regreso, `/login` devuelve 200 y
+    `/api/ux-review/demo` devuelve 404. Solo GET, sin sesiones ni datos reales.
+  - Se conservan los pendientes de UAT/RLS y la deuda histórica de lint anteriores.
+    La publicación no sustituye una prueba autenticada de los flujos comerciales.
+- Commit de implementación: `898e38a`. Resultado de publicación en commit documental posterior.
