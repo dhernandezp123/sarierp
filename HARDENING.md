@@ -6858,3 +6858,90 @@ Agregar una entrada por fix:
     y build de 73/73 páginas correctos. La publicación no certifica UAT autenticado
     ni RLS; se conservan los pendientes anteriores.
 - Commit de implementación: `e800cc7`. Registro de publicación en commit documental posterior.
+
+### 2026-09-14 — INT-20260914 — Hallazgos de pruebas integrales
+
+- Estado: implementación y regresiones locales realizadas; SQL publicado y auditado
+  el 16/09/2026. Frontend y UAT autenticado pendientes. No cerrar los hallazgos aún.
+- IDs: INT-01 shipment Miami; INT-02 fecha CAI; INT-03 Garantías;
+  INT-04 guardado/envío a Pricing; INT-05 apertura/foco de formularios;
+  INT-06 contacto; INT-07 carga Miami sin tarifas; INT-08 garantías multimoneda.
+- Archivos:
+  - `src/app/(protected)/settings/cai/page.tsx`, `src/lib/cai-validation.ts`.
+  - `src/app/(protected)/operations/garantias/page.tsx`, `src/lib/guarantees.ts`.
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`,
+    `src/app/(protected)/quotations/new/page.tsx`,
+    `src/components/quotations/MiamiQuotationSection.tsx`.
+  - `tests/integral-findings.test.mjs`, `supabase/tests/integral_ux_flow_fixes.sql`.
+  - `docs/uat/integral-findings-2026-09-14.md`, `docs/uat/integral-cai-audit.sql`.
+- SQL: nueva `supabase/migrations/20260914233000_integral_ux_flow_fixes.sql`.
+  Probada en transacción local con rollback; aplicada en producción el 16/09/2026.
+- Cambios:
+  - `save_quotation_edit`, SECURITY INVOKER y política UPDATE existente: whitelist de
+    campos, bloqueo de fila y estado esperado, cabecera/hijos/pricing/historial y
+    envío en una transacción. Reutiliza `replace_quotation_child_lines`.
+    Los dos botones usan el mismo guardado, con exclusión de envíos simultáneos;
+    la UI conserva los campos ante error y distingue fallos de avisos posteriores.
+    Se retiran bloques legacy inactivos de delete/insert en el editor.
+  - No exige agente únicamente para Miami LCL/Aéreo. Conserva autorización,
+    idempotencia, SI/shipment atómicos y datos del agente cuando existe.
+    Ningún rol crea un shipment nuevo desde cotización no ganada.
+  - CAI valida formato calendario/año y orden de rango; triggers bloquean fechas
+    no finitas o fuera de años 0001–9999 y emisión desde un CAI histórico corrupto.
+    Permite desactivar un rango inválido para su revisión. No deduce fechas correctas
+    ni modifica datos fiscales existentes. UI señala fechas anómalas.
+  - Garantías obtiene routing desde la FK explícita a Shipping Instructions, evita
+    ambigüedad por booking primario, recorre páginas y separa error de lista vacía.
+    Recuperación comprueba fila devuelta y estado previo; lectura/escritura conserva
+    roles Admin/Operaciones y cuenta aprobada/activa. Totales por moneda.
+  - CAI/Garantías abren y enfocan en lugar de alternar cierre. Calendarios legibles
+    en oscuro; carga Miami visible sin tarifas, precios condicionados a disponibilidad.
+    Creación y edición autocompletan `clientes.contacto`.
+- Validaciones:
+  - Node: 62/62 pruebas correctas; tres regresiones nuevas de fecha/rango CAI y monedas.
+  - SQL local: migración compila y pasan assertions de persistencia, rollback de
+    cabecera/carga/pricing, estado obsoleto, campos no editables, Miami/idempotencia,
+    FCL con/sin agente, rechazo de cotización no ganada y rol Cliente, fechas CAI,
+    emisión rechazada sin consumir correlativo y RLS de Garantías por rol.
+  - REST local: ambas consultas de Garantías responden HTTP 200 con FK explícita.
+  - Chrome con respuestas simuladas: 22 comprobaciones correctas, sin excepciones
+    durante interacciones; año extendido no se envía, fecha válida exacta, foco y
+    apertura repetida, registro con booking, error/reintento, moneda, carga Miami,
+    payload completo al enviar, retención ante fallo y contacto en edición.
+    CAI/Garantías a 1280/390/320 px sin desbordamiento y capturas oscuras revisadas.
+  - Harness retirado y caché dev eliminada comprobando ruta absoluta del workspace.
+    Evidencia ignorada en `.ua/intermediate/integral-*`. Los fixtures requieren
+    sesión simulada; no certifican hidratación ni autenticación en producción.
+  - ESLint de CAI, Garantías y helpers sin infracciones. Cotizaciones nueva/edición
+    y componente Miami conservan 30 errores y 12 avisos preexistentes, comprobados
+    contra HEAD; no se desactivaron reglas ni añadieron infracciones.
+  - `npm.cmd run build`: OK, 73/73 páginas; harness excluido.
+    `npx.cmd tsc --noEmit` final y `git diff --check`: OK.
+    La prueba SQL también confirma emisión válida y consumo de un solo correlativo.
+- Riesgos / acciones pendientes:
+  - Aplicar la migración antes del frontend, que depende de la nueva RPC. Ejecutar
+    auditoría CAI de solo lectura y contrastar fechas sospechosas con documentos
+    originales; registrar correcciones específicas con evidencia, sin truncar años.
+  - Verificar perfiles/RLS desplegados, persistencia al recargar y avisos reales.
+    La política de edición existente puede restringir Operaciones aunque la UI del
+    editor muestre ese rol; esta RPC no amplía permisos por el mero control visual.
+  - El historial local de migraciones difiere del esquema: `mbl_quantity` ya existe
+    sin registrar su migración. El push local se detuvo ahí; aceptación legal previa
+    sí se aplicó localmente. Nueva migración probada transaccionalmente, sin reparar
+    historial por inferencia ni ejecutar SQL remoto.
+- Publicación SQL (16/09/2026):
+  - Commit y despliegue autorizados por el usuario. Host de Supabase verificado
+    contra los assets públicos de `forwarders.app`: proyecto `fwspgdzvlbtbgiupvrzo`.
+  - Dry run: solo `20260914233000_integral_ux_flow_fixes.sql` pendiente.
+    Copia del esquema anterior guardada localmente e ignorada. La definición
+    anterior de `create_shipment_from_quotation` coincide con la fuente versionada.
+  - `supabase db push --yes`: correcto. Registro remoto de migración confirmado,
+    cuatro cuerpos de función coincidentes por MD5 con el SQL local y ambos
+    triggers activos. `save_quotation_edit` conserva SECURITY INVOKER;
+    ejecución denegada a `anon` y concedida a `authenticated`.
+  - Auditoría remota de solo lectura como `postgres`, sin filtrado RLS:
+    0 rangos CAI y 0 documentos con fecha CAI no representable. No había fechas
+    que corregir en esta base. La fecha reportada por las pruebas anteriores
+    requiere identificar su registro/ambiente para contrastarla con el original.
+  - No se emitieron facturas ni se crearon registros de prueba en producción.
+- Commit: pendiente de asignación; frontend pendiente de publicación/verificación.

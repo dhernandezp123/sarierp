@@ -546,7 +546,7 @@ export default function NewQuotationPage() {
     const updatedData = {
       ...formData,
       cliente_id: clienteId,
-      contact_name: selectedCliente?.nombre || '',
+      contact_name: selectedCliente?.contacto || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
       contact_state: selectedCliente?.departamento_estado || '',

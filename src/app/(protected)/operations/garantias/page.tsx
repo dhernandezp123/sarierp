@@ -1,8 +1,10 @@
 'use client'
 
+import { guaranteeTotalsByCurrency } from '@/src/lib/guarantees'
+import { readAllReportRows } from '@/src/lib/report-query'
 import { toDateInputValue } from '@/src/lib/format'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, CheckCircle, Clock, Plus, X } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
@@ -27,10 +29,10 @@ type Garantia = {
   status: 'Depositada' | 'Recuperada' | 'Vencida'
   notas: string | null
   created_at: string
-  bookings?: { routing_number: string | null; booking_number: string | null } | null
+  bookings?: Booking | null
 }
 
-type Booking = { id: string; routing_number: string | null; booking_number: string | null }
+type Booking = { id: string; booking_number: string | null; shipping_instructions: { routing_number: string | null } | null }
 
 const MONEDAS = ['USD', 'HNL', 'EUR']
 
@@ -79,47 +81,74 @@ const INITIAL_FORM = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function GarantiasNavierasPage() {
-  const { user } = useUser()
+  const { user, profile, loading: userLoading } = useUser()
+  const canManage = profile?.status === 'Aprobado' && !!profile.is_active && ['Admin', 'Operaciones'].includes(profile.rol)
   const [garantias, setGarantias] = useState<Garantia[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const [loadError, setLoadError] = useState('')
+  const loadVersion = useRef(0)
+  const formRef = useRef<HTMLDivElement>(null)
+  const navieraRef = useRef<HTMLInputElement>(null)
+  const focusForm = () => {
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    navieraRef.current?.focus({ preventScroll: true })
+  }
   const [showForm, setShowForm] = useState(false)
+  useEffect(() => { if (showForm) focusForm() }, [showForm])
   const [form, setForm] = useState(INITIAL_FORM)
   const [filterStatus, setFilterStatus] = useState<string>('Activas')
   const [filterNaviera, setFilterNaviera] = useState('')
 
-  useEffect(() => { load() }, [])
-
-  const load = async () => {
+  const load = useCallback(async () => {
+    const version = ++loadVersion.current
+    if (!user?.id || !canManage) { setLoading(false); return }
     setLoading(true)
-    const [garantiasRes, bookingsRes] = await Promise.all([
-      supabase
-        .from('garantias_navieras')
-        .select('*, bookings(routing_number, booking_number)')
-        .order('fecha_deposito', { ascending: false }),
-      supabase
-        .from('bookings')
-        .select('id, routing_number, booking_number')
-        .order('created_at', { ascending: false })
-        .limit(200),
-    ])
-    if (garantiasRes.error) toast.error('Error al cargar garantías')
-    setGarantias((garantiasRes.data || []) as Garantia[])
-    setBookings(bookingsRes.data || [])
-    setLoading(false)
-  }
+    setLoadError('')
+    try {
+      const [rows, bookingRows] = await Promise.all([
+        readAllReportRows((from, to) => supabase.from('garantias_navieras')
+          .select('*, bookings!garantias_navieras_booking_id_fkey(id, booking_number, shipping_instructions!bookings_shipping_instruction_id_fkey(routing_number))')
+          .order('fecha_deposito', { ascending: false }).order('id').range(from, to),
+          { label: 'garantías', isCurrent: () => loadVersion.current === version }),
+        readAllReportRows((from, to) => supabase.from('bookings')
+          .select('id, booking_number, shipping_instructions!bookings_shipping_instruction_id_fkey(routing_number)')
+          .order('created_at', { ascending: false }).order('id').range(from, to),
+          { label: 'bookings', isCurrent: () => loadVersion.current === version }),
+      ])
+      if (version !== loadVersion.current) return
+      guaranteeTotalsByCurrency(rows as unknown as Garantia[])
+      setGarantias(rows as unknown as Garantia[])
+      setBookings(bookingRows as unknown as Booking[])
+    } catch (error) {
+      if (version !== loadVersion.current) return
+      setGarantias([])
+      setBookings([])
+      setLoadError(error instanceof Error ? error.message : 'No se pudieron cargar las garantías.')
+    } finally { if (version === loadVersion.current) setLoading(false) }
+  }, [user?.id, canManage])
+  useEffect(() => {
+    if (userLoading) return
+    const versionRef = loadVersion
+    const timer = window.setTimeout(() => void load(), 0)
+    return () => { window.clearTimeout(timer); ++versionRef.current }
+  }, [load, userLoading])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
 
   const handleSave = async () => {
+    if (savingRef.current || !canManage) return
     if (!form.naviera.trim()) { toast.info('La naviera es obligatoria'); return }
     const monto = parseFloat(form.monto)
-    if (isNaN(monto) || monto <= 0) { toast.info('Ingresa un monto válido'); return }
+    if (!Number.isFinite(monto) || monto <= 0) { toast.info('Ingresa un monto válido'); return }
     if (!form.fecha_deposito) { toast.info('La fecha de depósito es obligatoria'); return }
 
+    savingRef.current = true
     setSaving(true)
+    try {
     const { error } = await supabase.from('garantias_navieras').insert({
       booking_id:             form.booking_id || null,
       naviera:                form.naviera.trim(),
@@ -135,25 +164,35 @@ export default function GarantiasNavierasPage() {
     setSaving(false)
     if (error) { toast.error(error.message); return }
     toast.success('Garantía registrada')
-    setForm(INITIAL_FORM)
+    setForm({ ...INITIAL_FORM, fecha_deposito: toDateInputValue() })
     setShowForm(false)
-    load()
+    await load()
+    } catch { toast.error('No se pudo confirmar el registro. Revisa el listado antes de reintentar.') }
+    finally { savingRef.current = false; setSaving(false) }
   }
 
   const marcarRecuperada = async (g: Garantia) => {
+    if (savingRef.current || !canManage) return
+    savingRef.current = true
+    setSaving(true)
+    try {
     const today = toDateInputValue()
     const { error } = await supabase
       .from('garantias_navieras')
       .update({ status: 'Recuperada', fecha_recuperacion: today })
       .eq('id', g.id)
+      .eq('status', 'Depositada')
+      .select('id').single()
     if (error) { toast.error(error.message); return }
     toast.success('Garantía marcada como recuperada')
-    load()
+    await load()
+    } catch { toast.error('No se pudo confirmar la recuperación. Actualiza el listado.') }
+    finally { savingRef.current = false; setSaving(false) }
   }
 
   // ── KPIs ──────────────────────────────────────────────────────────────────
   const depositadas = garantias.filter((g) => g.status === 'Depositada')
-  const totalDeposited = depositadas.reduce((s, g) => s + Number(g.monto), 0)
+  const totalsByCurrency = guaranteeTotalsByCurrency(depositadas)
   const alertas = depositadas.filter((g) => {
     const d = getDaysUntil(g.fecha_vencimiento_libre)
     return d !== null && d <= 14
@@ -173,11 +212,14 @@ export default function GarantiasNavierasPage() {
   })
 
   // ─── Render ───────────────────────────────────────────────────────────────
+  if (userLoading) return <TableSkeleton rows={5} cols={8} />
+  if (!canManage) return <EmptyState title="Acceso restringido" description="Garantías está disponible para Operaciones y Administración con cuenta aprobada y activa." />
+
   return (
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
             Operaciones
@@ -191,7 +233,9 @@ export default function GarantiasNavierasPage() {
         </div>
         <button
           type="button"
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => { setShowForm(true); if (showForm) focusForm() }}
+          aria-expanded={showForm}
+          aria-controls="new-guarantee"
           className={primaryButtonClass}
         >
           <Plus className="h-4 w-4" />
@@ -204,21 +248,21 @@ export default function GarantiasNavierasPage() {
         <div className={cardClass}>
           <p className="text-xs text-slate-500 dark:text-slate-400">Depositado activo</p>
           <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
-            {fmtMoney(totalDeposited)}
+            {loading ? 'Cargando…' : loadError ? 'No disponible' : totalsByCurrency.length ? totalsByCurrency.map(([currency, total]) => <span key={currency} className="block">{fmtMoney(total, currency)}</span>) : 'Sin depósitos activos'}
           </p>
           <p className="mt-0.5 text-xs text-slate-400">{depositadas.length} garantía{depositadas.length !== 1 ? 's' : ''} activa{depositadas.length !== 1 ? 's' : ''}</p>
         </div>
         <div className={`${cardClass} ${alertas.length > 0 ? 'border-orange-300 dark:border-orange-700/60' : ''}`}>
           <p className="text-xs text-slate-500 dark:text-slate-400">Por vencer (≤ 14 días)</p>
           <p className={`mt-1 text-2xl font-bold ${alertas.length > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-slate-900 dark:text-white'}`}>
-            {alertas.length}
+            {loading ? '…' : loadError ? 'No disponible' : alertas.length}
           </p>
           <p className="mt-0.5 text-xs text-slate-400">requieren atención</p>
         </div>
         <div className={cardClass}>
           <p className="text-xs text-slate-500 dark:text-slate-400">Recuperadas</p>
           <p className="mt-1 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-            {garantias.filter((g) => g.status === 'Recuperada').length}
+            {loading ? '…' : loadError ? 'No disponible' : garantias.filter((g) => g.status === 'Recuperada').length}
           </p>
           <p className="mt-0.5 text-xs text-slate-400">histórico total</p>
         </div>
@@ -226,67 +270,67 @@ export default function GarantiasNavierasPage() {
 
       {/* Formulario nueva garantía */}
       {showForm && (
-        <div className={`${cardClass} border-blue-200 dark:border-blue-800/60`}>
+        <div ref={formRef} id="new-guarantee" className={`${cardClass} scroll-mt-24 border-blue-200 dark:border-blue-800/60`}>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-semibold text-slate-900 dark:text-white">Nueva Garantía</h2>
-            <button type="button" onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <button type="button" onClick={() => setShowForm(false)} aria-label="Cerrar formulario" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
               <X className="h-5 w-5" />
             </button>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Booking / Embarque</label>
-              <select name="booking_id" value={form.booking_id} onChange={handleChange} className={fieldClass}>
+              <label htmlFor="guarantee-booking_id" className="mb-1 block text-xs font-medium text-slate-500">Booking / Embarque</label>
+              <select id="guarantee-booking_id" name="booking_id" value={form.booking_id} onChange={handleChange} className={fieldClass}>
                 <option value="">Sin vincular</option>
                 {bookings.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.routing_number || b.id.slice(0, 8)} {b.booking_number ? `· ${b.booking_number}` : ''}
+                    {b.shipping_instructions?.routing_number || b.id.slice(0, 8)} {b.booking_number ? `· ${b.booking_number}` : ''}
                   </option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Naviera <span className="text-red-400">*</span></label>
-              <input name="naviera" value={form.naviera} onChange={handleChange} placeholder="Ej. MAERSK, COSCO" className={fieldClass} />
+              <label htmlFor="guarantee-naviera" className="mb-1 block text-xs font-medium text-slate-500">Naviera <span className="text-red-400">*</span></label>
+              <input ref={navieraRef} id="guarantee-naviera" name="naviera" value={form.naviera} onChange={handleChange} placeholder="Ej. MAERSK, COSCO" className={fieldClass} />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Contenedor</label>
-              <input name="contenedor" value={form.contenedor} onChange={handleChange} placeholder="MOLU1234567" className={fieldClass} />
+              <label htmlFor="guarantee-contenedor" className="mb-1 block text-xs font-medium text-slate-500">Contenedor</label>
+              <input id="guarantee-contenedor" name="contenedor" value={form.contenedor} onChange={handleChange} placeholder="MOLU1234567" className={fieldClass} />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">BL / Referencia</label>
-              <input name="bl_number" value={form.bl_number} onChange={handleChange} placeholder="BL-XXXXXXXXX" className={fieldClass} />
+              <label htmlFor="guarantee-bl_number" className="mb-1 block text-xs font-medium text-slate-500">BL / Referencia</label>
+              <input id="guarantee-bl_number" name="bl_number" value={form.bl_number} onChange={handleChange} placeholder="BL-XXXXXXXXX" className={fieldClass} />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>
-              <input name="monto" type="number" step="0.01" min="0" value={form.monto} onChange={handleChange} placeholder="0.00" className={fieldClass} />
+              <label htmlFor="guarantee-monto" className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>
+              <input id="guarantee-monto" name="monto" type="number" step="0.01" min="0" value={form.monto} onChange={handleChange} placeholder="0.00" className={fieldClass} />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Moneda</label>
-              <select name="moneda" value={form.moneda} onChange={handleChange} className={fieldClass}>
+              <label htmlFor="guarantee-moneda" className="mb-1 block text-xs font-medium text-slate-500">Moneda</label>
+              <select id="guarantee-moneda" name="moneda" value={form.moneda} onChange={handleChange} className={fieldClass}>
                 {MONEDAS.map((m) => <option key={m}>{m}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Fecha depósito <span className="text-red-400">*</span></label>
-              <input name="fecha_deposito" type="date" value={form.fecha_deposito} onChange={handleChange} className={fieldClass} />
+              <label htmlFor="guarantee-fecha_deposito" className="mb-1 block text-xs font-medium text-slate-500">Fecha depósito <span className="text-red-400">*</span></label>
+              <input id="guarantee-fecha_deposito" name="fecha_deposito" type="date" value={form.fecha_deposito} onChange={handleChange} className={`${fieldClass} [color-scheme:light] dark:[color-scheme:dark]`} />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500">Fecha límite devolución contenedor</label>
-              <input name="fecha_vencimiento_libre" type="date" value={form.fecha_vencimiento_libre} onChange={handleChange} className={fieldClass} />
+              <label htmlFor="guarantee-fecha_vencimiento_libre" className="mb-1 block text-xs font-medium text-slate-500">Fecha límite devolución contenedor</label>
+              <input id="guarantee-fecha_vencimiento_libre" name="fecha_vencimiento_libre" type="date" value={form.fecha_vencimiento_libre} onChange={handleChange} className={`${fieldClass} [color-scheme:light] dark:[color-scheme:dark]`} />
             </div>
 
             <div className="sm:col-span-2 lg:col-span-3">
-              <label className="mb-1 block text-xs font-medium text-slate-500">Notas</label>
-              <textarea name="notas" value={form.notas} onChange={handleChange} rows={2} placeholder="Observaciones, número de confirmación de depósito..." className={`${fieldClass} resize-y`} />
+              <label htmlFor="guarantee-notas" className="mb-1 block text-xs font-medium text-slate-500">Notas</label>
+              <textarea id="guarantee-notas" name="notas" value={form.notas} onChange={handleChange} rows={2} placeholder="Observaciones, número de confirmación de depósito..." className={`${fieldClass} resize-y`} />
             </div>
           </div>
 
@@ -302,7 +346,7 @@ export default function GarantiasNavierasPage() {
       {/* Filtros */}
       <div className={`${cardClass} py-3`}>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {['Activas', 'Todas', 'Depositada', 'Recuperada', 'Vencida'].map((s) => (
               <button
                 key={s}
@@ -336,6 +380,8 @@ export default function GarantiasNavierasPage() {
       <div className={`${cardClass} overflow-hidden p-0`}>
         {loading ? (
           <div className="p-6"><TableSkeleton rows={5} cols={8} /></div>
+        ) : loadError ? (
+          <div role="alert" className="p-6 text-rose-700 dark:text-rose-300">{loadError} <button type="button" onClick={() => void load()} className={secondaryButtonClass}>Reintentar</button></div>
         ) : filtered.length === 0 ? (
           <EmptyState
             title="Sin garantías"
@@ -371,7 +417,7 @@ export default function GarantiasNavierasPage() {
 
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                         {g.bookings
-                          ? g.bookings.routing_number || g.bookings.booking_number || '—'
+                          ? g.bookings.shipping_instructions?.routing_number || g.bookings.booking_number || '—'
                           : '—'}
                       </td>
 
@@ -402,6 +448,7 @@ export default function GarantiasNavierasPage() {
                           <button
                             type="button"
                             onClick={() => marcarRecuperada(g)}
+                            disabled={saving}
                             className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800/60 dark:bg-emerald-950/20 dark:text-emerald-300 dark:hover:bg-emerald-900/30"
                           >
                             Marcar recuperada

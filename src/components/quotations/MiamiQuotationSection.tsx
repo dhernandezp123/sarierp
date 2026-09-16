@@ -303,7 +303,12 @@ export function MiamiQuotationSection({
         </div>
       )}
 
-      {miami.canUseMiamiCalculator && (
+      {!miami.canUseMiamiCalculator && (
+        <p role="status" className="mt-4 rounded-xl border border-amber-200 p-4 text-sm text-amber-800 dark:text-amber-200">
+          Puedes completar la carga. Para calcular y guardar la tarifa Miami, selecciona un cliente con tarifas activas disponibles.
+        </p>
+      )}
+      {miami.isMiamiFlow && (
         <div className="mt-4 space-y-5 rounded-2xl border border-blue-200 bg-blue-50/60 p-6 dark:border-blue-900/50 dark:bg-blue-950/20">
           <div className={cardClass}>
             <h3 className="text-base font-semibold text-slate-900 dark:text-white">
@@ -872,6 +877,7 @@ export function MiamiQuotationSection({
             )}
           </div>
 
+          {miami.canUseMiamiCalculator && <>
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
               Flujo rápido Miami Consolidado
@@ -1537,6 +1543,7 @@ export function MiamiQuotationSection({
               )}
             </div>
           </div>
+          </>}
         </div>
       )}
       <ConfirmDialog

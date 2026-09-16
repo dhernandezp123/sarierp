@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { formatDate, calendarDaysUntil, toDateInputValue } from '@/src/lib/format'
+import { isValidCaiDate, validateCaiRange } from '@/src/lib/cai-validation'
 import { toast } from 'sonner'
 import { Plus, CheckCircle2, AlertTriangle, Trash2, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
@@ -24,21 +26,12 @@ type CaiRange = {
   created_at: string
 }
 
-function formatDate(d: string | null) {
-  if (!d) return '—'
-  const [y, m, day] = d.split('T')[0].split('-')
-  return `${day}/${m}/${y}`
-}
-
 function isNearExpiry(fecha: string | null): boolean {
-  if (!fecha) return false
-  const diff = (new Date(fecha).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  return diff >= 0 && diff <= 30
+  const days = fecha && isValidCaiDate(fecha) ? calendarDaysUntil(fecha) : null
+  return days !== null && days >= 0 && days <= 30
 }
-
 function isExpired(fecha: string | null): boolean {
-  if (!fecha) return false
-  return fecha < new Date().toISOString().slice(0, 10)
+  return !fecha || !isValidCaiDate(fecha) || fecha < toDateInputValue()
 }
 
 type FiscalDocumentType = 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
@@ -74,16 +67,37 @@ export default function CaiSettingsPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const saveInFlight = useRef(false)
+  const formRef = useRef<HTMLElement>(null)
+  const firstFieldRef = useRef<HTMLSelectElement>(null)
+  const [loadError, setLoadError] = useState(false)
+  const openForm = () => {
+    setShowForm(true)
+    if (showForm) {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      firstFieldRef.current?.focus({ preventScroll: true })
+    }
+  }
+  useEffect(() => {
+    if (!showForm) return
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    firstFieldRef.current?.focus({ preventScroll: true })
+  }, [showForm])
   const [activating, setActivating] = useState<string | null>(null)
 
   const fetchAll = useCallback(async () => {
+    try {
     const rangesRes = await supabase
       .from('cai_ranges')
       .select('*')
       .order('created_at', { ascending: false })
+    setLoadError(!!rangesRes.error)
     if (rangesRes.error) toast.error('Error al cargar rangos CAI')
     setRanges((rangesRes.data || []) as CaiRange[])
-    setLoading(false)
+    } catch {
+      setLoadError(true)
+      toast.error('No se pudieron cargar los rangos CAI. Reintenta la consulta.')
+    } finally { setLoading(false) }
   }, [])
 
   useEffect(() => {
@@ -92,10 +106,11 @@ export default function CaiSettingsPage() {
   }, [fetchAll])
 
   const handleSave = async () => {
-    if (!form.cai || !form.rango_desde || !form.rango_hasta || !form.fecha_limite_emision) {
-      toast.error('CAI, rango y fecha límite son requeridos')
-      return
-    }
+    if (saveInFlight.current) return
+    const validation = validateCaiRange(form)
+    if (validation) { toast.error(validation); return }
+    saveInFlight.current = true
+    try {
     setSaving(true)
     const { error } = await supabase.from('cai_ranges').insert({
       cai: form.cai.trim(),
@@ -111,7 +126,13 @@ export default function CaiSettingsPage() {
     toast.success('Rango CAI registrado')
     setForm(emptyForm)
     setShowForm(false)
-    fetchAll()
+    await fetchAll()
+    } catch {
+      toast.error('No se pudo confirmar el registro. Revisa el historial antes de volver a guardar.')
+    } finally {
+      saveInFlight.current = false
+      setSaving(false)
+    }
   }
 
   const activateRange = async (id: string) => {
@@ -162,7 +183,9 @@ export default function CaiSettingsPage() {
         {isAdmin && (
           <button
             type="button"
-            onClick={() => setShowForm(!showForm)}
+            onClick={openForm}
+            aria-expanded={showForm}
+            aria-controls="new-cai-range"
             className={primaryButtonClass}
           >
             <Plus className="h-4 w-4" />
@@ -188,6 +211,12 @@ export default function CaiSettingsPage() {
         ))}
       </div>
 
+      {loadError && <div role="alert" className={cardClass}>No se pudieron cargar los rangos. <button type="button" onClick={() => void fetchAll()} className={secondaryButtonClass}>Reintentar</button></div>}
+      {ranges.some(range => !isValidCaiDate(range.fecha_limite_emision)) && (
+        <div role="alert" className="rounded-xl border border-rose-300 p-4 text-rose-700 dark:text-rose-300">
+          Hay rangos con fechas inválidas. Revisa el documento original antes de corregirlos; no deben activarse ni utilizarse para emitir.
+        </div>
+      )}
       {/* Status del rango activo */}
       {activeRange ? (
         <div className={`rounded-2xl border p-5 ${
@@ -270,7 +299,7 @@ export default function CaiSettingsPage() {
 
       {/* Form nuevo rango */}
       {showForm && isAdmin && (
-        <section className={cardClass}>
+        <section ref={formRef} id="new-cai-range" className={`${cardClass} scroll-mt-24`}>
           <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Nuevo rango CAI</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -278,6 +307,8 @@ export default function CaiSettingsPage() {
                 Tipo de documento fiscal <span className="text-red-500">*</span>
               </label>
               <select
+                aria-label="Tipo de documento fiscal"
+                ref={firstFieldRef}
                 value={form.document_type}
                 onChange={(e) => setForm((previous) => ({
                   ...previous,
@@ -295,6 +326,7 @@ export default function CaiSettingsPage() {
                 CAI <span className="text-red-500">*</span>
               </label>
               <input
+                aria-label="CAI"
                 value={form.cai}
                 onChange={(e) => setForm((p) => ({ ...p, cai: e.target.value }))}
                 placeholder="XXXXXX-XXXXX-XXXXX-XXXXXXXX-XXXXX-XX"
@@ -306,6 +338,7 @@ export default function CaiSettingsPage() {
                 Rango desde <span className="text-red-500">*</span>
               </label>
               <input
+                aria-label="Rango desde"
                 value={form.rango_desde}
                 onChange={(e) => setForm((p) => ({ ...p, rango_desde: e.target.value }))}
                 placeholder="000-001-01-00000001"
@@ -317,6 +350,7 @@ export default function CaiSettingsPage() {
                 Rango hasta <span className="text-red-500">*</span>
               </label>
               <input
+                aria-label="Rango hasta"
                 value={form.rango_hasta}
                 onChange={(e) => setForm((p) => ({ ...p, rango_hasta: e.target.value }))}
                 placeholder="000-001-01-00000500"
@@ -329,9 +363,13 @@ export default function CaiSettingsPage() {
               </label>
               <input
                 type="date"
+                aria-label="Fecha límite de emisión"
+                min="0001-01-01"
+                max="9999-12-31"
+                required
                 value={form.fecha_limite_emision}
                 onChange={(e) => setForm((p) => ({ ...p, fecha_limite_emision: e.target.value }))}
-                className={fieldClass}
+                className={`${fieldClass} [color-scheme:light] dark:[color-scheme:dark]`}
               />
             </div>
             <div>
@@ -339,6 +377,7 @@ export default function CaiSettingsPage() {
                 Lugar de emisión
               </label>
               <input
+                aria-label="Lugar de emisión"
                 value={form.lugar_emision}
                 onChange={(e) => setForm((p) => ({ ...p, lugar_emision: e.target.value }))}
                 placeholder="Ej. San Pedro Sula, Honduras"
@@ -393,7 +432,7 @@ export default function CaiSettingsPage() {
                         {r.rango_desde}<br />→ {r.rango_hasta}
                       </td>
                       <td className={`pr-4 text-sm ${exp ? 'text-rose-500 font-semibold' : 'text-slate-600 dark:text-slate-400'}`}>
-                        {formatDate(r.fecha_limite_emision)}
+                        {isValidCaiDate(r.fecha_limite_emision) ? formatDate(r.fecha_limite_emision) : 'Fecha inválida: revisar'}
                         {exp && <span className="ml-1">⚠</span>}
                       </td>
                       <td className="pr-4 text-slate-600 dark:text-slate-400">{r.lugar_emision || '—'}</td>
