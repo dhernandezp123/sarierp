@@ -2,7 +2,8 @@
 
 ### 2026-09-16 — COST-001 — Detalle y conciliación de costos operativos
 
-- Estado: implementado localmente; pendiente de UAT autenticado y publicación.
+- Estado: implementado, validado localmente y publicado en producción;
+  UAT autenticado y verificación de permisos desplegados pendientes.
 - Hallazgo: sin facturas, Validación mostraba todo el ingreso como “Profit Real”
   y el presupuesto faltante como ahorro. Emparejaba facturas por descripción,
   mezclaba monedas bajo USD y no explicaba el promedio por contenedor.
@@ -64,8 +65,17 @@
     sin presupuesto requieren conciliación con Pricing antes de cerrar por UI.
   - Render estático de UI y PDFs probado; falta revisión visual móvil/oscuro y
     prueba autenticada en navegador. No hubo escrituras comerciales remotas.
-- Commit de implementación y resultado de publicación: se registrarán después
-  de confirmar el despliegue autorizado. UAT autenticado sigue pendiente.
+- Publicación (16/09/2026): commit `97d3d2a884ee760f515243676713fe3ded00eea4`
+  enviado a `origin/main`. GitHub Production `6486521154` y Vercel
+  `7P8urUJk787NmLPttQvpnBpB5PE8` confirman `success / Deployment has completed`.
+  - URL del deployment:
+    `https://sarierp-13se44l39-claudherhn-5641s-projects.vercel.app`.
+  - GET en `https://forwarders.app`: `/login` devuelve 200;
+    `/cost-validation` y `/quotations/efc8766f-867c-4d8a-b865-e9a7cc82341f`
+    devuelven 307 al login con retorno a la ruta solicitada. Sin sesiones,
+    escrituras de datos ni cambios SQL. Esto no certifica el flujo autenticado.
+- Commit de implementación: `97d3d2a`. Registro de publicación en commit
+  documental posterior. Se conservan todos los pendientes de UAT/RLS anteriores.
 
 Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
