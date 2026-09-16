@@ -41,6 +41,7 @@ import {
 
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
+import { CostAnalysisPanel } from '@/src/components/pricing/CostAnalysisPanel'
 import { InsuranceCalculationDialog } from '@/src/components/quotations/InsuranceCalculationDialog'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
@@ -1196,6 +1197,7 @@ function QuotationDetail() {
         <CostDetailPDF
           quotation={quotation}
           selectedAgent={selectedAgent}
+          quotationContainers={quotationContainers}
           pricingItems={pricingItems}
           wonAt={wonAt}
           generatedByName={generatedByName}
@@ -2324,7 +2326,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
   <div className="max-w-full overflow-x-auto pb-1">
   <TabsList aria-label="Detalle de cotización" className="w-max bg-white border rounded-xl p-1 dark:border-slate-700 dark:bg-[#0b1220]">
     <TabsTrigger value="resumen">Resumen</TabsTrigger>
-    <TabsTrigger value="tarifas">Tarifas</TabsTrigger>
+    <TabsTrigger value="tarifas">{canPrintCostDetail ? 'Tarifas y costos' : 'Tarifas'}</TabsTrigger>
     <TabsTrigger value="validaciones">Validaciones</TabsTrigger>
     <TabsTrigger value="historial">Historial</TabsTrigger>
   </TabsList>
@@ -2738,6 +2740,16 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         </TabsContent>
 
         <TabsContent value="tarifas">
+          {canPrintCostDetail && <div className="mb-6 space-y-3">
+            <h2 className="text-xl font-bold">Costos cotizados actuales</h2>
+            <p className="text-sm text-slate-500">Líneas de Pricing actuales, independientes del resumen de opciones comerciales. Importes cotizados; no confirman facturas ni pagos de proveedor.</p>
+            <CostAnalysisPanel
+              pricing={pricingItems}
+              containers={['FCL', 'FTL'].includes(quotation.quote_type) ? quotationContainers : []}
+              agent={quotation.quote_type === 'FCL' ? selectedAgent : null}
+              showRegistered={false}
+            />
+          </div>}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">

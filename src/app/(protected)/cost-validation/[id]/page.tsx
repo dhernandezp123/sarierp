@@ -1,1021 +1,247 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
-import { FilePlus2, ReceiptText } from 'lucide-react'
-
-import { supabase } from '../../../../lib/supabase/client'
-import { useUser } from '../../../../hooks/useUser'
+import { useUser } from '@/src/hooks/useUser'
+import { supabase } from '@/src/lib/supabase/client'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
-import { aggregateBookingStatus } from '@/src/lib/booking-status'
+import { CostAnalysisPanel, costMoney } from '@/src/components/pricing/CostAnalysisPanel'
+import { analyzeCosts, costCurrency, costNumber } from '@/src/lib/cost-analysis'
+import { loadCostValidationData, type CostValidationData } from '@/src/lib/cost-validation-data'
+import { calculateTaxAmount } from '@/src/lib/tax'
+import { formatDate } from '@/src/lib/format'
+import { cardClass, fieldClassSm } from '@/src/lib/ui-classes'
 
-type CostValidationBookingContainer = {
-  container_type: string | null
-  quantity: number | null
-}
+const buttonClass = 'rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800'
+const emptyForm = { pricing_item_id: '', supplier: '', invoice_number: '', description: '', quantity: '1', unit_cost: '', currency: 'USD', tax_rate_id: '', invoice_date: '', is_taxable: false, notes: '' }
 
-type CostValidationBooking = {
-  id: string
-  booking_number: string | null
-  carrier_booking: string | null
-  carrier: string | null
-  etd: string | null
-  eta: string | null
-  shipment_status: string | null
-  booking_containers: CostValidationBookingContainer[] | null
-}
-
-type LinkedCustomerInvoice = {
-  id: string
-  invoice_number: string | null
-  status: string
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <label className="grid gap-1 text-sm"><span className="font-medium">{label}</span>{children}</label>
 }
 
 export default function CostValidationDetailPage() {
-  const { profile, loading: userLoading } = useUser()
-  const params = useParams()
-  const router = useRouter()
-  const role = profile?.rol || ''
-  const isAdmin = role === 'Admin'
-  const isSales = role === 'Ventas'
-  const isPricing = role === 'Pricing'
-  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
+  const { user, profile, loading } = useUser()
+  const params = useParams<{ id: string }>()
+  if (loading) return <p className="p-8">Cargando validación...</p>
+  if (!user || !profile || !profile.is_active || profile.status !== 'Aprobado' || !['Admin', 'Finanzas', 'Contabilidad'].includes(profile.rol)) {
+    return <div className={cardClass}><h1 className="text-xl font-bold">Acceso restringido</h1><p>No tienes permiso para ver este módulo.</p></div>
+  }
+  return <CostValidation key={user.id + ':' + profile.rol + ':' + params.id} quotationId={params.id} userId={user.id} />
+}
 
-  const canEditPricing =
-    isAdmin || isPricing
-  const canEditCostValidation =
-    isAdmin || isFinance
-  const canEditFinance =
-    isAdmin || isFinance
-  const canEditQuotes =
-    isAdmin || isSales
-  const canViewCostValidation =
-    isAdmin || isFinance
-
-  const [quotation, setQuotation] = useState<any>(null)
-  const [shipmentContext, setShipmentContext] = useState<any>(null)
-  const [pricingItems, setPricingItems] = useState<any[]>([])
-  const [invoiceItems, setInvoiceItems] = useState<any[]>([])
-  const [linkedCustomerInvoice, setLinkedCustomerInvoice] = useState<LinkedCustomerInvoice | null>(null)
-  const [taxRates, setTaxRates] = useState<any[]>([])
+function CostValidation({ quotationId, userId }: { quotationId: string; userId: string }) {
+  const [data, setData] = useState<CostValidationData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
-  const [confirmValidateOpen, setConfirmValidateOpen] = useState(false)
-  const [invoiceForm, setInvoiceForm] = useState({
-    supplier: '',
-    invoice_number: '',
-    description: '',
-    quantity: '1',
-    unit_cost: '',
-    currency: 'USD',
-    tax_rate_id: '',
-    invoice_date: '',
-    is_taxable: false,
-    notes: '',
-  })
-
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [form, setForm] = useState(emptyForm)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [confirmValidation, setConfirmValidation] = useState(false)
+  const version = useRef(0)
+  const mounted = useRef(true)
+  const mutating = useRef(false)
+  const refresh = useCallback(async () => {
+    const request = ++version.current
+    const current = () => mounted.current && request === version.current
+    setLoading(true); setError(''); setData(null)
+    try {
+      const result = await loadCostValidationData(supabase, quotationId, current)
+      if (current()) setData(result)
+    } catch (e) {
+      if (current()) setError(e instanceof Error ? e.message : 'No se pudieron cargar los costos.')
+    } finally { if (current()) setLoading(false) }
+  }, [quotationId])
   useEffect(() => {
-    if (userLoading) return
+    mounted.current = true
+    const requests = version
+    const timer = window.setTimeout(() => { void refresh() }, 0)
+    return () => { mounted.current = false; requests.current++; window.clearTimeout(timer) }
+  }, [refresh])
 
-    if (!canViewCostValidation) {
-      setLoading(false)
-      return
-    }
-
-    if (params.id) {
-      fetchData()
-      fetchTaxRates()
-    }
-  }, [params.id, userLoading, canViewCostValidation])
-
-  const AccessDenied = () => (
-    <>
-      <div className="rounded-2xl border bg-white p-8">
-        <h1 className="text-2xl font-bold">
-          Acceso restringido
-        </h1>
-
-        <p className="text-gray-500 mt-2">
-          No tienes permiso para ver este módulo.
-        </p>
-      </div>
-    </>
-  )
-
-  const fetchData = async () => {
-    const quotationId = params.id as string
-
-    const { data: quotationData, error: quotationError } = await supabase
-      .from('quotations')
-      .select(`
-        *,
-        clientes (
-          nombre,
-          codigo_cliente
-        )
-      `)
-      .eq('id', quotationId)
-      .is('deleted_at', null)
-      .single()
-
-    if (quotationError) {
-      toast.error(quotationError.message)
-      return
-    }
-
-    const { data: shipmentData, error: shipmentError } =
-      await supabase
-        .from('shipments')
-        .select(`
-          id,
-          shipment_number,
-          operational_status,
-          shipping_instruction:shipping_instructions!inner (
-            reference_number,
-            deleted_at
-          ),
-          bookings (
-            id,
-            booking_number,
-            carrier_booking,
-            carrier,
-            etd,
-            eta,
-            shipment_status,
-            booking_containers (
-              container_type,
-              quantity
-            )
-          )
-        `)
-        .eq('quotation_id', quotationId)
-        .is('shipping_instruction.deleted_at', null)
-        .order('created_at', { ascending: true })
-
-    if (shipmentError) {
-      toast.error(shipmentError.message)
-      return
-    }
-
-    const operationShipments = shipmentData || []
-    const operationStatuses = Array.from(
-      new Set(operationShipments.map((shipment) => shipment.operational_status).filter(Boolean))
-    )
-    const normalizedShipmentContext =
-      operationShipments.length > 0
-        ? {
-            id: operationShipments[0].id,
-            shipment_number: operationShipments
-              .map((shipment) => shipment.shipment_number)
-              .join(', '),
-            reference_number: operationShipments
-              .map((shipment) => {
-                const instruction = Array.isArray(shipment.shipping_instruction)
-                  ? shipment.shipping_instruction[0]
-                  : shipment.shipping_instruction
-                return instruction?.reference_number
-              })
-              .filter(Boolean)
-              .join(', '),
-            operational_status:
-              operationStatuses.length === 1
-                ? operationStatuses[0]
-                : operationStatuses.length > 1
-                  ? 'Múltiples operaciones'
-                  : 'Sin bookings',
-            bookings: operationShipments.flatMap((shipment) => shipment.bookings || []),
-          }
-        : null
-
-    const { data: pricingData, error: pricingError } = await supabase
-      .from('pricing_items')
-      .select('*')
-      .eq('quotation_id', quotationId)
-      .order('created_at', { ascending: true })
-
-    if (pricingError) {
-      toast.error(pricingError.message)
-      return
-    }
-
-    const { data: invoiceData, error: invoiceError } = await supabase
-      .from('provider_invoice_items')
-      .select('*')
-      .eq('quotation_id', quotationId)
-      .order('created_at', { ascending: true })
-
-    if (invoiceError) {
-      toast.error(invoiceError.message)
-      return
-    }
-
-    const { data: customerInvoiceData, error: customerInvoiceError } = await supabase
-      .from('invoices')
-      .select('id, invoice_number, status')
-      .eq('quotation_id', quotationId)
-      .eq('invoice_type', 'Factura')
-      .neq('status', 'Anulada')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (customerInvoiceError) {
-      toast.error(customerInvoiceError.message)
-      return
-    }
-
-    setQuotation(quotationData)
-    setShipmentContext(normalizedShipmentContext)
-    setPricingItems(pricingData || [])
-    setInvoiceItems(invoiceData || [])
-    setLinkedCustomerInvoice((customerInvoiceData as LinkedCustomerInvoice | null) ?? null)
-    setLoading(false)
+  async function mutate(action: () => Promise<void>, message: string) {
+    if (mutating.current || !data) return
+    mutating.current = true; setBusy(true)
+    try {
+      await action()
+      if (mounted.current) { toast.success(message); await refresh() }
+    } catch (e) {
+      if (mounted.current) toast.error(e instanceof Error ? e.message : 'No se pudo guardar el cambio.')
+    } finally { mutating.current = false; if (mounted.current) setBusy(false) }
   }
 
-  const fetchTaxRates = async () => {
-    const { data, error } = await supabase
-      .from('tax_rates')
-      .select('*')
-      .eq('is_active', true)
-      .order('country', { ascending: true })
-
-    if (error) {
-      toast.error(error.message)
-      return
+  const selectPricing = (id: string) => {
+    const item = data?.pricing.find(p => p.id === id)
+    setForm(previous => item ? { ...previous, pricing_item_id: id, supplier: item.supplier || '', description: item.description, currency: costCurrency(item.currency), quantity: String(item.quantity ?? ''), unit_cost: String(item.cost_amount ?? '') } : { ...previous, pricing_item_id: '' })
+  }
+  async function saveInvoice(event: FormEvent) {
+    event.preventDefault()
+    if (!data) return
+    const quantity = costNumber(form.quantity), unitCost = costNumber(form.unit_cost)
+    const linked = data.pricing.find(p => p.id === form.pricing_item_id)
+    if (!form.description.trim() || quantity === null || quantity <= 0 || unitCost === null) {
+      toast.error('Ingresa descripción, cantidad mayor a cero y costo unitario válido.'); return
     }
-
-    setTaxRates(data || [])
+    if (costCurrency(form.currency) === 'Sin moneda') {
+      toast.error('Revisa la moneda del cargo antes de registrar el costo.'); return
+    }
+    if (form.pricing_item_id && (!linked || costCurrency(linked.currency) !== form.currency)) {
+      toast.error('El cargo debe pertenecer a esta cotización y tener la misma moneda.'); return
+    }
+    const tax = data.taxes.find(t => t.id === form.tax_rate_id)
+    if (form.is_taxable && (!tax || costNumber(tax.percentage) === null)) {
+      toast.error('Selecciona una tasa válida para el impuesto.'); return
+    }
+    const percentage = form.is_taxable ? Number(tax!.percentage) : 0
+    const total = quantity * unitCost
+    if (!Number.isFinite(total) || !Number.isFinite(calculateTaxAmount(form.is_taxable, total, percentage))) {
+      toast.error('El importe supera el rango permitido.'); return
+    }
+    await mutate(async () => {
+      const result = await supabase.from('provider_invoice_items').insert({
+        quotation_id: quotationId, pricing_item_id: linked?.id || null,
+        supplier: form.supplier.trim() || null, invoice_number: form.invoice_number.trim() || null,
+        description: form.description.trim(), quantity, unit_cost: unitCost, total_cost: total,
+        currency: form.currency, tax_rate_id: form.is_taxable ? tax!.id : null,
+        tax_percentage_snapshot: percentage, tax_amount: calculateTaxAmount(form.is_taxable, total, percentage),
+        invoice_date: form.invoice_date || null, is_taxable: form.is_taxable,
+        notes: form.notes.trim() || null, created_by: userId,
+      }).select('id').single()
+      if (result.error || !result.data) throw new Error(result.error?.message || 'No se guardó el costo.')
+      if (mounted.current) setForm(emptyForm)
+    }, 'Costo de proveedor registrado')
   }
 
-  const quotedCost = pricingItems.reduce(
-    (sum, item) =>
-      sum + Number(item.cost_amount || 0) * Number(item.quantity || 1),
-    0
-  )
-
-  const quotedSale = pricingItems.reduce(
-    (sum, item) =>
-      sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
-    0
-  )
-
-  const realCost = invoiceItems.reduce((sum, item) => {
-    return (
-      sum +
-      Number(item.total_cost || 0) +
-      Number(item.tax_amount || 0)
-    )
-  }, 0)
-
-  const expectedProfit = quotedSale - quotedCost
-  const realProfit = quotedSale - realCost
-  const costDifference = realCost - quotedCost
-  const variancePercentage =
-    quotedCost > 0 ? (costDifference / quotedCost) * 100 : 0
-
-  const formatCurrency = (value: number) =>
-    value.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-
-  const formatDate = (value?: string | null) => {
-    if (!value) return 'N/A'
-    const [year, month, day] = value.split('-').map(Number)
-    return new Date(year, month - 1, day).toLocaleDateString('es-HN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    })
-  }
-
-  const operationalBookings =
-    (shipmentContext?.bookings || []) as CostValidationBooking[]
-
-  const financialStatus =
-    realProfit < 0
-      ? {
-          label: 'Pérdida detectada',
-          className: 'bg-red-100 text-red-700 border-red-200',
-        }
-      : variancePercentage > 15
-      ? {
-          label: 'Variación alta',
-          className: 'bg-red-100 text-red-700 border-red-200',
-        }
-      : variancePercentage > 5
-      ? {
-          label: 'Variación moderada',
-          className: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-        }
-      : {
-          label: 'Dentro de margen',
-          className: 'bg-green-100 text-green-700 border-green-200',
-        }
-
-  const normalizeDescription = (value: string) =>
-    value
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, ' ')
-
-  const pricingByDescription = pricingItems.reduce((acc: any, item) => {
-    const key = normalizeDescription(item.description || 'Sin descripción')
-
-    const total =
-      Number(item.cost_amount || 0) * Number(item.quantity || 1)
-
-    acc[key] = {
-      description: item.description || 'Sin descripción',
-      quoted: (acc[key]?.quoted || 0) + total,
-      real: acc[key]?.real || 0,
-    }
-
-    return acc
-  }, {})
-
-  invoiceItems.forEach((item) => {
-    const key = normalizeDescription(item.description || 'Sin descripción')
-
-    const total =
-      Number(item.total_cost || 0) + Number(item.tax_amount || 0)
-
-    if (!pricingByDescription[key]) {
-      pricingByDescription[key] = {
-        description: item.description || 'Sin descripción',
-        quoted: 0,
-        real: 0,
-      }
-    }
-
-    pricingByDescription[key].real += total
-  })
-
-  const varianceRows = Object.values(pricingByDescription).map((row: any) => {
-    const variance = row.real - row.quoted
-
-    const variancePercentage =
-      row.quoted > 0 ? (variance / row.quoted) * 100 : 0
-
-    return {
-      ...row,
-      variance,
-      variancePercentage,
-    }
-  })
-
-  const handleInvoiceChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
-    const { name, value, type } = e.target
-
-    setInvoiceForm({
-      ...invoiceForm,
-      [name]:
-        type === 'checkbox'
-          ? (e.target as HTMLInputElement).checked
-          : value,
-    })
-  }
-
-  const saveInvoiceItem = async () => {
-    if (!invoiceForm.description.trim()) {
-      toast.error('Debes ingresar una descripción del costo real.')
-      return
-    }
-
-    const quantity = Number(invoiceForm.quantity || 1)
-    const unitCost = Number(invoiceForm.unit_cost || 0)
-    const totalCost = quantity * unitCost
-    const selectedTaxRate = taxRates.find(
-      (tax) => tax.id === invoiceForm.tax_rate_id
-    )
-
-    const taxPercentage = selectedTaxRate
-      ? Number(selectedTaxRate.percentage || 0)
-      : 0
-
-    const taxAmount =
-      totalCost * (taxPercentage / 100)
-
-    const { error } = await supabase.from('provider_invoice_items').insert([
-      {
-        quotation_id: params.id as string,
-        supplier: invoiceForm.supplier || null,
-        invoice_number: invoiceForm.invoice_number || null,
-        description: invoiceForm.description.trim(),
-        quantity,
-        unit_cost: unitCost,
-        total_cost: totalCost,
-        currency: invoiceForm.currency || 'USD',
-        tax_rate_id: invoiceForm.tax_rate_id || null,
-        tax_percentage_snapshot: taxPercentage,
-        tax_amount: taxAmount,
-        invoice_date: invoiceForm.invoice_date || null,
-        is_taxable: invoiceForm.is_taxable,
-        notes: invoiceForm.notes || null,
-        created_by: profile?.id,
-      },
-    ])
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-
-    setInvoiceForm({
-      supplier: '',
-      invoice_number: '',
-      description: '',
-      quantity: '1',
-      unit_cost: '',
-      currency: 'USD',
-      tax_rate_id: '',
-      invoice_date: '',
-      is_taxable: false,
-      notes: '',
-    })
-
-    await fetchData()
-  }
-
-  const deleteInvoiceItem = async (id: string) => {
-    const { error } = await supabase
-      .from('provider_invoice_items')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-
-    await fetchData()
-  }
-
-  const markAsFinanciallyValidated = async () => {
-    const { error } = await supabase
-      .from('quotations')
-      .update({
-        financial_validation_status: 'Validado',
-      })
-      .eq('id', params.id as string)
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-
-    toast.success('Costos validados correctamente')
-    await fetchData()
-  }
-
-  if (userLoading || loading) {
-    return <div className="p-8">Cargando validación...</div>
-  }
-
-  if (!canViewCostValidation) {
-    return <AccessDenied />
-  }
-
-  return (
-    <>
-      <div className="space-y-6">
-        <button
-          type="button"
-          onClick={() => router.push('/cost-validation')}
-          className="rounded-xl border px-4 py-2 font-semibold"
-        >
-          Volver a Validación
-        </button>
-
-        <div>
-          <h1 className="text-4xl font-bold">
-            Validación de Costos
-          </h1>
-
-          <p className="text-gray-500 mt-2">
-            {quotation?.quotation_number} —{' '}
-            {quotation?.clientes?.nombre || 'Sin cliente'}
-          </p>
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <div
-              className={`inline-flex rounded-full border px-4 py-2 text-sm font-semibold ${financialStatus.className}`}
-            >
-              {financialStatus.label}
-            </div>
-
-            {canEditCostValidation && quotation?.financial_validation_status !== 'Validado' && (
-              <button
-                type="button"
-                onClick={() => setConfirmValidateOpen(true)}
-                className="rounded-xl bg-black px-5 py-3 text-white font-semibold"
-              >
-                Marcar como Validado
-              </button>
-            )}
-
-            {canEditCostValidation && quotation?.financial_validation_status === 'Validado' && (
-              <button
-                type="button"
-                onClick={() => router.push(
-                  linkedCustomerInvoice
-                    ? `/invoicing/${linkedCustomerInvoice.id}`
-                    : `/invoicing/new?quotation=${quotation.id}`
-                )}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800"
-              >
-                {linkedCustomerInvoice ? (
-                  <ReceiptText className="h-4 w-4" />
-                ) : (
-                  <FilePlus2 className="h-4 w-4" />
-                )}
-                {linkedCustomerInvoice
-                  ? `Ver factura ${linkedCustomerInvoice.invoice_number || ''}`.trim()
-                  : 'Generar factura'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-6">
-          <h2 className="mb-4 text-xl font-bold">
-            Información Operativa
-          </h2>
-
-          {shipmentContext ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-sm text-gray-500">RT</p>
-                  <p className="mt-1 font-semibold">
-                    {shipmentContext.shipment_number || 'N/A'}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-sm text-gray-500">Referencias operativas</p>
-                  <p className="mt-1 font-semibold">
-                    {operationalBookings.length === 0
-                      ? 'Sin bookings'
-                      : `${operationalBookings.length} booking${operationalBookings.length === 1 ? '' : 's'}`}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-sm text-gray-500">Estado agregado</p>
-                  <p className="mt-1 font-semibold">
-                    {aggregateBookingStatus(
-                      operationalBookings,
-                      shipmentContext.operational_status || 'Sin bookings'
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              {operationalBookings.length > 0 && (
-                <div className="overflow-x-auto rounded-xl border">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-900 text-white">
-                      <tr>
-                        <th className="p-3 text-left">Booking</th>
-                        <th className="p-3 text-left">Carrier</th>
-                        <th className="p-3 text-left">ETD</th>
-                        <th className="p-3 text-left">ETA</th>
-                        <th className="p-3 text-left">Estado</th>
-                        <th className="p-3 text-right">Contenedores</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {operationalBookings.map((booking) => {
-                        const containers = (booking.booking_containers || [])
-                          .reduce(
-                            (sum, container) =>
-                              sum + Number(container.quantity || 0),
-                            0
-                          )
-                        return (
-                          <tr key={booking.id} className="border-b">
-                            <td className="p-3 font-semibold">
-                              {booking.booking_number ||
-                                booking.carrier_booking ||
-                                'Pendiente'}
-                            </td>
-                            <td className="p-3">{booking.carrier || 'N/A'}</td>
-                            <td className="p-3">{formatDate(booking.etd)}</td>
-                            <td className="p-3">{formatDate(booking.eta)}</td>
-                            <td className="p-3">{booking.shipment_status || 'N/A'}</td>
-                            <td className="p-3 text-right">{containers}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <p className="text-xs text-slate-500">
-                Los bookings son referencias operativas. Los importes siguientes no
-                se multiplican por booking.
-              </p>
-            </div>
-          ) : (
-            <p className="text-gray-500">
-              No hay operación asociada a esta cotización.
-            </p>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">Costo Cotizado</p>
-            <p className="text-2xl font-bold">
-              USD {formatCurrency(quotedCost)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">Costo Real</p>
-            <p className="text-2xl font-bold">
-              USD {formatCurrency(realCost)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">Diferencia</p>
-            <p
-              className={`text-2xl font-bold ${
-                costDifference > 0 ? 'text-red-600' : 'text-green-600'
-              }`}
-            >
-              USD {formatCurrency(costDifference)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">Variación %</p>
-            <p
-              className={`text-2xl font-bold ${
-                variancePercentage > 0 ? 'text-red-600' : 'text-green-600'
-              }`}
-            >
-              {variancePercentage.toFixed(2)}%
-            </p>
-          </div>
-
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">Profit Esperado</p>
-            <p className="text-2xl font-bold text-green-600">
-              USD {formatCurrency(expectedProfit)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border bg-white p-5">
-            <p className="text-sm text-gray-500">Profit Real</p>
-            <p
-              className={`text-2xl font-bold ${
-                realProfit >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}
-            >
-              USD {formatCurrency(realProfit)}
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
-          Costo a nivel de cotización
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
-              Costos Cotizados
-            </h2>
-
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-white">
-                <tr>
-                  <th className="p-3 text-left">Concepto</th>
-                  <th className="p-3 text-right">QTY</th>
-                  <th className="p-3 text-right">Costo Unit.</th>
-                  <th className="p-3 text-right">Total</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {pricingItems.map((item) => {
-                  const qty = Number(item.quantity || 1)
-                  const cost = Number(item.cost_amount || 0)
-                  const total = qty * cost
-
-                  return (
-                    <tr key={item.id} className="border-b">
-                      <td className="p-3">{item.description}</td>
-                      <td className="p-3 text-right">{qty}</td>
-                      <td className="p-3 text-right">
-                        USD {formatCurrency(cost)}
-                      </td>
-                      <td className="p-3 text-right font-semibold">
-                        USD {formatCurrency(total)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="rounded-2xl border bg-white p-6">
-            <h2 className="text-xl font-bold mb-4">
-              Costos Reales Proveedor
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-              <input
-                name="supplier"
-                placeholder="Proveedor"
-                value={invoiceForm.supplier}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2"
-              />
-
-              <input
-                name="invoice_number"
-                placeholder="No. factura"
-                value={invoiceForm.invoice_number}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2"
-              />
-
-              <input
-                name="description"
-                placeholder="Descripción del cargo"
-                value={invoiceForm.description}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2 md:col-span-2"
-              />
-
-              <input
-                name="quantity"
-                type="number"
-                placeholder="Cantidad"
-                value={invoiceForm.quantity}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2"
-              />
-
-              <input
-                name="unit_cost"
-                type="number"
-                placeholder="Costo unitario"
-                value={invoiceForm.unit_cost}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2"
-              />
-
-              <select
-                name="currency"
-                value={invoiceForm.currency}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2"
-              >
-                <option value="USD">USD</option>
-                <option value="HNL">HNL</option>
-              </select>
-
-              <select
-                name="tax_rate_id"
-                value={invoiceForm.tax_rate_id}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2"
-              >
-                <option value="">
-                  Sin impuesto
-                </option>
-
-                {taxRates.map((tax) => (
-                  <option key={tax.id} value={tax.id}>
-                    {tax.country} — {tax.tax_name}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                name="invoice_date"
-                type="date"
-                value={invoiceForm.invoice_date}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2"
-              />
-
-              <label className="flex items-center gap-2 border rounded-xl px-3 py-2">
-                <input
-                  type="checkbox"
-                  name="is_taxable"
-                  checked={invoiceForm.is_taxable}
-                  onChange={handleInvoiceChange}
-                  disabled={!canEditCostValidation}
-                />
-
-                Gravable con impuesto seleccionado
-              </label>
-
-              <textarea
-                name="notes"
-                placeholder="Notas"
-                value={invoiceForm.notes}
-                onChange={handleInvoiceChange}
-                disabled={!canEditCostValidation}
-                className="border rounded-xl px-3 py-2 md:col-span-2"
-              />
-
-              {canEditCostValidation && (
-                <button
-                  type="button"
-                  onClick={saveInvoiceItem}
-                  className="rounded-xl bg-black px-5 py-3 text-white font-semibold md:col-span-2"
-                >
-                  Agregar Costo Real
-                </button>
-              )}
-            </div>
-
-            {invoiceItems.length === 0 ? (
-              <p className="text-gray-500">
-                No hay costos reales registrados todavía.
-              </p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-slate-900 text-white">
-                  <tr>
-                    <th className="p-3 text-left">Factura</th>
-                    <th className="p-3 text-left">Concepto</th>
-                    <th className="p-3 text-right">QTY</th>
-                    <th className="p-3 text-right">Costo Unit.</th>
-                    <th className="p-3 text-right">Total</th>
-                    <th className="p-3 text-right">Impuesto</th>
-                    <th className="p-3 text-right">Total + Imp.</th>
-                    <th className="p-3 text-right">Acción</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {invoiceItems.map((item) => {
-                    const baseTotal = Number(item.total_cost || 0)
-                    const taxAmount = Number(item.tax_amount || 0)
-                    const totalWithTax = baseTotal + taxAmount
-
-                    return (
-                      <tr key={item.id} className="border-b">
-                        <td className="p-3">
-                          {item.invoice_number || 'N/A'}
-                        </td>
-                        <td className="p-3">{item.description}</td>
-                        <td className="p-3 text-right">
-                          {item.quantity}
-                        </td>
-                        <td className="p-3 text-right">
-                          USD {formatCurrency(Number(item.unit_cost || 0))}
-                        </td>
-                        <td className="p-3 text-right font-semibold">
-                          USD {formatCurrency(baseTotal)}
-                        </td>
-                        <td className="p-3 text-right">
-                          {item.tax_percentage_snapshot
-                            ? `${Number(item.tax_percentage_snapshot).toFixed(2)}%`
-                            : '0.00%'}
-                        </td>
-                        <td className="p-3 text-right font-semibold">
-                          USD {formatCurrency(totalWithTax)}
-                        </td>
-                        <td className="p-3 text-right">
-                          {canEditCostValidation && (
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTargetId(item.id)}
-                              className="rounded-lg border border-red-200 px-3 py-2 text-red-600 hover:bg-red-50"
-                            >
-                              Eliminar
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-6">
-          <h2 className="text-xl font-bold mb-4">
-            Análisis de Variación
-          </h2>
-
-          {varianceRows.length === 0 ? (
-            <p className="text-gray-500">
-              No hay datos suficientes para analizar variaciones.
-            </p>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-900 text-white">
-                  <tr>
-                    <th className="p-3 text-left">Concepto</th>
-                    <th className="p-3 text-right">Cotizado</th>
-                    <th className="p-3 text-right">Real</th>
-                    <th className="p-3 text-right">Variación</th>
-                    <th className="p-3 text-right">%</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {varianceRows.map((row: any, index: number) => (
-                    <tr
-                      key={index}
-                      className={`border-b ${
-                        row.variance > 0
-                          ? 'bg-red-50'
-                          : row.variance < 0
-                          ? 'bg-green-50'
-                          : ''
-                      }`}
-                    >
-                      <td className="p-3 font-medium">
-                        {row.description}
-                      </td>
-
-                      <td className="p-3 text-right">
-                        USD {formatCurrency(row.quoted)}
-                      </td>
-
-                      <td className="p-3 text-right">
-                        USD {formatCurrency(row.real)}
-                      </td>
-
-                      <td
-                        className={`p-3 text-right font-semibold ${
-                          row.variance > 0
-                            ? 'text-red-600'
-                            : row.variance < 0
-                            ? 'text-green-600'
-                            : 'text-slate-700'
-                        }`}
-                      >
-                        USD {formatCurrency(row.variance)}
-                      </td>
-
-                      <td
-                        className={`p-3 text-right font-semibold ${
-                          row.variance > 0
-                            ? 'text-red-600'
-                            : row.variance < 0
-                            ? 'text-green-600'
-                            : 'text-slate-700'
-                        }`}
-                      >
-                        {row.variancePercentage.toFixed(2)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-      <ConfirmDialog
-        open={deleteTargetId !== null}
-        onOpenChange={(open) => { if (!open) setDeleteTargetId(null) }}
-        title="Eliminar costo real"
-        description="Esta accion eliminara este costo real de proveedor."
-        confirmLabel="Eliminar"
-        danger
-        onConfirm={() => {
-          if (deleteTargetId) void deleteInvoiceItem(deleteTargetId)
-          setDeleteTargetId(null)
-        }}
-      />
-
-      <ConfirmDialog
-        open={confirmValidateOpen}
-        onOpenChange={setConfirmValidateOpen}
-        title="Marcar como validado"
-        description="Esta cotizacion quedara marcada como financieramente validada."
-        confirmLabel="Marcar como validado"
-        onConfirm={() => { void markAsFinanciallyValidated() }}
-      />
-
-    </>
-  )
+  if (loading) return <p className="p-8" role="status">Cargando validación...</p>
+  if (error || !data) return <section className={cardClass} role="alert"><h1 className="text-xl font-bold">No se pudo cargar la validación</h1><p className="my-3">{error}</p><button className={buttonClass} onClick={() => void refresh()}>Reintentar</button></section>
+
+  const financiallyValidated = data.quotation.status === 'Ganada' && data.quotation.financial_validation_status === 'Validado'
+  const groups = analyzeCosts(data.pricing, data.invoices, financiallyValidated)
+  const canValidate = data.quotation.status === 'Ganada' && groups.length > 0 && groups.every(g => g.reconciled)
+  const validationReason = data.quotation.status !== 'Ganada' ? 'La cotización debe estar Ganada para validar.'
+    : !canValidate ? 'Vincula los costos con sus cargos cotizados y revisa las monedas e importes antes de validar. Los cargos adicionales deben conciliarse con Pricing.'
+    : 'Tener registros vinculados no confirma que todas las facturas hayan llegado; Finanzas debe revisar su alcance antes de validar.'
+
+  return <div className="min-w-0 space-y-6">
+    <div className="flex flex-wrap gap-3">
+      <Link className={buttonClass} href="/cost-validation">Volver a Validación</Link>
+      <Link className={buttonClass} href={'/quotations/' + quotationId}>Ver cotización</Link>
+      <button disabled={busy} className={buttonClass} onClick={() => void refresh()}>Actualizar</button>
+    </div>
+    <header><h1 className="text-3xl font-bold">Validación de Costos</h1>
+      <p className="mt-2">{data.quotation.quotation_number} · {data.quotation.clientName} · {data.quotation.status}</p>
+      <p className="text-sm">Estado financiero: {data.quotation.financial_validation_status || 'Pendiente'}</p>
+    </header>
+    <section className={cardClass}>
+      <h2 className="font-bold">Base de comparación</h2>
+      <p className="mt-2 text-sm">El detalle utiliza las líneas de Pricing actuales. La opción aceptada se conserva como referencia histórica independiente.</p>
+      {data.options.map(option => <p key={option.id} className="mt-2 text-sm">
+        Opción aceptada {option.option_code} — {option.label} ({formatDate(option.accepted_at)}):
+        {' '}costo {costMoney(costNumber(option.cost_total), option.currency)}; venta sin impuesto {costMoney(costNumber(option.sale_subtotal), option.currency)}.
+      </p>)}
+      {!data.options.length && <p className="mt-2 text-sm">Sin opción aceptada disponible.</p>}
+      {data.quotation.status === 'Pendiente de Fijar Precios' && <p className="mt-2 font-medium text-amber-700 dark:text-amber-300">Cotización en revisión de precios. Los valores actuales pueden diferir del presupuesto aceptado.</p>}
+    </section>
+    <section className={cardClass}>
+      <h2 className="font-bold">Operaciones vinculadas</h2>
+      {!data.shipments.length && <p className="mt-2 text-sm">Sin operación vinculada.</p>}
+      {data.shipments.map(shipment => <div key={shipment.id} className="mt-3 text-sm">
+        <p className="font-semibold">{shipment.shipment_number} · {shipment.operational_status}</p>
+        {shipment.bookings.map(booking => <p key={booking.id}>
+          {booking.booking_number || booking.carrier_booking || 'Booking sin número'} · {booking.carrier || 'Carrier pendiente'} · {booking.shipment_status || 'Estado pendiente'} ·
+          {' '}{booking.booking_containers.length ? booking.booking_containers.map(c => c.quantity + ' × ' + c.container_type).join(', ') : 'Sin contenedores operativos registrados'}
+          {' '}· ETD {formatDate(booking.etd)} · ETA {formatDate(booking.eta)}
+        </p>)}
+      </div>)}
+      <p className="mt-3 text-sm text-slate-500">Costos a nivel de cotización; no están asignados individualmente a bookings, BL o contenedores.</p>
+    </section>
+
+    <CostAnalysisPanel pricing={data.pricing} invoices={data.invoices} containers={data.containers} agent={data.agent} validated={financiallyValidated} />
+
+    <section className={cardClass}>
+      <h2 className="text-xl font-bold">Registrar factura de proveedor</h2>
+      <p className="mt-2 text-sm">Selecciona el cargo cotizado y ajusta cantidad e importe a la factura recibida. Puedes registrar varias facturas por cargo.</p>
+      <form onSubmit={saveInvoice} className="mt-4 grid gap-3 md:grid-cols-2">
+        <Field label="Cargo cotizado"><select className={fieldClassSm} value={form.pricing_item_id} disabled={busy} onChange={e => selectPricing(e.target.value)}>
+          <option value="">Sin vínculo — pendiente de conciliación</option>
+          {data.pricing.map(p => <option key={p.id} value={p.id}>{p.description} · {p.supplier || 'Sin proveedor'} · {p.currency}</option>)}
+        </select></Field>
+        <Field label="Proveedor"><input className={fieldClassSm} value={form.supplier} disabled={busy} onChange={e => setForm({ ...form, supplier: e.target.value })} /></Field>
+        <Field label="Número de factura"><input className={fieldClassSm} value={form.invoice_number} disabled={busy} onChange={e => setForm({ ...form, invoice_number: e.target.value })} /></Field>
+        <Field label="Descripción del cargo"><input required className={fieldClassSm} value={form.description} disabled={busy} onChange={e => setForm({ ...form, description: e.target.value })} /></Field>
+        <Field label="Cantidad facturada"><input required type="number" min="0.000001" step="any" className={fieldClassSm} value={form.quantity} disabled={busy} onChange={e => setForm({ ...form, quantity: e.target.value })} /></Field>
+        <Field label="Costo unitario sin impuesto"><input required type="number" min="0" step="any" className={fieldClassSm} value={form.unit_cost} disabled={busy} onChange={e => setForm({ ...form, unit_cost: e.target.value })} /></Field>
+        <Field label="Moneda"><select className={fieldClassSm} value={form.currency} disabled={busy || !!form.pricing_item_id} onChange={e => setForm({ ...form, currency: e.target.value })}>
+          {[...new Set(['USD', 'HNL', ...data.pricing.map(p => costCurrency(p.currency))])].filter(c => c !== 'Sin moneda').map(c => <option key={c}>{c}</option>)}
+        </select></Field>
+        <Field label="Fecha de factura"><input type="date" className={fieldClassSm} value={form.invoice_date} disabled={busy} onChange={e => setForm({ ...form, invoice_date: e.target.value })} /></Field>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_taxable} disabled={busy} onChange={e => setForm({ ...form, is_taxable: e.target.checked })} />Aplicar impuesto de proveedor</label>
+        <Field label="Tasa de impuesto"><select className={fieldClassSm} value={form.tax_rate_id} disabled={busy || !form.is_taxable} onChange={e => setForm({ ...form, tax_rate_id: e.target.value })}>
+          <option value="">Selecciona una tasa</option>
+          {data.taxes.map(t => <option key={t.id} value={t.id}>{t.country} — {t.tax_name} ({t.percentage}%)</option>)}
+        </select></Field>
+        <Field label="Notas"><textarea className={fieldClassSm} value={form.notes} disabled={busy} onChange={e => setForm({ ...form, notes: e.target.value })} /></Field>
+        <div className="flex items-end"><button className={buttonClass} disabled={busy} type="submit">{busy ? 'Guardando...' : 'Agregar costo de proveedor'}</button></div>
+      </form>
+    </section>
+    <section className={cardClass}>
+      <h2 className="text-xl font-bold">Facturas registradas y conciliación</h2>
+      <p className="mt-2 text-sm">Los registros sin vínculo no se emparejan por descripción. Selecciona su cargo para conciliar; cambiar el vínculo devuelve la validación a Pendiente.</p>
+      {!data.invoices.length ? <p className="mt-4">No hay costos de proveedor registrados.</p> : <div className="mt-4 overflow-x-auto rounded-xl border dark:border-slate-700">
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="bg-slate-100 text-left dark:bg-slate-800"><tr>{['Factura / proveedor', 'Concepto / fecha', 'Cantidad', 'Costo unitario', 'Base', 'Impuesto', 'Total con impuesto', 'Cargo cotizado', 'Acción'].map(h => <th key={h} className="p-3">{h}</th>)}</tr></thead>
+          <tbody>{data.invoices.map(item => {
+            const currency = costCurrency(item.currency), base = costNumber(item.total_cost), tax = costNumber(item.tax_amount)
+            const eligible = data.pricing.filter(p => costCurrency(p.currency) === currency)
+            return <tr key={item.id} className="border-t dark:border-slate-700">
+              <td className="p-3">{item.invoice_number || 'Sin número'}<p className="text-xs">{item.supplier || 'Sin proveedor'}</p></td>
+              <td className="p-3">{item.description}<p className="text-xs">{formatDate(item.invoice_date)}</p></td>
+              <td className="p-3">{item.quantity}</td>
+              <td className="p-3">{costMoney(costNumber(item.unit_cost), currency)}</td>
+              <td className="p-3">{costMoney(base, currency)}</td><td className="p-3">{costMoney(tax, currency)}</td>
+              <td className="p-3">{costMoney(base === null || tax === null ? null : base + tax, currency)}</td>
+              <td className="p-3"><select aria-label={'Cargo cotizado para ' + item.description + ' ' + (item.invoice_number || item.id)} className={fieldClassSm} disabled={busy}
+                value={eligible.some(p => p.id === item.pricing_item_id) ? item.pricing_item_id! : ''}
+                onChange={e => {
+                  const pricingId = e.target.value
+                  if (pricingId && !eligible.some(p => p.id === pricingId)) return
+                  void mutate(async () => {
+                    // Updating description to its existing value also invokes the existing financial invalidation trigger.
+                    const result = await supabase.from('provider_invoice_items').update({ pricing_item_id: pricingId || null, description: item.description })
+                      .eq('id', item.id).eq('quotation_id', quotationId).is('deleted_at', null).select('id').single()
+                    if (result.error || !result.data) throw new Error(result.error?.message || 'No se pudo vincular el costo.')
+                  }, 'Conciliación actualizada; revisa la validación financiera')
+                }}>
+                <option value="">Sin vínculo — revisar</option>{eligible.map(p => <option key={p.id} value={p.id}>{p.description} · {p.supplier || 'Sin proveedor'}</option>)}
+              </select></td>
+              <td className="p-3"><button className={buttonClass} disabled={busy} onClick={() => setDeleteId(item.id)}>Eliminar</button></td>
+            </tr>
+          })}</tbody>
+        </table>
+      </div>}
+    </section>
+    <section className={cardClass}>
+      <h2 className="font-bold">Revisión financiera</h2><p className="my-3 text-sm">{validationReason}</p>
+      {data.quotation.financial_validation_status !== 'Validado' && <button className={buttonClass} disabled={busy || !canValidate} onClick={() => setConfirmValidation(true)}>Marcar como validado</button>}
+      {financiallyValidated && <Link className={buttonClass} href={data.customerInvoice ? '/invoicing/' + data.customerInvoice.id : '/invoicing/new?quotation=' + quotationId}>
+        {data.customerInvoice ? 'Ver factura ' + (data.customerInvoice.invoice_number || '') : 'Generar factura'}
+      </Link>}
+    </section>
+    <ConfirmDialog open={deleteId !== null} onOpenChange={open => { if (!open) setDeleteId(null) }} title="Eliminar costo de proveedor" description="Se eliminará este registro y se deberá revisar nuevamente la validación financiera." confirmLabel="Eliminar" danger onConfirm={() => {
+      if (!deleteId) return
+      const target = deleteId
+      void mutate(async () => {
+        const result = await supabase.from('provider_invoice_items').delete().eq('id', target).eq('quotation_id', quotationId).select('id').single()
+        if (result.error || !result.data) throw new Error(result.error?.message || 'No se eliminó el registro.')
+      }, 'Costo eliminado')
+    }} />
+    <ConfirmDialog open={confirmValidation} onOpenChange={setConfirmValidation} title="Confirmar revisión completa" description="Confirma que recibiste todas las facturas y revisaste cantidades, cargos adicionales e impuestos. La presencia de un registro por cargo no garantiza que la facturación esté completa." confirmLabel="Validar costos" onConfirm={() => {
+      if (!canValidate) return
+      void mutate(async () => {
+        const result = await supabase.from('quotations').update({ financial_validation_status: 'Validado' }).eq('id', quotationId).eq('status', 'Ganada').select('id').single()
+        if (result.error || !result.data) throw new Error(result.error?.message || 'La cotización cambió; actualiza antes de validar.')
+      }, 'Costos validados')
+    }} />
+  </div>
 }

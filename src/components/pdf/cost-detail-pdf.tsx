@@ -12,6 +12,7 @@ import {
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import { calculateTaxAmount, normalizeTaxRatePercent } from '@/src/lib/tax'
+import { containerCount, freightBreakdown, type CostContainer } from '@/src/lib/cost-analysis'
 
 function formatCurrency(value: number) {
   return Number(value || 0).toLocaleString('en-US', {
@@ -400,6 +401,7 @@ const sumLinesByCurrency = (
 export default function CostDetailPDF({
   quotation,
   selectedAgent,
+  quotationContainers = [],
   pricingItems = [],
   wonAt,
   generatedByName,
@@ -409,6 +411,7 @@ export default function CostDetailPDF({
 }: {
   quotation: any
   selectedAgent: any
+  quotationContainers?: CostContainer[]
   pricingItems?: any[]
   wonAt?: string | null
   generatedByName?: string | null
@@ -459,6 +462,9 @@ export default function CostDetailPDF({
   ].filter((group) => group.items.length > 0)
 
   const totalsByCurrency = sumLinesByCurrency(pricingItems, normalizedTaxRate)
+  const canonicalContainers = ['FCL', 'FTL'].includes(quotation.quote_type) ? quotationContainers : []
+  const containers = containerCount(canonicalContainers)
+  const freight = quotation.quote_type === 'FCL' ? freightBreakdown(pricingItems, canonicalContainers, selectedAgent) : null
 
   const customer = quotation.cliente || quotation.clientes
   const quoteDate = quotation.quoted_at || quotation.created_at
@@ -509,7 +515,7 @@ export default function CostDetailPDF({
 
   return (
     <Document>
-      <Page size="LETTER" orientation="portrait" style={styles.page} wrap={false}>
+      <Page size="LETTER" orientation="portrait" style={styles.page}>
         <View style={styles.header}>
           <View>
             <Image src="/logo/sari-logo.png" style={styles.logo} />
@@ -642,7 +648,10 @@ export default function CostDetailPDF({
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>DETALLE DE COSTOS Y VENTA</Text>
+          <Text style={styles.sectionTitle}>COSTOS Y VENTA COTIZADOS — PRICING ACTUAL</Text>
+          <Text style={{ fontSize: 6, marginBottom: 4 }}>Presupuesto cotizado; no confirma costos facturados ni pagos de proveedor.</Text>
+          {containers !== null && <Text style={{ fontSize: 6, marginBottom: 4 }}>Carga: {canonicalContainers.map(c => `${c.quantity} x ${c.container_type_name}`).join(' / ')}. Promedios distribuidos entre {containers} contenedores; no asignados por BL.</Text>}
+          {freight && <Text style={{ fontSize: 6, marginBottom: 4 }}>Flete guardado {freight.currency} {formatCurrency(freight.total)} = marítimo {formatCurrency(freight.ocean)} + Profit Share agente ({freight.count} x {formatCurrency(freight.ps)}) + MBL ({freight.mbl} x {formatCurrency(freight.fee)}). Desglose conciliado con tarifa actual.</Text>}
 
           <View style={styles.table}>
             <View style={styles.tableHeader}>
@@ -690,7 +699,7 @@ export default function CostDetailPDF({
                         <Text style={styles.colAmount}>
                           {line.currency} {formatCurrency(line.tax)}
                         </Text>
-                        <Text style={styles.colProfit}>
+                        <Text style={[styles.colProfit, line.profit < 0 ? { color: '#B52A37' } : {}]}>
                           {line.currency} {formatCurrency(line.profit)}
                         </Text>
                         <Text style={styles.colMargin}>
@@ -720,7 +729,7 @@ export default function CostDetailPDF({
                       <Text style={styles.colAmount}>
                         {groupTotals.currency} {formatCurrency(groupTotals.tax)}
                       </Text>
-                      <Text style={styles.colProfit}>
+                      <Text style={[styles.colProfit, groupTotals.profit < 0 ? { color: '#B52A37' } : {}]}>
                         {groupTotals.currency} {formatCurrency(groupTotals.profit)}
                       </Text>
                       <Text style={styles.colMargin}>
@@ -773,10 +782,14 @@ export default function CostDetailPDF({
                 <Text>Costo Total</Text>
                 <Text>{totals.currency} {formatCurrency(totals.costTotal)}</Text>
               </View>
+              {containers !== null && <View style={styles.totalRow}>
+                <Text>Promedio costo / contenedor</Text>
+                <Text>{totals.currency} {formatCurrency(totals.costTotal / containers)}</Text>
+              </View>}
 
               <View style={styles.totalDivider} />
 
-              <View style={styles.profitRow}>
+              <View style={[styles.profitRow, totals.profit < 0 ? { color: '#B52A37' } : {}]}>
                 <Text>Profit</Text>
                 <Text>{totals.currency} {formatCurrency(totals.profit)}</Text>
               </View>

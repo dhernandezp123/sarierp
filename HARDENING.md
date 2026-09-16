@@ -1,5 +1,72 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-16 — COST-001 — Detalle y conciliación de costos operativos
+
+- Estado: implementado localmente; pendiente de UAT autenticado y publicación.
+- Hallazgo: sin facturas, Validación mostraba todo el ingreso como “Profit Real”
+  y el presupuesto faltante como ahorro. Emparejaba facturas por descripción,
+  mezclaba monedas bajo USD y no explicaba el promedio por contenedor.
+- Archivos:
+  - `src/lib/cost-analysis.ts`, `src/lib/cost-validation-data.ts`.
+  - `src/components/pricing/CostAnalysisPanel.tsx`.
+  - `src/app/(protected)/cost-validation/page.tsx` y `[id]/page.tsx`.
+  - `src/app/(protected)/quotations/[id]/page.tsx`.
+  - `src/components/pdf/cost-detail-pdf.tsx`.
+  - `tests/cost-analysis.test.mjs`, `tests/cost-analysis-panel.test.mjs`,
+    `tests/cost-validation-data.test.mjs`, `tests/cost-detail-pdf.test.mjs`.
+- SQL: no aplica; reutiliza `provider_invoice_items.pricing_item_id`, RLS y el
+  trigger existente de invalidación financiera. La reasignación incluye la
+  descripción sin modificarla para activar ese trigger en la misma escritura.
+- Cambios:
+  - Costos ausentes quedan pendientes, cero registrado sigue siendo válido;
+    utilidad con registros siempre provisional hasta validación y conciliación.
+    Facturas parciales no producen un ahorro ni cierre automático.
+  - Comparación por ID de cargo y moneda; registros legacy/adicionales quedan
+    sin vínculo hasta revisión explícita. Una factura puede cubrir parte de un
+    cargo y un cargo puede recibir varias facturas. Formularios con etiquetas,
+    verificación de moneda y cantidades, guardado con bloqueo de doble clic.
+  - Monedas separadas e impuestos de proveedor separados de la base. La utilidad
+    se identifica como comparación sin impuestos; no determina crédito fiscal,
+    pagos ni utilidad contable definitiva. Impuesto solo si se selecciona aplicar.
+  - Lectura paginada de Pricing/facturas, eliminación lógica excluida, permiso
+    de lectura comprobado antes de interpretar un resultado vacío, errores
+    bloqueantes con reintento y resultados obsoletos descartados por sesión/ruta.
+  - Promedios sobre contenedores canónicos, pérdidas por concepto y desglose
+    marítimo/Profit Share/MBL solo cuando coincide con el flete guardado. Panel
+    en Tarifas y costos limitado al permiso interno existente Admin/Pricing.
+  - PDF interno identifica Pricing actual, promedio, desglose y pérdidas; permite
+    paginación de detalles extensos. No modifica PDF comercial ni opciones.
+  - Opción aceptada visible como referencia histórica independiente; Pricing
+    actual identificado, con aviso de repricing. Listado conserva operaciones
+    cuya cotización se reabrió; validar sigue requiriendo Ganada.
+- Validaciones:
+  - `npm.cmd test`: 75/75; incluye ausencia de facturas, parciales, monedas,
+    vínculos por ID, cero válido, líneas eliminadas, errores/paginación y permisos.
+    Caso de referencia: costo 95,200, promedio 9,520 y DTHC con pérdida 300.
+  - Render estático del panel; PDF normal de una página y PDF de 100 cargos
+    paginado, con logo en memoria y sin solicitudes a producción.
+  - `npx.cmd tsc --noEmit`: OK tras el último cambio de código.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint de helpers, panel, detalle de validación y pruebas: sin hallazgos.
+    Comparación con HEAD: listado mantiene 3 errores previos, cotización 6 y
+    PDF 6 errores/1 aviso previos; sin desactivaciones de reglas.
+  - `git diff --check`: OK.
+- Riesgos / pendientes:
+  - UAT con cuentas Admin/Finanzas/Contabilidad: alta parcial, reasignación,
+    eliminación, invalidación, cierre y factura; confirmar RLS desplegado. El
+    permiso existente puede denegar Finanzas o cotizaciones en repricing; se
+    muestra el bloqueo, sin ampliar permisos ni tratarlo como costo cero.
+  - La validación de completitud es revisión humana: no existe estado individual
+    de cierre de cargo. El guard adicional de conciliación en UI no sustituye la
+    autorización ni constituye un nuevo constraint de cierre en servidor.
+  - Sin asignación física por BL/contenedor, proyección de facturas parciales,
+    conversión de monedas ni modificación de snapshots aceptados. Nuevos cargos
+    sin presupuesto requieren conciliación con Pricing antes de cerrar por UI.
+  - Render estático de UI y PDFs probado; falta revisión visual móvil/oscuro y
+    prueba autenticada en navegador. No hubo escrituras comerciales remotas.
+- Commit de implementación y resultado de publicación: se registrarán después
+  de confirmar el despliegue autorizado. UAT autenticado sigue pendiente.
+
 Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.

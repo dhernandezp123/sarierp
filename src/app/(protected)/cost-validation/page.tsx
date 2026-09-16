@@ -100,7 +100,7 @@ export default function CostValidationPage() {
           )
         )
       `)
-      .eq('quotation.status', 'Ganada')
+      .is('quotation.deleted_at', null)
       .is('shipping_instruction.deleted_at', null)
       .order('created_at', { ascending: false })
 
@@ -167,14 +167,14 @@ export default function CostValidationPage() {
 
       <div className="rounded-2xl border bg-white p-6">
         <h2 className="mb-4 text-xl font-bold">
-          Operaciones con cotizacion ganada
+          Operaciones vinculadas a cotizaciones
         </h2>
 
         {shipments.length === 0 ? (
           <EmptyState
             icon={<ClipboardCheck className="h-6 w-6" />}
             title="Sin operaciones pendientes"
-            description="No hay operaciones con cotización ganada pendientes de validar."
+            description="No hay operaciones vinculadas a cotizaciones disponibles."
           />
         ) : (
           <div className="overflow-x-auto rounded-xl border">
