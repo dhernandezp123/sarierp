@@ -1,6 +1,6 @@
 # Hallazgos integrales — 14/09/2026
 
-Estado: SQL publicado y verificado el 16/09/2026; frontend y UAT autenticado pendientes.
+Estado: SQL y frontend publicados y verificados el 16/09/2026; UAT autenticado pendiente.
 
 ## Cambios y aceptación
 
@@ -39,5 +39,10 @@ como `postgres`, sin restricciones RLS, encontró 0 rangos CAI y 0 documentos co
 fecha CAI no representable; no se corrigieron datos por inferencia. Para conciliar
 el hallazgo original hace falta identificar el registro/ambiente de aquella prueba.
 
-Commit y frontend pendientes. El UAT autenticado, la persistencia por rol y los
-avisos reales siguen pendientes; no hubo emisiones ni registros de prueba en producción.
+Frontend publicado en el commit `7b4eff5`, deployment GitHub `6484076735` y Vercel
+`A3WabPMXwFi1qRThLXht3Meycdea`, ambos con resultado `success`. En `forwarders.app`,
+los accesos ERP/portal responden 200 y CAI/Garantías/nueva cotización redirigen al
+login conservando destino. El harness temporal responde 404.
+
+El UAT autenticado, la persistencia por rol y los avisos reales siguen pendientes;
+no hubo emisiones ni registros de prueba en producción.

@@ -6861,8 +6861,8 @@ Agregar una entrada por fix:
 
 ### 2026-09-14 — INT-20260914 — Hallazgos de pruebas integrales
 
-- Estado: implementación y regresiones locales realizadas; SQL publicado y auditado
-  el 16/09/2026. Frontend y UAT autenticado pendientes. No cerrar los hallazgos aún.
+- Estado: SQL y frontend publicados y verificados el 16/09/2026.
+  Regresiones locales realizadas; UAT autenticado pendiente. No cerrar los hallazgos aún.
 - IDs: INT-01 shipment Miami; INT-02 fecha CAI; INT-03 Garantías;
   INT-04 guardado/envío a Pricing; INT-05 apertura/foco de formularios;
   INT-06 contacto; INT-07 carga Miami sin tarifas; INT-08 garantías multimoneda.
@@ -6919,9 +6919,9 @@ Agregar una entrada por fix:
     `npx.cmd tsc --noEmit` final y `git diff --check`: OK.
     La prueba SQL también confirma emisión válida y consumo de un solo correlativo.
 - Riesgos / acciones pendientes:
-  - Aplicar la migración antes del frontend, que depende de la nueva RPC. Ejecutar
-    auditoría CAI de solo lectura y contrastar fechas sospechosas con documentos
-    originales; registrar correcciones específicas con evidencia, sin truncar años.
+  - SQL aplicado antes del frontend y auditoría CAI realizada (resultado abajo).
+    Para conciliar el hallazgo original, identificar su registro/ambiente y contrastar
+    la fecha con el documento original; no truncar años ni inferir correcciones.
   - Verificar perfiles/RLS desplegados, persistencia al recargar y avisos reales.
     La política de edición existente puede restringir Operaciones aunque la UI del
     editor muestre ese rol; esta RPC no amplía permisos por el mero control visual.
@@ -6944,4 +6944,14 @@ Agregar una entrada por fix:
     que corregir en esta base. La fecha reportada por las pruebas anteriores
     requiere identificar su registro/ambiente para contrastarla con el original.
   - No se emitieron facturas ni se crearon registros de prueba en producción.
-- Commit: pendiente de asignación; frontend pendiente de publicación/verificación.
+- Publicación frontend (16/09/2026):
+  - Implementación `7b4eff5` publicada en `main`; Vercel y GitHub Production
+    confirman `success`. Deployment GitHub `6484076735`, Vercel
+    `A3WabPMXwFi1qRThLXht3Meycdea`.
+  - URL: `https://sarierp-pnjen3c88-claudherhn-5641s-projects.vercel.app`.
+  - En `https://forwarders.app`, `/login` y `/portal/login` responden 200;
+    `/settings/cai`, `/operations/garantias` y `/quotations/new` responden 307
+    al login conservando destino. `/api/integral-review/demo` responde 404.
+    Comprobaciones GET sin sesión ni mutaciones de datos.
+  - Estas verificaciones no cierran el UAT autenticado descrito en el guion.
+- Commit de implementación: `7b4eff5`. Registro de publicación en commit documental posterior.
