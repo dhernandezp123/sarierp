@@ -2,8 +2,8 @@
 
 ### 2026-09-16 - FLOW-027 / SEC-025 / PERF-006 - Workflow y bandeja de Shipping Instructions
 
-- Estado: implementado, validado e historial local reconciliado; despliegue SQL,
-  UAT autenticado y publicacion pendientes.
+- Estado: implementado, validado, migrado y publicado en Production; UAT
+  autenticado pendiente.
 - Hallazgos:
   - La bandeja descargaba todas las SI autorizadas, sus relaciones y bookings
     para filtrar, contar y paginar en el navegador. Esto aumentaba el costo de
@@ -59,17 +59,32 @@
   - ESLint dirigido de la bandeja: sin hallazgos. El detalle conserva 8 errores
     y 4 avisos preexistentes; este ajuste no agrega nuevas infracciones.
 - Riesgos / pendientes:
-  - Aplicar la migracion en el ambiente remoto y ejecutar la prueba SQL/UAT con
-    cuentas Ventas, Operaciones y Admin. No hubo escrituras ni despliegues remotos.
+  - Ejecutar UAT con cuentas Ventas, Operaciones y Admin. La prueba SQL local
+    certifica RLS y transacciones, pero no sustituye una sesion real desplegada.
   - Revisar visualmente busqueda rapida, cambio de filtros/pagina y conflictos
     entre dos sesiones. Las notificaciones internas ocurren despues de la
     transaccion principal y su fallo no revierte una transicion ya confirmada.
-- Commit: pendiente.
+- Publicacion (16/09/2026):
+  - `npx.cmd supabase db push --linked --yes`: aplico unicamente
+    `20260916120000_shipping_instruction_workflow_hardening.sql` en Production.
+    `migration list --linked` quedo alineado y el dry-run posterior confirma
+    `Remote database is up to date`.
+  - Implementacion `96b2108c4e77655b311ca5a27cd84bba2b8f2021` publicada en
+    `origin/main`. GitHub Production `6491672404` y Vercel
+    `78CgmcqV6JXfQ8uRCX84GPaVt1FK` reportan `success / Deployment has completed`.
+  - URL del deployment:
+    `https://sarierp-kd3ux1t4w-claudherhn-5641s-projects.vercel.app`.
+  - GET sin sesion en `https://forwarders.app`: `/login` responde 200;
+    `/pricing-comparison`, `/operations/shipping-instructions` y
+    `/quotations/new` responden 307 al login conservando la ruta de retorno.
+    No se crearon ni modificaron datos comerciales durante esta comprobacion.
+- Commit de implementacion: `96b2108`. Registro de publicacion en commit
+  documental posterior.
 
 ### 2026-09-16 - CALC-008 / FLOW-026 / UX-058 - Pricing, editor y bandeja de Shipping Instructions
 
-- Estado: implementado y validado localmente; UAT autenticado y publicacion
-  pendientes.
+- Estado: implementado, validado y publicado en Production; UAT autenticado
+  pendiente.
 - Hallazgos:
   - Pricing podia mostrar temporalmente cargos y tarifas de la cotizacion previa
     mientras cargaba otra seleccion, y respuestas tardias podian reemplazar el
@@ -131,10 +146,11 @@
     con multiples bookings y confirmar Cancelar en el editor.
   - La paginacion en servidor, la restriccion de escritura de Ventas y las
     transiciones atomicas quedaron implementadas y probadas localmente en
-    `FLOW-027 / SEC-025 / PERF-006`; su despliegue y UAT siguen pendientes.
+    `FLOW-027 / SEC-025 / PERF-006`; el despliegue esta completo y falta UAT.
   - Falta revision visual autenticada de la navegacion fija, foco y tablas en
-    movil. Sin escrituras comerciales, despliegue ni cambios remotos.
-- Commit: pendiente.
+    movil. La comprobacion postdeploy fue publica y sin escrituras comerciales.
+- Commit de implementacion: `96b2108`. Evidencia de publicacion registrada en
+  `FLOW-027 / SEC-025 / PERF-006`.
 
 ### 2026-09-16 — COST-001 — Detalle y conciliación de costos operativos
 
