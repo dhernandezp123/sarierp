@@ -1,5 +1,141 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-16 - FLOW-027 / SEC-025 / PERF-006 - Workflow y bandeja de Shipping Instructions
+
+- Estado: implementado, validado e historial local reconciliado; despliegue SQL,
+  UAT autenticado y publicacion pendientes.
+- Hallazgos:
+  - La bandeja descargaba todas las SI autorizadas, sus relaciones y bookings
+    para filtrar, contar y paginar en el navegador. Esto aumentaba el costo de
+    lectura y podia producir una experiencia lenta a medida que crecieran las
+    operaciones.
+  - Ventas y Pricing podian pasar la politica RLS de `UPDATE` de una SI y enviar
+    columnas fuera de su formulario mediante una llamada directa. Validar,
+    asignar y cancelar ejecutaban escrituras y auditoria separadas, sin bloqueo
+    de fila ni control de version.
+  - El guardado operativo tampoco detectaba una pestaña desactualizada. Asignar
+    podia regresar una SI ya validada al estado `Asignado`, y cancelar no cerraba
+    el shipment canonico en la misma transaccion.
+- Archivos:
+  - `supabase/migrations/20260916120000_shipping_instruction_workflow_hardening.sql`.
+  - `supabase/tests/shipping_instruction_workflow_hardening.sql`.
+  - `src/app/(protected)/operations/shipping-instructions/page.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`.
+  - `HARDENING.md`.
+- SQL:
+  - `list_shipping_instructions` resuelve permisos, busqueda literal, estado
+    agregado de bookings, filtros, conteos y paginas de 25/50/100 en servidor.
+  - RPC atomicas y con `FOR UPDATE`/`updated_at` para guardar informacion inicial
+    de Ventas, guardar detalles operativos, validar, asignar y cancelar.
+  - `can_update_shipping_instruction` deja la edicion directa solo a Admin y
+    Operaciones; Ventas usa una lista explicita de campos antes de enviar la SI.
+  - Cancelar sincroniza SI y shipment, y registra actividad/evento operativo en
+    la misma transaccion. Asignar sincroniza `shipments.assigned_to` sin degradar
+    un estado avanzado.
+- Cambios UX/UI:
+  - Busqueda con espera de 300 ms y descarte de respuestas obsoletas; filtros,
+    metricas y paginacion conservan la misma interfaz pero ahora reflejan el
+    resultado calculado por la base.
+  - Los errores de concurrencia explican que la SI cambio en otra sesion y piden
+    recargar, evitando que un guardado silencioso sobrescriba trabajo reciente.
+  - La respuesta canonica de cada accion actualiza la pantalla; se eliminaron
+    escrituras y logs duplicados desde el cliente. Las instrucciones especiales
+    que Ventas podia editar ahora tambien se persisten en su guardado inicial.
+- Validaciones:
+  - Prueba SQL transaccional local: OK. Cubre RLS directo, listas de campos,
+    propietario de Ventas, envio unico, versiones obsoletas, guardado operativo,
+    validacion, asignacion y sincronizacion, cancelacion atomica/auditoria,
+    bloqueo con bookings, paginacion, busqueda escapada, filtros y alcance RLS.
+  - `npx.cmd supabase db lint --local --level error`: sin errores de esquema.
+  - Historial local reconciliado: se comprobaron columna, default, constraint,
+    comentario y uso de `mbl_quantity`; despues se marco solo `20260908150000`
+    como aplicada. `supabase migration up --local` aplico y registro
+    `20260914233000` y `20260916120000`; `migration list --local` quedo alineado.
+  - `npx.cmd supabase db push --linked --dry-run`: Production propone unicamente
+    `20260916120000_shipping_instruction_workflow_hardening.sql`.
+  - `npm.cmd test`: 78/78.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 paginas.
+  - ESLint dirigido de la bandeja: sin hallazgos. El detalle conserva 8 errores
+    y 4 avisos preexistentes; este ajuste no agrega nuevas infracciones.
+- Riesgos / pendientes:
+  - Aplicar la migracion en el ambiente remoto y ejecutar la prueba SQL/UAT con
+    cuentas Ventas, Operaciones y Admin. No hubo escrituras ni despliegues remotos.
+  - Revisar visualmente busqueda rapida, cambio de filtros/pagina y conflictos
+    entre dos sesiones. Las notificaciones internas ocurren despues de la
+    transaccion principal y su fallo no revierte una transicion ya confirmada.
+- Commit: pendiente.
+
+### 2026-09-16 - CALC-008 / FLOW-026 / UX-058 - Pricing, editor y bandeja de Shipping Instructions
+
+- Estado: implementado y validado localmente; UAT autenticado y publicacion
+  pendientes.
+- Hallazgos:
+  - Pricing podia mostrar temporalmente cargos y tarifas de la cotizacion previa
+    mientras cargaba otra seleccion, y respuestas tardias podian reemplazar el
+    estado de una seleccion mas reciente.
+  - La tabla recalculaba ISV historico con la tasa corporativa actual mientras
+    mostraba el total persistido; el seguro guardaba `tax_rate = 15` aunque la
+    configuracion usada para el importe fuera distinta.
+  - La bandeja de Shipping Instructions ofrecía etiquetas de filtro que no
+    coincidían con los estados mostrados y dependia del estado legacy de la SI,
+    sin considerar sus bookings.
+  - El editor terminaba su carga al recibir solo la cabecera y su accion Cancelar
+    evitaba el guard de cambios sin guardar.
+  - El editor, Pricing y el detalle de SI eran paginas extensas sin navegacion
+    interna. La bandeja dependia de filas clicables con mouse, no identificaba
+    sus filtros y no permitia recuperarse de un error sin recargar la pagina.
+    Sus fechas tampoco seguian el formato estandar DD/MM/YYYY del ERP.
+- Archivos:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/page.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`.
+  - `src/components/ui/SectionNav.tsx`.
+  - `src/lib/tax.ts`, `src/lib/operation-status.ts`.
+  - `tests/tax-and-documents.test.mjs`, `tests/operation-status.test.mjs`.
+  - `HARDENING.md`.
+- SQL: no aplica; no se modificaron esquema, funciones, RLS ni datos remotos.
+- Cambios:
+  - El cambio de cotizacion limpia el workspace dependiente, bloquea acciones
+    mientras carga, consulta tarifas/cargos/opciones/contenedores/carga en
+    paralelo y descarta respuestas cuyo ID ya no sea el seleccionado. Se retiro
+    la segunda carga automatica de tarifas Miami.
+  - ISV y total conservan `tax_amount`, `tax_rate` y `total_amount` persistidos;
+    solo registros legacy sin esos valores usan la tasa corporativa actual. El
+    seguro persiste la misma tasa con la que calcula el importe.
+  - Shipping Instructions excluye eliminados, solicita solo columnas necesarias,
+    agrega el estado de bookings y comparte etiquetas canonicas de filtro. La
+    tabla extensa de Pricing tiene desplazamiento propio en pantallas angostas.
+  - El editor espera cabecera, catalogos, cliente, contenedores, carga y Pricing;
+    separa error de carga con reintento y Cancelar pasa por el guard existente.
+  - Las tres paginas largas comparten navegacion interna fija, desplazamiento
+    accesible y destinos con margen para el topbar. Bandeja y bookings exponen
+    encabezados semanticos, regiones desplazables y enlaces operables por
+    teclado; la bandeja agrega etiquetas, Actualizar, Reintentar, limpiar filtros
+    y evita una pagina vacia cuando cambia el total.
+  - Las fechas de bandeja y detalle de SI reutilizan `formatDate`, conservando
+    columnas DATE y el formato DD/MM/YYYY.
+- Validaciones:
+  - `npm.cmd test`: 78/78, incluidas tres regresiones nuevas para impuesto
+    historico, tasa cero, etiquetas y agregado de bookings.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 paginas.
+  - ESLint dirigido: `SectionNav`, helpers y pruebas sin hallazgos. Se conserva
+    deuda previa en las cuatro paginas; frente a HEAD baja de 58 errores/16
+    avisos a 49/12, sin desactivar reglas ni agregar hallazgos en el detalle SI.
+  - `git diff --check`: OK; solo avisos esperados de LF/CRLF.
+- Riesgos / pendientes:
+  - UAT autenticado: alternar cotizaciones con respuestas lentas, editar/aprobar,
+    validar totales con tasas historicas 0%, 12% y default, probar filtros de SI
+    con multiples bookings y confirmar Cancelar en el editor.
+  - La paginacion en servidor, la restriccion de escritura de Ventas y las
+    transiciones atomicas quedaron implementadas y probadas localmente en
+    `FLOW-027 / SEC-025 / PERF-006`; su despliegue y UAT siguen pendientes.
+  - Falta revision visual autenticada de la navegacion fija, foco y tablas en
+    movil. Sin escrituras comerciales, despliegue ni cambios remotos.
+- Commit: pendiente.
+
 ### 2026-09-16 — COST-001 — Detalle y conciliación de costos operativos
 
 - Estado: implementado, validado localmente y publicado en producción;

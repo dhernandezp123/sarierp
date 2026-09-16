@@ -1,7 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import loadTs from './load-ts.mjs'
-const { normalizeTaxRatePercent, calculateTaxAmount, DEFAULT_TAX_RATE_PERCENT } = loadTs('src/lib/tax.ts')
+const {
+  normalizeTaxRatePercent,
+  calculateTaxAmount,
+  resolvePersistedTaxAmount,
+  DEFAULT_TAX_RATE_PERCENT,
+} = loadTs('src/lib/tax.ts')
 const { resolveBookingDocumentSummary } = loadTs('src/lib/booking-document-summary.ts')
 
 test('Una tasa ausente usa el default existente; una exención explícita de cero se conserva', () => {
@@ -32,4 +37,34 @@ test('Los documentos legacy siguen disponibles cuando no existe un registro estr
   assert.equal(result.master.number, 'NEW-MBL')
   assert.equal(result.master.source, 'bills_of_lading')
   assert.equal(result.houses[0].number, 'LEGACY-HBL')
+})
+
+test('Pricing conserva impuestos historicos y solo usa el default cuando falta la tasa', () => {
+  assert.equal(resolvePersistedTaxAmount({
+    taxable: true,
+    subtotal: 100,
+    taxAmount: 12,
+    taxRatePercent: 12,
+    fallbackTaxRatePercent: 15,
+  }), 12)
+  assert.equal(resolvePersistedTaxAmount({
+    taxable: true,
+    subtotal: 100,
+    taxAmount: null,
+    taxRatePercent: 0,
+    fallbackTaxRatePercent: 15,
+  }), 0)
+  assert.equal(resolvePersistedTaxAmount({
+    taxable: true,
+    subtotal: 100,
+    taxAmount: null,
+    taxRatePercent: null,
+    fallbackTaxRatePercent: 18,
+  }), 18)
+  assert.equal(resolvePersistedTaxAmount({
+    taxable: false,
+    subtotal: 100,
+    taxAmount: 15,
+    fallbackTaxRatePercent: 15,
+  }), 0)
 })

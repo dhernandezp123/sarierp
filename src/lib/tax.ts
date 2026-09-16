@@ -18,3 +18,39 @@ export const calculateTaxAmount = (
   amount: number,
   taxRatePercent?: number | string | null
 ) => (taxable ? amount * getTaxMultiplier(taxRatePercent) : 0)
+
+type PersistedTaxInput = {
+  taxable: boolean
+  subtotal: number
+  taxAmount?: number | string | null
+  taxRatePercent?: number | string | null
+  fallbackTaxRatePercent?: number | string | null
+}
+
+/**
+ * Conserva el impuesto persistido de una linea historica. Solo recalcula cuando
+ * la linea no tiene tax_amount, usando su propia tasa antes del default actual.
+ */
+export const resolvePersistedTaxAmount = ({
+  taxable,
+  subtotal,
+  taxAmount,
+  taxRatePercent,
+  fallbackTaxRatePercent,
+}: PersistedTaxInput) => {
+  if (!taxable) return 0
+
+  if (taxAmount !== null && taxAmount !== undefined && taxAmount !== '') {
+    const persistedAmount = Number(taxAmount)
+    if (Number.isFinite(persistedAmount)) return persistedAmount
+  }
+
+  const effectiveRate =
+    taxRatePercent === null ||
+    taxRatePercent === undefined ||
+    (typeof taxRatePercent === 'string' && taxRatePercent.trim() === '')
+      ? fallbackTaxRatePercent
+      : taxRatePercent
+
+  return calculateTaxAmount(true, subtotal, effectiveRate)
+}

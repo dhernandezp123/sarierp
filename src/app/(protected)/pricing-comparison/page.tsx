@@ -38,6 +38,7 @@ import {
   DEFAULT_TAX_RATE_PERCENT,
   calculateTaxAmount,
   normalizeTaxRatePercent,
+  resolvePersistedTaxAmount,
 } from '@/src/lib/tax'
 import {
   DEFAULT_INSURANCE_COST_RATE_PERCENT,
@@ -50,6 +51,7 @@ import {
   partitionInsuranceCoverage,
 } from '@/src/lib/insurance-coverage'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
+import { SectionNav } from '@/src/components/ui/SectionNav'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import { CarrierCombobox } from '@/src/components/ui/CarrierCombobox'
@@ -94,6 +96,15 @@ const pricingItemTypeOptions = [
   'Inland',
   'Profit',
   'Otro',
+]
+
+const pricingSections = [
+  { href: '#pricing-summary' as const, label: 'Cotización' },
+  { href: '#pricing-builder' as const, label: 'Construcción' },
+  { href: '#pricing-agent-quotes' as const, label: 'Comparativo' },
+  { href: '#pricing-sale' as const, label: 'Venta' },
+  { href: '#pricing-options' as const, label: 'Opciones' },
+  { href: '#pricing-close' as const, label: 'Cierre' },
 ]
 import {
   Dialog,
@@ -207,6 +218,15 @@ type FinancialTotalsSnapshot = {
   gp_percentage: number
 }
 
+type PersistedPricingTaxItem = {
+  sale_amount?: number | string | null
+  quantity?: number | string | null
+  taxable?: boolean | null
+  tax_amount?: number | string | null
+  tax_rate?: number | string | null
+  total_amount?: number | string | null
+}
+
 type FclQuantityReview = {
   itemId: string
   description: string
@@ -305,6 +325,8 @@ function PricingComparisonContent() {
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
+  const [selectedQuoteLoading, setSelectedQuoteLoading] = useState(false)
+  const selectedQuoteIdRef = useRef<string | null>(null)
   const [clientNotes, setClientNotes] = useState('')
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
@@ -584,7 +606,9 @@ function PricingComparisonContent() {
       return
     }
 
-    setAgentQuotes(data || [])
+    if (selectedQuoteIdRef.current === quotationId) {
+      setAgentQuotes(data || [])
+    }
   }
 
   const fetchPricingItems = async (quotationId: string) => {
@@ -599,7 +623,9 @@ function PricingComparisonContent() {
       return
     }
 
-    setPricingItems(data || [])
+    if (selectedQuoteIdRef.current === quotationId) {
+      setPricingItems(data || [])
+    }
   }
 
   const fetchCommercialOptions = async (quotationId: string) => {
@@ -611,7 +637,9 @@ function PricingComparisonContent() {
 
     if (error) {
       toast.error(error.message)
-      setCommercialOptions([])
+      if (selectedQuoteIdRef.current === quotationId) {
+        setCommercialOptions([])
+      }
       return
     }
 
@@ -624,7 +652,9 @@ function PricingComparisonContent() {
       })
     )
 
-    setCommercialOptions(normalizedOptions)
+    if (selectedQuoteIdRef.current === quotationId) {
+      setCommercialOptions(normalizedOptions)
+    }
   }
 
   const fetchQuotationContainers = async (quotationId: string) => {
@@ -639,7 +669,9 @@ function PricingComparisonContent() {
       return
     }
 
-    setQuotationContainers(data || [])
+    if (selectedQuoteIdRef.current === quotationId) {
+      setQuotationContainers(data || [])
+    }
   }
 
   const loadCargoLines = async (quotationId?: string) => {
@@ -655,19 +687,25 @@ function PricingComparisonContent() {
 
     if (error) {
       toast.error(error.message)
-      setCargoLines([])
+      if (selectedQuoteIdRef.current === targetQuotationId) {
+        setCargoLines([])
+      }
       return
     }
 
     if (!error && data) {
-      setCargoLines(data as CargoLine[])
+      if (selectedQuoteIdRef.current === targetQuotationId) {
+        setCargoLines(data as CargoLine[])
+      }
     }
   }
 
   const loadMiamiRates = async (quote = selectedQuote) => {
     if (!quote?.cliente_id) {
-      setClientRates([])
-      setSurchargeRules([])
+      if (!quote?.id || selectedQuoteIdRef.current === quote.id) {
+        setClientRates([])
+        setSurchargeRules([])
+      }
       return
     }
 
@@ -689,26 +727,40 @@ function PricingComparisonContent() {
           .eq('is_active', true)
       : { data: [] }
 
-    setClientRates((ratesData || []) as ClientRate[])
-    setSurchargeRules((surchargeData || []) as SurchargeRule[])
+    if (selectedQuoteIdRef.current === quote.id) {
+      setClientRates((ratesData || []) as ClientRate[])
+      setSurchargeRules((surchargeData || []) as SurchargeRule[])
+    }
   }
 
-  useEffect(() => {
-    if (!selectedQuote?.id) return
-
-    loadMiamiRates()
-  }, [selectedQuote?.id, selectedQuote?.cliente_id, selectedQuote?.service_product])
-
   const handleSelectQuote = async (quote: any) => {
+    selectedQuoteIdRef.current = quote.id
     setSelectedQuote(quote)
+    setSelectedQuoteLoading(true)
     setAgentForm((current) => ({ ...current, mbl_quantity: '1' }))
     setClientNotes(quote.client_notes || '')
-    await fetchAgentQuotes(quote.id)
-    await fetchPricingItems(quote.id)
-    await fetchCommercialOptions(quote.id)
-    await fetchQuotationContainers(quote.id)
-    await loadCargoLines(quote.id)
-    await loadMiamiRates(quote)
+    setAgentQuotes([])
+    setPricingItems([])
+    setCommercialOptions([])
+    setQuotationContainers([])
+    setCargoLines([])
+    setClientRates([])
+    setSurchargeRules([])
+
+    try {
+      await Promise.all([
+        fetchAgentQuotes(quote.id),
+        fetchPricingItems(quote.id),
+        fetchCommercialOptions(quote.id),
+        fetchQuotationContainers(quote.id),
+        loadCargoLines(quote.id),
+        loadMiamiRates(quote),
+      ])
+    } finally {
+      if (selectedQuoteIdRef.current === quote.id) {
+        setSelectedQuoteLoading(false)
+      }
+    }
   }
 
   const fetchAgentRouteRates = async (agentId: string) => {
@@ -3041,13 +3093,42 @@ function PricingComparisonContent() {
     0
   )
 
+  const getPersistedPricingTax = (item: PersistedPricingTaxItem) => {
+    const subtotal =
+      Number(item.sale_amount || 0) * Number(item.quantity || 1)
+
+    return resolvePersistedTaxAmount({
+      taxable: Boolean(item.taxable),
+      subtotal,
+      taxAmount: item.tax_amount,
+      taxRatePercent: item.tax_rate,
+      fallbackTaxRatePercent: defaultTaxRate,
+    })
+  }
+
+  const getPersistedPricingTotal = (item: PersistedPricingTaxItem) => {
+    if (
+      item.total_amount !== null &&
+      item.total_amount !== undefined &&
+      item.total_amount !== '' &&
+      Number.isFinite(Number(item.total_amount))
+    ) {
+      return Number(item.total_amount)
+    }
+
+    return (
+      Number(item.sale_amount || 0) * Number(item.quantity || 1) +
+      getPersistedPricingTax(item)
+    )
+  }
+
   const totalSaleWithTax = pricingItems.reduce(
-    (sum, item) => sum + Number(item.total_amount || 0),
+    (sum, item) => sum + getPersistedPricingTotal(item),
     0
   )
 
   const totalTax = pricingItems.reduce(
-    (sum, item) => sum + Number(item.tax_amount || 0),
+    (sum, item) => sum + getPersistedPricingTax(item),
     0
   )
 
@@ -3473,8 +3554,10 @@ const profitabilityColor =
     selectedQuote?.status === 'Enviada al Cliente' ||
     selectedQuote?.status === 'Ganada' ||
     selectedQuote?.status === 'Perdida'
-  const isPricingActionDisabled = !canManagePricing || isLockedQuote
-  const isAgentQuoteFormActionDisabled = !canManagePricing
+  const isPricingActionDisabled =
+    !canManagePricing || isLockedQuote || selectedQuoteLoading
+  const isAgentQuoteFormActionDisabled =
+    !canManagePricing || selectedQuoteLoading
 
   const optionalClientRates = clientRates.filter((rate) => {
     return (
@@ -3673,7 +3756,7 @@ const profitabilityColor =
       sale_amount: insuranceSale,
       currency: 'USD',
       taxable: insuranceTaxable,
-      tax_rate: insuranceTaxable ? 15 : 0,
+      tax_rate: insuranceTaxable ? defaultTaxRate : 0,
       tax_amount: insuranceTaxAmount,
       total_amount: insuranceTotalAmount,
       notes,
@@ -3951,6 +4034,7 @@ const profitabilityColor =
                 <CotizacionCombobox
                   quotations={quotations}
                   value={selectedQuote?.id || ''}
+                  disabled={selectedQuoteLoading}
                   onChange={(id) => {
                     const quote = quotations.find((q) => q.id === id)
                     if (quote) handleSelectQuote(quote)
@@ -3986,13 +4070,35 @@ const profitabilityColor =
                   </div>
                 )}
 
+                {selectedQuoteLoading && (
+                  <div
+                    role="status"
+                    className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+                  >
+                    {'Cargando tarifas, cargos y opciones de esta cotizaci\u00f3n...'}
+                  </div>
+                )}
+
                 {isLockedQuote && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
                     Esta cotización ya fue enviada, ganada o perdida. La edición está bloqueada para proteger el historial comercial.
                   </div>
                 )}
 
-                <Card>
+                <SectionNav
+                  items={
+                    isMiamiFlow
+                      ? pricingSections.filter(
+                          (item) =>
+                            item.href !== '#pricing-builder' &&
+                            item.href !== '#pricing-agent-quotes'
+                        )
+                      : pricingSections
+                  }
+                  label="Secciones del comparativo de Pricing"
+                />
+
+                <Card id="pricing-summary" className="scroll-mt-28">
                   <CardHeader>
                     <CardTitle>
                       {selectedQuote.quotation_number} - {selectedQuote.origen} a {selectedQuote.destino}
@@ -4170,7 +4276,7 @@ const profitabilityColor =
 
                 {!isMiamiFlow && (
                   <>
-                    <Card>
+                    <Card id="pricing-builder" className="scroll-mt-28">
                   <CardHeader>
                     <CardTitle>Construcción de Tarifa</CardTitle>
                   </CardHeader>
@@ -4776,8 +4882,9 @@ const profitabilityColor =
                 </Card>
 
                 <div
+                  id="pricing-agent-quotes"
                   ref={agentQuotesSectionRef}
-                  className={cn(cardClass, 'p-6')}
+                  className={cn(cardClass, 'scroll-mt-28 p-6')}
                 >
                   <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -5188,7 +5295,7 @@ const profitabilityColor =
                   </>
                 )}
 
-                <Card>
+                <Card id="pricing-sale" className="scroll-mt-28">
                   {!isMiamiFlow && (
                     <CardHeader>
                       <CardTitle>Detalle de Venta al Cliente</CardTitle>
@@ -5788,7 +5895,8 @@ const profitabilityColor =
                         No hay líneas de cotización.
                       </p>
                     ) : (
-                      <table className="w-full text-left">
+                      <div className="overflow-x-auto">
+                      <table className="min-w-[1100px] w-full text-left">
                         <thead className="bg-zinc-950 text-white">
                           <tr>
                             <th className="p-2 text-xs uppercase text-gray-500">Descripción</th>
@@ -5809,8 +5917,8 @@ const profitabilityColor =
                           {pricingItems.map((item) => {
                             const qty = Number(item.quantity || 1)
                             const subtotal = qty * Number(item.sale_amount || 0)
-                            const tax = calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
-                            const total = subtotal + tax
+                            const tax = getPersistedPricingTax(item)
+                            const persistedTotal = getPersistedPricingTotal(item)
                             const currency = item.currency || 'USD'
                             const costSubtotal =
                               qty * Number(item.cost_amount || 0)
@@ -6012,7 +6120,7 @@ const profitabilityColor =
                                 <td className="p-2 text-sm font-bold">
                                   {editingPricingItemId === item.id
                                     ? `USD ${formatCurrency(displaySaleTotal)}`
-                                    : `USD ${formatCurrency(item.total_amount)}`
+                                    : `USD ${formatCurrency(persistedTotal)}`
                                   }
                                 </td>
 
@@ -6078,24 +6186,30 @@ const profitabilityColor =
                           })}
                         </tbody>
                       </table>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
 
-                <QuotationOptionsPanel
-                  options={commercialOptions}
-                  disabled={isPricingActionDisabled}
-                  saving={savingCommercialOption}
-                  formatCurrency={formatCurrency}
-                  onSave={saveCurrentPricingAsOption}
-                  onEdit={updateDraftCommercialOptionDetails}
-                  onDelete={deleteDraftCommercialOption}
-                  onViewSource={viewSourceAgentQuote}
-                  onPreview={previewQuotationPdf}
-                  onPrintOption={printCommercialOption}
-                />
+                <div id="pricing-options" className="scroll-mt-28">
+                  <QuotationOptionsPanel
+                    options={commercialOptions}
+                    disabled={isPricingActionDisabled}
+                    saving={savingCommercialOption}
+                    formatCurrency={formatCurrency}
+                    onSave={saveCurrentPricingAsOption}
+                    onEdit={updateDraftCommercialOptionDetails}
+                    onDelete={deleteDraftCommercialOption}
+                    onViewSource={viewSourceAgentQuote}
+                    onPreview={previewQuotationPdf}
+                    onPrintOption={printCommercialOption}
+                  />
+                </div>
 
-                <div className={cn(cardClass, 'p-6')}>
+                <div
+                  id="pricing-close"
+                  className={cn(cardClass, 'scroll-mt-28 p-6')}
+                >
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
                     Observaciones generales para Cliente (PDF)
                   </h3>
@@ -6117,6 +6231,7 @@ const profitabilityColor =
                       type="button"
                       className={primaryButtonClass}
                       onClick={saveClientNotes}
+                      disabled={isPricingActionDisabled}
                     >
                       Guardar observaciones
                     </button>
@@ -6127,6 +6242,7 @@ const profitabilityColor =
                   <button
                     type="button"
                     onClick={previewQuotationPdf}
+                    disabled={selectedQuoteLoading}
                     className={cn(
                       secondaryButtonClass,
                       'inline-flex items-center justify-center gap-2'

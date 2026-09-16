@@ -4,6 +4,7 @@ import { toDateInputValue } from '@/src/lib/format'
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../../../lib/supabase/client'
@@ -11,6 +12,7 @@ import { useUser } from '../../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { SectionNav } from '@/src/components/ui/SectionNav'
 import { createNotification } from '@/src/lib/notifications'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
@@ -41,6 +43,15 @@ const formatNumber = (value: number, decimals = 2) =>
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
+
+const editorSections = [
+  { href: '#quote-general' as const, label: 'General' },
+  { href: '#quote-route' as const, label: 'Ruta' },
+  { href: '#quote-cargo' as const, label: 'Carga' },
+  { href: '#quote-insurance' as const, label: 'Seguro' },
+  { href: '#quote-notes' as const, label: 'Observaciones' },
+  { href: '#quote-actions' as const, label: 'Guardar' },
+]
 
 type CargoDimensionLine = {
   id: string
@@ -74,6 +85,17 @@ type PricingItem = {
   taxable?: boolean | null
 }
 
+function AccessDenied() {
+  return (
+    <div className={cardClass}>
+      <h1 className="text-2xl font-bold">Acceso restringido</h1>
+      <p className="mt-2 text-gray-500">
+        {'No tienes permiso para ver este m\u00f3dulo.'}
+      </p>
+    </div>
+  )
+}
+
 export default function EditQuotationPage() {
   const { profile, loading: userLoading } = useUser()
   const params = useParams()
@@ -82,19 +104,12 @@ export default function EditQuotationPage() {
   const isAdmin = role === 'Admin'
   const isSales = role === 'Ventas'
   const isOperations = role === 'Operaciones'
-  const isPricing = role === 'Pricing'
-  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
-
-  const canEditPricing =
-    isAdmin || isPricing
-  const canEditCostValidation =
-    isAdmin || isFinance
-  const canEditFinance =
-    isAdmin || isFinance
   const canEditQuotes =
     isAdmin || isSales || isOperations
 
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [saving, setSaving] = useState(false)
   const saveInFlight = useRef(false)
   const [quotationNumber, setQuotationNumber] = useState<string | null>(null)
@@ -172,25 +187,6 @@ export default function EditQuotationPage() {
   const [serviceProductOptions, setServiceProductOptions] =
     useState(serviceProducts)
 
-  useEffect(() => {
-    if (userLoading) return
-
-    if (!canEditQuotes) {
-      setLoading(false)
-      return
-    }
-
-    fetchCatalogs()
-    fetchClientes()
-
-    if (params.id) {
-      fetchQuotation(params.id as string)
-      fetchContainerLines(params.id as string)
-      fetchCargoLines(params.id as string)
-      fetchPricingItems(params.id as string)
-    }
-  }, [params.id, userLoading, canEditQuotes])
-
   const fetchPricingUsers = async () => {
     const { data: pricingUsers, error } = await supabase
       .from('profiles')
@@ -202,57 +198,52 @@ export default function EditQuotationPage() {
     return pricingUsers || []
   }
 
-  const AccessDenied = () => (
-    <>
-      <div className={cardClass}>
-        <h1 className="text-2xl font-bold">
-          Acceso restringido
-        </h1>
-
-        <p className="text-gray-500 mt-2">
-          No tienes permiso para ver este módulo.
-        </p>
-      </div>
-    </>
-  )
-
   const fetchCatalogs = async () => {
-    const { data: countriesData } = await supabase
-      .from('countries')
-      .select('*')
-      .eq('active', true)
-      .order('name', { ascending: true })
-
-    const { data: portsData } = await supabase
-      .from('ports')
-      .select('*, countries(name)')
-      .eq('active', true)
-      .order('name', { ascending: true })
-
-    const { data: packageTypesData } = await supabase
-      .from('package_types')
-      .select('*')
-      .eq('active', true)
-      .order('name', { ascending: true })
-
-    const { data: containerTypesData, error: containerTypesError } =
-      await supabase
+    const [
+      countriesResult,
+      portsResult,
+      packageTypesResult,
+      containerTypesResult,
+      activeServiceProducts,
+    ] = await Promise.all([
+      supabase
+        .from('countries')
+        .select('*')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      supabase
+        .from('ports')
+        .select('*, countries(name)')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      supabase
+        .from('package_types')
+        .select('*')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      supabase
         .from('container_types')
         .select('*')
         .eq('active', true)
-        .order('name', { ascending: true })
+        .order('name', { ascending: true }),
+      fetchActiveServiceProducts(supabase),
+    ])
 
-    if (containerTypesError) {
-      toast.error(containerTypesError.message)
-      return
+    const catalogError = [
+      countriesResult.error,
+      portsResult.error,
+      packageTypesResult.error,
+      containerTypesResult.error,
+    ].find(Boolean)
+
+    if (catalogError) {
+      toast.error(catalogError.message)
     }
 
-    const activeServiceProducts = await fetchActiveServiceProducts(supabase)
-
-    setCountries(countriesData || [])
-    setPorts(portsData || [])
-    setPackageTypes(packageTypesData || [])
-    setContainerTypes(containerTypesData || [])
+    setCountries(countriesResult.data || [])
+    setPorts(portsResult.data || [])
+    setPackageTypes(packageTypesResult.data || [])
+    setContainerTypes(containerTypesResult.data || [])
     setServiceProductOptions(activeServiceProducts)
   }
 
@@ -264,7 +255,7 @@ export default function EditQuotationPage() {
       .order('nombre', { ascending: true })
 
     if (error) {
-      toast.error(error.message)
+      setLoadError(error.message)
       return
     }
 
@@ -329,7 +320,6 @@ export default function EditQuotationPage() {
 
     setQuotationNumber(data.quotation_number || null)
     setOriginalClienteId(data.cliente_id || '')
-    setLoading(false)
   }
 
   const fetchPricingItems = async (quotationId: string) => {
@@ -406,6 +396,55 @@ export default function EditQuotationPage() {
       })
     )
   }
+
+  useEffect(() => {
+    if (userLoading) return
+
+    if (!canEditQuotes) {
+      setLoading(false)
+      return
+    }
+
+    const quotationId = params.id as string | undefined
+    if (!quotationId) {
+      setLoadError('No se recibi\u00f3 una cotizaci\u00f3n v\u00e1lida.')
+      setLoading(false)
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    setLoadError('')
+
+    void Promise.allSettled([
+      fetchCatalogs(),
+      fetchClientes(),
+      fetchQuotation(quotationId),
+      fetchContainerLines(quotationId),
+      fetchCargoLines(quotationId),
+      fetchPricingItems(quotationId),
+    ])
+      .then((results) => {
+        const rejected = results.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === 'rejected'
+        )
+        if (active && rejected) {
+          setLoadError(
+            rejected.reason instanceof Error
+              ? rejected.reason.message
+              : 'No se pudieron cargar todos los datos de la cotizaci\u00f3n.'
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [params.id, userLoading, canEditQuotes, loadAttempt])
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -958,6 +997,31 @@ export default function EditQuotationPage() {
     return <AccessDenied />
   }
 
+  if (loadError) {
+    return (
+      <div className={cardClass} role="alert">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+          {'No se pudo cargar la cotizaci\u00f3n'}
+        </h1>
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+          {loadError}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+            className={primaryButtonClass}
+          >
+            Reintentar
+          </button>
+          <Link href="/quotations" className={secondaryButtonClass}>
+            Volver a cotizaciones
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   const originCountry = countries.find(
     (country) => country.name === formData.origen
   )
@@ -1038,6 +1102,11 @@ export default function EditQuotationPage() {
           </p>
         </div>
 
+        <SectionNav
+          items={editorSections}
+          label="Secciones del editor de cotización"
+        />
+
         <div className={cardClass}>
           <div className="space-y-8">
           {!canEditQuotes && (
@@ -1047,7 +1116,7 @@ export default function EditQuotationPage() {
           )}
 
           <fieldset disabled={!canEditQuotes} className="contents">
-          <section>
+          <section id="quote-general" className="scroll-mt-28">
             <h2 className="text-xl font-bold mb-4">Información General</h2>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -1195,7 +1264,7 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section className="pt-3">
+          <section id="quote-route" className="scroll-mt-28 pt-3">
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -1275,7 +1344,7 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section className="pt-3">
+          <section id="quote-cargo" className="scroll-mt-28 pt-3">
             <h2 className="text-xl font-bold mb-4">Carga</h2>
 
             <div className="space-y-4">
@@ -1784,7 +1853,7 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section className="py-6">
+          <section id="quote-insurance" className="scroll-mt-28 py-6">
             <h2 className="text-xl font-bold mb-4">Seguro de Carga</h2>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -1820,7 +1889,10 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <div className={`grid gap-4 ${isMiamiFlow ? 'lg:grid-cols-2' : ''}`}>
+          <div
+            id="quote-notes"
+            className={`scroll-mt-28 grid gap-4 ${isMiamiFlow ? 'lg:grid-cols-2' : ''}`}
+          >
             <section className={cardClass}>
               <h2 className={`${sectionTitleClass} mb-4`}>
                 Observaciones internas para Pricing
@@ -1876,13 +1948,16 @@ export default function EditQuotationPage() {
           </datalist>
           </fieldset>
 
-          <div className="flex justify-end gap-4">
-            <button
-              onClick={() => router.push(`/quotations/${params.id}`)}
+          <div
+            id="quote-actions"
+            className="scroll-mt-28 flex flex-wrap justify-end gap-4"
+          >
+            <Link
+              href={`/quotations/${params.id}`}
               className={secondaryButtonClass}
             >
               Cancelar
-            </button>
+            </Link>
 
             {canEditQuotes && formData.status === 'Borrador' && (
               <button
