@@ -1,5 +1,49 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-17 - FLOW-028 - Carrier seleccionado en Shipping Instructions
+
+- Estado: implementado y validado localmente; migracion y UAT en Production
+  pendientes.
+- Hallazgo:
+  - La cotizacion `SARIHN-2609-0266-AP` tiene seleccionada la tarifa de APS
+    EXPRESS con Maersk (`MSK`), pero su Shipping Instruction `RT0032` conserva
+    `COSCO`. El booking canonico ya refleja `MSK`.
+  - El RPC canonico de repricing sincronizaba agente, contacto y correo hacia
+    la Shipping Instruction, y el carrier hacia bookings elegibles, pero omitia
+    actualizar `shipping_instructions.carrier`. Por eso la sincronizacion manual
+    podia reportar `MSK` sin corregir el carrier visible de la SI.
+- Archivos:
+  - `supabase/migrations/20260917120000_shipping_instruction_carrier_sync.sql`.
+  - `supabase/tests/booking_canonical_consumers.sql`.
+  - `HARDENING.md`.
+- SQL:
+  - Se conserva la implementacion vigente del RPC como funcion interna y se
+    envuelve la sincronizacion canonica para propagar a la SI el carrier no
+    vacio devuelto por la tarifa seleccionada.
+  - La migracion incluye una reparacion idempotente y auditada para `RT0032`,
+    limitada al caso COSCO -> MSK/Maersk de la cotizacion afectada.
+  - La correccion no modifica campos operativos legacy ni fuerza cambios sobre
+    bookings confirmados. Las funciones internas mantienen ejecucion revocada
+    para `public`, `anon` y `authenticated`.
+- Validaciones:
+  - `supabase migration up --local`: migracion aplicada en Docker local.
+  - `booking_canonical_consumers.sql`: OK. Verifica carrier canonico en SI,
+    preservacion de bookings confirmados y permisos de funciones internas.
+  - `npx.cmd supabase db lint --local --level error`: sin errores de esquema.
+  - `npx.cmd supabase migration list --local`: historial local alineado hasta
+    `20260917120000`.
+  - `npx.cmd supabase db push --linked --dry-run`: Production propone solo
+    `20260917120000_shipping_instruction_carrier_sync.sql`; no se escribieron
+    datos ni esquema remoto.
+  - `npm.cmd test`: 78/78.
+  - `npx.cmd tsc --noEmit`: OK.
+- Riesgos / pendientes:
+  - Publicar la migracion solo con autorizacion explicita; su backfill repara
+    `RT0032` sin modificar el booking existente.
+  - Confirmar mediante UAT autenticado que la SI muestra Maersk y que el booking
+    existente permanece sin cambios operativos.
+- Commit: pendiente.
+
 ### 2026-09-16 - FLOW-027 / SEC-025 / PERF-006 - Workflow y bandeja de Shipping Instructions
 
 - Estado: implementado, validado, migrado y publicado en Production; UAT

@@ -509,7 +509,6 @@ select
   carrier_booking,
   master_bl,
   house_bl,
-  carrier,
   etd,
   eta,
   free_days
@@ -589,6 +588,15 @@ select pg_temp.assert_true(
 
 select pg_temp.assert_true(
   (
+    select carrier = 'NEW CANONICAL CARRIER'
+    from public.shipping_instructions
+    where id = '4b400000-0000-0000-0000-000000000001'
+  ),
+  'Repricing debe actualizar el carrier visible de la Shipping Instruction'
+);
+
+select pg_temp.assert_true(
+  (
     select carrier = 'CONFIRMED CARRIER'
       and vessel_name = 'VESSEL CONFIRMED'
       and actual_etd = current_date + 4
@@ -605,7 +613,6 @@ select pg_temp.assert_true(
       and si.carrier_booking = snapshot.carrier_booking
       and si.master_bl = snapshot.master_bl
       and si.house_bl = snapshot.house_bl
-      and si.carrier = snapshot.carrier
       and si.etd = snapshot.etd
       and si.eta = snapshot.eta
       and si.free_days = snapshot.free_days
@@ -613,7 +620,7 @@ select pg_temp.assert_true(
     cross join legacy_si_snapshot snapshot
     where si.id = '4b400000-0000-0000-0000-000000000001'
   ),
-  'Repricing v2 no debe escribir ningun campo booking legacy en SI'
+  'Repricing v2 no debe escribir campos operativos legacy del booking en SI'
 );
 
 select pg_temp.assert_true(
@@ -636,6 +643,20 @@ select pg_temp.assert_true(
     'EXECUTE'
   ),
   'El rol autenticado no debe poder invocar repricing v1 que escribe SI legacy'
+);
+
+select pg_temp.assert_true(
+  not has_function_privilege(
+    'authenticated',
+    'public.sync_shipping_instruction_from_selected_agent_quote_v2_v4b(uuid,text)',
+    'EXECUTE'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.sync_shipping_instruction_from_selected_agent_quote_v2_v4b_core(uuid,text)',
+    'EXECUTE'
+  ),
+  'El rol autenticado no debe invocar directamente las funciones internas de repricing'
 );
 
 select pg_temp.assert_true(
