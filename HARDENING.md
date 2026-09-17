@@ -2,8 +2,8 @@
 
 ### 2026-09-17 - FLOW-028 - Carrier seleccionado en Shipping Instructions
 
-- Estado: RPC implementado, validado y migrado en Production; reparacion puntual
-  validada localmente y pendiente de publicar; UAT autenticado pendiente.
+- Estado: implementado, validado, migrado y reparado en Production; UAT
+  autenticado pendiente.
 - Hallazgo:
   - La cotizacion `SARIHN-2609-0266-AP` tiene seleccionada la tarifa de APS
     EXPRESS con Maersk (`MSK`), pero su Shipping Instruction `RT0032` conserva
@@ -47,14 +47,21 @@
     no actuo.
   - `npx.cmd supabase migration up --local`: aplico
     `20260917123000_repair_rt0032_carrier.sql` sin errores.
+  - `npx.cmd supabase db push --linked --yes`: aplico
+    `20260917123000_repair_rt0032_carrier.sql` en Production.
+  - Lectura REST posterior: la SI `62909f82-241e-462b-90f0-f6e89421f4db`
+    muestra `carrier = MSK`; sus tres bookings permanecen en `MSK` y conservan
+    sus timestamps previos. La auditoria registra `COSCO -> MSK`, la tarifa
+    seleccionada `c05d6f8b-0b05-4b26-a3c4-a864a536df9b` y la migracion
+    correctiva.
   - `npm.cmd test`: 78/78.
   - `npx.cmd tsc --noEmit`: OK.
 - Riesgos / pendientes:
-  - Publicar `20260917123000` y comprobar carrier, booking y auditoria en
-    Production.
-  - Confirmar mediante UAT autenticado que la SI muestra Maersk y que el booking
-    existente permanece sin cambios operativos.
-- Commit: pendiente.
+  - Confirmar mediante UAT autenticado que la SI muestra Maersk en la interfaz.
+    La verificacion directa certifica los datos y la auditoria, pero no sustituye
+    la revision visual con una sesion operativa.
+- Commits: implementacion `0f28d10`; reparacion puntual `95a8d5b`; registro de
+  publicacion en commit documental posterior.
 
 ### 2026-09-16 - FLOW-027 / SEC-025 / PERF-006 - Workflow y bandeja de Shipping Instructions
 
