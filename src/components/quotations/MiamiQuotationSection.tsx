@@ -5,6 +5,10 @@ import { useEffect, useState } from 'react'
 
 import type { MiamiQuotationState } from '@/src/hooks/useMiamiQuotation'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import {
+  getAvailableClientRate,
+  MIAMI_LCL_OPTIONAL_CHARGES,
+} from '@/src/lib/miami-pricing-items'
 
 export type MiamiCargoDimensionLine = {
   id: string
@@ -877,6 +881,67 @@ export function MiamiQuotationSection({
             )}
           </div>
 
+          {formData.service_product === 'miami_lcl' && (
+            <div className={`mt-4 ${cardClass}`}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-white">
+                    Cargos opcionales Miami LCL
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                    Selecciona los cargos que aplican. Solo se agregarán cuando el cliente tenga una tarifa activa con monto mayor a cero.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {MIAMI_LCL_OPTIONAL_CHARGES.map((charge) => {
+                  const rate = getAvailableClientRate(
+                    miami.clientRates,
+                    charge.rateCode
+                  )
+                  const isAvailable = Boolean(formData.cliente_id && rate)
+                  const availabilityLabel = !formData.cliente_id
+                    ? 'Selecciona un cliente'
+                    : rate
+                      ? `${rate.currency || 'USD'} ${formatNumber(Number(rate.amount), 2)}`
+                      : 'Tarifa no configurada'
+
+                  return (
+                    <label
+                      key={charge.rateCode}
+                      className={`flex items-start gap-3 rounded-xl border p-3 text-sm ${
+                        isAvailable
+                          ? 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-950/70 dark:text-slate-200'
+                          : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-500'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={
+                          isAvailable &&
+                          Boolean(miami.miamiOptions[charge.optionKey])
+                        }
+                        disabled={!isAvailable}
+                        onChange={(e) =>
+                          miami.setMiamiOptions({
+                            ...miami.miamiOptions,
+                            [charge.optionKey]: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>
+                        <span className="block font-medium">{charge.label}</span>
+                        <span className="mt-1 block text-xs">{availabilityLabel}</span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {miami.canUseMiamiCalculator && <>
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -985,49 +1050,6 @@ export function MiamiQuotationSection({
                   </p>
                 )}
 
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={miami.miamiOptions.isHazmat}
-                      onChange={(e) =>
-                        miami.setMiamiOptions({
-                          ...miami.miamiOptions,
-                          isHazmat: e.target.checked,
-                        })
-                      }
-                    />
-                    Hazmat IMO Charge Line
-                  </label>
-
-                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={miami.miamiOptions.isImo}
-                      onChange={(e) =>
-                        miami.setMiamiOptions({
-                          ...miami.miamiOptions,
-                          isImo: e.target.checked,
-                        })
-                      }
-                    />
-                    Declaración IMO
-                  </label>
-
-                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={miami.miamiOptions.includeImoCertificate}
-                      onChange={(e) =>
-                        miami.setMiamiOptions({
-                          ...miami.miamiOptions,
-                          includeImoCertificate: e.target.checked,
-                        })
-                      }
-                    />
-                    Certificado IMO
-                  </label>
-                </div>
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-5">

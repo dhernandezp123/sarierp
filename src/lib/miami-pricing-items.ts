@@ -54,6 +54,45 @@ export type MiamiOptions = {
   includeImoCertificate: boolean
 }
 
+export const MIAMI_LCL_OPTIONAL_CHARGES = [
+  {
+    rateCode: 'hazmat_imo_charge_line',
+    optionKey: 'isHazmat',
+    label: 'Hazmat IMO Charge Line',
+  },
+  {
+    rateCode: 'declaracion_imo',
+    optionKey: 'isImo',
+    label: 'Declaración IMO',
+  },
+  {
+    rateCode: 'certificado_imo',
+    optionKey: 'includeImoCertificate',
+    label: 'Certificado IMO',
+  },
+] as const satisfies ReadonlyArray<{
+  rateCode: string
+  optionKey: keyof Pick<
+    MiamiOptions,
+    'isHazmat' | 'isImo' | 'includeImoCertificate'
+  >
+  label: string
+}>
+
+export function getAvailableClientRate(
+  clientRates: ClientRate[],
+  rateCode: string
+) {
+  return (
+    clientRates.find(
+      (rate) =>
+        rate.rate_code === rateCode &&
+        rate.is_active !== false &&
+        Number(rate.amount || 0) > 0
+    ) || null
+  )
+}
+
 export type MiamiPricingItemInput = {
   quotationId: string
   serviceProduct: string
@@ -248,11 +287,9 @@ export function buildMiamiPricingItems({
       ? ['bl', 'sed', 'documentos_manejo', 'desconsolidar']
       : []
 
-    const conditionalChargeCodes = [
-      miamiOptions.isHazmat ? 'hazmat_imo_charge_line' : null,
-      miamiOptions.isImo ? 'declaracion_imo' : null,
-      miamiOptions.includeImoCertificate ? 'certificado_imo' : null,
-    ].filter(Boolean) as string[]
+    const conditionalChargeCodes = MIAMI_LCL_OPTIONAL_CHARGES.filter(
+      ({ optionKey }) => miamiOptions[optionKey]
+    ).map(({ rateCode }) => rateCode)
 
     ;[...standardChargeCodes, ...conditionalChargeCodes].forEach((code) => {
       const rate = getClientRate(code)

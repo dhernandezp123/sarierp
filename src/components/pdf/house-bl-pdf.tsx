@@ -67,6 +67,25 @@ export type HBLData = {
   containers: HBLContainerData[]
 }
 
+export const HBL_ROUTE_LABELS = {
+  vesselVoyage: 'Vessel / Voy. No.',
+  portOfDischarge: 'Port of Discharge',
+} as const
+
+export function getHblRouteValues(
+  bl: Pick<
+    HBLData,
+    'carrier' | 'vessel_name' | 'voyage' | 'port_of_discharge' | 'place_of_delivery'
+  >
+) {
+  return {
+    preCarriageBy: bl.carrier,
+    vesselVoyage: [bl.vessel_name, bl.voyage].filter(Boolean).join(' / '),
+    portOfDischarge: bl.port_of_discharge,
+    placeOfDelivery: bl.place_of_delivery,
+  }
+}
+
 const FORM_RED = '#ef3340'
 const TEXT = '#151515'
 
@@ -401,6 +420,7 @@ export default function HouseBLPdf({
     : [branding.city, branding.country].filter(Boolean).join(', ')
   const issueDate = dateParts(bl.issue_date || bl.bl_date)
   const isDraft = !['Emitido', 'Liberado'].includes(bl.status || '')
+  const routeValues = getHblRouteValues(bl)
   const packageSummary = [value(bl.number_of_packages), value(bl.package_type)]
     .filter(Boolean)
     .join(' ')
@@ -474,7 +494,7 @@ export default function HouseBLPdf({
 
         <View style={styles.row}>
           <Field number="12" label="Pre-carriage by" style={[styles.routeField, styles.routeThird]}>
-            <Text style={styles.valueCompact}>{value(bl.carrier)}</Text>
+            <Text style={styles.valueCompact}>{value(routeValues.preCarriageBy)}</Text>
           </Field>
           <Field number="13" label="Place of receipt by pre-carrier" style={[styles.routeField, styles.routeThird]}>
             <Text style={styles.valueCompact}>{value(bl.place_of_receipt)}</Text>
@@ -484,8 +504,8 @@ export default function HouseBLPdf({
           </Field>
         </View>
         <View style={styles.row}>
-          <Field number="14" label="Exporting carrier" style={[styles.routeField, styles.routeThird]}>
-            <Text style={styles.valueCompact}>{[bl.vessel_name, bl.voyage].filter(Boolean).join(' / ')}</Text>
+          <Field number="14" label={HBL_ROUTE_LABELS.vesselVoyage} style={[styles.routeField, styles.routeThird]}>
+            <Text style={styles.valueCompact}>{value(routeValues.vesselVoyage)}</Text>
           </Field>
           <Field number="15" label="Port of loading / export" style={[styles.routeField, styles.routeThird]}>
             <Text style={styles.valueCompact}>{value(bl.port_of_loading)}</Text>
@@ -495,11 +515,11 @@ export default function HouseBLPdf({
           </Field>
         </View>
         <View style={styles.row}>
-          <Field number="16" label="Foreign port of unloading" hint="(Vessel and air only)" style={[styles.routeField, styles.routeHalf]}>
-            <Text style={styles.valueCompact}>{value(bl.port_of_discharge)}</Text>
+          <Field number="16" label={HBL_ROUTE_LABELS.portOfDischarge} style={[styles.routeField, styles.routeHalf]}>
+            <Text style={styles.valueCompact}>{value(routeValues.portOfDischarge)}</Text>
           </Field>
           <Field number="17" label="Place of delivery by on-carrier" style={[styles.routeField, styles.routeHalf]} last>
-            <Text style={styles.valueCompact}>{value(bl.place_of_delivery)}</Text>
+            <Text style={styles.valueCompact}>{value(routeValues.placeOfDelivery)}</Text>
           </Field>
         </View>
 

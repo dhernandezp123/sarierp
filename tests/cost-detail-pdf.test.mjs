@@ -16,6 +16,7 @@ const props = {
 test('internal PDF renders the expanded cost explanation on one page for a normal quote', async () => {
   const buffer = await renderer.renderToBuffer(React.createElement(CostDetailPDF, props))
   assert.equal(buffer.subarray(0, 4).toString(), '%PDF')
+  assert.match(buffer.toString('latin1'), /\/MediaBox \[0 0 792 612\]/)
   assert.equal((buffer.toString('latin1').match(/\/Type \/Page\b/g) || []).length, 1)
 })
 test('internal PDF paginates a large cost detail instead of forcing it onto one page', async () => {

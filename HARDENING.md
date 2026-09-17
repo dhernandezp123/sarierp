@@ -1,5 +1,82 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-17 - PDF-019 - Vessel/voyage y puerto de descarga en HBL
+
+- Estado: implementado y validado por codigo; UAT visual pendiente.
+- Hallazgo:
+  - En el HBL `SARI-HBL-20260917-001`, el item 14 se titulaba `Exporting
+    Carrier`, pero mostraba buque y viaje (`vessel_name / voyage`). Repetir la
+    naviera en ese espacio tambien duplicaria el item 12 `Pre-Carriage By`.
+  - El item 16 usaba la etiqueta `Foreign port of unloading (Vessel and air
+    only)` en lugar de la denominacion solicitada `Port of Discharge`.
+- Archivos:
+  - `src/components/pdf/house-bl-pdf.tsx`.
+  - `tests/house-bl-pdf.test.mjs`.
+  - `HARDENING.md`.
+- Cambio:
+  - El item 12 conserva la naviera desde `carrier` y el item 14 se renombra
+    `Vessel / Voy. No.`, alimentado por `vessel_name / voyage`; se elimina
+    completamente la etiqueta duplicada `Exporting Carrier`.
+  - El item 16 se renombra exactamente a `Port of Discharge` y conserva
+    `port_of_discharge` como valor.
+  - El item 17 conserva su etiqueta y `place_of_delivery` sin cambios.
+- SQL: no aplica; no se modificaron datos ni documentos persistidos.
+- Validaciones:
+  - Pruebas HBL: 3/3. Verifican que el item 12 use carrier, que el item 14 use
+    vessel/voyage, que items 16 y 17 conserven sus fuentes y que el PDF siga
+    renderizando en una pagina.
+  - `npm.cmd test`: 83/83.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 paginas.
+  - ESLint dirigido de HBL y su prueba: sin hallazgos.
+- Riesgos / pendientes:
+  - Regenerar y revisar visualmente `SARI-HBL-20260917-001`; el cambio corrige la
+    plantilla y no altera los datos operativos del booking.
+- Commit: incluido en este commit.
+
+### 2026-09-17 - UX-059 / PDF-018 - Cargos Miami LCL y detalle de costos legible
+
+- Estado: implementado y validado por codigo; UAT visual pendiente.
+- Hallazgos:
+  - En `/quotations/new`, Hazmat, Declaracion IMO y Certificado IMO permanecian
+    dentro de la calculadora Miami. Si el cliente no tenia tarifas activas, todo
+    el bloque desaparecia y Ventas no podia distinguir una opcion inexistente de
+    una tarifa pendiente de configurar.
+  - El detalle interno de costos se generaba en LETTER vertical con texto de
+    tabla de 5.4 puntos. La cantidad de columnas reducia su legibilidad impresa.
+- Archivos:
+  - `src/components/quotations/MiamiQuotationSection.tsx`.
+  - `src/lib/miami-pricing-items.ts`.
+  - `src/components/pdf/cost-detail-pdf.tsx`.
+  - `tests/miami-optional-charges.test.mjs`.
+  - `tests/cost-detail-pdf.test.mjs`.
+  - `HARDENING.md`.
+- Cambios UX/UI:
+  - Los tres cargos condicionales se muestran siempre en Miami Maritimo LCL.
+    Cada opcion indica su tarifa activa y solo puede marcarse con monto mayor a
+    cero; sin cliente o tarifa muestra el motivo y permanece deshabilitada.
+  - La configuracion de codigos y campos queda centralizada para que la interfaz
+    y la generacion de `pricing_items` no diverjan.
+  - El detalle de costos usa LETTER horizontal y aumenta tipografia de tabla,
+    encabezados, datos del embarque, notas y pie de pagina.
+- SQL: no aplica; no se modificaron esquema, RLS ni datos remotos.
+- Validaciones:
+  - Pruebas dirigidas Miami/PDF: 4/4. Confirman disponibilidad solo con tarifa
+    activa positiva, las tres opciones canonicas, LETTER horizontal, una pagina
+    para el caso normal y paginacion para un detalle extenso.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 83/83 en la validacion final del lote.
+  - `npm.cmd run build`: OK, 73/73 paginas.
+  - ESLint dirigido: el helper y las pruebas nuevas no agregan hallazgos. Los
+    dos componentes conservan 8 errores y 7 avisos preexistentes fuera de las
+    lineas modificadas (`any`, props sin uso, comillas JSX y `alt` del renderer).
+- Riesgos / pendientes:
+  - Ejecutar UAT visual en claro/oscuro y movil con cliente sin tarifas, con
+    tarifas parciales y con las tres tarifas configuradas.
+  - Revisar una impresion fisica o vista previa del detalle de costos; la prueba
+    automatizada valida orientacion y paginacion, no percepcion visual.
+- Commit: incluido en este commit.
+
 ### 2026-09-17 - FLOW-028 - Carrier seleccionado en Shipping Instructions
 
 - Estado: implementado, validado, migrado y reparado en Production; UAT
