@@ -2,8 +2,8 @@
 
 ### 2026-09-17 - UX-063 / DB-028 - Motor de validación documental MBL/HBL
 
-- Estado: implementado y migrado en Supabase local; despliegue Production,
-  revisión visual y UAT autenticado pendientes.
+- Estado: implementado, migrado y publicado en Production; revisión visual y
+  UAT autenticado pendientes.
 - Hallazgo:
   - La validación del BL detectaba campos vacíos, pero no advertía cuando ruta,
     carrier, buque/viaje, fechas, carga o parties diferían de Booking, Shipping
@@ -42,7 +42,7 @@
 - Migración:
   - `20260917170000_bill_of_lading_parent_integrity.sql` aplicada correctamente
     mediante `npx.cmd supabase db push --local`.
-  - No aplicada en Production.
+  - Aplicada correctamente en Production el 17/09/2026.
 - Validaciones:
   - Pruebas Node dirigidas de workflow + workspace: 10/10. Cubren padre
     obligatorio, diferencias contra MBL/SI, regla ETD/ETA y POL/POD.
@@ -55,20 +55,24 @@
   - `npx.cmd tsc --noEmit`: OK.
   - `npm.cmd run build`: OK, 73/73 páginas.
 - Riesgos / pendientes:
-  - Auditar en Production si existen HBL históricos sin padre o asociados a un
-    MBL no validado antes de desplegar; la regla protege escrituras futuras y no
-    reescribe snapshots históricos.
+  - Auditar HBL históricos sin padre o asociados a un MBL no validado; la regla
+    desplegada protege escrituras futuras y no reescribe snapshots históricos.
   - Ejecutar UAT de una diferencia intencional, `Usar fuente`, guardado y
     transición HBL Draft → Pendiente Aprobación Cliente.
   - Las discrepancias son advertencias deliberadas; convertirlas en bloqueos o
     exigir un motivo persistente para excepciones corresponde a workflows
     avanzados y requiere modelo/auditoría adicional.
-- Commit: pendiente.
+- Publicación (17/09/2026): migraciones `20260917150000`, `20260917160000` y
+  `20260917170000` aplicadas en Supabase Production. Commit `e79cabc` publicado
+  en `main`; Vercel deployment `4M27W7HJ7Lj8iP1h82aZC5DyEsQ7` finalizó en
+  `success`. `/operations/shipping-instructions` responde 307 hacia el login
+  preservando `next`; UAT autenticado continúa pendiente.
+- Commit de implementación: `e79cabc`.
 
 ### 2026-09-17 - UX-062 / FLOW-032 - Documentation Workspace unificado
 
-- Estado: implementado y validado por código; revisión visual y UAT autenticado
-  pendientes.
+- Estado: implementado y publicado en Production; revisión visual y UAT
+  autenticado pendientes.
 - Hallazgo:
   - El detalle del booking ya contenía Shipping Instructions, readiness,
     adjuntos y BL, pero como secciones independientes y extensas. El operador
@@ -112,12 +116,12 @@
     todos los bookings de un shipment queda fuera de esta fase.
   - Adjuntar un PDF generado como evidencia continúa siendo una acción explícita;
     el workspace no presupone que descargar un PDF lo haya archivado.
-- Commit: pendiente.
+- Commit de implementación: `e79cabc`.
 
 ### 2026-09-17 - FLOW-031 / UX-061 - Confirmación operativa del booking
 
-- Estado: implementado y migrado en Supabase local; despliegue Production y UAT
-  autenticado pendientes.
+- Estado: implementado, migrado y publicado en Production; UAT autenticado
+  pendiente.
 - Hallazgo:
   - Operaciones veía `Booking Number` y `Carrier Booking` como solo lectura, pero
     la única interfaz capaz de modificarlos era `Corrección Admin` o el flujo de
@@ -146,7 +150,7 @@
 - Migración:
   - Aplicada correctamente en Supabase local mediante
     `npx.cmd supabase db push --local`.
-  - No aplicada en Production.
+  - Aplicada correctamente en Production el 17/09/2026.
 - Validaciones:
   - Prueba SQL dirigida en contenedor local: OK con rollback. Cubre bloqueo de
     `UPDATE` directo, autorización, confirmación incremental, preservación de
@@ -161,12 +165,12 @@
     la segunda después y crear el MBL desde el mismo booking.
   - Los bookings históricos/finalizados y las referencias existentes mantienen
     su protección; cualquier corrección requiere Admin.
-- Commit: pendiente.
+- Commit de implementación: `e79cabc`.
 
 ### 2026-09-17 - FLOW-030 / DB-027 - Integridad transaccional MBL/HBL
 
-- Estado: implementado y migrado en Supabase local; despliegue Production y UAT
-  operativo pendientes.
+- Estado: implementado, migrado y publicado en Production; UAT operativo
+  pendiente.
 - Hallazgos:
   - La numeración `SARI-HBL-YYYYMMDD-NNN` se calculaba en el navegador con
     `max + 1`, por lo que dos usuarios podían reservar el mismo número.
@@ -195,7 +199,7 @@
 - Migración:
   - Aplicada correctamente en Supabase local mediante
     `npx.cmd supabase db push --local`.
-  - No aplicada en Production.
+  - Aplicada correctamente en Production el 17/09/2026.
 - Validaciones:
   - Prueba SQL dirigida en contenedor local: OK con rollback. Cubre numeración
     única, bloqueo de estado directo, rechazo de documento incompleto,
@@ -204,25 +208,25 @@
   - `npm.cmd test`: 86/86.
   - `npx.cmd tsc --noEmit`: OK.
   - `npm.cmd run build`: OK, 73/73 páginas.
-  - ESLint del helper y prueba Node: OK. El editor conserva 8 errores y 1
-    aviso preexistentes fuera de las líneas modificadas.
+  - ESLint final del helper, componentes, editor y pruebas: sin errores ni
+    advertencias; la deuda previa del editor se corrigió en `UX-063 / DB-028`.
   - La ejecución global `supabase test db --local` alcanza y ejecuta la prueba
     nueva sin error, pero el comando global continúa fallando por pruebas
     históricas ajenas (`booking_documents_*`, `phase1_rls` y
     `phase4_receivables`).
 - Riesgos / pendientes:
-  - Antes de Production, verificar que no existan números HBL duplicados; la
-    migración se detiene deliberadamente si encuentra alguno.
+  - La migración de Production comprobó la ausencia de números HBL duplicados y
+    se aplicó correctamente; queda pendiente el UAT autenticado del flujo.
   - Ejecutar UAT autenticado de MBL Draft → Validado y HBL Draft → Liberado.
   - La edición ordinaria del draft aún usa `UPDATE` directo; una fase posterior
     puede mover también el guardado y su enmienda a un RPC con versión.
   - La acción operativa para registrar referencias del booking se completa en
     `FLOW-031 / UX-061`.
-- Commit: pendiente.
+- Commit de implementación: `e79cabc`.
 
 ### 2026-09-17 - FLOW-029 / UX-060 - Preparación documental MBL/HBL
 
-- Estado: implementado y validado por código; UAT operativo pendiente.
+- Estado: implementado y publicado en Production; UAT operativo pendiente.
 - Hallazgos:
   - Al crear un HBL desde su MBL padre, el editor heredaba también `shipper`,
     `consignee` y `notify party`. Esas partes corresponden al contrato del MBL
@@ -266,7 +270,7 @@
     validar las partes contractuales caso por caso.
   - La acción operativa explícita para registrar el número de booking continúa
     pendiente; la numeración HBL y la inmutabilidad se completan en `FLOW-030`.
-- Commit: pendiente.
+- Commit de implementación: `e79cabc`.
 
 ### 2026-09-17 - PDF-019 - Vessel/voyage y puerto de descarga en HBL
 
