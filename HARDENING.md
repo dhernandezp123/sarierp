@@ -2,8 +2,8 @@
 
 ### 2026-09-17 - FLOW-028 - Carrier seleccionado en Shipping Instructions
 
-- Estado: implementado y validado localmente; migracion y UAT en Production
-  pendientes.
+- Estado: RPC implementado, validado y migrado en Production; reparacion puntual
+  validada localmente y pendiente de publicar; UAT autenticado pendiente.
 - Hallazgo:
   - La cotizacion `SARIHN-2609-0266-AP` tiene seleccionada la tarifa de APS
     EXPRESS con Maersk (`MSK`), pero su Shipping Instruction `RT0032` conserva
@@ -14,6 +14,7 @@
     podia reportar `MSK` sin corregir el carrier visible de la SI.
 - Archivos:
   - `supabase/migrations/20260917120000_shipping_instruction_carrier_sync.sql`.
+  - `supabase/migrations/20260917123000_repair_rt0032_carrier.sql`.
   - `supabase/tests/booking_canonical_consumers.sql`.
   - `HARDENING.md`.
 - SQL:
@@ -22,6 +23,10 @@
     vacio devuelto por la tarifa seleccionada.
   - La migracion incluye una reparacion idempotente y auditada para `RT0032`,
     limitada al caso COSCO -> MSK/Maersk de la cotizacion afectada.
+  - Como `RT0032` es una referencia visible que no esta persistida en
+    `shipping_instructions.reference_number`, la primera condicion no encontro
+    la fila y no escribio datos. Una segunda migracion usa el UUID canonico
+    comprobado, manteniendo las mismas guardas de cotizacion y carrier.
   - La correccion no modifica campos operativos legacy ni fuerza cambios sobre
     bookings confirmados. Las funciones internas mantienen ejecucion revocada
     para `public`, `anon` y `authenticated`.
@@ -35,11 +40,18 @@
   - `npx.cmd supabase db push --linked --dry-run`: Production propone solo
     `20260917120000_shipping_instruction_carrier_sync.sql`; no se escribieron
     datos ni esquema remoto.
+  - `npx.cmd supabase db push --linked --yes`: aplico
+    `20260917120000_shipping_instruction_carrier_sync.sql` en Production.
+  - Lectura REST posterior: el RPC quedo publicado; la SI seguia en `COSCO` y
+    `reference_number` era `NULL`, confirmando por que el primer backfill seguro
+    no actuo.
+  - `npx.cmd supabase migration up --local`: aplico
+    `20260917123000_repair_rt0032_carrier.sql` sin errores.
   - `npm.cmd test`: 78/78.
   - `npx.cmd tsc --noEmit`: OK.
 - Riesgos / pendientes:
-  - Publicar la migracion solo con autorizacion explicita; su backfill repara
-    `RT0032` sin modificar el booking existente.
+  - Publicar `20260917123000` y comprobar carrier, booking y auditoria en
+    Production.
   - Confirmar mediante UAT autenticado que la SI muestra Maersk y que el booking
     existente permanece sin cambios operativos.
 - Commit: pendiente.
