@@ -52,6 +52,7 @@ type ScheduleRevision = {
     | 'ROLLOVER_SAME_BOOKING'
     | 'CARRIER_UPDATE'
     | 'ROUTING_CHANGE'
+    | 'BOOKING_CONFIRMATION'
     | 'ADMIN_CORRECTION'
   carrier: string | null
   booking_number: string | null
@@ -70,7 +71,7 @@ type ScheduleRevision = {
   metadata: Record<string, unknown>
 }
 
-type ActionKind = 'revise' | 'rollover' | 'replace' | 'cancel' | 'admin'
+type ActionKind = 'confirm' | 'revise' | 'rollover' | 'replace' | 'cancel' | 'admin'
 
 type ScheduleForm = {
   carrier: string
@@ -93,6 +94,7 @@ type ScheduleForm = {
 }
 
 const actionTitles: Record<ActionKind, string> = {
+  confirm: 'Confirmar referencia de booking',
   revise: 'Revisar itinerario',
   rollover: 'Registrar rollover',
   replace: 'Reemplazar booking',
@@ -106,6 +108,7 @@ const revisionLabels: Record<ScheduleRevision['revision_type'], string> = {
   ROLLOVER_SAME_BOOKING: 'Rollover del mismo booking',
   CARRIER_UPDATE: 'Carrier actualizado',
   ROUTING_CHANGE: 'Ruta actualizada',
+  BOOKING_CONFIRMATION: 'Referencia de booking confirmada',
   ADMIN_CORRECTION: 'Corrección administrativa',
 }
 
@@ -272,7 +275,15 @@ export function BookingScheduleManager({
       | Awaited<ReturnType<typeof supabase.rpc>>
       | undefined
 
-    if (action === 'revise') {
+    if (action === 'confirm') {
+      result = await supabase.rpc('confirm_booking_reference', {
+        p_booking_id: booking.id,
+        p_expected_updated_at: booking.updated_at,
+        p_booking_number: form.bookingNumber || null,
+        p_carrier_booking: form.carrierBooking || null,
+        p_reason: form.reason.trim(),
+      })
+    } else if (action === 'revise') {
       result = await supabase.rpc('revise_booking_schedule', {
         p_booking_id: booking.id,
         p_expected_updated_at: booking.updated_at,
@@ -383,6 +394,15 @@ export function BookingScheduleManager({
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {isActive && booking.shipment_status !== 'Finalizado' && (!booking.booking_number || !booking.carrier_booking) && (
+              <button
+                type="button"
+                onClick={() => openAction('confirm')}
+                className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                Confirmar referencia
+              </button>
+            )}
             {canNormalSchedule && (
               <button
                 type="button"
@@ -536,6 +556,8 @@ export function BookingScheduleManager({
                 ? 'Se creará otro booking y el actual quedará histórico. BL, documentos, tracking y fechas reales no se copiarán.'
                 : action === 'cancel'
                   ? 'El booking se conservará como histórico y dejará de participar en cálculos activos.'
+                  : action === 'confirm'
+                    ? 'Completa las referencias entregadas por el carrier. Los valores confirmados no podrán cambiarse desde esta acción.'
                   : action === 'admin'
                     ? 'Solo para errores de captura. No uses esta acción para ocultar un cambio operativo real.'
                     : 'Compara el itinerario vigente con el nuevo y documenta el motivo.'}
@@ -544,22 +566,25 @@ export function BookingScheduleManager({
 
           {action && action !== 'cancel' && (
             <div className="grid gap-4 md:grid-cols-2">
-              <label className="text-sm text-slate-700 dark:text-slate-300">
-                Carrier
-                <input
-                  value={form.carrier}
-                  onChange={(event) => setForm({ ...form, carrier: event.target.value })}
-                  disabled={action === 'rollover'}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              {(action === 'replace' || action === 'admin') && (
+              {action !== 'confirm' && (
+                <label className="text-sm text-slate-700 dark:text-slate-300">
+                  Carrier
+                  <input
+                    value={form.carrier}
+                    onChange={(event) => setForm({ ...form, carrier: event.target.value })}
+                    disabled={action === 'rollover'}
+                    className={`${fieldClass} mt-1`}
+                  />
+                </label>
+              )}
+              {(action === 'confirm' || action === 'replace' || action === 'admin') && (
                 <>
                   <label className="text-sm text-slate-700 dark:text-slate-300">
                     Booking number
                     <input
                       value={form.bookingNumber}
                       onChange={(event) => setForm({ ...form, bookingNumber: event.target.value })}
+                      disabled={action === 'confirm' && Boolean(booking.booking_number)}
                       className={`${fieldClass} mt-1`}
                     />
                   </label>
@@ -568,53 +593,58 @@ export function BookingScheduleManager({
                     <input
                       value={form.carrierBooking}
                       onChange={(event) => setForm({ ...form, carrierBooking: event.target.value })}
+                      disabled={action === 'confirm' && Boolean(booking.carrier_booking)}
                       className={`${fieldClass} mt-1`}
                     />
                   </label>
                 </>
               )}
-              <label className="text-sm text-slate-700 dark:text-slate-300">
-                Vessel
-                <input
-                  value={form.vesselName}
-                  onChange={(event) => setForm({ ...form, vesselName: event.target.value })}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              <label className="text-sm text-slate-700 dark:text-slate-300">
-                Voyage
-                <input
-                  value={form.voyage}
-                  onChange={(event) => setForm({ ...form, voyage: event.target.value })}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              <label className="text-sm text-slate-700 dark:text-slate-300">
-                ETD
-                <input
-                  type="date"
-                  value={form.etd}
-                  onChange={(event) => setForm({ ...form, etd: event.target.value })}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              <label className="text-sm text-slate-700 dark:text-slate-300">
-                ETA
-                <input
-                  type="date"
-                  value={form.eta}
-                  onChange={(event) => setForm({ ...form, eta: event.target.value })}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              <label className="text-sm text-slate-700 dark:text-slate-300 md:col-span-2">
-                Ruta / transbordo
-                <input
-                  value={form.routingSummary}
-                  onChange={(event) => setForm({ ...form, routingSummary: event.target.value })}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
+              {action !== 'confirm' && (
+                <>
+                  <label className="text-sm text-slate-700 dark:text-slate-300">
+                    Vessel
+                    <input
+                      value={form.vesselName}
+                      onChange={(event) => setForm({ ...form, vesselName: event.target.value })}
+                      className={`${fieldClass} mt-1`}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700 dark:text-slate-300">
+                    Voyage
+                    <input
+                      value={form.voyage}
+                      onChange={(event) => setForm({ ...form, voyage: event.target.value })}
+                      className={`${fieldClass} mt-1`}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700 dark:text-slate-300">
+                    ETD
+                    <input
+                      type="date"
+                      value={form.etd}
+                      onChange={(event) => setForm({ ...form, etd: event.target.value })}
+                      className={`${fieldClass} mt-1`}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700 dark:text-slate-300">
+                    ETA
+                    <input
+                      type="date"
+                      value={form.eta}
+                      onChange={(event) => setForm({ ...form, eta: event.target.value })}
+                      className={`${fieldClass} mt-1`}
+                    />
+                  </label>
+                  <label className="text-sm text-slate-700 dark:text-slate-300 md:col-span-2">
+                    Ruta / transbordo
+                    <input
+                      value={form.routingSummary}
+                      onChange={(event) => setForm({ ...form, routingSummary: event.target.value })}
+                      className={`${fieldClass} mt-1`}
+                    />
+                  </label>
+                </>
+              )}
             </div>
           )}
 

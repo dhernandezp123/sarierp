@@ -1,5 +1,273 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-17 - UX-063 / DB-028 - Motor de validación documental MBL/HBL
+
+- Estado: implementado y migrado en Supabase local; despliegue Production,
+  revisión visual y UAT autenticado pendientes.
+- Hallazgo:
+  - La validación del BL detectaba campos vacíos, pero no advertía cuando ruta,
+    carrier, buque/viaje, fechas, carga o parties diferían de Booking, Shipping
+    Instructions, cotización o MBL padre.
+  - La relación `parent_bl_id` tenía FK y la copia de contenedores comprobaba el
+    padre cuando estaba informado, pero todavía era posible crear o avanzar un
+    HBL sin un MBL padre válido.
+- Archivos / SQL:
+  - `src/lib/bl-document-workflow.ts`.
+  - `src/components/operations/BLValidationPanel.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `tests/bl-document-workflow.test.mjs`.
+  - `supabase/migrations/20260917170000_bill_of_lading_parent_integrity.sql`.
+  - `supabase/tests/bill_of_lading_parent_integrity.sql`.
+  - `supabase/tests/bill_of_lading_document_integrity.sql`.
+  - `HARDENING.md`.
+- Cambios:
+  - El editor compara los campos compartidos del MBL contra Booking/SI y los del
+    HBL contra su MBL padre; las partes comerciales del HBL se comparan contra
+    SI/cotización, no contra las partes maestras del MBL.
+  - Se detectan también ETA anterior a ETD y POL igual a POD. Las diferencias se
+    muestran como revisiones, no como bloqueos, porque pueden corresponder a
+    Switch BL, triangle shipment u otra excepción documental válida.
+  - Cada discrepancia muestra valor del documento, fuente y una acción `Usar
+    fuente`; nunca se reemplazan datos automáticamente. Documentos HBL emitidos
+    o liberados conservan su snapshot y no se comparan con fuentes que hayan
+    cambiado después.
+  - El panel separa bloqueos obligatorios, datos recomendados y diferencias de
+    consistencia, y está visible también durante la creación del BL.
+  - Todo HBL nuevo exige `parent_bl_id` apuntando a un MBL del mismo booking. El
+    MBL puede estar en draft mientras se prepara el HBL, pero debe estar en
+    `MBL Validado` antes de que el HBL abandone `HBL Draft`. Un MBL no puede
+    tener padre.
+  - Se eliminó deuda local de lint del editor: tipos `any`, llamada síncrona de
+    carga dentro del efecto y comillas JSX sin escapar.
+- Migración:
+  - `20260917170000_bill_of_lading_parent_integrity.sql` aplicada correctamente
+    mediante `npx.cmd supabase db push --local`.
+  - No aplicada en Production.
+- Validaciones:
+  - Pruebas Node dirigidas de workflow + workspace: 10/10. Cubren padre
+    obligatorio, diferencias contra MBL/SI, regla ETD/ETA y POL/POD.
+  - Prueba SQL `bill_of_lading_parent_integrity.sql`: OK con rollback. Cubre HBL
+    sin padre, padre de otro booking, MBL draft y jerarquía válida.
+  - Regresión SQL `bill_of_lading_document_integrity.sql`: OK con rollback.
+  - `npx.cmd supabase db lint --local --level warning`: sin errores.
+  - `npm.cmd test`: 93/93.
+  - ESLint dirigido: sin errores ni advertencias.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / pendientes:
+  - Auditar en Production si existen HBL históricos sin padre o asociados a un
+    MBL no validado antes de desplegar; la regla protege escrituras futuras y no
+    reescribe snapshots históricos.
+  - Ejecutar UAT de una diferencia intencional, `Usar fuente`, guardado y
+    transición HBL Draft → Pendiente Aprobación Cliente.
+  - Las discrepancias son advertencias deliberadas; convertirlas en bloqueos o
+    exigir un motivo persistente para excepciones corresponde a workflows
+    avanzados y requiere modelo/auditoría adicional.
+- Commit: pendiente.
+
+### 2026-09-17 - UX-062 / FLOW-032 - Documentation Workspace unificado
+
+- Estado: implementado y validado por código; revisión visual y UAT autenticado
+  pendientes.
+- Hallazgo:
+  - El detalle del booking ya contenía Shipping Instructions, readiness,
+    adjuntos y BL, pero como secciones independientes y extensas. El operador
+    debía recorrer toda la pantalla para descubrir qué estaba listo, qué lo
+    bloqueaba y dónde continuar el MBL/HBL.
+  - No existía una representación única del expediente documental ni una
+    siguiente acción sugerida basada en las fuentes de verdad actuales.
+- Archivos:
+  - `src/lib/documentation-workspace.ts`.
+  - `src/components/operations/DocumentationWorkspace.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`.
+  - `tests/documentation-workspace.test.mjs`.
+  - `HARDENING.md`.
+- SQL: no aplica. El workspace es una vista derivada; no crea estados, tablas ni
+  una fuente documental paralela y no modifica RLS.
+- Cambios:
+  - Se incorpora al inicio del booking un expediente con tarjetas para Shipping
+    Instructions, booking/routing, preparación operativa, archivos de soporte,
+    MBL, HBL y aviso de llegada.
+  - Cada tarjeta muestra estado `Completo`, `En curso`, `Falta información`,
+    `Bloqueado` o `Por iniciar`, además del responsable, contexto y acceso a la
+    acción existente correspondiente.
+  - La siguiente acción respeta la secuencia SI → booking → readiness → MBL →
+    HBL. El HBL no se ofrece hasta que exista un MBL validado y el MBL no se
+    ofrece hasta confirmar `Booking Number` o `Carrier Booking`.
+  - Los enlaces internos llevan directamente a datos, confirmación, readiness,
+    adjuntos y BL sin duplicar formularios. El aviso de llegada conserva su
+    disponibilidad únicamente después del arribo.
+- Validaciones:
+  - Pruebas dirigidas del workspace: 4/4. Cubren creación de MBL por referencia,
+    bloqueo y habilitación del HBL y exposición de bloqueos de readiness.
+  - Pruebas documentales combinadas: 7/7.
+  - `npm.cmd test`: 90/90.
+  - ESLint dirigido: sin errores ni advertencias.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / pendientes:
+  - Validar visualmente en escritorio y móvil con datos reales, modos marítimo,
+    aéreo y terrestre, y con roles Admin/Operaciones/solo lectura.
+  - El workspace resume el expediente de un booking; una vista transversal de
+    todos los bookings de un shipment queda fuera de esta fase.
+  - Adjuntar un PDF generado como evidencia continúa siendo una acción explícita;
+    el workspace no presupone que descargar un PDF lo haya archivado.
+- Commit: pendiente.
+
+### 2026-09-17 - FLOW-031 / UX-061 - Confirmación operativa del booking
+
+- Estado: implementado y migrado en Supabase local; despliegue Production y UAT
+  autenticado pendientes.
+- Hallazgo:
+  - Operaciones veía `Booking Number` y `Carrier Booking` como solo lectura, pero
+    la única interfaz capaz de modificarlos era `Corrección Admin` o el flujo de
+    reemplazo. Sin una referencia, la pantalla tampoco permitía crear el MBL.
+  - El trigger canónico protegía correctamente la identidad del booking, por lo
+    que agregar los campos al guardado genérico no era una solución válida.
+- Archivos / SQL:
+  - `supabase/migrations/20260917160000_booking_reference_confirmation.sql`.
+  - `supabase/tests/booking_reference_confirmation.sql`.
+  - `src/components/operations/BookingScheduleManager.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`.
+  - `HARDENING.md`.
+- Cambios:
+  - Se agrega `confirm_booking_reference`, disponible solo para Admin y
+    Operaciones, con control optimista por `updated_at` y motivo obligatorio.
+  - La acción solo completa `booking_number` o `carrier_booking` vacíos; no puede
+    borrar ni reemplazar valores confirmados. Una corrección real continúa
+    requiriendo el flujo administrativo.
+  - Cada confirmación crea una revisión inmutable `BOOKING_CONFIRMATION` y un
+    `activity_log` dentro de la misma transacción.
+  - `BookingScheduleManager` muestra `Confirmar referencia` cuando falta alguno
+    de los dos campos, conserva bloqueadas las referencias ya confirmadas y
+    recarga el booking al terminar.
+  - La creación del MBL se habilita con `Booking Number` o `Carrier Booking`, y
+    el encabezado usa la referencia disponible.
+- Migración:
+  - Aplicada correctamente en Supabase local mediante
+    `npx.cmd supabase db push --local`.
+  - No aplicada en Production.
+- Validaciones:
+  - Prueba SQL dirigida en contenedor local: OK con rollback. Cubre bloqueo de
+    `UPDATE` directo, autorización, confirmación incremental, preservación de
+    valores, rechazo de reemplazo y creación de revisión/actividad.
+  - `npx.cmd supabase db lint --local --level warning`: sin errores de esquema.
+  - ESLint dirigido de ambos componentes: sin errores ni advertencias.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 86/86.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / pendientes:
+  - Ejecutar UAT con rol Operaciones: confirmar primero una referencia, agregar
+    la segunda después y crear el MBL desde el mismo booking.
+  - Los bookings históricos/finalizados y las referencias existentes mantienen
+    su protección; cualquier corrección requiere Admin.
+- Commit: pendiente.
+
+### 2026-09-17 - FLOW-030 / DB-027 - Integridad transaccional MBL/HBL
+
+- Estado: implementado y migrado en Supabase local; despliegue Production y UAT
+  operativo pendientes.
+- Hallazgos:
+  - La numeración `SARI-HBL-YYYYMMDD-NNN` se calculaba en el navegador con
+    `max + 1`, por lo que dos usuarios podían reservar el mismo número.
+  - Las transiciones actualizaban directamente `bills_of_lading`; la validación,
+    las fechas, la bitácora y la sincronización del booking no eran una sola
+    transacción y podían ser omitidas por un `UPDATE` directo.
+  - Un HBL emitido seguía admitiendo cambios en sus datos y contenedores.
+- Archivos / SQL:
+  - `supabase/migrations/20260917150000_bill_of_lading_document_integrity.sql`.
+  - `supabase/tests/bill_of_lading_document_integrity.sql`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `HARDENING.md`.
+- Cambios:
+  - Un trigger asigna el número HBL dentro de la misma transacción del `INSERT`,
+    usando un contador diario bloqueado y una restricción única normalizada.
+  - `transition_bill_of_lading` valida autorización, versión, transición y
+    campos documentales; registra fechas, enmienda, actividad y sincroniza el
+    resumen del booking mediante `update_booking_canonical` atómicamente.
+  - Se retira a `authenticated` el permiso de actualizar columnas de estado y
+    control; solo el RPC puede avanzar el documento.
+  - Un HBL `Emitido` o `Liberado` y sus `bl_containers` quedan inmutables. La
+    única excepción es la transición canónica `Emitido` → `Liberado`.
+  - El editor exige guardar primero, usa control optimista por `updated_at`,
+    bloquea los campos del HBL emitido y muestra las fechas de control como
+    valores administrados por el workflow.
+- Migración:
+  - Aplicada correctamente en Supabase local mediante
+    `npx.cmd supabase db push --local`.
+  - No aplicada en Production.
+- Validaciones:
+  - Prueba SQL dirigida en contenedor local: OK con rollback. Cubre numeración
+    única, bloqueo de estado directo, rechazo de documento incompleto,
+    transiciones completas, fechas, booking cache, bitácora e inmutabilidad.
+  - `npx.cmd supabase db lint --local --level warning`: sin errores de esquema.
+  - `npm.cmd test`: 86/86.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint del helper y prueba Node: OK. El editor conserva 8 errores y 1
+    aviso preexistentes fuera de las líneas modificadas.
+  - La ejecución global `supabase test db --local` alcanza y ejecuta la prueba
+    nueva sin error, pero el comando global continúa fallando por pruebas
+    históricas ajenas (`booking_documents_*`, `phase1_rls` y
+    `phase4_receivables`).
+- Riesgos / pendientes:
+  - Antes de Production, verificar que no existan números HBL duplicados; la
+    migración se detiene deliberadamente si encuentra alguno.
+  - Ejecutar UAT autenticado de MBL Draft → Validado y HBL Draft → Liberado.
+  - La edición ordinaria del draft aún usa `UPDATE` directo; una fase posterior
+    puede mover también el guardado y su enmienda a un RPC con versión.
+  - La acción operativa para registrar referencias del booking se completa en
+    `FLOW-031 / UX-061`.
+- Commit: pendiente.
+
+### 2026-09-17 - FLOW-029 / UX-060 - Preparación documental MBL/HBL
+
+- Estado: implementado y validado por código; UAT operativo pendiente.
+- Hallazgos:
+  - Al crear un HBL desde su MBL padre, el editor heredaba también `shipper`,
+    `consignee` y `notify party`. Esas partes corresponden al contrato del MBL
+    y podían reemplazar incorrectamente las partes comerciales del HBL.
+  - Los nuevos documentos no precargaban descripción, bultos, peso ni volumen
+    desde la cotización y sus `quotation_cargo_lines` canónicas.
+  - Las transiciones permitían validar o enviar documentos con datos críticos
+    incompletos, y el editor no mostraba el contexto SI → Booking → BL.
+- Archivos:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `src/lib/bl-document-workflow.ts`.
+  - `tests/bl-document-workflow.test.mjs`.
+  - `HARDENING.md`.
+- Cambios:
+  - El HBL conserva las partes comerciales configuradas en la Shipping
+    Instruction/cotización y solo hereda del MBL ruta, carrier, buque/viaje y
+    datos de carga compartidos.
+  - Los nuevos BL precargan mercancía desde `quotation_cargo_lines`; el peso
+    unitario en libras se multiplica por cantidad y se convierte a kilogramos.
+    Si no hay líneas utilizables, se usan los campos de cabecera de la
+    cotización como respaldo.
+  - Se incorporan breadcrumbs y contexto visible de SI y Booking.
+  - Antes de una transición se muestran faltantes obligatorios y recomendados;
+    se bloquea el avance si faltan partes, ruta, carrier, carga, peso o datos de
+    buque/viaje. Para validar un MBL también se exige el draft del agente.
+- SQL: no aplica en esta fase; no se modificaron esquema, RLS ni datos
+  persistidos existentes.
+- Validaciones:
+  - Pruebas dirigidas del workflow documental: 3/3.
+  - `npm.cmd test`: 86/86.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint del helper y prueba nuevos: OK. El editor conserva 8 errores y 1
+    aviso preexistentes fuera de las líneas modificadas.
+- Riesgos / pendientes:
+  - Ejecutar UAT creando MBL/HBL marítimo, aéreo y terrestre desde bookings
+    reales, incluyendo un HBL con MBL padre.
+  - La validación transaccional y la protección en base de datos se completan en
+    `FLOW-030 / DB-027`.
+  - No se corrigen automáticamente documentos existentes porque hacerlo exige
+    validar las partes contractuales caso por caso.
+  - La acción operativa explícita para registrar el número de booking continúa
+    pendiente; la numeración HBL y la inmutabilidad se completan en `FLOW-030`.
+- Commit: pendiente.
+
 ### 2026-09-17 - PDF-019 - Vessel/voyage y puerto de descarga en HBL
 
 - Estado: implementado y validado por codigo; UAT visual pendiente.

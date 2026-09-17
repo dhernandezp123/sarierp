@@ -31,6 +31,7 @@ import {
   type BookingReadinessEvaluation,
   type ReadinessRequirement,
 } from '@/src/components/operations/BookingReadinessPanel'
+import { DocumentationWorkspace } from '@/src/components/operations/DocumentationWorkspace'
 import {
   cardClass,
   fieldClass,
@@ -44,6 +45,7 @@ import {
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { buildDocumentationWorkspace } from '@/src/lib/documentation-workspace'
 
 type ClienteJoin = {
   nombre: string | null
@@ -1310,8 +1312,10 @@ export default function RoutingBookingChildPage() {
   const incotermReference = quotation?.incoterm || ''
   const selectedAgentTransit =
     selectedAgent?.transit_time || selectedAgent?.transit || quotation?.transit_time || ''
-  const bookingTitle = booking.booking_number
-    ? `Booking ${booking.booking_number}`
+  const bookingReference = booking.booking_number || booking.carrier_booking
+  const hasBookingReference = Boolean(bookingReference)
+  const bookingTitle = bookingReference
+    ? `Booking ${bookingReference}`
     : 'Nuevo Booking'
   const availableForThisBooking = Object.values(groupContainers(availableContainers))
     .map((container) => ({
@@ -1344,11 +1348,39 @@ export default function RoutingBookingChildPage() {
               'Registra la entrega antes de habilitar la finalización del booking.',
           }
       : bookingTransitionActions[booking.shipment_status || 'Booking Solicitado']
+  const isArrived = ['Arribado', 'Finalizado'].includes(booking.shipment_status || '')
+  const documentationItems = buildDocumentationWorkspace({
+    shippingInstructionId: id,
+    bookingId,
+    routingNumber: routing.routing_number,
+    origin: quotation?.origen || null,
+    destination: quotation?.destino || null,
+    shipperName,
+    consigneeName,
+    bookingReference,
+    carrier: booking.carrier,
+    vesselName: booking.vessel_name,
+    voyage: booking.voyage,
+    transportMode: quotation?.tipo_transporte || quotation?.quote_type || null,
+    containerCount: containerRows.reduce(
+      (total, container) => total + Number(container.quantity || 0),
+      0
+    ),
+    documentTypes: bookingDocuments.map((document) => document.document_type),
+    bills: billsOfLading.map((bill) => ({
+      id: bill.id,
+      bl_type: bill.bl_type,
+      parent_bl_id: bill.parent_bl_id,
+      bl_number: bill.bl_number,
+      status: bill.status,
+    })),
+    readiness: readinessEvaluation,
+    isArrived,
+  })
 
   return (
-    <div>
+    <div id="booking-header" className="scroll-mt-24">
       {(() => {
-        const isArrived = ['Arribado', 'Finalizado'].includes(booking.shipment_status || '')
         const issuedHBL = billsOfLading.find((bl) => bl.bl_type === 'HBL' && bl.status === 'Emitido')
         const arrivalNoticeData: ArrivalNoticeData = {
           si_number: routing.routing_number,
@@ -1437,7 +1469,12 @@ export default function RoutingBookingChildPage() {
       })()}
 
       <div className="space-y-6">
-        <div className="grid gap-6 lg:grid-cols-2">
+        <DocumentationWorkspace
+          items={documentationItems}
+          reference={bookingReference || routing.routing_number}
+        />
+
+        <div id="booking-data" className="grid scroll-mt-24 gap-6 lg:grid-cols-2">
           <SectionCard title="Referencia Operativa">
             <Field label="Carrier / Naviera" readonlySource="referencia">
               <input value={booking.carrier || ''} readOnly className={readonlyFieldClass} />
@@ -1711,26 +1748,30 @@ export default function RoutingBookingChildPage() {
           </SectionCard>
         </div>
 
-        <BookingScheduleManager
-          booking={booking as ScheduleBooking}
-          userRole={profile?.rol}
-          onChanged={loadData}
-          onReplaced={(newBookingId) =>
-            router.push(
-              `/operations/shipping-instructions/${id}/bookings/${newBookingId}`
-            )
-          }
-        />
+        <div id="booking-schedule" className="scroll-mt-24">
+          <BookingScheduleManager
+            booking={booking as ScheduleBooking}
+            userRole={profile?.rol}
+            onChanged={loadData}
+            onReplaced={(newBookingId) =>
+              router.push(
+                `/operations/shipping-instructions/${id}/bookings/${newBookingId}`
+              )
+            }
+          />
+        </div>
 
-        <BookingReadinessPanel
-          bookingId={booking.id}
-          shipmentId={booking.shipment_id}
-          containers={containerRows}
-          userRole={profile?.rol}
-          onEvaluationChange={setReadinessEvaluation}
-        />
+        <div id="booking-readiness" className="scroll-mt-24">
+          <BookingReadinessPanel
+            bookingId={booking.id}
+            shipmentId={booking.shipment_id}
+            containers={containerRows}
+            userRole={profile?.rol}
+            onEvaluationChange={setReadinessEvaluation}
+          />
+        </div>
 
-        <section className={cardClass}>
+        <section id="booking-documents" className={`${cardClass} scroll-mt-24`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -2084,12 +2125,12 @@ export default function RoutingBookingChildPage() {
       </div>
 
       {/* Bills of Lading */}
-      <section className={`${cardClass} mt-6`}>
+      <section id="booking-bills" className={`${cardClass} mt-6 scroll-mt-24`}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Bills of Lading
           </h2>
-          {booking.booking_number && (
+          {hasBookingReference && (
             <button
               type="button"
               onClick={() =>
@@ -2108,9 +2149,9 @@ export default function RoutingBookingChildPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">Cargando...</p>
         ) : billsOfLading.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {booking.booking_number
+            {hasBookingReference
               ? 'No hay BLs registrados. Crea el MBL para iniciar el proceso.'
-              : 'Confirma el Booking Number antes de crear el MBL.'}
+              : 'Confirma el Booking Number o Carrier Booking antes de crear el MBL.'}
           </p>
         ) : (
           <div className="space-y-3">
