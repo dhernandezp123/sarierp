@@ -1,5 +1,70 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-18 - FLOW-033 / DB-029 / UX-064 - Excepciones documentales auditables
+
+- Estado: implementado y migrado localmente; despliegue a Production y UAT
+  autenticado pendientes.
+- Hallazgo:
+  - El motor documental advertía diferencias entre BL y sus fuentes, pero una
+    excepción válida (Switch BL, triangulación u otra instrucción especial) no
+    podía justificar ni conservar autor, valores revisados e historial.
+  - Las diferencias seguían siendo advertencias en cada revisión o podían
+    normalizarse copiando la fuente, sin distinguir una corrección de una
+    decisión operativa deliberada.
+- Archivos / SQL:
+  - `src/lib/bl-document-workflow.ts`.
+  - `src/components/operations/BLValidationPanel.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `tests/bl-document-workflow.test.mjs`.
+  - `supabase/migrations/20260918100000_bl_validation_exceptions.sql`.
+  - `supabase/migrations/20260918103000_bl_exception_transition_gate.sql`.
+  - `supabase/tests/bl_validation_exceptions.sql`.
+  - `HARDENING.md`.
+- Cambios:
+  - Se incorpora un registro append-only para excepciones documentales con
+    campo, valor del BL, valor y nombre de la fuente, justificación, autor,
+    fecha y estado `ACTIVE`, `SUPERSEDED` o `REVOKED`.
+  - La justificación solo resuelve la diferencia exacta revisada. Si cambia el
+    documento, la fuente o su contexto, la diferencia reaparece; una nueva
+    justificación reemplaza la vigente sin borrar la anterior.
+  - Operaciones/Admin justifican o revocan mediante RPCs atómicos. La tabla es
+    de solo lectura para usuarios autenticados, aplica RLS por acceso al BL y
+    cada acción genera un evento en `activity_logs`.
+  - El panel separa diferencias pendientes de excepciones vigentes, presenta
+    autor/motivo y ofrece historial. Crear una excepción exige un BL guardado;
+    un HBL emitido o liberado no admite cambios de excepciones.
+  - La UI y un trigger de base exigen corregir o justificar diferencias de
+    fuente antes de validar el MBL o emitir el HBL. El gate SQL recalcula las
+    fuentes de Booking, SI, cotización, líneas de carga o MBL padre y solo
+    acepta una excepción cuyo snapshot coincida exactamente.
+  - Las reglas lógicas ETD/ETA y POL/POD continúan como alertas no
+    justificables.
+- Migración:
+  - `20260918100000_bl_validation_exceptions.sql` aplicada correctamente con
+    `npx.cmd supabase db push --local`.
+  - `20260918103000_bl_exception_transition_gate.sql` aplicada correctamente
+    con `npx.cmd supabase db push --local`.
+- Validaciones:
+  - Prueba Node dirigida del workflow: 7/7. Incluye coincidencia exacta,
+    invalidación al cambiar la fuente y revocación lógica.
+  - Prueba SQL `bl_validation_exceptions.sql`: OK con rollback. Cubre bloqueo de
+    inserción directa, alta atómica, reemplazo con historial, revocación y
+    eventos de auditoría, bloqueo SQL de finalización y desbloqueo mediante un
+    snapshot exacto.
+  - Regresiones SQL `bill_of_lading_document_integrity.sql` y
+    `bill_of_lading_parent_integrity.sql`: OK con rollback.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 94/94.
+  - ESLint dirigido: sin errores ni advertencias.
+  - `npx.cmd supabase db lint --local --level warning`: sin errores.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / pendientes:
+  - Aplicar la migración en Production y ejecutar UAT autenticado con un MBL y
+    un HBL reales antes de marcar el hallazgo como completado.
+  - Verificar en UAT que descripciones y tipos de bulto compuestos se presentan
+    igual en la UI y en el gate SQL cuando existen varias líneas de carga.
+- Commit: pendiente.
+
 ### 2026-09-17 - UX-063 / DB-028 - Motor de validación documental MBL/HBL
 
 - Estado: implementado, migrado y publicado en Production; revisión visual y

@@ -7,6 +7,7 @@ const {
   getBlConsistencyWarnings,
   getBlReadiness,
   inheritParentMblData,
+  isBlValidationExceptionMatch,
 } = loadTs('src/lib/bl-document-workflow.ts')
 
 test('los defaults de carga suelta usan las líneas canónicas y convierten libras a kg', () => {
@@ -200,4 +201,41 @@ test('detecta ETA anterior al ETD y POL igual a POD', () => {
     ['logical', 'eta'],
     ['logical', 'port_of_discharge'],
   ])
+})
+
+test('una excepción solo resuelve la diferencia exacta que fue justificada', () => {
+  const warning = {
+    field: 'carrier',
+    label: 'Carrier',
+    documentValue: 'COSCO',
+    sourceValue: 'MAERSK',
+    sourceLabel: 'MBL padre',
+    kind: 'source_mismatch',
+  }
+  const exception = {
+    id: 'exception-1',
+    bl_id: 'bl-1',
+    field_name: 'carrier',
+    document_value: 'cosco',
+    source_value: 'maersk',
+    source_label: 'MBL PADRE',
+    reason: 'Switch BL autorizado por el cliente',
+    status: 'ACTIVE',
+    created_by: 'user-1',
+    created_by_name: 'Operador Uno',
+    created_at: '2026-09-18T10:00:00Z',
+    closed_at: null,
+    closed_by: null,
+    closure_reason: null,
+  }
+
+  assert.equal(isBlValidationExceptionMatch(exception, warning), true)
+  assert.equal(
+    isBlValidationExceptionMatch(exception, { ...warning, sourceValue: 'HAPAG-LLOYD' }),
+    false
+  )
+  assert.equal(
+    isBlValidationExceptionMatch({ ...exception, status: 'REVOKED' }, warning),
+    false
+  )
 })

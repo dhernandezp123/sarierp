@@ -97,6 +97,23 @@ export type BlConsistencyWarning = {
   kind: 'source_mismatch' | 'logical'
 }
 
+export type BlValidationException = {
+  id: string
+  bl_id: string
+  field_name: BlConsistencyField
+  document_value: string
+  source_value: string
+  source_label: string
+  reason: string
+  status: 'ACTIVE' | 'SUPERSEDED' | 'REVOKED'
+  created_by: string
+  created_by_name: string
+  created_at: string
+  closed_at: string | null
+  closed_by: string | null
+  closure_reason: string | null
+}
+
 const LBS_PER_KG = 2.20462
 
 const CONSISTENCY_LABELS: Record<BlConsistencyField, string> = {
@@ -186,6 +203,21 @@ function comparableValue(field: BlConsistencyField, value: unknown) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
+}
+
+export function isBlValidationExceptionMatch(
+  exception: BlValidationException,
+  warning: BlConsistencyWarning
+) {
+  return exception.status === 'ACTIVE'
+    && warning.kind === 'source_mismatch'
+    && exception.field_name === warning.field
+    && comparableValue(warning.field, exception.document_value)
+      === comparableValue(warning.field, warning.documentValue)
+    && comparableValue(warning.field, exception.source_value)
+      === comparableValue(warning.field, warning.sourceValue)
+    && comparableValue(warning.field, exception.source_label)
+      === comparableValue(warning.field, warning.sourceLabel)
 }
 
 function sourceWarning(

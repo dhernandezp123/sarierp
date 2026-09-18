@@ -13,6 +13,14 @@ import HouseBLPdf, { type HBLData } from '@/src/components/pdf/house-bl-pdf'
 import AWBPdf, { type AWBData } from '@/src/components/pdf/awb-pdf'
 import CartaPortePdf, { type CartaPorteData } from '@/src/components/pdf/carta-porte-pdf'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/src/components/ui/dialog'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { BLValidationPanel } from '@/src/components/operations/BLValidationPanel'
@@ -21,7 +29,10 @@ import {
   getBlConsistencyWarnings,
   getBlReadiness,
   inheritParentMblData,
+  isBlValidationExceptionMatch,
   type BlConsistencyField,
+  type BlConsistencyWarning,
+  type BlValidationException,
   type BlValidationSources,
 } from '@/src/lib/bl-document-workflow'
 import {
@@ -204,6 +215,10 @@ type DocumentContext = {
   routingNumber: string
   bookingNumber: string
 }
+
+type ExceptionAction =
+  | { kind: 'justify'; warning: BlConsistencyWarning }
+  | { kind: 'revoke'; exception: BlValidationException }
 
 function formToHBLData(
   form: BLForm,
@@ -410,6 +425,10 @@ export default function BLPage() {
     operational: {},
     commercial: {},
   })
+  const [validationExceptions, setValidationExceptions] = useState<BlValidationException[]>([])
+  const [exceptionAction, setExceptionAction] = useState<ExceptionAction | null>(null)
+  const [exceptionReason, setExceptionReason] = useState('')
+  const [savingException, setSavingException] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const savedFormRef = useRef<BLForm | null>(null)
 
@@ -663,12 +682,14 @@ export default function BLPage() {
       }
 
       // Load amendment history
-      const [{ data: amendData }, { data: sendData }] = await Promise.all([
+      const [{ data: amendData }, { data: sendData }, { data: exceptionData }] = await Promise.all([
         supabase.from('bl_amendments').select('*').eq('bl_id', blId).order('amendment_number', { ascending: true }),
         supabase.from('bl_draft_sends').select('*').eq('bl_id', blId).order('sent_at', { ascending: false }),
+        supabase.from('bl_validation_exceptions').select('*').eq('bl_id', blId).order('created_at', { ascending: false }),
       ])
       setAmendments((amendData || []) as Amendment[])
       setDraftSends((sendData || []) as DraftSend[])
+      setValidationExceptions((exceptionData || []) as BlValidationException[])
 
       setLoading(false)
       return
@@ -1004,6 +1025,25 @@ export default function BLPage() {
       return
     }
 
+    if (['MBL Validado', 'Emitido'].includes(transition.next)) {
+      const unresolvedDifferences = getBlConsistencyWarnings(form, validationSources)
+        .filter((warning) => warning.kind === 'source_mismatch')
+        .filter((warning) =>
+          !validationExceptions.some((exception) =>
+            isBlValidationExceptionMatch(exception, warning)
+          )
+        )
+
+      if (unresolvedDifferences.length > 0) {
+        toast.error(
+          `Corrige o justifica antes de finalizar: ${unresolvedDifferences
+            .map(({ label }) => label)
+            .join(', ')}`
+        )
+        return
+      }
+    }
+
     if (!documentUpdatedAt) {
       toast.error('No se pudo verificar la versión del documento. Recarga la página.')
       return
@@ -1054,6 +1094,78 @@ export default function BLPage() {
     if (result?.booking_updated_at) setBookingUpdatedAt(result.booking_updated_at)
     if (result?.amendment) setAmendments((current) => [...current, result.amendment!])
     toast.success(`Estado actualizado: ${updatedForm.status}`)
+  }
+
+  const closeExceptionDialog = () => {
+    if (savingException) return
+    setExceptionAction(null)
+    setExceptionReason('')
+  }
+
+  const submitExceptionAction = async () => {
+    if (!exceptionAction) return
+    const reason = exceptionReason.trim()
+    if (reason.length < 8) {
+      toast.error('Escribe un motivo de al menos 8 caracteres.')
+      return
+    }
+
+    setSavingException(true)
+
+    if (exceptionAction.kind === 'justify') {
+      const warning = exceptionAction.warning
+      const { data, error } = await supabase.rpc('acknowledge_bl_validation_exception', {
+        p_bl_id: blId,
+        p_field_name: warning.field,
+        p_document_value: warning.documentValue,
+        p_source_value: warning.sourceValue,
+        p_source_label: warning.sourceLabel,
+        p_reason: reason,
+      })
+
+      setSavingException(false)
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      const inserted = data as BlValidationException
+      setValidationExceptions((current) => [
+        inserted,
+        ...current.map((exception) =>
+          exception.status === 'ACTIVE' && exception.field_name === inserted.field_name
+            ? {
+                ...exception,
+                status: 'SUPERSEDED' as const,
+                closed_at: inserted.created_at,
+                closed_by: user?.id || null,
+                closure_reason: 'Reemplazada por una nueva justificación para el campo',
+              }
+            : exception
+        ),
+      ])
+      toast.success('Diferencia documental justificada')
+    } else {
+      const { data, error } = await supabase.rpc('revoke_bl_validation_exception', {
+        p_exception_id: exceptionAction.exception.id,
+        p_reason: reason,
+      })
+
+      setSavingException(false)
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      const revoked = data as BlValidationException
+      setValidationExceptions((current) =>
+        current.map((exception) => exception.id === revoked.id ? revoked : exception)
+      )
+      toast.success('Excepción revocada; la diferencia requiere revisión nuevamente')
+    }
+
+    setExceptionAction(null)
+    setExceptionReason('')
   }
 
   const uploadDraftFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1374,8 +1486,18 @@ export default function BLPage() {
         blocking={readiness.blocking}
         recommended={readiness.warnings}
         consistencyWarnings={consistencyWarnings}
+        validationExceptions={validationExceptions}
         locked={isDocumentLocked}
+        canManageExceptions={!isNew && !isDocumentLocked}
         onUseSource={useValidationSource}
+        onJustify={(warning) => {
+          setExceptionAction({ kind: 'justify', warning })
+          setExceptionReason('')
+        }}
+        onRevoke={(exception) => {
+          setExceptionAction({ kind: 'revoke', exception })
+          setExceptionReason('')
+        }}
       />
 
       {/* MBL Draft Upload */}
@@ -1954,6 +2076,86 @@ export default function BLPage() {
           )}
         </section>
       )}
+
+      <Dialog
+        open={Boolean(exceptionAction)}
+        onOpenChange={(open) => {
+          if (!open) closeExceptionDialog()
+        }}
+      >
+        <DialogContent className="sm:max-w-lg" showCloseButton={!savingException}>
+          <DialogHeader>
+            <DialogTitle>
+              {exceptionAction?.kind === 'justify'
+                ? 'Justificar diferencia documental'
+                : 'Revocar excepción documental'}
+            </DialogTitle>
+            <DialogDescription>
+              {exceptionAction?.kind === 'justify'
+                ? 'La justificación quedará vinculada a los valores comparados y registrada en la bitácora.'
+                : 'La diferencia volverá a mostrarse como pendiente de revisión. El historial anterior no se elimina.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {exceptionAction?.kind === 'justify' && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900/60 dark:bg-amber-950/20">
+              <p className="font-semibold text-slate-900 dark:text-white">
+                {exceptionAction.warning.label}
+              </p>
+              <p className="mt-1 break-words text-slate-600 dark:text-slate-300">
+                Documento: {exceptionAction.warning.documentValue}
+              </p>
+              <p className="mt-0.5 break-words text-slate-500 dark:text-slate-400">
+                {exceptionAction.warning.sourceLabel}: {exceptionAction.warning.sourceValue}
+              </p>
+            </div>
+          )}
+
+          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            {exceptionAction?.kind === 'justify' ? 'Justificación' : 'Motivo de revocación'}
+            <textarea
+              rows={4}
+              maxLength={2000}
+              value={exceptionReason}
+              onChange={(event) => setExceptionReason(event.target.value)}
+              className={`${fieldClass} mt-1 min-h-24`}
+              placeholder={
+                exceptionAction?.kind === 'justify'
+                  ? 'Ej: Switch BL autorizado por el cliente el 18/09/2026...'
+                  : 'Explica por qué la excepción ya no es válida...'
+              }
+              disabled={savingException}
+              autoFocus
+            />
+            <span className="mt-1 block text-slate-400">
+              Mínimo 8 caracteres. No incluyas datos sensibles innecesarios.
+            </span>
+          </label>
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={closeExceptionDialog}
+              disabled={savingException}
+              className={secondaryButtonClass}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={submitExceptionAction}
+              disabled={savingException || exceptionReason.trim().length < 8}
+              className={`${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              {savingException
+                ? 'Guardando...'
+                : exceptionAction?.kind === 'justify'
+                  ? 'Guardar justificación'
+                  : 'Revocar excepción'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
