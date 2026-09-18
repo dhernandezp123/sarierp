@@ -46,6 +46,8 @@ import {
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import { buildDocumentationWorkspace } from '@/src/lib/documentation-workspace'
+import { deriveBookingOperationalState } from '@/src/lib/booking-operational-state'
+import { operationsReturnHref } from '@/src/lib/operations-navigation'
 
 type ClienteJoin = {
   nombre: string | null
@@ -117,6 +119,7 @@ type RoutingData = {
   id: string
   quotation_id: string | null
   routing_number: string
+  operations_assigned_to: string | null
   container_type: string | null
   container_qty: number | null
   supplier_name: string | null
@@ -400,6 +403,11 @@ export default function RoutingBookingChildPage() {
   const { profile } = useUser()
   const id = params.id
   const bookingId = params.bookingId
+  const returnHref = typeof window === 'undefined'
+    ? '/operations/shipping-instructions'
+    : operationsReturnHref(
+        new URLSearchParams(window.location.search).get('returnTo')
+      )
   const canManageBookingDocuments =
     profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
 
@@ -540,6 +548,7 @@ export default function RoutingBookingChildPage() {
         id,
         quotation_id,
         routing_number,
+        operations_assigned_to,
         container_type,
         container_qty,
         supplier_name,
@@ -1280,10 +1289,12 @@ export default function RoutingBookingChildPage() {
         <p className="text-sm text-red-500">Booking no encontrado.</p>
         <button
           type="button"
-          onClick={() => router.push(`/operations/shipping-instructions/${id}`)}
+          onClick={() => router.push(returnHref)}
           className={`${secondaryButtonClass} mt-4`}
         >
-          Volver a Shipping Instruction
+          {returnHref.startsWith('/operations/dashboard')
+            ? 'Volver al Control Tower'
+            : 'Volver a Shipping Instruction'}
         </button>
       </div>
     )
@@ -1377,6 +1388,50 @@ export default function RoutingBookingChildPage() {
     readiness: readinessEvaluation,
     isArrived,
   })
+  const operationalState = deriveBookingOperationalState({
+    shipmentStatus: booking.shipment_status,
+    bookingNumber: booking.booking_number,
+    carrierBooking: booking.carrier_booking,
+    etd: booking.etd,
+    eta: booking.eta,
+    actualEtd: booking.actual_etd,
+    actualEta: booking.actual_eta,
+    assignedTo: routing.operations_assigned_to,
+    mode:
+      readinessEvaluation?.mode ||
+      quotation?.tipo_transporte ||
+      quotation?.quote_type,
+    documents: bookingDocuments,
+    bills: billsOfLading,
+    readiness: readinessEvaluation
+      ? {
+          ready: readinessEvaluation.ready,
+          blocking_count: readinessEvaluation.blocking_count,
+          warning_count: readinessEvaluation.warning_count,
+          overdue_cutoff_count: readinessEvaluation.overdue_cutoffs.length,
+          missing_vgm_count: readinessEvaluation.missing_vgm_containers.length,
+        }
+      : null,
+  })
+  const bookingPath = `/operations/shipping-instructions/${id}/bookings/${bookingId}`
+  const returnQuery = returnHref.startsWith('/operations/dashboard')
+    ? `?returnTo=${encodeURIComponent(returnHref)}`
+    : ''
+  const bookingContextPath = `${bookingPath}${returnQuery}`
+  const operationalActionHref = (() => {
+    switch (operationalState.nextAction?.target) {
+      case 'shipping_instruction':
+        return `/operations/shipping-instructions/${id}${returnQuery}`
+      case 'booking_schedule':
+        return `${bookingContextPath}#booking-schedule`
+      case 'booking_readiness':
+        return `${bookingContextPath}#booking-readiness`
+      case 'booking_documents':
+        return `${bookingContextPath}#booking-documents`
+      default:
+        return `${bookingContextPath}#booking-header`
+    }
+  })()
 
   return (
     <div id="booking-header" className="scroll-mt-24">
@@ -1458,10 +1513,12 @@ export default function RoutingBookingChildPage() {
               )}
               <button
                 type="button"
-                onClick={() => router.push(`/operations/shipping-instructions/${id}`)}
+                onClick={() => router.push(returnHref)}
                 className={secondaryButtonClass}
               >
-                Volver a SI
+                {returnHref.startsWith('/operations/dashboard')
+                  ? 'Volver al Control Tower'
+                  : 'Volver a SI'}
               </button>
             </div>
           </div>
@@ -1472,6 +1529,17 @@ export default function RoutingBookingChildPage() {
         <DocumentationWorkspace
           items={documentationItems}
           reference={bookingReference || routing.routing_number}
+          operationalAction={
+            operationalState.nextAction
+              ? {
+                  label: operationalState.nextAction.label,
+                  href: operationalActionHref,
+                  summary:
+                    operationalState.attentionReason ||
+                    `Estado derivado: ${operationalState.displayStatus}`,
+                }
+              : null
+          }
         />
 
         <div id="booking-data" className="grid scroll-mt-24 gap-6 lg:grid-cols-2">
@@ -1505,8 +1573,14 @@ export default function RoutingBookingChildPage() {
             </Field>
 
             <Field label="Estado operativo">
-              <div className="flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                {booking.shipment_status || 'Booking Solicitado'}
+              <div className="min-h-10 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                <p className="font-semibold">{operationalState.displayStatus}</p>
+                {operationalState.hasStatusDrift && (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                    Registrado: {operationalState.persistedStatus}.{' '}
+                    {operationalState.statusDriftReason}
+                  </p>
+                )}
               </div>
             </Field>
           </SectionCard>

@@ -17,6 +17,7 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { billingReturnHref } from '@/src/lib/billing-readiness'
 
 type Invoice = {
   id: string
@@ -226,6 +227,10 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const rawReturnTo = typeof window === 'undefined'
+    ? null
+    : new URLSearchParams(window.location.search).get('returnTo')
+  const returnHref = rawReturnTo ? billingReturnHref(rawReturnTo) : '/invoicing'
   const [loading, setLoading] = useState(true)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [items, setItems] = useState<InvoiceItem[]>([])
@@ -540,7 +545,7 @@ export default function InvoiceDetailPage() {
     <div className="space-y-6">
       <Breadcrumbs
         items={[
-          { label: 'Facturación', href: '/invoicing' },
+          { label: 'Facturación', href: returnHref },
           { label: invoice.invoice_number || 'Detalle de factura' },
         ]}
       />
@@ -548,7 +553,7 @@ export default function InvoiceDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex items-start gap-4">
-          <button type="button" onClick={() => router.push('/invoicing')} className={secondaryButtonClass}>
+          <button type="button" onClick={() => router.push(returnHref)} className={secondaryButtonClass}>
             <ChevronLeft className="h-4 w-4" />
             Volver
           </button>

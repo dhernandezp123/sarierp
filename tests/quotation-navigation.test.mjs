@@ -26,6 +26,9 @@ test('role ordering preserves all groups and does not expand route permissions',
   assert.equal(canAccessPath('Finanzas', '/quotations/new'), false)
   assert.equal(canAccessPath('Ventas', '/pricing-comparison'), false)
   assert.equal(canAccessPath('Pricing', '/quotations/quote-1'), false)
+  assert.equal(canAccessPath('Ventas', '/agents/agent-1'), true)
+  assert.equal(canAccessPath('Operaciones', '/agents/agent-1'), true)
+  assert.equal(canAccessPath('Contabilidad', '/agents'), false)
 })
 
 test('return to list preserves filters and rejects external or unrelated paths', () => {
@@ -34,6 +37,10 @@ test('return to list preserves filters and rejects external or unrelated paths',
   assert.equal(result.searchParams.get('search'), 'ACME & Co')
   assert.equal(result.searchParams.get('page'), '3')
   assert.equal(result.searchParams.get('from'), '2026-09-01')
+  assert.equal(
+    quotationListHref('/ventas?work=urgent&workSearch=ACME&next=/admin'),
+    '/ventas?work=urgent&workSearch=ACME'
+  )
   for (const value of ['https://evil.example/historico', '//evil.example', '/historico/../admin', '/historico/activity', '/historico#bad', 'javascript:alert(1)', null]) assert.equal(quotationListHref(value), '/historico')
   assert.equal(quotationListHref('/historico?next=https://evil.example'), '/historico')
 })

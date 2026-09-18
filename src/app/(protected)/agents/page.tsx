@@ -1,14 +1,29 @@
 ﻿'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase/client'
 import { cardClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import AgentForm from '@/src/components/agents/AgentForm'
+import { useUser } from '@/src/hooks/useUser'
+import { canAccessPath } from '@/src/lib/permissions'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+type AgentListRow = {
+  id: string
+  name: string | null
+  type: string | null
+  country: string | null
+  city: string | null
+  contact_name: string | null
+  email: string | null
+  currency: string | null
+  profit_per_container: number | null
+  mbl_fee: number | null
+}
 
 function getTipoBadge(tipo?: string | null) {
   switch (tipo) {
@@ -25,21 +40,27 @@ function getTipoBadge(tipo?: string | null) {
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function AgentsPage() {
-  const [agents,  setAgents]  = useState<any[]>([])
+  const { profile } = useUser()
+  const [agents,  setAgents]  = useState<AgentListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
+  const canManageCatalog = profile?.rol === 'Admin' || profile?.rol === 'Pricing'
+  const canOpenSuppliers = canAccessPath(profile?.rol, '/suppliers')
 
-  useEffect(() => { fetchAgents() }, [])
-
-  const fetchAgents = async () => {
+  const fetchAgents = useCallback(async () => {
     const { data, error } = await supabase
       .from('agents')
       .select('*')
       .order('created_at', { ascending: false })
     if (error) toast.error('Error al cargar agentes')
-    setAgents(data || [])
+    setAgents((data || []) as AgentListRow[])
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fetchAgents() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchAgents])
 
   const filtered = agents.filter((a) => {
     const q = search.toLowerCase()
@@ -66,25 +87,33 @@ export default function AgentsPage() {
           Agentes de Carga
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Catálogo operativo de agentes con tarifas base y rutas. Para pagos y cuentas por pagar, ve a <a href="/suppliers" className="text-blue-600 hover:underline dark:text-blue-400">Proveedores</a>.
+          Directorio operativo con contacto, lanes, ofertas y expedientes vinculados.
+          {' '}La contraparte para pagos se administra por separado en{' '}
+          {canOpenSuppliers ? (
+            <Link href="/suppliers" className="text-blue-600 hover:underline dark:text-blue-400">Proveedores</Link>
+          ) : (
+            <span>Proveedores</span>
+          )}.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+      <div className={`grid gap-6 ${canManageCatalog ? 'lg:grid-cols-[340px_1fr]' : ''}`}>
 
         {/* ── Formulario nuevo agente ── */}
-        <div className={`${cardClass} self-start`}>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-white">
-            Nuevo Agente
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-            Completa los datos del agente o proveedor.
-          </p>
+        {canManageCatalog && (
+          <div className={`${cardClass} self-start`}>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+              Nuevo Agente
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+              Completa los datos del agente o proveedor.
+            </p>
 
-          <div className="mt-5">
-            <AgentForm onCreated={fetchAgents} />
+            <div className="mt-5">
+              <AgentForm onCreated={fetchAgents} />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ── Tabla de agentes ── */}
         <div className={`${cardClass} p-0 overflow-hidden`}>

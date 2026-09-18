@@ -2,11 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { operationStatuses } from '@/src/lib/operation-status'
 import { supabase } from '@/src/lib/supabase/client'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { filterSelectClass } from '@/src/lib/ui-classes'
 import { Pagination } from '@/src/components/ui/Pagination'
+import {
+  deriveBookingOperationalState,
+  type BookingOperationalState,
+} from '@/src/lib/booking-operational-state'
+import { formatDate } from '@/src/lib/format'
 
 type BookingItem = {
   id: string
@@ -20,6 +26,7 @@ type BookingItem = {
   carrier: string | null
   etd: string | null
   eta: string | null
+  actual_etd: string | null
   actual_eta: string | null
   operations_assigned_to: string | null
   tracking_url: string | null
@@ -28,6 +35,78 @@ type BookingItem = {
     nombre: string | null
     apellido: string | null
   } | null
+  operational_state: BookingOperationalState
+}
+
+type BookingQueryItem = Omit<
+  BookingItem,
+  | 'routing_number'
+  | 'reference_number'
+  | 'operations_assigned_to'
+  | 'cliente'
+  | 'assigned_user'
+  | 'operational_state'
+> & {
+  booking_documents: Array<{ document_type: string | null }> | null
+  bills_of_lading: Array<{
+    bl_type: string | null
+    status: string | null
+  }> | null
+  shipment:
+    | { requires_hbl: boolean | null; service_type: string | null }
+    | Array<{ requires_hbl: boolean | null; service_type: string | null }>
+    | null
+  shipping_instruction:
+    | {
+        routing_number: string | null
+        reference_number: string | null
+        operations_assigned_to: string | null
+        cliente:
+          | { nombre: string | null }
+          | Array<{ nombre: string | null }>
+          | null
+        assigned_user:
+          | { nombre: string | null; apellido: string | null }
+          | Array<{ nombre: string | null; apellido: string | null }>
+          | null
+        quotation:
+          | { tipo_transporte: string | null; quote_type: string | null }
+          | Array<{ tipo_transporte: string | null; quote_type: string | null }>
+          | null
+      }
+    | Array<{
+        routing_number: string | null
+        reference_number: string | null
+        operations_assigned_to: string | null
+        cliente:
+          | { nombre: string | null }
+          | Array<{ nombre: string | null }>
+          | null
+        assigned_user:
+          | { nombre: string | null; apellido: string | null }
+          | Array<{ nombre: string | null; apellido: string | null }>
+          | null
+        quotation:
+          | { tipo_transporte: string | null; quote_type: string | null }
+          | Array<{ tipo_transporte: string | null; quote_type: string | null }>
+          | null
+      }>
+    | null
+}
+
+type ReadinessOverview = {
+  booking_id: string
+  mode: string
+  ready: boolean
+  blocking_count: number
+  warning_count: number
+  overdue_cutoff_count: number
+  missing_vgm_count: number
+}
+
+function resolveJoin<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
 }
 
 function getStatusBadgeClass(status?: string | null) {
@@ -40,6 +119,11 @@ function getStatusBadgeClass(status?: string | null) {
       return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
     case 'Booking Confirmado':
       return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+    case 'Documentación Pendiente':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+    case 'Listo para Embarque':
+      return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300'
+    case 'Embarcado':
     case 'En Tránsito':
       return 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
     case 'Arribado':
@@ -50,51 +134,17 @@ function getStatusBadgeClass(status?: string | null) {
   }
 }
 
-function getEtaDisplay(item: BookingItem) {
-  const dateValue = item.actual_eta || item.eta
+function actionHref(item: BookingItem) {
+  const bookingPath = `/operations/shipping-instructions/${item.shipping_instruction_id}/bookings/${item.id}`
+  const target = item.operational_state.nextAction?.target
 
-  if (!dateValue) {
-    return {
-      label: 'Sin ETA',
-      className: 'text-slate-500 dark:text-slate-400',
-    }
+  if (target === 'shipping_instruction') {
+    return `/operations/shipping-instructions/${item.shipping_instruction_id}`
   }
-
-  const eta = new Date(dateValue)
-  const today = new Date()
-
-  const diffDays = Math.ceil(
-    (eta.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-  )
-
-  if (
-    diffDays < 0 &&
-    !['Finalizado', 'Arribado'].includes(item.shipment_status || '')
-  ) {
-    return {
-      label: `Vencida hace ${Math.abs(diffDays)} días`,
-      className: 'font-semibold text-red-600 dark:text-red-400',
-    }
-  }
-
-  if (diffDays === 0) {
-    return {
-      label: 'ETA hoy',
-      className: 'font-semibold text-amber-600 dark:text-amber-400',
-    }
-  }
-
-  if (diffDays > 0 && diffDays <= 7) {
-    return {
-      label: `En ${diffDays} días`,
-      className: 'font-semibold text-blue-600 dark:text-blue-400',
-    }
-  }
-
-  return {
-    label: dateValue,
-    className: 'text-slate-600 dark:text-slate-300',
-  }
+  if (target === 'booking_schedule') return `${bookingPath}#booking-schedule`
+  if (target === 'booking_readiness') return `${bookingPath}#booking-readiness`
+  if (target === 'booking_documents') return `${bookingPath}#booking-documents`
+  return bookingPath
 }
 
 export default function OperationsBookingsPage() {
@@ -103,46 +153,82 @@ export default function OperationsBookingsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [etaFilter, setEtaFilter] = useState('Todos')
+  const [assignmentFilter, setAssignmentFilter] = useState('Todos')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
+  const [errorMessage, setErrorMessage] = useState('')
 
   const loadItems = async () => {
     setLoading(true)
+    setErrorMessage('')
 
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        id,
-        shipment_id,
-        shipping_instruction_id,
-        booking_number,
-        carrier_booking,
-        shipment_status,
-        carrier,
-        etd,
-        eta,
-        actual_eta,
-        tracking_url,
-        created_at,
-        shipping_instruction:shipping_instructions (
+    const [bookingsResult, readinessResult] = await Promise.all([
+      supabase
+        .from('bookings')
+        .select(`
           id,
-          routing_number,
-          reference_number,
-          operations_assigned_to,
-          cliente:clientes (
-            nombre
+          shipment_id,
+          shipping_instruction_id,
+          booking_number,
+          carrier_booking,
+          shipment_status,
+          carrier,
+          etd,
+          eta,
+          actual_etd,
+          actual_eta,
+          tracking_url,
+          created_at,
+          shipment:shipments!bookings_shipment_id_fkey (
+            requires_hbl,
+            service_type
           ),
-          assigned_user:profiles!shipping_instructions_operations_assigned_to_fkey (
-            nombre,
-            apellido
+          shipping_instruction:shipping_instructions!bookings_shipping_instruction_id_fkey (
+            id,
+            routing_number,
+            reference_number,
+            operations_assigned_to,
+            cliente:clientes (
+              nombre
+            ),
+            assigned_user:profiles!shipping_instructions_operations_assigned_to_fkey (
+              nombre,
+              apellido
+            ),
+            quotation:quotations (
+              tipo_transporte,
+              quote_type
+            )
+          ),
+          booking_documents (
+            document_type
+          ),
+          bills_of_lading (
+            bl_type,
+            status
           )
-        )
-      `)
-      .eq('booking_lifecycle_status', 'ACTIVE')
-      .order('created_at', { ascending: false })
+        `)
+        .eq('booking_lifecycle_status', 'ACTIVE')
+        .order('created_at', { ascending: false }),
+      supabase.rpc('get_booking_readiness_overview', { p_shipment_id: null }),
+    ])
 
-    if (!error && data) {
-      const normalizedItems = (data as any[]).map((item) => {
+    const loadError = bookingsResult.error || readinessResult.error
+    if (loadError) {
+      setItems([])
+      setErrorMessage(loadError.message)
+      setLoading(false)
+      return
+    }
+
+    if (bookingsResult.data) {
+      const readinessByBookingId = new Map(
+        ((readinessResult.data || []) as ReadinessOverview[]).map((overview) => [
+          overview.booking_id,
+          overview,
+        ])
+      )
+      const normalizedItems = (bookingsResult.data as BookingQueryItem[]).map((item) => {
         const shippingInstruction = Array.isArray(item.shipping_instruction)
           ? item.shipping_instruction[0] ?? null
           : item.shipping_instruction
@@ -152,6 +238,28 @@ export default function OperationsBookingsPage() {
         const assignedUser = Array.isArray(shippingInstruction?.assigned_user)
           ? shippingInstruction.assigned_user[0] ?? null
           : shippingInstruction?.assigned_user ?? null
+        const quotation = resolveJoin(shippingInstruction?.quotation)
+        const shipment = resolveJoin(item.shipment)
+        const readiness = readinessByBookingId.get(item.id) || null
+        const operationalState = deriveBookingOperationalState({
+          shipmentStatus: item.shipment_status,
+          bookingNumber: item.booking_number,
+          carrierBooking: item.carrier_booking,
+          etd: item.etd,
+          eta: item.eta,
+          actualEtd: item.actual_etd,
+          actualEta: item.actual_eta,
+          assignedTo: shippingInstruction?.operations_assigned_to,
+          mode:
+            readiness?.mode ||
+            quotation?.tipo_transporte ||
+            quotation?.quote_type ||
+            shipment?.service_type,
+          requiresHbl: shipment?.requires_hbl,
+          documents: item.booking_documents,
+          bills: item.bills_of_lading,
+          readiness,
+        })
 
         return {
           id: item.id,
@@ -165,12 +273,14 @@ export default function OperationsBookingsPage() {
           carrier: item.carrier,
           etd: item.etd,
           eta: item.eta,
+          actual_etd: item.actual_etd,
           actual_eta: item.actual_eta,
           operations_assigned_to:
             shippingInstruction?.operations_assigned_to || null,
           tracking_url: item.tracking_url,
           cliente,
           assigned_user: assignedUser,
+          operational_state: operationalState,
         } satisfies BookingItem
       })
 
@@ -181,43 +291,38 @@ export default function OperationsBookingsPage() {
   }
 
   useEffect(() => {
-    loadItems()
+    const timeout = window.setTimeout(() => {
+      void loadItems()
+    }, 0)
+
+    return () => window.clearTimeout(timeout)
   }, [])
 
   const metrics = useMemo(() => {
-    const today = new Date()
-
     const active = items.filter(
-      (item) =>
-        !['Finalizado', 'Arribado'].includes(item.shipment_status || '')
+      (item) => !item.operational_state.isFinal
     ).length
 
-    const withoutBooking = items.filter((item) => !item.booking_number).length
+    const withoutBooking = items.filter(
+      (item) => item.operational_state.isPendingConfirmation
+    ).length
 
     const inTransit = items.filter(
-      (item) => item.shipment_status === 'En Tránsito'
+      (item) => item.operational_state.displayStatus === 'En Tránsito'
     ).length
 
-    const arrivalsSoon = items.filter((item) => {
-      const dateValue = item.actual_eta || item.eta
-      if (!dateValue) return false
-      const eta = new Date(dateValue)
-      const diff = (eta.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-      return diff >= 0 && diff <= 7
-    }).length
+    const arrivalsSoon = items.filter((item) =>
+      ['today', 'upcoming'].includes(item.operational_state.eta.kind)
+    ).length
 
-    const delayed = items.filter((item) => {
-      const dateValue = item.actual_eta || item.eta
-      if (!dateValue) return false
-      const eta = new Date(dateValue)
+    const delayed = items.filter(
+      (item) => item.operational_state.eta.kind === 'overdue'
+    ).length
+    const unassigned = items.filter(
+      (item) => item.operational_state.isUnassigned
+    ).length
 
-      return (
-        eta < today &&
-        !['Finalizado', 'Arribado'].includes(item.shipment_status || '')
-      )
-    }).length
-
-    return { active, withoutBooking, inTransit, arrivalsSoon, delayed }
+    return { active, withoutBooking, inTransit, arrivalsSoon, delayed, unassigned }
   }, [items])
 
   const filteredItems = items.filter((item) => {
@@ -240,28 +345,23 @@ export default function OperationsBookingsPage() {
       assigned.toLowerCase().includes(query)
 
     const matchesStatus =
-      statusFilter === 'Todos' || item.shipment_status === statusFilter
-
-    const dateValue = item.actual_eta || item.eta
-    const etaDate = dateValue ? new Date(dateValue) : null
-    const now = new Date()
-    const diffDays = etaDate
-      ? (etaDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-      : null
+      statusFilter === 'Todos' ||
+      item.operational_state.displayStatus === statusFilter
 
     const matchesEta =
       etaFilter === 'Todos' ||
-      (etaFilter === 'Sin ETA' && !etaDate) ||
+      (etaFilter === 'Sin ETA' && item.operational_state.eta.kind === 'missing') ||
       (etaFilter === 'Con retraso' &&
-        etaDate !== null &&
-        etaDate < now &&
-        !['Finalizado', 'Arribado'].includes(item.shipment_status || '')) ||
+        item.operational_state.eta.kind === 'overdue') ||
       (etaFilter === 'Próximos 7 días' &&
-        diffDays !== null &&
-        diffDays >= 0 &&
-        diffDays <= 7)
+        ['today', 'upcoming'].includes(item.operational_state.eta.kind))
 
-    return matchesSearch && matchesStatus && matchesEta
+    const matchesAssignment =
+      assignmentFilter === 'Todos' ||
+      (assignmentFilter === 'Sin asignar' && item.operational_state.isUnassigned) ||
+      (assignmentFilter === 'Asignados' && !item.operational_state.isUnassigned)
+
+    return matchesSearch && matchesStatus && matchesEta && matchesAssignment
   })
 
   const paginatedItems = filteredItems.slice((page - 1) * pageSize, page * pageSize)
@@ -280,26 +380,62 @@ export default function OperationsBookingsPage() {
     )
   }
 
+  if (errorMessage) {
+    return (
+      <div className="space-y-6">
+        <BookingsHeader />
+        <section className="rounded-2xl border border-red-200 bg-red-50 p-6 shadow-sm dark:border-red-900/50 dark:bg-red-950/20">
+          <div className="flex items-start gap-3">
+            <AlertTriangle
+              aria-hidden="true"
+              className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-300"
+            />
+            <div>
+              <h2 className="font-semibold text-red-900 dark:text-red-100">
+                No se pudieron cargar los bookings
+              </h2>
+              <p role="alert" className="mt-1 text-sm text-red-700 dark:text-red-200">
+                {errorMessage}
+              </p>
+              <button
+                type="button"
+                onClick={() => void loadItems()}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100 dark:hover:bg-red-900/50"
+              >
+                <RefreshCw aria-hidden="true" className="h-4 w-4" />
+                Reintentar
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Bookings Operativos
-        </h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Bandeja diaria de operaciones activas, ETAs y tracking.
-        </p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <BookingsHeader />
+        <button
+          type="button"
+          onClick={() => void loadItems()}
+          className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <RefreshCw aria-hidden="true" className="h-4 w-4" />
+          Actualizar
+        </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <MetricCard title="Activos" value={metrics.active} />
         <MetricCard title="Sin Booking" value={metrics.withoutBooking} />
         <MetricCard title="En Tránsito" value={metrics.inTransit} />
         <MetricCard title="Arribos 7 días" value={metrics.arrivalsSoon} />
         <MetricCard title="Con retraso" value={metrics.delayed} danger />
+        <MetricCard title="Sin asignar" value={metrics.unassigned} danger />
       </div>
 
-      <div className="mt-6 grid gap-3 lg:grid-cols-3">
+      <div className="mt-6 grid gap-3 lg:grid-cols-4">
         <input
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1) }}
@@ -330,6 +466,16 @@ export default function OperationsBookingsPage() {
           <option value="Con retraso">Con retraso</option>
           <option value="Próximos 7 días">Próximos 7 días</option>
         </select>
+
+        <select
+          value={assignmentFilter}
+          onChange={(e) => { setAssignmentFilter(e.target.value); setPage(1) }}
+          className={filterSelectClass}
+        >
+          <option value="Todos">Todas las asignaciones</option>
+          <option value="Sin asignar">Sin asignar</option>
+          <option value="Asignados">Asignados</option>
+        </select>
       </div>
 
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
@@ -348,26 +494,34 @@ export default function OperationsBookingsPage() {
                 <th>Booking</th>
                 <th>ETD</th>
                 <th>ETA</th>
-                <th>Estado</th>
+                <th>Estado derivado</th>
                 <th>Asignado</th>
+                <th>Siguiente acción</th>
                 <th></th>
               </tr>
             </thead>
 
             <tbody>
-              {paginatedItems.map((item) => {
+              {paginatedItems.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={11}
+                    className="border-t border-slate-100 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400"
+                  >
+                    {items.length === 0
+                      ? 'No hay bookings activos.'
+                      : 'No hay bookings que coincidan con los filtros.'}
+                  </td>
+                </tr>
+              ) : paginatedItems.map((item) => {
                 const assigned =
                   item.assigned_user?.nombre || item.assigned_user?.apellido
                     ? `${item.assigned_user?.nombre || ''} ${
                         item.assigned_user?.apellido || ''
                       }`.trim()
                     : 'Sin asignar'
-                const etaDisplay = getEtaDisplay(item)
-                const isDelayed =
-                  etaDisplay.label.startsWith('Vencida') &&
-                  !['Finalizado', 'Arribado'].includes(
-                    item.shipment_status || ''
-                  )
+                const state = item.operational_state
+                const isDelayed = state.eta.kind === 'overdue'
 
                 return (
                   <tr
@@ -383,15 +537,25 @@ export default function OperationsBookingsPage() {
                     <td>{item.cliente?.nombre || 'N/A'}</td>
                     <td>{item.carrier || 'N/A'}</td>
                     <td>{item.booking_number || 'Pendiente'}</td>
-                    <td>{item.etd || 'N/A'}</td>
+                    <td>{formatDate(item.etd, 'N/A')}</td>
                     <td>
                       <div>
-                        <p className={etaDisplay.className}>
-                          {etaDisplay.label}
+                        <p
+                          className={
+                            state.eta.kind === 'overdue'
+                              ? 'font-semibold text-red-600 dark:text-red-400'
+                              : state.eta.kind === 'today'
+                                ? 'font-semibold text-amber-600 dark:text-amber-400'
+                                : state.eta.kind === 'upcoming'
+                                  ? 'font-semibold text-blue-600 dark:text-blue-400'
+                                  : 'text-slate-600 dark:text-slate-300'
+                          }
+                        >
+                          {state.eta.label}
                         </p>
-                        {(item.actual_eta || item.eta) && (
+                        {state.eta.date && (
                           <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {item.actual_eta || item.eta}
+                            {formatDate(state.eta.date)}
                           </p>
                         )}
                       </div>
@@ -399,13 +563,41 @@ export default function OperationsBookingsPage() {
                     <td>
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClass(
-                          item.shipment_status
+                          state.displayStatus
                         )}`}
                       >
-                        {item.shipment_status || 'N/A'}
+                        {state.displayStatus}
+                      </span>
+                      {state.hasStatusDrift && (
+                        <p className="mt-1 max-w-40 text-xs text-amber-700 dark:text-amber-300">
+                          Registrado: {state.persistedStatus}
+                        </p>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          state.isUnassigned
+                            ? 'font-semibold text-amber-700 dark:text-amber-300'
+                            : undefined
+                        }
+                      >
+                        {assigned}
                       </span>
                     </td>
-                    <td>{assigned}</td>
+                    <td>
+                      <Link
+                        href={actionHref(item)}
+                        className="font-semibold text-blue-600 hover:underline dark:text-blue-300"
+                      >
+                        {state.nextAction?.label || 'Abrir booking'}
+                      </Link>
+                      {state.attentionReason && (
+                        <p className="mt-1 max-w-48 text-xs text-slate-500 dark:text-slate-400">
+                          {state.attentionReason}
+                        </p>
+                      )}
+                    </td>
                     <td className="text-right">
                       <Link
                         href={`/operations/shipping-instructions/${item.shipping_instruction_id}/bookings/${item.id}`}
@@ -428,6 +620,19 @@ export default function OperationsBookingsPage() {
           />
         </div>
       </div>
+    </div>
+  )
+}
+
+function BookingsHeader() {
+  return (
+    <div>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+        Bookings Operativos
+      </h1>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        Bandeja diaria de operaciones activas, ETAs y tracking.
+      </p>
     </div>
   )
 }

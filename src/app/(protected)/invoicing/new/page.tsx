@@ -15,6 +15,7 @@ import {
   cardClass,
   fieldClass,
 } from '@/src/lib/ui-classes'
+import { billingReturnHref } from '@/src/lib/billing-readiness'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -194,6 +195,10 @@ export default function NewInvoicePage() {
   const parentId = searchParams.get('parent')
   const docType = searchParams.get('doc_type') // 'nc' | 'nd'
   const requestedQuotationId = searchParams.get('quotation')
+  const requestedReturnTo = searchParams.get('returnTo')
+  const returnHref = requestedReturnTo
+    ? billingReturnHref(requestedReturnTo)
+    : '/invoicing'
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [quotations, setQuotations] = useState<Quotation[]>([])
@@ -211,6 +216,13 @@ export default function NewInvoicePage() {
   const applyQuotation = useCallback(async (quotation: Quotation) => {
     if (quotation.status !== 'Ganada') {
       toast.error('La cotización debe estar Ganada antes de facturar')
+      return false
+    }
+    const operationState = await supabase.rpc('quotation_operations_complete', {
+      p_quotation_id: quotation.id,
+    })
+    if (operationState.error || operationState.data !== true) {
+      toast.error('Todas las operaciones activas deben estar finalizadas antes de facturar')
       return false
     }
     if (quotation.financial_validation_status !== 'Validado') {
@@ -575,7 +587,11 @@ export default function NewInvoicePage() {
     }
 
     toast.success(`${invoiceType} ${invoice.invoice_number} creada`)
-    router.push(`/invoicing/${invoice.invoice_id}`)
+    router.push(
+      requestedReturnTo
+        ? `/invoicing/${invoice.invoice_id}?returnTo=${encodeURIComponent(returnHref)}`
+        : `/invoicing/${invoice.invoice_id}`
+    )
   }
 
   const isNote = IS_NOTE[invoiceType]
@@ -593,7 +609,7 @@ export default function NewInvoicePage() {
       <div className="flex items-center gap-4">
         <button
           type="button"
-          onClick={() => router.push(parentId ? `/invoicing/${parentId}` : '/invoicing')}
+          onClick={() => router.push(parentId ? `/invoicing/${parentId}` : returnHref)}
           className={secondaryButtonClass}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -1131,7 +1147,7 @@ export default function NewInvoicePage() {
           </button>
           <button
             type="button"
-            onClick={() => router.push(parentId ? `/invoicing/${parentId}` : '/invoicing')}
+            onClick={() => router.push(parentId ? `/invoicing/${parentId}` : returnHref)}
             className={`w-full ${secondaryButtonClass}`}
           >
             Cancelar

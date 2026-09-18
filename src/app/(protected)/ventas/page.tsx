@@ -2,18 +2,27 @@
 
 import { toDateInputValue } from '@/src/lib/format'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import {
   Phone, MapPin, Users, Plus, X, Clock, Search, Pencil, Trash2,
   CalendarClock, Target, AlertCircle, UserCheck, UserPlus,
   ChevronLeft, ChevronRight, LayoutList, Calendar,
+  ArrowRight, Inbox,
 } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { fieldClass } from '@/src/lib/ui-classes'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import {
+  buildSalesWorkQueue,
+  type LeadWorkSource,
+  type QuotationWorkSource,
+  type SalesWorkCategory,
+  type SalesWorkItem,
+} from '@/src/lib/sales-work-queue'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,7 +49,47 @@ type SalesActivity = {
   proxima_accion:       string | null
   fecha_proxima_accion: string | null
   created_by:           string | null
+  created_at:           string | null
   profiles?:            { nombre: string | null; apellido: string | null } | null
+}
+
+type SalesQuotationRow = {
+  id: string
+  quotation_number: string | null
+  status: string | null
+  valid_until: string | null
+  created_at: string | null
+  clientes?: { nombre: string | null } | { nombre: string | null }[] | null
+  shipments?: { id: string }[] | null
+  quotation_status_history?: Array<{
+    new_status: string | null
+    created_at: string | null
+  }> | null
+}
+
+type SalesWorkFilter = 'all' | 'urgent' | SalesWorkCategory
+
+const SALES_WORK_FILTERS: Array<{ value: SalesWorkFilter; label: string }> = [
+  { value: 'all', label: 'Todo' },
+  { value: 'urgent', label: 'Urgente' },
+  { value: 'follow_up', label: 'Seguimientos' },
+  { value: 'quotation', label: 'Cotizaciones' },
+  { value: 'handoff', label: 'Handoffs' },
+  { value: 'lead', label: 'Leads' },
+]
+
+function initialSalesWorkState() {
+  if (typeof window === 'undefined') {
+    return { filter: 'all' as SalesWorkFilter, search: '' }
+  }
+  const params = new URLSearchParams(window.location.search)
+  const requestedFilter = params.get('work') as SalesWorkFilter | null
+  return {
+    filter: requestedFilter && SALES_WORK_FILTERS.some(({ value }) => value === requestedFilter)
+      ? requestedFilter
+      : 'all',
+    search: params.get('workSearch') || '',
+  }
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -134,8 +183,13 @@ const blankForm = (date?: string) => ({
 export default function VentasPage() {
   const { profile } = useUser()
   const [activities, setActivities]     = useState<SalesActivity[]>([])
-  const [clientes, setClientes]         = useState<any[]>([])
+  const [workActivities, setWorkActivities] = useState<SalesActivity[]>([])
+  const [workQuotations, setWorkQuotations] = useState<SalesQuotationRow[]>([])
+  const [workLeads, setWorkLeads] = useState<LeadWorkSource[]>([])
+  const [clientes, setClientes]         = useState<Array<{ id: string; nombre: string }>>([])
   const [loading, setLoading]           = useState(true)
+  const [workLoading, setWorkLoading]   = useState(true)
+  const [workError, setWorkError]       = useState('')
   const [showModal, setShowModal]       = useState(false)
   const [editingId, setEditingId]       = useState<string | null>(null)
   const [form, setForm]                 = useState(blankForm())
@@ -149,6 +203,9 @@ export default function VentasPage() {
   const [calMonth, setCalMonth]         = useState(() => new Date().getMonth())
   const [selectedDay, setSelectedDay]   = useState<string | null>(null)
   const [activityPendingDelete, setActivityPendingDelete] = useState<SalesActivity | null>(null)
+  const [workFilter, setWorkFilter] = useState<SalesWorkFilter>('all')
+  const [workSearch, setWorkSearch] = useState('')
+  const [workUrlReady, setWorkUrlReady] = useState(false)
 
   const today = toDateInputValue()
 
@@ -192,7 +249,98 @@ export default function VentasPage() {
     setLoading(false)
   }, [filterTipo, filterEtapa, filterPeriod, viewMode, calYear, calMonth, today])
 
-  useEffect(() => { fetchActivities() }, [fetchActivities])
+  useEffect(() => {
+    const timeout = window.setTimeout(() => { void fetchActivities() }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [fetchActivities])
+
+  const fetchSalesWork = useCallback(async () => {
+    setWorkLoading(true)
+    setWorkError('')
+
+    const [activitiesResult, quotationsResult, leadsResult] = await Promise.all([
+      supabase
+        .from('sales_activities')
+        .select('*, clientes(nombre), profiles(nombre, apellido)')
+        .is('deleted_at', null)
+        .order('fecha_actividad', { ascending: false })
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('quotations')
+        .select(`
+          id,
+          quotation_number,
+          status,
+          valid_until,
+          created_at,
+          clientes (nombre),
+          shipments (id),
+          quotation_status_history (new_status, created_at)
+        `)
+        .is('deleted_at', null)
+        .in('status', [
+          'Borrador',
+          'Pendiente de Fijar Precios',
+          'Pricing Aprobado',
+          'Enviada al Cliente',
+          'Ganada',
+        ])
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('leads')
+        .select('id, nombre, empresa, email, created_at')
+        .order('created_at', { ascending: false }),
+    ])
+
+    const errors = [
+      activitiesResult.error,
+      quotationsResult.error,
+      leadsResult.error,
+    ].filter((error): error is NonNullable<typeof error> => Boolean(error))
+
+    if (errors.length > 0) {
+      setWorkActivities([])
+      setWorkQuotations([])
+      setWorkLeads([])
+      setWorkError(errors.map((error) => error.message).join(' · '))
+      setWorkLoading(false)
+      return
+    }
+
+    setWorkActivities((activitiesResult.data || []) as SalesActivity[])
+    setWorkQuotations((quotationsResult.data || []) as SalesQuotationRow[])
+    setWorkLeads((leadsResult.data || []) as LeadWorkSource[])
+    setWorkLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => { void fetchSalesWork() }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [fetchSalesWork])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const initial = initialSalesWorkState()
+      setWorkFilter(initial.filter)
+      setWorkSearch(initial.search)
+      setWorkUrlReady(true)
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [])
+
+  useEffect(() => {
+    if (!workUrlReady) return
+    const params = new URLSearchParams(window.location.search)
+    if (workFilter === 'all') params.delete('work')
+    else params.set('work', workFilter)
+    if (workSearch.trim()) params.set('workSearch', workSearch.trim())
+    else params.delete('workSearch')
+    window.history.replaceState(
+      null,
+      '',
+      `/ventas${params.size ? `?${params.toString()}` : ''}${window.location.hash}`
+    )
+  }, [workFilter, workSearch, workUrlReady])
 
   useEffect(() => {
     supabase.from('clientes')
@@ -265,6 +413,7 @@ export default function VentasPage() {
     toast.success(editingId ? 'Actividad actualizada' : 'Actividad registrada')
     setShowModal(false)
     fetchActivities()
+    void fetchSalesWork()
   }
 
   // ── Delete (soft) ──────────────────────────────────────────────────────────
@@ -277,9 +426,76 @@ export default function VentasPage() {
     if (error) { toast.error(error.message); return }
     toast.success('Actividad eliminada')
     fetchActivities()
+    void fetchSalesWork()
   }
 
   // ── Derived ────────────────────────────────────────────────────────────────
+
+  const salesWorkQueue = useMemo(() => buildSalesWorkQueue({
+    activities: workActivities.map((activity) => ({
+      ...activity,
+      clientName: activity.clientes?.nombre || null,
+    })),
+    quotations: workQuotations.map<QuotationWorkSource>((quotation) => {
+      const client = Array.isArray(quotation.clientes)
+        ? quotation.clientes[0]
+        : quotation.clientes
+      return {
+        id: quotation.id,
+        quotation_number: quotation.quotation_number,
+        status: quotation.status,
+        valid_until: quotation.valid_until,
+        created_at: quotation.created_at,
+        clientName: client?.nombre || null,
+        shipmentCount: quotation.shipments?.length || 0,
+        statusHistory: quotation.quotation_status_history,
+      }
+    }),
+    leads: workLeads,
+  }), [workActivities, workLeads, workQuotations])
+
+  const visibleSalesWork = useMemo(() => {
+    const normalizedSearch = workSearch
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase()
+    return salesWorkQueue.filter((item) => {
+      const matchesFilter = workFilter === 'all'
+        || (workFilter === 'urgent' && item.severity === 'critical')
+        || item.category === workFilter
+      return matchesFilter && (!normalizedSearch || item.searchText.includes(normalizedSearch))
+    })
+  }, [salesWorkQueue, workFilter, workSearch])
+
+  const salesReturnTo = (() => {
+    const query = new URLSearchParams()
+    if (workFilter !== 'all') query.set('work', workFilter)
+    if (workSearch.trim()) query.set('workSearch', workSearch.trim())
+    return `/ventas${query.size ? `?${query.toString()}` : ''}`
+  })()
+
+  const openSalesWorkItem = (item: SalesWorkItem) => {
+    if (item.sourceType === 'activity') {
+      const activity = workActivities.find((candidate) => candidate.id === item.sourceId)
+      if (activity) openEdit(activity)
+      return
+    }
+
+    if (item.sourceType === 'lead') {
+      const lead = workLeads.find((candidate) => candidate.id === item.sourceId)
+      if (!lead) return
+      setForm({
+        ...blankForm(),
+        tipo_cliente: 'Nuevo',
+        nombre_prospecto: lead.nombre,
+        empresa_prospecto: lead.empresa,
+        etapa_captacion: 'Primer Contacto',
+      })
+      setEditingId(null)
+      setShowModal(true)
+    }
+  }
 
   const activityName = (a: SalesActivity) =>
     a.tipo_cliente === 'Mantenimiento'
@@ -299,13 +515,9 @@ export default function VentasPage() {
     ? activities.filter((a) => a.fecha_actividad === selectedDay)
     : []
 
-  const todayCount       = activities.filter((a) => a.fecha_actividad === today).length
-  const activeProspects  = activities.filter((a) =>
-    a.tipo_cliente === 'Nuevo' && !['Ganado', 'Perdido'].includes(a.etapa_captacion || '')
-  ).length
-  const pendingFollowUps = activities.filter((a) =>
-    a.fecha_proxima_accion && a.fecha_proxima_accion >= today
-  ).length
+  const todayCount = workActivities.filter((a) => a.fecha_actividad === today).length
+  const urgentWork = salesWorkQueue.filter((item) => item.severity === 'critical').length
+  const pendingFollowUps = salesWorkQueue.filter((item) => item.category === 'follow_up').length
 
   const weeks = buildCalendar(calYear, calMonth)
 
@@ -588,10 +800,10 @@ export default function VentasPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Actividades de Ventas
+            Mi día
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Registro de visitas, llamadas y reuniones con clientes y prospectos.
+            Prioridades comerciales, seguimientos y handoffs que requieren acción.
           </p>
         </div>
         <button type="button" onClick={() => openNew()}
@@ -601,13 +813,36 @@ export default function VentasPage() {
         </button>
       </div>
 
+      <SalesWorkQueuePanel
+        items={visibleSalesWork}
+        totalItems={salesWorkQueue.length}
+        loading={workLoading}
+        errorMessage={workError}
+        filter={workFilter}
+        search={workSearch}
+        returnTo={salesReturnTo}
+        onFilterChange={setWorkFilter}
+        onSearchChange={setWorkSearch}
+        onOpenItem={openSalesWorkItem}
+        onRetry={() => void fetchSalesWork()}
+      />
+
+      <div>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+          Agenda e historial
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Registro de visitas, llamadas y reuniones con clientes y prospectos.
+        </p>
+      </div>
+
       {/* ── KPI cards ────────────────────────────────────────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-3">
         {[
           { label: 'Actividades hoy',       value: todayCount,       icon: CalendarClock,
             color: 'text-blue-600 dark:text-blue-400',    bg: 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900/40' },
-          { label: 'Prospectos activos',     value: activeProspects,  icon: Target,
-            color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-900/40' },
+          { label: 'Acciones críticas',       value: urgentWork,       icon: Target,
+            color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900/40' },
           { label: 'Seguimientos pendientes', value: pendingFollowUps, icon: AlertCircle,
             color: 'text-amber-600 dark:text-amber-400',  bg: 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900/40' },
         ].map(({ label, value, icon: Icon, color, bg }) => (
@@ -910,5 +1145,237 @@ export default function VentasPage() {
         }}
       />
     </div>
+  )
+}
+
+function salesWorkCategoryLabel(category: SalesWorkCategory) {
+  if (category === 'follow_up') return 'Seguimiento'
+  if (category === 'quotation') return 'Cotización'
+  if (category === 'handoff') return 'Handoff'
+  return 'Lead'
+}
+
+function SalesWorkQueuePanel({
+  items,
+  totalItems,
+  loading,
+  errorMessage,
+  filter,
+  search,
+  returnTo,
+  onFilterChange,
+  onSearchChange,
+  onOpenItem,
+  onRetry,
+}: {
+  items: SalesWorkItem[]
+  totalItems: number
+  loading: boolean
+  errorMessage: string
+  filter: SalesWorkFilter
+  search: string
+  returnTo: string
+  onFilterChange: (filter: SalesWorkFilter) => void
+  onSearchChange: (search: string) => void
+  onOpenItem: (item: SalesWorkItem) => void
+  onRetry: () => void
+}) {
+  const nextActions = items.slice(0, 3)
+
+  if (loading) {
+    return (
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
+        <div className="h-6 w-48 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-36 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  if (errorMessage) {
+    return (
+      <section className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/50 dark:bg-red-950/20">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-300" />
+          <div>
+            <h2 className="font-semibold text-red-900 dark:text-red-100">No se pudo cargar Mi día</h2>
+            <p role="alert" className="mt-1 text-sm text-red-700 dark:text-red-200">{errorMessage}</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-3 rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-violet-700 dark:bg-violet-950/60 dark:text-violet-200">
+              Cola comercial
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{items.length} de {totalItems}</span>
+          </div>
+          <h2 className="mt-3 text-xl font-bold text-slate-900 dark:text-white">Qué requiere atención</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Aging desde el último cambio de estado y seguimientos de la actividad más reciente.
+          </p>
+        </div>
+        <label className="relative block w-full lg:max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <span className="sr-only">Buscar en Mi día</span>
+          <input
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Cliente, cotización o acción"
+            className={`${fieldClass} pl-9`}
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {SALES_WORK_FILTERS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onFilterChange(option.value)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+              filter === option.value
+                ? 'border-violet-600 bg-violet-600 text-white'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      <h3 className="mt-5 text-sm font-semibold text-slate-900 dark:text-white">Siguientes 3 acciones</h3>
+      {nextActions.length === 0 ? (
+        <div className="mt-3 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center dark:border-slate-700">
+          <Inbox className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+          <p className="mt-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+            {totalItems === 0 ? 'No hay acciones comerciales pendientes.' : 'No hay resultados para estos filtros.'}
+          </p>
+        </div>
+      ) : (
+        <div className="mt-3 grid gap-3 lg:grid-cols-3">
+          {nextActions.map((item, index) => {
+            const className = `group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
+              item.severity === 'critical'
+                ? 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20'
+                : item.severity === 'warning'
+                  ? 'border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-950/20'
+                  : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900'
+            }`
+            const content = (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    #{index + 1} · {salesWorkCategoryLabel(item.category)}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5" />
+                </div>
+                <p className="mt-2 font-bold text-slate-900 dark:text-white">{item.entityLabel}</p>
+                <p className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100">{item.title}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{item.reason}</p>
+                <p className="mt-3 text-xs font-semibold text-violet-700 dark:text-violet-300">{item.nextAction}</p>
+              </>
+            )
+
+            return item.href ? (
+              <Link
+                key={item.id}
+                href={`${item.href}?returnTo=${encodeURIComponent(returnTo)}`}
+                className={className}
+              >
+                {content}
+              </Link>
+            ) : (
+              <button key={item.id} type="button" onClick={() => onOpenItem(item)} className={className}>
+                {content}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <tr>
+                <th className="py-3 pr-4">Prioridad</th>
+                <th className="pr-4">Cuenta</th>
+                <th className="pr-4">Motivo</th>
+                <th className="pr-4">Fecha / Aging</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.slice(0, 50).map((item) => (
+                <tr key={item.id} className="border-t border-slate-100 align-top dark:border-slate-800">
+                  <td className="py-3 pr-4">
+                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      item.severity === 'critical'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-200'
+                        : item.severity === 'warning'
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-200'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                    }`}>
+                      {item.severity === 'critical' ? 'Ahora' : item.severity === 'warning' ? 'Próxima' : 'Planificada'}
+                    </span>
+                  </td>
+                  <td className="pr-4">
+                    <p className="font-semibold text-slate-900 dark:text-white">{item.entityLabel}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{salesWorkCategoryLabel(item.category)}</p>
+                  </td>
+                  <td className="max-w-sm pr-4">
+                    <p className="font-medium text-slate-800 dark:text-slate-100">{item.title}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.reason}</p>
+                  </td>
+                  <td className="whitespace-nowrap pr-4 text-slate-700 dark:text-slate-300">
+                    {item.dueDate ? formatDate(item.dueDate) : `${item.agingDays}d en estado`}
+                  </td>
+                  <td>
+                    {item.href ? (
+                      <Link
+                        href={`${item.href}?returnTo=${encodeURIComponent(returnTo)}`}
+                        className="inline-flex items-center gap-1 font-semibold text-violet-700 hover:underline dark:text-violet-300"
+                      >
+                        {item.nextAction}<ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onOpenItem(item)}
+                        className="inline-flex items-center gap-1 font-semibold text-violet-700 hover:underline dark:text-violet-300"
+                      >
+                        {item.nextAction}<ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {items.length > 50 && (
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+              Se muestran las primeras 50 acciones según prioridad.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
   )
 }

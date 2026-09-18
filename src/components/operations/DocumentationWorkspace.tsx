@@ -60,9 +60,15 @@ const statusPresentation: Record<
 export function DocumentationWorkspace({
   items,
   reference,
+  operationalAction,
 }: {
   items: DocumentationWorkspaceItem[]
   reference: string
+  operationalAction?: {
+    label: string
+    href: string
+    summary: string
+  } | null
 }) {
   const completeCount = items.filter((item) => item.status === 'complete').length
   const attentionCount = items.filter((item) =>
@@ -80,6 +86,15 @@ export function DocumentationWorkspace({
   const nextItem = actionOrder
     .map((id) => items.find((item) => item.id === id))
     .find((item) => item && item.status !== 'complete')
+  const suggestedAction = operationalAction || (
+    nextItem?.action
+      ? {
+          label: nextItem.action.label,
+          href: nextItem.action.href,
+          summary: `${nextItem.label}: ${nextItem.summary}`,
+        }
+      : null
+  )
 
   return (
     <section className={cn(cardClass, 'border-blue-100 dark:border-blue-900/50')}>
@@ -118,21 +133,21 @@ export function DocumentationWorkspace({
         </div>
       </div>
 
-      {nextItem?.action && (
+      {suggestedAction && (
         <div className="mt-5 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900/70 dark:bg-blue-950/30 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-300">
               Siguiente acción sugerida
             </p>
             <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
-              {nextItem.label}: {nextItem.summary}
+              {suggestedAction.summary}
             </p>
           </div>
           <Link
-            href={nextItem.action.href}
+            href={suggestedAction.href}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           >
-            {nextItem.action.label}
+            {suggestedAction.label}
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>

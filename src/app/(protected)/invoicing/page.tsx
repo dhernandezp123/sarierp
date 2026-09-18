@@ -4,7 +4,7 @@ import { toDateInputValue } from '@/src/lib/format'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, FileText, CheckCircle2, Clock, XCircle, AlertCircle, DollarSign, BarChart2, BookOpen, Mail } from 'lucide-react'
+import { Plus, Search, FileText, CheckCircle2, Clock, XCircle, AlertCircle, DollarSign, BarChart2, BookOpen, Mail, ArrowRight, ClipboardList } from 'lucide-react'
 import { toast } from 'sonner'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { supabase } from '../../../lib/supabase/client'
@@ -17,6 +17,12 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
+import {
+  billingQueueActionHref,
+  billingQueueHref,
+  type BillingQueueRow,
+  type BillingReadinessCode,
+} from '@/src/lib/billing-readiness'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -88,7 +94,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
 
 function formatDate(d: string | null) {
   if (!d) return '—'
-  const [y, m, day] = d.split('-')
+  const [y, m, day] = d.split('T')[0].split('-')
   return `${day}/${m}/${y}`
 }
 
@@ -104,6 +110,9 @@ export default function InvoicingPage() {
   const [loading, setLoading] = useState(true)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [receivables, setReceivables] = useState<ReceivableSummary[]>([])
+  const [workQueue, setWorkQueue] = useState<BillingQueueRow[]>([])
+  const [workQueueError, setWorkQueueError] = useState('')
+  const [view, setView] = useState<'work' | 'documents'>('work')
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | InvoiceType>('all')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -123,7 +132,8 @@ export default function InvoicingPage() {
 
   async function fetchInvoices() {
     setLoading(true)
-    const [invoicesResult, receivablesResult] = await Promise.all([
+    setWorkQueueError('')
+    const [invoicesResult, receivablesResult, workQueueResult] = await Promise.all([
       supabase
         .from('invoices')
         .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, payment_condition, credit_days, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date, status)')
@@ -132,6 +142,7 @@ export default function InvoicingPage() {
       supabase
         .from('invoice_receivables')
         .select('invoice_id, currency, original_total, credit_notes, debit_notes, adjusted_total, balance, paid_total, stored_status, receivable_status, days_overdue'),
+      supabase.rpc('get_billing_work_queue'),
     ])
 
     if (invoicesResult.error || receivablesResult.error) {
@@ -146,14 +157,42 @@ export default function InvoicingPage() {
       status: statuses.get(invoice.id) || invoice.status,
     })))
     setReceivables(receivableRows)
+    if (workQueueResult.error) {
+      setWorkQueue([])
+      setWorkQueueError(workQueueResult.error.message || 'No se pudo cargar la cola por facturar.')
+    } else {
+      setWorkQueue((workQueueResult.data || []) as BillingQueueRow[])
+    }
     setLoading(false)
   }
 
   useEffect(() => {
-    // Initial client-side synchronization with Supabase.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchInvoices()
+    const timer = window.setTimeout(() => {
+      const requestedView = new URLSearchParams(window.location.search).get('view')
+      if (requestedView === 'documents') setView('documents')
+      void fetchInvoices()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
+
+  const changeView = (nextView: 'work' | 'documents') => {
+    setView(nextView)
+    window.history.replaceState(null, '', billingQueueHref(nextView))
+  }
+
+  const queueCounts = workQueue.reduce<Record<BillingReadinessCode, number>>(
+    (counts, row) => {
+      counts[row.readiness_code] += 1
+      return counts
+    },
+    {
+      READY_TO_INVOICE: 0,
+      COSTS_PENDING: 0,
+      OPERATIONS_PENDING: 0,
+      CLIENT_DATA_MISSING: 0,
+      PRICING_INVALID: 0,
+    }
+  )
 
   const filtered = invoices.filter((inv) => {
     if (filterType !== 'all' && inv.invoice_type !== filterType) return false
@@ -591,6 +630,125 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         </div>
       )}
 
+      <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
+        <button
+          type="button"
+          onClick={() => changeView('work')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${view === 'work' ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+        >
+          Por facturar
+        </button>
+        <button
+          type="button"
+          onClick={() => changeView('documents')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${view === 'documents' ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+        >
+          Documentos emitidos
+        </button>
+      </div>
+
+      {view === 'work' ? (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm dark:border-emerald-800/50 dark:bg-emerald-950/30">
+              <p className="text-xs text-emerald-700 dark:text-emerald-300">Listas para facturar</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-800 dark:text-emerald-200">{queueCounts.READY_TO_INVOICE}</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm dark:border-amber-800/50 dark:bg-amber-950/30">
+              <p className="text-xs text-amber-700 dark:text-amber-300">Pendientes de costos</p>
+              <p className="mt-1 text-2xl font-bold text-amber-800 dark:text-amber-200">{queueCounts.COSTS_PENDING}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Pendientes de operación</p>
+              <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{queueCounts.OPERATIONS_PENDING}</p>
+            </div>
+          </div>
+
+          {workQueueError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200" role="alert">
+              <p className="font-semibold">No se pudo cargar la cola Por facturar</p>
+              <p className="mt-1 text-sm">{workQueueError}</p>
+              <button type="button" onClick={() => void fetchInvoices()} className="mt-3 rounded-xl border border-rose-300 px-3 py-2 text-sm font-semibold hover:bg-rose-100 dark:border-rose-800 dark:hover:bg-rose-950">
+                Reintentar
+              </button>
+            </div>
+          ) : workQueue.length === 0 ? (
+            <div className={`${cardClass} py-16 text-center`}>
+              <ClipboardList className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
+              <p className="mt-3 text-sm font-medium text-slate-500 dark:text-slate-400">
+                No hay cotizaciones ganadas pendientes de factura.
+              </p>
+            </div>
+          ) : (
+            <div className={cardClass}>
+              <div className="mb-4">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Cola de salida a facturación</h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Se deriva del cierre canónico de todas las operaciones, la conciliación financiera y los datos fiscales; no requiere marcar tareas manualmente.
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-sm">
+                  <thead className="text-left text-xs uppercase text-slate-500 dark:text-slate-400">
+                    <tr className="border-b border-slate-200 dark:border-slate-700">
+                      <th className="pb-3 pr-4">Cotización</th>
+                      <th className="pb-3 pr-4">Cliente</th>
+                      <th className="pb-3 pr-4">Operaciones</th>
+                      <th className="pb-3 pr-4">Cierre</th>
+                      <th className="pb-3 pr-4">Importe estimado</th>
+                      <th className="pb-3 pr-4">Estado / bloqueo</th>
+                      <th className="pb-3 text-right">Siguiente paso</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workQueue.map((row) => {
+                      const actionHref = row.readiness_code === 'OPERATIONS_PENDING' && profile?.rol !== 'Admin'
+                        ? null
+                        : billingQueueActionHref(row, billingQueueHref('work'))
+                      const ready = row.readiness_code === 'READY_TO_INVOICE'
+                      return (
+                        <tr key={row.quotation_id} className="border-b border-slate-100 align-top dark:border-slate-800">
+                          <td className="py-4 pr-4 font-semibold text-blue-600 dark:text-blue-400">{row.quotation_number || row.quotation_id}</td>
+                          <td className="py-4 pr-4 text-slate-700 dark:text-slate-300">{row.client_name}</td>
+                          <td className="py-4 pr-4 text-slate-600 dark:text-slate-400">
+                            <p>{row.shipment_count} operación{row.shipment_count === 1 ? '' : 'es'}</p>
+                            <p className="mt-1 text-xs">{row.shipment_numbers || 'Sin shipment activo'}</p>
+                          </td>
+                          <td className="py-4 pr-4 text-slate-600 dark:text-slate-400">{formatDate(row.latest_closed_at)}</td>
+                          <td className="py-4 pr-4 font-semibold text-slate-900 dark:text-white">
+                            {row.currency ? formatUSD(Number(row.estimated_total || 0), row.currency) : '—'}
+                          </td>
+                          <td className="py-4 pr-4">
+                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${ready ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}`}>
+                              {ready ? 'Lista para facturar' : row.next_action}
+                            </span>
+                            {row.blocker && <p className="mt-2 max-w-xs text-xs text-slate-500 dark:text-slate-400">{row.blocker}</p>}
+                          </td>
+                          <td className="py-4 text-right">
+                            {actionHref ? (
+                              <button
+                                type="button"
+                                onClick={() => router.push(actionHref)}
+                                className={ready ? primaryButtonClass : 'inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800'}
+                              >
+                                {row.next_action}
+                                <ArrowRight className="h-4 w-4" />
+                              </button>
+                            ) : (
+                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{row.next_action}</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
       {/* KPI mini cards */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
@@ -739,6 +897,8 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
             />
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   )

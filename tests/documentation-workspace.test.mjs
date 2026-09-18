@@ -104,3 +104,25 @@ test('expone los bloqueos de readiness sin declararlo completo', () => {
     'Pendiente: Documentación completa',
   ])
 })
+
+test('no convierte MBL y HBL en requisitos para modalidades terrestres', () => {
+  const items = buildDocumentationWorkspace(
+    baseInput({
+      transportMode: 'Terrestre FTL',
+    })
+  )
+
+  assert.equal(items.some((item) => item.id === 'mbl'), false)
+  assert.equal(items.some((item) => item.id === 'hbl'), false)
+})
+
+test('respeta que una operación marítima no requiera HBL', () => {
+  const items = buildDocumentationWorkspace(
+    baseInput({
+      requiresHbl: false,
+    })
+  )
+
+  assert.equal(items.some((item) => item.id === 'mbl'), true)
+  assert.equal(items.some((item) => item.id === 'hbl'), false)
+})

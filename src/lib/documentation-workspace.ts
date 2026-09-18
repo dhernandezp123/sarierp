@@ -50,6 +50,7 @@ type DocumentationWorkspaceInput = {
   vesselName: string | null
   voyage: string | null
   transportMode: string | null
+  requiresHbl?: boolean | null
   containerCount: number
   documentTypes: string[]
   bills: DocumentationWorkspaceBill[]
@@ -85,7 +86,8 @@ export function buildDocumentationWorkspace(
 ): DocumentationWorkspaceItem[] {
   const bookingPath = `/operations/shipping-instructions/${input.shippingInstructionId}/bookings/${input.bookingId}`
   const siPath = `/operations/shipping-instructions/${input.shippingInstructionId}`
-  const maritime = normalized(input.transportMode).includes('marit')
+  const mode = inferBookingOperationalMode(input.transportMode)
+  const maritime = mode === 'SEA_FCL' || mode === 'SEA_LCL'
   const siMissing = [
     !hasText(input.routingNumber) ? 'Número de Shipping Instruction' : null,
     !hasText(input.shipperName) ? 'Shipper' : null,
@@ -206,78 +208,82 @@ export function buildDocumentationWorkspace(
     },
   ]
 
-  items.push({
-    id: 'mbl',
-    label: 'Master Bill of Lading',
-    owner: 'Operaciones / agente',
-    status: mbl
-      ? billIsComplete(mbl)
-        ? 'complete'
-        : 'in_progress'
-      : hasText(input.bookingReference)
-        ? 'not_started'
-        : 'blocked',
-    summary: mbl
-      ? `${mbl.bl_number || 'MBL sin número'} · ${mbl.status}`
-      : hasText(input.bookingReference)
-        ? 'Listo para iniciar el MBL'
-        : 'Requiere una referencia de booking',
-    details: mbl
-      ? [billIsComplete(mbl) ? 'Validado para preparar HBL' : 'Continúa la revisión del draft']
-      : [
-          hasText(input.bookingReference)
-            ? 'Los datos conocidos se heredarán automáticamente'
-            : 'Confirma Booking Number o Carrier Booking',
-        ],
-    action: mbl
-      ? {
-          label: billIsComplete(mbl) ? 'Abrir MBL' : 'Continuar MBL',
-          href: `${bookingPath}/bl/${mbl.id}`,
-        }
-      : hasText(input.bookingReference)
-        ? { label: 'Crear MBL', href: `${bookingPath}/bl/new?type=MBL` }
-        : { label: 'Confirmar referencia', href: `${bookingPath}#booking-schedule` },
-  })
-
-  items.push({
-    id: 'hbl',
-    label: 'House Bill of Lading',
-    owner: 'Operaciones / cliente',
-    status:
-      hbls.length === 0
-        ? validatedMbl
-          ? 'not_started'
-          : 'blocked'
-        : completeHbls.length === hbls.length
+  if (maritime || mbl) {
+    items.push({
+      id: 'mbl',
+      label: 'Master Bill of Lading',
+      owner: 'Operaciones / agente',
+      status: mbl
+        ? billIsComplete(mbl)
           ? 'complete'
-          : 'in_progress',
-    summary:
-      hbls.length === 0
-        ? validatedMbl
-          ? 'MBL validado; HBL listo para iniciar'
-          : 'Requiere validar primero el MBL'
-        : `${completeHbls.length}/${hbls.length} HBL emitido(s) o liberado(s)`,
-    details:
-      hbls.length === 0
-        ? ['El HBL heredará ruta y carga, conservando las partes comerciales']
-        : hbls.slice(-3).map(
-            (bill) => `${bill.bl_number || 'HBL sin número'} · ${bill.status}`
-          ),
-    action:
-      hbls.length > 0
+          : 'in_progress'
+        : hasText(input.bookingReference)
+          ? 'not_started'
+          : 'blocked',
+      summary: mbl
+        ? `${mbl.bl_number || 'MBL sin número'} · ${mbl.status}`
+        : hasText(input.bookingReference)
+          ? 'Listo para iniciar el MBL'
+          : 'Requiere una referencia de booking',
+      details: mbl
+        ? [billIsComplete(mbl) ? 'Validado para preparar HBL' : 'Continúa la revisión del draft']
+        : [
+            hasText(input.bookingReference)
+              ? 'Los datos conocidos se heredarán automáticamente'
+              : 'Confirma Booking Number o Carrier Booking',
+          ],
+      action: mbl
         ? {
-            label: completeHbls.length === hbls.length ? 'Ver HBL' : 'Continuar HBL',
-            href: `${bookingPath}/bl/${hbls.at(-1)?.id}`,
+            label: billIsComplete(mbl) ? 'Abrir MBL' : 'Continuar MBL',
+            href: `${bookingPath}/bl/${mbl.id}`,
           }
-        : validatedMbl
+        : hasText(input.bookingReference)
+          ? { label: 'Crear MBL', href: `${bookingPath}/bl/new?type=MBL` }
+          : { label: 'Confirmar referencia', href: `${bookingPath}#booking-schedule` },
+    })
+  }
+
+  if ((maritime && input.requiresHbl !== false) || hbls.length > 0) {
+    items.push({
+      id: 'hbl',
+      label: 'House Bill of Lading',
+      owner: 'Operaciones / cliente',
+      status:
+        hbls.length === 0
+          ? validatedMbl
+            ? 'not_started'
+            : 'blocked'
+          : completeHbls.length === hbls.length
+            ? 'complete'
+            : 'in_progress',
+      summary:
+        hbls.length === 0
+          ? validatedMbl
+            ? 'MBL validado; HBL listo para iniciar'
+            : 'Requiere validar primero el MBL'
+          : `${completeHbls.length}/${hbls.length} HBL emitido(s) o liberado(s)`,
+      details:
+        hbls.length === 0
+          ? ['El HBL heredará ruta y carga, conservando las partes comerciales']
+          : hbls.slice(-3).map(
+              (bill) => `${bill.bl_number || 'HBL sin número'} · ${bill.status}`
+            ),
+      action:
+        hbls.length > 0
           ? {
-              label: 'Crear HBL',
-              href: `${bookingPath}/bl/new?type=HBL&parentBlId=${validatedMbl.id}`,
+              label: completeHbls.length === hbls.length ? 'Ver HBL' : 'Continuar HBL',
+              href: `${bookingPath}/bl/${hbls.at(-1)?.id}`,
             }
-          : mbl
-            ? { label: 'Continuar MBL', href: `${bookingPath}/bl/${mbl.id}` }
-            : { label: 'Preparar MBL', href: `${bookingPath}#booking-bills` },
-  })
+          : validatedMbl
+            ? {
+                label: 'Crear HBL',
+                href: `${bookingPath}/bl/new?type=HBL&parentBlId=${validatedMbl.id}`,
+              }
+            : mbl
+              ? { label: 'Continuar MBL', href: `${bookingPath}/bl/${mbl.id}` }
+              : { label: 'Preparar MBL', href: `${bookingPath}#booking-bills` },
+    })
+  }
 
   items.push({
     id: 'arrival_notice',
@@ -308,3 +314,4 @@ export function buildDocumentationWorkspace(
 
   return items
 }
+import { inferBookingOperationalMode } from '@/src/lib/booking-operational-state'

@@ -13,6 +13,7 @@ import { loadCostValidationData, type CostValidationData } from '@/src/lib/cost-
 import { calculateTaxAmount } from '@/src/lib/tax'
 import { formatDate } from '@/src/lib/format'
 import { cardClass, fieldClassSm } from '@/src/lib/ui-classes'
+import { billingReturnHref, operationsAreComplete } from '@/src/lib/billing-readiness'
 
 const buttonClass = 'rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800'
 const emptyForm = { pricing_item_id: '', supplier: '', invoice_number: '', description: '', quantity: '1', unit_cost: '', currency: 'USD', tax_rate_id: '', invoice_date: '', is_taxable: false, notes: '' }
@@ -32,6 +33,10 @@ export default function CostValidationDetailPage() {
 }
 
 function CostValidation({ quotationId, userId }: { quotationId: string; userId: string }) {
+  const rawReturnTo = typeof window === 'undefined'
+    ? null
+    : new URLSearchParams(window.location.search).get('returnTo')
+  const returnHref = rawReturnTo ? billingReturnHref(rawReturnTo) : '/cost-validation'
   const [data, setData] = useState<CostValidationData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -118,14 +123,16 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
 
   const financiallyValidated = data.quotation.status === 'Ganada' && data.quotation.financial_validation_status === 'Validado'
   const groups = analyzeCosts(data.pricing, data.invoices, financiallyValidated)
-  const canValidate = data.quotation.status === 'Ganada' && groups.length > 0 && groups.every(g => g.reconciled)
+  const operationsComplete = operationsAreComplete(data.shipments)
+  const canValidate = operationsComplete && data.quotation.status === 'Ganada' && groups.length > 0 && groups.every(g => g.reconciled)
   const validationReason = data.quotation.status !== 'Ganada' ? 'La cotización debe estar Ganada para validar.'
+    : !operationsComplete ? 'Todas las operaciones activas de la cotización deben estar finalizadas antes de validar los costos.'
     : !canValidate ? 'Vincula los costos con sus cargos cotizados y revisa las monedas e importes antes de validar. Los cargos adicionales deben conciliarse con Pricing.'
     : 'Tener registros vinculados no confirma que todas las facturas hayan llegado; Finanzas debe revisar su alcance antes de validar.'
 
   return <div className="min-w-0 space-y-6">
     <div className="flex flex-wrap gap-3">
-      <Link className={buttonClass} href="/cost-validation">Volver a Validación</Link>
+      <Link className={buttonClass} href={returnHref}>{rawReturnTo ? 'Volver a Por facturar' : 'Volver a Validación'}</Link>
       <Link className={buttonClass} href={'/quotations/' + quotationId}>Ver cotización</Link>
       <button disabled={busy} className={buttonClass} onClick={() => void refresh()}>Actualizar</button>
     </div>
@@ -147,7 +154,7 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
       <h2 className="font-bold">Operaciones vinculadas</h2>
       {!data.shipments.length && <p className="mt-2 text-sm">Sin operación vinculada.</p>}
       {data.shipments.map(shipment => <div key={shipment.id} className="mt-3 text-sm">
-        <p className="font-semibold">{shipment.shipment_number} · {shipment.operational_status}</p>
+        <p className="font-semibold">{shipment.shipment_number} · {shipment.operational_status} · cierre {formatDate(shipment.closed_at)}</p>
         {shipment.bookings.map(booking => <p key={booking.id}>
           {booking.booking_number || booking.carrier_booking || 'Booking sin número'} · {booking.carrier || 'Carrier pendiente'} · {booking.shipment_status || 'Estado pendiente'} ·
           {' '}{booking.booking_containers.length ? booking.booking_containers.map(c => c.quantity + ' × ' + c.container_type).join(', ') : 'Sin contenedores operativos registrados'}
@@ -224,7 +231,7 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
     <section className={cardClass}>
       <h2 className="font-bold">Revisión financiera</h2><p className="my-3 text-sm">{validationReason}</p>
       {data.quotation.financial_validation_status !== 'Validado' && <button className={buttonClass} disabled={busy || !canValidate} onClick={() => setConfirmValidation(true)}>Marcar como validado</button>}
-      {financiallyValidated && <Link className={buttonClass} href={data.customerInvoice ? '/invoicing/' + data.customerInvoice.id : '/invoicing/new?quotation=' + quotationId}>
+      {financiallyValidated && <Link className={buttonClass} href={data.customerInvoice ? '/invoicing/' + data.customerInvoice.id : '/invoicing/new?quotation=' + quotationId + '&returnTo=' + encodeURIComponent(returnHref)}>
         {data.customerInvoice ? 'Ver factura ' + (data.customerInvoice.invoice_number || '') : 'Generar factura'}
       </Link>}
     </section>
@@ -239,7 +246,9 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
     <ConfirmDialog open={confirmValidation} onOpenChange={setConfirmValidation} title="Confirmar revisión completa" description="Confirma que recibiste todas las facturas y revisaste cantidades, cargos adicionales e impuestos. La presencia de un registro por cargo no garantiza que la facturación esté completa." confirmLabel="Validar costos" onConfirm={() => {
       if (!canValidate) return
       void mutate(async () => {
-        const result = await supabase.from('quotations').update({ financial_validation_status: 'Validado' }).eq('id', quotationId).eq('status', 'Ganada').select('id').single()
+        const result = await supabase.rpc('validate_quotation_financial_costs', {
+          p_quotation_id: quotationId,
+        })
         if (result.error || !result.data) throw new Error(result.error?.message || 'La cotización cambió; actualiza antes de validar.')
       }, 'Costos validados')
     }} />

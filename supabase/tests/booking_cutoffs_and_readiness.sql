@@ -88,6 +88,13 @@ insert into public.quotations (
     '5c000000-0000-0000-0000-000000000001',
     'Ganada', 'Q-5C-ROAD', 'usa_ltl_ftl', 'LTL', 'Terrestre',
     'FOB', 'Miami', 'San Pedro Sula'
+  ),
+  (
+    '5c200000-0000-0000-0000-000000000005',
+    '5c100000-0000-0000-0000-000000000001',
+    '5c000000-0000-0000-0000-000000000001',
+    'Ganada', 'Q-5C-FTL', 'usa_ltl_ftl', 'FTL', 'Terrestre',
+    'FOB', 'Miami', 'San Pedro Sula'
   );
 
 insert into public.shipping_instructions (
@@ -125,6 +132,14 @@ insert into public.shipping_instructions (
     '5c000000-0000-0000-0000-000000000002',
     'Validada', 'Documentación Pendiente', 'Listo para Booking',
     '5c000000-0000-0000-0000-000000000002', now()
+  ),
+  (
+    '5c300000-0000-0000-0000-000000000005', 'RT-5C-FTL',
+    '5c200000-0000-0000-0000-000000000005',
+    '5c100000-0000-0000-0000-000000000001',
+    '5c000000-0000-0000-0000-000000000002',
+    'Validada', 'Documentación Pendiente', 'Listo para Booking',
+    '5c000000-0000-0000-0000-000000000002', now()
   );
 
 insert into public.bookings (
@@ -156,6 +171,13 @@ insert into public.bookings (
     '5c400000-0000-0000-0000-000000000004',
     '5c300000-0000-0000-0000-000000000004',
     'BOOK-5C-ROAD', 'CB-5C-ROAD', 'TRUCKER', null, null,
+    current_date + 2, current_date + 4, 'Documentación Pendiente',
+    '5c000000-0000-0000-0000-000000000002'
+  ),
+  (
+    '5c400000-0000-0000-0000-000000000005',
+    '5c300000-0000-0000-0000-000000000005',
+    'BOOK-5C-FTL', 'CB-5C-FTL', 'TRUCKER FTL', null, null,
     current_date + 2, current_date + 4, 'Documentación Pendiente',
     '5c000000-0000-0000-0000-000000000002'
   );
@@ -218,6 +240,12 @@ select pg_temp.assert_true(
     '5c400000-0000-0000-0000-000000000004'
   ) = 'ROAD_LTL',
   'Debe clasificar terrestre LTL'
+);
+select pg_temp.assert_true(
+  public.booking_operational_mode(
+    '5c400000-0000-0000-0000-000000000005'
+  ) = 'ROAD_FTL',
+  'Debe priorizar FTL sobre la etiqueta terrestre generica'
 );
 
 select pg_temp.assert_true(

@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from '@/src/components/ui/dialog'
 import { formatDate } from '@/src/lib/format'
+import { operationsReturnHref } from '@/src/lib/operations-navigation'
 
 type OperationsUser = {
   id: string
@@ -106,8 +107,13 @@ type ShippingInstruction = {
   operational_status: string | null
   created_by: string | null
   operations_assigned_to: string | null
+  operations_accepted_at: string | null
+  operations_accepted_by: string | null
   quotation_id?: string | null
+  // Compatibility shape consumed by the existing PDF and legacy detail fields.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cliente?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   quotation?: any
   quotation_number?: string | null
   client_name?: string | null
@@ -381,6 +387,7 @@ function formatOperationalEvent(event: OperationalTimelineEvent) {
     shipping_instruction_updated: { icon: '🚢', title: 'Información operativa actualizada' },
     shipping_instruction_validated: { icon: '✅', title: 'SI validada por Operaciones' },
     shipping_instruction_assigned: { icon: '👤', title: 'Operativo asignado' },
+    shipping_instruction_accepted: { icon: '✅', title: 'Expediente aceptado por Operaciones' },
     shipping_instruction_finalized: { icon: '🚢', title: 'Shipping Instruction finalizada' },
     shipping_instruction_cancelled: { icon: '🚫', title: 'Shipping Instruction cancelada' },
     booking_created: { icon: '📦', title: 'Booking creado' },
@@ -407,11 +414,18 @@ export default function RoutingDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const id = params.id
+  const returnHref = typeof window === 'undefined'
+    ? '/operations/shipping-instructions'
+    : operationsReturnHref(
+        new URLSearchParams(window.location.search).get('returnTo')
+      )
   const bookingsSectionRef = useRef<HTMLElement | null>(null)
   const { user, profile, loading: userLoading } = useUser()
 
   const [routing, setRouting] = useState<ShippingInstruction | null>(null)
   const [shipmentContext, setShipmentContext] = useState<ShipmentContext | null>(null)
+  // Selected agent quotes still expose legacy columns without a generated type.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [operationalEvents, setOperationalEvents] = useState<OperationalTimelineEvent[]>([])
@@ -420,6 +434,7 @@ export default function RoutingDetailPage() {
   const [operationsUsers, setOperationsUsers] = useState<OperationsUser[]>([])
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
+  const [accepting, setAccepting] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [creatingBooking, setCreatingBooking] = useState(false)
@@ -430,6 +445,13 @@ export default function RoutingDetailPage() {
   const [loading, setLoading] = useState(true)
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
+
+  const bookingDetailHref = (targetBookingId: string) => {
+    const path = `/operations/shipping-instructions/${id}/bookings/${targetBookingId}`
+    return returnHref.startsWith('/operations/dashboard')
+      ? `${path}?returnTo=${encodeURIComponent(returnHref)}`
+      : path
+  }
 
   const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
   const canViewRouting =
@@ -449,15 +471,21 @@ export default function RoutingDetailPage() {
       routing?.shipment_status !== SI_CANCELLED &&
       routing?.operational_status !== SI_CANCELLED) ||
     canSalesEditInitialInfo
-
-  const parseIntegerValue = (value: unknown) => {
-    if (value === null || value === undefined || value === '') return null
-
-    const numericValue = Number(value)
-    if (!Number.isFinite(numericValue)) return null
-
-    return Math.trunc(numericValue)
-  }
+  const assignedOperationsUser = operationsUsers.find(
+    (operationsUser) => operationsUser.id === routing?.operations_assigned_to
+  )
+  const assignedOperationsName = assignedOperationsUser
+    ? `${assignedOperationsUser.nombre || ''} ${assignedOperationsUser.apellido || ''}`.trim()
+      || assignedOperationsUser.email
+      || 'Operativo asignado'
+    : routing?.operations_assigned_to
+      ? 'Operativo asignado'
+      : 'Sin asignar'
+  const canAcceptHandoff =
+    profile?.rol === 'Operaciones' &&
+    Boolean(routing?.sales_submitted_at) &&
+    !routing?.operations_accepted_at &&
+    (!routing?.operations_assigned_to || routing.operations_assigned_to === user?.id)
 
   const loadRouting = async () => {
     // TODO: Reforzar esta misma regla en Supabase RLS para shipping_instructions.
@@ -642,6 +670,8 @@ export default function RoutingDetailPage() {
     }
 
     timelineEvents.push(
+      // Supabase returns this legacy event table without generated row types.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...(shippingEventsData || []).map((event: any) => ({
         id: `shipping-event-${event.id}`,
         source: 'shipping_instruction_events' as const,
@@ -683,6 +713,8 @@ export default function RoutingDetailPage() {
         // timeline continues without activity logs
       }
 
+      // The embedded profile relation is polymorphic in the generated response.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const activityTimelineEvents = (activityLogsData || []).map((log: any) => {
           const profile = Array.isArray(log.created_by_profile)
             ? log.created_by_profile[0] || null
@@ -904,6 +936,10 @@ export default function RoutingDetailPage() {
       setValidating(false)
       return
     }
+    if (!routing.operations_accepted_at || !routing.operations_accepted_by) {
+      toast.error('Acepta formalmente el expediente antes de validarlo')
+      return
+    }
 
     setValidating(true)
 
@@ -943,6 +979,41 @@ export default function RoutingDetailPage() {
     }
 
     toast.success('Shipping Instructions listas para booking')
+  }
+
+  const acceptOperationsHandoff = async () => {
+    if (!routing || !canAcceptHandoff) return
+
+    setAccepting(true)
+    const { data, error } = await supabase.rpc(
+      'accept_shipping_instruction_handoff',
+      {
+        p_shipping_instruction_id: routing.id,
+        p_expected_updated_at: routing.updated_at,
+      }
+    )
+    setAccepting(false)
+
+    if (error) {
+      toast.error(
+        isShippingInstructionVersionConflict(error)
+          ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de aceptar.'
+          : error.message || 'No se pudo aceptar el expediente'
+      )
+      return
+    }
+
+    const result = data as {
+      shipping_instruction?: ShippingInstruction
+    } | null
+
+    if (result?.shipping_instruction) {
+      setRouting(result.shipping_instruction)
+    } else {
+      await loadRouting()
+    }
+    await loadOperationalTimeline(routing, bookings)
+    toast.success('Expediente aceptado; ahora puedes validarlo')
   }
 
   const assignOperationsUser = async (userId: string) => {
@@ -1042,7 +1113,7 @@ export default function RoutingDetailPage() {
     setShipmentContext(await loadShipmentContext(routing.id))
     await loadOperationalTimeline(routing, bookings)
 
-    toast.success('Shipping Instruction finalizada')
+    toast.success('Operación finalizada; Finanzas ya puede revisar costos')
   }
 
   const cancelRouting = async () => {
@@ -1158,7 +1229,7 @@ export default function RoutingDetailPage() {
     const newBooking = await createBookingChild()
     if (!routing || !newBooking) return
 
-    router.push(`/operations/shipping-instructions/${routing.id}/bookings/${newBooking.id}`)
+    router.push(bookingDetailHref(newBooking.id))
   }
 
   const handleOpenBooking = async () => {
@@ -1169,7 +1240,7 @@ export default function RoutingDetailPage() {
     }
 
     if (bookings.length === 1) {
-      router.push(`/operations/shipping-instructions/${routing.id}/bookings/${bookings[0].id}`)
+      router.push(bookingDetailHref(bookings[0].id))
       return
     }
 
@@ -1182,7 +1253,7 @@ export default function RoutingDetailPage() {
     const newBooking = await createBookingChild()
     if (!newBooking) return
 
-    router.push(`/operations/shipping-instructions/${routing.id}/bookings/${newBooking.id}`)
+    router.push(bookingDetailHref(newBooking.id))
   }
 
   const handlePrintRoutingPdf = async () => {
@@ -1211,21 +1282,26 @@ export default function RoutingDetailPage() {
   }
 
   useEffect(() => {
-    loadRouting()
-    loadBookings()
-  }, [id])
+    const timer = window.setTimeout(() => {
+      void loadRouting()
+      void loadBookings()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps -- Loaders refresh only when the route identity changes.
 
   useEffect(() => {
-    if (canManageRouting) {
-      loadOperationsUsers()
-    }
+    if (!canManageRouting) return
+    const timer = window.setTimeout(() => { void loadOperationsUsers() }, 0)
+    return () => window.clearTimeout(timer)
   }, [canManageRouting])
 
   useEffect(() => {
-    if (routing) {
-      loadOperationalTimeline(routing, bookings)
-    }
-  }, [routing?.id, routing?.quotation_id, routing?.routing_number, bookings.map((booking) => booking.id).join('|')])
+    if (!routing) return
+    const timer = window.setTimeout(() => {
+      void loadOperationalTimeline(routing, bookings)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [routing?.id, routing?.quotation_id, routing?.routing_number, bookings.map((booking) => booking.id).join('|')]) // eslint-disable-line react-hooks/exhaustive-deps -- Timeline identity is derived from stable row keys.
 
   if (loading || userLoading) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando Shipping Instructions...</p>
@@ -1336,7 +1412,12 @@ export default function RoutingDetailPage() {
     <div>
       <Breadcrumbs
         items={[
-          { label: 'Shipping Instructions', href: '/operations/shipping-instructions' },
+          {
+            label: returnHref.startsWith('/operations/dashboard')
+              ? 'Control Tower'
+              : 'Shipping Instructions',
+            href: returnHref,
+          },
           { label: routing.routing_number || 'Detalle' },
         ]}
       />
@@ -1554,7 +1635,7 @@ export default function RoutingDetailPage() {
       </section>
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Info label="Estado operativo" value={routing.operational_status || 'N/A'} />
           <Info label="Estado embarque" value={routing.shipment_status || 'N/A'} />
           <Info
@@ -1567,7 +1648,47 @@ export default function RoutingDetailPage() {
                   : 'Pendiente'
             }
           />
+          <Info
+            label="Responsable operativo"
+            value={assignedOperationsName}
+          />
+          <Info
+            label="Aceptación de Operaciones"
+            value={
+              routing.operations_accepted_at
+                ? `Aceptado por ${assignedOperationsName} el ${formatDisplayDate(routing.operations_accepted_at)}`
+                : routing.sales_submitted_at
+                  ? 'Pendiente de aceptación'
+                  : 'Pendiente de envío por Ventas'
+            }
+          />
         </div>
+        {routing.sales_submitted_at && !routing.operations_accepted_at && canManageRouting && (
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold">Handoff pendiente</p>
+              <p className="mt-1">
+                El operativo responsable debe aceptar el expediente antes de validarlo o crear el booking.
+              </p>
+            </div>
+            {canAcceptHandoff ? (
+              <button
+                type="button"
+                onClick={acceptOperationsHandoff}
+                disabled={accepting}
+                className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
+              >
+                {accepting ? 'Aceptando...' : 'Aceptar expediente'}
+              </button>
+            ) : (
+              <span className="shrink-0 font-semibold">
+                {profile?.rol === 'Admin'
+                  ? 'Debe aceptarlo el operativo asignado.'
+                  : `Asignado a ${assignedOperationsName}.`}
+              </span>
+            )}
+          </div>
+        )}
       </section>
 
       <section
@@ -1704,7 +1825,7 @@ export default function RoutingDetailPage() {
                     </td>
                     <td className="text-right">
                       <Link
-                        href={`/operations/shipping-instructions/${routing.id}/bookings/${booking.id}`}
+                        href={bookingDetailHref(booking.id)}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         Abrir
@@ -2097,7 +2218,8 @@ export default function RoutingDetailPage() {
                   <button
                     type="button"
                     onClick={validateRouting}
-                    disabled={validating}
+                    disabled={validating || !routing.operations_accepted_at}
+                    title={!routing.operations_accepted_at ? 'Acepta el expediente antes de validarlo' : undefined}
                     className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     {validating ? 'Validando...' : 'Validar SI'}
@@ -2119,7 +2241,7 @@ export default function RoutingDetailPage() {
                   disabled={finalizing}
                   className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
-                  {finalizing ? 'Finalizando...' : 'Finalizar SI'}
+                  {finalizing ? 'Finalizando...' : 'Finalizar operación'}
                 </button>
               )}
 

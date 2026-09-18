@@ -7672,3 +7672,321 @@ Agregar una entrada por fix:
     Comprobaciones GET sin sesión ni mutaciones de datos.
   - Estas verificaciones no cierran el UAT autenticado descrito en el guion.
 - Commit de implementación: `7b4eff5`. Registro de publicación en commit documental posterior.
+
+### 2026-09-18 - OPS-P0-01 - Restauración de Dashboard y bandeja de bookings
+
+- Estado: implementado y validado localmente; UAT autenticado y despliegue pendientes.
+- Fase: 0 - restaurar verdad operacional, sin modificar reglas de negocio,
+  estados, ownership ni diseño de Control Tower.
+- Hallazgos: O-01, O-02 y D-01 de la auditoría transversal del 18/09/2026.
+- Causa raíz:
+  - `bookings` y `shipping_instructions` tienen dos relaciones válidas desde
+    la introducción de `shipping_instructions.primary_booking_id`.
+  - Dashboard Operativo y `/operations/bookings` embebían
+    `shipping_instructions` sin especificar la FK. PostgREST respondía
+    `PGRST201` y ambas pantallas descartaban el error como si no hubiera filas.
+- Código:
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/app/(protected)/operations/bookings/page.tsx`
+  - `tests/operations-dashboard-query.test.mjs`
+- SQL: ninguno. No se modificaron migraciones, RLS ni datos productivos.
+- Cambios:
+  - Ambas consultas usan la relación canónica explícita
+    `shipping_instructions!bookings_shipping_instruction_id_fkey`.
+  - Los errores de bookings, contenedores cotizados o readiness dejan de
+    convertirse en métricas cero y muestran un estado persistente con detalle
+    y acción `Reintentar`.
+  - Dashboard y bandeja incluyen `Actualizar`; la bandeja distingue entre
+    cero bookings activos y cero resultados por filtros.
+  - Se agregó una regresión de fuente que impide reintroducir el embed ambiguo
+    y comprueba los estados de error/vacío.
+- Validaciones ejecutadas:
+  - Producción, solo lectura: la consulta original reprodujo `PGRST201`; la
+    misma consulta con la FK canónica respondió correctamente con 9 bookings
+    activos. No se realizaron escrituras.
+  - `npm.cmd test`: 96/96 pruebas correctas, incluidas 2 regresiones nuevas.
+  - ESLint dirigido sobre las dos rutas y la prueba: sin errores ni avisos.
+  - `npm.cmd run build`: OK, 73/73 páginas; incluye ambas rutas operativas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos de conversión LF/CRLF.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT con una cuenta Admin y una de Operaciones para confirmar RLS,
+    carga de readiness, enlaces de detalle, refresh y recuperación ante error.
+  - La corrección restaura los datos existentes; no corrige todavía reglas de
+    prioridad, documentos por modalidad, ETAs vencidas ni asignación. Esos
+    cambios pertenecen a las fases siguientes del plan aprobado.
+  - No se ha desplegado frontend ni se ha realizado commit.
+- Commit: pendiente.
+
+### 2026-09-18 - OPS-P1-01 - Unificación de reglas operativas
+
+- Estado: implementado y validado; migraciones productivas aplicadas y UAT
+  autenticado pendiente.
+- Fase: 1 - unificar estado derivado, riesgo, siguiente acción, readiness,
+  documentación por modalidad y visibilidad de ownership.
+- Hallazgos: O-03 y H-01 de la auditoría transversal del 18/09/2026.
+- Causa raíz:
+  - Dashboard, bandeja de bookings y alertas duplicaban reglas de estado, ETA y
+    documentos; algunas contradecían readiness y Documentation Workspace.
+  - La lista fija exigía Booking Confirmation, MBL, HBL, Packing List y
+    Commercial Invoice a todas las modalidades.
+  - Una ETA vencida desaparecía de “próximos 7 días”, y un booking podía seguir
+    visualmente como solicitado aun teniendo ambas referencias confirmadas.
+  - `booking_operational_mode` evaluaba textos compartidos antes del
+    `quote_type`; `usa_ltl_ftl` impedía distinguir confiablemente LTL de FTL.
+- Código:
+  - `src/lib/booking-operational-state.ts`
+  - `src/lib/documentation-workspace.ts`
+  - `src/lib/alerts.ts`
+  - `src/components/operations/DocumentationWorkspace.tsx`
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/app/(protected)/operations/bookings/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `tests/booking-operational-state.test.mjs`
+  - `tests/documentation-workspace.test.mjs`
+  - `tests/operations-dashboard-query.test.mjs`
+- SQL:
+  - `supabase/migrations/20260918170000_booking_operational_mode_priority.sql`
+  - `supabase/migrations/20260918171000_booking_operational_mode_explicit_quote_type.sql`
+  - `supabase/tests/booking_cutoffs_and_readiness.sql`
+- Cambios:
+  - Se creó una derivación pura y reutilizable para estado visible, drift,
+    severidad, ETA, ownership, documentos y siguiente acción.
+  - Los estados persistidos no se modifican automáticamente: cualquier
+    incompatibilidad con referencias o fechas reales se presenta como “por
+    conciliar”, conservando el valor almacenado para auditoría.
+  - Dashboard muestra ETAs vencidas, operaciones sin asignar y estados por
+    conciliar; la bandeja añade filtro de asignación y siguiente acción.
+  - Readiness alimenta las mismas decisiones en Dashboard, bandeja y detalle.
+  - MBL/HBL dejan de bloquear modalidades terrestres; `requires_hbl = false`
+    evita exigir HBL en operaciones marítimas configuradas de esa forma.
+  - Alertas reutiliza los requisitos documentales por modalidad y ahora genera
+    una alerta explícita para ETA vencida sin arribo.
+  - La clasificación SQL prioriza `quote_type` explícito y mantiene textos de
+    transporte/servicio únicamente como fallback.
+- Validaciones ejecutadas:
+  - Producción, solo lectura: la consulta ampliada recuperó 9 bookings activos;
+    los 9 están sin asignar, los 9 tienen readiness bloqueado, 4 tienen ETA
+    vencida sin arribo y 2 tienen referencias completas con estado solicitado.
+    `evaluate_booking_readiness` respondió para los 9. No hubo escrituras.
+  - Base local: ambas migraciones aplicadas; prueba SQL transaccional ejecutada
+    directamente con `psql -v ON_ERROR_STOP=1`: `BEGIN`,
+    `booking_cutoffs_and_readiness: OK`, `ROLLBACK`.
+  - `npm.cmd test`: 105/105 pruebas correctas.
+  - ESLint dirigido sobre helpers, componentes, rutas y pruebas: sin errores ni
+    avisos.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos de conversión LF/CRLF.
+- Producción:
+  - Migraciones `20260918170000` y `20260918171000` aplicadas el 18/09/2026
+    al proyecto enlazado `fwspgdzvlbtbgiupvrzo`.
+  - `supabase migration list --linked`: historial local/remoto alineado.
+  - Dump remoto posterior: `booking_operational_mode` prioriza `quote_type`
+    explícito para FTL, LTL, LCL y FCL antes de usar el contexto como fallback.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT autenticado con Admin y Operaciones para verificar RLS del RPC
+    `get_booking_readiness_overview`, navegación de acciones, filtros y estados
+    derivados. Service role no reproduce el contexto de `auth.uid()` requerido
+    por `can_select_booking`.
+  - Revisar manualmente los 2 drifts de confirmación y asignar responsables a
+    los 9 expedientes; esta fase no altera datos productivos automáticamente.
+  - La cola única de Control Tower, aging y persistencia de filtros pertenecen
+    a la Fase 2 y no se implementaron aquí.
+  - No se ha desplegado frontend ni se ha realizado commit.
+- Commit: pendiente.
+
+### 2026-09-18 - P2-CTRL-01 - Control Tower Operativo y Mi día comercial
+
+- Estado: implementado y validado localmente; UAT autenticado y despliegue
+  pendientes.
+- Fase: 2 - priorización diaria y trazabilidad de trabajo. No incluye handoff
+  formal de ownership, cierre operativo/facturación ni Agent 360, reservados
+  para fases posteriores.
+- Hallazgos: cola operativa fragmentada, aging no visible, dashboard comercial
+  limitado a actividades históricas y pérdida de filtros al abrir un detalle.
+- Código:
+  - `src/lib/operations-control-tower.ts`
+  - `src/lib/operations-navigation.ts`
+  - `src/lib/sales-work-queue.ts`
+  - `src/lib/quotation-detail-ux.ts`
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/(protected)/ventas/page.tsx`
+  - `tests/operations-control-tower.test.mjs`
+  - `tests/operations-navigation.test.mjs`
+  - `tests/sales-work-queue.test.mjs`
+  - `tests/quotation-navigation.test.mjs`
+- SQL: ninguno. Esta fase consume `operational_events`,
+  `quotation_status_history` y los RPC vigentes de readiness sin modificar
+  esquema, RLS ni datos.
+- Cambios:
+  - El Dashboard Operativo abre con una Control Tower única, filtros por
+    atención, asignación, salidas, arribos, documentos, excepciones y cierres
+    recientes, además de búsqueda por booking, RT, cliente o carrier.
+  - La cola reutiliza `get_booking_readiness_alerts`; combina cut-offs,
+    readiness, ETA, free days, ownership, drift y documentos con una sola
+    severidad y siguiente acción. Los paneles especializados se conservan como
+    vistas secundarias.
+  - El aging operativo parte del último `operational_event` del booking y usa
+    `bookings.updated_at`/`created_at` solo como fallback. Los tres primeros
+    elementos se presentan como “Siguientes 3 acciones”.
+  - `/ventas` pasa a encabezar con “Mi día”: seguimiento vencido o de hoy,
+    vigencia de propuesta, cotización enviada sin respuesta, cotización ganada
+    sin shipment y lead sin primera gestión. Agenda y calendario permanecen
+    debajo como historial.
+  - El aging comercial de cotizaciones parte del último cambio al estado actual
+    en `quotation_status_history`; no se calcula desde la creación salvo que no
+    exista historial. Para no duplicar pendientes, solo se proyecta la próxima
+    acción de la actividad más reciente por cuenta/prospecto.
+  - Los filtros de ambas colas se serializan en la URL. Los detalles validan un
+    `returnTo` interno y permiten volver al Control Tower o a Mi día sin perder
+    búsqueda/filtro; URLs externas o rutas ajenas se descartan.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 114/114 pruebas correctas; 9 regresiones nuevas para
+    prioridad, aging desde eventos/historial, deduplicación de seguimientos,
+    leads gestionados y navegación segura.
+  - ESLint dirigido sobre Control Tower, Mi día, detalle de booking y helpers:
+    sin errores ni avisos. El detalle legacy de Shipping Instruction también
+    se comprobó con sus cuatro reglas preexistentes deshabilitadas de forma
+    dirigida; no se añadieron nuevas excepciones al repositorio.
+  - `npm.cmd run build`: OK, 73/73 páginas, incluidas `/operations/dashboard`
+    y `/ventas`.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos de conversión LF/CRLF.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT autenticado con Ventas, Operaciones y Admin para confirmar RLS,
+    volumen real, orden de las tres primeras acciones, anclas y retorno de
+    filtros. La validación local no sustituye esa prueba de aceptación.
+  - `sales_activities` no tiene estado de ejecución. La cola considera resuelto
+    un seguimiento anterior cuando existe una actividad más reciente para la
+    misma cuenta/prospecto; una fase futura podría introducir tareas explícitas
+    si el negocio necesita conservar varios pendientes simultáneos.
+  - Los leads tampoco tienen relación formal con actividades. “Sin gestión” se
+    infiere por coincidencia normalizada de empresa o contacto; revisar falsos
+    positivos/negativos durante UAT antes de endurecer el modelo.
+  - Las dos migraciones de modalidad de la Fase 1 fueron aplicadas en
+    Production el 18/09/2026; su UAT autenticado continúa pendiente.
+  - No se ha desplegado frontend ni se ha realizado commit.
+- Commit: pendiente.
+
+### 2026-09-18 - FLOW-P3-01 - Handoffs formales y cola Por facturar
+
+- Estado: implementado y validado; migración productiva aplicada y UAT autenticado pendiente.
+- Fase: 3 - aceptación Ventas → Operaciones, cierre operativo verificable y handoff Operaciones → Finanzas. No incluye Agent 360.
+- Hallazgos: ownership operativo implícito, validación de costos antes del cierre real y ausencia de una bandeja derivada por facturar.
+- Código:
+  - `src/lib/billing-readiness.ts`
+  - `src/lib/cost-validation-data.ts`
+  - `src/lib/operations-navigation.ts`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/cost-validation/[id]/page.tsx`
+  - `src/app/(protected)/invoicing/page.tsx`
+  - `src/app/(protected)/invoicing/new/page.tsx`
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `tests/billing-readiness.test.mjs`
+  - `tests/operations-navigation.test.mjs`
+- SQL:
+  - `supabase/migrations/20260918180000_phase3_handoffs_billing_readiness.sql`
+  - `supabase/tests/phase3_handoffs_billing_readiness.sql`
+  - `supabase/tests/shipping_instruction_workflow_hardening.sql`
+- Cambios:
+  - La entrega de Ventas queda aceptada explícitamente por el usuario de Operaciones responsable, con actor y fecha. Si no había asignación, el operativo que acepta asume ownership; una reasignación reinicia la aceptación.
+  - `validate_shipping_instruction` exige una aceptación vigente y coherente con el asignado. Admin puede asignar, pero solo el operativo responsable acepta el expediente.
+  - El cierre reutiliza exclusivamente `finalize_shipping_instruction_canonical`; `shipments.closed_at` y `Finalizado` siguen siendo los hechos canónicos.
+  - Finanzas valida mediante `validate_quotation_financial_costs`, evitando que RLS convierta el cierre en un `UPDATE` de cero filas y dejando auditoría. El servidor exige operación cerrada, todos los cargos con costos vinculados, moneda coherente e importes válidos.
+  - No se puede crear una Factura vinculada hasta que exista al menos un shipment activo y todos los activos estén cerrados canónicamente.
+  - `/invoicing` abre con `Por facturar`: clasifica operación pendiente, costos pendientes, RTN faltante, Pricing inválido y listo para facturar, con bloqueo y siguiente acción.
+  - Cola, Validación de Costos, creación y detalle de factura conservan un `returnTo` interno validado; retornos externos se descartan.
+- Validaciones ejecutadas:
+  - Base local: migración aplicada de forma idempotente.
+  - SQL transaccional con `psql -v ON_ERROR_STOP=1`: `phase3_handoffs_billing_readiness: OK` y `shipping_instruction_workflow_hardening.sql: OK`; ambos con `ROLLBACK`.
+  - `npm.cmd test`: 117/117 pruebas correctas.
+  - ESLint dirigido: sin errores ni avisos.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos LF/CRLF.
+- Producción:
+  - Migración `20260918180000` aplicada el 18/09/2026 al proyecto enlazado
+    `fwspgdzvlbtbgiupvrzo`.
+  - `supabase migration list --linked`: historial local/remoto alineado.
+  - Dump remoto posterior: presentes `operations_accepted_at`,
+    `operations_accepted_by`, el constraint de aceptación, los RPC de handoff,
+    cierre/validación/cola y el trigger que protege Facturación.
+  - Respaldo previo del esquema público guardado fuera del repositorio con
+    SHA-256 `0970CDF66C49F047D968C2842299F5E1BB4771C114C6A661B50EEB61F1AE0689`.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT con Ventas, dos usuarios de Operaciones, Admin y Finanzas: envío, aceptación, reasignación, validación, cierre multishipment, costos, RTN, factura y retornos.
+  - No se inventó aceptación histórica: expedientes existentes aún previos a Booking deberán ser aceptados por su responsable.
+  - Cotizaciones históricas ya `Validado` no se reescriben; cola y guarda de Factura igualmente bloquean si la operación no cerró.
+  - No se ha desplegado frontend ni se ha realizado commit.
+- Commit: pendiente.
+
+### 2026-09-18 - AGT-P4-01 - Agent 360 basado en relaciones canónicas
+
+- Estado: implementado y validado; migración productiva aplicada. Despliegue
+  frontend y UAT autenticado pendientes.
+- Fase: 4 - consulta contextual de agentes. No introduce scoring, documentos de
+  agentes, actividad transversal ni modelos nuevos.
+- Hallazgos: `/agents` funcionaba como catálogo editable sin mostrar uso real;
+  Ventas y Operaciones podían leer `agents` por RLS, pero la navegación les
+  bloqueaba el módulo y `agent_route_rates` solo permitía lectura a Admin/Pricing.
+- Código:
+  - `src/lib/agent-360.ts`
+  - `src/components/agents/Agent360Panel.tsx`
+  - `src/app/(protected)/agents/page.tsx`
+  - `src/app/(protected)/agents/[id]/page.tsx`
+  - `src/lib/permissions.ts`
+  - `tests/agent-360.test.mjs`
+  - `tests/quotation-navigation.test.mjs`
+- SQL:
+  - `supabase/migrations/20260918190000_agent_360_read_access.sql`
+  - `supabase/tests/phase4_agent_360_access.sql`
+- Cambios:
+  - El perfil consolida ofertas, selecciones, cotizaciones ganadas, shipments,
+    bookings visibles, última actividad y lanes utilizados a partir de
+    `agents → agent_quotes → quotations → shipments → bookings`.
+  - Un shipment solo se atribuye al agente cuando existe una tarifa activa con
+    `is_selected = true`; no se relacionan operaciones por nombres legacy.
+  - Activos/cerrados reutilizan el hecho canónico `shipments.closed_at`; los
+    conteos no inventan performance ni mezclan costo cotizado con costo real.
+  - Cotizaciones y expedientes conservan enlaces permitidos por rol. Pricing
+    abre el comparativo; Operaciones/Ventas abren únicamente rutas autorizadas.
+  - La contraparte de Proveedores permanece separada y solo se consulta cuando
+    el rol ya tiene permiso financiero; los demás roles reciben una explicación.
+  - Ventas y Operaciones obtienen acceso de consulta a `/agents` y lanes. Crear,
+    editar o eliminar agentes/tarifas queda oculto y sigue protegido por RLS
+    para Admin/Pricing.
+- Validaciones ejecutadas:
+  - Migración aplicada en Supabase local.
+  - SQL directo con `psql -v ON_ERROR_STOP=1`: Ventas/Operaciones leen lanes y
+    no pueden modificarlas; Pricing conserva escritura; Finanzas ve cero filas;
+    prueba finalizada con `ROLLBACK` y `phase4_agent_360_access.sql: OK`.
+  - `npm.cmd test`: 119/119 pruebas correctas.
+  - ESLint dirigido sobre rutas, panel, helpers y pruebas: sin errores ni avisos.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos LF/CRLF.
+  - Preflight Production: historial remoto alineado hasta `20260918180000` y
+    dry-run limitado exclusivamente a `20260918190000_agent_360_read_access.sql`.
+  - Respaldo previo del esquema `public` guardado fuera del repositorio en
+    `sarierp-prod-pre-phase4-20260918.sql` (852,992 bytes), SHA-256
+    `75386573E6166E10E22C00D41E1913A94F62CDA177F8798ADBA86FA1C3899A5D`.
+  - Migración aplicada en Production al proyecto vinculado
+    `fwspgdzvlbtbgiupvrzo`; historial local/remoto alineado en
+    `20260918190000` y postflight `db push --dry-run`: base remota al día.
+  - Snapshot posterior `sarierp-prod-post-phase4-20260918.sql` (853,076 bytes),
+    SHA-256 `4CD502B528F31A8574BEA3CC3B2272C1E2632955B871B4F5A7098B3252125152`;
+    confirma `agent_route_rates_select_policy` para Admin, Pricing,
+    Operaciones y Ventas, condicionado a usuario activo/aprobado.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT con Admin, Pricing, Operaciones y Ventas: visibilidad por rol,
+    ofertas versus seleccionadas, expedientes 0/1/N, lanes, enlaces y edición.
+  - Los registros históricos que solo guardan `agent_name`/`agente_nombre` sin
+    `agent_id` no se atribuyen automáticamente; conciliarlos requiere evidencia
+    y no forma parte de esta fase.
+  - Los totales son relativos a lo que RLS permite ver al usuario autenticado;
+    una suite local no certifica el volumen ni los datos de Production.
+  - No se ha desplegado frontend ni realizado commit.
+- Commit: pendiente.

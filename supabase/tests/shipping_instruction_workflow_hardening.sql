@@ -344,6 +344,30 @@ select pg_temp.expect_error(
   'Operaciones no debe cambiar estados mediante el formulario general'
 );
 
+select pg_temp.expect_error(
+  $$select public.validate_shipping_instruction(
+    '52400000-0000-0000-0000-000000000001',
+    (select updated_at from public.shipping_instructions where id = '52400000-0000-0000-0000-000000000001')
+  )$$,
+  'Operaciones no debe validar antes de aceptar el handoff'
+);
+
+select public.accept_shipping_instruction_handoff(
+  '52400000-0000-0000-0000-000000000001',
+  (select updated_at from public.shipping_instructions where id = '52400000-0000-0000-0000-000000000001')
+);
+
+select pg_temp.assert_true(
+  (
+    select operations_assigned_to = '52100000-0000-0000-0000-000000000002'
+      and operations_accepted_by = operations_assigned_to
+      and operations_accepted_at is not null
+    from public.shipping_instructions
+    where id = '52400000-0000-0000-0000-000000000001'
+  ),
+  'Aceptar debe asumir propiedad explicita del expediente sin asignar'
+);
+
 create temp table stale_si_version as
 select updated_at
 from public.shipping_instructions
@@ -373,12 +397,14 @@ select pg_temp.assert_true(
   (
     select si.operations_assigned_to = '52100000-0000-0000-0000-000000000003'
       and si.operational_status = 'Listo para Booking'
+      and si.operations_accepted_at is null
+      and si.operations_accepted_by is null
       and shipment.assigned_to = si.operations_assigned_to
     from public.shipping_instructions si
     join public.shipments shipment on shipment.shipping_instruction_id = si.id
     where si.id = '52400000-0000-0000-0000-000000000001'
   ),
-  'Asignar debe sincronizar shipment sin regresar una SI validada'
+  'Reasignar debe sincronizar shipment, reiniciar la aceptacion y no regresar una SI validada'
 );
 
 select pg_temp.expect_error(

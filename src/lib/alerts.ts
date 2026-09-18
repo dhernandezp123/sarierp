@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { aggregateBookingStatus } from '@/src/lib/booking-status'
+import {
+  aggregateBookingStatus,
+  isFinalBookingStatus,
+} from '@/src/lib/booking-status'
+import { getMissingBookingDocuments } from '@/src/lib/booking-operational-state'
 import { calendarDaysUntil } from '@/src/lib/format'
 
 export type SystemAlertCategory = 'Comercial' | 'Operativa' | 'Gerencial'
@@ -61,6 +65,7 @@ type BookingDocumentJoin = {
 
 type BillOfLadingJoin = {
   bl_type: string | null
+  status: string | null
 }
 
 type BookingContainerJoin = {
@@ -71,6 +76,8 @@ type BookingContainerJoin = {
 type RoutingQuoteJoin = {
   id?: string | null
   created_by?: string | null
+  quote_type?: string | null
+  tipo_transporte?: string | null
   clientes?: ClientJoin | ClientJoin[] | null
 }
 
@@ -99,6 +106,8 @@ type ShipmentRoutingJoin = {
   container_qty: number | null
   container_type: string | null
   created_by?: string | null
+  service_type?: string | null
+  requires_hbl?: boolean | null
   quotation?: RoutingQuoteJoin | RoutingQuoteJoin[] | null
 }
 
@@ -156,6 +165,8 @@ type BookingShipmentJoin = {
   shipment_number: string
   quotation_id: string | null
   created_by?: string | null
+  service_type?: string | null
+  requires_hbl?: boolean | null
   shipping_instruction:
     | ShipmentInstructionContextJoin
     | ShipmentInstructionContextJoin[]
@@ -179,14 +190,6 @@ type ReadinessAlertRow = {
   description: string
   due_at: string | null
 }
-
-const requiredDocumentTypes = [
-  'Booking Confirmation',
-  'Master BL',
-  'House BL',
-  'Packing List',
-  'Commercial Invoice',
-]
 
 function resolveJoin<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null
@@ -237,7 +240,9 @@ function normalizeStatus(status?: string | null) {
 
 function isFinalStatus(status?: string | null) {
   const normalized = normalizeStatus(status)
-  return normalized === 'Finalizado' || normalized === 'Convertida a Shipment'
+  return (
+    isFinalBookingStatus(status) || normalized === 'Convertida a Shipment'
+  )
 }
 
 function isArrived(status?: string | null) {
@@ -296,21 +301,6 @@ function assignedContainers(bookings: BookingRow[]) {
     )
     return total + bookingTotal
   }, 0)
-}
-
-function missingDocuments(booking: BookingRow) {
-  const attached = new Set(
-    (booking.booking_documents || [])
-      .map((document) => document.document_type)
-      .filter((type): type is string => Boolean(type))
-  )
-
-  ;(booking.bills_of_lading || []).forEach((bill) => {
-    if (bill.bl_type === 'MBL') attached.add('Master BL')
-    if (bill.bl_type === 'HBL') attached.add('House BL')
-  })
-
-  return requiredDocumentTypes.filter((type) => !attached.has(type))
 }
 
 function quoteBelongsToUser(quote: QuotationRow, userId?: string | null) {
@@ -443,6 +433,8 @@ export async function getSystemAlerts(
         shipment_number,
         quotation_id,
         created_by,
+        service_type,
+        requires_hbl,
         shipping_instruction:shipping_instructions (
           id,
           container_qty,
@@ -451,6 +443,8 @@ export async function getSystemAlerts(
         quotation:quotations (
           id,
           created_by,
+          quote_type,
+          tipo_transporte,
           clientes (
             nombre
           )
@@ -460,7 +454,8 @@ export async function getSystemAlerts(
         document_type
       ),
       bills_of_lading (
-        bl_type
+        bl_type,
+        status
       ),
       booking_containers (
         container_type,
@@ -496,6 +491,8 @@ export async function getSystemAlerts(
               container_qty: instruction?.container_qty ?? null,
               container_type: instruction?.container_type ?? null,
               created_by: shipment.created_by,
+              service_type: shipment.service_type,
+              requires_hbl: shipment.requires_hbl,
               quotation: shipment.quotation,
             }
           : null,
@@ -721,7 +718,16 @@ export async function getSystemAlerts(
 
   bookings.forEach((booking) => {
     const routing = resolveJoin(booking.shipment)
-    const missingDocs = missingDocuments(booking)
+    const quotation = resolveJoin(routing?.quotation)
+    const missingDocs = getMissingBookingDocuments({
+      mode:
+        quotation?.tipo_transporte ||
+        quotation?.quote_type ||
+        routing?.service_type,
+      requiresHbl: routing?.requires_hbl,
+      documents: booking.booking_documents,
+      bills: booking.bills_of_lading,
+    }).map((document) => document.label)
     const etaDays = calendarDaysUntil(booking.actual_eta || booking.eta)
     const remainingFreeDays = Number(booking.remaining_free_days)
     const assignedContainers = (booking.booking_containers || []).reduce(
@@ -919,8 +925,26 @@ export async function getSystemAlerts(
 
     if (
       !isFinalStatus(booking.shipment_status) &&
+      !isArrived(booking.shipment_status) &&
       etaDays !== null &&
-      etaDays >= 0 &&
+      etaDays < 0
+    ) {
+      alerts.push({
+        id: `eta-overdue-${booking.id}`,
+        category: 'Operativa',
+        severity: 'Alta',
+        title: 'ETA vencida sin arribo',
+        description: `${clientNameFromRouting(routing)} tiene una ETA vencida hace ${Math.abs(etaDays)} día(s) y no registra arribo.`,
+        entityLabel: bookingLabel(booking),
+        entityType: 'Booking',
+        href: `/operations/shipping-instructions/${booking.shipping_instruction_id}/bookings/${booking.id}`,
+        createdAt: booking.actual_eta || booking.eta || new Date().toISOString(),
+        ageLabel: routingLabel(routing),
+      })
+    } else if (
+      !isFinalStatus(booking.shipment_status) &&
+      !isArrived(booking.shipment_status) &&
+      etaDays !== null &&
       etaDays <= 7
     ) {
       alerts.push({

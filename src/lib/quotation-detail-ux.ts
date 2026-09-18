@@ -13,9 +13,17 @@ export function quotationTransitionHint(next: string, options: Pick<QuotationCom
 
 /** Only return to the quotation list; never accept an external URL as navigation. */
 export function quotationListHref(value?: string | null) {
-  if (!value || !/^\/historico(?:\?|$)/.test(value)) return '/historico'
+  if (!value || !/^\/(?:historico|ventas)(?:\?|$)/.test(value)) return '/historico'
   try {
     const url = new URL(value, 'https://forwarders.app')
+    if (url.pathname === '/ventas') {
+      const query = new URLSearchParams()
+      const work = url.searchParams.get('work')
+      const workSearch = url.searchParams.get('workSearch')
+      if (work) query.set('work', work)
+      if (workSearch) query.set('workSearch', workSearch)
+      return '/ventas' + (query.size ? '?' + query.toString() : '')
+    }
     if (url.pathname !== '/historico') return '/historico'
     const query = new URLSearchParams()
     for (const key of ['status', 'from', 'to', 'search', 'page', 'pageSize']) {
