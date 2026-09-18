@@ -7675,7 +7675,7 @@ Agregar una entrada por fix:
 
 ### 2026-09-18 - OPS-P0-01 - Restauración de Dashboard y bandeja de bookings
 
-- Estado: implementado y validado localmente; UAT autenticado y despliegue pendientes.
+- Estado: implementado, validado y desplegado; UAT autenticado pendiente.
 - Fase: 0 - restaurar verdad operacional, sin modificar reglas de negocio,
   estados, ownership ni diseño de Control Tower.
 - Hallazgos: O-01, O-02 y D-01 de la auditoría transversal del 18/09/2026.
@@ -7715,13 +7715,12 @@ Agregar una entrada por fix:
   - La corrección restaura los datos existentes; no corrige todavía reglas de
     prioridad, documentos por modalidad, ETAs vencidas ni asignación. Esos
     cambios pertenecen a las fases siguientes del plan aprobado.
-  - No se ha desplegado frontend ni se ha realizado commit.
-- Commit: pendiente.
+- Commit de implementación y despliegue: `c93548c`.
 
 ### 2026-09-18 - OPS-P1-01 - Unificación de reglas operativas
 
-- Estado: implementado y validado; migraciones productivas aplicadas y UAT
-  autenticado pendiente.
+- Estado: implementado, validado y desplegado; migraciones productivas aplicadas
+  y UAT autenticado pendiente.
 - Fase: 1 - unificar estado derivado, riesgo, siguiente acción, readiness,
   documentación por modalidad y visibilidad de ownership.
 - Hallazgos: O-03 y H-01 de la auditoría transversal del 18/09/2026.
@@ -7793,13 +7792,11 @@ Agregar una entrada por fix:
     los 9 expedientes; esta fase no altera datos productivos automáticamente.
   - La cola única de Control Tower, aging y persistencia de filtros pertenecen
     a la Fase 2 y no se implementaron aquí.
-  - No se ha desplegado frontend ni se ha realizado commit.
-- Commit: pendiente.
+- Commit de implementación y despliegue: `c93548c`.
 
 ### 2026-09-18 - P2-CTRL-01 - Control Tower Operativo y Mi día comercial
 
-- Estado: implementado y validado localmente; UAT autenticado y despliegue
-  pendientes.
+- Estado: implementado, validado y desplegado; UAT autenticado pendiente.
 - Fase: 2 - priorización diaria y trazabilidad de trabajo. No incluye handoff
   formal de ownership, cierre operativo/facturación ni Agent 360, reservados
   para fases posteriores.
@@ -7868,12 +7865,11 @@ Agregar una entrada por fix:
     positivos/negativos durante UAT antes de endurecer el modelo.
   - Las dos migraciones de modalidad de la Fase 1 fueron aplicadas en
     Production el 18/09/2026; su UAT autenticado continúa pendiente.
-  - No se ha desplegado frontend ni se ha realizado commit.
-- Commit: pendiente.
+- Commit de implementación y despliegue: `c93548c`.
 
 ### 2026-09-18 - FLOW-P3-01 - Handoffs formales y cola Por facturar
 
-- Estado: implementado y validado; migración productiva aplicada y UAT autenticado pendiente.
+- Estado: implementado, validado y desplegado; migración productiva aplicada y UAT autenticado pendiente.
 - Fase: 3 - aceptación Ventas → Operaciones, cierre operativo verificable y handoff Operaciones → Finanzas. No incluye Agent 360.
 - Hallazgos: ownership operativo implícito, validación de costos antes del cierre real y ausencia de una bandeja derivada por facturar.
 - Código:
@@ -7920,13 +7916,12 @@ Agregar una entrada por fix:
   - Ejecutar UAT con Ventas, dos usuarios de Operaciones, Admin y Finanzas: envío, aceptación, reasignación, validación, cierre multishipment, costos, RTN, factura y retornos.
   - No se inventó aceptación histórica: expedientes existentes aún previos a Booking deberán ser aceptados por su responsable.
   - Cotizaciones históricas ya `Validado` no se reescriben; cola y guarda de Factura igualmente bloquean si la operación no cerró.
-  - No se ha desplegado frontend ni se ha realizado commit.
-- Commit: pendiente.
+- Commit de implementación y despliegue: `c93548c`.
 
 ### 2026-09-18 - AGT-P4-01 - Agent 360 basado en relaciones canónicas
 
-- Estado: implementado y validado; migración productiva aplicada. Despliegue
-  frontend y UAT autenticado pendientes.
+- Estado: implementado, validado y desplegado; migración productiva aplicada y
+  UAT autenticado pendiente.
 - Fase: 4 - consulta contextual de agentes. No introduce scoring, documentos de
   agentes, actividad transversal ni modelos nuevos.
 - Hallazgos: `/agents` funcionaba como catálogo editable sin mostrar uso real;
@@ -7988,5 +7983,14 @@ Agregar una entrada por fix:
     y no forma parte de esta fase.
   - Los totales son relativos a lo que RLS permite ver al usuario autenticado;
     una suite local no certifica el volumen ni los datos de Production.
-  - No se ha desplegado frontend ni realizado commit.
-- Commit: pendiente.
+  - La comprobación pública no sustituye el UAT autenticado de datos y permisos.
+- Publicación frontend:
+  - Commit `c93548c` publicado en `origin/main` el 18/09/2026.
+  - Vercel Production `dpl_5hTtAkXSfTVQFaQMJAS8xBNHdsYJ`, estado `Ready`;
+    URL inmutable `https://sarierp-k08pbshr4-claudherhn-5641s-projects.vercel.app`.
+  - Alias confirmados: `https://forwarders.app`, `https://sarierp.vercel.app` y
+    rama `main`.
+  - Smoke público posterior: `/` y `/login` respondieron HTTP 200 desde Vercel;
+    comprobaciones GET sin sesión y sin escrituras.
+- Commit de implementación y despliegue: `c93548c`. Registro de publicación en
+  commit documental posterior.
