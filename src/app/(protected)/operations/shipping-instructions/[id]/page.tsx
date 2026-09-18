@@ -19,6 +19,7 @@ import {
 } from '@/src/lib/shipment-service'
 import { primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 import { SectionNav } from '@/src/components/ui/SectionNav'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import ShippingInstructionOrderPDF from '@/src/components/pdf/shipping-instruction-order-pdf'
@@ -1433,6 +1434,16 @@ export default function RoutingDetailPage() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <CreateContextTaskDialog
+            context={{
+              entityType: 'shipping_instruction',
+              entityId: routing.id,
+              entityLabel: routing.routing_number || 'Shipping Instruction',
+              sourceModule: 'operations',
+              sourcePath: `/operations/shipping-instructions/${routing.id}`,
+            }}
+            suggestedTitle={`Revisar ${routing.routing_number || 'Shipping Instruction'}`}
+          />
           {canDownloadRoutingPdf && (
             <>
               <PDFDownloadLink

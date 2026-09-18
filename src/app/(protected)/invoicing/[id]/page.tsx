@@ -18,6 +18,7 @@ import {
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import { billingReturnHref } from '@/src/lib/billing-readiness'
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 
 type Invoice = {
   id: string
@@ -572,6 +573,16 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <CreateContextTaskDialog
+            context={{
+              entityType: 'invoice',
+              entityId: invoice.id,
+              entityLabel: invoice.invoice_number || 'Factura sin número',
+              sourceModule: 'invoicing',
+              sourcePath: `/invoicing/${invoice.id}`,
+            }}
+            suggestedTitle={`Revisar ${invoice.invoice_number || 'factura'}`}
+          />
           {flow && (
             <button
               type="button"

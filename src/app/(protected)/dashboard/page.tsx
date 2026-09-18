@@ -27,19 +27,16 @@ import {
   secondaryButtonClass as baseSecondaryButtonClass,
 } from '@/src/lib/ui-classes'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import {
+  filterUserTasks,
+  userTaskModuleLabel,
+  userTaskSourceHref,
+  type UserTask,
+  type UserTaskPriority,
+  type UserTaskView,
+} from '@/src/lib/user-tasks'
 
 const secondaryButtonClass = `${baseSecondaryButtonClass} dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500`
-type TaskView = 'pending' | 'overdue' | 'completed'
-
-type UserTask = {
-  id: string
-  title: string
-  notes: string | null
-  status: 'Pendiente' | 'Completada'
-  priority: 'Baja' | 'Media' | 'Alta'
-  due_date: string | null
-}
-
 type ClientJoin = {
   id?: string | null
   nombre: string | null
@@ -213,7 +210,7 @@ export default function DashboardPage() {
   const [detailFilter, setDetailFilter] = useState(isPricing ? 'pricing' : 'all')
   const [clientFilter, setClientFilter] = useState('')
   const [sellerFilter, setSellerFilter] = useState('')
-  const [taskView, setTaskView] = useState<TaskView>('pending')
+  const [taskView, setTaskView] = useState<UserTaskView>('pending')
 
   // Date range filter — defaults to current month
   const today = new Date()
@@ -320,8 +317,12 @@ export default function DashboardPage() {
         const allTasks: UserTask[] = []
         const pageSize = 500
         for (let offset = 0; ; offset += pageSize) {
-          const { data, error } = await supabase.from('user_tasks').select('*')
-            .eq('user_id', userId).order('status', { ascending: false })
+          const { data, error } = await supabase.from('user_tasks').select(`
+            id, title, notes, status, priority, due_date,
+            entity_type, entity_id, entity_label, source_module, source_path,
+            completed_at, updated_at
+          `)
+            .eq('user_id', userId).is('deleted_at', null).order('status', { ascending: false })
             .order('due_date', { ascending: true, nullsFirst: false })
             .order('created_at', { ascending: false }).order('id')
             .range(offset, offset + pageSize - 1)
@@ -383,9 +384,9 @@ export default function DashboardPage() {
 
   const deleteTask = async (taskId: string) => {
     if (!userId) return
-    const { error } = await supabase.from('user_tasks').delete().eq('id', taskId).eq('user_id', userId)
+    const { data, error } = await supabase.rpc('soft_delete_user_task', { p_task_id: taskId })
 
-    if (error) {
+    if (error || !data) {
       toast.error('No se pudo eliminar la tarea')
       return
     }
@@ -1118,34 +1119,31 @@ function TasksPanel({
   toggleTask,
   deleteTask,
 }: {
-  view: TaskView
-  onViewChange: (view: TaskView) => void
+  view: UserTaskView
+  onViewChange: (view: UserTaskView) => void
   tasks: UserTask[]
   taskTitle: string
-  taskPriority: 'Baja' | 'Media' | 'Alta'
+  taskPriority: UserTaskPriority
   taskDueDate: string
   loadingTasks: boolean
   setTaskTitle: (value: string) => void
-  setTaskPriority: (value: 'Baja' | 'Media' | 'Alta') => void
+  setTaskPriority: (value: UserTaskPriority) => void
   setTaskDueDate: (value: string) => void
   createTask: () => void
   toggleTask: (task: UserTask) => void
   deleteTask: (taskId: string) => void
 }) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const visibleTasks = tasks.filter((task) => view === 'completed'
-    ? task.status === 'Completada'
-    : task.status === 'Pendiente' && (view !== 'overdue' ||
-      (task.due_date && (calendarDaysUntil(task.due_date) ?? 0) < 0)))
+  const visibleTasks = filterUserTasks(tasks, view)
 
   return (
     <Panel
       title="Mis tareas"
-      description="Pendientes personales del usuario conectado."
+      description="Recordatorios manuales personales. Los estados operativos y financieros continúan derivados de sus expedientes."
     >
       <label className="mb-4 flex items-center gap-3 text-sm text-slate-700 dark:text-slate-200">
         Mostrar
-        <select className={fieldClass} value={view} onChange={(event) => onViewChange(event.target.value as TaskView)}>
+        <select className={fieldClass} value={view} onChange={(event) => onViewChange(event.target.value as UserTaskView)}>
           <option value="pending">Pendientes</option>
           <option value="overdue">Vencidas</option>
           <option value="completed">Completadas</option>
@@ -1180,7 +1178,7 @@ function TasksPanel({
           aria-label="Prioridad de la tarea"
           value={taskPriority}
           onChange={(event) =>
-            setTaskPriority(event.target.value as 'Baja' | 'Media' | 'Alta')
+            setTaskPriority(event.target.value as UserTaskPriority)
           }
           className={fieldClass}
         >
@@ -1213,15 +1211,17 @@ function TasksPanel({
       <div className="space-y-2">
         {visibleTasks.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-300 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-            No hay tareas en esta vista.
+            No hay tareas en esta vista. Puedes crear un recordatorio con el formulario superior.
           </p>
         ) : (
-          visibleTasks.map((task) => (
-            <div
-              key={task.id}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"
-            >
-              <div>
+          visibleTasks.map((task) => {
+            const sourceHref = userTaskSourceHref(task)
+            return (
+              <div
+                key={task.id}
+                className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"
+              >
+              <div className="min-w-0 flex-1">
                 <p
                   className={`text-sm font-medium ${
                     task.status === 'Completada'
@@ -1231,9 +1231,16 @@ function TasksPanel({
                 >
                   {task.title}
                 </p>
-                <div className="mt-1 flex gap-2 text-xs text-slate-500 dark:text-slate-400">
+                {task.notes && <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{task.notes}</p>}
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <span>{task.priority}</span>
                   {task.due_date && <span>Vence: {formatDate(task.due_date)}</span>}
+                  {task.source_module !== 'general' && <span>{userTaskModuleLabel(task.source_module)}</span>}
+                  {sourceHref && (
+                    <Link href={sourceHref} className="font-semibold text-blue-600 hover:underline dark:text-blue-300">
+                      Abrir {task.entity_label || 'contexto'}
+                    </Link>
+                  )}
                 </div>
               </div>
 
@@ -1255,8 +1262,9 @@ function TasksPanel({
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-            </div>
-          ))
+              </div>
+            )
+          })
         )}
       </div>
     </Panel>

@@ -9,6 +9,7 @@ import { Plus, Trash2, ChevronLeft, Pencil, Check, X } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { Agent360Panel } from '@/src/components/agents/Agent360Panel'
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
@@ -235,6 +236,16 @@ export default function AgentDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <CreateContextTaskDialog
+            context={{
+              entityType: 'agent',
+              entityId: id,
+              entityLabel: agent.name || 'Agente sin nombre',
+              sourceModule: 'agents',
+              sourcePath: `/agents/${id}`,
+            }}
+            suggestedTitle={`Dar seguimiento a ${agent.name || 'agente'}`}
+          />
           {canManageCatalog && (!editing ? (
             <button type="button" onClick={() => setEditing(true)} className={secondaryButtonClass}>
               <Pencil className="h-4 w-4" />

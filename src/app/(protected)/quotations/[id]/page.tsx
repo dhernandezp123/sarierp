@@ -27,6 +27,7 @@ import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 import { createNotification } from '@/src/lib/notifications'
 import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
 import { quotationListHref, quotationTransitionHint } from '@/src/lib/quotation-detail-ux'
@@ -1983,6 +1984,16 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         </div>
 
         <div className="flex max-w-full flex-wrap items-center gap-2">
+          <CreateContextTaskDialog
+            context={{
+              entityType: 'quotation',
+              entityId: quotation.id,
+              entityLabel: quotation.quotation_number || 'Cotización sin número',
+              sourceModule: 'sales',
+              sourcePath: `/quotations/${quotation.id}`,
+            }}
+            suggestedTitle={`Dar seguimiento a ${quotation.quotation_number || 'cotización'}`}
+          />
           <PDFDownloadLink
             document={
               <QuotationPDF

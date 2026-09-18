@@ -7994,3 +7994,86 @@ Agregar una entrada por fix:
     comprobaciones GET sin sesión y sin escrituras.
 - Commit de implementación y despliegue: `c93548c`. Registro de publicación en
   commit documental posterior.
+
+### 2026-09-18 - TASK-P5-01 - Tareas contextuales sin duplicar fuentes de verdad
+
+- Estado: implementado y validado; migración productiva aplicada. Despliegue
+  frontend y UAT autenticado pendientes.
+- Fase: 5 - arquitectura transversal de recordatorios manuales y next actions.
+  No copia a `user_tasks` los estados derivados de Control Tower, readiness o
+  facturación, ni reemplaza `sales_activities`/`operational_events` como historia.
+- Evidencia de Production, solo lectura y sin exponer contenido:
+  - `user_tasks`: 1 registro, ya completado, con prioridad media y vencimiento;
+    la migración conserva sus campos y completa `completed_at`.
+  - `sales_activities`: 0 registros; no existe historia comercial que migrar o
+    reconciliar en este ambiente.
+  - `operational_events`: 51 registros; continúan como hechos operativos y no se
+    convierten en tareas manualmente completables.
+- Código:
+  - `src/lib/user-tasks.ts`
+  - `src/components/tasks/CreateContextTaskDialog.tsx`
+  - `src/app/(protected)/dashboard/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/agents/[id]/page.tsx`
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `tests/user-tasks.test.mjs`
+- SQL:
+  - `supabase/migrations/20260918200000_phase5_contextual_user_tasks.sql`
+  - `supabase/tests/phase5_contextual_user_tasks.sql`
+- Cambios:
+  - Se extendió la tabla existente `user_tasks`; no se creó una tabla paralela.
+    El contexto opcional admite cliente, lead, actividad comercial, cotización,
+    Shipping Instruction, booking, BL, agente o factura.
+  - Las tareas guardan módulo, etiqueta y ruta interna. Frontend y constraint SQL
+    rechazan destinos externos; el enlace se vuelve a validar según entidad.
+  - `can_access_user_task_context` reutiliza las funciones canónicas de acceso a
+    clientes, cotizaciones, SI, bookings, BL y facturas. Agentes, leads y
+    actividades exigen rol y usuario activo/aprobado.
+  - RLS mantiene cada tarea privada para su propietario. No existe política de
+    `DELETE`; `soft_delete_user_task` valida sesión/propiedad y deja auditoría.
+  - El trigger de lifecycle mantiene `updated_at`, registra `completed_at` al
+    completar y lo limpia al reabrir.
+  - Cotización, SI, Agent 360 y factura permiten crear un recordatorio contextual.
+    “Mis tareas” muestra notas, módulo y retorno seguro al expediente.
+  - Las colas de Ventas, Operaciones y Facturación siguen derivándose de hechos;
+    el modal aclara que un recordatorio no cambia estado ni resuelve bloqueos.
+- Validaciones ejecutadas:
+  - Migración aplicada idempotentemente en Supabase local.
+  - SQL directo transaccional con `psql -v ON_ERROR_STOP=1`: creación contextual,
+    aislamiento entre Ventas/Operaciones, lifecycle, bloqueo de borrado físico y
+    borrado lógico; finalizó con `ROLLBACK` y
+    `phase5_contextual_user_tasks.sql: OK`.
+  - `npm.cmd test`: 121/121 pruebas correctas.
+  - ESLint dirigido: helpers, componente, dashboard y detalles modificados sin
+    errores. El detalle legacy de cotización conserva sus excepciones dirigidas
+    preexistentes para `no-explicit-any`; no se añadieron `any` nuevos.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - Preflight Production: historial remoto alineado hasta `20260918190000` y
+    dry-run limitado exclusivamente a
+    `20260918200000_phase5_contextual_user_tasks.sql`.
+  - Respaldo previo del esquema `public` guardado fuera del repositorio en
+    `sarierp-prod-pre-phase5-tasks-20260918.sql` (853,076 bytes), SHA-256
+    `4CD502B528F31A8574BEA3CC3B2272C1E2632955B871B4F5A7098B3252125152`.
+  - Migración aplicada en Production al proyecto `fwspgdzvlbtbgiupvrzo`;
+    historial local/remoto alineado en `20260918200000` y postflight dry-run:
+    base remota al día.
+  - Snapshot posterior `sarierp-prod-post-phase5-tasks-20260918.sql` (860,260
+    bytes), SHA-256
+    `3FA1746AB4C5DCDF38F848158BFF7195FE3D98E032F80C1B8D981095565258CF`;
+    confirma columnas, constraints, índices, trigger, RLS y RPC de borrado.
+  - Verificación agregada posterior: 1 tarea histórica, 1 completada, 1 con
+    `completed_at` y `updated_at`; cero contextuales y cero borradas. No se
+    imprimieron títulos, notas ni datos personales.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT con Ventas, Operaciones, Pricing, Admin y Finanzas: crear desde
+    cada contexto, completar, reabrir, borrar lógicamente y regresar al origen.
+  - La fase no convierte automáticamente `proxima_accion` de Ventas en tarea:
+    hoy Production no tiene `sales_activities`, y hacerlo sin transacción única
+    introduciría dos fuentes de verdad. Evaluar sólo cuando exista uso real.
+  - No hay asignación de tareas entre usuarios. `user_tasks.user_id` conserva el
+    modelo privado existente; un workflow de delegación requiere reglas y UAT de
+    ownership explícitos antes de ampliar RLS.
+  - No se ha desplegado frontend ni realizado commit.
+- Commit: pendiente.
