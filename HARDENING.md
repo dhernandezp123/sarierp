@@ -7997,8 +7997,8 @@ Agregar una entrada por fix:
 
 ### 2026-09-18 - TASK-P5-01 - Tareas contextuales sin duplicar fuentes de verdad
 
-- Estado: implementado y validado; migración productiva aplicada. Despliegue
-  frontend y UAT autenticado pendientes.
+- Estado: implementado, validado y desplegado; migración productiva aplicada y
+  UAT autenticado pendiente.
 - Fase: 5 - arquitectura transversal de recordatorios manuales y next actions.
   No copia a `user_tasks` los estados derivados de Control Tower, readiness o
   facturación, ni reemplaza `sales_activities`/`operational_events` como historia.
@@ -8075,5 +8075,13 @@ Agregar una entrada por fix:
   - No hay asignación de tareas entre usuarios. `user_tasks.user_id` conserva el
     modelo privado existente; un workflow de delegación requiere reglas y UAT de
     ownership explícitos antes de ampliar RLS.
-  - No se ha desplegado frontend ni realizado commit.
-- Commit: pendiente.
+- Publicación frontend:
+  - Commit `6637e82` publicado en `origin/main` el 18/09/2026.
+  - Vercel Production `dpl_2bukdyTDSiDEBS6XXsTDJ9ipdC2R`, estado `Ready`;
+    URL inmutable
+    `https://sarierp-o2x9hibeo-claudherhn-5641s-projects.vercel.app`.
+  - Smoke público posterior en `https://forwarders.app`: `/` y `/login`
+    respondieron HTTP 200; `/dashboard` sin sesión respondió HTTP 307 hacia
+    `/login?next=%2Fdashboard`, sin escrituras ni credenciales.
+- Commit de implementación y despliegue: `6637e82`. Registro de publicación en
+  commit documental posterior.
