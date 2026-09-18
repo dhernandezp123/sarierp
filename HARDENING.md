@@ -2,8 +2,8 @@
 
 ### 2026-09-18 - FLOW-033 / DB-029 / UX-064 - Excepciones documentales auditables
 
-- Estado: implementado y migrado localmente; despliegue a Production y UAT
-  autenticado pendientes.
+- Estado: implementado, migrado y publicado en Production; UAT autenticado
+  pendiente.
 - Hallazgo:
   - El motor documental advertía diferencias entre BL y sus fuentes, pero una
     excepción válida (Switch BL, triangulación u otra instrucción especial) no
@@ -44,6 +44,10 @@
     `npx.cmd supabase db push --local`.
   - `20260918103000_bl_exception_transition_gate.sql` aplicada correctamente
     con `npx.cmd supabase db push --local`.
+  - Preflight `npx.cmd supabase db push --linked --dry-run`: Production propuso
+    únicamente `20260918100000` y `20260918103000`.
+  - Ambas migraciones aplicadas correctamente en Supabase Production el
+    18/09/2026; el dry-run posterior confirmó `Remote database is up to date`.
 - Validaciones:
   - Prueba Node dirigida del workflow: 7/7. Incluye coincidencia exacta,
     invalidación al cambiar la fuente y revocación lógica.
@@ -58,12 +62,19 @@
   - ESLint dirigido: sin errores ni advertencias.
   - `npx.cmd supabase db lint --local --level warning`: sin errores.
   - `npm.cmd run build`: OK, 73/73 páginas.
+  - Postdeploy público: `https://forwarders.app/` responde `200`; la ruta
+    `/operations/shipping-instructions` responde `307` hacia
+    `/login?next=%2Foperations%2Fshipping-instructions`.
 - Riesgos / pendientes:
-  - Aplicar la migración en Production y ejecutar UAT autenticado con un MBL y
-    un HBL reales antes de marcar el hallazgo como completado.
+  - Ejecutar UAT autenticado con un MBL y un HBL reales antes de marcar el
+    hallazgo como completado.
   - Verificar en UAT que descripciones y tipos de bulto compuestos se presentan
     igual en la UI y en el gate SQL cuando existen varias líneas de carga.
-- Commit: pendiente.
+- Publicación (18/09/2026): implementación `00f9cf1` publicada en `main`;
+  GitHub Production `6527725938` finalizó en `success`. Vercel deployment
+  `dpl_EBnQ1usgQ6AfkK23X8BHhZkBng5Z` quedó `Ready` con alias
+  `https://forwarders.app`.
+- Commit de implementación: `00f9cf1`.
 
 ### 2026-09-17 - UX-063 / DB-028 - Motor de validación documental MBL/HBL
 
