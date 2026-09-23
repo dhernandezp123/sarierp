@@ -115,7 +115,7 @@ export default function ClienteProfilePage() {
       .from('client_notes')
       .select(`
         *,
-        profiles (
+        profiles!client_notes_tenant_created_by_fkey (
           nombre,
           apellido
         )

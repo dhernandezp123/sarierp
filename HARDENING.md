@@ -1,5 +1,43 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-23 - SAAS-P8-07 - Relaciones PostgREST duplicadas tras el corte multiempresa
+
+- Estado: hotfix implementado y validado localmente; despliegue SQL y UAT
+  autenticado pendientes dentro de la ventana congelada.
+- Hallazgo:
+  - El UAT autenticado mostró Dashboard y Cotizaciones sin datos.
+  - Las 291 cotizaciones activas continúan en Production; PostgREST devolvía
+    `PGRST201` porque coexistían la foreign key simple legacy y la nueva foreign
+    key compuesta por `tenant_id` para una misma relación.
+  - Una auditoría de solo lectura reprodujo 23 consultas ambiguas en Comercial,
+    Pricing, Operaciones, Reportes y Finanzas.
+- Archivos y SQL:
+  - `supabase/migrations/20260923141500_phase8_postgrest_relationship_disambiguation.sql`.
+  - `supabase/tests/phase8_postgrest_relationship_disambiguation.sql`.
+  - `src/app/(protected)/clientes/[id]/page.tsx`.
+- Cambio:
+  - Los pares de constraints con semántica referencial idéntica se consolidan en
+    una sola foreign key compuesta, conservando el nombre legacy consumido por
+    las consultas existentes.
+  - Las relaciones con acciones distintas no se alteran; el embed de notas de
+    cliente se desambigua explícitamente con la clave compuesta por tenant.
+  - No se modifican ni eliminan filas de negocio.
+- Validaciones ejecutadas:
+  - Auditoría Production previa: perfil `Admin Pruebas` activo, aprobado y
+    asociado a Sari; 291 cotizaciones activas; error reproducido `PGRST201`.
+  - La migración local reconcilió 130 relaciones equivalentes; la prueba SQL
+    específica finalizó correctamente con `ROLLBACK`.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 139/139 pruebas correctas.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint dirigido al archivo React tocado reproduce 29 errores y 1 warning de
+    deuda legacy preexistente; el cambio de hint no agrega una regla nueva.
+  - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
+- Riesgos / trabajo pendiente:
+  - Aplicar el hotfix en Production y repetir la auditoría PostgREST sin errores.
+  - Repetir UAT autenticado antes de levantar el congelamiento.
+- Commit: pendiente.
+
 ### 2026-09-23 - SAAS-P8-06 - Corte SQL multiempresa en Production
 
 - Estado: SQL aplicado y postflight técnico aprobado; frontend Production y UAT
