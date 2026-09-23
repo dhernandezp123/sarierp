@@ -96,6 +96,12 @@ function initialSalesWorkState() {
 
 const TIPOS_ACTIVIDAD: TipoActividad[] = ['Visita', 'Llamada', 'Reunión']
 
+const SALES_ACTIVITY_SELECT = `
+  *,
+  clientes!sales_activities_tenant_cliente_fkey(nombre),
+  profiles!sales_activities_tenant_created_by_fkey(nombre, apellido)
+`
+
 const ETAPAS: { value: EtapaCaptacion; color: string; bg: string }[] = [
   { value: 'Primer Contacto',      color: 'text-slate-600 dark:text-slate-300',     bg: 'bg-slate-100 dark:bg-slate-700/60' },
   { value: 'Prospecto Calificado', color: 'text-blue-600 dark:text-blue-300',       bg: 'bg-blue-100 dark:bg-blue-900/40' },
@@ -217,7 +223,7 @@ export default function VentasPage() {
 
     let query = supabase
       .from('sales_activities')
-      .select('*, clientes(nombre), profiles(nombre, apellido)')
+      .select(SALES_ACTIVITY_SELECT)
       .is('deleted_at', null)
       .order('fecha_actividad', { ascending: false })
       .order('created_at',      { ascending: false })
@@ -261,7 +267,7 @@ export default function VentasPage() {
     const [activitiesResult, quotationsResult, leadsResult] = await Promise.all([
       supabase
         .from('sales_activities')
-        .select('*, clientes(nombre), profiles(nombre, apellido)')
+        .select(SALES_ACTIVITY_SELECT)
         .is('deleted_at', null)
         .order('fecha_actividad', { ascending: false })
         .order('created_at', { ascending: false }),

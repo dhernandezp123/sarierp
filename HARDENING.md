@@ -1,9 +1,43 @@
 # Sari Express ERP — Hardening y Trial
 
-### 2026-09-23 - SAAS-P8-08 - Caché CORS entre dominio plataforma y tenant
+### 2026-09-23 - SAAS-P8-09 - Relaciones ambiguas en actividades de Ventas
 
 - Estado: hotfix implementado y validado localmente; despliegue y UAT
   autenticado pendientes dentro de la ventana congelada.
+- Hallazgo:
+  - Ventas devolvía `PGRST201`: PostgREST encontró más de una relación entre
+    `sales_activities` y `clientes`.
+  - Production conserva intencionalmente una FK simple legacy y una FK
+    compuesta por `tenant_id` tanto hacia `clientes` como hacia `profiles`;
+    difieren en su acción de borrado y no deben consolidarse automáticamente.
+  - Las dos consultas de actividades usaban embeds sin hint. Resolver solamente
+    Clientes habría dejado la misma ambigüedad pendiente para Perfiles.
+- Archivos modificados:
+  - `src/app/(protected)/ventas/page.tsx`.
+  - `tests/sales-activities-query.test.mjs`.
+- Cambio:
+  - La agenda y la cola “Mi día” comparten un select que fija
+    `sales_activities_tenant_cliente_fkey` y
+    `sales_activities_tenant_created_by_fkey`.
+  - No se cambia SQL, RLS ni información comercial.
+- Validaciones ejecutadas:
+  - Consulta REST original contra Production: `300`, `PGRST201` reproducido.
+  - Misma consulta con ambos hints tenant: `200`, sin error de relación.
+  - Prueba dirigida de las dos consultas: OK.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a Ventas y la prueba nueva: OK.
+  - `npm.cmd test`: 141/141 pruebas correctas.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
+- Riesgos / trabajo pendiente:
+  - Desplegar el hotfix y repetir UAT autenticado en Ventas antes de levantar
+    el congelamiento.
+- Commit: pendiente.
+
+### 2026-09-23 - SAAS-P8-08 - Caché CORS entre dominio plataforma y tenant
+
+- Estado: hotfix desplegado y postflight técnico aprobado; UAT autenticado en
+  progreso dentro de la ventana congelada.
 - Hallazgo:
   - Desde `https://sari.forwarders.app`, Reportes y Ventas fallaban con
     `TypeError: Failed to fetch`; Alertas tampoco podía procesar tarifas
@@ -41,9 +75,16 @@
   - `npm.cmd run build`: OK, 73/73 páginas.
   - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
 - Riesgos / trabajo pendiente:
-  - Desplegar el hotfix y repetir UAT autenticado en Dashboard, Cotizaciones,
-    Clientes, Ventas, Reportes y Alertas antes de levantar el congelamiento.
-- Commit: pendiente.
+  - Completar UAT autenticado en Dashboard, Cotizaciones, Clientes, Ventas,
+    Reportes y Alertas antes de levantar el congelamiento.
+- Postflight Production:
+  - Deployment `dpl_E7UAwdM72niAPWbSsPGqt3M4jh2o`: `Ready`, con alias
+    `forwarders.app` y `sari.forwarders.app`.
+  - Smoke público: `/` y `/login` responden `200`; las rutas protegidas
+    redirigen a Login sin sesión.
+  - El bundle publicado contiene el cliente Supabase con `no-store`; los GET
+    REST frescos reflejan correctamente ambos orígenes.
+- Commit: `c233119`.
 
 ### 2026-09-23 - SAAS-P8-07 - Relaciones PostgREST duplicadas tras el corte multiempresa
 
