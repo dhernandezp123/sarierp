@@ -1,5 +1,50 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-23 - SAAS-P8-08 - Caché CORS entre dominio plataforma y tenant
+
+- Estado: hotfix implementado y validado localmente; despliegue y UAT
+  autenticado pendientes dentro de la ventana congelada.
+- Hallazgo:
+  - Desde `https://sari.forwarders.app`, Reportes y Ventas fallaban con
+    `TypeError: Failed to fetch`; Alertas tampoco podía procesar tarifas
+    vencidas.
+  - DevTools mostró respuestas REST de Supabase reutilizadas con
+    `Access-Control-Allow-Origin: https://forwarders.app`, distinto del origen
+    tenant solicitante.
+  - La configuración remota del rol `authenticator` no contiene
+    `pgrst.server_cors_allowed_origins`. Una comprobación fresca del gateway
+    acepta ambos orígenes, pero las respuestas REST no publican `Vary: Origin`
+    ni `Cache-Control`, por lo que el navegador puede conservar una respuesta
+    incompatible al alternar entre dominio raíz y subdominio.
+- Archivos modificados:
+  - `src/lib/supabase/client.ts`.
+  - `tests/supabase-browser-client.test.mjs`.
+- Cambio:
+  - El cliente Supabase compartido usa un `fetch` personalizado con
+    `cache: 'no-store'`, conservando método, headers y demás opciones.
+  - El ajuste cubre las consultas autenticadas de Comercial, Alertas,
+    Reportes y los demás módulos que consumen el cliente común; no modifica
+    tablas, RLS, sesiones ni filas de negocio.
+- Validaciones ejecutadas:
+  - Consulta remota de solo lectura a `pg_roles`: sin override CORS en
+    `authenticator`.
+  - Preflight fresco para `sari.forwarders.app`, `forwarders.app` y un origen
+    ajeno: `200`, gateway activo.
+  - GET REST controlado desde ambos dominios: el gateway refleja el origen
+    solicitante y responde mediante Cloudflare en modo `DYNAMIC`; la respuesta
+    no declara `Vary` ni `Cache-Control`.
+  - Prueba dirigida del wrapper de red: OK; fuerza `no-store` y preserva URL,
+    método y headers.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 140/140 pruebas correctas.
+  - ESLint dirigido al cliente y su prueba: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
+- Riesgos / trabajo pendiente:
+  - Desplegar el hotfix y repetir UAT autenticado en Dashboard, Cotizaciones,
+    Clientes, Ventas, Reportes y Alertas antes de levantar el congelamiento.
+- Commit: pendiente.
+
 ### 2026-09-23 - SAAS-P8-07 - Relaciones PostgREST duplicadas tras el corte multiempresa
 
 - Estado: SQL aplicado y postflight remoto aprobado; promoción del frontend y
