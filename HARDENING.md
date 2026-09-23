@@ -1,9 +1,41 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-23 - SAAS-P8-06 - Corte SQL multiempresa en Production
+
+- Estado: SQL aplicado y postflight técnico aprobado; frontend Production y UAT
+  autenticado pendientes dentro de la misma ventana congelada.
+- Alcance:
+  - Se aplicaron las Fases 1 a 8, incluida la reconciliación de una cuenta Admin
+    operativa y la eliminación autorizada de una notificación legacy huérfana.
+  - MYA continúa deshabilitada; solo existe el tenant Sari.
+- Evidencia previa:
+  - Backup cifrado fresco: run `35908161172`, `success`.
+  - Restore drill aislado de esa copia: run `35908448864`, `success`.
+  - Dry-run inicial limitado al paquete multiempresa y ausencia de consultas
+    largas o bloqueos.
+- Postflight Production:
+  - Historial local/remoto alineado hasta `20260921190000`.
+  - 81 tablas tenant-scoped auditadas: ninguna tabla de negocio contiene
+    `tenant_id` nulo ni distinto de Sari.
+  - Perfiles: 7 cuentas operativas Sari, 1 cuenta exclusiva de plataforma, 0
+    cuentas con doble contexto y 0 cuentas sin contexto válido.
+  - Un tenant Sari activo, un dominio primario `sari.forwarders.app` activo y
+    `resolve_tenant_public_context` devuelve una sola fila válida; hostname
+    desconocido devuelve cero filas.
+  - `npx.cmd supabase db lint --linked --level error`: sin errores.
+  - Consultas largas y bloqueos: ninguno.
+  - Vercel Preview del commit `a15c651`: build `success`; el hostname Preview
+    responde `404` de forma esperada porque `*.vercel.app` no está autorizado
+    como dominio tenant.
+- Riesgos / trabajo pendiente:
+  - Promover el commit final a Production y ejecutar smoke/UAT autenticado antes
+    de levantar el congelamiento.
+  - Configurar y verificar DNS/TLS de `sari.forwarders.app` sin habilitar MYA.
+- Hash del commit de documentación: pendiente.
+
 ### 2026-09-23 - SAAS-P8-05 - Notificación legacy sin destinatario
 
-- Estado: corrección autorizada y preparada durante la ventana de corte;
-  pendiente de aplicar y verificar en Production.
+- Estado: aplicada y verificada en Production.
 - Hallazgo:
   - El preflight transaccional de Fase 6 encontró 1 de 373 notificaciones
     internas con `user_id IS NULL`. La fila no tiene destinatario, no es visible
@@ -23,15 +55,16 @@
     tenant.
   - Migración local dentro de `BEGIN`/`ROLLBACK`: OK.
   - `phase6_portal_storage_api_isolation.sql`: OK, finaliza con `ROLLBACK`.
+  - Production eliminó exactamente 1 fila; postflight: 372 notificaciones, 0
+    destinatarios nulos y 0 tenants inválidos.
 - Riesgos / trabajo pendiente:
   - Aplicar la limpieza y las migraciones restantes; ejecutar postflight y UAT
     antes de levantar el congelamiento.
-- Hash del commit: pendiente.
+- Commit: `a15c651`.
 
 ### 2026-09-23 - SAAS-P8-04 - Reconciliación de administradores operativos Sari
 
-- Estado: corrección preparada durante la ventana de corte; pendiente de
-  aplicar y verificar en Production.
+- Estado: aplicada y verificada en Production.
 - Hallazgo:
   - El preflight de `20260921142000` detectó dos perfiles `Admin` marcados como
     administradores de plataforma que también son autores de datos históricos
@@ -47,21 +80,24 @@
     tenant distinto; no altera administradores exclusivos de plataforma sin
     historial operativo.
 - Validaciones ejecutadas:
-  - Auditoría Production de solo lectura: 2 perfiles afectados, ambos `Admin`,
-    `Aprobado`, activos y referenciados únicamente por registros Sari.
+  - Auditoría Production de solo lectura: 2 perfiles de plataforma iniciales,
+    ambos `Admin`, `Aprobado` y activos; 1 conservaba referencias operativas de
+    Sari y requería reclasificación.
   - Backup cifrado `35908161172`: OK.
   - Restore drill aislado `35908448864`: OK.
   - Migración correctiva local dentro de `BEGIN`/`ROLLBACK`: OK; 0 cambios en
     los fixtures ya consistentes.
   - `phase3_commercial_tenant_isolation.sql`: OK, finaliza con `ROLLBACK`.
   - `npx.cmd tsc --noEmit`: OK.
+  - Production reclasificó exactamente 1 perfil operativo; postflight: 7
+    perfiles Sari, 1 administrador exclusivo de plataforma y 0 dobles contextos.
 - Riesgos / trabajo pendiente:
   - Aplicar la reconciliación y las migraciones restantes, ejecutar postflight,
     desplegar la aplicación y realizar UAT autenticado antes de levantar el
     congelamiento.
-  - Crear posteriormente una cuenta independiente y sin tenant para soporte de
-    plataforma; las dos cuentas actuales conservarán únicamente acceso Sari.
-- Hash del commit: pendiente.
+  - La cuenta restante sin tenant conserva exclusivamente el contexto de soporte
+    de plataforma y no puede asumir datos operativos de Sari.
+- Commit: `9506630`.
 
 ### 2026-09-23 - SAAS-P8-03 - Release candidate de dominios multiempresa
 
