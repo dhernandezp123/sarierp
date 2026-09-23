@@ -2,8 +2,8 @@
 
 ### 2026-09-23 - SAAS-P8-10 - Detalle de factura bloqueado por relación recursiva
 
-- Estado: corrección implementada y validada localmente; despliegue y UAT
-  autenticado pendientes dentro de la ventana congelada.
+- Estado: corrección desplegada y postflight técnico aprobado; UAT autenticado
+  pendiente dentro de la ventana congelada.
 - Hallazgo:
   - La auditoría de las 73 páginas reprodujo `PGRST200` al abrir
     `/invoicing/[id]`: PostgREST no encontró una relación embebible entre
@@ -33,10 +33,16 @@
   - ESLint dirigido a la página y la prueba nueva: OK.
   - `npm.cmd test`: 142/142 pruebas correctas.
   - `npm.cmd run build`: OK, 73/73 páginas.
+  - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
 - Riesgos / trabajo pendiente:
-  - Desplegar y probar con sesión una factura normal y una nota de crédito o
-    débito antes de levantar el congelamiento de Facturación.
-- Commit: pendiente.
+  - Probar con sesión una factura normal y una nota de crédito o débito antes
+    de levantar el congelamiento de Facturación.
+- Postflight Production:
+  - Deployment `dpl_BcJtny9fSELmHYM2QMEXuYTdSHLP`: `Ready`, con alias
+    `forwarders.app` y `sari.forwarders.app`.
+  - Smoke público: `/` y `/login` responden `200`; `/invoicing` y
+    `/invoicing/[id]` redirigen a Login sin sesión.
+- Commit: `ad07a3c`.
 
 ### 2026-09-23 - SAAS-P8-09 - Relaciones ambiguas en actividades de Ventas
 
