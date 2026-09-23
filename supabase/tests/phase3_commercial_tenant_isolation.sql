@@ -49,6 +49,16 @@ select pg_temp.assert_true(
   'Las 19 tablas comerciales deben exigir tenant_id'
 );
 
+select pg_temp.assert_true(
+  not exists (
+    select 1
+    from public.profiles profile
+    where profile.is_platform_admin is true
+      and profile.tenant_id is not null
+  ),
+  'Un administrador de plataforma no debe conservar un tenant operativo'
+);
+
 insert into public.tenants (id, slug, name, status)
 values ('00000000-0000-4000-8000-000000000013', 'mya-phase3', 'MYA Phase 3', 'Activo');
 

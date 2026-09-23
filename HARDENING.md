@@ -1,5 +1,40 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-23 - SAAS-P8-04 - Reconciliación de administradores operativos Sari
+
+- Estado: corrección preparada durante la ventana de corte; pendiente de
+  aplicar y verificar en Production.
+- Hallazgo:
+  - El preflight de `20260921142000` detectó dos perfiles `Admin` marcados como
+    administradores de plataforma que también son autores de datos históricos
+    de Sari. La separación estricta de contexto dejó esos perfiles sin
+    `tenant_id` y bloqueó correctamente las claves compuestas de actor/tenant.
+- SQL y pruebas:
+  - `supabase/migrations/20260921141500_phase3_reclassify_operational_platform_admins.sql`.
+  - `supabase/tests/phase3_commercial_tenant_isolation.sql`.
+- Cambio:
+  - Solo los administradores de plataforma sin tenant que ya poseen referencias
+    operativas de Sari se reclasifican como cuentas `Admin` de Sari.
+  - La migración aborta si alguna de esas cuentas está referenciada por un
+    tenant distinto; no altera administradores exclusivos de plataforma sin
+    historial operativo.
+- Validaciones ejecutadas:
+  - Auditoría Production de solo lectura: 2 perfiles afectados, ambos `Admin`,
+    `Aprobado`, activos y referenciados únicamente por registros Sari.
+  - Backup cifrado `35908161172`: OK.
+  - Restore drill aislado `35908448864`: OK.
+  - Migración correctiva local dentro de `BEGIN`/`ROLLBACK`: OK; 0 cambios en
+    los fixtures ya consistentes.
+  - `phase3_commercial_tenant_isolation.sql`: OK, finaliza con `ROLLBACK`.
+  - `npx.cmd tsc --noEmit`: OK.
+- Riesgos / trabajo pendiente:
+  - Aplicar la reconciliación y las migraciones restantes, ejecutar postflight,
+    desplegar la aplicación y realizar UAT autenticado antes de levantar el
+    congelamiento.
+  - Crear posteriormente una cuenta independiente y sin tenant para soporte de
+    plataforma; las dos cuentas actuales conservarán únicamente acceso Sari.
+- Hash del commit: pendiente.
+
 ### 2026-09-23 - SAAS-P8-03 - Release candidate de dominios multiempresa
 
 - Estado: candidato validado y preparado en la rama
