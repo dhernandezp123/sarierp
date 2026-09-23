@@ -14,11 +14,18 @@ export async function GET() {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('rol, status, is_active')
+      .select('rol, status, is_active, tenant_id, is_platform_admin')
       .eq('id', user.id)
       .single()
 
-    if (profileError || profile?.rol !== 'Admin' || profile?.status !== 'Aprobado' || profile?.is_active !== true) {
+    if (
+      profileError
+      || profile?.rol !== 'Admin'
+      || profile?.status !== 'Aprobado'
+      || profile?.is_active !== true
+      || profile?.is_platform_admin === true
+      || !profile?.tenant_id
+    ) {
       return NextResponse.json({ error: 'Solo Admin puede consultar las conexiones' }, { status: 403, headers })
     }
 
@@ -30,6 +37,14 @@ export async function GET() {
     const admin = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
+    const { data: tenantProfiles, error: tenantProfilesError } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('tenant_id', profile.tenant_id)
+    if (tenantProfilesError) {
+      return NextResponse.json({ error: 'No se pudieron consultar las conexiones' }, { status: 502, headers })
+    }
+    const tenantUserIds = new Set((tenantProfiles ?? []).map(({ id }) => id))
     const users: { id: string; last_sign_in_at: string | null }[] = []
     let page = 1
     while (true) {
@@ -38,7 +53,7 @@ export async function GET() {
         return NextResponse.json({ error: 'No se pudieron consultar las conexiones' }, { status: 502, headers })
       }
       // Auth contiene datos privados; devolver únicamente el ID y la fecha.
-      users.push(...data.users.map(({ id, last_sign_in_at }) => ({
+      users.push(...data.users.filter(({ id }) => tenantUserIds.has(id)).map(({ id, last_sign_in_at }) => ({
         id,
         last_sign_in_at: last_sign_in_at ?? null,
       })))

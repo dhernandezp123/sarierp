@@ -23,6 +23,8 @@ import {
   type BillingQueueRow,
   type BillingReadinessCode,
 } from '@/src/lib/billing-readiness'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -105,6 +107,8 @@ function formatUSD(amount: number, currency = 'USD') {
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
 export default function InvoicingPage() {
+  const tenant = useTenant()
+  const tenantName = tenant?.tradeName || 'Forwarders ERP'
   const router = useRouter()
   const { profile } = useUser()
   const [loading, setLoading] = useState(true)
@@ -296,7 +300,7 @@ export default function InvoicingPage() {
 .footer{font-size:11px;color:#94a3b8;margin-top:8px}
 @media print{button{display:none}}</style></head><body>
 <div class="title">Cierre del período</div>
-<div class="sub">${mes} ${cierreAnio} &mdash; Sari Express &mdash; ${s.total} documentos</div>
+<div class="sub">${mes} ${cierreAnio} &mdash; ${tenantName} &mdash; ${s.total} documentos</div>
 ${summaryCards || '<p>Sin movimientos para este período.</p>'}
 <div class="footer">${PLATFORM_NAME}<br>${PLATFORM_ATTRIBUTION} &middot; ${new Date().toLocaleDateString('es-HN')}</div>
 <script>window.onload=()=>window.print()</script></body></html>`
@@ -321,10 +325,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
     setShowEC(true)
     if (!ecCompany) {
       setEcLoadingCompany(true)
-      const { data, error } = await supabase
-        .from('company_settings')
-        .select('legal_name, trade_name, rtn, address, phone')
-        .limit(1).single()
+      const { data, error } = await loadCurrentCompanySettings<EcCompanySettings>(supabase)
       if (error) {
         toast.error('No se pudo cargar la configuración de la empresa')
         setEcLoadingCompany(false)
@@ -366,7 +367,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       })
       .filter((item) => item.saldo > 0.005)
     setEcPdfData({
-      empresa: ecCompany?.legal_name || ecCompany?.trade_name || 'Sari Express',
+      empresa: ecCompany?.legal_name || ecCompany?.trade_name || tenantName,
       empresa_rtn: ecCompany?.rtn ?? null,
       empresa_dir: ecCompany?.address ?? null,
       empresa_tel: ecCompany?.phone ?? null,
@@ -387,7 +388,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       ).map(([currency, balance]) => ({ currency, balance }))
     : []
   const ecEmailSubject = ecPdfData
-    ? `Estado de cuenta al ${ecPdfData.fecha_generacion.split('-').reverse().join('/')} - Sari Express`
+    ? `Estado de cuenta al ${ecPdfData.fecha_generacion.split('-').reverse().join('/')} - ${tenantName}`
     : ''
   const ecEmailBody = ecPdfData
     ? [
@@ -401,7 +402,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         'Por favor adjunte el PDF descargado antes de enviar este correo.',
         '',
         'Saludos cordiales,',
-        'Sari Express',
+        tenantName,
       ].join('\n')
     : ''
   const ecMailto = ecPdfData?.cliente_email

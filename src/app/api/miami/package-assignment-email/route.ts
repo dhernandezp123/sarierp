@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { readEmailProviderResponse } from '@/src/lib/email-provider-response'
 import { formatMiamiDateTime } from '@/src/lib/format'
+import { loadTenantEmailBranding } from '@/src/lib/company-settings'
 
 const EVENT_TYPE = 'miami_package_assigned'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -14,6 +15,7 @@ type ClientRow = {
 
 type PackageRow = {
   id: string
+  tenant_id: string
   tracking_number: string
   warehouse_number: string | null
   status: string
@@ -85,7 +87,7 @@ export async function POST(request: Request) {
     })
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('rol, status, is_active')
+      .select('rol, status, is_active, tenant_id, is_platform_admin')
       .eq('id', authData.user.id)
       .single()
 
@@ -94,7 +96,9 @@ export async function POST(request: Request) {
       || !profile
       || !['Admin', 'Operaciones'].includes(profile.rol)
       || profile.status !== 'Aprobado'
-      || profile.is_active === false
+      || profile.is_active !== true
+      || profile.is_platform_admin === true
+      || !profile.tenant_id
     ) {
       return NextResponse.json(
         { ok: false, error: 'Solo Administración u Operaciones pueden enviar este aviso' },
@@ -132,8 +136,9 @@ export async function POST(request: Request) {
 
     const { data: packageData, error: packageError } = await supabaseAdmin
       .from('miami_packages')
-      .select('id, tracking_number, warehouse_number, status, assigned_at, received_at, cliente_id, clientes(nombre, contacto, email_1)')
+      .select('id, tenant_id, tracking_number, warehouse_number, status, assigned_at, received_at, cliente_id, clientes(nombre, contacto, email_1)')
       .eq('id', packageId)
+      .eq('tenant_id', profile.tenant_id)
       .single()
 
     if (packageError || !packageData) {
@@ -154,11 +159,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, skipped: true })
     }
 
+    const [{ data: tenantDomain }, { data: companySettings }] = await Promise.all([
+      supabaseAdmin
+        .from('tenant_domains')
+        .select('hostname')
+        .eq('tenant_id', pkg.tenant_id)
+        .eq('is_primary', true)
+        .eq('is_active', true)
+        .single(),
+      loadTenantEmailBranding(supabaseAdmin, pkg.tenant_id),
+    ])
+    if (!tenantDomain?.hostname) {
+      return NextResponse.json(
+        { ok: false, error: 'La empresa no tiene un dominio principal activo' },
+        { status: 409 }
+      )
+    }
+
     const { data: existingData, error: existingError } = await supabaseAdmin
       .from('client_email_deliveries')
       .select('id, status, attempts, updated_at')
       .eq('package_id', pkg.id)
       .eq('event_type', EVENT_TYPE)
+      .eq('tenant_id', pkg.tenant_id)
       .maybeSingle()
 
     if (existingError) {
@@ -195,6 +218,7 @@ export async function POST(request: Request) {
           updated_at: now,
         })
         .eq('id', existing.id)
+        .eq('tenant_id', pkg.tenant_id)
         .eq('status', 'failed')
         .eq('updated_at', existing.updated_at)
         .select('id, status, attempts, updated_at')
@@ -208,6 +232,7 @@ export async function POST(request: Request) {
       const { data: created, error: createError } = await supabaseAdmin
         .from('client_email_deliveries')
         .insert({
+          tenant_id: pkg.tenant_id,
           package_id: pkg.id,
           event_type: EVENT_TYPE,
           recipient_email: recipientEmail,
@@ -229,7 +254,7 @@ export async function POST(request: Request) {
       delivery = created as DeliveryRow
     }
 
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://forwarders.app').replace(/\/$/, '')
+    const siteUrl = `https://${tenantDomain.hostname}`
     const uploadUrl = `${siteUrl}/portal/paquetes/${pkg.id}?section=factura-comercial#factura-comercial`
     const contactName = client?.contacto?.trim() || 'cliente'
     const tracking = escapeHtml(pkg.tracking_number)
@@ -238,9 +263,15 @@ export async function POST(request: Request) {
     const safeReceivedLabel = escapeHtml(receivedLabel)
     const safeContactName = escapeHtml(contactName)
     const safeUploadUrl = escapeHtml(uploadUrl)
+    const companyName = companySettings?.trade_name?.trim()
+      || companySettings?.legal_name?.trim()
+      || 'Empresa logística'
+    const safeCompanyName = escapeHtml(companyName)
     const sender = process.env.RESEND_FROM_EMAIL
       || 'Forwarders ERP <no-reply@mail.forwarders.app>'
-    const replyTo = process.env.RESEND_REPLY_TO || 'contacto@forwarders.app'
+    const replyTo = companySettings?.email?.trim()
+      || process.env.RESEND_REPLY_TO
+      || 'contacto@forwarders.app'
 
     const resendRequest = {
         from: sender,
@@ -255,7 +286,7 @@ export async function POST(request: Request) {
           <div style="background:#f4f7fb;padding:32px 16px;font-family:Arial,sans-serif;color:#0f172a">
             <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
               <div style="background:#07152b;padding:24px 28px;color:#ffffff">
-                <div style="font-size:20px;font-weight:700">Forwarders ERP</div>
+                <div style="font-size:20px;font-weight:700">${safeCompanyName}</div>
                 <div style="margin-top:4px;color:#94a3b8;font-size:13px">Notificación de bodega Miami</div>
               </div>
               <div style="padding:28px">
@@ -279,6 +310,7 @@ export async function POST(request: Request) {
         tags: [
           { name: 'event', value: EVENT_TYPE },
           { name: 'package_id', value: pkg.id },
+          { name: 'tenant_id', value: pkg.tenant_id },
         ],
       }
 
@@ -302,6 +334,7 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', delivery.id)
+        .eq('tenant_id', pkg.tenant_id)
 
       return NextResponse.json(
         { ok: false, error: 'No se pudo conectar con Resend' },
@@ -321,6 +354,7 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', delivery.id)
+        .eq('tenant_id', pkg.tenant_id)
 
       return NextResponse.json(
         { ok: false, error: 'Resend no aceptó el correo' },
@@ -338,6 +372,7 @@ export async function POST(request: Request) {
         updated_at: sentAt,
       })
       .eq('id', delivery.id)
+      .eq('tenant_id', pkg.tenant_id)
 
     if (deliveryUpdateError) {
       return NextResponse.json(

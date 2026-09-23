@@ -8,8 +8,11 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { TermsAcknowledgement } from '@/src/components/legal/TermsAcknowledgement'
 import { signupLegalAcceptance } from '@/src/lib/legal-documents'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
 
 export default function PortalRegisterPage() {
+  const tenant = useTenant()
   const [sent, setSent] = useState(false)
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
@@ -49,6 +52,11 @@ export default function PortalRegisterPage() {
     setLoading(true)
     submittingRef.current = true
     try {
+      if (!tenant) {
+        toast.error('No se pudo validar la empresa de este enlace.')
+        return
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
@@ -60,6 +68,7 @@ export default function PortalRegisterPage() {
             apellido: apellido.trim(),
             company: company.trim(),
             phone: phone.trim() || null,
+            tenant_hostname: tenant.hostname,
           },
         },
       })
@@ -90,6 +99,7 @@ export default function PortalRegisterPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10 dark:bg-[#020817]">
       <div className="w-full max-w-md">
         <div className="mb-7 text-center">
+          <div className="mb-5"><TenantBrand compact /></div>
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-500/25">
             <Package className="h-7 w-7 text-white" />
           </div>
@@ -97,7 +107,7 @@ export default function PortalRegisterPage() {
             Solicitar acceso de cliente
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Tu cuenta será revisada y vinculada por el equipo de Sari Express.
+            Tu cuenta será revisada y vinculada por el equipo de {tenant?.tradeName || 'tu empresa'}.
           </p>
         </div>
 

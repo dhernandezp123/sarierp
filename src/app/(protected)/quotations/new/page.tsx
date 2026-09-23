@@ -9,6 +9,7 @@ import { pdf } from '@react-pdf/renderer'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
@@ -24,7 +25,6 @@ import {
 } from '@/src/lib/quotation-products'
 import { usesClientRatesFromCatalog } from '@/src/lib/pricing-catalogs'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
@@ -181,11 +181,7 @@ export default function NewQuotationPage() {
   }, [])
 
   const fetchCompanyBranding = async () => {
-    const { data } = await supabase
-      .from('company_settings')
-      .select(COMPANY_BRANDING_SELECT)
-      .limit(1)
-      .maybeSingle()
+    const { data } = await loadCurrentCompanySettings(supabase)
 
     setCompanyBranding(normalizeCompanyBranding(data))
   }

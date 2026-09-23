@@ -16,6 +16,7 @@ import {
   fieldClass,
 } from '@/src/lib/ui-classes'
 import { billingReturnHref } from '@/src/lib/billing-readiness'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -294,7 +295,7 @@ export default function NewInvoicePage() {
     const init = async () => {
       const [clientesRes, settingsRes] = await Promise.all([
         supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito').order('nombre'),
-        supabase.from('company_settings').select('exchange_rate_usd_hnl').limit(1).single(),
+        loadCurrentCompanySettings(supabase),
       ])
 
       setClientes((clientesRes.data || []) as Cliente[])

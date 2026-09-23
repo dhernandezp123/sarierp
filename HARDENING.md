@@ -1,5 +1,237 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-23 - SAAS-P8-03 - Release candidate de dominios multiempresa
+
+- Estado: candidato validado y preparado en la rama
+  `feat/multi-tenant-domains`; commit, push y Preview pendientes. Production,
+  SQL remoto y DNS permanecen en `NO-GO` hasta ejecutar el preflight y la
+  ventana de corte del runbook.
+- Alcance:
+  - Consolida las fases 1 a 8 del plan multiempresa, sus 18 migraciones, suites
+    SQL, aislamiento por tenant, branding, resolución de hostname, Storage y
+    acceso limitado del administrador de plataforma.
+  - Incluye la documentación de corte/UAT y el registro del sistema externo de
+    backups ya validado.
+- Validaciones ejecutadas sobre el worktree definitivo:
+  - `npm.cmd test`: 139/139 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a proxy, contexto, branding, helpers, providers, endpoints
+    administrativos y pruebas tenant: OK.
+  - ESLint ampliado sobre el lote modificado reproduce deuda legacy documentada
+    en pantallas y PDFs; no se usa como gate ni se mezcla con este corte.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `git diff --check`: OK.
+- Validaciones / acciones pendientes:
+  - Publicar la rama y verificar el deployment Preview de Vercel.
+  - Ejecutar el UAT autenticado de 15 casos sobre un entorno aislado.
+  - Congelar escrituras, ejecutar preflight de Production y aplicar las 18
+    migraciones antes de promover exactamente este build.
+  - Configurar y verificar DNS/TLS de `sari.forwarders.app`; MYA permanece
+    deshabilitada.
+- Riesgos / trabajo pendiente:
+  - La aplicación multiempresa depende de que el SQL se aplique primero; no se
+    debe promover esta rama a Production mientras la base conserve el esquema
+    anterior.
+  - El backup externo está operativo y el restore drill de datos de aplicación
+    fue exitoso, pero Auth/Storage alojados aún requieren UAT en un proyecto
+    separado cuando exista capacidad.
+  - Hash del commit y URL Preview: pendientes.
+
+### 2026-09-22 - SAAS-P8-02 - Acceso aislado a soporte de plataforma
+
+- Estado: implementado y validado localmente; el cierre formal de Fase 8 sigue
+  pendiente de UAT visual autenticado y preflight sobre una copia reciente de
+  Production. Sin despliegue, DNS, SQL remoto ni alta real de MYA.
+- Fase: cierre incremental de la Fase 8 del plan multiempresa.
+- Hallazgo:
+  - `is_platform_admin` concedía acceso transversal explícito a las tablas y RPC
+    de soporte, pero login y el layout protegido exigían siempre un tenant. Una
+    cuenta de plataforma sin `tenant_id` no podía abrir la consola autorizada.
+  - La navegación de rol `Admin` también habría presentado módulos operativos y
+    creación de tickets que no corresponden al contexto de Hernova.
+- Archivos modificados:
+  - `src/lib/tenant-context.ts`.
+  - `src/proxy.ts`.
+  - `src/app/login/page.tsx`.
+  - `src/app/(protected)/layout.tsx`.
+  - `src/app/(protected)/support/page.tsx`.
+  - `src/components/layout/protected-shell.tsx`.
+  - `src/components/layout/sidebar.tsx`.
+  - `src/components/layout/topbar.tsx`.
+  - `tests/tenant-host.test.mjs`.
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`.
+  - `docs/uat/multi-tenant-phase8-local-certification.md`.
+  - `docs/uat/multi-tenant-phase8-manual-uat.md`.
+  - `HARDENING.md`.
+- Cambios:
+  - Se separa el acceso por contexto: un perfil operativo solo coincide con su
+    tenant; un administrador de plataforma debe tener `is_platform_admin = true`
+    y `tenant_id IS NULL`.
+  - El dominio raíz admite login y tickets existentes de soporte. Dashboard,
+    perfil, nuevo ticket y cualquier módulo de negocio fallan cerrados.
+  - La consola de plataforma oculta acciones rápidas, alertas operativas,
+    tutorial, perfil y navegación de negocio; conserva únicamente soporte,
+    tema y cierre de sesión.
+  - Se documenta una matriz de 15 casos para el UAT manual pendiente.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 139/139 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido de los archivos modificados: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - Smoke HTTP local con `Host: forwarders.app`: `/login` 200; `/support` y
+    `/support/<uuid>` redirigen a login sin sesión; `/dashboard` y
+    `/support/new` responden 404.
+- Validaciones pendientes:
+  - Login y gestión visual de un ticket con un administrador de plataforma real
+    en una copia aislada reciente de Production.
+  - UAT por todos los roles, ensayo de duración, locks, conteos y Storage.
+- Riesgos / trabajo pendiente:
+  - Proxy y layout son defensa de ruta; RLS y RPC continúan siendo la autoridad
+    de datos. El UAT debe comprobar ambas capas con sesiones reales.
+  - Production, Supabase vinculado, Vercel, DNS y TLS permanecen intactos.
+  - No hay hash de commit disponible.
+
+### 2026-09-23 - OPS-BACKUP-01 - Respaldo externo cifrado de Supabase
+
+- Estado: publicado y programado en un repositorio privado aislado; primeras
+  ejecuciones de base de datos y Storage verificadas. Restauracion efimera de
+  los datos propios del ERP e integridad completa de los artefactos verificadas.
+  Sin despliegue de la aplicacion.
+- Repositorio externo:
+  - `https://github.com/dhernandezp123/sarierp-backups`
+  - `.github/workflows/supabase-backup.yml`
+  - `.github/workflows/restore-drill.yml`
+  - `scripts/backup/backup-supabase.sh`
+  - `scripts/backup/restore-drill.sh`
+  - `README.md`
+- SQL modificado: ninguno.
+- Cambios:
+  - Programa un dump logico diario de roles, esquema y datos mediante la version
+    fijada de Supabase CLI.
+  - Incluye un snapshot semanal separado de todos los buckets de Supabase
+    Storage mediante su endpoint S3.
+  - Cifra los archivos con AES-256 antes de subirlos al bucket privado de
+    Backblaze B2 y publica checksums SHA-256.
+  - Verifica el tamano remoto, contabiliza todas las versiones de B2 y detiene
+    nuevas subidas antes de alcanzar el limite gratuito de 10 GB; la limpieza
+    queda en reglas Lifecycle por prefijo para eliminar tambien versiones.
+  - Mantiene los secretos exclusivamente en GitHub Actions y elimina el material
+    sin cifrar del runner efimero al finalizar.
+  - Incorpora una prueba manual de recuperacion que descarga los ultimos
+    artefactos desde B2, valida ambos niveles de checksum, descifra y restaura la
+    base en un Supabase local efimero dentro de GitHub Actions. No consume un
+    proyecto alojado ni se conecta a Production, Demo o Resident Pass.
+- Validaciones ejecutadas:
+  - `bash -n scripts/backup/backup-supabase.sh`: OK con Git Bash.
+  - Parseo estructural de `.github/workflows/supabase-backup.yml` con
+    `js-yaml`: OK; trigger y job principal presentes.
+  - `npx.cmd supabase db dump --help`: opciones `--role-only`, `--data-only`,
+    `--use-copy`, `--exclude`, `--file` y `--db-url` confirmadas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check` y revision de whitespace de los archivos nuevos: OK;
+    solo avisos CRLF del worktree existente.
+  - Publicacion aislada en la rama `main` de `sarierp-backups`: OK; el
+    repositorio de la aplicacion, Vercel y Supabase permanecieron sin cambios.
+  - Primera ejecucion manual de base de datos: OK en 57 segundos; archivo
+    cifrado de 624.1 KB y checksum visibles en `production/database/`.
+  - Primera ejecucion manual con Storage: OK en 1 minuto 26 segundos; archivo
+    cifrado de 213.1 KB y checksum visibles en `production/storage/`.
+  - `actions/checkout` actualizado de v4.2.2 a v7.0.1, fijado por SHA, para usar
+    el runtime Node.js 24 y eliminar el aviso de deprecacion observado.
+- Validaciones pendientes:
+  - Restauracion de Storage y UAT integral de Auth, APIs y Realtime en un
+    proyecto alojado aislado cuando exista capacidad.
+- Riesgos / trabajo pendiente:
+  - Una ejecucion verde y los archivos remotos certifican creacion, cifrado,
+    subida y tamano, pero no sustituyen una restauracion integral de prueba.
+  - La prueba efimera valida la restauracion SQL y la integridad del snapshot de
+    Storage; no carga los objetos en una API Storage alojada ni valida servicios
+    externos del proyecto.
+  - La primera prueba efimera (`35903548497`) verifico descarga, checksums,
+    descifrado y extraccion de base y Storage, pero la restauracion SQL se detuvo
+    en `auth.custom_oauth_providers.custom_claims_allowlist`: la imagen local de
+    Auth incluida por CLI `2.107.0` era anterior al esquema alojado. Se actualiza
+    solo el drill a la version estable `2.117.0`; revalidacion pendiente.
+  - La segunda prueba (`35904491408`) supero esa diferencia con CLI `2.117.0`,
+    pero encontro otra deriva administrada: la tabla alojada
+    `auth.mfa_recovery_code_sets` aun no existe en la imagen local. El drill pasa
+    a restaurar de forma estricta solo los datos de aplicacion y mantiene los
+    bloques `auth`/`storage` intactos y verificados en el respaldo.
+  - La tercera prueba (`35905133247`): OK en 1 minuto 49 segundos; 88 bloques
+    `COPY` de aplicacion restaurados, 138 tablas base visibles y 31 bloques
+    administrados Auth/Storage preservados y verificados. Ningun proyecto remoto
+    fue modificado.
+  - La rotacion automatica requiere configurar las dos reglas Lifecycle de B2
+    documentadas y que Object Lock expire antes de su eliminacion.
+  - GitHub Actions y Backblaze B2 son dependencias externas sin SLA contratado.
+  - Commits externos: `671cc2a`, `5cab0f9`, `a8211aa`, `9df04aa`, `65bea43` y
+    `eef95a3` (`sarierp-backups`).
+
+### 2026-09-21 - SAAS-P8-01 - Certificación local y paquete de corte multiempresa
+
+- Estado: candidato técnico validado localmente; cierre formal pendiente de UAT
+  visual autenticado y preflight sobre copia reciente de Production. Sin
+  despliegue, DNS, SQL remoto ni alta real de MYA.
+- Fase: 8 del plan multiempresa.
+- Documentación:
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`
+  - `docs/MULTI_TENANT_CUTOVER_RUNBOOK.md`
+  - `docs/uat/multi-tenant-phase8-local-certification.md`
+- SQL y pruebas modificados:
+  - `supabase/migrations/20260921150000_phase4_operations_tenant_isolation.sql`
+  - `supabase/migrations/20260921162000_phase5_invoice_entrypoint.sql`
+  - `supabase/migrations/20260921171000_phase6_tenant_storage_policies.sql`
+  - `supabase/migrations/20260921190000_phase8_main_platform_admin.sql`
+  - `supabase/tests/phase4_operations_tenant_isolation.sql`
+  - `supabase/tests/phase8_upgrade_fixture.sql`
+  - `supabase/tests/phase8_upgrade_verify.sql`
+- Hallazgos corregidos:
+  - Se eliminaron dos dependencias accidentales de `main` hacia helpers
+    exclusivos de la rama Demo en facturación y políticas de fotos Miami.
+  - El backfill operativo suspende solo los triggers de usuario de sus 27 tablas
+    dentro de la transacción, asigna ownership, los reactiva antes del preflight
+    y aborta ante nulos o referencias cruzadas. Esto evita que historiales 5C
+    append-only bloqueen el upgrade con datos existentes.
+  - La prueba de Fase 4 limita su conteo a las 27 policies que realmente
+    certifica y no confunde policies agregadas por fases posteriores.
+  - La nueva migración `20260921190000` redefine `is_platform_admin()` para la
+    rama productiva sin SQL dinámico hacia funciones de Demo y conserva permisos
+    mínimos.
+- Validaciones ejecutadas:
+  - Instalación limpia en la pila aislada
+    `sarierp_phase8_certification`: 99 migraciones hasta
+    `20260921190000`, correcta.
+  - Upgrade desde `20260918200000`: 81 -> 99 migraciones, correcto.
+  - Fixture de upgrade: 15/15 tablas conservaron exactamente sus conteos; cero
+    `tenant_id` nulos o ajenos y relaciones Cotización -> Shipment -> SI ->
+    Booking -> Facturación intactas.
+  - Suites SQL `phase1` a `phase7`: 7/7 correctas con rollback; cubren `anon`,
+    Cliente, Ventas, Pricing, Operaciones, Contabilidad, Finanzas, Admin,
+    administrador de plataforma, cruces Sari/MYA, RPC y Storage.
+  - `npx.cmd supabase db lint --local --workdir .phase8-certification --level error`:
+    sin errores.
+  - `npm.cmd test`: 138/138 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint dirigido de proxy, contexto, branding, helpers, providers y pruebas
+    tenant: OK.
+  - ESLint dirigido que incluyó los dos PDFs legacy: 23 errores y 7 warnings ya
+    existentes (`any`, variables sin uso y `alt`).
+  - `npm.cmd run lint`: 212 errores y 41 warnings de deuda extendida existente;
+    no se introdujeron errores en la capa tenant dirigida y TypeScript/build
+    permanecen correctos.
+- Validaciones pendientes:
+  - UAT visual autenticado por rol en una copia reciente de Production.
+  - Ensayo de duración, locks, conteos y Storage con volumen representativo.
+  - Backup restaurado, preflight y autorización explícita en una ventana futura.
+- Riesgos / trabajo pendiente:
+  - La deuda global de ESLint no se mezcló con el corte y debe abordarse por
+    separado.
+  - La duración local no predice la duración del backfill productivo.
+  - Producción, Supabase vinculado, Vercel, DNS y TLS permanecen intactos; MYA
+    continúa deshabilitada.
+  - No hay hash de commit disponible.
+
 ### 2026-09-18 - FLOW-033 / DB-029 / UX-064 - Excepciones documentales auditables
 
 - Estado: implementado, migrado y publicado en Production; UAT autenticado
@@ -8085,3 +8317,445 @@ Agregar una entrada por fix:
     `/login?next=%2Fdashboard`, sin escrituras ni credenciales.
 - Commit de implementación y despliegue: `6637e82`. Registro de publicación en
   commit documental posterior.
+
+### 2026-09-21 - SAAS-P1-01 - Fundación aditiva multiempresa para Sari
+
+- Estado: implementado y validado localmente; sin despliegue, SQL remoto ni UAT
+  productivo.
+- Fase: 0/1 del plan multiempresa. Registra a Sari como tenant inicial sin
+  cambiar todavía el aislamiento RLS de los módulos de negocio.
+- Documentación:
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`
+  - `docs/MULTI_TENANT_TABLE_INVENTORY.md`
+- Código:
+  - `src/types/index.ts`
+- SQL:
+  - `supabase/migrations/20260921120000_phase1_multitenant_foundation.sql`
+  - `supabase/tests/phase1_multitenant_foundation.sql`
+- Cambios:
+  - Crea `tenants` y `tenant_domains`, con slugs/hostnames validados, un dominio
+    primario por tenant y RLS de lectura limitada al tenant autenticado.
+  - Registra de forma determinista a Sari y `sari.forwarders.app`.
+  - Agrega `tenant_id` nullable a `profiles` y `company_settings`; el backfill
+    asigna registros actuales a Sari y deja sin tenant a administradores
+    exclusivos de plataforma.
+  - Agrega `current_tenant_id()` e `is_current_tenant(uuid)`; ambos exigen un
+    perfil activo y aprobado y no están disponibles para `anon`.
+  - Un trigger impide que usuarios autenticados, incluidos Admin de tenant,
+    asignen o cambien su propia empresa. La Fase 1 no cambia aún RLS de clientes,
+    cotizaciones, pricing, operaciones ni finanzas.
+- Validaciones ejecutadas:
+  - Inventario estático: 88 tablas clasificadas; base local alineada hasta
+    `20260918200000`, con 204 funciones `SECURITY DEFINER` y 394 policies en
+    `public`/Storage antes de esta migración.
+  - `npx.cmd supabase migration up --local`: migración aplicada; el historial
+    local queda en `20260921120000`.
+  - `phase1_multitenant_foundation.sql`: OK mediante `psql` en el contenedor
+    local; prueba Sari/MYA, grants, RLS, perfil inactivo, Admin de tenant,
+    administrador de plataforma y `anon`; finaliza con `ROLLBACK`.
+  - Postflight local: 1 tenant, 1 dominio primario de Sari, 2 policies nuevas y
+    3 helpers/guards de tenant presentes.
+  - `npm.cmd test`: 121/121 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a `src/types/index.ts`: OK.
+  - `git diff --check`: OK; solo avisos LF/CRLF preexistentes del entorno.
+  - `npx.cmd supabase db lint --local --level warning`: los objetos nuevos no
+    reportan hallazgos; persiste un error previo en
+    `can_access_user_task_context` porque referencia `leads.deleted_at`, columna
+    ausente. No fue introducido ni corregido en esta fase.
+- Validaciones pendientes:
+  - UAT y RLS en una base con copia de datos reales, únicamente cuando se acuerde
+    una ventana futura. No ejecutar contra producción durante la preparación.
+- Riesgos / trabajo pendiente:
+  - Producción permanece sin cambios y no debe recibir esta migración mientras
+    el usuario esté trabajando cotizaciones.
+  - Un segundo tenant continúa prohibido: las políticas de los 88 módulos aún
+    no incorporan `tenant_id`.
+  - Falta completar la auditoría de las 204 funciones `SECURITY DEFINER`, vistas,
+    índices únicos, grants efectivos y rutas de Storage.
+  - No hay hash de commit disponible.
+
+### 2026-09-21 - SAAS-P7-01 - Resolución segura por hostname y branding de tenant
+
+- Estado: implementado y validado localmente; sin despliegue, DNS, SQL remoto ni
+  UAT productivo.
+- Fase: 7 del plan multiempresa. Conecta dominio, autenticación e identidad
+  visual sin usar el hostname como autorización de datos.
+- Archivos / SQL principales:
+  - `src/proxy.ts`.
+  - `src/lib/tenant-host.ts`.
+  - `src/lib/tenant-context.ts`.
+  - `src/components/tenant/TenantProvider.tsx`.
+  - `src/components/tenant/TenantBrand.tsx`.
+  - layouts, login, registro, onboarding, callback, portal, navegación y PDFs.
+  - `supabase/migrations/20260921180000_phase7_tenant_hostname_resolution.sql`.
+  - `supabase/migrations/20260921181000_phase7_sari_branding_bootstrap.sql`.
+  - `supabase/tests/phase7_tenant_hostname_resolution.sql`.
+  - `tests/tenant-host.test.mjs`.
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`.
+- Cambios:
+  - Normaliza hostnames y puertos, admite `sari.localhost` y el alias local
+    explícito de Sari, y rechaza slugs reservados, `Host` ambiguo, suffix
+    injection, dominios desconocidos y tenants/dominios inactivos.
+  - `proxy.ts` borra headers de tenant aportados por el cliente y solo inyecta
+    identidad después de resolver un RPC público de campos limitados. RLS sigue
+    derivando el tenant desde el perfil autenticado.
+  - Los layouts protegidos, ambos login, portal, onboarding y callback comparan
+    el tenant del dominio con `profiles.tenant_id`; una sesión de otra empresa
+    se cierra o redirige sin conceder acceso.
+  - El registro público entrega únicamente el hostname canónico. El trigger de
+    Auth resuelve `tenant_id`, conserva invitaciones administrativas confiables
+    y enlaza la aceptación legal al mismo tenant.
+  - Nombre, logo, colores y metadata se aplican en el root layout, accesos,
+    portal y shell interno. Cotización y orden operativa reemplazan textos de
+    Sari por el nombre comercial cargado del tenant al renderizar PDF/correo.
+  - El bootstrap crea `company_settings` de Sari solo si una base construida
+    desde migraciones no posee la fila histórica; nunca reemplaza una existente.
+- Validaciones ejecutadas:
+  - `npx.cmd supabase migration up --local`: migraciones aplicadas únicamente a
+    Supabase local; historial alineado en `20260921181000`.
+  - `phase7_tenant_hostname_resolution.sql`: OK mediante `psql`, con rollback.
+    Cubre RPC anónimo limitado, MYA temporal, dominio desconocido/inactivo, alta
+    ligada al dominio, aceptación legal y bloqueo de lectura directa de tablas.
+  - Smoke HTTP con Next.js y Supabase locales: `sari.localhost/login` y el alias
+    `localhost/login` responden 200 con nombre, colores y metadata de Sari;
+    `forwarders.app/` responde 200 y su `/login` responde 404; dominio
+    desconocido, reservado y suffix injection responden 404.
+  - `npm.cmd test`: 138/138 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido al resolver, proxy, layouts, auth, portal, navegación e
+    invoicing: sin errores ni advertencias.
+  - `npx.cmd supabase db lint --local`: sin errores.
+  - `npm.cmd run build`: OK, 73/73 páginas; proxy reconocido por Next.js 16.
+- Validaciones pendientes:
+  - UAT autenticado por rol y revisión visual completa pertenecen a la Fase 8.
+  - Validar upgrade desde copia representativa de Production y migración desde
+    cero antes de preparar cualquier ventana de corte.
+- Riesgos / trabajo pendiente:
+  - Producción y el proyecto Supabase vinculado permanecen sin cambios; la app
+    desplegada todavía no debe recibir tráfico en `sari.forwarders.app`.
+  - El entorno local habitual apunta al Supabase vinculado; el smoke de esta
+    fase se ejecutó con variables temporales hacia Supabase local para no tocar
+    datos remotos.
+  - MYA no fue creada de forma persistente. DNS wildcard, TLS, dominios de Auth,
+    variables del hosting y rollback operacional corresponden al paquete de
+    corte de Fase 8.
+  - No hay hash de commit disponible.
+
+### 2026-09-21 - SAAS-P6-01 - Portal, Storage, correos y APIs por tenant
+
+- Estado: implementado y validado localmente; sin despliegue, SQL remoto ni UAT
+  productivo.
+- Fase: 6 del plan multiempresa. Cierra portal, auditoría, notificaciones,
+  soporte, archivos privados y Route Handlers que usan `service_role`.
+- Documentación:
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`
+  - `docs/MULTI_TENANT_TABLE_INVENTORY.md`
+- SQL:
+  - `supabase/migrations/20260921170000_phase6_portal_support_tenant_isolation.sql`
+  - `supabase/migrations/20260921171000_phase6_tenant_storage_policies.sql`
+  - `supabase/tests/phase6_portal_storage_api_isolation.sql`
+- Aplicación y pruebas principales:
+  - `src/app/api/admin/invite/route.ts`
+  - `src/app/api/admin/users/last-sign-in/route.ts`
+  - `src/app/api/miami/package-assignment-email/route.ts`
+  - `src/app/api/support/notify/route.ts`
+  - `src/lib/storage-paths.ts`
+  - `src/lib/support-attachments.ts`
+  - `src/lib/company-settings.ts`
+  - consumidores de Storage de perfil, proveedor, Booking, BL, soporte y portal
+    Miami.
+  - `tests/admin-invite-tenant.test.mjs`
+  - `tests/storage-paths.test.mjs`
+  - `tests/email-notifications.test.mjs`
+  - `tests/user-last-sign-in.test.mjs`
+- Cambios:
+  - Agrega `tenant_id NOT NULL`, índices, guards y RLS restrictivo a 13 tablas:
+    8 de auditoría/portal y 5 tenant-scoped de soporte.
+  - Acota la lectura y administración de `profiles` al tenant; Hernova conserva
+    acceso transversal únicamente a la mesa de ayuda.
+  - Soporte deriva el tenant del creador/ticket y permite a administradores de
+    plataforma responder sin convertir datos operativos del tenant en globales.
+  - Las cargas nuevas de los seis buckets usan el prefijo de tenant. Booking,
+    documentos/fotos Miami, proveedor y soporte verifican además el padre; las
+    rutas privadas legacy solo siguen accesibles si se relacionan con un padre
+    visible del tenant actual.
+  - `avatars` continúa público por diseño, pero solo su propietario autenticado
+    puede crear, reemplazar o borrar bajo `tenant_id/auth.uid()/...`.
+  - Invitaciones fijan tenant y dominio primario; la consulta de últimas
+    conexiones filtra los usuarios Auth al tenant del Admin.
+  - Correos Miami y soporte validan ownership antes de leer/escribir con
+    `service_role`, registran auditoría con tenant y generan enlaces desde el
+    dominio primario activo. Miami usa branding/contacto del tenant; soporte
+    conserva la identidad de Hernova/Forwarders ERP.
+  - Corrige `can_access_user_task_context`: elimina la referencia inválida a
+    `leads.deleted_at` y exige tenant en agentes/actividades comerciales.
+- Validaciones ejecutadas:
+  - `npx.cmd supabase migration up --local`: ambas migraciones aplicadas solo a
+    Supabase local; historial alineado en `20260921171000`.
+  - Postflight: 13/13 columnas obligatorias, 13/13 guards, 13/13 policies RLS
+    restrictivas, 6 policies de carga con prefijo y cero tenants MYA persistidos.
+  - `phase6_portal_storage_api_isolation.sql`: OK mediante `psql`; prueba Sari,
+    MYA, administrador de plataforma, auditoría, soporte, attachment privado,
+    intento de notificación cruzada y termina con `ROLLBACK`.
+  - `npx.cmd supabase db lint --local --level error`: sin errores.
+  - `npm.cmd test`: 133/133 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido de APIs, helpers y pruebas: OK; consumidores UI modificados
+    sin errores y con un único warning preexistente por `<img>` en perfil.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `git diff --check`: OK; únicamente avisos LF/CRLF del worktree existente.
+- Validaciones pendientes:
+  - UAT autenticado con una copia representativa de Production para Cliente,
+    Admin, Operaciones, Finanzas y administrador de plataforma.
+  - Preflight de filas/objetos reales, respaldo y ventana futura antes de aplicar
+    SQL o migrar rutas legacy en el proyecto vinculado.
+- Riesgos / trabajo pendiente:
+  - Producción permanece sin cambios y MYA continúa deshabilitada.
+  - El resolver de hostname, alta pública asociada al dominio, callbacks de Auth
+    y experiencia visual global corresponden a la Fase 7; no se debe habilitar
+    un segundo tenant antes de completarla.
+  - Los avatares son activos públicos no sensibles; los documentos operativos
+    permanecen en buckets privados con validación de tenant.
+  - No hay hash de commit disponible.
+
+### 2026-09-21 - SAAS-P2-01 - Configuración y branding aislados por tenant
+
+- Estado: implementado y validado localmente; sin despliegue, SQL remoto ni UAT
+  productivo.
+- Fase: 2 del plan multiempresa. El cambio elimina las lecturas globales de
+  `company_settings`, pero no habilita todavía un segundo tenant operativo.
+- Documentación:
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`
+  - `docs/MULTI_TENANT_TABLE_INVENTORY.md`
+- Código principal:
+  - `src/lib/company-settings.ts`
+  - `src/lib/company-branding.ts`
+  - `src/app/(protected)/settings/company/page.tsx`
+  - Consumidores de branding/configuración en cotizaciones, pricing, invoicing,
+    operaciones, reportes, Miami y portal.
+  - `tests/company-settings-tenant.test.mjs`
+- SQL:
+  - `supabase/migrations/20260921130000_phase2_tenant_company_settings.sql`
+  - `supabase/tests/phase2_tenant_company_settings.sql`
+- Cambios:
+  - Convierte `company_settings.tenant_id` en obligatorio y único por empresa.
+  - Agrega colores principal/secundario con defaults de Sari y constraints de
+    formato hexadecimal.
+  - Reemplaza políticas globales por lectura del tenant para personal interno e
+    `INSERT`/`UPDATE` para su Admin activo; no agrega policy permisiva de DELETE.
+  - Agrega un RPC interno completo que conserva RLS y un RPC de branding seguro
+    para Cliente, ambos resolviendo el tenant desde `auth.uid()`.
+  - Centraliza los consumidores en loaders por tenant y elimina todas las
+    lecturas `.from('company_settings')` fuera del editor controlado.
+  - La pantalla de configuración deriva `tenant_id` del perfil, limita el update
+    por `id + tenant_id` y permite editar los dos colores corporativos.
+- Validaciones ejecutadas:
+  - `npx.cmd supabase migration up --local`: migración aplicada; historial local
+    alineado en `20260921130000`.
+  - `phase2_tenant_company_settings.sql`: OK mediante `psql`; prueba aislamiento
+    Sari/MYA, unicidad, colores, Cliente, Admin de tenant, administrador de
+    plataforma y `anon`, y finaliza con `ROLLBACK`.
+  - Postflight local: las políticas efectivas son por tenant y los datos de MYA
+    no permanecen después de la prueba.
+  - `npm.cmd test`: 124/124 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint dirigido a los helpers, normalización de branding y prueba nueva: OK.
+  - `npx.cmd supabase db lint --local --level warning`: los objetos de Fase 2 no
+    reportan hallazgos; persiste el error previo en
+    `can_access_user_task_context` por la referencia a `leads.deleted_at`.
+- Riesgos / trabajo pendiente:
+  - Producción permanece sin cambios. No aplicar esta migración mientras se estén
+    trabajando cotizaciones ni sin una ventana posterior autorizada.
+  - `surcharge_rules` sigue siendo global y se aislará con catálogos/finanzas en
+    la Fase 5.
+  - Los colores ya se almacenan, pero el tema global, logo y metadatos por
+    hostname se conectarán en la Fase 7.
+  - MYA sigue prohibida como empresa operativa hasta aislar comercial,
+    operaciones, finanzas, portal, Storage y APIs.
+  - No hay hash de commit disponible.
+
+### 2026-09-21 - SAAS-P3-01 - Aislamiento comercial Sari/MYA
+
+- Estado: implementado y validado localmente; sin despliegue, SQL remoto ni UAT
+  productivo.
+- Fase: 3 del plan multiempresa. Aísla clientes, CRM, cotizaciones, pricing,
+  agentes y snapshots comerciales sin cambiar estados ni cálculos.
+- Documentación:
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`
+  - `docs/MULTI_TENANT_TABLE_INVENTORY.md`
+- SQL:
+  - `supabase/migrations/20260921140000_phase3_commercial_tenant_isolation.sql`
+  - `supabase/migrations/20260921141000_fix_phase3_parent_tenant_guard.sql`
+  - `supabase/migrations/20260921142000_phase3_profile_reference_integrity.sql`
+  - `supabase/migrations/20260921143000_phase3_tenant_delete_guards.sql`
+  - `supabase/tests/phase3_commercial_tenant_isolation.sql`
+- Cambios:
+  - Agrega `tenant_id NOT NULL` e índice a 19 tablas del núcleo comercial.
+  - Backfill de raíces hacia Sari con comprobación por cliente/perfil y herencia
+    determinista para hijos de cliente, cotización, agente, tarifa y opción.
+  - Instala 19 guards para `INSERT`, `UPDATE` y `DELETE`; el tenant se deriva de
+    la sesión o del padre y las RPC `SECURITY DEFINER` no pueden mutar otro tenant.
+  - Agrega claves compuestas de ownership y de referencias de perfiles para
+    bloquear clientes, agentes, snapshots, actores y asignaciones cruzadas.
+  - Reemplaza las policies comerciales y helpers `can_*` conservando los roles
+    vigentes, soft delete, demo guards y RPC atómicas.
+  - Cambia la unicidad de `codigo_cliente` y `quotation_number` de global a
+    `(tenant_id, valor)`. Las secuencias independientes se mantienen para Fase 5.
+  - La corrección incremental `20260921141000` documenta el hallazgo detectado
+    durante pruebas: `EXECUTE` dinámico no actualiza `FOUND` en PL/pgSQL.
+- Validaciones ejecutadas:
+  - Migraciones aplicadas únicamente en Supabase local; historial local alineado
+    en `20260921143000`.
+  - Postflight: 19/19 columnas `tenant_id` obligatorias, 19 guards instalados,
+    índices únicos comerciales por tenant y cero tenants MYA persistentes.
+  - `phase3_commercial_tenant_isolation.sql`: OK mediante `psql`; prueba Sari/MYA,
+    Ventas, Pricing, Cliente, administrador de plataforma, `anon`, mismas claves
+    en tenants distintos, referencias cruzadas, perfiles, RPC de tarifas,
+    selección atómica, snapshots y borrado propio/cross-tenant; termina con
+    `ROLLBACK`.
+  - `npm.cmd test`: 124/124 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd supabase db lint --local --level warning`: los objetos de Fase 3 no
+    reportan hallazgos; persiste el error previo en
+    `can_access_user_task_context` por la referencia a `leads.deleted_at`.
+- Validaciones pendientes:
+  - UAT autenticado con datos equivalentes a Production para Ventas, Pricing,
+    Admin, Operaciones y Contabilidad antes de cualquier despliegue.
+  - Preflight de filas reales y respaldo en una ventana futura autorizada.
+- Riesgos / trabajo pendiente:
+  - Producción permanece sin cambios y MYA continúa deshabilitada.
+  - `leads` se resolverá con el contexto de landing/dominio en Fases 6/7;
+    `client_notifications` y correos del portal quedan en Fase 6.
+  - Catálogos y secuencias, incluido `client_rate_catalog`, continúan pendientes
+    para Fase 5.
+  - Operaciones y documentos aún no tienen ownership propio; se abordarán en
+    Fase 4 antes de habilitar una segunda empresa.
+  - No hay hash de commit disponible.
+
+### 2026-09-21 - SAAS-P4-01 - Aislamiento de operaciones y documentos Sari/MYA
+
+- Estado: implementado y validado localmente; sin despliegue, SQL remoto ni UAT
+  productivo.
+- Fase: 4 del plan multiempresa. Aísla Shipment, Shipping Instruction, Booking,
+  documentos operativos, BL, VGM, garantías y operación Miami sin cambiar sus
+  estados ni sustituir las RPC atómicas vigentes.
+- Documentación:
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`
+  - `docs/MULTI_TENANT_TABLE_INVENTORY.md`
+- SQL:
+  - `supabase/migrations/20260921150000_phase4_operations_tenant_isolation.sql`
+  - `supabase/migrations/20260921151000_phase4_operations_tenant_helpers.sql`
+  - `supabase/tests/phase4_operations_tenant_isolation.sql`
+- Cambios:
+  - Agrega `tenant_id NOT NULL` e índice a 27 tablas: las 19 del expediente
+    operativo y 8 de Miami; `miami_carriers` queda en Fase 5 como catálogo.
+  - El backfill usa cotización, cliente, Shipping Instruction, Booking, BL,
+    paquete o perfil según el padre canónico, con Sari únicamente como fallback
+    histórico de raíces sin vínculo.
+  - Agrega claves compuestas para expediente, actores y relaciones opcionales;
+    bloquea referencias entre tenants incluso desde `service_role` o funciones
+    propietarias.
+  - Instala 27 guards para `INSERT`, `UPDATE` y `DELETE`, además de 27 policies
+    RLS restrictivas que conservan las reglas funcionales, Cliente y Demo.
+  - Endurece helpers de Shipping Instruction, Shipment, Booking, BL y documentos
+    Miami. `booking_operational_mode()` y `get_billing_work_queue()` ya no leen
+    datos de otra empresa bajo `SECURITY DEFINER`.
+  - Convierte routing, shipment, HBL, manifiesto, warehouse y embarque Miami a
+    unicidad por tenant; los generadores independientes permanecen en Fase 5.
+- Validaciones ejecutadas:
+  - `npx.cmd supabase migration up --local`: ambas migraciones aplicadas solo a
+    Supabase local; historial alineado en `20260921151000`.
+  - Postflight: 27/27 columnas `tenant_id` obligatorias, 27/27 guards, 27/27
+    policies restrictivas y cero tenants MYA persistentes.
+  - `phase4_operations_tenant_isolation.sql`: OK mediante `psql`; prueba Sari y
+    MYA con Ventas, Operaciones, Contabilidad, Cliente, administrador de
+    plataforma y `anon`; ejerce creación canónica de shipment y booking,
+    eventos, BL, documentos, garantías, manifiestos y embarques Miami, números
+    compartidos, referencias/borrado cross-tenant y cola de facturación; termina
+    con `ROLLBACK`.
+  - `npm.cmd test`: 124/124 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd supabase db lint --local --level warning`: los objetos de Fase 4 no
+    reportan hallazgos; persiste el error previo en
+    `can_access_user_task_context` por la referencia a `leads.deleted_at`.
+- Validaciones pendientes:
+  - UAT autenticado con una copia representativa de Production para Ventas,
+    Operaciones, Contabilidad y Cliente antes de cualquier despliegue.
+  - Preflight de filas reales, respaldo y ventana de mantenimiento futura.
+- Riesgos / trabajo pendiente:
+  - Producción permanece sin cambios y MYA continúa deshabilitada.
+  - Finanzas, proveedores, catálogos (`miami_carriers` incluido) y numeradores
+    independientes continúan en Fase 5.
+  - Storage, portal completo, correos y Route Handlers con `service_role`
+    continúan en Fase 6; no se modificaron rutas de archivos existentes.
+  - No hay hash de commit disponible.
+
+### 2026-09-21 - SAAS-P5-01 - Aislamiento financiero, catálogos y numeraciones Sari/MYA
+
+- Estado: implementado y validado localmente; sin despliegue, SQL remoto ni UAT
+  productivo.
+- Fase: 5 del plan multiempresa. Aísla documentos fiscales, cartera, pagos,
+  proveedores, costos, catálogos configurables y numeradores sin recalcular
+  saldos, importes o snapshots históricos.
+- Documentación:
+  - `docs/MULTI_TENANT_MIGRATION_PLAN.md`
+  - `docs/MULTI_TENANT_TABLE_INVENTORY.md`
+- SQL y aplicación:
+  - `supabase/migrations/20260921160000_phase5_finance_catalog_tenant_isolation.sql`
+  - `supabase/migrations/20260921161000_phase5_finance_tenant_helpers.sql`
+  - `supabase/migrations/20260921162000_phase5_invoice_entrypoint.sql`
+  - `supabase/migrations/20260921163000_phase5_freight_payable_conflict.sql`
+  - `supabase/migrations/20260921164000_phase5_internal_function_privileges.sql`
+  - `supabase/tests/phase5_finance_catalog_tenant_isolation.sql`
+  - `src/app/(protected)/settings/company/page.tsx`
+- Cambios:
+  - Agrega `tenant_id NOT NULL`, índice, guard de `INSERT`/`UPDATE`/`DELETE` y
+    policy RLS restrictiva a 20 tablas financieras y configurables.
+  - El backfill deriva ownership desde cotización, cliente, invoice, pago,
+    proveedor, booking, agente o perfil; usa Sari solo como fallback histórico.
+  - Agrega relaciones compuestas para impedir facturas, notas, pagos, splits,
+    costos, CxP, proveedores, impuestos y actores cruzados entre tenants.
+  - Acota por tenant la unicidad de número de factura, CAI activo, idempotencia
+    de CxP, plantillas, productos, cargos, carriers y demás catálogos.
+  - Convierte `document_sequences` y `hbl_number_counters` a contadores por
+    tenant. Cliente, cotización, routing, proforma, HBL, manifiesto, warehouse y
+    embarque Miami conservan sus formatos visibles y avanzan por separado.
+  - Endurece CAI, creación atómica de facturas, pagos, reversos, CxP, helpers de
+    costos y acceso, además de `invoice_receivables`, contra lecturas o
+    mutaciones cross-tenant bajo `SECURITY DEFINER`.
+  - Actualiza el `upsert` de Bunker para usar la clave compuesta
+    `tenant_id,code` sin aceptar el tenant desde la interfaz.
+  - La migración incremental `20260921163000` corrige el `ON CONFLICT` legacy de
+    la CxP detectado por `supabase db lint` y conserva su idempotencia por tenant.
+- Validaciones ejecutadas:
+  - `npx.cmd supabase migration up --local`: cinco migraciones aplicadas solo a
+    Supabase local; historial alineado en `20260921164000`.
+  - Postflight: 20/20 columnas `tenant_id` obligatorias, 20/20 guards, 20/20
+    policies restrictivas y cero tenants/usuarios MYA de prueba persistentes.
+  - `phase5_finance_catalog_tenant_isolation.sql`: OK mediante `psql`; prueba
+    Sari/MYA, números y códigos iguales entre tenants, duplicados internos,
+    facturas/items, pagos, CxP idempotente, proveedores, costos, catálogos,
+    contadores, administrador de plataforma y `anon`; termina con `ROLLBACK`.
+  - `npm.cmd test`: 124/124 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `git diff --check`: OK; únicamente avisos de normalización LF/CRLF del
+    worktree existente.
+  - `npx.cmd supabase db lint --local --level warning`: los objetos de Fase 5 no
+    reportan hallazgos; persiste únicamente el error previo en
+    `can_access_user_task_context` por la referencia a `leads.deleted_at`.
+- Validaciones pendientes:
+  - UAT autenticado con una copia representativa de Production para Finanzas,
+    Contabilidad, Admin, Pricing y Operaciones antes de cualquier despliegue.
+  - Preflight de filas reales, respaldo y ventana de mantenimiento futura.
+- Riesgos / trabajo pendiente:
+  - Producción permanece sin cambios y MYA continúa deshabilitada.
+  - Portal, Storage, correos enviados y Route Handlers con `service_role`
+    continúan en Fase 6.
+  - Los prefijos visibles existentes de Sari se conservaron deliberadamente;
+    la experiencia visual y resolución por hostname pertenecen a la Fase 7.
+  - No hay hash de commit disponible.

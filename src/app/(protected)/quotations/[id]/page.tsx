@@ -31,6 +31,7 @@ import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTas
 import { createNotification } from '@/src/lib/notifications'
 import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
 import { quotationListHref, quotationTransitionHint } from '@/src/lib/quotation-detail-ux'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import {
   QUOTATION_LOSS_REASONS,
   type QuotationLossReason,
@@ -52,8 +53,8 @@ import {
   type EmailTemplate,
 } from '@/src/lib/email-templates'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
+  getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import {
@@ -592,11 +593,8 @@ function QuotationDetail() {
       .eq('entity_id', id)
       .order('created_at', { ascending: false })
 
-    const { data: companyData, error: companyError } = await supabase
-      .from('company_settings')
-      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent, insurance_included_service_patterns, insurance_excluded_service_patterns`)
-      .limit(1)
-      .maybeSingle()
+    const { data: companyData, error: companyError } =
+      await loadCurrentCompanySettings(supabase)
 
     if (version !== loadVersion.current) return
     const failed = [
@@ -1447,11 +1445,7 @@ function QuotationDetail() {
     setEmailLoading(true)
     try {
               if (!plantillaCotizacion) {
-                const { data } = await supabase
-                  .from('company_settings')
-                  .select('plantilla_cotizacion')
-                  .limit(1)
-                  .maybeSingle()
+                const { data } = await loadCurrentCompanySettings(supabase)
                 setPlantillaCotizacion(data?.plantilla_cotizacion ?? '')
               }
               if (emailTemplates.length === 0) {
@@ -1793,7 +1787,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           ? formatDisplayDate(quotation?.valid_until)
           : '',
     cierre:
-      plantillaCotizacion || 'Saludos cordiales,\nSari Express — Equipo Comercial',
+      plantillaCotizacion || `Saludos cordiales,\n${getCompanyTradeName(companyBranding)} — Equipo Comercial`,
   }
 
   const activeEmailTemplate =

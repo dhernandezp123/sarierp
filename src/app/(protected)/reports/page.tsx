@@ -25,10 +25,10 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { ReportPdf, type ReportPdfColumn, type ReportPdfData, type ReportPdfRow } from '@/src/components/pdf/report-pdf'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import { aggregateBookingStatus } from '@/src/lib/booking-status'
 import {
   resolveBookingDocumentSummary,
@@ -441,7 +441,7 @@ function ReportsContent() {
     setLoadError(null)
     try {
       const tasks: PromiseLike<void>[] = []
-      tasks.push(supabase.from('company_settings').select(COMPANY_BRANDING_SELECT).limit(1).maybeSingle().then(({ data, error }) => {
+      tasks.push(loadCurrentCompanySettings(supabase).then(({ data, error }) => {
         if (error) throw new Error('No se pudo cargar la configuración del reporte. Reintenta la consulta.')
         if (isCurrent()) setCompanyBranding(normalizeCompanyBranding(data))
       }))

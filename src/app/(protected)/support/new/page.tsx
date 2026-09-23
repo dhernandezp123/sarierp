@@ -16,9 +16,11 @@ import {
   uploadSupportAttachments,
 } from '@/src/lib/support-attachments'
 import type { SupportTicketCategory, SupportTicketPriority } from '@/src/types'
+import { useUser } from '@/src/hooks/useUser'
 
 export default function NewSupportTicketPage() {
   const router = useRouter()
+  const { profile } = useUser()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [subject, setSubject] = useState('')
   const [description, setDescription] = useState('')
@@ -66,7 +68,7 @@ export default function NewSupportTicketPage() {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (!user) {
+      if (!user || !profile?.tenant_id) {
         toast.error('Tu sesión ha vencido. Vuelve a iniciar sesión.')
         return
       }
@@ -119,6 +121,7 @@ export default function NewSupportTicketPage() {
             ticketId,
             messageId: initialMessage.id,
             userId: user.id,
+            tenantId: profile.tenant_id,
             files,
           })
           failedAttachmentCount = uploadResult.failedFileNames.length

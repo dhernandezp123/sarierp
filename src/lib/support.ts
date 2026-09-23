@@ -46,6 +46,7 @@ export type SupportProfileSummary = {
 
 export type SupportTicket = {
   id: string
+  tenant_id: string
   ticket_number: string
   subject: string
   category: SupportTicketCategory

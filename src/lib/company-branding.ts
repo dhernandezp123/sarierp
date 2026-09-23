@@ -8,6 +8,8 @@ export type CompanyBranding = {
   phone: string | null
   email: string | null
   logo_url: string | null
+  primary_color: string | null
+  secondary_color: string | null
   miami_consignee: string | null
   miami_address_line: string | null
   miami_suite_prefix: string | null
@@ -28,6 +30,8 @@ export const COMPANY_BRANDING_SELECT = `
   phone,
   email,
   logo_url,
+  primary_color,
+  secondary_color,
   miami_consignee,
   miami_address_line,
   miami_suite_prefix,
@@ -49,6 +53,8 @@ export const DEFAULT_COMPANY_BRANDING: CompanyBranding = {
   phone: null,
   email: null,
   logo_url: '/logo/sari-logo.png',
+  primary_color: '#0038BD',
+  secondary_color: '#07111F',
   miami_consignee: null,
   miami_address_line: null,
   miami_suite_prefix: null,
@@ -80,6 +86,10 @@ export function normalizeCompanyBranding(
     phone: clean(data.phone),
     email: clean(data.email),
     logo_url: clean(data.logo_url) || DEFAULT_COMPANY_BRANDING.logo_url,
+    primary_color:
+      clean(data.primary_color) || DEFAULT_COMPANY_BRANDING.primary_color,
+    secondary_color:
+      clean(data.secondary_color) || DEFAULT_COMPANY_BRANDING.secondary_color,
     miami_consignee: clean(data.miami_consignee),
     miami_address_line: clean(data.miami_address_line),
     miami_suite_prefix: clean(data.miami_suite_prefix),

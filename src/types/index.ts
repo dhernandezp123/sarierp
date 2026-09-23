@@ -15,6 +15,7 @@ export type UserStatus = 'Pendiente' | 'Aprobado' | 'Rechazado'
 
 export type Profile = {
   id: string
+  tenant_id?: string | null
   nombre: string | null
   apellido: string | null
   email: string | null

@@ -13,7 +13,13 @@ test('Respuestas inválidas del proveedor se normalizan sin lanzar ni aceptar un
   assert.equal(result.message, 'Rate limit')
 })
 
-async function exerciseRoute(kind, { demo = false, providerBody = '<html>Bad gateway</html>', providerStatus = 502 } = {}) {
+async function exerciseRoute(kind, {
+  demo = false,
+  providerBody = '<html>Bad gateway</html>',
+  providerStatus = 502,
+  callerTenant = 'tenant-sari',
+  resourceTenant = 'tenant-sari',
+} = {}) {
   const env = {
     NEXT_PUBLIC_SUPABASE_URL: 'https://example.invalid', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'mock',
     SUPABASE_SERVICE_ROLE_KEY: 'mock', RESEND_API_KEY: 'mock', OUTBOUND_EMAIL_ENABLED: 'true',
@@ -27,21 +33,28 @@ async function exerciseRoute(kind, { demo = false, providerBody = '<html>Bad gat
     providerCalls.push(options)
     return new Response(providerBody, { status: providerStatus })
   }
-  const profile = { id: 'user', rol: 'Admin', status: 'Aprobado', is_active: true, nombre: 'Test', apellido: '', email: 'test@example.invalid' }
+  const profile = { id: 'user', tenant_id: callerTenant, rol: 'Admin', status: 'Aprobado', is_active: true, is_platform_admin: false, nombre: 'Test', apellido: '', email: 'test@example.invalid' }
   const rows = {
     profiles: profile,
     platform_environment: { environment: demo ? 'demo' : 'production' },
-    support_tickets: { id: 'ticket', ticket_number: 'TEST-1', subject: 'Local', category: 'Bug', priority: 'Media', status: 'Abierto', created_by: 'user', creator: profile },
+    tenant_domains: { tenant_id: resourceTenant, hostname: 'sari.forwarders.app', is_primary: true, is_active: true },
+    company_settings: { tenant_id: resourceTenant, trade_name: 'Sari Express', legal_name: 'Sari Express', email: 'contacto@sari.invalid' },
+    support_tickets: { id: 'ticket', tenant_id: resourceTenant, ticket_number: 'TEST-1', subject: 'Local', category: 'Bug', priority: 'Media', status: 'Abierto', created_by: 'user', creator: profile },
     support_settings: { enabled: true, support_email: 'support@example.invalid' },
-    miami_packages: { id: 'package', tracking_number: 'LOCAL', status: 'Asignado', cliente_id: 'client', warehouse_number: 'WH-1', received_at: '2026-09-07T18:00:00Z', clientes: { nombre: 'Test', contacto: 'Test', email_1: 'client@example.invalid' } },
+    miami_packages: { id: 'package', tenant_id: resourceTenant, tracking_number: 'LOCAL', status: 'Asignado', cliente_id: 'client', warehouse_number: 'WH-1', received_at: '2026-09-07T18:00:00Z', clientes: { nombre: 'Test', contacto: 'Test', email_1: 'client@example.invalid' } },
   }
   const client = {
     auth: { getUser: async () => ({ data: { user: { id: 'user' } }, error: null }) },
     from(table) {
       let inserted = false
-      const result = () => ({ data: inserted ? { id: 'delivery', status: 'processing', attempts: 1 } : rows[table] ?? null, error: null })
+      const conditions = []
+      const result = () => {
+        const row = rows[table] ?? null
+        const matches = !row || conditions.every(([column, value]) => row[column] === undefined || row[column] === value)
+        return { data: inserted ? { id: 'delivery', status: 'processing', attempts: 1 } : matches ? row : null, error: null }
+      }
       const query = {
-        select() { return query }, eq() { return query },
+        select() { return query }, eq(column, value) { conditions.push([column, value]); return query },
         insert() { inserted = true; return query },
         update(value) { updates.push({ table, ...value }); return query },
         single: async () => result(), maybeSingle: async () => result(),
@@ -87,6 +100,18 @@ for (const kind of ['miami', 'support']) {
 
   test(`${kind}: demo no llama al proveedor ni escribe una auditoría de envío`, async () => {
     const result = await exerciseRoute(kind, { demo: true })
+    assert.equal(result.providerCalls.length, 0)
+    assert.equal(result.updates.length, 0)
+  })
+}
+
+for (const kind of ['miami', 'support']) {
+  test(`${kind}: rechaza recursos de otro tenant antes de enviar correo`, async () => {
+    const result = await exerciseRoute(kind, {
+      callerTenant: 'tenant-sari',
+      resourceTenant: 'tenant-mya',
+    })
+    assert.ok([403, 404].includes(result.response.status))
     assert.equal(result.providerCalls.length, 0)
     assert.equal(result.updates.length, 0)
   })

@@ -8,12 +8,12 @@ import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from 
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   getCompanyDisplayName,
   getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -73,11 +73,7 @@ export default function EmbarquesPage() {
       .select('id, shipment_number, transport_mode, status, total_packages, total_weight_lbs, dispatched_at')
       .order('dispatched_at', { ascending: false })
       .limit(10)
-    const companyQuery = supabase
-      .from('company_settings')
-      .select(COMPANY_BRANDING_SELECT)
-      .limit(1)
-      .maybeSingle()
+    const companyQuery = loadCurrentCompanySettings(supabase)
     const [
       { data, error },
       { data: shipmentData, error: shipmentError },

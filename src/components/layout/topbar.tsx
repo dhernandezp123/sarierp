@@ -13,6 +13,7 @@ import NewClientDialog from '@/src/components/clientes/NewClientDialog'
 import ClientProfileDialog from '@/src/components/clientes/ClientProfileDialog'
 import EmailTemplatesDialog from '@/src/components/email/EmailTemplatesDialog'
 import ReferenceInsuranceCalculatorDialog from '@/src/components/quotations/ReferenceInsuranceCalculatorDialog'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
 
 // Acciones rapidas disponibles segun rol; con `href` navegan y con
 // `action` abren un modal sin salir de la pagina actual.
@@ -86,6 +87,8 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
   const { theme, setTheme } = useTheme()
   const { user, profile, loading: userLoading } = useUser()
   const pathname = usePathname()
+  const tenant = useTenant()
+  const isPlatformAdmin = profile?.is_platform_admin === true
 
   const [alerts, setAlerts] = useState<SystemAlert[]>([])
   const [seenHighAlertIds, setSeenHighAlertIds] = useState<Set<string>>(new Set())
@@ -104,7 +107,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
     const fetchAlerts = async () => {
       if (userLoading) return
 
-      if (!user) {
+      if (!user || isPlatformAdmin) {
         setAlerts([])
         setSeenHighAlertIds(new Set())
         return
@@ -128,7 +131,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
     }
 
     fetchAlerts()
-  }, [pathname, profile, user, userLoading])
+  }, [isPlatformAdmin, pathname, profile, user, userLoading])
 
   // Cierra dropdowns al clic fuera
   useEffect(() => {
@@ -167,9 +170,11 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
     saveSeenAlertIds(user.id, nextSeenIds)
   }
 
-  const visibleActions = QUICK_ACTIONS.filter((action) =>
-    !profile?.rol || action.roles.includes(profile.rol)
-  )
+  const visibleActions = isPlatformAdmin
+    ? []
+    : QUICK_ACTIONS.filter((action) =>
+        !profile?.rol || action.roles.includes(profile.rol)
+      )
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6 dark:border-slate-700/60 dark:bg-[#081120]/90">
@@ -190,7 +195,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
         )}
 
         <Link
-          href="/dashboard"
+          href={isPlatformAdmin ? '/support' : '/dashboard'}
           title="Ir al inicio"
           className="rounded-xl p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
         >
@@ -199,10 +204,10 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
 
         <div className="hidden sm:block">
           <p className="text-sm font-semibold text-slate-900 dark:text-white">
-            Sari Express ERP
+            {tenant?.tradeName || 'Forwarders ERP'}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Plataforma logistica interna
+            {isPlatformAdmin ? 'Consola de soporte Hernova' : 'Plataforma logistica interna'}
           </p>
         </div>
       </div>
@@ -294,7 +299,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
           )}
         </button>
 
-        <div ref={alertsRef} className="relative">
+        {!isPlatformAdmin && <div ref={alertsRef} className="relative">
           <button
             type="button"
             onClick={toggleAlerts}
@@ -353,9 +358,9 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
               )}
             </div>
           )}
-        </div>
+        </div>}
 
-        <Link
+        {!isPlatformAdmin && <Link
           href="/profile"
           className="ml-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-transparent dark:hover:bg-slate-800"
         >
@@ -371,7 +376,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
               {profile?.rol || 'Ventas'}
             </p>
           </div>
-        </Link>
+        </Link>}
       </div>
 
       <NewAgentDialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen} />

@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { Package, LogOut, User, Bell, Home, Ship, ClipboardList } from 'lucide-react'
 import { PortalUnlinked } from '@/src/components/portal/PortalFeedback'
@@ -10,11 +9,15 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { UserProvider, useUser } from '@/src/hooks/useUser'
 import { useClientNotifications } from '@/src/hooks/useClientNotifications'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { profileMatchesTenant } from '@/src/lib/tenant-context'
 
 function PortalShell({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useUser()
   const router = useRouter()
   const pathname = usePathname()
+  const tenant = useTenant()
   const isPublicPortalPath = [
     '/portal/login',
     '/portal/register',
@@ -30,6 +33,13 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       router.replace(`/portal/login?next=${encodeURIComponent(returnTo)}`)
       return
     }
+    if (!profileMatchesTenant(profile.tenant_id, tenant)) {
+      void supabase.auth.signOut().finally(() => {
+        toast.error('Esta cuenta pertenece a otra empresa.')
+        router.replace('/portal/login')
+      })
+      return
+    }
     if (profile.rol !== 'Cliente') {
       toast.error('Esta área es solo para clientes.')
       router.replace('/dashboard')
@@ -38,7 +48,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
     if (profile.status !== 'Aprobado' || !profile.is_active) {
       router.replace('/portal/login')
     }
-  }, [isPublicPortalPath, loading, user, profile, router, pathname])
+  }, [isPublicPortalPath, loading, user, profile, router, pathname, tenant])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -65,14 +75,7 @@ function PortalShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#07111F]/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <Link href="/portal" className="flex items-center gap-2">
-            <Image
-              src="/brand/isotipo-color.png"
-              alt="Forwarders ERP"
-              width={32}
-              height={32}
-              className="h-8 w-8 object-contain"
-            />
-            <span className="font-semibold text-white">Mi Carga</span>
+            <TenantBrand compact inverse />
           </Link>
 
           <nav aria-label="Navegación principal" className="hidden items-center gap-1 md:flex">

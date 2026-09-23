@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { ProtectedShell } from '@/src/components/layout/protected-shell'
 import { UserProvider } from '@/src/hooks/useUser'
 import { createClient } from '@/src/lib/supabase/server'
+import { profileMatchesAccessContext, readTenantHeaders } from '@/src/lib/tenant-context'
 import type { Profile } from '@/src/types'
 
 export default async function ProtectedLayout({
@@ -9,6 +11,8 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode
 }) {
+  const tenant = readTenantHeaders(await headers())
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -26,6 +30,10 @@ export default async function ProtectedLayout({
 
   if (!profile || profile.status !== 'Aprobado' || !profile.is_active) {
     redirect('/login')
+  }
+
+  if (!profileMatchesAccessContext(profile, tenant)) {
+    redirect('/login?error=tenant_mismatch')
   }
 
   if (profile.rol === 'Cliente') redirect('/portal')

@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
 import { formatDateTime } from '@/src/lib/format'
+import { buildTenantStoragePath } from '@/src/lib/storage-paths'
 
 const compressImage = async (file: File) => {
   return new Promise<File>((resolve) => {
@@ -67,10 +68,12 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!profile) return
-
-    setNombre(profile.nombre || '')
-    setApellido(profile.apellido || '')
-    setAvatarUrl(profile.avatar_url ?? null)
+    const timeout = window.setTimeout(() => {
+      setNombre(profile.nombre || '')
+      setApellido(profile.apellido || '')
+      setAvatarUrl(profile.avatar_url ?? null)
+    }, 0)
+    return () => window.clearTimeout(timeout)
   }, [profile])
 
   const currentAvatarUrl = avatarUrl ?? profile?.avatar_url ?? null
@@ -79,12 +82,19 @@ export default function ProfilePage() {
     : 'Usuario'
 
   const handleAvatarUpload = async (file: File) => {
-    if (!user) return
+    if (!user || !profile?.tenant_id) {
+      toast.error('Tu perfil no tiene una empresa asignada.')
+      return
+    }
 
     setUploading(true)
 
     const compressed = await compressImage(file)
-    const filePath = `${user.id}/${Date.now()}-${file.name}`
+    const filePath = buildTenantStoragePath(
+      profile.tenant_id,
+      user.id,
+      `${crypto.randomUUID()}.jpg`,
+    )
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')

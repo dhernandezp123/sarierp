@@ -1,7 +1,6 @@
 'use client'
 
 import type React from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -12,9 +11,13 @@ import {
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
 import { getLoginDestination } from '@/src/lib/auth-redirect'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { profileMatchesAccessContext } from '@/src/lib/tenant-context'
 
 export default function LoginPage() {
   const router = useRouter()
+  const tenant = useTenant()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -58,6 +61,16 @@ export default function LoginPage() {
         return
       }
 
+      if (!profileMatchesAccessContext(profile, tenant)) {
+        await supabase.auth.signOut()
+        toast.error(
+          tenant
+            ? 'Esta cuenta pertenece a otra empresa. Revisa el enlace de acceso.'
+            : 'Este acceso es exclusivo para soporte autorizado de la plataforma.',
+        )
+        return
+      }
+
       if (profile.status !== 'Aprobado') {
         await supabase.auth.signOut()
         toast.info('Tu usuario esta pendiente de aprobacion por un administrador.')
@@ -71,7 +84,9 @@ export default function LoginPage() {
       }
 
       const requestedPath = new URLSearchParams(window.location.search).get('next')
-      const safePath = getLoginDestination(profile.rol, requestedPath)
+      const safePath = profile.is_platform_admin
+        ? '/support'
+        : getLoginDestination(profile.rol, requestedPath)
       router.push(safePath)
       router.refresh()
     } catch {
@@ -96,14 +111,16 @@ export default function LoginPage() {
         <div className="flex min-h-screen items-center px-10 py-20">
           <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             <div className="mb-10 text-center">
-              <Image
-                src="/brand/lockup-h-blanco.png"
-                alt="Forwarders ERP"
-                width={256}
-                height={140}
-                priority
-                className="mx-auto mb-10 h-auto w-64 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]"
-              />
+              <div className="mb-10">
+                {tenant ? (
+                  <TenantBrand inverse />
+                ) : (
+                  <div>
+                    <p className="text-2xl font-bold text-white">{PLATFORM_NAME}</p>
+                    <p className="mt-2 text-sm text-slate-300">Acceso de soporte autorizado</p>
+                  </div>
+                )}
+              </div>
 
               <p className="text-sm tracking-wide text-slate-400">
                 ERP Logístico-Comercial Versión 1.0
@@ -120,7 +137,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-14 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 text-white placeholder:text-slate-400 focus:border-yellow-400 focus:ring-2 focus:ring-yellow-400/20"
-                  placeholder="usuario@sariexpress.com"
+                  placeholder="usuario@empresa.com"
                   autoComplete="email"
                   required
                 />
@@ -150,15 +167,17 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <p className="mt-6 text-center text-sm text-slate-300">
-              Necesitas acceso?{' '}
-              <Link
-                href="/register"
-                className="font-semibold text-yellow-300 hover:underline"
-              >
-                Solicitar acceso
-              </Link>
-            </p>
+            {tenant && (
+              <p className="mt-6 text-center text-sm text-slate-300">
+                Necesitas acceso?{' '}
+                <Link
+                  href="/register"
+                  className="font-semibold text-yellow-300 hover:underline"
+                >
+                  Solicitar acceso
+                </Link>
+              </p>
+            )}
           </div>
         </div>
 

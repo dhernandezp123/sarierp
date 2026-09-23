@@ -7,6 +7,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import { usesClientRates } from '@/src/lib/quotation-products'
 import { getCompanyTradeName } from '@/src/lib/company-branding'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import { DEFAULT_TAX_RATE_PERCENT, normalizeTaxRatePercent } from '@/src/lib/tax'
 import {
   defaultClientRateCatalog,
@@ -114,14 +115,10 @@ export function useMiamiQuotation({
   }, [])
 
   const loadCompanyDefaults = async () => {
-    const { data } = await supabase
-      .from('company_settings')
-      .select('legal_name, trade_name, default_tax_rate')
-      .limit(1)
-      .maybeSingle()
+    const { data } = await loadCurrentCompanySettings(supabase)
 
-    setTaxRatePercent(normalizeTaxRatePercent((data as any)?.default_tax_rate))
-    setSupplierName(getCompanyTradeName(data as any))
+    setTaxRatePercent(normalizeTaxRatePercent(data?.default_tax_rate))
+    setSupplierName(getCompanyTradeName(data))
   }
 
   const loadClientRates = async (clientId: string) => {

@@ -6,6 +6,7 @@ import { Clock, Download, FileText, History, Mail, Plus, Printer, Send, Trash2, 
 import { PDFDownloadLink, pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { buildTenantStoragePath, isTenantResourceStoragePath } from '@/src/lib/storage-paths'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
@@ -36,10 +37,11 @@ import {
   type BlValidationSources,
 } from '@/src/lib/bl-document-workflow'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
+  getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
 const BOOKING_DOCUMENTS_STORAGE_MARKERS = [
@@ -383,7 +385,7 @@ export default function BLPage() {
   const params = useParams<{ id: string; bookingId: string; blId: string }>()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { user } = useUser()
+  const { user, profile } = useUser()
 
   const { id, bookingId, blId } = params
   const isNew = blId === 'new'
@@ -499,11 +501,7 @@ export default function BLPage() {
         `)
         .eq('id', bookingId)
         .single(),
-      supabase
-        .from('company_settings')
-        .select(`${COMPANY_BRANDING_SELECT}, condiciones_bl, condiciones_awb, condiciones_carta_porte`)
-        .limit(1)
-        .maybeSingle(),
+      loadCurrentCompanySettings(supabase),
     ])
 
     if (bookingError || !bookingData) {
@@ -1171,10 +1169,20 @@ export default function BLPage() {
   const uploadDraftFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!profile?.tenant_id) {
+      toast.error('Tu perfil no tiene una empresa asignada')
+      return
+    }
 
     setUploadingDraft(true)
     const safeName = sanitizeFileName(file.name)
-    const path = `${bookingId}/bl-drafts/${isNew ? 'new' : blId}/${Date.now()}-${safeName}`
+    const path = buildTenantStoragePath(
+      profile.tenant_id,
+      bookingId,
+      'bl-drafts',
+      isNew ? 'new' : blId,
+      `${Date.now()}-${safeName}`,
+    )
 
     const { error: uploadError } = await supabase.storage
       .from(BOOKING_DOCUMENTS_BUCKET)
@@ -1200,7 +1208,7 @@ export default function BLPage() {
   const openDraftFile = async () => {
     const path = normalizeBookingDocumentPath(form.draft_file_url)
 
-    if (!path || !path.startsWith(`${bookingId}/`)) {
+    if (!path || !profile?.tenant_id || !isTenantResourceStoragePath(path, profile.tenant_id, bookingId)) {
       toast.error('La ruta del Draft MBL no es válida')
       return
     }
@@ -1243,7 +1251,7 @@ export default function BLPage() {
   const printUploadedMBLDraft = async () => {
     const path = normalizeBookingDocumentPath(form.draft_file_url)
 
-    if (!path || !path.startsWith(`${bookingId}/`)) {
+    if (!path || !profile?.tenant_id || !isTenantResourceStoragePath(path, profile.tenant_id, bookingId)) {
       toast.error('Sube y guarda el Draft MBL del agente antes de imprimirlo.')
       return
     }
@@ -1324,7 +1332,7 @@ export default function BLPage() {
     'Por favor revise la información y confírmenos su aprobación, o notifíquenos si requiere algún ajuste.',
     '',
     'Saludos,',
-    'Sari Express — Operaciones',
+    `${getCompanyTradeName(companyBranding)} — Operaciones`,
   ].join('\n')
 
   const mailtoLink = form.consignee_email

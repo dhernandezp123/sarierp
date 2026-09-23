@@ -3,18 +3,21 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { PLATFORM_CONTACT_EMAIL } from '@/src/lib/platform-branding'
 import { getLoginDestination } from '@/src/lib/auth-redirect'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { profileMatchesTenant } from '@/src/lib/tenant-context'
 
 const emailInputId = 'portal-login-email'
 const passwordInputId = 'portal-login-password'
 
 export default function PortalLoginPage() {
   const router = useRouter()
+  const tenant = useTenant()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -25,18 +28,29 @@ export default function PortalLoginPage() {
     if (loading) return
     setLoading(true)
     try {
+      if (!tenant) {
+        toast.error('No se pudo validar la empresa de este enlace.')
+        return
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) { toast.error('Correo o contraseña incorrectos'); return }
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('rol, status, is_active')
+        .select('rol, status, is_active, tenant_id')
         .eq('id', data.user.id)
         .single()
 
       if (!profile || profile.status !== 'Aprobado' || !profile.is_active) {
         await supabase.auth.signOut()
         toast.error('Tu cuenta no está activa. Contacta a soporte.')
+        return
+      }
+
+      if (!profileMatchesTenant(profile.tenant_id, tenant)) {
+        await supabase.auth.signOut()
+        toast.error('Esta cuenta pertenece a otra empresa. Revisa el enlace de acceso.')
         return
       }
 
@@ -60,17 +74,9 @@ export default function PortalLoginPage() {
         <div className="pointer-events-none absolute -bottom-52 -left-36 h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_50%_50%,rgba(239,142,1,0.14),rgba(239,142,1,0)_60%)]" />
 
         {/* logo */}
-        <div className="relative z-10 flex items-center gap-4">
-          <Image
-            src="/brand/isotipo-color.png"
-            alt=""
-            width={40}
-            height={40}
-            className="h-10 w-10 shrink-0 object-contain"
-          />
-          <span className="font-display text-[22px] font-bold tracking-tight">
-            Forwarders <span className="text-[#EF8E01]">ERP</span>
-          </span>
+        <div className="relative z-10">
+          <TenantBrand compact inverse />
+          <p className="mt-2 text-center text-xs uppercase tracking-[0.18em] text-slate-400">Operado con Forwarders ERP</p>
         </div>
 
         {/* pitch */}
@@ -128,22 +134,9 @@ export default function PortalLoginPage() {
       {/* RIGHT · LOGIN FORM */}
       <div className="flex w-full flex-col justify-center bg-white px-8 py-12 dark:bg-[#020817] lg:w-[480px] lg:flex-none lg:px-14 lg:py-16">
         <div className="mx-auto w-full max-w-[360px]">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <Image
-              src="/brand/isotipo-color.png"
-              alt=""
-              width={40}
-              height={40}
-              className="h-10 w-10 shrink-0 object-contain"
-            />
-            <div>
-              <p className="font-display text-lg font-bold tracking-tight text-[#07111F] dark:text-white">
-                Forwarders <span className="text-[#EF8E01]">ERP</span>
-              </p>
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#7E8AA0]">
-                Portal de clientes
-              </p>
-            </div>
+          <div className="mb-8 lg:hidden">
+            <TenantBrand compact />
+            <p className="mt-2 text-center text-xs font-medium uppercase tracking-[0.16em] text-[#7E8AA0]">Portal de clientes</p>
           </div>
 
           <div className="mb-9">
@@ -202,7 +195,7 @@ export default function PortalLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="h-[46px] w-full rounded-[10px] bg-[#0038BD] text-[15px] font-semibold text-white transition-colors hover:bg-[#022a91] disabled:cursor-not-allowed disabled:bg-[#5B7CD6] dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-blue-900"
+              className="h-[46px] w-full rounded-[10px] bg-tenant-primary text-[15px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? 'Ingresando...' : 'Ingresar'}
             </button>

@@ -11,6 +11,7 @@ import { X } from 'lucide-react'
 import OnboardingTutorial from '@/src/components/onboarding/OnboardingTutorial'
 import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath, getDefaultPathForRole } from '@/src/lib/permissions'
+import { isPlatformSupportPath } from '@/src/lib/tenant-context'
 import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
@@ -20,7 +21,13 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
   const { profile } = useUser()
   const pathname = usePathname()
   const router = useRouter()
-  const hasPathAccess = Boolean(profile && canAccessPath(profile.rol, pathname))
+  const isPlatformAdmin = profile?.is_platform_admin === true
+  const hasPathAccess = Boolean(
+    profile
+    && (isPlatformAdmin
+      ? isPlatformSupportPath(pathname)
+      : canAccessPath(profile.rol, pathname)),
+  )
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
@@ -34,8 +41,8 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
     if (!profile || hasPathAccess) return
 
     toast.error('No tienes permisos para acceder a esta sección')
-    router.replace(getDefaultPathForRole(profile.rol))
-  }, [hasPathAccess, profile, router])
+    router.replace(isPlatformAdmin ? '/support' : getDefaultPathForRole(profile.rol))
+  }, [hasPathAccess, isPlatformAdmin, profile, router])
 
   // Cierra el menú móvil al navegar a otra ruta.
   const [prevPathname, setPrevPathname] = useState(pathname)
@@ -71,7 +78,7 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
 
-        <OnboardingTutorial />
+        {!isPlatformAdmin && <OnboardingTutorial />}
 
         <footer className="border-t border-slate-200 bg-[#F5F7FA] px-6 py-3 text-center text-xs text-slate-500">
           <p className="font-semibold text-slate-700">{PLATFORM_NAME}</p>

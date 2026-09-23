@@ -11,6 +11,7 @@ import {
   type CompanyBranding,
   getCompanyAddressLines,
   getCompanyDisplayName,
+  getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 
@@ -239,6 +240,7 @@ export default function RoutingOrderPDF({
 }: RoutingOrderPdfProps) {
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
+  const companyTradeName = getCompanyTradeName(companyBranding)
   const companyAddress = getCompanyAddressLines(companyBranding).join(' | ')
   const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
   const quote = quotation || routing?.quotation || {}
@@ -392,7 +394,7 @@ export default function RoutingOrderPDF({
 
         <Section title="3. DOCUMENTS">
           <Text style={styles.noteBox}>
-            Send all operational updates and document drafts to Sari Express Operations before final release. Request and share commercial invoice, packing list and any relevant origin, customs, insurance, inspection or regulatory documents required for destination clearance.
+            Send all operational updates and document drafts to {companyTradeName} Operations before final release. Request and share commercial invoice, packing list and any relevant origin, customs, insurance, inspection or regulatory documents required for destination clearance.
           </Text>
         </Section>
 

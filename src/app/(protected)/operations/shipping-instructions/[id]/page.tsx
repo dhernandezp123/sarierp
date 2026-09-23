@@ -24,7 +24,6 @@ import { SectionNav } from '@/src/components/ui/SectionNav'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import ShippingInstructionOrderPDF from '@/src/components/pdf/shipping-instruction-order-pdf'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
@@ -37,6 +36,7 @@ import {
 } from '@/src/components/ui/dialog'
 import { formatDate } from '@/src/lib/format'
 import { operationsReturnHref } from '@/src/lib/operations-navigation'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 type OperationsUser = {
   id: string
@@ -514,11 +514,7 @@ export default function RoutingDetailPage() {
         setShipmentContext(null)
       }
 
-      const { data: companyData } = await supabase
-        .from('company_settings')
-        .select(COMPANY_BRANDING_SELECT)
-        .limit(1)
-        .maybeSingle()
+      const { data: companyData } = await loadCurrentCompanySettings(supabase)
 
       setCompanyBranding(normalizeCompanyBranding(companyData))
 

@@ -7,6 +7,7 @@ import { Download, FileText, Lock, Trash2, Upload } from 'lucide-react'
 import { PDFDownloadLink } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { buildTenantStoragePath } from '@/src/lib/storage-paths'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
 import ArrivalNoticePdf, { type ArrivalNoticeData } from '@/src/components/pdf/arrival-notice-pdf'
@@ -40,8 +41,8 @@ import {
 import { cn } from '@/src/lib/utils'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
@@ -130,6 +131,7 @@ type RoutingData = {
 
 type BookingData = {
   id: string
+  tenant_id: string
   shipping_instruction_id: string
   shipment_id: string | null
   booking_number: string | null
@@ -601,11 +603,7 @@ export default function RoutingBookingChildPage() {
       return
     }
 
-    const { data: companyData } = await supabase
-      .from('company_settings')
-      .select(COMPANY_BRANDING_SELECT)
-      .limit(1)
-      .maybeSingle()
+    const { data: companyData } = await loadCurrentCompanySettings(supabase)
 
     setCompanyBranding(normalizeCompanyBranding(companyData))
 
@@ -1146,7 +1144,11 @@ export default function RoutingBookingChildPage() {
       return
     }
 
-    const filePath = `${booking.id}/${Date.now()}-${sanitizeFileName(file.name)}`
+    const filePath = buildTenantStoragePath(
+      booking.tenant_id,
+      booking.id,
+      `${Date.now()}-${sanitizeFileName(file.name)}`,
+    )
 
     const { error: uploadError } = await supabase.storage
       .from(BOOKING_DOCUMENT_BUCKET)

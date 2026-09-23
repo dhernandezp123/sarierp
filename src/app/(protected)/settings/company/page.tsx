@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Building2, Fuel, MapPin, Plus, Save, ShieldCheck, X } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
@@ -14,9 +14,11 @@ import {
   normalizeInsuranceCoveragePatterns,
   normalizeInsuranceExclusionPatterns,
 } from '@/src/lib/insurance-coverage'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 type CompanySettings = {
   id: string
+  tenant_id: string
   legal_name: string | null
   trade_name: string | null
   rtn: string | null
@@ -29,6 +31,8 @@ type CompanySettings = {
   email: string | null
   website: string | null
   logo_url: string | null
+  primary_color: string | null
+  secondary_color: string | null
   default_currency: string | null
   default_tax_rate: number | null
   insurance_cost_rate_percent: number | null
@@ -77,7 +81,7 @@ export default function CompanySettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [settingsId, setSettingsId] = useState<string | null>(null)
-  const [form, setForm] = useState<Omit<CompanySettings, 'id'>>({
+  const [form, setForm] = useState<Omit<CompanySettings, 'id' | 'tenant_id'>>({
     legal_name: '',
     trade_name: '',
     rtn: '',
@@ -90,6 +94,8 @@ export default function CompanySettingsPage() {
     email: '',
     website: '',
     logo_url: '',
+    primary_color: '#0038BD',
+    secondary_color: '#07111F',
     default_currency: 'USD',
     default_tax_rate: 15,
     insurance_cost_rate_percent: DEFAULT_INSURANCE_COST_RATE_PERCENT,
@@ -131,14 +137,8 @@ export default function CompanySettingsPage() {
 
   const isAdmin = profile?.rol === 'Admin'
 
-  useEffect(() => { fetchSettings() }, [])
-
-  const fetchSettings = async () => {
-    const { data, error } = await supabase
-      .from('company_settings')
-      .select('*')
-      .limit(1)
-      .single()
+  const fetchSettings = useCallback(async () => {
+    const { data, error } = await loadCurrentCompanySettings<CompanySettings>(supabase)
 
     if (error && error.code !== 'PGRST116') {
       toast.error('Error al cargar configuración')
@@ -161,35 +161,37 @@ export default function CompanySettingsPage() {
         email: data.email ?? '',
         website: data.website ?? '',
         logo_url: data.logo_url ?? '',
+        primary_color: data.primary_color ?? '#0038BD',
+        secondary_color: data.secondary_color ?? '#07111F',
         default_currency: data.default_currency ?? 'USD',
         default_tax_rate: data.default_tax_rate ?? 15,
         insurance_cost_rate_percent:
-          (data as any).insurance_cost_rate_percent ??
+          data.insurance_cost_rate_percent ??
           DEFAULT_INSURANCE_COST_RATE_PERCENT,
         insurance_included_service_patterns:
           normalizeInsuranceCoveragePatterns(
-            (data as any).insurance_included_service_patterns ??
+            data.insurance_included_service_patterns ??
               DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS
           ),
         insurance_excluded_service_patterns:
           normalizeInsuranceExclusionPatterns(
-            (data as any).insurance_excluded_service_patterns
+            data.insurance_excluded_service_patterns
           ),
         invoice_footer_note: data.invoice_footer_note ?? '',
         lugar_emision_defecto: data.lugar_emision_defecto ?? '',
         exchange_rate_usd_hnl: data.exchange_rate_usd_hnl ?? 25.30,
-        condiciones_bl: (data as any).condiciones_bl ?? '',
-        condiciones_awb: (data as any).condiciones_awb ?? '',
-        condiciones_carta_porte: (data as any).condiciones_carta_porte ?? '',
-        plantilla_cotizacion: (data as any).plantilla_cotizacion ?? '',
-        miami_consignee: (data as any).miami_consignee ?? '',
-        miami_address_line: (data as any).miami_address_line ?? '',
-        miami_suite_prefix: (data as any).miami_suite_prefix ?? '',
-        miami_city: (data as any).miami_city ?? 'Miami',
-        miami_state: (data as any).miami_state ?? 'FL',
-        miami_zip: (data as any).miami_zip ?? '',
-        miami_country: (data as any).miami_country ?? 'USA',
-        miami_phone: (data as any).miami_phone ?? '',
+        condiciones_bl: data.condiciones_bl ?? '',
+        condiciones_awb: data.condiciones_awb ?? '',
+        condiciones_carta_porte: data.condiciones_carta_porte ?? '',
+        plantilla_cotizacion: data.plantilla_cotizacion ?? '',
+        miami_consignee: data.miami_consignee ?? '',
+        miami_address_line: data.miami_address_line ?? '',
+        miami_suite_prefix: data.miami_suite_prefix ?? '',
+        miami_city: data.miami_city ?? 'Miami',
+        miami_state: data.miami_state ?? 'FL',
+        miami_zip: data.miami_zip ?? '',
+        miami_country: data.miami_country ?? 'USA',
+        miami_phone: data.miami_phone ?? '',
       })
     }
 
@@ -219,7 +221,22 @@ export default function CompanySettingsPage() {
     }
 
     setLoading(false)
-  }
+  }, [])
+
+  const hasProfile = Boolean(profile)
+  const tenantId = profile?.tenant_id
+
+  useEffect(() => {
+    if (!hasProfile) return
+    if (!tenantId) {
+      const timeoutId = window.setTimeout(() => {
+        setLoading(false)
+        toast.error('Tu perfil no está vinculado a una empresa.')
+      }, 0)
+      return () => window.clearTimeout(timeoutId)
+    }
+    void fetchSettings()
+  }, [fetchSettings, hasProfile, tenantId])
 
   const set = (
     key: keyof typeof form,
@@ -291,6 +308,10 @@ export default function CompanySettingsPage() {
   }
 
   const handleSave = async () => {
+    if (!profile?.tenant_id) {
+      toast.error('Tu perfil no está vinculado a una empresa.')
+      return
+    }
     if (!isAdmin) { toast.error('Solo el Admin puede modificar esta configuración'); return }
     if (!bunkerLoaded) {
       toast.error('No se puede guardar hasta cargar la configuracion del Bunker')
@@ -309,6 +330,7 @@ export default function CompanySettingsPage() {
 
     const payload = {
       ...form,
+      tenant_id: profile.tenant_id,
       default_tax_rate: Number(form.default_tax_rate) || 15,
       insurance_cost_rate_percent: insuranceCostRatePercent,
       insurance_included_service_patterns:
@@ -337,7 +359,11 @@ export default function CompanySettingsPage() {
 
     let error
     if (settingsId) {
-      const res = await supabase.from('company_settings').update(payload).eq('id', settingsId)
+      const res = await supabase
+        .from('company_settings')
+        .update(payload)
+        .eq('id', settingsId)
+        .eq('tenant_id', profile.tenant_id)
       error = res.error
     } else {
       const res = await supabase.from('company_settings').insert(payload).select('id').single()
@@ -363,7 +389,7 @@ export default function CompanySettingsPage() {
             is_active: bunker.is_active,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'code' }
+          { onConflict: 'tenant_id,code' }
         )
 
       if (bunkerError) {
@@ -549,6 +575,26 @@ export default function CompanySettingsPage() {
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Color principal">
+                <input
+                  type="color"
+                  value={form.primary_color ?? '#0038BD'}
+                  onChange={(e) => set('primary_color', e.target.value)}
+                  disabled={!isAdmin}
+                  className={`${fieldClass} h-11 p-1 disabled:opacity-60`}
+                />
+              </Field>
+              <Field label="Color secundario">
+                <input
+                  type="color"
+                  value={form.secondary_color ?? '#07111F'}
+                  onChange={(e) => set('secondary_color', e.target.value)}
+                  disabled={!isAdmin}
+                  className={`${fieldClass} h-11 p-1 disabled:opacity-60`}
+                />
+              </Field>
+            </div>
           </div>
         </section>
 

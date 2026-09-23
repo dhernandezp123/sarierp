@@ -8,6 +8,7 @@ const SUPPORTED_EVENTS = ['ticket_created', 'message_added', 'ticket_updated'] a
 type SupportEventType = typeof SUPPORTED_EVENTS[number]
 
 type ProfileRow = {
+  tenant_id?: string | null
   nombre: string | null
   apellido: string | null
   email: string | null
@@ -19,6 +20,7 @@ type ProfileRow = {
 
 type TicketRow = {
   id: string
+  tenant_id: string
   ticket_number: string
   subject: string
   category: string
@@ -99,7 +101,7 @@ export async function POST(request: Request) {
     })
     const { data: callerData, error: callerError } = await adminClient
       .from('profiles')
-      .select('nombre, apellido, email, rol, status, is_active, is_platform_admin')
+      .select('nombre, apellido, email, rol, status, is_active, is_platform_admin, tenant_id')
       .eq('id', authData.user.id)
       .single()
 
@@ -131,7 +133,7 @@ export async function POST(request: Request) {
     const { data: ticketData, error: ticketError } = await adminClient
       .from('support_tickets')
       .select(`
-        id, ticket_number, subject, category, priority, status,
+        id, tenant_id, ticket_number, subject, category, priority, status,
         created_by, updated_at,
         creator:profiles!support_tickets_created_by_fkey(nombre, apellido, email)
       `)
@@ -143,6 +145,23 @@ export async function POST(request: Request) {
     }
 
     const ticket = ticketData as unknown as TicketRow
+    if (caller.is_platform_admin !== true && caller.tenant_id !== ticket.tenant_id) {
+      return NextResponse.json({ ok: false, error: 'Ticket no encontrado' }, { status: 404 })
+    }
+
+    const { data: tenantDomain } = await adminClient
+      .from('tenant_domains')
+      .select('hostname')
+      .eq('tenant_id', ticket.tenant_id)
+      .eq('is_primary', true)
+      .eq('is_active', true)
+      .single()
+    if (!tenantDomain?.hostname) {
+      return NextResponse.json(
+        { ok: false, error: 'La empresa no tiene un dominio principal activo' },
+        { status: 409 }
+      )
+    }
     let messageIsInternal = false
     if (payload.eventType === 'ticket_created') {
       if (ticket.created_by !== authData.user.id && caller.is_platform_admin !== true) {
@@ -154,6 +173,7 @@ export async function POST(request: Request) {
         .select('id, ticket_id, author_id, is_internal')
         .eq('id', payload.messageId!)
         .eq('ticket_id', ticket.id)
+        .eq('tenant_id', ticket.tenant_id)
         .single()
 
       if (messageError || !message || message.author_id !== authData.user.id) {
@@ -201,6 +221,7 @@ export async function POST(request: Request) {
       .from('support_notification_outbox')
       .select('id, status, attempts, updated_at')
       .eq('idempotency_key', idempotencyKey)
+      .eq('tenant_id', ticket.tenant_id)
       .maybeSingle()
     if (existingError) {
       return NextResponse.json({ ok: false, error: 'No se pudo validar la auditoría del correo' }, { status: 500 })
@@ -226,6 +247,7 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id)
+        .eq('tenant_id', ticket.tenant_id)
         .eq('status', 'failed')
         .eq('updated_at', existing.updated_at)
         .select('id, status, attempts, updated_at')
@@ -236,6 +258,7 @@ export async function POST(request: Request) {
       const { data: created, error: createError } = await adminClient
         .from('support_notification_outbox')
         .insert({
+          tenant_id: ticket.tenant_id,
           ticket_id: ticket.id,
           message_id: payload.messageId || null,
           event_type: payload.eventType,
@@ -253,7 +276,7 @@ export async function POST(request: Request) {
       delivery = created as DeliveryRow
     }
 
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://forwarders.app').replace(/\/$/, '')
+    const siteUrl = `https://${tenantDomain.hostname}`
     const ticketUrl = `${siteUrl}/support/${ticket.id}`
     const safeTicketNumber = escapeHtml(ticket.ticket_number)
     const safeSubject = escapeHtml(ticket.subject)
@@ -304,6 +327,7 @@ export async function POST(request: Request) {
       tags: [
         { name: 'event', value: payload.eventType },
         { name: 'ticket', value: ticket.ticket_number },
+        { name: 'tenant_id', value: ticket.tenant_id },
       ],
     }
 
@@ -323,6 +347,7 @@ export async function POST(request: Request) {
         .from('support_notification_outbox')
         .update({ status: 'failed', error_message: 'No se pudo conectar con Resend', updated_at: new Date().toISOString() })
         .eq('id', delivery.id)
+        .eq('tenant_id', ticket.tenant_id)
       return NextResponse.json({ ok: false, error: 'No se pudo conectar con Resend' }, { status: 502 })
     }
 
@@ -333,6 +358,7 @@ export async function POST(request: Request) {
         .from('support_notification_outbox')
         .update({ status: 'failed', error_message: errorMessage.slice(0, 500), updated_at: new Date().toISOString() })
         .eq('id', delivery.id)
+        .eq('tenant_id', ticket.tenant_id)
       return NextResponse.json({ ok: false, error: 'Resend no aceptó el correo' }, { status: 502 })
     }
 
@@ -346,6 +372,7 @@ export async function POST(request: Request) {
         updated_at: sentAt,
       })
       .eq('id', delivery.id)
+      .eq('tenant_id', ticket.tenant_id)
 
     if (updateError) {
       return NextResponse.json({ ok: false, error: 'El correo fue enviado, pero falta conciliar su auditoría' }, { status: 500 })

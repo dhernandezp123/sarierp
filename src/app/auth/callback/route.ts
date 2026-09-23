@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { headers } from 'next/headers'
 import { createClient } from '@/src/lib/supabase/server'
+import { profileMatchesTenant, readTenantHeaders } from '@/src/lib/tenant-context'
 
 function safeNextPath(value: string | null) {
   if (value?.startsWith('/portal/')) return value
@@ -15,7 +17,21 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-      return NextResponse.redirect(new URL(nextPath, request.url))
+      const tenant = readTenantHeaders(await headers())
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: profile } = user
+        ? await supabase
+            .from('profiles')
+            .select('tenant_id')
+            .eq('id', user.id)
+            .maybeSingle()
+        : { data: null }
+
+      if (profileMatchesTenant(profile?.tenant_id, tenant)) {
+        return NextResponse.redirect(new URL(nextPath, request.url))
+      }
+
+      await supabase.auth.signOut()
     }
   }
 

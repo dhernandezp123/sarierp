@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, AlertCircle, Clock, Upload, ExternalLink } from 'lucide-react'
@@ -10,6 +10,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { buildTenantStoragePath } from '@/src/lib/storage-paths'
 
 type Proveedor = {
   id: string
@@ -69,10 +70,12 @@ const saldoCuenta = (c: CuentaPagar) => {
   return Math.max(0, Number(c.monto || 0) - pagado)
 }
 
+const editableTextFields = ['rtn', 'email', 'telefono', 'contacto', 'pais'] as const
+
 export default function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { user } = useUser()
+  const { user, profile } = useUser()
 
   const [proveedor, setProveedor] = useState<Proveedor | null>(null)
   const [cuentas, setCuentas] = useState<CuentaPagar[]>([])
@@ -101,7 +104,7 @@ export default function SupplierDetailPage() {
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<Partial<Proveedor>>({})
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     const [{ data: prov }, { data: cp }, { data: quotations }] = await Promise.all([
       supabase.from('proveedores').select('*, agents(id, name)').eq('id', id).single(),
@@ -127,9 +130,12 @@ export default function SupplierDetailPage() {
     setCuentas((cp || []) as unknown as CuentaPagar[])
     setApprovedQuotations((quotations || []) as unknown as ApprovedQuotation[])
     setLoading(false)
-  }
+  }, [id, router])
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void load(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [load])
 
   const saveEdit = async () => {
     if (!editForm.nombre?.trim()) {
@@ -218,6 +224,10 @@ export default function SupplierDetailPage() {
   }
 
   const uploadDocumento = async (cuentaId: string, file: File) => {
+    if (!profile?.tenant_id) {
+      toast.error('Tu perfil no tiene una empresa asignada')
+      return
+    }
     if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
       toast.error('Solo se permiten archivos PDF')
       return
@@ -229,7 +239,12 @@ export default function SupplierDetailPage() {
 
     setUploadingDocId(cuentaId)
     const currentDocument = cuentas.find((cuenta) => cuenta.id === cuentaId)?.documento_url || null
-    const path = `${id}/${cuentaId}/${crypto.randomUUID()}.pdf`
+    const path = buildTenantStoragePath(
+      profile.tenant_id,
+      id,
+      cuentaId,
+      `${crypto.randomUUID()}.pdf`,
+    )
     const { error: upErr } = await supabase.storage
       .from('proveedor-docs')
       .upload(path, file, { contentType: 'application/pdf', upsert: false })
@@ -330,10 +345,10 @@ export default function SupplierDetailPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-500">Nombre</label>
                 <input value={editForm.nombre || ''} onChange={setEF('nombre')} className={fieldClass} />
               </div>
-              {['rtn', 'email', 'telefono', 'contacto', 'pais'].map((f) => (
+              {editableTextFields.map((f) => (
                 <div key={f}>
                   <label className="mb-1 block text-xs font-medium text-slate-500 capitalize">{f}</label>
-                  <input value={(editForm as any)[f] || ''} onChange={setEF(f as any)} className={fieldClass} />
+                  <input value={editForm[f] || ''} onChange={setEF(f)} className={fieldClass} />
                 </div>
               ))}
               <div>
@@ -486,7 +501,11 @@ export default function SupplierDetailPage() {
                     <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/20">
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-slate-800 dark:text-slate-200">{c.descripcion}</div>
-                        {c.quotations && <div className="text-xs text-slate-400">Cot. {(c.quotations as any).quotation_number}</div>}
+                        {c.quotations && (
+                          <div className="text-xs text-slate-400">
+                            Cot. {(Array.isArray(c.quotations) ? c.quotations[0] : c.quotations)?.quotation_number}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400">{c.numero_factura_proveedor || '-'}</td>
                       <td className="px-3 py-2.5 font-semibold text-slate-800 dark:text-slate-200">{fmtMoney(Number(c.monto), c.moneda)}</td>

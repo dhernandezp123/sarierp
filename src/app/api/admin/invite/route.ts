@@ -56,19 +56,41 @@ export async function POST(request: Request) {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('rol, status, is_active')
+      .select('rol, status, is_active, tenant_id, is_platform_admin')
       .eq('id', authData.user.id)
       .single()
 
-    if (profileError || profile?.rol !== 'Admin' || profile?.status !== 'Aprobado' || profile?.is_active === false) {
+    if (
+      profileError
+      || profile?.rol !== 'Admin'
+      || profile?.status !== 'Aprobado'
+      || profile?.is_active !== true
+      || profile?.is_platform_admin === true
+      || !profile?.tenant_id
+    ) {
       return NextResponse.json({ error: 'Solo Admin puede invitar usuarios' }, { status: 403 })
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    const { data: tenantDomain, error: domainError } = await supabaseAdmin
+      .from('tenant_domains')
+      .select('hostname')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('is_primary', true)
+      .eq('is_active', true)
+      .single()
+
+    if (domainError || !tenantDomain?.hostname) {
+      return NextResponse.json(
+        { error: 'La empresa no tiene un dominio principal activo' },
+        { status: 409 }
+      )
+    }
+
+    const siteUrl = `https://${tenantDomain.hostname}`
 
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${siteUrl}/onboarding`,
-      data: { rol, invited_by_admin: true },
+      data: { rol, invited_by_admin: true, tenant_id: profile.tenant_id },
     })
 
     if (error) {
@@ -79,6 +101,7 @@ export async function POST(request: Request) {
       .from('profiles')
       .update({
         email: email.trim().toLowerCase(),
+        tenant_id: profile.tenant_id,
         rol,
         status: rol === 'Cliente' ? 'Pendiente' : 'Aprobado',
         is_active: true,

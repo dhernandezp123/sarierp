@@ -8,6 +8,8 @@ import { MapPin, Copy, CheckCircle2, ChevronLeft, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { loadCurrentCompanyBranding } from '@/src/lib/company-settings'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
 
 type MiamiAddress = {
   consignee: string
@@ -22,6 +24,7 @@ type MiamiAddress = {
 
 export default function DireccionMiamiPage() {
   const { profile } = useUser()
+  const tenant = useTenant()
   const router = useRouter()
   const [address, setAddress] = useState<MiamiAddress | null>(null)
   const [codigoCliente, setCodigoCliente] = useState<string | null>(null)
@@ -37,11 +40,7 @@ export default function DireccionMiamiPage() {
     setLoadError(false)
     try {
     const [settingsResult, clienteResult] = await Promise.all([
-      supabase
-        .from('company_settings')
-        .select('miami_consignee, miami_address_line, miami_suite_prefix, miami_city, miami_state, miami_zip, miami_country, miami_phone')
-        .limit(1)
-        .maybeSingle(),
+      loadCurrentCompanyBranding(supabase),
       profile?.cliente_id
         ? supabase
             .from('clientes')
@@ -186,7 +185,7 @@ export default function DireccionMiamiPage() {
 
       <Link href="/portal/contacto" className="block text-center text-sm font-semibold text-blue-600 dark:text-blue-400">Ayuda con mi dirección o código de cliente</Link>
       <p className="text-center text-xs text-slate-400 dark:text-slate-600">
-        Esta dirección es administrada por Sari Express. Úsala para indicar a tus proveedores dónde enviar tus paquetes.
+        Esta dirección es administrada por {tenant?.tradeName || 'tu empresa'}. Úsala para indicar a tus proveedores dónde enviar tus paquetes.
       </p>
     </div>
   )

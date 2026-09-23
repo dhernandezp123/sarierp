@@ -10,6 +10,7 @@ import {
   type CompanyBranding,
   getCompanyAddressLines,
   getCompanyDisplayName,
+  getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import type { QuotationCommercialOption } from '@/src/lib/quotation-options'
@@ -730,6 +731,7 @@ function QuotationPDFPages({
 }) {
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
+  const companyTradeName = getCompanyTradeName(companyBranding)
   const companyAddressLines = getCompanyAddressLines(companyBranding)
   const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
   const generalClientNotes = String(quotation.client_notes || '').trim()
@@ -1293,7 +1295,7 @@ function QuotationPDFPages({
                   : styles.termParagraph
               }
             >
-              {term.text}
+              {term.text.replaceAll('Sari Express', companyTradeName)}
             </Text>
           ))}
         </View>

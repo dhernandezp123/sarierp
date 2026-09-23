@@ -19,6 +19,7 @@ import {
 } from '@/src/lib/company-branding'
 import { billingReturnHref } from '@/src/lib/billing-readiness'
 import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 type Invoice = {
   id: string
@@ -265,7 +266,7 @@ export default function InvoiceDetailPage() {
       supabase.from('invoices').select('*, parent_invoice:parent_invoice_id(invoice_number)').eq('id', id).single(),
       supabase.from('invoice_items').select('*').eq('invoice_id', id).order('sort_order'),
       supabase.from('invoice_payments').select('*, invoice_payment_splits(*)').eq('invoice_id', id).order('payment_date', { ascending: false }),
-      supabase.from('company_settings').select('legal_name, trade_name, rtn, address, city, lugar_emision_defecto, phone, email, invoice_footer_note').limit(1).single(),
+      loadCurrentCompanySettings<CompanySettings>(supabase),
       supabase.from('invoices').select('id, invoice_number, invoice_type, status, total, currency, issue_date, motivo').eq('parent_invoice_id', id).order('created_at'),
       supabase.from('invoice_receivables').select('adjusted_total, paid_total, balance, receivable_status, days_overdue').eq('invoice_id', id).maybeSingle(),
       supabase.from('cai_ranges').select('lugar_emision').eq('is_active', true).not('lugar_emision', 'is', null),

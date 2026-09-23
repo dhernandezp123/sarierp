@@ -7,6 +7,7 @@ import { LockKeyhole } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { PortalError } from '@/src/components/portal/PortalFeedback'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -74,6 +75,7 @@ export default function ResetPasswordPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-[#020817]">
       <div className="w-full max-w-sm">
         <div className="mb-7 text-center">
+          <div className="mb-5"><TenantBrand compact /></div>
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-500/25">
             <LockKeyhole className="h-7 w-7 text-white" />
           </div>

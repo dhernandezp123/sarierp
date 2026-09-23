@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { LogisticsTerms } from '@/src/components/legal/LogisticsTerms'
 
 export const metadata = {
-  title: 'Condiciones del portal y servicio logístico — Sari Express',
+  title: 'Condiciones del portal y servicio logístico',
   description: 'Condiciones de acceso, contratación, carga y privacidad del portal de clientes.',
 }
 

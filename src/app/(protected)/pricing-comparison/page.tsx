@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import QuotationPDF from '../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { getAgentMblTotal, getFclMblTotal, getMblQuantity, isValidMblQuantity } from '@/src/lib/agent-mbl-cost'
@@ -29,7 +30,6 @@ import {
   validatePricingCompleteness,
 } from '@/src/lib/pricing-validation'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   getCompanyTradeName,
   normalizeCompanyBranding,
@@ -517,11 +517,7 @@ function PricingComparisonContent() {
   }
 
   const fetchCompanyBranding = async () => {
-    const { data } = await supabase
-      .from('company_settings')
-      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent, insurance_included_service_patterns, insurance_excluded_service_patterns`)
-      .limit(1)
-      .maybeSingle()
+    const { data } = await loadCurrentCompanySettings(supabase)
 
     const normalizedBranding = normalizeCompanyBranding(data)
     setCompanyBranding(normalizedBranding)
@@ -5500,7 +5496,7 @@ const profitabilityColor =
                           Gestión operativa Miami
                         </h2>
                         <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                          Esta cotización usa tarifas propias de Sari Express. No requiere comparativo de agentes.
+                          Esta cotización usa tarifas propias de {defaultSupplierName}. No requiere comparativo de agentes.
                         </p>
 
                         <div className="mt-4 grid gap-3 sm:grid-cols-4">

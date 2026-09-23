@@ -1,7 +1,6 @@
 'use client'
 
 import type React from 'react'
-import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -11,9 +10,13 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { profileMatchesTenant } from '@/src/lib/tenant-context'
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const tenant = useTenant()
   const [authUser, setAuthUser] = useState<User | null>(null)
   const [checking, setChecking] = useState(true)
   const [nombre, setNombre] = useState('')
@@ -31,9 +34,16 @@ export default function OnboardingPage() {
           // Check if profile already completed
           const { data: profile } = await supabase
             .from('profiles')
-            .select('nombre, apellido, status, rol')
+            .select('nombre, apellido, status, rol, tenant_id')
             .eq('id', session.user.id)
             .single()
+
+          if (!profileMatchesTenant(profile?.tenant_id, tenant)) {
+            await supabase.auth.signOut()
+            toast.error('La invitaciÃ³n pertenece a otra empresa.')
+            router.push('/login')
+            return
+          }
 
           if (profile?.nombre && profile?.apellido && profile?.status === 'Aprobado') {
             router.push(profile.rol === 'Cliente' ? '/portal' : '/dashboard')
@@ -55,7 +65,7 @@ export default function OnboardingPage() {
     })
 
     return () => subscription.unsubscribe()
-  }, [router])
+  }, [router, tenant])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -147,14 +157,7 @@ export default function OnboardingPage() {
         <div className="flex min-h-screen items-center justify-center px-6 py-20">
           <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             <div className="mb-8 text-center">
-              <Image
-                src="/brand/lockup-h-blanco.png"
-                alt="Sari Express"
-                width={256}
-                height={140}
-                priority
-                className="mx-auto mb-8 h-auto w-56 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]"
-              />
+              <div className="mb-8"><TenantBrand inverse /></div>
               <h1 className="text-2xl font-bold text-white">Completa tu perfil</h1>
               <p className="mt-2 text-sm text-slate-400">
                 Fuiste invitado como <span className="font-semibold text-yellow-300">{authUser.user_metadata?.rol || 'Usuario'}</span>
