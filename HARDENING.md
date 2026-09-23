@@ -1,9 +1,46 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-23 - SAAS-P8-10 - Detalle de factura bloqueado por relación recursiva
+
+- Estado: corrección implementada y validada localmente; despliegue y UAT
+  autenticado pendientes dentro de la ventana congelada.
+- Hallazgo:
+  - La auditoría de las 73 páginas reprodujo `PGRST200` al abrir
+    `/invoicing/[id]`: PostgREST no encontró una relación embebible entre
+    `invoices` y `parent_invoice_id`.
+  - La clave foránea compuesta existe en Production, pero es autorreferencial;
+    PostgREST requiere una relación computada para embeber relaciones
+    recursivas y tampoco resolvió el hint canónico de la constraint.
+  - El fallo de ese dato auxiliar impedía cargar por completo la factura,
+    incluidos pagos, documentos y acciones operativas.
+- Archivos modificados:
+  - `src/app/(protected)/invoicing/[id]/page.tsx`.
+  - `tests/invoice-detail-query.test.mjs`.
+- Cambio:
+  - La factura principal se consulta sin el embed recursivo.
+  - Si el documento es una nota de crédito o débito, el número de su factura
+    original se obtiene mediante una segunda consulta por ID protegida por RLS.
+  - Un fallo aislado al leer ese número muestra una advertencia, pero ya no
+    bloquea el resto del detalle ni la navegación a la factura original.
+  - No se modifica SQL, RLS ni información financiera.
+- Validaciones ejecutadas:
+  - Consulta original contra Production: `400`, `PGRST200` reproducido.
+  - Hint con `invoices_parent_invoice_id_fkey`: `400`, `PGRST200` reproducido.
+  - Auditoría PostgREST: 209 consultas de lectura únicas; 207 correctas, este
+    hallazgo real y un sentinel opcional de ambiente demo no desplegado.
+  - Prueba dirigida del detalle de factura: OK.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a la página y la prueba nueva: OK.
+  - `npm.cmd test`: 142/142 pruebas correctas.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / trabajo pendiente:
+  - Desplegar y probar con sesión una factura normal y una nota de crédito o
+    débito antes de levantar el congelamiento de Facturación.
+- Commit: pendiente.
+
 ### 2026-09-23 - SAAS-P8-09 - Relaciones ambiguas en actividades de Ventas
 
-- Estado: hotfix implementado y validado localmente; despliegue y UAT
-  autenticado pendientes dentro de la ventana congelada.
+- Estado: hotfix desplegado y UAT autenticado aprobado por el usuario.
 - Hallazgo:
   - Ventas devolvía `PGRST201`: PostgREST encontró más de una relación entre
     `sales_activities` y `clientes`.
@@ -30,9 +67,12 @@
   - `npm.cmd run build`: OK, 73/73 páginas.
   - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
 - Riesgos / trabajo pendiente:
-  - Desplegar el hotfix y repetir UAT autenticado en Ventas antes de levantar
-    el congelamiento.
-- Commit: pendiente.
+  - Ninguno pendiente para las consultas de Ventas corregidas.
+- Postflight Production:
+  - Deployment `dpl_DQLyyKgQC4SijaefkCkz2zdN1jSV`: `Ready`, con alias
+    `forwarders.app` y `sari.forwarders.app`.
+  - El usuario confirmó que Ventas y Alertas cargan correctamente.
+- Commit: `6def458`.
 
 ### 2026-09-23 - SAAS-P8-08 - Caché CORS entre dominio plataforma y tenant
 

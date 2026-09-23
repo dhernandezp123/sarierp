@@ -263,7 +263,7 @@ export default function InvoiceDetailPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     const [invRes, itemsRes, paymentsRes, settingsRes, notesRes, receivableRes, caiRes] = await Promise.all([
-      supabase.from('invoices').select('*, parent_invoice:parent_invoice_id(invoice_number)').eq('id', id).single(),
+      supabase.from('invoices').select('*').eq('id', id).single(),
       supabase.from('invoice_items').select('*').eq('invoice_id', id).order('sort_order'),
       supabase.from('invoice_payments').select('*, invoice_payment_splits(*)').eq('invoice_id', id).order('payment_date', { ascending: false }),
       loadCurrentCompanySettings<CompanySettings>(supabase),
@@ -273,9 +273,24 @@ export default function InvoiceDetailPage() {
     ])
 
     if (invRes.error) { toast.error('Factura no encontrada'); router.push('/invoicing'); return }
+    let parentInvoice: Invoice['parent_invoice'] = null
+    if (invRes.data.parent_invoice_id) {
+      const parentInvoiceRes = await supabase
+        .from('invoices')
+        .select('invoice_number')
+        .eq('id', invRes.data.parent_invoice_id)
+        .maybeSingle()
+
+      if (parentInvoiceRes.error) {
+        toast.warning('No se pudo cargar el número de la factura original')
+      } else {
+        parentInvoice = parentInvoiceRes.data
+      }
+    }
     const receivableData = (receivableRes.data as ReceivableSummary | null) ?? null
     setInvoice({
       ...(invRes.data as Invoice),
+      parent_invoice: parentInvoice,
       status: receivableData?.receivable_status || invRes.data.status,
     })
     setItems((itemsRes.data || []) as InvoiceItem[])
