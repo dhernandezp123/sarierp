@@ -1,5 +1,33 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-23 - SAAS-P8-05 - Notificación legacy sin destinatario
+
+- Estado: corrección autorizada y preparada durante la ventana de corte;
+  pendiente de aplicar y verificar en Production.
+- Hallazgo:
+  - El preflight transaccional de Fase 6 encontró 1 de 373 notificaciones
+    internas con `user_id IS NULL`. La fila no tiene destinatario, no es visible
+    para ninguna cuenta y no permite derivar ownership de tenant.
+- SQL y pruebas:
+  - `supabase/migrations/20260921165000_phase6_remove_orphan_notification.sql`.
+  - `supabase/tests/phase6_portal_storage_api_isolation.sql`.
+- Cambio:
+  - Se elimina exclusivamente la notificación legacy sin destinatario.
+  - La migración aborta si encuentra más de una fila para impedir ampliar
+    silenciosamente el alcance autorizado.
+  - La Fase 6 posterior establece `notifications.user_id NOT NULL` y la clave
+    compuesta de tenant/perfil, evitando que reaparezca el estado inválido.
+- Validaciones ejecutadas:
+  - Auditoría Production de solo lectura: 373 notificaciones totales, 1 con
+    `user_id IS NULL`, 0 con perfil inexistente y 0 asociadas a un perfil sin
+    tenant.
+  - Migración local dentro de `BEGIN`/`ROLLBACK`: OK.
+  - `phase6_portal_storage_api_isolation.sql`: OK, finaliza con `ROLLBACK`.
+- Riesgos / trabajo pendiente:
+  - Aplicar la limpieza y las migraciones restantes; ejecutar postflight y UAT
+    antes de levantar el congelamiento.
+- Hash del commit: pendiente.
+
 ### 2026-09-23 - SAAS-P8-04 - Reconciliación de administradores operativos Sari
 
 - Estado: corrección preparada durante la ventana de corte; pendiente de

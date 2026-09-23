@@ -53,6 +53,15 @@ select pg_temp.assert_true(
   'Las 13 tablas de portal/auditoría/soporte deben exigir tenant y RLS restrictivo'
 );
 
+select pg_temp.assert_true(
+  not exists (
+    select 1
+    from public.notifications notification
+    where notification.user_id is null
+  ),
+  'No deben persistir notificaciones internas sin destinatario'
+);
+
 insert into public.tenants (id, slug, name, status)
 values ('00000000-0000-4000-8000-000000000016', 'mya-phase6', 'MYA Phase 6', 'Activo');
 
