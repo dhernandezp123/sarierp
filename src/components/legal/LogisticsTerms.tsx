@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import document from '@/public/legal/logistics-2026-09-07.json'
+import { PLATFORM_ORIGIN } from '@/src/lib/platform-branding'
 
 export function LogisticsTerms() {
   return (
@@ -17,10 +18,9 @@ export function LogisticsTerms() {
           {section.body.split('\n\n').map((paragraph, index) => <p key={index} className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{paragraph}</p>)}
         </section>
       ))}
-      <footer className="flex flex-wrap gap-4 text-sm text-blue-700 underline underline-offset-4 dark:text-blue-300">
-        <Link href="/politicas">Privacidad y términos del software</Link>
-        <a href="/legal/logistics-2026-09-07.json" download>Descargar registro de esta versión (JSON)</a>
-        <a href="/legal/logistics-2026-06.json" download>Versión anterior (junio de 2026, JSON)</a>
+      <footer className="flex flex-wrap items-center gap-4 text-sm">
+        <Link href={`${PLATFORM_ORIGIN}/politicas`} className="text-blue-700 underline underline-offset-4 dark:text-blue-300">Privacidad y términos del software</Link>
+        <span className="text-slate-500 dark:text-slate-400">Versión vigente: {document.edition}</span>
       </footer>
     </article>
   )

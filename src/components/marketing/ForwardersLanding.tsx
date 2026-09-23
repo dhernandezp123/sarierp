@@ -1,7 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowDown, ArrowRight, Check, ChevronDown, ClipboardCheck, FileText, Globe2, Mail, Route, ShieldCheck, Smartphone, Users } from 'lucide-react'
-import { PLATFORM_ATTRIBUTION, PLATFORM_CONTACT_EMAIL, PLATFORM_NAME } from '@/src/lib/platform-branding'
+import { PLATFORM_ATTRIBUTION, PLATFORM_CONTACT_EMAIL, PLATFORM_NAME, PLATFORM_ORIGIN } from '@/src/lib/platform-branding'
 import { LandingHeader } from './LandingHeader'
 import { LandingContact } from './LandingContact'
 import { ProductShowcase } from './ProductShowcase'
@@ -152,7 +152,7 @@ export function ForwardersLanding() {
             <div><p className="font-bold tracking-tight">{PLATFORM_NAME}</p><p className="mt-1 text-xs leading-6 text-slate-600">{PLATFORM_ATTRIBUTION}</p></div>
             <nav aria-label="Enlaces del pie de página" className="flex flex-wrap gap-x-6 gap-y-3">{landingNavigation.map((link) => <a key={link.href} href={link.href} className="text-sm text-slate-600 hover:text-[#0038BD]">{link.label}</a>)}</nav>
           </div>
-          <div className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-5 text-xs text-slate-600"><p>Creado por forwarders, para forwarders.</p><Link href="/politicas" className="underline underline-offset-4 hover:text-[#0038BD]">Términos y privacidad</Link></div>
+          <div className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-5 text-xs text-slate-600"><p>Creado por forwarders, para forwarders.</p><Link href={`${PLATFORM_ORIGIN}/politicas`} className="underline underline-offset-4 hover:text-[#0038BD]">Términos y privacidad</Link></div>
         </div>
       </footer>
     </div>

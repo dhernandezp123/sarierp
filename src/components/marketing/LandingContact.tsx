@@ -5,7 +5,7 @@ import { useRef, useState } from 'react'
 import { ArrowRight, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
-import { PLATFORM_CONTACT_EMAIL } from '@/src/lib/platform-branding'
+import { PLATFORM_CONTACT_EMAIL, PLATFORM_ORIGIN } from '@/src/lib/platform-branding'
 
 export function LandingContact() {
   const [form, setForm] = useState({ nombre: '', empresa: '', email: '', telefono: '' })
@@ -136,7 +136,7 @@ export function LandingContact() {
                 </button>
                 <p className="text-center text-[11px] text-slate-300">
                   Usaremos tus datos para responder y coordinar tu demo. No te suscribes a publicidad.{' '}
-                  <Link href="/politicas#solicitudes-demo" className="text-slate-300 underline underline-offset-2">Consulta cómo tratamos tus datos.</Link>
+                  <Link href={`${PLATFORM_ORIGIN}/politicas#solicitudes-demo`} className="text-slate-300 underline underline-offset-2">Consulta cómo tratamos tus datos.</Link>
                 </p>
                 <p className="text-center text-xs text-slate-300">
                   O escríbenos a{' '}

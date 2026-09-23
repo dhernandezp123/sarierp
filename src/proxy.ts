@@ -8,7 +8,12 @@ import {
   writeTenantHeaders,
   type TenantPublicContextRow,
 } from '@/src/lib/tenant-context'
-import { resolveTenantHost } from '@/src/lib/tenant-host'
+import {
+  getTenantPlatformRedirectUrl,
+  isLegalDocumentPath,
+  isPlatformLegalDocumentPath,
+  resolveTenantHost,
+} from '@/src/lib/tenant-host'
 
 const PUBLIC_ROUTES = new Set([
   '/',
@@ -30,10 +35,7 @@ const PLATFORM_ROUTES = new Set([
   '/init',
   '/login',
   '/politicas',
-  '/terminos-logisticos',
 ])
-
-const LEGAL_DOCUMENT_PATTERN = /^\/legal\/(platform-2026-06-22|platform-2026-09-07|logistics-2026-06|logistics-2026-09-07)\.json$/
 
 function tenantErrorResponse(request: NextRequest, unavailable = false) {
   if (request.nextUrl.pathname.startsWith('/api/')) {
@@ -64,6 +66,7 @@ function tenantErrorResponse(request: NextRequest, unavailable = false) {
 export async function proxy(req: NextRequest) {
   const requestHeaders = new Headers(req.headers)
   clearTenantHeaders(requestHeaders)
+  const pathname = req.nextUrl.pathname
 
   const localTenantHostname = process.env.LOCAL_TENANT_HOSTNAME
     || (process.env.NODE_ENV === 'production' ? null : 'sari.forwarders.app')
@@ -94,14 +97,13 @@ export async function proxy(req: NextRequest) {
     },
   )
 
-  const pathname = req.nextUrl.pathname
-  const isLegalDocument = LEGAL_DOCUMENT_PATTERN.test(pathname)
+  const isLegalDocument = isLegalDocumentPath(pathname)
 
   if (hostResolution.kind === 'platform') {
     if (
       !PLATFORM_ROUTES.has(pathname)
       && !isPlatformSupportPath(pathname)
-      && !isLegalDocument
+      && !isPlatformLegalDocumentPath(pathname)
       && !pathname.startsWith('/api/')
     ) {
       return tenantErrorResponse(req)
@@ -121,6 +123,14 @@ export async function proxy(req: NextRequest) {
     )
     if (!tenant || (hostResolution.slug && tenant.slug !== hostResolution.slug)) {
       return tenantErrorResponse(req)
+    }
+
+    const platformRedirectUrl = getTenantPlatformRedirectUrl(
+      req.nextUrl.toString(),
+      hostResolution.isLocalAlias,
+    )
+    if (platformRedirectUrl) {
+      return NextResponse.redirect(platformRedirectUrl, 308)
     }
 
     writeTenantHeaders(requestHeaders, tenant)

@@ -5,11 +5,15 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_CONTACT_EMAIL,
   PLATFORM_NAME,
+  PLATFORM_ORIGIN,
 } from '@/src/lib/platform-branding'
 
 export const metadata = {
   title: 'Términos de Uso y Privacidad — Forwarders ERP by Hernova Systems',
   description: 'Términos de uso, aviso de privacidad y condiciones del sistema logístico Forwarders ERP.',
+  alternates: {
+    canonical: `${PLATFORM_ORIGIN}/politicas`,
+  },
 }
 
 const sections = platformPolicy.sections
@@ -178,11 +182,6 @@ export default function PoliticasPage() {
               </section>
             ))}
 
-            <div className="flex flex-wrap gap-4 text-sm text-blue-700 underline underline-offset-4">
-              <Link href="/terminos-logisticos">Condiciones del servicio logístico</Link>
-              <a href="/legal/platform-2026-09-07.json" download>Descargar esta versión</a>
-              <a href="/legal/platform-2026-06-22.json" download>Consultar versión anterior (22/06/2026)</a>
-            </div>
             {/* CTA contacto */}
             <div className="relative overflow-hidden rounded-2xl bg-[#07111F] p-6 sm:p-8">
               <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[#EF8E01]/15 blur-3xl" />

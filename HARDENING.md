@@ -1,5 +1,58 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-23 - SAAS-P8-11 - Separación del dominio público y documentos legales
+
+- Estado: corrección implementada y validada localmente; despliegue y UAT
+  público pendientes.
+- Hallazgo:
+  - El landing y las políticas globales de Forwarders ERP se podían abrir bajo
+    `sari.forwarders.app`, mezclando identidad de plataforma con la empresa.
+  - `forwarders.app` también exponía las condiciones logísticas específicas de
+    Sari Express y sus snapshots JSON.
+  - Las páginas legales ofrecían los JSON versionados como descargas para el
+    usuario, aunque esos archivos existen como evidencia técnica del contenido
+    aceptado y de su hash.
+- Archivos modificados:
+  - `src/proxy.ts`.
+  - `src/lib/tenant-host.ts`.
+  - `src/lib/platform-branding.ts`.
+  - `src/app/page.tsx`.
+  - `src/app/politicas/page.tsx`.
+  - `src/components/legal/LogisticsTerms.tsx`.
+  - `src/components/legal/TermsAcknowledgement.tsx`.
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `src/components/marketing/LandingContact.tsx`.
+  - `tests/tenant-host.test.mjs`.
+  - `tests/legal-documents.test.mjs`.
+- Cambio:
+  - El landing, `/politicas` y los snapshots legales de plataforma se
+    canonizan hacia `https://forwarders.app` cuando se solicitan desde un
+    dominio tenant; las rutas locales de desarrollo no se redirigen.
+  - Las condiciones logísticas y sus snapshots dejan de estar disponibles en
+    el dominio raíz y permanecen dentro del dominio tenant de Sari.
+  - Los enlaces hacia las políticas del software usan el dominio absoluto de
+    plataforma, incluido el registro y el portal.
+  - Se retiraron de la interfaz los enlaces a snapshots JSON y el enlace a las
+    condiciones de Sari desde las políticas globales. Los archivos no se
+    modifican ni eliminan para conservar los hashes legales registrados.
+  - Landing y políticas declaran su URL canónica de plataforma.
+  - No se modifica SQL, RLS ni información de usuarios.
+- Validaciones ejecutadas:
+  - Pruebas dirigidas de hostname, canonización y documentos legales: 11/11.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a los 11 archivos afectados: OK.
+  - `npm.cmd test`: 145/145 pruebas correctas.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
+- Riesgos / trabajo pendiente:
+  - Desplegar y ejecutar smoke cruzado de ambos dominios.
+  - La versión legal vigente conserva en su contenido versionado una referencia
+    histórica a las condiciones de Sari. Neutralizar ese texto requiere una
+    nueva versión legal, hash y migración; no debe editarse retroactivamente.
+  - Antes de habilitar MYA se necesitan condiciones logísticas propias de ese
+    tenant; no se debe reutilizar el documento de Sari.
+- Commit: pendiente.
+
 ### 2026-09-23 - SAAS-P8-10 - Detalle de factura bloqueado por relación recursiva
 
 - Estado: corrección desplegada y postflight técnico aprobado; UAT autenticado

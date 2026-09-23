@@ -1,5 +1,13 @@
 export const PLATFORM_HOSTNAME = 'forwarders.app'
 
+const PLATFORM_CANONICAL_ROUTES = new Set([
+  '/',
+  '/politicas',
+])
+
+const PLATFORM_LEGAL_DOCUMENT_PATTERN = /^\/legal\/platform-2026-(?:06-22|09-07)\.json$/
+const LOGISTICS_LEGAL_DOCUMENT_PATTERN = /^\/legal\/logistics-2026-(?:06|09-07)\.json$/
+
 export const RESERVED_TENANT_SLUGS = new Set([
   'admin',
   'api',
@@ -22,6 +30,37 @@ export type TenantHostResolution =
       isLocalAlias: boolean
     }
   | { kind: 'invalid'; reason: string }
+
+export function isPlatformLegalDocumentPath(pathname: string) {
+  return PLATFORM_LEGAL_DOCUMENT_PATTERN.test(pathname)
+}
+
+export function isLogisticsLegalDocumentPath(pathname: string) {
+  return LOGISTICS_LEGAL_DOCUMENT_PATTERN.test(pathname)
+}
+
+export function isLegalDocumentPath(pathname: string) {
+  return isPlatformLegalDocumentPath(pathname)
+    || isLogisticsLegalDocumentPath(pathname)
+}
+
+export function isPlatformCanonicalPath(pathname: string) {
+  return PLATFORM_CANONICAL_ROUTES.has(pathname)
+    || isPlatformLegalDocumentPath(pathname)
+}
+
+export function getTenantPlatformRedirectUrl(
+  requestUrl: string,
+  isLocalAlias = false,
+) {
+  const url = new URL(requestUrl)
+  if (isLocalAlias || !isPlatformCanonicalPath(url.pathname)) return null
+
+  url.protocol = 'https:'
+  url.hostname = PLATFORM_HOSTNAME
+  url.port = ''
+  return url
+}
 
 function stripPort(value: string) {
   if (value.startsWith('[')) return null

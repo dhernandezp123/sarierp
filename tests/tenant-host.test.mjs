@@ -3,6 +3,11 @@ import assert from 'node:assert/strict'
 import loadTs from './load-ts.mjs'
 
 const {
+  getTenantPlatformRedirectUrl,
+  isLegalDocumentPath,
+  isLogisticsLegalDocumentPath,
+  isPlatformCanonicalPath,
+  isPlatformLegalDocumentPath,
   normalizeRequestHostname,
   resolveTenantHost,
 } = loadTs('src/lib/tenant-host.ts')
@@ -58,6 +63,37 @@ test('resuelve subdominio productivo, sari.localhost y alias local explícito', 
     kind: 'platform',
     requestHostname: 'forwarders.app',
   })
+})
+
+test('separa las rutas públicas de plataforma de las condiciones logísticas del tenant', () => {
+  for (const path of ['/', '/politicas', '/legal/platform-2026-09-07.json']) {
+    assert.equal(isPlatformCanonicalPath(path), true, path)
+  }
+
+  for (const path of ['/login', '/dashboard', '/terminos-logisticos', '/legal/logistics-2026-09-07.json']) {
+    assert.equal(isPlatformCanonicalPath(path), false, path)
+  }
+
+  assert.equal(isPlatformLegalDocumentPath('/legal/platform-2026-06-22.json'), true)
+  assert.equal(isLogisticsLegalDocumentPath('/legal/logistics-2026-06.json'), true)
+  assert.equal(isLegalDocumentPath('/legal/logistics-2026-09-07.json'), true)
+})
+
+test('canoniza landing y políticas del tenant sin sacar sus páginas operativas', () => {
+  assert.equal(
+    getTenantPlatformRedirectUrl('https://sari.forwarders.app/').toString(),
+    'https://forwarders.app/',
+  )
+  assert.equal(
+    getTenantPlatformRedirectUrl('https://sari.forwarders.app/politicas?source=erp').toString(),
+    'https://forwarders.app/politicas?source=erp',
+  )
+  assert.equal(getTenantPlatformRedirectUrl('https://sari.forwarders.app/login'), null)
+  assert.equal(getTenantPlatformRedirectUrl('https://sari.forwarders.app/terminos-logisticos'), null)
+  assert.equal(
+    getTenantPlatformRedirectUrl('http://sari.localhost:3000/politicas', true),
+    null,
+  )
 })
 
 test('slugs reservados e intentos de suffix injection fallan cerrados', () => {

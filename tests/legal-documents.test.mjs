@@ -25,3 +25,13 @@ test('Las versiones presentadas coinciden con los hashes registrados en SQL', ()
     assert.equal(new Set(document.sections.map(s => s.id)).size, document.sections.length)
   }
 })
+
+test('La interfaz legal no ofrece snapshots JSON como descargas para usuarios', () => {
+  const platformPage = fs.readFileSync('src/app/politicas/page.tsx', 'utf8')
+  const logisticsTerms = fs.readFileSync('src/components/legal/LogisticsTerms.tsx', 'utf8')
+
+  assert.doesNotMatch(platformPage, /href="\/legal\//)
+  assert.doesNotMatch(platformPage, /Condiciones del servicio logístico/)
+  assert.doesNotMatch(logisticsTerms, /href="\/legal\//)
+  assert.doesNotMatch(logisticsTerms, /\sdownload(?:=|>)/)
+})
