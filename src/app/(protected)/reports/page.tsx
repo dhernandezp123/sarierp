@@ -603,10 +603,10 @@ function ReportsContent() {
             id, invoice_number, invoice_type, status,
             cliente_id, cliente_nombre,
             issue_date, due_date, payment_condition, credit_days, total, currency,
-            clientes!cliente_id(
+            clientes!invoices_cliente_id_fkey(
               ciudad,
               tipo_cliente,
-              vendedor_profile:profiles!vendedor_asignado(nombre, apellido)
+              vendedor_profile:profiles!clientes_vendedor_asignado_fkey(nombre, apellido)
             )
           `)
           .is('deleted_at', null)

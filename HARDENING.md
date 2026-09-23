@@ -2,8 +2,8 @@
 
 ### 2026-09-23 - SAAS-P8-07 - Relaciones PostgREST duplicadas tras el corte multiempresa
 
-- Estado: hotfix implementado y validado localmente; despliegue SQL y UAT
-  autenticado pendientes dentro de la ventana congelada.
+- Estado: SQL aplicado y postflight remoto aprobado; promoción del frontend y
+  UAT autenticado pendientes dentro de la ventana congelada.
 - Hallazgo:
   - El UAT autenticado mostró Dashboard y Cotizaciones sin datos.
   - Las 291 cotizaciones activas continúan en Production; PostgREST devolvía
@@ -15,12 +15,15 @@
   - `supabase/migrations/20260923141500_phase8_postgrest_relationship_disambiguation.sql`.
   - `supabase/tests/phase8_postgrest_relationship_disambiguation.sql`.
   - `src/app/(protected)/clientes/[id]/page.tsx`.
+  - `src/app/(protected)/reports/page.tsx`.
 - Cambio:
   - Los pares de constraints con semántica referencial idéntica se consolidan en
     una sola foreign key compuesta, conservando el nombre legacy consumido por
     las consultas existentes.
   - Las relaciones con acciones distintas no se alteran; el embed de notas de
     cliente se desambigua explícitamente con la clave compuesta por tenant.
+  - Los hints abreviados de facturas se reemplazan por los nombres canónicos de
+    las constraints compuestas que permanecen después de la consolidación.
   - No se modifican ni eliminan filas de negocio.
 - Validaciones ejecutadas:
   - Auditoría Production previa: perfil `Admin Pruebas` activo, aprobado y
@@ -32,11 +35,18 @@
   - `npm.cmd run build`: OK, 73/73 páginas.
   - ESLint dirigido al archivo React tocado reproduce 29 errores y 1 warning de
     deuda legacy preexistente; el cambio de hint no agrega una regla nueva.
+  - ESLint dirigido a `reports/page.tsx`: OK.
   - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
+  - Production reconcilió 130 relaciones equivalentes sin modificar filas; el
+    historial local/remoto quedó alineado hasta `20260923141500`.
+  - Auditoría PostgREST posterior: 36 consultas embebidas verificadas, 0 errores.
+  - Conteo posterior: 291 cotizaciones activas; consultas exactas de Dashboard e
+    Histórico sin error; perfil `Admin Pruebas` conserva contexto Sari válido.
+  - `npx.cmd supabase db lint --linked --level error`: sin errores de esquema.
 - Riesgos / trabajo pendiente:
-  - Aplicar el hotfix en Production y repetir la auditoría PostgREST sin errores.
+  - Promover los hints canónicos del frontend y comprobar el despliegue.
   - Repetir UAT autenticado antes de levantar el congelamiento.
-- Commit: pendiente.
+- Commit de migración y hotfix base: `c39cf06`; follow-up de hints pendiente.
 
 ### 2026-09-23 - SAAS-P8-06 - Corte SQL multiempresa en Production
 
