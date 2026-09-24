@@ -5,8 +5,8 @@ const PLATFORM_CANONICAL_ROUTES = new Set([
   '/politicas',
 ])
 
-const PLATFORM_LEGAL_DOCUMENT_PATTERN = /^\/legal\/platform-2026-(?:06-22|09-07)\.json$/
-const LOGISTICS_LEGAL_DOCUMENT_PATTERN = /^\/legal\/logistics-2026-(?:06|09-07)\.json$/
+const PLATFORM_LEGAL_DOCUMENT_PATTERN = /^\/legal\/platform-2026-(?:06-22|09-(?:07|24))\.json$/
+const LOGISTICS_LEGAL_DOCUMENT_PATTERN = /^\/legal\/logistics-2026-(?:06|09-(?:07|24))\.json$/
 
 export const RESERVED_TENANT_SLUGS = new Set([
   'admin',

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import document from '@/public/legal/logistics-2026-09-07.json'
+import document from '@/public/legal/logistics-2026-09-24.json'
 import { PLATFORM_ORIGIN } from '@/src/lib/platform-branding'
 
 export function LogisticsTerms() {

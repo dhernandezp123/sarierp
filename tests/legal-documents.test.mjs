@@ -14,16 +14,44 @@ test('No genera declaración sin aceptación explícita; distingue ERP de portal
 })
 
 test('Las versiones presentadas coinciden con los hashes registrados en SQL', () => {
-  const sql = fs.readFileSync('supabase/migrations/20260907160000_signup_legal_acceptance.sql', 'utf8')
+  const sql = fs.readFileSync('supabase/migrations/20260924100000_legal_documents_2026_09_24.sql', 'utf8')
+  const compactSql = sql
+    .replace(/\s+/g, ' ')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
   for (const key of ['platform', 'logistics']) {
     const path = `/legal/${key}-${LEGAL_VERSION}.json`
     const bytes = fs.readFileSync(`public${path}`)
     const document = JSON.parse(bytes)
     const hash = crypto.createHash('sha256').update(bytes).digest('hex')
-    assert.ok(sql.includes(`('${key}', '${LEGAL_VERSION}', '${path}', '${hash}')`))
+    assert.ok(compactSql.includes(`('${key}', '${LEGAL_VERSION}', '${path}', '${hash}')`))
     assert.equal(document.version, LEGAL_VERSION)
     assert.equal(new Set(document.sections.map(s => s.id)).size, document.sections.length)
   }
+})
+
+test('Las ediciones publicadas anteriormente permanecen inmutables', () => {
+  const sql = fs.readFileSync('supabase/migrations/20260907160000_signup_legal_acceptance.sql', 'utf8')
+  const historicalVersions = [
+    ['platform', '2026-09-07'],
+    ['logistics', '2026-09-07'],
+  ]
+
+  for (const [key, version] of historicalVersions) {
+    const path = `/legal/${key}-${version}.json`
+    const bytes = fs.readFileSync(`public${path}`)
+    const hash = crypto.createHash('sha256').update(bytes).digest('hex')
+    assert.ok(sql.includes(`('${key}', '${version}', '${path}', '${hash}')`))
+  }
+})
+
+test('La política global es neutral y las condiciones logísticas siguen siendo de Sari', () => {
+  const platform = fs.readFileSync(`public/legal/platform-${LEGAL_VERSION}.json`, 'utf8')
+  const logistics = fs.readFileSync(`public/legal/logistics-${LEGAL_VERSION}.json`, 'utf8')
+
+  assert.doesNotMatch(platform, /Sari Express|sari\.forwarders\.app|\/terminos-logisticos/)
+  assert.match(logistics, /Sari Express/)
+  assert.match(logistics, /sari\.forwarders\.app/)
 })
 
 test('La interfaz legal no ofrece snapshots JSON como descargas para usuarios', () => {

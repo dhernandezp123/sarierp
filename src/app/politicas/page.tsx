@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import platformPolicy from '@/public/legal/platform-2026-09-07.json'
+import platformPolicy from '@/public/legal/platform-2026-09-24.json'
 import { Globe2, ArrowLeft, Mail } from 'lucide-react'
 import {
   PLATFORM_ATTRIBUTION,

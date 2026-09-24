@@ -66,17 +66,19 @@ test('resuelve subdominio productivo, sari.localhost y alias local explícito', 
 })
 
 test('separa las rutas públicas de plataforma de las condiciones logísticas del tenant', () => {
-  for (const path of ['/', '/politicas', '/legal/platform-2026-09-07.json']) {
+  for (const path of ['/', '/politicas', '/legal/platform-2026-09-07.json', '/legal/platform-2026-09-24.json']) {
     assert.equal(isPlatformCanonicalPath(path), true, path)
   }
 
-  for (const path of ['/login', '/dashboard', '/terminos-logisticos', '/legal/logistics-2026-09-07.json']) {
+  for (const path of ['/login', '/dashboard', '/terminos-logisticos', '/legal/logistics-2026-09-07.json', '/legal/logistics-2026-09-24.json']) {
     assert.equal(isPlatformCanonicalPath(path), false, path)
   }
 
   assert.equal(isPlatformLegalDocumentPath('/legal/platform-2026-06-22.json'), true)
   assert.equal(isLogisticsLegalDocumentPath('/legal/logistics-2026-06.json'), true)
   assert.equal(isLegalDocumentPath('/legal/logistics-2026-09-07.json'), true)
+  assert.equal(isPlatformLegalDocumentPath('/legal/platform-2026-09-24.json'), true)
+  assert.equal(isLogisticsLegalDocumentPath('/legal/logistics-2026-09-24.json'), true)
 })
 
 test('canoniza landing y políticas del tenant sin sacar sus páginas operativas', () => {

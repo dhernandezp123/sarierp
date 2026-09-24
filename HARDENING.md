@@ -1,5 +1,69 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-24 - POL-RELEASE-02 - Políticas multiempresa y proveedores de respaldo
+
+- Estado: actualización implementada y validada localmente; migración,
+  despliegue y UAT público pendientes.
+- Hallazgo:
+  - La edición vigente de la política global aún remitía expresamente al portal y
+    a las condiciones de Sari Express, aunque ahora la plataforma admite dominios
+    de múltiples empresas.
+  - La descripción del rol Administrador podía interpretarse como acceso global y
+    el inventario de proveedores no incluía la automatización y almacenamiento de
+    los respaldos cifrados.
+  - Las versiones anteriores no debían editarse porque sus bytes y hashes forman
+    parte de la evidencia de aceptación ya registrada.
+- Archivos y SQL modificados:
+  - `public/legal/platform-2026-09-24.json`.
+  - `public/legal/logistics-2026-09-24.json`.
+  - `src/app/politicas/page.tsx`.
+  - `src/components/legal/LogisticsTerms.tsx`.
+  - `src/lib/legal-documents.ts`.
+  - `src/lib/tenant-host.ts`.
+  - `supabase/migrations/20260924100000_legal_documents_2026_09_24.sql`.
+  - `supabase/tests/legal_documents_2026_09_24.sql`.
+  - `tests/legal-documents.test.mjs`.
+  - `tests/tenant-host.test.mjs`.
+  - `docs/privacy-terms-review-2026-09-24.md`.
+  - `docs/privacy-operations-runbook.md`.
+  - `HARDENING.md`.
+- Cambio:
+  - Las condiciones globales ya son neutrales respecto de Sari y remiten las
+    condiciones particulares al dominio, cotización o contrato de cada empresa.
+  - El acceso administrativo se limita textualmente a la organización y permisos
+    asignados; no concede ni describe acceso entre tenants.
+  - Se documentan Supabase, Vercel, Resend cuando está habilitado, GitHub Actions
+    y Backblaze B2, indicando cifrado previo de las copias externas sin prometer
+    región, retención, disponibilidad o restauración no contratadas.
+  - Las condiciones logísticas permanecen identificadas como documento exclusivo
+    de Sari en `sari.forwarders.app` y no deben reutilizarse para otro tenant.
+  - Se publica la edición `2026-09-24` mediante archivos y hashes nuevos; las
+    ediciones anteriores continúan intactas y archivadas para trazabilidad.
+- Validaciones ejecutadas:
+  - Pruebas dirigidas de documentos y dominios: 12/12 correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a los 6 archivos TypeScript/JavaScript modificados: OK.
+  - `npm.cmd test`: 147/147 pruebas correctas.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
+  - `supabase/tests/legal_documents_2026_09_24.sql`: OK en Supabase local;
+    verificó catálogo/hashes, aceptación ERP y portal con tenant, rechazo de una
+    versión desconocida y finalizó con `ROLLBACK`.
+  - La migración nueva se probó de forma aislada porque la copia Docker tenía una
+    inconsistencia histórica al reaplicar `20260923141500`; no se modificó esa
+    migración ya publicada ni se usaron datos de producción.
+- Riesgos / trabajo pendiente:
+  - Aplicar la migración de catálogo antes de desplegar el frontend; invertir ese
+    orden haría que un alta con la nueva versión sea rechazada por la base.
+  - Esta entrega no fuerza una nueva aceptación a cuentas existentes. Evaluar con
+    asesoría legal si el cambio debe comunicarse o aceptarse expresamente y, de
+    requerirse, diseñar ese flujo sin inventar aceptaciones retrospectivas.
+  - Ejecutar UAT de alta ERP y portal, comprobar evidencia de versión/tenant y
+    verificar la separación pública entre `forwarders.app` y `sari.forwarders.app`.
+  - Completar la identidad legal del titular, contratos, acuerdo de tratamiento,
+    retención y SLA. La revisión técnica no sustituye asesoría jurídica.
+- Commit: pendiente.
+
 ### 2026-09-23 - SAAS-P8-11 - Separación del dominio público y documentos legales
 
 - Estado: corrección implementada y validada localmente; despliegue y UAT
