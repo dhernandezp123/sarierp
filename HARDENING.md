@@ -2,8 +2,8 @@
 
 ### 2026-09-24 - POL-RELEASE-02 - Políticas multiempresa y proveedores de respaldo
 
-- Estado: actualización implementada y validada localmente; migración,
-  despliegue y UAT público pendientes.
+- Estado: migración y frontend desplegados; validación local y postflight público
+  aprobados. UAT autenticado con alta real pendiente.
 - Hallazgo:
   - La edición vigente de la política global aún remitía expresamente al portal y
     a las condiciones de Sari Express, aunque ahora la plataforma admite dominios
@@ -52,17 +52,26 @@
   - La migración nueva se probó de forma aislada porque la copia Docker tenía una
     inconsistencia histórica al reaplicar `20260923141500`; no se modificó esa
     migración ya publicada ni se usaron datos de producción.
+  - Dry-run de Supabase Production: solo
+    `20260924100000_legal_documents_2026_09_24.sql` pendiente.
+  - Migración aplicada en Production y confirmada en el historial remoto.
+  - Postflight público:
+    - `forwarders.app/politicas`: `200`, versión `2026-09-24` y sin referencia a
+      Sari Express.
+    - `sari.forwarders.app/politicas`: `308` a la URL canónica de plataforma.
+    - `sari.forwarders.app/terminos-logisticos`: `200`, versión `2026-09-24`.
+    - Las condiciones y JSON logísticos responden `404` en el dominio raíz; el
+      JSON de plataforma se canoniza desde Sari hacia `forwarders.app`.
+    - Los registros ERP y portal muestran la versión `2026-09-24`.
 - Riesgos / trabajo pendiente:
-  - Aplicar la migración de catálogo antes de desplegar el frontend; invertir ese
-    orden haría que un alta con la nueva versión sea rechazada por la base.
   - Esta entrega no fuerza una nueva aceptación a cuentas existentes. Evaluar con
     asesoría legal si el cambio debe comunicarse o aceptarse expresamente y, de
     requerirse, diseñar ese flujo sin inventar aceptaciones retrospectivas.
-  - Ejecutar UAT de alta ERP y portal, comprobar evidencia de versión/tenant y
-    verificar la separación pública entre `forwarders.app` y `sari.forwarders.app`.
+  - Ejecutar UAT autorizado con alta real ERP y portal y comprobar la evidencia
+    de versión/tenant. El postflight no creó usuarios ni envió correos reales.
   - Completar la identidad legal del titular, contratos, acuerdo de tratamiento,
     retención y SLA. La revisión técnica no sustituye asesoría jurídica.
-- Commit: pendiente.
+- Commit: `31eb411` (`feat: publish multi-tenant legal policies`).
 
 ### 2026-09-23 - SAAS-P8-11 - Separación del dominio público y documentos legales
 
