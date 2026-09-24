@@ -2,8 +2,8 @@
 
 ### 2026-09-24 - MKT-LANDING-V2-PLAN-01 - Cierre de las siete fases de Landing V2
 
-- Estado: las siete fases propuestas quedaron implementadas y validadas
-  localmente; sin despliegue ni escritura de leads reales.
+- Estado: las siete fases propuestas quedaron implementadas, validadas y
+  publicadas en Production; sin escritura de leads reales.
 - Hallazgo:
   - Los incrementos anteriores cubrieron hero, evidencia, un workflow resumido,
     product tour, formulario y SEO, pero no materializaron todos los componentes
@@ -69,14 +69,23 @@
     hero precargada y capturas del producto con lazy loading.
   - JavaScript inicial: `247.4 KiB` comprimidos (`861.2 KiB` sin comprimir), por
     debajo del presupuesto aproximado de `265 KiB` comprimidos.
+  - Vercel Production `dpl_6XudiUqDQ96RWymNezfvyc63JHPD`: estado `READY`;
+    URL inmutable
+    `https://sarierp-hchrszcpe-claudherhn-5641s-projects.vercel.app` y alias
+    `https://forwarders.app` confirmado.
+  - Smoke público posterior, únicamente con solicitudes GET: `/`, `/robots.txt`,
+    `/sitemap.xml`, `/opengraph-image` y `/login` respondieron `200` con tipos de
+    contenido esperados. El HTML contiene el hero, la etapa Factura y
+    rentabilidad, `Organization`, `SoftwareApplication` y `FAQPage`; el sitemap
+    publica `/` y `/politicas` y excluye las condiciones logísticas del tenant.
 - Riesgos / trabajo pendiente:
-  - Repetir Core Web Vitals y verificación de metadata después del despliegue;
-    las cifras locales no sustituyen datos de campo.
+  - Monitorear Core Web Vitals de campo; las cifras locales no sustituyen datos
+    reales de usuarios y dispositivos.
   - Probar la escritura real de un lead únicamente en un ambiente autorizado y
     confirmar Supabase/RLS de extremo a extremo.
   - UAT comercial pendiente con usuarios designados. No se modificaron SQL, RLS,
     autenticación ni módulos operativos.
-  - Hash del commit: pendiente; los cambios no se han confirmado en Git.
+  - Commit de implementación y despliegue: `cd91b57`.
 
 ### 2026-09-24 - MKT-LANDING-V2-C-01 - Conversión, formulario y SEO técnico
 
