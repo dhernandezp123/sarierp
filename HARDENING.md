@@ -1,5 +1,155 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-24 - MKT-LANDING-V2-C-01 - Conversión, formulario y SEO técnico
+
+- Estado: Incremento C implementado y validado localmente; sin despliegue ni
+  escritura de leads reales.
+- Hallazgo:
+  - La landing sólo declaraba URL canónica; no tenía título y descripción propios,
+    Open Graph, Twitter Card, datos estructurados, sitemap ni reglas explícitas
+    para impedir el rastreo de rutas internas del ERP.
+  - El formulario era corto, pero agrupaba errores obligatorios, no enfocaba el
+    primer campo inválido y el cierre prometía contacto «pronto» sin una condición
+    comercial verificada.
+- Archivos y SQL modificados:
+  - `src/app/page.tsx`.
+  - `src/app/opengraph-image.tsx`.
+  - `src/app/robots.ts`.
+  - `src/app/sitemap.ts`.
+  - `src/proxy.ts`.
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `src/components/marketing/LandingContact.tsx`.
+  - `src/components/marketing/landing-content.ts`.
+  - `HARDENING.md`.
+  - SQL: ninguno; se conserva la tabla `leads` y su RLS vigente.
+- Cambio:
+  - La portada publica título, descripción, keywords, canonical, Open Graph,
+    Twitter Card y directivas de indexación específicas de Forwarders.app.
+  - Se añadieron JSON-LD de `WebSite`, `SoftwareApplication` y `FAQPage`; las seis
+    respuestas estructuradas reutilizan exactamente el contenido visible.
+  - `robots.txt` permite la landing y políticas, excluye autenticación, portal y
+    módulos internos; `sitemap.xml` publica sólo la portada y políticas.
+  - La imagen social de `1200x630` se genera con `ImageResponse` y comunica el
+    posicionamiento y el recorrido cotización-pricing-operación-rentabilidad.
+  - Las rutas de metadata se habilitaron explícitamente en el proxy de plataforma.
+  - La sección final explica qué se revisa en una demo. El formulario conserva
+    cuatro datos, muestra errores por campo, enfoca el primero inválido, mantiene
+    el bloqueo de doble envío y ofrece estados recuperables sin prometer plazos.
+- Validaciones ejecutadas:
+  - `/`, `/robots.txt`, `/sitemap.xml` y `/opengraph-image`: `200` local; tipos de
+    contenido HTML, texto, XML y PNG correctos.
+  - HTML renderizado: title, description, canonical y Open Graph correctos; JSON-LD
+    válido con `WebSite`, `SoftwareApplication`, `FAQPage` y 6 preguntas.
+  - Imagen Open Graph revisada visualmente: OK.
+  - Navegador con solicitudes de Supabase interceptadas: campos vacíos muestran
+    tres errores y enfocan `demo-nombre`; fallo de red permite reintentar; éxito
+    sustituye el formulario; doble clic genera una sola solicitud.
+  - Cero leads reales. El único error de consola fue el fallo de red simulado.
+  - Emulación móvil `390x844`: `scrollWidth = clientWidth = 390`; formulario sin
+    desbordamiento horizontal.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a los 8 archivos TypeScript/TSX de este incremento: OK.
+  - `npm.cmd test`: 147/147 pruebas correctas.
+  - `npm.cmd run build`: OK, 76/76 páginas.
+- Riesgos / trabajo pendiente:
+  - Verificar después del despliegue los cuatro endpoints públicos, previews de
+    redes y rastreo real; enviar el sitemap desde la herramienta de buscadores que
+    se decida utilizar.
+  - La recepción de un lead debe probarse sólo en un ambiente autorizado. Esta
+    revisión no certifica Supabase/RLS de extremo a extremo.
+  - No se añadió analítica: falta seleccionar un proveedor y definir medición sin
+    datos personales antes de atribuir mejoras de conversión.
+  - No se modificaron autenticación, permisos, SQL ni módulos operativos.
+
+### 2026-09-24 - MKT-LANDING-V2-B-01 - Storytelling operativo y product tour
+
+- Estado: Incremento B implementado y validado localmente; sin despliegue.
+- Hallazgo:
+  - La landing mostraba seis pantallas reales, pero como una galería de módulos
+    separada del recorrido de un embarque.
+  - El workflow resumido no explicaba los handoffs entre Ventas, Pricing,
+    Operaciones, Documentación y Finanzas ni su relación con el producto visible.
+- Archivos y SQL modificados:
+  - `src/components/marketing/ConnectedWorkflow.tsx`.
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `src/components/marketing/ProductShowcase.tsx`.
+  - `src/components/marketing/landing-content.ts`.
+  - `src/components/marketing/landing.module.css`.
+  - `HARDENING.md`.
+  - SQL: ninguno.
+- Cambio:
+  - Se sustituyó el workflow genérico por un ciclo de siete momentos alineado con
+    el producto: cotización, pricing, opción aceptada, shipment/SI, booking/BL,
+    costos/facturación y resultado.
+  - Tres bloques explican los handoffs de decisión, ejecución y cierre sin afirmar
+    automatizaciones ni resultados que el sistema no pueda demostrar.
+  - El recorrido por capturas ahora funciona como product tour: navegación lateral
+    en escritorio, carril táctil en móvil, etapa visible, captura ampliable y CTA
+    contextual. Conserva las seis imágenes del ambiente Demo ya aprobadas.
+  - La sección por equipos comunica qué recibe y qué entrega cada área, y mantiene
+    el portal del cliente separado de las herramientas internas.
+  - El nuevo storytelling está renderizado en servidor; sólo las pestañas y el
+    diálogo de ampliación permanecen como componente cliente.
+- Validaciones ejecutadas:
+  - Revisión visual local completa a `1440px`: OK.
+  - Emulación móvil real a `390x844`: `scrollWidth = clientWidth = 390`; sin
+    desbordamiento horizontal del documento.
+  - Navegación del product tour por teclado: la segunda pestaña activa la vista de
+    cotización y su contenido correspondiente; sin excepciones del navegador.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a los 4 archivos TypeScript/TSX de este incremento: OK.
+  - `npm.cmd test`: 147/147 pruebas correctas.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / trabajo pendiente:
+  - En móvil, el ciclo de siete etapas y las seis pestañas usan desplazamiento
+    horizontal intencional; el contenido esencial también aparece fuera de esos
+    carriles para no depender del gesto.
+  - El Incremento C debe cerrar conversión, formulario, metadata y SEO; no forman
+    parte de esta entrega.
+  - No se modificaron autenticación, leads, SQL, RLS ni módulos operativos.
+
+### 2026-09-24 - MKT-LANDING-V2-A-01 - Landing V2: identidad y primer viewport
+
+- Estado: Incremento A implementado y validado localmente; sin despliegue.
+- Hallazgo:
+  - La portada pública no expresaba con suficiente claridad que Forwarders.app
+    conecta cotización, pricing, operación y rentabilidad para freight forwarders.
+  - El primer viewport dependía de mensajes generales y no mostraba evidencia
+    inmediata del producto ni el problema de fragmentación que resuelve.
+- Archivos y SQL modificados:
+  - `src/components/marketing/ConnectedOperationHero.tsx`.
+  - `src/components/marketing/FragmentationProblem.tsx`.
+  - `src/components/marketing/ProductEvidence.tsx`.
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `src/components/marketing/LandingHeader.tsx`.
+  - `src/components/marketing/landing-content.ts`.
+  - `src/components/marketing/landing.module.css`.
+  - `src/lib/platform-branding.ts`.
+  - `HARDENING.md`.
+  - SQL: ninguno.
+- Cambio:
+  - Se introdujo la identidad pública `Forwarders.app` sin cambiar el nombre
+    operativo `Forwarders ERP` usado por el producto y los tenants.
+  - El hero ahora comunica una operación conectada de cotización a rentabilidad,
+    incorpora una captura real del producto y ofrece rutas claras hacia demo y
+    exploración del flujo.
+  - Se agregó evidencia verificable del alcance actual del producto y una sección
+    visual sobre la fragmentación entre Excel, correo, WhatsApp y carpetas.
+  - Se mantuvo la landing como composición de servidor salvo las interacciones ya
+    existentes, sin dependencias nuevas ni afirmaciones comerciales inventadas.
+- Validaciones ejecutadas:
+  - Revisión visual local en escritorio y emulación móvil de `390x844`: OK.
+  - Ancho móvil: `scrollWidth = clientWidth = 390`; sin desbordamiento horizontal.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a los 7 archivos TypeScript/TSX modificados: OK.
+  - `npm.cmd test`: 147/147 pruebas correctas.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / trabajo pendiente:
+  - Los incrementos B y C aún deben reorganizar la narrativa completa del
+    producto, reforzar la conversión/formulario y completar metadata/SEO.
+  - No se modificaron autenticación, leads, SQL, RLS ni módulos operativos.
+  - Validar contenido comercial final y analítica antes de desplegar la V2.
+
 ### 2026-09-24 - POL-RELEASE-02 - Políticas multiempresa y proveedores de respaldo
 
 - Estado: migración y frontend desplegados; validación local y postflight público

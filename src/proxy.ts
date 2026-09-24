@@ -17,6 +17,9 @@ import {
 
 const PUBLIC_ROUTES = new Set([
   '/',
+  '/opengraph-image',
+  '/robots.txt',
+  '/sitemap.xml',
   '/init',
   '/login',
   '/register',
@@ -32,6 +35,9 @@ const PUBLIC_ROUTES = new Set([
 
 const PLATFORM_ROUTES = new Set([
   '/',
+  '/opengraph-image',
+  '/robots.txt',
+  '/sitemap.xml',
   '/init',
   '/login',
   '/politicas',
