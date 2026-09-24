@@ -1,5 +1,83 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-24 - MKT-LANDING-V2-PLAN-01 - Cierre de las siete fases de Landing V2
+
+- Estado: las siete fases propuestas quedaron implementadas y validadas
+  localmente; sin despliegue ni escritura de leads reales.
+- Hallazgo:
+  - Los incrementos anteriores cubrieron hero, evidencia, un workflow resumido,
+    product tour, formulario y SEO, pero no materializaron todos los componentes
+    ni el recorrido de ocho etapas definidos en el plan aprobado.
+  - Faltaban la historia de margen, el cambio de perspectiva por equipo, la
+    comparación controlada del portal, las cinco etapas de implementación y la
+    composición final en componentes independientes.
+- Archivos y SQL modificados:
+  - `src/app/page.tsx`.
+  - `src/components/marketing/ConnectedOperationHero.tsx`.
+  - `src/components/marketing/ConnectedWorkflow.tsx` (retirado).
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `src/components/marketing/ProductShowcase.tsx`.
+  - `src/components/marketing/landing-content.ts`.
+  - `src/components/marketing/OperationJourney.tsx`.
+  - `src/components/marketing/JourneyStagePanel.tsx`.
+  - `src/components/marketing/ProductFrame.tsx`.
+  - `src/components/marketing/MarginStory.tsx`.
+  - `src/components/marketing/TeamRoleSwitcher.tsx`.
+  - `src/components/marketing/ClientPortalSection.tsx`.
+  - `src/components/marketing/ImplementationPath.tsx`.
+  - `src/components/marketing/MarketingFaq.tsx`.
+  - `src/components/marketing/DemoConversionPanel.tsx`.
+  - `HARDENING.md`.
+  - SQL: ninguno.
+- Cambio:
+  - La portada conserva los fundamentos visuales y el hero de la fase 1, con CTA
+    móvil de ancho completo y un ajuste específico de composición para `1024px`.
+  - El storytelling de la fase 2 recorre las ocho etapas exactas desde Cotización
+    hasta Factura y rentabilidad; cada etapa presenta decisión, responsable,
+    información conectada y resultado, y enlaza capturas Demo existentes.
+  - La fase 3 incorpora la historia de margen con valores visibles en el Demo,
+    las perspectivas de Ventas/Pricing, Operaciones/Documentación y
+    Finanzas/Dirección, y una comparación conceptual de información interna
+    frente a la permitida al cliente.
+  - La fase 4 incorpora Diagnóstico, Configuración, Evaluación de datos,
+    Capacitación y Puesta en marcha, reutiliza el FAQ visible y conserva el panel
+    de conversión y su formulario sin promesas no verificadas.
+  - La fase 5 declara una entidad `Organization` reutilizada por `WebSite` y
+    `SoftwareApplication`. El sitemap conserva únicamente `/` y `/politicas`: la
+    condición del plan de incluir sólo URLs públicas reales prevalece porque
+    `/terminos-logisticos` pertenece al tenant Sari y responde `404` en el dominio
+    de plataforma; no se mezclaron condiciones logísticas del tenant.
+  - Las fases 6 y 7 cierran targets táctiles mínimos, lazy loading fuera del hero,
+    navegación por teclado, retorno de foco, movimiento reducido, responsive,
+    presupuesto de JavaScript y validación integral.
+- Validaciones ejecutadas:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npx.cmd eslint src/components/marketing src/app/page.tsx src/app/sitemap.ts src/app/robots.ts`: OK.
+  - `npm.cmd test`: 147/147 pruebas correctas.
+  - `npm.cmd run build`: OK, 76/76 páginas.
+  - Navegador real mediante Chrome DevTools: `320x844`, `390x844`, `768x1024`,
+    `1024x768` y `1440x1000`; sin overflow horizontal y con revisión visual de
+    los cinco tamaños.
+  - Navegación interna, menú móvil con Escape y restitución de foco, tabs con
+    teclado, diálogo, zoom, restitución de foco, FAQ y movimiento reducido: OK.
+  - Formulario con solicitudes interceptadas: vacío, correo inválido, fallo,
+    reintento, doble submit y éxito simulado: OK; una sola solicitud por intento
+    y cero leads reales.
+  - JavaScript deshabilitado: H1, CTA e imagen principal presentes; consola sin
+    excepciones en la auditoría con JavaScript.
+  - Rendimiento local, mediana de tres corridas: LCP `0.956 s`, CLS `0`; imagen
+    hero precargada y capturas del producto con lazy loading.
+  - JavaScript inicial: `247.4 KiB` comprimidos (`861.2 KiB` sin comprimir), por
+    debajo del presupuesto aproximado de `265 KiB` comprimidos.
+- Riesgos / trabajo pendiente:
+  - Repetir Core Web Vitals y verificación de metadata después del despliegue;
+    las cifras locales no sustituyen datos de campo.
+  - Probar la escritura real de un lead únicamente en un ambiente autorizado y
+    confirmar Supabase/RLS de extremo a extremo.
+  - UAT comercial pendiente con usuarios designados. No se modificaron SQL, RLS,
+    autenticación ni módulos operativos.
+  - Hash del commit: pendiente; los cambios no se han confirmado en Git.
+
 ### 2026-09-24 - MKT-LANDING-V2-C-01 - Conversión, formulario y SEO técnico
 
 - Estado: Incremento C implementado y validado localmente; sin despliegue ni

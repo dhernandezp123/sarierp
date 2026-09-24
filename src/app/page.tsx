@@ -66,6 +66,20 @@ const structuredData = {
       name: PLATFORM_MARKETING_NAME,
       description,
       inLanguage: 'es',
+      publisher: {
+        '@id': `${PLATFORM_ORIGIN}/#organization`,
+      },
+    },
+    {
+      '@type': 'Organization',
+      '@id': `${PLATFORM_ORIGIN}/#organization`,
+      name: 'Hernova Systems',
+      url: PLATFORM_ORIGIN,
+      logo: `${PLATFORM_ORIGIN}/brand/isotipo-color.png`,
+      brand: {
+        '@type': 'Brand',
+        name: PLATFORM_MARKETING_NAME,
+      },
     },
     {
       '@type': 'SoftwareApplication',
@@ -79,8 +93,7 @@ const structuredData = {
       operatingSystem: 'Web',
       inLanguage: 'es',
       publisher: {
-        '@type': 'Organization',
-        name: 'Hernova Systems',
+        '@id': `${PLATFORM_ORIGIN}/#organization`,
       },
       audience: {
         '@type': 'BusinessAudience',

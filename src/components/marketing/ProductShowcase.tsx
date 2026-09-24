@@ -20,8 +20,8 @@ export function ProductShowcase() {
           <div className="min-w-0 bg-[#09172B] p-4 text-white sm:p-6 lg:p-7">
             <div className="px-1">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#FFB44B]">Product tour</p>
-              <p className="mt-3 text-lg font-semibold tracking-tight">Explora cada punto de control.</p>
-              <p className="mt-2 text-xs leading-5 text-slate-400">Selecciona una vista para seguir el trabajo de tu equipo.</p>
+              <p className="mt-3 text-lg font-semibold tracking-tight">Sigue el trabajo dentro del producto.</p>
+              <p className="mt-2 text-xs leading-5 text-slate-400">Selecciona un paso para avanzar por las seis vistas Demo.</p>
             </div>
             <div className="mt-5 overflow-x-auto pb-1 lg:overflow-visible">
               <TabsList aria-label="Vistas del producto" className="flex h-auto w-max flex-row gap-2 border-0 bg-transparent p-0 lg:w-full lg:flex-col">
@@ -33,7 +33,7 @@ export function ProductShowcase() {
                         <Icon size={15} aria-hidden="true" />
                       </span>
                       <span className="min-w-0">
-                        <span className="block font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500 group-data-[state=active]:text-[#0038BD]">Vista {String(index + 1).padStart(2, '0')}</span>
+                        <span className="block font-mono text-[9px] font-bold uppercase tracking-[0.08em] text-slate-500 group-data-[state=active]:text-[#0038BD]">Paso {String(index + 1).padStart(2, '0')}</span>
                         <span className="mt-0.5 block truncate text-xs font-bold">{item.label}</span>
                       </span>
                     </TabsTrigger>
@@ -51,7 +51,7 @@ export function ProductShowcase() {
               <TabsContent key={item.id} value={item.id} className="m-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0038BD]">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 sm:px-6">
                   <span className="inline-flex items-center gap-2 text-xs font-medium text-slate-600"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-[#16A36A]" />Captura real · Datos de demostración</span>
-                  <DialogTrigger asChild><button type="button" onClick={(event) => { triggerRef.current = event.currentTarget }} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#0038BD] hover:bg-blue-50"><ZoomIn size={15} aria-hidden="true" />Ampliar captura</button></DialogTrigger>
+                  <DialogTrigger asChild><button type="button" onClick={(event) => { triggerRef.current = event.currentTarget }} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[#0038BD] hover:bg-blue-50"><ZoomIn size={15} aria-hidden="true" />Ampliar captura</button></DialogTrigger>
                 </div>
                 <DialogTrigger asChild>
                   <button type="button" onClick={(event) => { triggerRef.current = event.currentTarget }} aria-label={`Ampliar: ${item.title}`} className="block w-full cursor-zoom-in bg-[#F5F8FC] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#0038BD]">
@@ -76,11 +76,11 @@ export function ProductShowcase() {
             <DialogTitle className="text-base font-semibold leading-6">{view.title}</DialogTitle>
             <DialogDescription className="mt-1 text-xs leading-5 text-slate-600">Datos de demostración. Amplía para leer los detalles y desplázate por la captura.</DialogDescription>
           </div>
-          <DialogClose asChild><button type="button" aria-label="Cerrar captura" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-100"><X size={20} /></button></DialogClose>
+          <DialogClose asChild><button type="button" aria-label="Cerrar captura" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-100"><X size={20} /></button></DialogClose>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-2">
-          <button type="button" onClick={() => setZoomed(!zoomed)} aria-pressed={zoomed} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-[#0038BD] hover:bg-blue-50">{zoomed ? <Minus size={16} /> : <Plus size={16} />}{zoomed ? 'Ajustar a pantalla' : 'Ver al 100%'}</button>
-          <a href={view.image} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-1 text-xs font-medium text-slate-600 underline underline-offset-4">Abrir imagen <ArrowUpRight size={14} /><span className="sr-only"> en una pestaña nueva</span></a>
+          <button type="button" onClick={() => setZoomed(!zoomed)} aria-pressed={zoomed} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-[#0038BD] hover:bg-blue-50">{zoomed ? <Minus size={16} /> : <Plus size={16} />}{zoomed ? 'Ajustar a pantalla' : 'Ver al 100%'}</button>
+          <a href={view.image} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1 text-xs font-medium text-slate-600 underline underline-offset-4">Abrir imagen <ArrowUpRight size={14} /><span className="sr-only"> en una pestaña nueva</span></a>
         </div>
         <div tabIndex={0} role="region" aria-label="Captura ampliada; utiliza las flechas para desplazarte" className="min-h-0 overflow-auto overscroll-contain bg-slate-100 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#0038BD]">
           <Image src={view.image} alt={view.alt} width={1920} height={1080} unoptimized className={zoomed ? 'h-auto w-[1920px] max-w-none' : 'h-auto w-full'} />

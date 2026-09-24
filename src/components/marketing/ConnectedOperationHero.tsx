@@ -16,13 +16,13 @@ export function ConnectedOperationHero() {
   return (
     <section id="contenido" tabIndex={-1} className={`${styles.hero} relative overflow-hidden border-b border-slate-200`}>
       <div aria-hidden="true" className={styles.heroGrid} />
-      <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 py-14 sm:px-8 sm:py-18 lg:grid-cols-[0.88fr_1.12fr] lg:gap-14 lg:py-24">
+      <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 py-14 sm:px-8 sm:py-18 lg:grid-cols-[0.78fr_1.22fr] lg:gap-8 lg:py-24 xl:grid-cols-[0.88fr_1.12fr] xl:gap-14">
         <div className="relative z-10">
           <p className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#0038BD]">
             <span className="h-1.5 w-6 rounded-full bg-[#EF8E01]" aria-hidden="true" />
             Plataforma operativa para freight forwarders
           </p>
-          <h1 className="mt-5 max-w-2xl font-display text-[2.65rem] font-semibold leading-[1.02] tracking-[-0.045em] text-[#07111F] sm:text-[3.6rem] lg:text-[4rem]">
+          <h1 className="mt-5 max-w-2xl font-display text-[2.65rem] font-semibold leading-[1.02] tracking-[-0.045em] text-[#07111F] sm:text-[3.6rem] lg:text-[3rem] xl:text-[4rem]">
             De la cotización a la rentabilidad.
             <span className="mt-2 block text-[#0038BD]">Una sola operación conectada.</span>
           </h1>
@@ -30,10 +30,10 @@ export function ConnectedOperationHero() {
             Forwarders.app conecta ventas, pricing, operaciones, documentos y finanzas en una plataforma creada para freight forwarders y NVOCCs.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <a href="#demo" className="inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-[#0038BD] px-6 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition-colors hover:bg-[#002a90]">
+            <a href="#demo" className="inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-full bg-[#0038BD] px-6 text-sm font-bold text-white shadow-lg shadow-blue-900/20 transition-colors hover:bg-[#002a90] sm:w-auto">
               Ver una demo con mi flujo <ArrowRight size={17} aria-hidden="true" />
             </a>
-            <a href="#producto" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-slate-300 bg-white/90 px-5 text-sm font-semibold text-slate-700 transition-colors hover:border-[#0038BD] hover:text-[#0038BD]">
+            <a href="#producto" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full border border-slate-300 bg-white/90 px-5 text-sm font-semibold text-slate-700 transition-colors hover:border-[#0038BD] hover:text-[#0038BD] sm:w-auto">
               Explorar el producto <ArrowDown size={16} aria-hidden="true" />
             </a>
           </div>
