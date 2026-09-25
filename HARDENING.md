@@ -2,8 +2,9 @@
 
 ### 2026-09-25 - PRICING-UX-01 - Desglose de seguro legible y sin superposición
 
-- Estado: corrección implementada y validada localmente; pendiente de commit y
-  despliegue.
+- Estado: corrección implementada, validada y desplegada en Production; queda
+  pendiente únicamente la comprobación visual autenticada con una cotización
+  real.
 - Hallazgo:
   - La ayuda de la línea `Seguro de Carga` se mostraba como un tooltip absoluto
     dentro de la tabla con desplazamiento horizontal. Podía recortarse o
@@ -41,8 +42,15 @@
   - El archivo histórico de Pricing conserva 33 errores y 5 advertencias de
     lint preexistentes fuera de este cambio; TypeScript, la suite y el build sí
     concluyen correctamente.
-  - Falta comprobación visual autenticada con una cotización real y despliegue.
-- Commit: pendiente.
+  - Falta comprobación visual autenticada con una cotización real.
+- Postflight Production:
+  - Vercel Production: `Ready`.
+  - URL inmutable:
+    `https://sarierp-nbfnsrgh9-claudherhn-5641s-projects.vercel.app`.
+  - `https://sari.forwarders.app/pricing-comparison`: `307` hacia
+    `/login?next=%2Fpricing-comparison` sin una sesión activa.
+  - `https://sari.forwarders.app/login`: `200` con branding de Sari.
+- Commit: `9b6d460` (`fix: clarify insurance pricing breakdown`).
 
 ### 2026-09-25 - SAAS-P8-12 - Entrada del tenant dirigida a su acceso empresarial
 
