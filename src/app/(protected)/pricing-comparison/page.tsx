@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { AlertTriangle, CheckCircle2, ChevronDown, CircleHelp, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 
@@ -60,6 +60,7 @@ import {
   type FclTableChargeOverrides,
 } from '@/src/components/pricing/FclAgentComparisonTable'
 import { QuotationOptionsPanel } from '@/src/components/pricing/QuotationOptionsPanel'
+import { InsuranceCalculationDetails } from '@/src/components/pricing/InsuranceCalculationDetails'
 import {
   getClientVisibleQuotationOptions,
   type QuotationCommercialOption,
@@ -5960,7 +5961,7 @@ const profitabilityColor =
                                     : 'dark:bg-[#131c2e]'
                                 }`}
                               >
-                                <td className="p-2 text-sm">
+                                <td className="min-w-[19rem] p-2 align-top text-sm">
                                   {editingPricingItemId === item.id ? (
                                     <input
                                       value={editingPricingItemForm?.description || ''}
@@ -5973,25 +5974,11 @@ const profitabilityColor =
                                       className="border rounded px-2 py-1 text-sm w-full"
                                     />
                                   ) : isInsurancePricingItem(item) ? (
-                                    <div className="group/insurance relative inline-flex items-center gap-1.5">
-                                      <span>{item.description}</span>
-                                      <button
-                                        type="button"
-                                        aria-label="Ver calculo del seguro"
-                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-blue-600 transition hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:text-blue-300 dark:hover:bg-blue-950 dark:focus:bg-blue-950"
-                                      >
-                                        <CircleHelp className="h-4 w-4" />
-                                      </button>
-                                      <div
-                                        role="tooltip"
-                                        className="pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-96 max-w-[min(24rem,80vw)] whitespace-pre-line rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-5 text-slate-100 shadow-xl group-hover/insurance:block group-focus-within/insurance:block"
-                                      >
-                                        <p className="mb-1 font-semibold text-white">
-                                          Cálculo del seguro
-                                        </p>
-                                        {item.notes ||
-                                          'Esta línea no tiene el detalle histórico del cálculo.'}
-                                      </div>
+                                    <div className="min-w-0">
+                                      <span className="font-medium text-slate-900 dark:text-white">
+                                        {item.description}
+                                      </span>
+                                      <InsuranceCalculationDetails notes={item.notes} />
                                     </div>
                                   ) : (
                                     item.description

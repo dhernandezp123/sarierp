@@ -1,5 +1,49 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-25 - PRICING-UX-01 - Desglose de seguro legible y sin superposición
+
+- Estado: corrección implementada y validada localmente; pendiente de commit y
+  despliegue.
+- Hallazgo:
+  - La ayuda de la línea `Seguro de Carga` se mostraba como un tooltip absoluto
+    dentro de la tabla con desplazamiento horizontal. Podía recortarse o
+    superponerse a otros elementos y no ofrecía una interacción adecuada en
+    pantallas táctiles.
+  - El cálculo completo se presentaba como un único párrafo multilínea, lo que
+    dificultaba distinguir la base, los servicios cubiertos, los porcentajes y
+    el impuesto.
+- Archivos y SQL modificados:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/components/pricing/InsuranceCalculationDetails.tsx`.
+  - `tests/insurance-calculation-details.test.mjs`.
+  - `HARDENING.md`.
+  - SQL: ninguno.
+- Cambio:
+  - Se sustituyó el signo de interrogación con tooltip flotante por un control
+    explícito `Ver desglose del cálculo`, utilizable con mouse, teclado y tacto.
+  - El desglose se expande dentro del flujo de la misma fila, por lo que aumenta
+    su altura sin invadir las opciones comerciales ni quedar oculto por el
+    contenedor de la tabla.
+  - Cada línea histórica del cálculo se presenta como un paso numerado, separa
+    visualmente el concepto del valor y conserva intactos los datos y fórmulas
+    almacenados en `pricing_items.notes`.
+  - La columna de descripción recibe un ancho mínimo para que las fórmulas y las
+    listas de servicios puedan ajustarse de forma legible.
+- Validaciones ejecutadas:
+  - Prueba dirigida del desglose: 2/2 correcta.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido al componente y su prueba: OK.
+  - `npm.cmd test`: 149/149 pruebas correctas.
+  - `npm.cmd run build`: OK, 76/76 páginas.
+- Riesgos / trabajo pendiente:
+  - No se modificó el cálculo, la cobertura, los porcentajes, los importes ni el
+    guardado del seguro.
+  - El archivo histórico de Pricing conserva 33 errores y 5 advertencias de
+    lint preexistentes fuera de este cambio; TypeScript, la suite y el build sí
+    concluyen correctamente.
+  - Falta comprobación visual autenticada con una cotización real y despliegue.
+- Commit: pendiente.
+
 ### 2026-09-25 - SAAS-P8-12 - Entrada del tenant dirigida a su acceso empresarial
 
 - Estado: corrección desplegada y validada local y públicamente; UAT autenticado
