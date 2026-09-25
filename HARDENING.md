@@ -2,8 +2,8 @@
 
 ### 2026-09-25 - SAAS-P8-12 - Entrada del tenant dirigida a su acceso empresarial
 
-- Estado: corrección implementada y validada localmente; commit, despliegue y
-  postflight público pendientes.
+- Estado: corrección desplegada y validada local y públicamente; UAT autenticado
+  no requerido porque no cambió sesión ni autorización.
 - Hallazgo:
   - La raíz `/` estaba clasificada como ruta canónica de plataforma. Como
     consecuencia, `sari.forwarders.app/` respondía con un `308` hacia el landing
@@ -31,11 +31,18 @@
   - `npm.cmd run build`: OK, 76/76 páginas.
   - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
 - Riesgos / trabajo pendiente:
-  - Desplegar y confirmar públicamente: raíz de Sari `308` a su `/login`, raíz de
-    plataforma `200` con landing y políticas globales aún canónicas.
-  - La prueba pública no sustituye UAT autenticado; este cambio no modifica RLS,
-    sesión, perfiles ni SQL.
-- Commit: pendiente.
+  - Postflight Production:
+    - `sari.forwarders.app/`: `308`, `Location: /login`.
+    - Seguimiento del redirect: `200` y branding visible de Sari Express.
+    - `forwarders.app/`: `200` y conserva el landing de plataforma.
+    - `sari.forwarders.app/politicas`: `308` hacia la política global.
+    - `sari.forwarders.app/terminos-logisticos`: `200`.
+  - Monitorear enlaces externos que hubieran asumido el redirect histórico al
+    landing; ahora deben enlazar `forwarders.app` cuando busquen la plataforma.
+  - No se modificaron RLS, sesión, perfiles ni SQL.
+- Despliegue: Vercel Production `success`; URL inmutable
+  `https://sarierp-fhgvpi3s0-claudherhn-5641s-projects.vercel.app`.
+- Commit: `7d139ce` (`fix: route tenant root to company login`).
 
 ### 2026-09-24 - MKT-LANDING-V2-PLAN-01 - Cierre de las siete fases de Landing V2
 
