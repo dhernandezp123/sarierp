@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import loadTs from './load-ts.mjs'
 
 const {
+  getTenantEntryRedirectUrl,
   getTenantPlatformRedirectUrl,
   isLegalDocumentPath,
   isLogisticsLegalDocumentPath,
@@ -66,11 +67,11 @@ test('resuelve subdominio productivo, sari.localhost y alias local explícito', 
 })
 
 test('separa las rutas públicas de plataforma de las condiciones logísticas del tenant', () => {
-  for (const path of ['/', '/politicas', '/legal/platform-2026-09-07.json', '/legal/platform-2026-09-24.json']) {
+  for (const path of ['/politicas', '/legal/platform-2026-09-07.json', '/legal/platform-2026-09-24.json']) {
     assert.equal(isPlatformCanonicalPath(path), true, path)
   }
 
-  for (const path of ['/login', '/dashboard', '/terminos-logisticos', '/legal/logistics-2026-09-07.json', '/legal/logistics-2026-09-24.json']) {
+  for (const path of ['/', '/login', '/dashboard', '/terminos-logisticos', '/legal/logistics-2026-09-07.json', '/legal/logistics-2026-09-24.json']) {
     assert.equal(isPlatformCanonicalPath(path), false, path)
   }
 
@@ -81,11 +82,13 @@ test('separa las rutas públicas de plataforma de las condiciones logísticas de
   assert.equal(isLogisticsLegalDocumentPath('/legal/logistics-2026-09-24.json'), true)
 })
 
-test('canoniza landing y políticas del tenant sin sacar sus páginas operativas', () => {
+test('envía la raíz del tenant a su login y canoniza solo políticas de plataforma', () => {
   assert.equal(
-    getTenantPlatformRedirectUrl('https://sari.forwarders.app/').toString(),
-    'https://forwarders.app/',
+    getTenantEntryRedirectUrl('https://sari.forwarders.app/?campaign=landing').toString(),
+    'https://sari.forwarders.app/login',
   )
+  assert.equal(getTenantEntryRedirectUrl('https://sari.forwarders.app/login'), null)
+  assert.equal(getTenantPlatformRedirectUrl('https://sari.forwarders.app/'), null)
   assert.equal(
     getTenantPlatformRedirectUrl('https://sari.forwarders.app/politicas?source=erp').toString(),
     'https://forwarders.app/politicas?source=erp',

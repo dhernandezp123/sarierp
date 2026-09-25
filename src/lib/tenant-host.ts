@@ -1,7 +1,6 @@
 export const PLATFORM_HOSTNAME = 'forwarders.app'
 
 const PLATFORM_CANONICAL_ROUTES = new Set([
-  '/',
   '/politicas',
 ])
 
@@ -47,6 +46,16 @@ export function isLegalDocumentPath(pathname: string) {
 export function isPlatformCanonicalPath(pathname: string) {
   return PLATFORM_CANONICAL_ROUTES.has(pathname)
     || isPlatformLegalDocumentPath(pathname)
+}
+
+export function getTenantEntryRedirectUrl(requestUrl: string) {
+  const url = new URL(requestUrl)
+  if (url.pathname !== '/') return null
+
+  url.pathname = '/login'
+  url.search = ''
+  url.hash = ''
+  return url
 }
 
 export function getTenantPlatformRedirectUrl(

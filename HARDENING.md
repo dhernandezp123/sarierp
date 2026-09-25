@@ -1,5 +1,42 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-25 - SAAS-P8-12 - Entrada del tenant dirigida a su acceso empresarial
+
+- Estado: corrección implementada y validada localmente; commit, despliegue y
+  postflight público pendientes.
+- Hallazgo:
+  - La raíz `/` estaba clasificada como ruta canónica de plataforma. Como
+    consecuencia, `sari.forwarders.app/` respondía con un `308` hacia el landing
+    global de `forwarders.app` en vez de abrir el acceso de Sari.
+- Archivos y SQL modificados:
+  - `src/proxy.ts`.
+  - `src/lib/tenant-host.ts`.
+  - `tests/tenant-host.test.mjs`.
+  - `HARDENING.md`.
+  - SQL: ninguno.
+- Cambio:
+  - La raíz de un dominio tenant validado redirige en el mismo origen a `/login`
+    y elimina parámetros de campaña que no pertenecen al formulario de acceso.
+  - La raíz de `forwarders.app` conserva el landing público.
+  - `/politicas` y los documentos globales siguen canonizándose hacia
+    `forwarders.app`; las páginas operativas y condiciones logísticas permanecen
+    en el dominio tenant.
+  - La regla también replica el comportamiento en aliases locales de tenant sin
+    convertir la raíz global de plataforma en una ruta de login.
+- Validaciones ejecutadas:
+  - Prueba dirigida de resolución y redirección de tenant: 8/8 correcta.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a los 3 archivos TypeScript/JavaScript afectados: OK.
+  - `npm.cmd test`: 147/147 pruebas correctas.
+  - `npm.cmd run build`: OK, 76/76 páginas.
+  - `git diff --check`: OK; solo avisos LF/CRLF del entorno.
+- Riesgos / trabajo pendiente:
+  - Desplegar y confirmar públicamente: raíz de Sari `308` a su `/login`, raíz de
+    plataforma `200` con landing y políticas globales aún canónicas.
+  - La prueba pública no sustituye UAT autenticado; este cambio no modifica RLS,
+    sesión, perfiles ni SQL.
+- Commit: pendiente.
+
 ### 2026-09-24 - MKT-LANDING-V2-PLAN-01 - Cierre de las siete fases de Landing V2
 
 - Estado: las siete fases propuestas quedaron implementadas, validadas y

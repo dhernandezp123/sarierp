@@ -9,6 +9,7 @@ import {
   type TenantPublicContextRow,
 } from '@/src/lib/tenant-context'
 import {
+  getTenantEntryRedirectUrl,
   getTenantPlatformRedirectUrl,
   isLegalDocumentPath,
   isPlatformLegalDocumentPath,
@@ -129,6 +130,13 @@ export async function proxy(req: NextRequest) {
     )
     if (!tenant || (hostResolution.slug && tenant.slug !== hostResolution.slug)) {
       return tenantErrorResponse(req)
+    }
+
+    const tenantEntryRedirectUrl = getTenantEntryRedirectUrl(
+      req.nextUrl.toString(),
+    )
+    if (tenantEntryRedirectUrl) {
+      return NextResponse.redirect(tenantEntryRedirectUrl, 308)
     }
 
     const platformRedirectUrl = getTenantPlatformRedirectUrl(
