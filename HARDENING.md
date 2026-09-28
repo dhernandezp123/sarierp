@@ -2,8 +2,8 @@
 
 ### 2026-09-28 - INS-028 - Cargo mínimo de seguro de USD 75.00
 
-- Estado: corrección implementada y validada localmente; sin despliegue ni UAT
-  autenticado.
+- Estado: corrección implementada, validada localmente y desplegada en
+  Production; queda pendiente el UAT autenticado del flujo de Pricing.
 - Hallazgo:
   - El cálculo porcentual del seguro podía guardar un costo o una venta inferior
     al cargo mínimo de USD 75.00.
@@ -43,7 +43,20 @@
   - Los componentes históricos de cálculo conservan cuatro errores de lint
     preexistentes (`any` y actualizaciones de estado dentro de efectos), fuera
     del alcance de esta regla; TypeScript, pruebas y build sí concluyen bien.
-  - No hay hash de commit disponible.
+- Postflight Production:
+  - Commit funcional `b572efe` (`fix: enforce insurance minimum charge`)
+    publicado en `main` y en `feat/multi-tenant-domains`.
+  - GitHub deployment `6717065917` y Vercel Production
+    `9kWD1ATsTASPuZxPk8W4BjA5ka9K`: `success`.
+  - URL generada por Vercel:
+    `https://sarierp-gzz81m24c-claudherhn-5641s-projects.vercel.app`.
+    Responde el `404 Empresa no encontrada` de la aplicación porque el hostname
+    técnico no pertenece a un tenant registrado; el deployment sí terminó con
+    éxito y el dominio canónico quedó actualizado.
+  - `https://sari.forwarders.app/pricing-comparison`: `307` hacia
+    `/login?next=%2Fpricing-comparison` sin una sesión activa.
+  - `https://sari.forwarders.app/login`: `200` con branding de Sari Express.
+- Commit: `b572efe` (`fix: enforce insurance minimum charge`).
 
 ### 2026-09-25 - PRICING-UX-01 - Desglose de seguro legible y sin superposición
 
