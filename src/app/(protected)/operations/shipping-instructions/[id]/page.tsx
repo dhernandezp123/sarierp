@@ -37,6 +37,7 @@ import {
 import { formatDate } from '@/src/lib/format'
 import { operationsReturnHref } from '@/src/lib/operations-navigation'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { mergeShippingInstructionMutation } from '@/src/lib/shipping-instruction-state'
 
 type OperationsUser = {
   id: string
@@ -844,7 +845,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting(result.shipping_instruction)
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -895,7 +898,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting(result.shipping_instruction)
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -970,7 +975,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting(result.shipping_instruction)
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1005,7 +1012,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting(result.shipping_instruction)
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1054,7 +1063,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting(result.shipping_instruction)
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1103,7 +1114,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting(result.shipping_instruction)
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1168,7 +1181,9 @@ export default function RoutingDetailPage() {
     const updatedRouting = result?.shipping_instruction || routing
 
     if (result?.shipping_instruction) {
-      setRouting(result.shipping_instruction)
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }

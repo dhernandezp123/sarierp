@@ -1,5 +1,46 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-28 - FLOW-034 - Shipping Instruction conserva contexto tras guardar
+
+- Estado: corrección implementada y validada localmente; UAT autenticado
+  pendiente.
+- Hallazgo:
+  - Los RPC de guardado y transición devolvían correctamente la fila actualizada
+    de `shipping_instructions`, pero esa fila física no incluye las relaciones
+    embebidas `quotation` y `cliente` que carga el detalle.
+  - La pantalla reemplazaba todo su estado con la respuesta del RPC. Después de
+    `Guardar SI`, el contexto comercial se mostraba como `N/A` hasta ejecutar
+    `Actualizar desde Pricing`, acción que incidentalmente volvía a consultar
+    las relaciones.
+- Archivos y SQL modificados:
+  - `src/lib/shipping-instruction-state.ts`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`.
+  - `tests/shipping-instruction-state.test.mjs`.
+  - `HARDENING.md`.
+  - SQL: ninguno; los datos sí se persistían correctamente.
+- Cambio:
+  - Las respuestas de mutaciones ahora se reconcilian con el estado actual y
+    conservan `quotation` y `cliente`, mientras los campos escalares devueltos
+    por el servidor siguen siendo la fuente autoritativa.
+  - La misma regla se aplica a guardado de Operaciones y Ventas, validación,
+    aceptación, asignación, finalización y cancelación para evitar la misma
+    regresión en cualquier transición de la SI.
+- Validaciones ejecutadas:
+  - Regresión dirigida del estado de SI: 2/2 pruebas correctas; cubre la
+    conservación de relaciones embebidas y el caso sin contexto previo.
+  - `npm.cmd test`: 154/154 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido al helper, la prueba y el detalle de SI: OK.
+  - `npm.cmd run build`: OK, 76/76 páginas.
+  - `git diff --check`: OK; únicamente el aviso esperado de LF/CRLF.
+- Riesgos / trabajo pendiente:
+  - Falta UAT autenticado: ganar una cotización, completar proveedor, guardar la
+    SI y confirmar que cotización, cliente, origen, destino y notas permanecen
+    visibles sin usar `Actualizar desde Pricing`.
+  - La sincronización manual desde Pricing se conserva para repricing real; ya no
+    es necesaria como recuperación visual después del guardado.
+- Commit: pendiente.
+
 ### 2026-09-28 - INS-028 - Cargo mínimo de seguro de USD 75.00
 
 - Estado: corrección implementada, validada localmente y desplegada en
