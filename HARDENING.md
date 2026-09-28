@@ -1,5 +1,50 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-09-28 - INS-028 - Cargo mínimo de seguro de USD 75.00
+
+- Estado: corrección implementada y validada localmente; sin despliegue ni UAT
+  autenticado.
+- Hallazgo:
+  - El cálculo porcentual del seguro podía guardar un costo o una venta inferior
+    al cargo mínimo de USD 75.00.
+  - La aplicación real en Pricing y las calculadoras de apoyo tenían caminos de
+    cálculo separados, con riesgo de mostrar importes distintos.
+- Archivos y SQL modificados:
+  - `src/lib/insurance-calculator.ts`.
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/components/quotations/InsuranceCalculationDialog.tsx`.
+  - `src/components/quotations/ReferenceInsuranceCalculatorDialog.tsx`.
+  - `tests/insurance-calculator.test.mjs`.
+  - `HARDENING.md`.
+  - SQL: ninguno.
+- Cambio:
+  - Centraliza un cargo mínimo de USD 75.00 y lo aplica de forma independiente
+    al costo de aseguradora y a la venta al cliente cuando la prima porcentual
+    positiva resulta menor o igual a ese valor.
+  - Una prima sin base o con tasa cero permanece en USD 0.00; los cálculos
+    superiores a USD 75.00 conservan su importe original.
+  - Pricing guarda el importe final con el mínimo antes de calcular el ISV y
+    registra en las notas tanto la prima porcentual como el mínimo aplicado.
+  - Los desgloses y la calculadora referencial muestran cuándo el resultado fue
+    elevado al mínimo, evitando presentar USD 75.00 como si fuera únicamente el
+    producto de la base por la tasa.
+- Validaciones ejecutadas:
+  - Regresión dirigida del mínimo: 3/3 pruebas correctas; cubre prima menor,
+    igual y mayor a USD 75.00, además del cálculo vacío en cero.
+  - `npm.cmd test`: 152/152 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 76/76 páginas.
+  - ESLint dirigido al helper y la prueba nueva: OK.
+- Riesgos / trabajo pendiente:
+  - No se recalculan líneas históricas automáticamente; el nuevo mínimo se
+    guarda cuando Pricing aplica o reaplica el seguro de carga.
+  - Falta UAT autenticado con una cotización cuya prima sea menor, igual y mayor
+    al mínimo, verificando línea comercial, ISV, PDF y margen.
+  - Los componentes históricos de cálculo conservan cuatro errores de lint
+    preexistentes (`any` y actualizaciones de estado dentro de efectos), fuera
+    del alcance de esta regla; TypeScript, pruebas y build sí concluyen bien.
+  - No hay hash de commit disponible.
+
 ### 2026-09-25 - PRICING-UX-01 - Desglose de seguro legible y sin superposición
 
 - Estado: corrección implementada, validada y desplegada en Production; queda

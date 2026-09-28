@@ -41,7 +41,9 @@ import {
   resolvePersistedTaxAmount,
 } from '@/src/lib/tax'
 import {
+  applyInsuranceMinimumCharge,
   DEFAULT_INSURANCE_COST_RATE_PERCENT,
+  INSURANCE_MINIMUM_CHARGE_USD,
 } from '@/src/lib/insurance-calculator'
 import {
   DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS,
@@ -3705,9 +3707,12 @@ const profitabilityColor =
     const insuredBaseCost = fob + serviceCostWithoutInsurance
     const insuredValueSale = insuredBaseSale * insuranceMarkupMultiplier
     const insuredValueCost = insuredBaseCost * insuranceMarkupMultiplier
-    const insuranceSale = insuredValueSale * (saleRatePercent / 100)
-    const insuranceCost =
+    const calculatedInsuranceSale =
+      insuredValueSale * (saleRatePercent / 100)
+    const calculatedInsuranceCost =
       insuredValueCost * (costRatePercent / 100)
+    const insuranceSale = applyInsuranceMinimumCharge(calculatedInsuranceSale)
+    const insuranceCost = applyInsuranceMinimumCharge(calculatedInsuranceCost)
     const insuranceTaxAmount = calculateTaxAmount(
       insuranceTaxable,
       insuranceSale,
@@ -3738,8 +3743,14 @@ const profitabilityColor =
       }`,
       `Valor asegurado costo: (FOB + costos) × 1.10 = USD ${formatCurrency(insuredValueCost)}`,
       `Valor asegurado venta: (FOB + ventas) × 1.10 = USD ${formatCurrency(insuredValueSale)}`,
-      `Seguro costo: USD ${formatCurrency(insuredValueCost)} × ${costRatePercent}% = USD ${formatCurrency(insuranceCost)}`,
-      `Seguro venta: USD ${formatCurrency(insuredValueSale)} × ${saleRatePercent}% = USD ${formatCurrency(insuranceSale)}`,
+      `Seguro costo calculado: USD ${formatCurrency(insuredValueCost)} × ${costRatePercent}% = USD ${formatCurrency(calculatedInsuranceCost)}`,
+      calculatedInsuranceCost <= INSURANCE_MINIMUM_CHARGE_USD
+        ? `Mínimo de seguro aplicado al costo: USD ${formatCurrency(INSURANCE_MINIMUM_CHARGE_USD)}`
+        : `Seguro costo final: USD ${formatCurrency(insuranceCost)}`,
+      `Seguro venta calculada: USD ${formatCurrency(insuredValueSale)} × ${saleRatePercent}% = USD ${formatCurrency(calculatedInsuranceSale)}`,
+      calculatedInsuranceSale <= INSURANCE_MINIMUM_CHARGE_USD
+        ? `Mínimo de seguro aplicado a la venta: USD ${formatCurrency(INSURANCE_MINIMUM_CHARGE_USD)}`
+        : `Seguro venta final: USD ${formatCurrency(insuranceSale)}`,
       `ISV ${defaultTaxRate}% aplicado: ${insuranceTaxable ? 'Sí' : 'No'}`,
     ].join('\n')
     const existingInsuranceItem = pricingItems.find(isInsurancePricingItem)

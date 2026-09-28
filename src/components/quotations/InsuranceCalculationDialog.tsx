@@ -14,6 +14,7 @@ import {
 import {
   calculateInsuranceDeclaration,
   DEFAULT_INSURANCE_COST_RATE_PERCENT,
+  INSURANCE_MINIMUM_CHARGE_USD,
   INSURANCE_SURCHARGE_PERCENT,
 } from '@/src/lib/insurance-calculator'
 import {
@@ -120,8 +121,13 @@ export function InsuranceCalculationDialog({
     additionalExpenses,
     operationalExpenses,
     insuredValue,
+    calculatedInsuranceSale,
+    insuranceSaleMinimumApplied,
     insuranceSale,
   } = saleDeclaration
+  const calculatedInsuranceCost = costDeclaration.calculatedInsuranceCost
+  const insuranceCostMinimumApplied =
+    costDeclaration.insuranceCostMinimumApplied
   const insuranceCost = costDeclaration.insuranceCost
   const storedCost = toAmount(insuranceItem?.cost_amount)
   const storedSale = toAmount(insuranceItem?.sale_amount)
@@ -394,15 +400,20 @@ export function InsuranceCalculationDialog({
     setText('cost-insured-base', money(costDeclaration.insuredValue))
     setText(
       'cost-premium-label',
-      `Costo del seguro (${effectiveCostRate}%)`
+      `Costo del seguro (${effectiveCostRate}%)${
+        insuranceCostMinimumApplied ? ' - mínimo aplicado' : ''
+      }`
     )
     setText('cost-premium', money(insuranceCost))
     setText(
       'cost-formula-detail',
       `Base: (${money(invoice)} + ${money(commercialServiceCost)}) + ` +
         `${money(costDeclaration.additionalExpenses)} + ${money(costDeclaration.operationalExpenses)} ` +
-        `= ${money(costDeclaration.insuredValue)}. Prima: ${money(costDeclaration.insuredValue)} × ` +
-        `${effectiveCostRate}% = ${money(insuranceCost)}.`
+        `= ${money(costDeclaration.insuredValue)}. Prima calculada: ${money(costDeclaration.insuredValue)} × ` +
+        `${effectiveCostRate}% = ${money(calculatedInsuranceCost)}. ` +
+        (insuranceCostMinimumApplied
+          ? `Cargo mínimo aplicado: ${money(INSURANCE_MINIMUM_CHARGE_USD)}.`
+          : `Costo final: ${money(insuranceCost)}.`)
     )
 
     setText('sale-invoice', money(invoice))
@@ -423,7 +434,12 @@ export function InsuranceCalculationDialog({
     )
     setText('sale-operational', money(saleDeclaration.operationalExpenses))
     setText('sale-insured-base', money(saleDeclaration.insuredValue))
-    setText('sale-premium-label', `Venta del seguro (${clientSaleRate}%)`)
+    setText(
+      'sale-premium-label',
+      `Venta del seguro (${clientSaleRate}%)${
+        insuranceSaleMinimumApplied ? ' - mínimo aplicado' : ''
+      }`
+    )
     setText('sale-premium', money(insuranceSale))
     setText(
       'sale-tax-label',
@@ -437,8 +453,11 @@ export function InsuranceCalculationDialog({
       'sale-formula-detail',
       `Base: (${money(invoice)} + ${money(freight)}) + ` +
         `${money(saleDeclaration.additionalExpenses)} + ${money(saleDeclaration.operationalExpenses)} ` +
-        `= ${money(saleDeclaration.insuredValue)}. Prima: ${money(saleDeclaration.insuredValue)} × ` +
-        `${clientSaleRate}% = ${money(insuranceSale)}. ` +
+        `= ${money(saleDeclaration.insuredValue)}. Prima calculada: ${money(saleDeclaration.insuredValue)} × ` +
+        `${clientSaleRate}% = ${money(calculatedInsuranceSale)}. ` +
+        (insuranceSaleMinimumApplied
+          ? `Cargo mínimo aplicado: ${money(INSURANCE_MINIMUM_CHARGE_USD)}. `
+          : `Venta final: ${money(insuranceSale)}. `) +
         `Total cliente: ${money(insuranceSale)} + ISV ${money(calculatedInsuranceTax)} ` +
         `= ${money(insuranceSaleWithTax)}.`
     )
@@ -579,6 +598,11 @@ export function InsuranceCalculationDialog({
             <p className="mt-1 text-[11px] text-slate-500">
               Base: USD {formatAmount(commercialCostInsuredBase)}
             </p>
+            {insuranceCostMinimumApplied && (
+              <p className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                Cálculo: USD {formatAmount(calculatedInsuranceCost)}; se aplica el mínimo de USD {formatAmount(INSURANCE_MINIMUM_CHARGE_USD)}.
+              </p>
+            )}
           </div>
           <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
             <p className="text-xs text-slate-500">Venta cliente ({clientSaleRate}%)</p>
@@ -586,6 +610,11 @@ export function InsuranceCalculationDialog({
             <p className="mt-1 text-[11px] text-slate-500">
               Base: USD {formatAmount(commercialSaleInsuredBase)}
             </p>
+            {insuranceSaleMinimumApplied && (
+              <p className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                Cálculo: USD {formatAmount(calculatedInsuranceSale)}; se aplica el mínimo de USD {formatAmount(INSURANCE_MINIMUM_CHARGE_USD)}.
+              </p>
+            )}
           </div>
         </div>
 

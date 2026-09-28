@@ -1,5 +1,6 @@
 export const DEFAULT_INSURANCE_COST_RATE_PERCENT = 0.28
 export const INSURANCE_SURCHARGE_PERCENT = 10
+export const INSURANCE_MINIMUM_CHARGE_USD = 75
 
 type InsuranceDeclarationInput = {
   invoiceValue: number
@@ -13,6 +14,14 @@ type InsuranceDeclarationInput = {
 
 const finiteAmount = (value: number) =>
   Number.isFinite(value) ? Math.max(value, 0) : 0
+
+export const applyInsuranceMinimumCharge = (calculatedPremium: number) => {
+  const premium = finiteAmount(calculatedPremium)
+
+  if (premium === 0) return 0
+
+  return Math.max(premium, INSURANCE_MINIMUM_CHARGE_USD)
+}
 
 export function calculateInsuranceDeclaration({
   invoiceValue,
@@ -35,10 +44,12 @@ export function calculateInsuranceDeclaration({
     : 0
   const insuredValue = subtotal + additionalExpenses + operationalExpenses
   const normalizedCostRate = finiteAmount(costRatePercent)
-  const insuranceCost =
+  const calculatedInsuranceCost =
     insuredValue * (normalizedCostRate / 100)
-  const insuranceSale =
+  const calculatedInsuranceSale =
     insuredValue * (finiteAmount(saleRatePercent) / 100)
+  const insuranceCost = applyInsuranceMinimumCharge(calculatedInsuranceCost)
+  const insuranceSale = applyInsuranceMinimumCharge(calculatedInsuranceSale)
 
   return {
     invoice,
@@ -49,6 +60,14 @@ export function calculateInsuranceDeclaration({
     operationalExpenses,
     insuredValue,
     costRatePercent: normalizedCostRate,
+    calculatedInsuranceCost,
+    calculatedInsuranceSale,
+    insuranceCostMinimumApplied:
+      calculatedInsuranceCost > 0 &&
+      calculatedInsuranceCost <= INSURANCE_MINIMUM_CHARGE_USD,
+    insuranceSaleMinimumApplied:
+      calculatedInsuranceSale > 0 &&
+      calculatedInsuranceSale <= INSURANCE_MINIMUM_CHARGE_USD,
     insuranceCost,
     insuranceSale,
   }
