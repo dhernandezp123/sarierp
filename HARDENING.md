@@ -2,8 +2,8 @@
 
 ### 2026-09-28 - FLOW-034 - Shipping Instruction conserva contexto tras guardar
 
-- Estado: corrección implementada y validada localmente; UAT autenticado
-  pendiente.
+- Estado: corrección implementada, validada y desplegada en Production; UAT
+  autenticado pendiente.
 - Hallazgo:
   - Los RPC de guardado y transición devolvían correctamente la fila actualizada
     de `shipping_instructions`, pero esa fila física no incluye las relaciones
@@ -39,7 +39,18 @@
     visibles sin usar `Actualizar desde Pricing`.
   - La sincronización manual desde Pricing se conserva para repricing real; ya no
     es necesaria como recuperación visual después del guardado.
-- Commit: pendiente.
+- Postflight Production:
+  - Commit funcional `5b3694b` publicado en `main` y en
+    `feat/multi-tenant-domains`.
+  - GitHub Production `6720835910` y Vercel
+    `dpl_BuKZjt751xMpZhDb4Ah8CQ8W1rux` reportan
+    `success / Deployment has completed` y `Ready`.
+  - URL inmutable:
+    `https://sarierp-fdvlamsoi-claudherhn-5641s-projects.vercel.app`.
+  - Smoke público de solo lectura: `https://sari.forwarders.app/login` responde
+    `200`; `/operations/shipping-instructions` responde `307` al login y conserva
+    la ruta de retorno.
+- Commit: `5b3694b` (`fix: preserve shipping instruction context after save`).
 
 ### 2026-09-28 - INS-028 - Cargo mínimo de seguro de USD 75.00
 
