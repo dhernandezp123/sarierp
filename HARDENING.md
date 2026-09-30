@@ -9610,8 +9610,8 @@ Agregar una entrada por fix:
 
 ### 2026-09-30 - FLOW-035 - Conservación de servicios al cambiar tarifa aérea
 
-- Estado: implementado, validado localmente y migrado en Production; publicación
-  frontend y UAT autenticado pendientes.
+- Estado: implementado, validado, migrado y desplegado en Production; UAT
+  autenticado pendiente.
 - Hallazgo: al cambiar una tarifa ya seleccionada en una cotización Aéreo
   Consolidado, la RPC de selección eliminaba todas las líneas de venta y solo
   recreaba flete/EXW. Se perdían cargos de servicio, IDs, venta, impuestos y
@@ -9649,5 +9649,14 @@ Agregar una entrada por fix:
 - Riesgos / trabajo pendiente:
   - UAT autenticado: cambiar entre dos tarifas de Aéreo Consolidado con cargos
     de servicio y verificar selección única, importes comerciales y PDF.
-  - Publicar el cambio frontend en Vercel y ejecutar smoke HTTP público.
-  - No hay hash de commit disponible.
+- Postflight Production:
+  - Commit funcional `a688c19` publicado en `origin/main`.
+  - GitHub Production `6767287257` y Vercel reportan
+    `success / Deployment has completed`.
+  - URL inmutable:
+    `https://sarierp-awjwk4ebl-claudherhn-5641s-projects.vercel.app`.
+  - Smoke público de solo lectura: `https://sari.forwarders.app/login` responde
+    `200`; `/pricing-comparison` responde `307` hacia
+    `/login?next=%2Fpricing-comparison`; `https://forwarders.app/` responde `200`.
+- Commit de implementación y despliegue: `a688c19`. Registro de publicación en
+  commit documental posterior.
