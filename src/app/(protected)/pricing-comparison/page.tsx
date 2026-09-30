@@ -1341,9 +1341,14 @@ function PricingComparisonContent() {
       selectedAgentQuote = data
     }
 
+    const shouldPreserveExistingPricing =
+      pricingItems.length > 0 &&
+      (normalizeText(selectedQuote.quote_type) === 'fcl' ||
+        (isAirConsolidatedQuote() &&
+          agentQuotes.some((quote) => isSelectedQuote(quote))))
     const reason = await requestChangeReason(
-      normalizeText(selectedQuote.quote_type) === 'fcl' && pricingItems.length > 0
-        ? 'Actualizar costos FCL conservando venta'
+      shouldPreserveExistingPricing
+        ? 'Actualizar costos conservando venta'
         : 'Regenerar pricing'
     )
 

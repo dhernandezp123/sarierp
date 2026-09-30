@@ -9607,3 +9607,47 @@ Agregar una entrada por fix:
   - Los prefijos visibles existentes de Sari se conservaron deliberadamente;
     la experiencia visual y resolución por hostname pertenecen a la Fase 7.
   - No hay hash de commit disponible.
+
+### 2026-09-30 - FLOW-035 - Conservación de servicios al cambiar tarifa aérea
+
+- Estado: implementado, validado localmente y migrado en Production; publicación
+  frontend y UAT autenticado pendientes.
+- Hallazgo: al cambiar una tarifa ya seleccionada en una cotización Aéreo
+  Consolidado, la RPC de selección eliminaba todas las líneas de venta y solo
+  recreaba flete/EXW. Se perdían cargos de servicio, IDs, venta, impuestos y
+  notas ya registrados.
+- Archivos:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `supabase/tests/air_consolidated_agent_selection.sql`.
+- SQL:
+  - `supabase/migrations/20260930120000_preserve_air_consolidated_pricing.sql`.
+- Cambios:
+  - La RPC atómica conserva las líneas existentes de Aéreo Consolidado cuando
+    ya había una tarifa seleccionada, igual que el resguardo vigente de FCL.
+  - Solo actualiza costo y proveedor de la línea canónica de flete; mantiene
+    IDs, precios de venta, cantidades, impuestos, totales, notas y servicios,
+    incluso si un servicio adicional está clasificado como `Flete`.
+  - Una primera selección sin tarifa previa conserva el flujo de generación
+    inicial. Coincidencias ambiguas o incompatibles abortan toda la transacción.
+  - La UI registra el cambio como actualización conservando venta en vez de
+    describirlo como regeneración de pricing.
+- Validaciones ejecutadas:
+  - `npx.cmd tsc --noEmit`: exitoso.
+  - `npm.cmd test`: 154/154 pruebas exitosas.
+  - `npm.cmd run build`: exitoso, 76/76 páginas generadas.
+  - ESLint dirigido: 33 errores y 5 advertencias preexistentes; el resultado es
+    idéntico contra `HEAD` y el cambio no agrega hallazgos.
+  - `git diff --check`: exitoso.
+  - Migración aplicada en Supabase local; `db lint --local --level warning` sin
+    errores de esquema.
+  - Prueba SQL transaccional `air_consolidated_agent_selection.sql`: exitosa y
+    finalizada con `ROLLBACK`. Verifica tres líneas intactas, actualización
+    exclusiva de costo/proveedor, selección única y rollback ante incompatibilidad.
+  - Migración `20260930120000` aplicada al proyecto Supabase remoto vinculado;
+    historial local/remoto alineado y postflight `db push --linked --dry-run`:
+    base remota al día.
+- Riesgos / trabajo pendiente:
+  - UAT autenticado: cambiar entre dos tarifas de Aéreo Consolidado con cargos
+    de servicio y verificar selección única, importes comerciales y PDF.
+  - Publicar el cambio frontend en Vercel y ejecutar smoke HTTP público.
+  - No hay hash de commit disponible.
