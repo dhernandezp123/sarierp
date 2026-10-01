@@ -1,8 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronLeft, AlertTriangle, Search } from 'lucide-react'
+import Link from 'next/link'
+import { PortalConfirmation } from '@/src/components/portal/PortalConfirmation'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
+import { ChevronLeft, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
@@ -30,22 +33,26 @@ export default function NuevaIncidenciaPage() {
   const preselectedId = searchParams.get('packageId')
 
   const [packages, setPackages] = useState<PackageOption[]>([])
-  const [pkgSearch, setPkgSearch] = useState('')
   const [selectedPkg, setSelectedPkg] = useState<PackageOption | null>(null)
-  const [showPkgList, setShowPkgList] = useState(false)
   const [tipo, setTipo] = useState('')
   const [descripcion, setDescripcion] = useState('')
+  const [sent, setSent] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const loadPackages = async (clientId: string) => {
-    const { data } = await supabase
+  const loadPackages = useCallback(async (clientId: string) => {
+    setLoadError(false)
+    setLoading(true)
+    try {
+    const { data, error } = await supabase
       .from('miami_packages')
       .select('id, tracking_number, warehouse_number, carrier, status')
       .eq('cliente_id', clientId)
       .neq('status', 'Entregado')
       .order('received_at', { ascending: false })
 
+    if (error) throw error
     const pkgs = (data ?? []) as PackageOption[]
     setPackages(pkgs)
 
@@ -53,25 +60,22 @@ export default function NuevaIncidenciaPage() {
       const found = pkgs.find(p => p.id === preselectedId)
       if (found) setSelectedPkg(found)
     }
-    setLoading(false)
-  }
+    } catch { setLoadError(true) } finally { setLoading(false) }
+  }, [preselectedId])
 
   useEffect(() => {
     const clientId = profile?.cliente_id
     if (!clientId) return
     const timeout = window.setTimeout(() => void loadPackages(clientId), 0)
     return () => window.clearTimeout(timeout)
-  }, [profile?.cliente_id])
+  }, [profile?.cliente_id, loadPackages])
 
-  const filteredPkgs = pkgSearch.trim()
-    ? packages.filter(p =>
-        p.tracking_number.toLowerCase().includes(pkgSearch.toLowerCase()) ||
-        (p.warehouse_number ?? '').toLowerCase().includes(pkgSearch.toLowerCase())
-      )
-    : packages
+
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saving) return
     if (!profile?.cliente_id) { toast.error('No se encontró el cliente asociado'); return }
     if (!selectedPkg) { toast.error('Selecciona un paquete'); return }
     if (!tipo)         { toast.error('Selecciona el tipo de problema'); return }
@@ -90,13 +94,14 @@ export default function NuevaIncidenciaPage() {
       if (error) throw error
 
       // Update package status
-      await supabase
+      const { error: statusError } = await supabase
         .from('miami_packages')
         .update({ status: 'Con incidencia' })
         .eq('id', selectedPkg.id)
 
-      toast.success('Incidencia reportada. Te contactaremos pronto.')
-      router.replace('/portal/incidencias')
+      if (statusError) toast.warning('El caso fue registrado. El estado del paquete queda pendiente de actualizar; no necesitas enviarlo otra vez.')
+      else toast.success('Incidencia registrada')
+      setSent(true)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Error al reportar')
     } finally {
@@ -106,12 +111,14 @@ export default function NuevaIncidenciaPage() {
 
   const fieldClass = 'h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-950'
 
+  if (sent) return <PortalConfirmation title="Incidencia registrada" description="Puedes consultar el estado y la respuesta del equipo en Incidencias. Conserva el tracking para cualquier consulta." reference={selectedPkg?.tracking_number} href="/portal/incidencias" />
+  if (loadError) return <PortalError onRetry={() => profile?.cliente_id && void loadPackages(profile.cliente_id)} />
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          aria-label="Volver" onClick={() => router.push('/portal/incidencias')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -129,56 +136,7 @@ export default function NuevaIncidenciaPage() {
             ¿Con cuál paquete tienes el problema? <span className="text-red-500">*</span>
           </label>
 
-          {selectedPkg ? (
-            <div className="flex items-start justify-between rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
-              <div>
-                <p className="font-mono text-sm font-semibold text-slate-900 dark:text-white">{selectedPkg.tracking_number}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {selectedPkg.carrier ?? 'Sin carrier'}
-                  {selectedPkg.warehouse_number && <span> · WH: {selectedPkg.warehouse_number}</span>}
-                </p>
-              </div>
-              <button type="button" onClick={() => { setSelectedPkg(null); setPkgSearch('') }} className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
-                Cambiar
-              </button>
-            </div>
-          ) : (
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={pkgSearch}
-                onChange={e => { setPkgSearch(e.target.value); setShowPkgList(true) }}
-                onFocus={() => setShowPkgList(true)}
-                placeholder="Buscar por tracking o WH#..."
-                className={`${fieldClass} pl-9`}
-                autoFocus={!preselectedId}
-              />
-              {showPkgList && (
-                <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                  {loading ? (
-                    <div className="p-3 text-xs text-slate-400">Cargando...</div>
-                  ) : filteredPkgs.length === 0 ? (
-                    <div className="p-3 text-xs text-slate-400">Sin paquetes disponibles</div>
-                  ) : (
-                    filteredPkgs.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => { setSelectedPkg(p); setShowPkgList(false); setPkgSearch('') }}
-                        className="flex w-full flex-col items-start px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800"
-                      >
-                        <p className="font-mono text-sm font-semibold text-slate-900 dark:text-white">{p.tracking_number}</p>
-                        <p className="text-xs text-slate-400">
-                          {p.carrier ?? 'Sin carrier'}
-                          {p.warehouse_number && ` · WH: ${p.warehouse_number}`}
-                        </p>
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          <select id="incident-package" aria-label="Paquete relacionado" value={selectedPkg?.id || ''} onChange={event => setSelectedPkg(packages.find(pkg => pkg.id === event.target.value) || null)} required disabled={loading} className={fieldClass}><option value="">{loading ? 'Cargando paquetes…' : 'Selecciona un paquete'}</option>{packages.map(pkg => <option key={pkg.id} value={pkg.id}>{pkg.tracking_number} · {pkg.warehouse_number || pkg.carrier}</option>)}</select><Link href="/portal/contacto" className="mt-3 block text-xs font-semibold text-blue-600 dark:text-blue-400">¿El paquete ya fue entregado o no aparece? Contactar al equipo</Link>
         </div>
 
         {/* Tipo de problema */}
@@ -191,6 +149,7 @@ export default function NuevaIncidenciaPage() {
               <button
                 key={t}
                 type="button"
+                aria-pressed={tipo === t}
                 onClick={() => setTipo(t)}
                 className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium text-left transition ${
                   tipo === t
@@ -210,7 +169,7 @@ export default function NuevaIncidenciaPage() {
           <label className="mb-3 block text-sm font-semibold text-slate-900 dark:text-white">
             Describe el problema con detalle <span className="text-red-500">*</span>
           </label>
-          <textarea
+          <textarea aria-label="Descripción del problema"
             value={descripcion}
             onChange={e => setDescripcion(e.target.value)}
             rows={4}
@@ -221,6 +180,7 @@ export default function NuevaIncidenciaPage() {
           <p className="mt-2 text-xs text-slate-400">Mientras más detalles des, más rápido podemos ayudarte.</p>
         </div>
 
+        <Link href="/portal/contacto" className="block text-sm font-semibold text-blue-600 dark:text-blue-400">Canales para enviar fotos al equipo</Link>
         {/* Note about photos */}
         <div className="rounded-2xl border border-amber-100 bg-amber-50 px-5 py-4 dark:border-amber-900/30 dark:bg-amber-950/20">
           <p className="text-sm text-amber-800 dark:text-amber-200">
@@ -231,7 +191,7 @@ export default function NuevaIncidenciaPage() {
         <div className="flex justify-end gap-3">
           <button
             type="button"
-            onClick={() => router.back()}
+            aria-label="Volver" onClick={() => router.push('/portal/incidencias')}
             className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             Cancelar
@@ -239,7 +199,7 @@ export default function NuevaIncidenciaPage() {
           <button
             type="submit"
             disabled={saving || !selectedPkg || !tipo || !descripcion.trim()}
-            className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? 'Enviando...' : 'Reportar problema'}
           </button>

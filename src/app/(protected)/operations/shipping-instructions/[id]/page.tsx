@@ -10,7 +10,6 @@ import {
 } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
-import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
 import { aggregateBookingStatus as deriveBookingAggregateStatus } from '@/src/lib/booking-status'
@@ -20,6 +19,8 @@ import {
 } from '@/src/lib/shipment-service'
 import { primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
+import { SectionNav } from '@/src/components/ui/SectionNav'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import ShippingInstructionOrderPDF from '@/src/components/pdf/shipping-instruction-order-pdf'
 import {
@@ -34,6 +35,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import { mergeShippingInstructionMutation } from '@/src/lib/shipping-instruction-state'
+import { formatDate } from '@/src/lib/format'
+import { operationsReturnHref } from '@/src/lib/operations-navigation'
 
 type OperationsUser = {
   id: string
@@ -79,6 +83,24 @@ const SI_PENDING_VALIDATION = 'Pendiente Validación'
 const SI_VALIDATED = 'Validada'
 const SI_CANCELLED = 'Cancelada'
 
+function isShippingInstructionVersionConflict(error: {
+  code?: string
+  message?: string
+}) {
+  return (
+    error.code === '40001' ||
+    error.message?.includes('SHIPPING_INSTRUCTION_VERSION_CONFLICT')
+  )
+}
+
+const shippingInstructionSections = [
+  { href: '#si-overview' as const, label: 'Resumen' },
+  { href: '#si-bookings' as const, label: 'Bookings' },
+  { href: '#si-information' as const, label: 'Información' },
+  { href: '#si-actions' as const, label: 'Acciones' },
+  { href: '#si-timeline' as const, label: 'Timeline' },
+]
+
 type ShippingInstruction = {
   id: string
   routing_number: string
@@ -87,8 +109,13 @@ type ShippingInstruction = {
   operational_status: string | null
   created_by: string | null
   operations_assigned_to: string | null
+  operations_accepted_at: string | null
+  operations_accepted_by: string | null
   quotation_id?: string | null
+  // Compatibility shape consumed by the existing PDF and legacy detail fields.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cliente?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   quotation?: any
   quotation_number?: string | null
   client_name?: string | null
@@ -199,13 +226,7 @@ function InfoContent({ label, children }: { label: string; children: ReactNode }
 }
 
 function formatDisplayDate(date?: string | null) {
-  if (!date) return 'N/A'
-
-  return new Intl.DateTimeFormat('es-HN', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(date))
+  return formatDate(date, 'N/A')
 }
 
 function formatContainerSummary(routing: ShippingInstruction) {
@@ -368,6 +389,7 @@ function formatOperationalEvent(event: OperationalTimelineEvent) {
     shipping_instruction_updated: { icon: '🚢', title: 'Información operativa actualizada' },
     shipping_instruction_validated: { icon: '✅', title: 'SI validada por Operaciones' },
     shipping_instruction_assigned: { icon: '👤', title: 'Operativo asignado' },
+    shipping_instruction_accepted: { icon: '✅', title: 'Expediente aceptado por Operaciones' },
     shipping_instruction_finalized: { icon: '🚢', title: 'Shipping Instruction finalizada' },
     shipping_instruction_cancelled: { icon: '🚫', title: 'Shipping Instruction cancelada' },
     booking_created: { icon: '📦', title: 'Booking creado' },
@@ -394,11 +416,18 @@ export default function RoutingDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const id = params.id
+  const returnHref = typeof window === 'undefined'
+    ? '/operations/shipping-instructions'
+    : operationsReturnHref(
+        new URLSearchParams(window.location.search).get('returnTo')
+      )
   const bookingsSectionRef = useRef<HTMLElement | null>(null)
   const { user, profile, loading: userLoading } = useUser()
 
   const [routing, setRouting] = useState<ShippingInstruction | null>(null)
   const [shipmentContext, setShipmentContext] = useState<ShipmentContext | null>(null)
+  // Selected agent quotes still expose legacy columns without a generated type.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [operationalEvents, setOperationalEvents] = useState<OperationalTimelineEvent[]>([])
@@ -407,6 +436,7 @@ export default function RoutingDetailPage() {
   const [operationsUsers, setOperationsUsers] = useState<OperationsUser[]>([])
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
+  const [accepting, setAccepting] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [creatingBooking, setCreatingBooking] = useState(false)
@@ -417,6 +447,13 @@ export default function RoutingDetailPage() {
   const [loading, setLoading] = useState(true)
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
+
+  const bookingDetailHref = (targetBookingId: string) => {
+    const path = `/operations/shipping-instructions/${id}/bookings/${targetBookingId}`
+    return returnHref.startsWith('/operations/dashboard')
+      ? `${path}?returnTo=${encodeURIComponent(returnHref)}`
+      : path
+  }
 
   const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
   const canViewRouting =
@@ -436,15 +473,21 @@ export default function RoutingDetailPage() {
       routing?.shipment_status !== SI_CANCELLED &&
       routing?.operational_status !== SI_CANCELLED) ||
     canSalesEditInitialInfo
-
-  const parseIntegerValue = (value: unknown) => {
-    if (value === null || value === undefined || value === '') return null
-
-    const numericValue = Number(value)
-    if (!Number.isFinite(numericValue)) return null
-
-    return Math.trunc(numericValue)
-  }
+  const assignedOperationsUser = operationsUsers.find(
+    (operationsUser) => operationsUser.id === routing?.operations_assigned_to
+  )
+  const assignedOperationsName = assignedOperationsUser
+    ? `${assignedOperationsUser.nombre || ''} ${assignedOperationsUser.apellido || ''}`.trim()
+      || assignedOperationsUser.email
+      || 'Operativo asignado'
+    : routing?.operations_assigned_to
+      ? 'Operativo asignado'
+      : 'Sin asignar'
+  const canAcceptHandoff =
+    profile?.rol === 'Operaciones' &&
+    Boolean(routing?.sales_submitted_at) &&
+    !routing?.operations_accepted_at &&
+    (!routing?.operations_assigned_to || routing.operations_assigned_to === user?.id)
 
   const loadRouting = async () => {
     // TODO: Reforzar esta misma regla en Supabase RLS para shipping_instructions.
@@ -629,6 +672,8 @@ export default function RoutingDetailPage() {
     }
 
     timelineEvents.push(
+      // Supabase returns this legacy event table without generated row types.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...(shippingEventsData || []).map((event: any) => ({
         id: `shipping-event-${event.id}`,
         source: 'shipping_instruction_events' as const,
@@ -670,6 +715,8 @@ export default function RoutingDetailPage() {
         // timeline continues without activity logs
       }
 
+      // The embedded profile relation is polymorphic in the generated response.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const activityTimelineEvents = (activityLogsData || []).map((log: any) => {
           const profile = Array.isArray(log.created_by_profile)
             ? log.created_by_profile[0] || null
@@ -746,59 +793,66 @@ export default function RoutingDetailPage() {
 
     setSaving(true)
 
-    const { error } = await supabase
-      .from('shipping_instructions')
-      .update({
-        supplier_name: routing.supplier_name,
-        supplier_contact: routing.supplier_contact,
-        supplier_email: routing.supplier_email,
-        supplier_phone: routing.supplier_phone,
-        supplier_address: routing.supplier_address,
+    const { data, error } = await supabase.rpc(
+      'save_shipping_instruction_operations_details',
+      {
+        p_shipping_instruction_id: routing.id,
+        p_expected_updated_at: routing.updated_at,
+        p_changes: {
+          supplier_name: routing.supplier_name,
+          supplier_contact: routing.supplier_contact,
+          supplier_email: routing.supplier_email,
+          supplier_phone: routing.supplier_phone,
+          supplier_address: routing.supplier_address,
 
-        freight_terms: routing.freight_terms,
-        release_type: routing.release_type,
-        hbl_freight_visibility: routing.hbl_freight_visibility,
-        printed_at_destination: routing.printed_at_destination,
-        insurance_requested: routing.insurance_requested,
+          freight_terms: routing.freight_terms,
+          release_type: routing.release_type,
+          hbl_freight_visibility: routing.hbl_freight_visibility,
+          printed_at_destination: routing.printed_at_destination,
+          insurance_requested: routing.insurance_requested,
 
-        shipper: routing.shipper,
-        consignee: routing.consignee,
-        consignee_tax_id: routing.consignee_tax_id,
-        consignee_address: routing.consignee_address,
-        consignee_contact: routing.consignee_contact,
-        consignee_email: routing.consignee_email,
-        consignee_phone: routing.consignee_phone,
+          shipper: routing.shipper,
+          consignee: routing.consignee,
+          consignee_tax_id: routing.consignee_tax_id,
+          consignee_address: routing.consignee_address,
+          consignee_contact: routing.consignee_contact,
+          consignee_email: routing.consignee_email,
+          consignee_phone: routing.consignee_phone,
 
-        notify_party: routing.notify_party,
-        notify_party_tax_id: routing.notify_party_tax_id,
-        notify_party_address: routing.notify_party_address,
-        notify_party_contact: routing.notify_party_contact,
-        notify_party_email: routing.notify_party_email,
-        notify_party_phone: routing.notify_party_phone,
+          notify_party: routing.notify_party,
+          notify_party_tax_id: routing.notify_party_tax_id,
+          notify_party_address: routing.notify_party_address,
+          notify_party_contact: routing.notify_party_contact,
+          notify_party_email: routing.notify_party_email,
+          notify_party_phone: routing.notify_party_phone,
 
-        sales_observations: routing.sales_observations,
+          sales_observations: routing.sales_observations,
 
-        special_instructions: routing.special_instructions,
-      })
-      .eq('id', routing.id)
+          special_instructions: routing.special_instructions,
+        },
+      }
+    )
 
     setSaving(false)
 
     if (error) {
-      toast.error(error.message || 'No se pudieron guardar las Shipping Instructions')
+      toast.error(
+        isShippingInstructionVersionConflict(error)
+          ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de guardar.'
+          : error.message || 'No se pudieron guardar las Shipping Instructions'
+      )
       return
     }
 
-    await createActivityLog({
-      module: 'operations_routing',
-      action: 'shipping_instruction_updated',
-      entityType: 'shipping_instruction',
-      entityId: routing.id,
-      description: `Shipping Instructions ${routing.routing_number} actualizadas`,
-      metadata: {
-        updated_by: user?.id,
-      },
-    })
+    const result = data as {
+      shipping_instruction?: ShippingInstruction
+    } | null
+
+    if (result?.shipping_instruction) {
+      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+    } else {
+      await loadRouting()
+    }
 
     toast.success('Shipping Instructions actualizadas')
   }
@@ -812,33 +866,44 @@ export default function RoutingDetailPage() {
 
     setSaving(true)
 
-    const updateData: Record<string, any> = {
-      supplier_name: routing.supplier_name,
-      supplier_contact: routing.supplier_contact,
-      supplier_email: routing.supplier_email,
-      supplier_phone: routing.supplier_phone,
-      supplier_address: routing.supplier_address,
-      sales_observations: routing.sales_observations,
-    }
-
-    if (submitToOperations) {
-      updateData.sales_submitted_at = new Date().toISOString()
-      updateData.operational_status = SI_PENDING_VALIDATION
-    }
-
-    const { error } = await supabase
-      .from('shipping_instructions')
-      .update(updateData)
-      .eq('id', routing.id)
+    const { data, error } = await supabase.rpc(
+      'save_shipping_instruction_sales_initial',
+      {
+        p_shipping_instruction_id: routing.id,
+        p_expected_updated_at: routing.updated_at,
+        p_changes: {
+          supplier_name: routing.supplier_name,
+          supplier_contact: routing.supplier_contact,
+          supplier_email: routing.supplier_email,
+          supplier_phone: routing.supplier_phone,
+          supplier_address: routing.supplier_address,
+          sales_observations: routing.sales_observations,
+          special_instructions: routing.special_instructions,
+        },
+        p_submit_to_operations: submitToOperations,
+      }
+    )
 
     setSaving(false)
 
     if (error) {
-      toast.error(error.message || 'No se pudo guardar la información inicial')
+      toast.error(
+        isShippingInstructionVersionConflict(error)
+          ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de guardar.'
+          : error.message || 'No se pudo guardar la información inicial'
+      )
       return
     }
 
-    await loadRouting()
+    const result = data as {
+      shipping_instruction?: ShippingInstruction
+    } | null
+
+    if (result?.shipping_instruction) {
+      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+    } else {
+      await loadRouting()
+    }
     toast.success(
       submitToOperations
         ? 'Información enviada a Operaciones'
@@ -854,18 +919,6 @@ export default function RoutingDetailPage() {
     }
     if (routing.shipment_status === SI_CANCELLED || routing.operational_status === SI_CANCELLED) {
       toast.error('Esta Shipping Instruction está cancelada')
-      return
-    }
-
-    setValidating(true)
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      toast.error('No se pudo validar el usuario')
-      setValidating(false)
       return
     }
 
@@ -885,33 +938,28 @@ export default function RoutingDetailPage() {
       setValidating(false)
       return
     }
+    if (!routing.operations_accepted_at || !routing.operations_accepted_by) {
+      toast.error('Acepta formalmente el expediente antes de validarlo')
+      return
+    }
 
-    const validatedAt = new Date().toISOString()
+    setValidating(true)
 
-    const { error } = await supabase
-      .from('shipping_instructions')
-      .update({
-        shipment_status: SI_VALIDATED,
-        operational_status: SI_READY_FOR_BOOKING,
-        validated_at: validatedAt,
-        validated_by: user.id,
-      })
-      .eq('id', routing.id)
+    const { data, error } = await supabase.rpc('validate_shipping_instruction', {
+      p_shipping_instruction_id: routing.id,
+      p_expected_updated_at: routing.updated_at,
+    })
 
     setValidating(false)
 
     if (error) {
-      toast.error('No se pudo validar la Shipping Instruction')
+      toast.error(
+        isShippingInstructionVersionConflict(error)
+          ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de validar.'
+          : error.message || 'No se pudo validar la Shipping Instruction'
+      )
       return
     }
-
-    await createActivityLog({
-      module: 'operations_routing',
-      action: 'shipping_instruction_validated',
-      entityType: 'shipping_instruction',
-      entityId: routing.id,
-      description: `Shipping Instructions ${routing.routing_number} validadas`,
-    })
 
     if (routing.created_by) {
       await createNotification({
@@ -922,15 +970,52 @@ export default function RoutingDetailPage() {
       })
     }
 
-    setRouting({
-      ...routing,
-      shipment_status: SI_VALIDATED,
-      operational_status: SI_READY_FOR_BOOKING,
-      validated_at: validatedAt,
-      validated_by: user.id,
-    })
+    const result = data as {
+      shipping_instruction?: ShippingInstruction
+    } | null
+
+    if (result?.shipping_instruction) {
+      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+    } else {
+      await loadRouting()
+    }
 
     toast.success('Shipping Instructions listas para booking')
+  }
+
+  const acceptOperationsHandoff = async () => {
+    if (!routing || !canAcceptHandoff) return
+
+    setAccepting(true)
+    const { data, error } = await supabase.rpc(
+      'accept_shipping_instruction_handoff',
+      {
+        p_shipping_instruction_id: routing.id,
+        p_expected_updated_at: routing.updated_at,
+      }
+    )
+    setAccepting(false)
+
+    if (error) {
+      toast.error(
+        isShippingInstructionVersionConflict(error)
+          ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de aceptar.'
+          : error.message || 'No se pudo aceptar el expediente'
+      )
+      return
+    }
+
+    const result = data as {
+      shipping_instruction?: ShippingInstruction
+    } | null
+
+    if (result?.shipping_instruction) {
+      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+    } else {
+      await loadRouting()
+    }
+    await loadOperationalTimeline(routing, bookings)
+    toast.success('Expediente aceptado; ahora puedes validarlo')
   }
 
   const assignOperationsUser = async (userId: string) => {
@@ -943,31 +1028,22 @@ export default function RoutingDetailPage() {
 
     setAssigning(true)
 
-    const { error } = await supabase
-      .from('shipping_instructions')
-      .update({
-        operations_assigned_to: userId || null,
-        operational_status: userId ? 'Asignado' : SI_PENDING_VALIDATION,
-      })
-      .eq('id', routing.id)
+    const { data, error } = await supabase.rpc('assign_shipping_instruction', {
+      p_shipping_instruction_id: routing.id,
+      p_operations_user_id: userId || null,
+      p_expected_updated_at: routing.updated_at,
+    })
 
     setAssigning(false)
 
     if (error) {
-      toast.error('No se pudo asignar el operativo')
+      toast.error(
+        isShippingInstructionVersionConflict(error)
+          ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de asignar.'
+          : error.message || 'No se pudo asignar el operativo'
+      )
       return
     }
-
-    await createActivityLog({
-      module: 'operations_routing',
-      action: 'shipping_instruction_assigned',
-      entityType: 'shipping_instruction',
-      entityId: routing.id,
-      description: `Shipping Instructions ${routing.routing_number} asignadas a operaciones`,
-      metadata: {
-        assigned_to: userId,
-      },
-    })
 
     if (userId) {
       await createNotification({
@@ -978,11 +1054,15 @@ export default function RoutingDetailPage() {
       })
     }
 
-    setRouting({
-      ...routing,
-      operations_assigned_to: userId || null,
-      operational_status: userId ? 'Asignado' : SI_PENDING_VALIDATION,
-    })
+    const result = data as {
+      shipping_instruction?: ShippingInstruction
+    } | null
+
+    if (result?.shipping_instruction) {
+      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+    } else {
+      await loadRouting()
+    }
 
     toast.success('Operativo asignado')
   }
@@ -1028,14 +1108,14 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting(result.shipping_instruction)
+      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
     } else {
       await loadRouting()
     }
     setShipmentContext(await loadShipmentContext(routing.id))
     await loadOperationalTimeline(routing, bookings)
 
-    toast.success('Shipping Instruction finalizada')
+    toast.success('Operación finalizada; Finanzas ya puede revisar costos')
   }
 
   const cancelRouting = async () => {
@@ -1070,53 +1150,35 @@ export default function RoutingDetailPage() {
 
     setCancelling(true)
 
-    const previousShipmentStatus = routing.shipment_status
-    const previousOperationalStatus = routing.operational_status
-
-    const { error } = await supabase
-      .from('shipping_instructions')
-      .update({
-        shipment_status: SI_CANCELLED,
-        operational_status: SI_CANCELLED,
-      })
-      .eq('id', routing.id)
+    const { data, error } = await supabase.rpc('cancel_shipping_instruction', {
+      p_shipping_instruction_id: routing.id,
+      p_expected_updated_at: routing.updated_at,
+      p_reason: reason,
+    })
 
     setCancelling(false)
 
     if (error) {
-      toast.error(error.message || 'No se pudo cancelar la Shipping Instruction')
+      toast.error(
+        isShippingInstructionVersionConflict(error)
+          ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de cancelar.'
+          : error.message || 'No se pudo cancelar la Shipping Instruction'
+      )
       return
     }
 
-    await createActivityLog({
-      module: 'operations_routing',
-      action: 'shipping_instruction_cancelled',
-      entityType: 'shipping_instruction',
-      entityId: routing.id,
-      description: `Shipping Instruction ${routing.routing_number} cancelada`,
-      metadata: {
-        routing_number: routing.routing_number,
-        previous_shipment_status: previousShipmentStatus,
-        previous_operational_status: previousOperationalStatus,
-        reason,
-        cancelled_by: user?.id,
-      },
-    })
+    const result = data as {
+      shipping_instruction?: ShippingInstruction
+    } | null
+    const updatedRouting = result?.shipping_instruction || routing
 
-    await recordOperationalEvent({
-      eventType: 'Shipping Instruction cancelada',
-      notes: `Shipping Instruction ${routing.routing_number} cancelada. Motivo: ${reason}`,
-      metadata: {
-        routing_number: routing.routing_number,
-        reason,
-      },
-    })
-
-    setRouting({
-      ...routing,
-      shipment_status: SI_CANCELLED,
-      operational_status: SI_CANCELLED,
-    })
+    if (result?.shipping_instruction) {
+      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+    } else {
+      await loadRouting()
+    }
+    setShipmentContext(await loadShipmentContext(routing.id))
+    await loadOperationalTimeline(updatedRouting, bookings)
     setCancelDialogOpen(false)
     setCancelReason('')
     toast.success('Shipping Instruction cancelada')
@@ -1169,7 +1231,7 @@ export default function RoutingDetailPage() {
     const newBooking = await createBookingChild()
     if (!routing || !newBooking) return
 
-    router.push(`/operations/shipping-instructions/${routing.id}/bookings/${newBooking.id}`)
+    router.push(bookingDetailHref(newBooking.id))
   }
 
   const handleOpenBooking = async () => {
@@ -1180,7 +1242,7 @@ export default function RoutingDetailPage() {
     }
 
     if (bookings.length === 1) {
-      router.push(`/operations/shipping-instructions/${routing.id}/bookings/${bookings[0].id}`)
+      router.push(bookingDetailHref(bookings[0].id))
       return
     }
 
@@ -1193,7 +1255,7 @@ export default function RoutingDetailPage() {
     const newBooking = await createBookingChild()
     if (!newBooking) return
 
-    router.push(`/operations/shipping-instructions/${routing.id}/bookings/${newBooking.id}`)
+    router.push(bookingDetailHref(newBooking.id))
   }
 
   const handlePrintRoutingPdf = async () => {
@@ -1222,21 +1284,26 @@ export default function RoutingDetailPage() {
   }
 
   useEffect(() => {
-    loadRouting()
-    loadBookings()
-  }, [id])
+    const timer = window.setTimeout(() => {
+      void loadRouting()
+      void loadBookings()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps -- Loaders refresh only when the route identity changes.
 
   useEffect(() => {
-    if (canManageRouting) {
-      loadOperationsUsers()
-    }
+    if (!canManageRouting) return
+    const timer = window.setTimeout(() => { void loadOperationsUsers() }, 0)
+    return () => window.clearTimeout(timer)
   }, [canManageRouting])
 
   useEffect(() => {
-    if (routing) {
-      loadOperationalTimeline(routing, bookings)
-    }
-  }, [routing?.id, routing?.quotation_id, routing?.routing_number, bookings.map((booking) => booking.id).join('|')])
+    if (!routing) return
+    const timer = window.setTimeout(() => {
+      void loadOperationalTimeline(routing, bookings)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [routing?.id, routing?.quotation_id, routing?.routing_number, bookings.map((booking) => booking.id).join('|')]) // eslint-disable-line react-hooks/exhaustive-deps -- Timeline identity is derived from stable row keys.
 
   if (loading || userLoading) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">Cargando Shipping Instructions...</p>
@@ -1347,7 +1414,12 @@ export default function RoutingDetailPage() {
     <div>
       <Breadcrumbs
         items={[
-          { label: 'Shipping Instructions', href: '/operations/shipping-instructions' },
+          {
+            label: returnHref.startsWith('/operations/dashboard')
+              ? 'Control Tower'
+              : 'Shipping Instructions',
+            href: returnHref,
+          },
           { label: routing.routing_number || 'Detalle' },
         ]}
       />
@@ -1363,6 +1435,16 @@ export default function RoutingDetailPage() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <CreateContextTaskDialog
+            context={{
+              entityType: 'shipping_instruction',
+              entityId: routing.id,
+              entityLabel: routing.routing_number || 'Shipping Instruction',
+              sourceModule: 'operations',
+              sourcePath: `/operations/shipping-instructions/${routing.id}`,
+            }}
+            suggestedTitle={`Revisar ${routing.routing_number || 'Shipping Instruction'}`}
+          />
           {canDownloadRoutingPdf && (
             <>
               <PDFDownloadLink
@@ -1411,6 +1493,7 @@ export default function RoutingDetailPage() {
 
           {canManageRouting && !isRoutingCancelled && (
             <select
+              aria-label="Asignar operativo"
               value={routing.operations_assigned_to || ''}
               onChange={(e) => assignOperationsUser(e.target.value)}
               disabled={assigning}
@@ -1425,6 +1508,13 @@ export default function RoutingDetailPage() {
             </select>
           )}
         </div>
+      </div>
+
+      <div className="mb-6">
+        <SectionNav
+          items={shippingInstructionSections}
+          label="Secciones de la Shipping Instruction"
+        />
       </div>
 
       {shipmentContext && (
@@ -1464,7 +1554,10 @@ export default function RoutingDetailPage() {
         </section>
       )}
 
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+      <section
+        id="si-overview"
+        className="mb-6 scroll-mt-28 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Datos de Cotización
@@ -1554,7 +1647,7 @@ export default function RoutingDetailPage() {
       </section>
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Info label="Estado operativo" value={routing.operational_status || 'N/A'} />
           <Info label="Estado embarque" value={routing.shipment_status || 'N/A'} />
           <Info
@@ -1567,12 +1660,53 @@ export default function RoutingDetailPage() {
                   : 'Pendiente'
             }
           />
+          <Info
+            label="Responsable operativo"
+            value={assignedOperationsName}
+          />
+          <Info
+            label="Aceptación de Operaciones"
+            value={
+              routing.operations_accepted_at
+                ? `Aceptado por ${assignedOperationsName} el ${formatDisplayDate(routing.operations_accepted_at)}`
+                : routing.sales_submitted_at
+                  ? 'Pendiente de aceptación'
+                  : 'Pendiente de envío por Ventas'
+            }
+          />
         </div>
+        {routing.sales_submitted_at && !routing.operations_accepted_at && canManageRouting && (
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold">Handoff pendiente</p>
+              <p className="mt-1">
+                El operativo responsable debe aceptar el expediente antes de validarlo o crear el booking.
+              </p>
+            </div>
+            {canAcceptHandoff ? (
+              <button
+                type="button"
+                onClick={acceptOperationsHandoff}
+                disabled={accepting}
+                className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
+              >
+                {accepting ? 'Aceptando...' : 'Aceptar expediente'}
+              </button>
+            ) : (
+              <span className="shrink-0 font-semibold">
+                {profile?.rol === 'Admin'
+                  ? 'Debe aceptarlo el operativo asignado.'
+                  : `Asignado a ${assignedOperationsName}.`}
+              </span>
+            )}
+          </div>
+        )}
       </section>
 
       <section
+        id="si-bookings"
         ref={bookingsSectionRef}
-        className="mb-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
+        className="mb-6 scroll-mt-28 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
       >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1620,7 +1754,12 @@ export default function RoutingDetailPage() {
           />
         </div>
 
-        <div className="mt-5 overflow-x-auto">
+        <div
+          className="mt-5 overflow-x-auto"
+          role="region"
+          aria-label="Bookings asociados"
+          tabIndex={bookings.length > 0 ? 0 : undefined}
+        >
           {bookings.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center dark:border-slate-700">
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
@@ -1644,16 +1783,16 @@ export default function RoutingDetailPage() {
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <tr>
-                  <th className="py-3 pr-4">Booking</th>
-                  <th className="pr-4">Carrier Booking</th>
-                  <th className="pr-4">Master BL</th>
-                  <th className="pr-4">House BL</th>
-                  <th className="pr-4">Estado</th>
-                  <th className="pr-4">ETD</th>
-                  <th className="pr-4">ETA</th>
-                  <th className="pr-4">Dias libres</th>
-                  <th className="pr-4">Contenedores</th>
-                  <th></th>
+                  <th scope="col" className="py-3 pr-4">Booking</th>
+                  <th scope="col" className="pr-4">Carrier Booking</th>
+                  <th scope="col" className="pr-4">Master BL</th>
+                  <th scope="col" className="pr-4">House BL</th>
+                  <th scope="col" className="pr-4">Estado</th>
+                  <th scope="col" className="pr-4">ETD</th>
+                  <th scope="col" className="pr-4">ETA</th>
+                  <th scope="col" className="pr-4">Días libres</th>
+                  <th scope="col" className="pr-4">Contenedores</th>
+                  <th scope="col"><span className="sr-only">Acciones</span></th>
                 </tr>
               </thead>
 
@@ -1698,7 +1837,7 @@ export default function RoutingDetailPage() {
                     </td>
                     <td className="text-right">
                       <Link
-                        href={`/operations/shipping-instructions/${routing.id}/bookings/${booking.id}`}
+                        href={bookingDetailHref(booking.id)}
                         className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         Abrir
@@ -1730,7 +1869,10 @@ export default function RoutingDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div
+        id="si-information"
+        className="scroll-mt-28 grid gap-6 lg:grid-cols-2"
+      >
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Proveedor / Shipper Contact
@@ -2041,7 +2183,10 @@ export default function RoutingDetailPage() {
         </section>
       </div>
 
-      <div className="mt-6 flex items-center justify-between gap-3">
+      <div
+        id="si-actions"
+        className="mt-6 flex scroll-mt-28 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
         <div>
           {canCancelRouting && (
             <button
@@ -2054,7 +2199,7 @@ export default function RoutingDetailPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {isRoutingCancelled && (
             <span className="inline-flex items-center rounded-xl bg-red-100 px-3 py-2 text-sm font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300">
               Cancelada
@@ -2085,7 +2230,8 @@ export default function RoutingDetailPage() {
                   <button
                     type="button"
                     onClick={validateRouting}
-                    disabled={validating}
+                    disabled={validating || !routing.operations_accepted_at}
+                    title={!routing.operations_accepted_at ? 'Acepta el expediente antes de validarlo' : undefined}
                     className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     {validating ? 'Validando...' : 'Validar SI'}
@@ -2107,7 +2253,7 @@ export default function RoutingDetailPage() {
                   disabled={finalizing}
                   className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
-                  {finalizing ? 'Finalizando...' : 'Finalizar SI'}
+                  {finalizing ? 'Finalizando...' : 'Finalizar operación'}
                 </button>
               )}
 
@@ -2134,7 +2280,10 @@ export default function RoutingDetailPage() {
         </div>
       </div>
 
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+      <section
+        id="si-timeline"
+        className="mt-6 scroll-mt-28 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Timeline Operativo ({operationalEvents.length} eventos)

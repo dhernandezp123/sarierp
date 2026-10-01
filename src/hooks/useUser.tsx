@@ -39,16 +39,23 @@ export function UserProvider({
   // Id del usuario ya cargado. Sirve para ignorar eventos redundantes de auth
   // (p. ej. refresco de token) sin meter `user`/`profile` en las dependencias
   // del efecto, lo que provocaria un bucle de re-suscripcion y re-fetch.
-  const loadedUserIdRef = useRef<string | null>(initialUser?.id ?? null)
+  const loadedUserIdRef = useRef<string | null>(hasInitialSession ? initialUser?.id ?? null : null)
 
   useEffect(() => {
     let active = true
+    let requestId = 0
+    let authVersion = 0
+    let initialized = hasInitialSession
 
     const loadProfile = async (authUser: User | null) => {
       if (!active) return
 
+      const currentRequest = ++requestId
+      initialized = true
       loadedUserIdRef.current = authUser?.id ?? null
       setUser(authUser)
+      setProfile(null)
+      setLoading(Boolean(authUser))
 
       if (!authUser) {
         setProfile(null)
@@ -56,26 +63,43 @@ export function UserProvider({
         return
       }
 
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authUser.id)
-        .maybeSingle()
+      // Salir del callback de auth antes de consultar Supabase (su lock sigue activo).
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      if (!active || currentRequest !== requestId) return
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle()
 
-      if (!active) return
-      setProfile((data as Profile | null) ?? null)
-      setLoading(false)
+        if (!active || currentRequest !== requestId) return
+        if (error || !data) loadedUserIdRef.current = null
+        setProfile(error ? null : (data as Profile | null))
+      } catch {
+        if (!active || currentRequest !== requestId) return
+        loadedUserIdRef.current = null
+        setProfile(null)
+      } finally {
+        if (active && currentRequest === requestId) setLoading(false)
+      }
     }
 
     if (!hasInitialSession) {
-      supabase.auth.getUser().then(({ data }) => loadProfile(data.user))
+      const initialVersion = authVersion
+      supabase.auth.getUser().then(({ data }) => {
+        if (active && authVersion === initialVersion) void loadProfile(data.user)
+      }).catch(() => {
+        if (active && authVersion === initialVersion) void loadProfile(null)
+      })
     }
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      authVersion += 1
       const nextUserId = session?.user?.id ?? null
-      if (nextUserId === loadedUserIdRef.current) return
+      if (initialized && nextUserId === loadedUserIdRef.current && _event !== 'SIGNED_OUT') return
       void loadProfile(session?.user ?? null)
     })
 

@@ -103,6 +103,18 @@ values (
   100
 );
 
+insert into public.provider_invoice_items(quotation_id,pricing_item_id,supplier,invoice_number,description,currency,quantity,unit_cost,total_cost,tax_amount,created_by)
+values ('a1411000-0000-4000-8000-000000000020','a1411000-0000-4000-8000-000000000030',
+  'Demo provider','DEMO-PROVIDER-01','Flete ficticio para proforma Demo','USD',1,70,70,0,
+  'a1411000-0000-4000-8000-000000000001');
+
+insert into public.shipping_instructions (id, routing_number, quotation_id, client_id, created_by, shipment_status, operational_status)
+values ('a1411000-0000-4000-8000-000000000040', 'RT-DEMO-CLOSED',
+  'a1411000-0000-4000-8000-000000000020', 'a1411000-0000-4000-8000-000000000010',
+  'a1411000-0000-4000-8000-000000000001', 'Finalizado', 'Finalizado');
+update public.shipments set operational_status = 'Finalizado', closed_at = now()
+where quotation_id = 'a1411000-0000-4000-8000-000000000020';
+
 set local role authenticated;
 select set_config(
   'request.jwt.claims',
@@ -113,6 +125,11 @@ select set_config(
 update public.quotations
 set financial_validation_status = 'Validado'
 where id = 'a1411000-0000-4000-8000-000000000020';
+
+select pg_temp.assert_true(
+  exists(select 1 from public.get_billing_work_queue() where quotation_id = 'a1411000-0000-4000-8000-000000000020'),
+  'The closed quotation must appear before creating a Proforma'
+);
 
 select *
 from public.create_invoice_from_quotation(
@@ -127,6 +144,10 @@ from public.create_invoice_from_quotation(
   'a1411000-0000-4000-8000-000000000020'
 );
 
+select pg_temp.assert_true(
+  not exists(select 1 from public.get_billing_work_queue() where quotation_id = 'a1411000-0000-4000-8000-000000000020'),
+  'A linked Proforma must remove the quotation from the billing queue'
+);
 reset role;
 
 select pg_temp.assert_true(
@@ -226,5 +247,16 @@ select pg_temp.expect_failure(
   'Una cotizacion no debe crear dos documentos activos'
 );
 
+reset role;
+select pg_temp.assert_true(
+  public.allocate_internal_hbl_number(current_date) like 'DEMO-HBL-%',
+  'Demo HBL numbering must retain its sandbox prefix'
+);
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+update public.profiles set demo_expires_at = now() - interval '1 minute'
+where id = 'a1411000-0000-4000-8000-000000000001';
+set local role authenticated;
+select pg_temp.expect_failure($$select * from public.get_billing_work_queue()$$,
+  'Expired Demo users cannot access the new billing queue');
 reset role;
 rollback;

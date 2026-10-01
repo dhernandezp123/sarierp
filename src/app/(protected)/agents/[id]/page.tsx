@@ -1,10 +1,15 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Plus, Trash2, ChevronLeft, Pencil, Check, X } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
+import { useUser } from '@/src/hooks/useUser'
+import { Agent360Panel } from '@/src/components/agents/Agent360Panel'
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
@@ -81,7 +86,7 @@ function formatDate(d: string | null) {
 
 function isExpired(d: string | null) {
   if (!d) return false
-  return d < new Date().toISOString().slice(0, 10)
+  return d < toDateInputValue()
 }
 
 async function queryAgentDetail(agentId: string) {
@@ -100,6 +105,8 @@ async function queryAgentDetail(agentId: string) {
 export default function AgentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const { profile } = useUser()
+  const canManageCatalog = !IS_DEMO_ENVIRONMENT && (profile?.rol === 'Admin' || profile?.rol === 'Pricing')
 
   const [agent, setAgent] = useState<Agent | null>(null)
   const [formData, setFormData] = useState<Agent | null>(null)
@@ -115,6 +122,7 @@ export default function AgentDetailPage() {
   const [editingRateData, setEditingRateData] = useState<RouteRate | null>(null)
 
   const fetchAll = useCallback(async () => {
+    setLoading(true)
     const [agentRes, ratesRes] = await queryAgentDetail(id)
     if (agentRes.error) { toast.error('Agente no encontrado'); router.push('/agents'); return }
     setAgent(agentRes.data as Agent)
@@ -124,28 +132,13 @@ export default function AgentDetailPage() {
   }, [id, router])
 
   useEffect(() => {
-    let active = true
-    if (id) {
-      void queryAgentDetail(id).then(([agentRes, ratesRes]) => {
-        if (!active) return
-        if (agentRes.error) {
-          toast.error('Agente no encontrado')
-          router.push('/agents')
-          return
-        }
-        setAgent(agentRes.data as Agent)
-        setFormData(agentRes.data as Agent)
-        setRates((ratesRes.data || []) as RouteRate[])
-        setLoading(false)
-      })
-    }
-    return () => {
-      active = false
-    }
-  }, [id, router])
+    if (!id) return
+    const timer = window.setTimeout(() => { void fetchAll() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchAll, id])
 
   const saveAgent = async () => {
-    if (!formData) return
+    if (!formData || !canManageCatalog) return
     setSaving(true)
     const { error } = await supabase.from('agents').update({
       name: formData.name,
@@ -168,6 +161,7 @@ export default function AgentDetailPage() {
   }
 
   const saveRate = async () => {
+    if (!canManageCatalog) return
     if (!rateForm.origin || !rateForm.destination) {
       toast.error('Origen y destino son requeridos')
       return
@@ -191,7 +185,7 @@ export default function AgentDetailPage() {
   }
 
   const saveEditedRate = async () => {
-    if (!editingRateData) return
+    if (!editingRateData || !canManageCatalog) return
     setSavingRate(true)
     const { error } = await supabase.from('agent_route_rates').update({
       origin: editingRateData.origin,
@@ -216,6 +210,7 @@ export default function AgentDetailPage() {
   }
 
   const deleteRate = async (rateId: string) => {
+    if (!canManageCatalog) return
     const { error } = await supabase.from('agent_route_rates').delete().eq('id', rateId)
     if (error) { toast.error(error.message); return }
     toast.success('Tarifa eliminada')
@@ -250,8 +245,18 @@ export default function AgentDetailPage() {
             )}
           </div>
         </div>
-        {!IS_DEMO_ENVIRONMENT && <div className="flex gap-2">
-          {!editing ? (
+        <div className="flex gap-2">
+          <CreateContextTaskDialog
+            context={{
+              entityType: 'agent',
+              entityId: id,
+              entityLabel: agent.name || 'Agente sin nombre',
+              sourceModule: 'agents',
+              sourcePath: `/agents/${id}`,
+            }}
+            suggestedTitle={`Dar seguimiento a ${agent.name || 'agente'}`}
+          />
+          {canManageCatalog && (!editing ? (
             <button type="button" onClick={() => setEditing(true)} className={secondaryButtonClass}>
               <Pencil className="h-4 w-4" />
               Editar
@@ -267,8 +272,8 @@ export default function AgentDetailPage() {
                 Cancelar
               </button>
             </>
-          )}
-        </div>}
+          ))}
+        </div>
       </div>
 
       <DemoReadOnlyNotice label="La ficha del agente y sus tarifas por ruta son datos maestros compartidos; puedes consultarlos durante la demo." />
@@ -351,6 +356,8 @@ export default function AgentDetailPage() {
         </div>
       </section>
 
+      <Agent360Panel agentId={id} />
+
       {/* Route rates */}
       <section className={cardClass}>
         <div className="mb-4 flex items-center justify-between">
@@ -360,18 +367,20 @@ export default function AgentDetailPage() {
               {rates.length} tarifa{rates.length !== 1 ? 's' : ''} registrada{rates.length !== 1 ? 's' : ''}
             </p>
           </div>
-          {!IS_DEMO_ENVIRONMENT && <button
-            type="button"
-            onClick={() => { setShowRateForm(!showRateForm); setRateForm(emptyRate(id)) }}
-            className={primaryButtonClass}
-          >
-            <Plus className="h-4 w-4" />
-            Agregar tarifa
-          </button>}
+          {canManageCatalog && (
+            <button
+              type="button"
+              onClick={() => { setShowRateForm(!showRateForm); setRateForm(emptyRate(id)) }}
+              className={primaryButtonClass}
+            >
+              <Plus className="h-4 w-4" />
+              Agregar tarifa
+            </button>
+          )}
         </div>
 
         {/* New rate form */}
-        {!IS_DEMO_ENVIRONMENT && showRateForm && (
+        {canManageCatalog && showRateForm && (
           <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/50 p-4 dark:border-blue-800/40 dark:bg-blue-950/20">
             <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Nueva tarifa</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -520,7 +529,7 @@ export default function AgentDetailPage() {
                   <th className="pb-3 pr-3 text-center">Tránsito</th>
                   <th className="pb-3 pr-3">Transbordo</th>
                   <th className="pb-3 pr-3">Vigencia</th>
-                  <th className="pb-3" />
+                  {canManageCatalog && <th className="pb-3" />}
                 </tr>
               </thead>
               <tbody>
@@ -657,24 +666,26 @@ export default function AgentDetailPage() {
                           <span className="text-xs text-slate-400">Sin vencimiento</span>
                         )}
                       </td>
-                      <td>
-                        {!IS_DEMO_ENVIRONMENT ? <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => { setEditingRateId(rate.id); setEditingRateData({ ...rate }) }}
-                            className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setRatePendingDelete(rate.id)}
-                            className="rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:border-slate-700 dark:hover:bg-rose-950/30"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div> : <span className="text-slate-400">—</span>}
-                      </td>
+                      {canManageCatalog && (
+                        <td>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { setEditingRateId(rate.id); setEditingRateData({ ...rate }) }}
+                              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRatePendingDelete(rate.id)}
+                              className="rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-500 dark:border-slate-700 dark:hover:bg-rose-950/30"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
@@ -684,18 +695,20 @@ export default function AgentDetailPage() {
         )}
       </section>
 
-      {!IS_DEMO_ENVIRONMENT && <ConfirmDialog
-        open={ratePendingDelete !== null}
-        onOpenChange={(open) => { if (!open) setRatePendingDelete(null) }}
-        title="Eliminar tarifa del agente"
-        description="Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
-        danger
-        onConfirm={() => {
-          if (ratePendingDelete) void deleteRate(ratePendingDelete)
-          setRatePendingDelete(null)
-        }}
-      />}
+      {canManageCatalog && (
+        <ConfirmDialog
+          open={ratePendingDelete !== null}
+          onOpenChange={(open) => { if (!open) setRatePendingDelete(null) }}
+          title="Eliminar tarifa del agente"
+          description="Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          danger
+          onConfirm={() => {
+            if (ratePendingDelete) void deleteRate(ratePendingDelete)
+            setRatePendingDelete(null)
+          }}
+        />
+      )}
     </div>
   )
 }

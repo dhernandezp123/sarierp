@@ -6,6 +6,7 @@
 // fechas sin hora se interpretan siempre en horario local.
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/
+const MIAMI_TIME_ZONE = 'America/New_York'
 
 /**
  * Convierte un valor de fecha (columna DATE 'YYYY-MM-DD' o timestamp ISO)
@@ -17,7 +18,12 @@ export function parseDateValue(value: string | Date | null | undefined): Date | 
 
   if (DATE_ONLY_RE.test(value)) {
     const [year, month, day] = value.split('-').map(Number)
-    return new Date(year, month - 1, day)
+    const date = new Date(0)
+    date.setFullYear(year, month - 1, day)
+    date.setHours(0, 0, 0, 0)
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+      ? date
+      : null
   }
 
   const parsed = new Date(value)
@@ -59,6 +65,53 @@ export function formatDateTime(value: string | Date | null | undefined, fallback
   })
 }
 
+/** Fecha y hora del instante en la zona horaria de la bodega de Miami. */
+export function formatMiamiDateTime(
+  value: string | Date | null | undefined,
+  fallback = '-'
+): string {
+  const date = parseDateValue(value)
+  if (!date) return fallback
+
+  const dateLabel = date.toLocaleDateString('es-HN', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: MIAMI_TIME_ZONE,
+  })
+  const timeLabel = date.toLocaleTimeString('es-HN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: MIAMI_TIME_ZONE,
+  })
+
+  return `${dateLabel} · ${timeLabel} (hora Miami)`
+}
+
+/** Fecha YYYY-MM-DD correspondiente al calendario local de Miami. */
+export function toMiamiDateInputValue(
+  value: string | Date | null | undefined = new Date(),
+  fallback = ''
+): string {
+  const date = parseDateValue(value)
+  if (!date) return fallback
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: MIAMI_TIME_ZONE,
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value
+  const year = part('year')
+  const month = part('month')
+  const day = part('day')
+
+  return year && month && day ? `${year}-${month}-${day}` : fallback
+}
+
 /**
  * Valor 'YYYY-MM-DD' en zona local para inputs type="date" y filtros.
  * No usar `toISOString().slice(0, 10)`: después de las 18:00 en Honduras
@@ -69,6 +122,14 @@ export function toDateInputValue(date: Date = new Date()): string {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+/** Diferencia de días de calendario; no depende de horas UTC ni del cambio de horario. */
+export function calendarDaysUntil(value: string | Date | null | undefined, today = new Date()): number | null {
+  const target = parseDateValue(value)
+  if (!target || Number.isNaN(today.getTime())) return null
+  const calendarTime = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  return Math.round((calendarTime(target) - calendarTime(today)) / 86_400_000)
 }
 
 /** Formato monetario estándar del ERP: 'USD 5,865.00'. */

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Package, Globe, Shield, Clock } from 'lucide-react'
 
@@ -7,7 +8,7 @@ const VALUES = [
   { icon: Package, title: 'Logística sin complicaciones', desc: 'Nos encargamos de todo el proceso desde Miami hasta tu puerta, con visibilidad en tiempo real de tus paquetes.' },
   { icon: Globe, title: 'Experiencia internacional', desc: 'Operamos la ruta Miami – Honduras con profundo conocimiento de los procesos aduaneros y logísticos.' },
   { icon: Shield, title: 'Confianza y transparencia', desc: 'Cada paquete recibe un número único de bodega (WH#). Sabes dónde está tu carga en todo momento.' },
-  { icon: Clock, title: 'Tiempos de respuesta', desc: 'Notificamos la recepción de tus paquetes el mismo día. Respondemos consultas en menos de 24 horas hábiles.' },
+  { icon: Clock, title: 'Tiempos de respuesta', desc: 'Consulta avisos de recepción y comunícate con el equipo para resolver dudas sobre tu carga.' },
 ]
 
 export default function NosotrosPage() {
@@ -18,7 +19,7 @@ export default function NosotrosPage() {
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          aria-label="Volver" onClick={() => router.push('/portal/perfil')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -36,7 +37,7 @@ export default function NosotrosPage() {
         </div>
         <h2 className="text-xl font-bold">Freight Forwarding de confianza</h2>
         <p className="mt-2 text-sm text-blue-100 leading-relaxed">
-          Conectamos tus compras en EE.UU. con Honduras. Somos un equipo especializado en logística internacional con sede en Miami y Tegucigalpa.
+          Conectamos tus compras en EE.UU. con Honduras. Somos un equipo especializado en logística internacional que coordina la recepción y el transporte de tu carga.
         </p>
       </div>
 
@@ -44,7 +45,7 @@ export default function NosotrosPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="mb-2 font-semibold text-slate-900 dark:text-white">Nuestra Misión</h2>
         <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">
-          Hacer que importar sea simple, transparente y confiable para empresas y personas en Honduras. Creemos que la logística no tiene que ser un dolor de cabeza — con las herramientas correctas y un equipo dedicado, cada envío llega a tiempo y en perfectas condiciones.
+          Hacer que importar sea simple, transparente y confiable para empresas y personas en Honduras. Nuestro objetivo es facilitar el seguimiento de la carga y la comunicación con el equipo durante cada etapa.
         </p>
       </div>
 
@@ -64,19 +65,7 @@ export default function NosotrosPage() {
         ))}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { value: '5+', label: 'Años operando' },
-          { value: '500+', label: 'Clientes activos' },
-          { value: '99%', label: 'Entregas exitosas' },
-        ].map(s => (
-          <div key={s.label} className="rounded-2xl border border-slate-200 bg-white p-4 text-center dark:border-slate-800 dark:bg-slate-900">
-            <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{s.value}</p>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{s.label}</p>
-          </div>
-        ))}
-      </div>
+      <p className="text-sm text-slate-500">Mi Carga es el portal de clientes de Sari Express, disponible en Forwarders ERP.</p><Link href="/portal/contacto" className="inline-block rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white">Contactar al equipo</Link>
     </div>
   )
 }

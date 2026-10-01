@@ -8,6 +8,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { useMiamiCarriers } from '@/src/hooks/useMiamiCarriers'
 import { notifyClientPackageAssigned } from '@/src/lib/client-notifications'
+import { sendMiamiPackageAssignmentEmail } from '@/src/lib/miami-assignment-email'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 
@@ -125,9 +126,25 @@ export default function MiamiIngresoPage() {
           trackingNumber:  form.tracking_number.trim().toUpperCase(),
           warehouseNumber: whData,
         })
+        const emailResult = await sendMiamiPackageAssignmentEmail(pkg.id)
+        if (!emailResult.ok) {
+          toast.warning('Paquete asignado, pero el correo no fue enviado', {
+            description: emailResult.error,
+          })
+        } else if (emailResult.skipped) {
+          toast.info('El cliente no tiene correo principal configurado')
+        }
         toast.success('Paquete ingresado y asignado al cliente')
       } else if (pkg?.status === 'Asignado') {
         // DB trigger auto-matched a pending pre-alert
+        const emailResult = await sendMiamiPackageAssignmentEmail(pkg.id)
+        if (!emailResult.ok) {
+          toast.warning('Paquete auto-asignado, pero el correo no fue enviado', {
+            description: emailResult.error,
+          })
+        } else if (emailResult.skipped) {
+          toast.info('El cliente no tiene correo principal configurado')
+        }
         toast.success(`✓ Auto-asignado por pre-alerta · WH: ${pkg.warehouse_number}`, { duration: 6000 })
       } else {
         toast.success('Paquete ingresado correctamente')

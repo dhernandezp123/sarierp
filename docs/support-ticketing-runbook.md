@@ -6,6 +6,11 @@ El módulo está integrado en `feat/support-tickets-demo`. La migración
 `20260810170000` fue aplicada al proyecto Demo verificado el 10/08/2026 y
 `support_settings.enabled` quedó activo temporalmente para UAT. Producción no
 ha sido modificada. No aplicar allí hasta completar primero la UAT en Demo.
+El módulo fue integrado en `main`, desplegado por Vercel y habilitado en
+Producción el 10/08/2026. La migración productiva se aplicó después de un
+dry-run que mostró únicamente `20260810170000`. `admin@admin.com` y
+`dher@forwarders.app` son los Administradores Supremos autorizados; la segunda
+cuenta todavía debe completar su invitación. Falta cerrar el UAT funcional.
 
 El historial local contiene cuatro migraciones exclusivas de la rama `demo`
 que, por diseño, no existen en `main`:
@@ -26,7 +31,7 @@ separadas o reconstruir conscientemente la base local de la rama objetivo.
 ## Configuración por instalación
 
 Estado del canal: `soporte@forwarders.app` fue creado en ImprovMX y su reenvío
-se confirmó el 10/08/2026 con un correo enviado desde una cuenta externa.
+se confirmó el 10/08/2026 mediante un correo enviado desde una cuenta externa.
 
 Antes de habilitar correos:
 

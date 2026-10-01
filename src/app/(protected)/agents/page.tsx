@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase/client'
@@ -10,9 +10,14 @@ import AgentForm from '@/src/components/agents/AgentForm'
 import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
 import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
+import { useUser } from '@/src/hooks/useUser'
+import { canAccessPath } from '@/src/lib/permissions'
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 type AgentListRow = {
   id: string
-  name: string
+  name: string | null
   type: string | null
   country: string | null
   city: string | null
@@ -23,12 +28,7 @@ type AgentListRow = {
   mbl_fee: number | null
 }
 
-const queryAgents = () => supabase
-  .from('agents')
-  .select('*')
-  .order('created_at', { ascending: false })
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const queryAgents = () => supabase.from('agents').select('*').order('created_at', { ascending: false })
 
 function getTipoBadge(tipo?: string | null) {
   switch (tipo) {
@@ -45,16 +45,27 @@ function getTipoBadge(tipo?: string | null) {
 // ─── Página ───────────────────────────────────────────────────────────────────
 
 export default function AgentsPage() {
+  const { profile } = useUser()
   const [agents,  setAgents]  = useState<AgentListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
+  const canManageCatalog = !IS_DEMO_ENVIRONMENT && (profile?.rol === 'Admin' || profile?.rol === 'Pricing')
+  const canOpenSuppliers = canAccessPath(profile?.rol, '/suppliers')
 
-  const fetchAgents = async () => {
-    const { data, error } = await queryAgents()
+  const fetchAgents = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('agents')
+      .select('*')
+      .order('created_at', { ascending: false })
     if (error) toast.error('Error al cargar agentes')
     setAgents((data || []) as AgentListRow[])
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void fetchAgents() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchAgents])
 
   useEffect(() => {
     let active = true
@@ -94,27 +105,34 @@ export default function AgentsPage() {
           Agentes de Carga
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Catálogo operativo de agentes con tarifas base y rutas. Para pagos y cuentas por pagar, ve a <Link href="/suppliers" className="text-blue-600 hover:underline dark:text-blue-400">Proveedores</Link>.
+          Directorio operativo con contacto, lanes, ofertas y expedientes vinculados.
+          {' '}La contraparte para pagos se administra por separado en{' '}
+          {canOpenSuppliers ? (
+            <Link href="/suppliers" className="text-blue-600 hover:underline dark:text-blue-400">Proveedores</Link>
+          ) : (
+            <span>Proveedores</span>
+          )}.
         </p>
       </div>
 
-      <DemoReadOnlyNotice label="Los agentes y sus tarifas base son datos maestros compartidos; puedes consultarlos durante la demo." />
-
-      <div className={`grid gap-6 ${IS_DEMO_ENVIRONMENT ? '' : 'lg:grid-cols-[340px_1fr]'}`}>
+      <DemoReadOnlyNotice label="Datos maestros compartidos: solo lectura durante la demo." />
+      <div className={`grid gap-6 ${canManageCatalog ? 'lg:grid-cols-[340px_1fr]' : ''}`}>
 
         {/* ── Formulario nuevo agente ── */}
-        {!IS_DEMO_ENVIRONMENT && <div className={`${cardClass} self-start`}>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-white">
-            Nuevo Agente
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-            Completa los datos del agente o proveedor.
-          </p>
+        {canManageCatalog && (
+          <div className={`${cardClass} self-start`}>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">
+              Nuevo Agente
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+              Completa los datos del agente o proveedor.
+            </p>
 
-          <div className="mt-5">
-            <AgentForm onCreated={fetchAgents} />
+            <div className="mt-5">
+              <AgentForm onCreated={fetchAgents} />
+            </div>
           </div>
-        </div>}
+        )}
 
         {/* ── Tabla de agentes ── */}
         <div className={`${cardClass} p-0 overflow-hidden`}>

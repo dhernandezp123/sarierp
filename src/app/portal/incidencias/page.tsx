@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Plus } from 'lucide-react'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 
@@ -30,32 +31,38 @@ export default function PortalIncidenciasPage() {
   const { profile } = useUser()
   const router = useRouter()
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
+  const [loadError, setLoadError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('Todos')
 
   const loadIncidencias = async (clientId: string) => {
+    setLoadError(false)
+    try {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('miami_incidencias')
       .select('id, tipo, descripcion, status, resolucion, created_at, package_id')
       .eq('cliente_id', clientId)
       .order('created_at', { ascending: false })
 
+    if (error) throw error
     const incs = (data ?? []) as Incidencia[]
 
     // Fetch tracking numbers for context
     const packageIds = [...new Set(incs.map(i => i.package_id))]
     if (packageIds.length > 0) {
-      const { data: pkgs } = await supabase
+      const { data: pkgs, error: packageError } = await supabase
         .from('miami_packages')
         .select('id, tracking_number')
         .in('id', packageIds)
+      if (packageError) throw packageError
       const pkgMap = Object.fromEntries((pkgs ?? []).map(p => [p.id, p.tracking_number]))
       incs.forEach(i => { i.tracking_number = pkgMap[i.package_id] })
     }
 
     setIncidencias(incs)
     setLoading(false)
+    } catch { setLoadError(true) } finally { setLoading(false) }
   }
 
   useEffect(() => {
@@ -67,9 +74,11 @@ export default function PortalIncidenciasPage() {
 
   const filtered = statusFilter === 'Todos' ? incidencias : incidencias.filter(i => i.status === statusFilter)
 
+  if (loadError) return <PortalError onRetry={() => profile?.cliente_id && void loadIncidencias(profile.cliente_id)} />
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">Incidencias</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Problemas reportados con tus paquetes</p>
@@ -90,6 +99,7 @@ export default function PortalIncidenciasPage() {
           <button
             key={s}
             type="button"
+            aria-pressed={statusFilter === s}
             onClick={() => setStatusFilter(s)}
             className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
               statusFilter === s
@@ -117,13 +127,14 @@ export default function PortalIncidenciasPage() {
               {incidencias.length === 0 ? 'No tienes incidencias reportadas' : 'Sin resultados'}
             </p>
             {incidencias.length === 0 && (
-              <p className="mt-1 text-xs text-slate-400">¡Genial! Eso significa que todo va bien con tus paquetes.</p>
+              <p className="mt-1 text-xs text-slate-400">Si necesitas ayuda con un paquete, puedes reportar un problema.</p>
             )}
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {filtered.map(inc => (
-              <div key={inc.id} className="px-5 py-4">
+              <div key={inc.id} id={`caso-${inc.id}`} className="scroll-mt-24 px-5 py-4 target:bg-blue-50 dark:target:bg-blue-950/40">
+                <p className="mb-2 text-xs text-slate-500">Caso {inc.id.slice(0, 8)}</p>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">

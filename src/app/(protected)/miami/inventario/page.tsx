@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { History, MapPin, Package, ScanLine, Search, X } from 'lucide-react'
+import { Copy, ExternalLink, FileText, History, Mail, MapPin, Package, ScanLine, Search, X } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
+import { useUser } from '@/src/hooks/useUser'
+import { sendMiamiPackageAssignmentEmail } from '@/src/lib/miami-assignment-email'
+import { formatMiamiDateTime, toMiamiDateInputValue } from '@/src/lib/format'
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
@@ -20,9 +23,20 @@ type Pkg = {
   status: string
   weight_lbs: number | null
   warehouse_number: string | null
+  cliente_id: string | null
   rack_location: string | null
+  manifest_id: string | null
   received_at: string
   clientes?: { nombre: string | null } | null
+  miami_package_documents?: PackageDocument[] | null
+}
+
+type PackageDocument = {
+  id: string
+  file_name: string
+  file_path: string
+  status: string
+  created_at: string
 }
 
 type ScannedItem = {
@@ -63,8 +77,12 @@ const STATUS_CLS: Record<CargoStatus, string> = {
   'Entregado':          'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
 }
 
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+const shiftDateKey = (dateKey: string, days: number) => {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
 
 const nextStatus = (current: CargoStatus | string | null): CargoStatus | null => {
   if (!current) return 'En Consolidación'
@@ -83,14 +101,19 @@ const previousStatus = (current: CargoStatus | string | null): CargoStatus | nul
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InventarioPage() {
+  const { profile } = useUser()
   const [packages, setPackages] = useState<Pkg[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
   const [filterCargo, setFilterCargo]   = useState<string>('En bodega')
   const [filterTipo, setFilterTipo]     = useState<string>('Todos')
+  const [filterSource, setFilterSource] = useState<string>('Todos')
+  const [receivedFrom, setReceivedFrom] = useState('')
+  const [receivedTo, setReceivedTo] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [updatingId, setUpdatingId]     = useState<string | null>(null)
+  const [emailingId, setEmailingId]     = useState<string | null>(null)
   const [historyPackage, setHistoryPackage] = useState<Pkg | null>(null)
   const [historyEvents, setHistoryEvents] = useState<PackageEvent[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -106,17 +129,65 @@ export default function InventarioPage() {
   const rackRef = useRef<HTMLInputElement>(null)
   const scanRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { load() }, [])
-
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('miami_packages')
-      .select('id, tracking_number, carrier, tipo_carga, cargo_status, status, weight_lbs, warehouse_number, rack_location, received_at, clientes(nombre)')
+      .select('id, tracking_number, carrier, tipo_carga, cargo_status, status, weight_lbs, warehouse_number, cliente_id, rack_location, manifest_id, received_at, clientes(nombre), miami_package_documents(id, file_name, file_path, status, created_at)')
       .order('received_at', { ascending: false })
     if (error) toast.error('Error al cargar inventario')
     setPackages((data || []) as unknown as Pkg[])
     setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => void load(), 0)
+    return () => window.clearTimeout(timeout)
+  }, [load])
+
+  const copyInvoiceUploadLink = async (pkg: Pkg) => {
+    const link = `${window.location.origin}/portal/paquetes/${pkg.id}?section=factura-comercial#factura-comercial`
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success('Enlace de carga copiado', {
+        description: 'El cliente deberá iniciar sesión en el portal para adjuntar la factura.',
+      })
+    } catch {
+      toast.error('No se pudo copiar el enlace')
+    }
+  }
+
+  const openLatestCommercialInvoice = async (pkg: Pkg) => {
+    const latest = [...(pkg.miami_package_documents ?? [])]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+    if (!latest) return
+
+    const { data, error } = await supabase.storage
+      .from('miami-package-documents')
+      .createSignedUrl(latest.file_path, 60)
+
+    if (error || !data?.signedUrl) {
+      toast.error('No se pudo abrir la factura comercial')
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const sendAssignmentNotice = async (pkg: Pkg) => {
+    setEmailingId(pkg.id)
+    const result = await sendMiamiPackageAssignmentEmail(pkg.id)
+    setEmailingId(null)
+
+    if (!result.ok) {
+      toast.error('No se pudo enviar el aviso', { description: result.error })
+      return
+    }
+    if (result.skipped) {
+      toast.info('El cliente no tiene correo principal configurado')
+      return
+    }
+    toast.success(result.alreadySent ? 'El aviso ya había sido procesado' : 'Aviso enviado al contacto principal')
   }
 
   const advanceStatus = async (pkg: Pkg) => {
@@ -234,6 +305,37 @@ export default function InventarioPage() {
   CARGO_STATUSES.forEach((s) => { kpis[s] = packages.filter((p) => p.cargo_status === s).length })
   const sinRackCount = packages.filter((p) => isInBodega(p) && !p.rack_location).length
 
+  const todayKey = toMiamiDateInputValue()
+  const yesterdayKey = shiftDateKey(todayKey, -1)
+  const weekStartKey = shiftDateKey(todayKey, -6)
+  const activeReceivedPreset = !receivedFrom && !receivedTo
+    ? 'Todos'
+    : receivedFrom === todayKey && receivedTo === todayKey
+      ? 'Hoy'
+      : receivedFrom === yesterdayKey && receivedTo === yesterdayKey
+        ? 'Ayer'
+        : receivedFrom === weekStartKey && receivedTo === todayKey
+          ? '7 días'
+          : 'Rango'
+
+  const applyReceivedPreset = (preset: 'Todos' | 'Hoy' | 'Ayer' | '7 días') => {
+    if (preset === 'Todos') {
+      setReceivedFrom('')
+      setReceivedTo('')
+    } else if (preset === 'Hoy') {
+      setReceivedFrom(todayKey)
+      setReceivedTo(todayKey)
+    } else if (preset === 'Ayer') {
+      setReceivedFrom(yesterdayKey)
+      setReceivedTo(yesterdayKey)
+    } else {
+      setReceivedFrom(weekStartKey)
+      setReceivedTo(todayKey)
+    }
+    setFilterCargo('Todos')
+    setPage(1)
+  }
+
   // ── Filters ───────────────────────────────────────────────────────────────
   const filtered = packages.filter((p) => {
     const q = search.toLowerCase()
@@ -242,7 +344,7 @@ export default function InventarioPage() {
       p.tracking_number.toLowerCase().includes(q) ||
       p.warehouse_number?.toLowerCase().includes(q) ||
       p.rack_location?.toLowerCase().includes(q) ||
-      (p.clientes as any)?.nombre?.toLowerCase().includes(q)
+      p.clientes?.nombre?.toLowerCase().includes(q)
 
     const matchCargo =
       filterCargo === 'Todos' ? true :
@@ -251,8 +353,13 @@ export default function InventarioPage() {
       p.cargo_status === filterCargo
 
     const matchTipo = filterTipo === 'Todos' || p.tipo_carga === filterTipo
+    const matchSource = filterSource === 'Todos'
+      || (filterSource === 'Individual' ? !p.manifest_id : Boolean(p.manifest_id))
+    const receivedDateKey = toMiamiDateInputValue(p.received_at)
+    const matchReceivedDate = (!receivedFrom || receivedDateKey >= receivedFrom)
+      && (!receivedTo || receivedDateKey <= receivedTo)
 
-    return matchSearch && matchCargo && matchTipo
+    return matchSearch && matchCargo && matchTipo && matchSource && matchReceivedDate
   })
 
   const paginatedPackages = filtered.slice((page - 1) * pageSize, page * pageSize)
@@ -314,7 +421,7 @@ export default function InventarioPage() {
       </div>
 
       {/* Filters */}
-      <div className={`${cardClass} py-3`}>
+      <div className={`${cardClass} space-y-3 py-3`}>
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -349,6 +456,59 @@ export default function InventarioPage() {
           </select>
           <span className="ml-auto text-xs text-slate-400">{filtered.length} paquete{filtered.length !== 1 ? 's' : ''}</span>
         </div>
+        <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Historial de ingresos</p>
+            <div className="flex flex-wrap gap-1.5">
+              {(['Hoy', 'Ayer', '7 días', 'Todos'] as const).map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => applyReceivedPreset(preset)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    activeReceivedPreset === preset
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                  }`}
+                >
+                  {preset === '7 días' ? 'Últimos 7 días' : preset}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Desde
+            <input
+              type="date"
+              value={receivedFrom}
+              max={receivedTo || undefined}
+              onChange={(event) => { setReceivedFrom(event.target.value); setFilterCargo('Todos'); setPage(1) }}
+              className={`${fieldClass} mt-1 w-auto`}
+            />
+          </label>
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Hasta
+            <input
+              type="date"
+              value={receivedTo}
+              min={receivedFrom || undefined}
+              onChange={(event) => { setReceivedTo(event.target.value); setFilterCargo('Todos'); setPage(1) }}
+              className={`${fieldClass} mt-1 w-auto`}
+            />
+          </label>
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Origen
+            <select
+              value={filterSource}
+              onChange={(event) => { setFilterSource(event.target.value); setPage(1) }}
+              className={`${fieldClass} mt-1 w-auto`}
+            >
+              <option value="Todos">Todos los ingresos</option>
+              <option value="Individual">Ingreso individual</option>
+              <option value="Manifiesto">Por manifiesto</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {/* Table */}
@@ -362,7 +522,7 @@ export default function InventarioPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-900 dark:bg-[#081120]">
-                  {['WH #', 'Tracking', 'Cliente', 'Rack', 'Tipo', 'Peso', 'Recibido', 'Estado', 'Avanzar', 'Historial'].map((h) => (
+                  {['WH #', 'Tracking', 'Cliente', 'Rack', 'Tipo', 'Peso', 'Origen', 'Recibido', 'Estado', 'Factura', 'Avanzar', 'Historial'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-300 whitespace-nowrap">
                       {h}
                     </th>
@@ -384,7 +544,7 @@ export default function InventarioPage() {
                         {p.carrier && <p className="text-xs text-slate-400">{p.carrier}</p>}
                       </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                        {(p.clientes as any)?.nombre || <span className="text-slate-300 text-xs">Sin asignar</span>}
+                        {p.clientes?.nombre || <span className="text-slate-300 text-xs">Sin asignar</span>}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {p.rack_location ? (
@@ -404,13 +564,66 @@ export default function InventarioPage() {
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {p.weight_lbs ? `${p.weight_lbs} lbs` : '—'}
                       </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          p.manifest_id
+                            ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                        }`}>
+                          {p.manifest_id ? 'Manifiesto' : 'Individual'}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap text-xs">
-                        {fmtDate(p.received_at)}
+                        {formatMiamiDateTime(p.received_at)}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_CLS[cs] || 'bg-slate-100 text-slate-600'}`}>
                           {cs}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(p.miami_package_documents?.length ?? 0) > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => openLatestCommercialInvoice(p)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              Recibida
+                              <ExternalLink className="h-3 w-3" />
+                            </button>
+                          ) : (
+                            <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                              Pendiente
+                            </span>
+                          )}
+                          {profile?.rol === 'Admin' && p.cliente_id && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => copyInvoiceUploadLink(p)}
+                                title="Copiar enlace autenticado para el cliente"
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                                Enlace
+                              </button>
+                              {p.status === 'Asignado' && (
+                                <button
+                                  type="button"
+                                  onClick={() => sendAssignmentNotice(p)}
+                                  disabled={emailingId === p.id}
+                                  title="Enviar o reintentar el aviso por correo"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300"
+                                >
+                                  <Mail className="h-3.5 w-3.5" />
+                                  {emailingId === p.id ? 'Enviando...' : 'Avisar'}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1.5">
@@ -525,7 +738,7 @@ export default function InventarioPage() {
                             )}
                           </div>
                           <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
-                            {fmtDate(event.created_at)}
+                            {formatMiamiDateTime(event.created_at)}
                           </span>
                         </div>
                       </div>

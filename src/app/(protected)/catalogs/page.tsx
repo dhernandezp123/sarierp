@@ -616,6 +616,40 @@ export default function CatalogsPage() {
       </section>
 
       <section className={cardClass}>
+        <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300">Cotizaciones</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">Navieras y carriers</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Administra las opciones del selector y los colores de sus badges.</p>
+        </div>
+        <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+          <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700/70">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-slate-900 dark:text-white">{editingCarrierCode ? 'Editar naviera' : 'Nueva naviera'}</h3>
+              {editingCarrierCode && <button type="button" onClick={() => { setEditingCarrierCode(null); setCarrierForm(emptyCarrierForm) }} aria-label="Cancelar edición" className="rounded-lg border border-slate-200 p-2 dark:border-slate-700"><RotateCcw className="h-4 w-4" /></button>}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <input className={fieldClass} placeholder="Código (MSC)" value={carrierForm.code} disabled={Boolean(editingCarrierCode)} onChange={(e) => setCarrierForm((v) => ({ ...v, code: e.target.value }))} />
+              <select className={fieldClass} value={carrierForm.type} onChange={(e) => setCarrierForm((v) => ({ ...v, type: e.target.value as CarrierType }))}>
+                <option value="ocean">Marítimo</option><option value="air">Aéreo</option><option value="ground">Terrestre</option>
+              </select>
+            </div>
+            <input className={fieldClass} placeholder="Nombre completo" value={carrierForm.name} onChange={(e) => setCarrierForm((v) => ({ ...v, name: e.target.value }))} />
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs text-slate-500">Fondo<input type="color" className="mt-1 h-11 w-full rounded-lg border border-slate-200 p-1 dark:border-slate-700" value={carrierForm.bg_color} onChange={(e) => setCarrierForm((v) => ({ ...v, bg_color: e.target.value }))} /></label>
+              <label className="text-xs text-slate-500">Texto<input type="color" className="mt-1 h-11 w-full rounded-lg border border-slate-200 p-1 dark:border-slate-700" value={carrierForm.text_color} onChange={(e) => setCarrierForm((v) => ({ ...v, text_color: e.target.value }))} /></label>
+            </div>
+            <label className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700"><span className="text-sm font-semibold">Visible</span><Switch checked={carrierForm.active} onChange={() => setCarrierForm((v) => ({ ...v, active: !v.active }))} /></label>
+            <button type="button" disabled={savingCarrier} onClick={() => void saveCarrier()} className={`${primaryButtonClass} flex w-full items-center justify-center gap-2`}><Check className="h-4 w-4" />{savingCarrier ? 'Guardando...' : 'Guardar naviera'}</button>
+          </div>
+          <div className="max-h-[480px] overflow-auto rounded-xl border border-slate-200 dark:border-slate-700/70">
+            <table className="w-full text-sm"><thead><tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/60"><th className="px-4 py-3 text-left">Naviera</th><th className="px-4 py-3 text-left">Tipo</th><th className="px-4 py-3 text-left">Visible</th><th className="px-4 py-3 text-right">Acciones</th></tr></thead>
+              <tbody>{carrierCatalog.map((item) => <tr key={item.code} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-4 py-3"><span className="inline-flex items-center gap-2"><span style={{ backgroundColor: item.bg_color, color: item.text_color }} className="rounded-md px-2 py-1 text-xs font-bold">{item.code}</span><span>{item.name}</span></span></td><td className="px-4 py-3 capitalize">{item.type}</td><td className="px-4 py-3"><button type="button" onClick={() => void toggleCarrier(item)} className="flex items-center gap-2"><Switch checked={item.active} /><span>{item.active ? 'Visible' : 'Oculta'}</span></button></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => editCarrier(item)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold dark:border-slate-700"><Edit3 className="h-3.5 w-3.5" />Editar</button></td></tr>)}</tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className={cardClass}>
         <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 dark:border-slate-800 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300">

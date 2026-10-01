@@ -1,0 +1,35 @@
+.landing :is(a, button, summary, input):focus-visible {
+  outline: 2px solid #0038bd;
+  outline-offset: 4px;
+}
+
+.landing :is(section, span)[id] {
+  scroll-margin-top: 100px;
+}
+
+.landing section:is([id='workflow'], [id='demo']) :is(a, button, input):focus-visible {
+  outline-color: #ffb44b;
+}
+
+.hero {
+  background: radial-gradient(ellipse at 85% 10%, #dce7ff 0, transparent 52%), linear-gradient(180deg, #f8faff, #fff);
+}
+
+.heroPreview {
+  animation: appear 500ms ease-out both;
+}
+
+@keyframes appear {
+  from { opacity: 0.5; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing *, .landing *::before, .landing *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  :global(html):has(.landing) {
+    scroll-behavior: auto;
+  }
+}

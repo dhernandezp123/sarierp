@@ -1,5 +1,6 @@
 import { supabase } from '@/src/lib/supabase/client'
 import { createNotification } from '@/src/lib/notifications'
+import { toDateInputValue } from '@/src/lib/format'
 
 type ExpiredQuoteRow = {
   id: string
@@ -16,7 +17,7 @@ type ExpiredQuoteRow = {
 }
 
 export async function checkAndNotifyExpiredTarifas() {
-  const today = new Date().toISOString().split('T')[0]
+  const today = toDateInputValue()
 
   // Fetch expired, selected, unnotified agent quotes with their quotation
   const { data: expiredQuotes, error: expiredError } = await supabase

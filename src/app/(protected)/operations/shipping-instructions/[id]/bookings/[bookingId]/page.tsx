@@ -31,6 +31,7 @@ import {
   type BookingReadinessEvaluation,
   type ReadinessRequirement,
 } from '@/src/components/operations/BookingReadinessPanel'
+import { DocumentationWorkspace } from '@/src/components/operations/DocumentationWorkspace'
 import {
   cardClass,
   fieldClass,
@@ -47,6 +48,9 @@ import {
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { buildDocumentationWorkspace } from '@/src/lib/documentation-workspace'
+import { deriveBookingOperationalState } from '@/src/lib/booking-operational-state'
+import { operationsReturnHref } from '@/src/lib/operations-navigation'
 
 type ClienteJoin = {
   nombre: string | null
@@ -118,6 +122,7 @@ type RoutingData = {
   id: string
   quotation_id: string | null
   routing_number: string
+  operations_assigned_to: string | null
   container_type: string | null
   container_qty: number | null
   supplier_name: string | null
@@ -401,6 +406,13 @@ export default function RoutingBookingChildPage() {
   const { profile } = useUser()
   const id = params.id
   const bookingId = params.bookingId
+  const returnHref = typeof window === 'undefined'
+    ? '/operations/shipping-instructions'
+    : operationsReturnHref(
+        new URLSearchParams(window.location.search).get('returnTo')
+      )
+  const canManageBookingDocuments =
+    !IS_DEMO_ENVIRONMENT && (profile?.rol === 'Admin' || profile?.rol === 'Operaciones')
 
   const [routing, setRouting] = useState<RoutingData | null>(null)
   const [booking, setBooking] = useState<BookingData | null>(null)
@@ -539,6 +551,7 @@ export default function RoutingBookingChildPage() {
         id,
         quotation_id,
         routing_number,
+        operations_assigned_to,
         container_type,
         container_qty,
         supplier_name,
@@ -1123,6 +1136,11 @@ export default function RoutingBookingChildPage() {
     event.preventDefault()
     if (!booking) return
 
+    if (!canManageBookingDocuments) {
+      toast.error('No tienes permisos para adjuntar documentos al booking')
+      return
+    }
+
     const fileInput = event.currentTarget.elements.namedItem('documentFile') as HTMLInputElement | null
     const file = fileInput?.files?.[0]
 
@@ -1218,43 +1236,60 @@ export default function RoutingBookingChildPage() {
   }
 
   const deleteBookingDocument = async (document: BookingDocument) => {
+    if (!canManageBookingDocuments) {
+      setDocumentPendingDelete(null)
+      toast.error('No tienes permisos para eliminar documentos del booking')
+      return
+    }
+
     setDeletingDocumentId(document.id)
+
+    const { data: deletedDocument, error: deleteError } = await supabase
+      .from('booking_documents')
+      .delete()
+      .eq('id', document.id)
+      .eq('booking_id', document.booking_id)
+      .select('id')
+      .maybeSingle()
+
+    if (deleteError || !deletedDocument) {
+      setDeletingDocumentId(null)
+      toast.error('No se pudo eliminar el documento', {
+        description:
+          deleteError?.message ||
+          'El documento no existe, está relacionado con otro registro o no tienes permisos.',
+      })
+      return
+    }
 
     const { error: removeError } = await supabase.storage
       .from(BOOKING_DOCUMENT_BUCKET)
       .remove([document.file_url])
 
-    if (removeError) {
-      toast.error('No se pudo eliminar el archivo del Storage', {
-        description: 'Se intentara quitar el registro del booking.',
-      })
-    }
-
-    const { error: deleteError } = await supabase
-      .from('booking_documents')
-      .delete()
-      .eq('id', document.id)
-
     setDeletingDocumentId(null)
     setDocumentPendingDelete(null)
 
-    if (deleteError) {
-      toast.error('No se pudo eliminar el documento', {
-        description: deleteError.message,
-      })
-      return
-    }
-
     await recordBookingActivity({
-      action: 'booking_document_deleted',
+      action: removeError
+        ? 'booking_document_storage_cleanup_failed'
+        : 'booking_document_deleted',
       description: `Documento ${document.document_type} eliminado del booking`,
       metadata: {
         document_type: document.document_type,
         file_name: document.file_name,
+        storage_cleanup_pending: Boolean(removeError),
       },
     })
 
-    toast.success('Documento eliminado')
+    if (removeError) {
+      toast.warning('Documento eliminado del booking', {
+        description:
+          'El archivo privado quedó pendiente de limpieza en Storage. Contacta a un administrador.',
+      })
+    } else {
+      toast.success('Documento eliminado')
+    }
+
     await loadBookingDocuments(document.booking_id)
   }
 
@@ -1270,10 +1305,12 @@ export default function RoutingBookingChildPage() {
         <p className="text-sm text-red-500">Booking no encontrado.</p>
         <button
           type="button"
-          onClick={() => router.push(`/operations/shipping-instructions/${id}`)}
+          onClick={() => router.push(returnHref)}
           className={`${secondaryButtonClass} mt-4`}
         >
-          Volver a Shipping Instruction
+          {returnHref.startsWith('/operations/dashboard')
+            ? 'Volver al Control Tower'
+            : 'Volver a Shipping Instruction'}
         </button>
       </div>
     )
@@ -1302,8 +1339,10 @@ export default function RoutingBookingChildPage() {
   const incotermReference = quotation?.incoterm || ''
   const selectedAgentTransit =
     selectedAgent?.transit_time || selectedAgent?.transit || quotation?.transit_time || ''
-  const bookingTitle = booking.booking_number
-    ? `Booking ${booking.booking_number}`
+  const bookingReference = booking.booking_number || booking.carrier_booking
+  const hasBookingReference = Boolean(bookingReference)
+  const bookingTitle = bookingReference
+    ? `Booking ${bookingReference}`
     : 'Nuevo Booking'
   const availableForThisBooking = Object.values(groupContainers(availableContainers))
     .map((container) => ({
@@ -1336,11 +1375,83 @@ export default function RoutingBookingChildPage() {
               'Registra la entrega antes de habilitar la finalización del booking.',
           }
       : bookingTransitionActions[booking.shipment_status || 'Booking Solicitado']
+  const isArrived = ['Arribado', 'Finalizado'].includes(booking.shipment_status || '')
+  const documentationItems = buildDocumentationWorkspace({
+    shippingInstructionId: id,
+    bookingId,
+    routingNumber: routing.routing_number,
+    origin: quotation?.origen || null,
+    destination: quotation?.destino || null,
+    shipperName,
+    consigneeName,
+    bookingReference,
+    carrier: booking.carrier,
+    vesselName: booking.vessel_name,
+    voyage: booking.voyage,
+    transportMode: quotation?.tipo_transporte || quotation?.quote_type || null,
+    containerCount: containerRows.reduce(
+      (total, container) => total + Number(container.quantity || 0),
+      0
+    ),
+    documentTypes: bookingDocuments.map((document) => document.document_type),
+    bills: billsOfLading.map((bill) => ({
+      id: bill.id,
+      bl_type: bill.bl_type,
+      parent_bl_id: bill.parent_bl_id,
+      bl_number: bill.bl_number,
+      status: bill.status,
+    })),
+    readiness: readinessEvaluation,
+    isArrived,
+  })
+  const operationalState = deriveBookingOperationalState({
+    shipmentStatus: booking.shipment_status,
+    bookingNumber: booking.booking_number,
+    carrierBooking: booking.carrier_booking,
+    etd: booking.etd,
+    eta: booking.eta,
+    actualEtd: booking.actual_etd,
+    actualEta: booking.actual_eta,
+    assignedTo: routing.operations_assigned_to,
+    mode:
+      readinessEvaluation?.mode ||
+      quotation?.tipo_transporte ||
+      quotation?.quote_type,
+    documents: bookingDocuments,
+    bills: billsOfLading,
+    readiness: readinessEvaluation
+      ? {
+          ready: readinessEvaluation.ready,
+          blocking_count: readinessEvaluation.blocking_count,
+          warning_count: readinessEvaluation.warning_count,
+          overdue_cutoff_count: readinessEvaluation.overdue_cutoffs.length,
+          missing_vgm_count: readinessEvaluation.missing_vgm_containers.length,
+        }
+      : null,
+  })
+  const bookingPath = `/operations/shipping-instructions/${id}/bookings/${bookingId}`
+  const returnQuery = returnHref.startsWith('/operations/dashboard')
+    ? `?returnTo=${encodeURIComponent(returnHref)}`
+    : ''
+  const bookingContextPath = `${bookingPath}${returnQuery}`
+  const operationalActionHref = (() => {
+    switch (operationalState.nextAction?.target) {
+      case 'shipping_instruction':
+        return `/operations/shipping-instructions/${id}${returnQuery}`
+      case 'booking_schedule':
+        return `${bookingContextPath}#booking-schedule`
+      case 'booking_readiness':
+        return `${bookingContextPath}#booking-readiness`
+      case 'booking_documents':
+        return `${bookingContextPath}#booking-documents`
+      default:
+        return `${bookingContextPath}#booking-header`
+    }
+  })()
 
   return (
-    <div>
+    <div id="booking-header" className="scroll-mt-24">
       {(() => {
-        const isArrived = ['Arribado', 'Finalizado'].includes(booking.shipment_status || '')
         const issuedHBL = billsOfLading.find((bl) => bl.bl_type === 'HBL' && bl.status === 'Emitido')
         const arrivalNoticeData: ArrivalNoticeData = {
           si_number: routing.routing_number,
@@ -1418,10 +1529,12 @@ export default function RoutingBookingChildPage() {
               )}
               <button
                 type="button"
-                onClick={() => router.push(`/operations/shipping-instructions/${id}`)}
+                onClick={() => router.push(returnHref)}
                 className={secondaryButtonClass}
               >
-                Volver a SI
+                {returnHref.startsWith('/operations/dashboard')
+                  ? 'Volver al Control Tower'
+                  : 'Volver a SI'}
               </button>
             </div>
           </div>
@@ -1429,7 +1542,23 @@ export default function RoutingBookingChildPage() {
       })()}
 
       <div className="space-y-6">
-        <div className="grid gap-6 lg:grid-cols-2">
+        <DocumentationWorkspace
+          items={documentationItems}
+          reference={bookingReference || routing.routing_number}
+          operationalAction={
+            operationalState.nextAction
+              ? {
+                  label: operationalState.nextAction.label,
+                  href: operationalActionHref,
+                  summary:
+                    operationalState.attentionReason ||
+                    `Estado derivado: ${operationalState.displayStatus}`,
+                }
+              : null
+          }
+        />
+
+        <div id="booking-data" className="grid scroll-mt-24 gap-6 lg:grid-cols-2">
           <SectionCard title="Referencia Operativa">
             <Field label="Carrier / Naviera" readonlySource="referencia">
               <input value={booking.carrier || ''} readOnly className={readonlyFieldClass} />
@@ -1460,8 +1589,14 @@ export default function RoutingBookingChildPage() {
             </Field>
 
             <Field label="Estado operativo">
-              <div className="flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                {booking.shipment_status || 'Booking Solicitado'}
+              <div className="min-h-10 rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                <p className="font-semibold">{operationalState.displayStatus}</p>
+                {operationalState.hasStatusDrift && (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                    Registrado: {operationalState.persistedStatus}.{' '}
+                    {operationalState.statusDriftReason}
+                  </p>
+                )}
               </div>
             </Field>
           </SectionCard>
@@ -1703,26 +1838,30 @@ export default function RoutingBookingChildPage() {
           </SectionCard>
         </div>
 
-        <BookingScheduleManager
-          booking={booking as ScheduleBooking}
-          userRole={profile?.rol}
-          onChanged={loadData}
-          onReplaced={(newBookingId) =>
-            router.push(
-              `/operations/shipping-instructions/${id}/bookings/${newBookingId}`
-            )
-          }
-        />
+        <div id="booking-schedule" className="scroll-mt-24">
+          <BookingScheduleManager
+            booking={booking as ScheduleBooking}
+            userRole={profile?.rol}
+            onChanged={loadData}
+            onReplaced={(newBookingId) =>
+              router.push(
+                `/operations/shipping-instructions/${id}/bookings/${newBookingId}`
+              )
+            }
+          />
+        </div>
 
-        <BookingReadinessPanel
-          bookingId={booking.id}
-          shipmentId={booking.shipment_id}
-          containers={containerRows}
-          userRole={profile?.rol}
-          onEvaluationChange={setReadinessEvaluation}
-        />
+        <div id="booking-readiness" className="scroll-mt-24">
+          <BookingReadinessPanel
+            bookingId={booking.id}
+            shipmentId={booking.shipment_id}
+            containers={containerRows}
+            userRole={profile?.rol}
+            onEvaluationChange={setReadinessEvaluation}
+          />
+        </div>
 
-        <section className={cardClass}>
+        <section id="booking-documents" className={`${cardClass} scroll-mt-24`}>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
@@ -1868,11 +2007,8 @@ export default function RoutingBookingChildPage() {
             </div>
           </div>
 
-          {IS_DEMO_ENVIRONMENT ? (
-            <div className="mt-5">
-              <DemoReadOnlyNotice label="Los documentos precargados son de consulta. Las cargas y reemplazos están bloqueados en el sandbox compartido." />
-            </div>
-          ) : (
+          {IS_DEMO_ENVIRONMENT && <DemoReadOnlyNotice label="Documentos de consulta: cargas y reemplazos bloqueados en Demo." />}
+          {!IS_DEMO_ENVIRONMENT && canManageBookingDocuments && (
             <form
               onSubmit={uploadBookingDocument}
               className="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70 md:grid-cols-2 lg:grid-cols-4"
@@ -1983,7 +2119,7 @@ export default function RoutingBookingChildPage() {
                             <Download className="h-3.5 w-3.5" />
                             Descargar
                           </button>
-                          {!IS_DEMO_ENVIRONMENT && (
+                          {!IS_DEMO_ENVIRONMENT && canManageBookingDocuments && (
                             <button
                               type="button"
                               onClick={() => setDocumentPendingDelete(document)}
@@ -2089,12 +2225,12 @@ export default function RoutingBookingChildPage() {
       </div>
 
       {/* Bills of Lading */}
-      <section className={`${cardClass} mt-6`}>
+      <section id="booking-bills" className={`${cardClass} mt-6 scroll-mt-24`}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
             Bills of Lading
           </h2>
-          {booking.booking_number && (
+          {hasBookingReference && (
             <button
               type="button"
               onClick={() =>
@@ -2113,9 +2249,9 @@ export default function RoutingBookingChildPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">Cargando...</p>
         ) : billsOfLading.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {booking.booking_number
+            {hasBookingReference
               ? 'No hay BLs registrados. Crea el MBL para iniciar el proceso.'
-              : 'Confirma el Booking Number antes de crear el MBL.'}
+              : 'Confirma el Booking Number o Carrier Booking antes de crear el MBL.'}
           </p>
         ) : (
           <div className="space-y-3">
@@ -2337,7 +2473,7 @@ export default function RoutingBookingChildPage() {
       />
 
       <Dialog
-        open={Boolean(documentPendingDelete)}
+        open={canManageBookingDocuments && Boolean(documentPendingDelete)}
         onOpenChange={(open) => {
           if (!open && !deletingDocumentId) {
             setDocumentPendingDelete(null)

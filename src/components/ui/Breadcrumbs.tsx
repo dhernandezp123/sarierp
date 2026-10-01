@@ -8,9 +8,9 @@ export type BreadcrumbItem = {
 
 export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
   return (
-    <nav className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+    <nav aria-label="Ruta de navegación" className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
       {items.map((item, i) => (
-        <span key={i} className="flex items-center gap-1">
+        <span key={i} className="flex min-w-0 items-center gap-1 break-all">
           {i > 0 && (
             <ChevronRight className="h-3 w-3 shrink-0 text-slate-400 dark:text-slate-600" />
           )}
@@ -23,6 +23,7 @@ export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
             </Link>
           ) : (
             <span
+              aria-current={i === items.length - 1 ? 'page' : undefined}
               className={
                 i === items.length - 1
                   ? 'font-medium text-slate-900 dark:text-white'

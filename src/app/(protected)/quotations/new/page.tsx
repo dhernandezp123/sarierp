@@ -1,5 +1,7 @@
 ﻿'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -75,7 +77,7 @@ export default function NewQuotationPage() {
   const defaultValidUntil = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
     .toISOString()
     .split('T')[0]
-  const todayString = new Date().toISOString().split('T')[0]
+  const todayString = toDateInputValue()
 
   const [loading, setLoading] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
@@ -544,7 +546,7 @@ export default function NewQuotationPage() {
     const updatedData = {
       ...formData,
       cliente_id: clienteId,
-      contact_name: selectedCliente?.nombre || '',
+      contact_name: selectedCliente?.contacto || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
       contact_state: selectedCliente?.departamento_estado || '',

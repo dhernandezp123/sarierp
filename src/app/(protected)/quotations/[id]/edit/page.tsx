@@ -1,7 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { toDateInputValue } from '@/src/lib/format'
+
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../../../lib/supabase/client'
@@ -9,6 +12,7 @@ import { useUser } from '../../../../../hooks/useUser'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
+import { SectionNav } from '@/src/components/ui/SectionNav'
 import { createNotification } from '@/src/lib/notifications'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
@@ -39,6 +43,15 @@ const formatNumber = (value: number, decimals = 2) =>
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
+
+const editorSections = [
+  { href: '#quote-general' as const, label: 'General' },
+  { href: '#quote-route' as const, label: 'Ruta' },
+  { href: '#quote-cargo' as const, label: 'Carga' },
+  { href: '#quote-insurance' as const, label: 'Seguro' },
+  { href: '#quote-notes' as const, label: 'Observaciones' },
+  { href: '#quote-actions' as const, label: 'Guardar' },
+]
 
 type CargoDimensionLine = {
   id: string
@@ -72,6 +85,17 @@ type PricingItem = {
   taxable?: boolean | null
 }
 
+function AccessDenied() {
+  return (
+    <div className={cardClass}>
+      <h1 className="text-2xl font-bold">Acceso restringido</h1>
+      <p className="mt-2 text-gray-500">
+        {'No tienes permiso para ver este m\u00f3dulo.'}
+      </p>
+    </div>
+  )
+}
+
 export default function EditQuotationPage() {
   const { profile, loading: userLoading } = useUser()
   const params = useParams()
@@ -80,20 +104,14 @@ export default function EditQuotationPage() {
   const isAdmin = role === 'Admin'
   const isSales = role === 'Ventas'
   const isOperations = role === 'Operaciones'
-  const isPricing = role === 'Pricing'
-  const isFinance = role === 'Finanzas' || role === 'Contabilidad'
-
-  const canEditPricing =
-    isAdmin || isPricing
-  const canEditCostValidation =
-    isAdmin || isFinance
-  const canEditFinance =
-    isAdmin || isFinance
   const canEditQuotes =
     isAdmin || isSales || isOperations
 
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [saving, setSaving] = useState(false)
+  const saveInFlight = useRef(false)
   const [quotationNumber, setQuotationNumber] = useState<string | null>(null)
   const [sendPricingDialogOpen, setSendPricingDialogOpen] = useState(false)
   const [savingAfterEdit, setSavingAfterEdit] = useState(false)
@@ -169,86 +187,63 @@ export default function EditQuotationPage() {
   const [serviceProductOptions, setServiceProductOptions] =
     useState(serviceProducts)
 
-  useEffect(() => {
-    if (userLoading) return
-
-    if (!canEditQuotes) {
-      setLoading(false)
-      return
-    }
-
-    fetchCatalogs()
-    fetchClientes()
-
-    if (params.id) {
-      fetchQuotation(params.id as string)
-      fetchContainerLines(params.id as string)
-      fetchCargoLines(params.id as string)
-      fetchPricingItems(params.id as string)
-    }
-  }, [params.id, userLoading, canEditQuotes])
-
   const fetchPricingUsers = async () => {
-    const { data: pricingUsers } = await supabase
+    const { data: pricingUsers, error } = await supabase
       .from('profiles')
       .select('id')
       .eq('rol', 'Pricing')
       .eq('is_active', true)
 
+    if (error) throw error
     return pricingUsers || []
   }
 
-  const AccessDenied = () => (
-    <>
-      <div className={cardClass}>
-        <h1 className="text-2xl font-bold">
-          Acceso restringido
-        </h1>
-
-        <p className="text-gray-500 mt-2">
-          No tienes permiso para ver este módulo.
-        </p>
-      </div>
-    </>
-  )
-
   const fetchCatalogs = async () => {
-    const { data: countriesData } = await supabase
-      .from('countries')
-      .select('*')
-      .eq('active', true)
-      .order('name', { ascending: true })
-
-    const { data: portsData } = await supabase
-      .from('ports')
-      .select('*, countries(name)')
-      .eq('active', true)
-      .order('name', { ascending: true })
-
-    const { data: packageTypesData } = await supabase
-      .from('package_types')
-      .select('*')
-      .eq('active', true)
-      .order('name', { ascending: true })
-
-    const { data: containerTypesData, error: containerTypesError } =
-      await supabase
+    const [
+      countriesResult,
+      portsResult,
+      packageTypesResult,
+      containerTypesResult,
+      activeServiceProducts,
+    ] = await Promise.all([
+      supabase
+        .from('countries')
+        .select('*')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      supabase
+        .from('ports')
+        .select('*, countries(name)')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      supabase
+        .from('package_types')
+        .select('*')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      supabase
         .from('container_types')
         .select('*')
         .eq('active', true)
-        .order('name', { ascending: true })
+        .order('name', { ascending: true }),
+      fetchActiveServiceProducts(supabase),
+    ])
 
-    if (containerTypesError) {
-      toast.error(containerTypesError.message)
-      return
+    const catalogError = [
+      countriesResult.error,
+      portsResult.error,
+      packageTypesResult.error,
+      containerTypesResult.error,
+    ].find(Boolean)
+
+    if (catalogError) {
+      toast.error(catalogError.message)
     }
 
-    const activeServiceProducts = await fetchActiveServiceProducts(supabase)
-
-    setCountries(countriesData || [])
-    setPorts(portsData || [])
-    setPackageTypes(packageTypesData || [])
-    setContainerTypes(containerTypesData || [])
+    setCountries(countriesResult.data || [])
+    setPorts(portsResult.data || [])
+    setPackageTypes(packageTypesResult.data || [])
+    setContainerTypes(containerTypesResult.data || [])
     setServiceProductOptions(activeServiceProducts)
   }
 
@@ -260,7 +255,7 @@ export default function EditQuotationPage() {
       .order('nombre', { ascending: true })
 
     if (error) {
-      toast.error(error.message)
+      setLoadError(error.message)
       return
     }
 
@@ -325,7 +320,6 @@ export default function EditQuotationPage() {
 
     setQuotationNumber(data.quotation_number || null)
     setOriginalClienteId(data.cliente_id || '')
-    setLoading(false)
   }
 
   const fetchPricingItems = async (quotationId: string) => {
@@ -403,6 +397,55 @@ export default function EditQuotationPage() {
     )
   }
 
+  useEffect(() => {
+    if (userLoading) return
+
+    if (!canEditQuotes) {
+      setLoading(false)
+      return
+    }
+
+    const quotationId = params.id as string | undefined
+    if (!quotationId) {
+      setLoadError('No se recibi\u00f3 una cotizaci\u00f3n v\u00e1lida.')
+      setLoading(false)
+      return
+    }
+
+    let active = true
+    setLoading(true)
+    setLoadError('')
+
+    void Promise.allSettled([
+      fetchCatalogs(),
+      fetchClientes(),
+      fetchQuotation(quotationId),
+      fetchContainerLines(quotationId),
+      fetchCargoLines(quotationId),
+      fetchPricingItems(quotationId),
+    ])
+      .then((results) => {
+        const rejected = results.find(
+          (result): result is PromiseRejectedResult =>
+            result.status === 'rejected'
+        )
+        if (active && rejected) {
+          setLoadError(
+            rejected.reason instanceof Error
+              ? rejected.reason.message
+              : 'No se pudieron cargar todos los datos de la cotizaci\u00f3n.'
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [params.id, userLoading, canEditQuotes, loadAttempt])
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -425,7 +468,7 @@ export default function EditQuotationPage() {
     setFormData((current) => ({
       ...current,
       cliente_id: clienteId,
-      contact_name: selectedCliente?.nombre || '',
+      contact_name: selectedCliente?.contacto || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
       origen: selectedCliente?.origen_frecuente || current.origen,
@@ -628,94 +671,18 @@ export default function EditQuotationPage() {
   const getLineTotalWeightKg = (line: CargoDimensionLine) =>
     getLineUnitWeightKg(line) * Number(line.quantity || 0)
 
-  const handleSendToPricing = async () => {
-    if (!params.id) return
+  const handleSendToPricing = async () => { await handleSave(true) }
 
-    const oldStatus = formData.status || 'Borrador'
-    const nextStatus = 'Pendiente de Fijar Precios'
-
-    if (oldStatus === 'Ganada') {
-      toast.error('Usa la acción "Reabrir para Repricing" desde el detalle de la cotización.')
+  const handleSave = async (sendToPricing = false) => {
+    if (!params.id || saveInFlight.current) return
+    if (sendToPricing && (formData.status === 'Ganada' || !canTransition(formData.status, 'Pendiente de Fijar Precios'))) {
+      toast.error('No se puede enviar desde este estado. Para una cotización ganada usa Reabrir para Repricing.')
       return
     }
-
-    if (!canTransition(oldStatus, nextStatus)) {
-      toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
+    if (sendToPricing && (!formData.tipo_transporte || !formData.quote_type)) {
+      toast.error('Selecciona el transporte y tipo de cotización')
       return
     }
-
-    if (!formData.commodity.trim()) {
-      toast.error('Debes ingresar Commodity/Descripción de la carga')
-      return
-    }
-
-    if (!formData.tipo_transporte) {
-      toast.error('Debes seleccionar el tipo de transporte')
-      return
-    }
-
-    if (!formData.quote_type) {
-      toast.error('Debes seleccionar el tipo de cotización')
-      return
-    }
-
-    if (requiresContainerLines && containerLines.length === 0) {
-      toast.error('Debes agregar al menos un contenedor/unidad')
-      return
-    }
-
-    const { error } = await supabase
-      .from('quotations')
-      .update({ status: nextStatus })
-      .eq('id', params.id as string)
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-
-    await supabase.from('quotation_status_history').insert([
-      {
-        quotation_id: params.id as string,
-        old_status: oldStatus,
-        new_status: nextStatus,
-        changed_by: profile?.id,
-      },
-    ])
-
-    const quotationId = params.id as string
-    const pricingUsers = await fetchPricingUsers()
-
-    await Promise.all(
-      pricingUsers.map((pricingUser) =>
-        createNotification({
-          userId: pricingUser.id,
-          title: 'Nueva cotización para pricing',
-          message: 'Se recibió una nueva solicitud de cotización.',
-          type: 'info',
-        })
-      )
-    )
-
-    await createActivityLog({
-      module: 'quotations',
-      action: 'resend_to_pricing',
-      entityType: 'quotation',
-      entityId: quotationId,
-      description: 'Cotización actualizada y enviada nuevamente a Pricing',
-    })
-
-    setFormData({
-      ...formData,
-      status: nextStatus,
-    })
-
-    toast.success('Cotización enviada a Pricing correctamente')
-    router.push(`/quotations/${params.id}`)
-  }
-
-  const handleSave = async () => {
-    if (!params.id) return
 
     if (!formData.cliente_id) {
       toast.error('Debes seleccionar un cliente')
@@ -752,6 +719,11 @@ export default function EditQuotationPage() {
       formData.service_product === 'miami_lcl' ||
       formData.service_product === 'miami_air'
 
+    if (saveIsMiamiFlow && !miami.canUseMiamiCalculator) {
+      toast.error('No hay tarifas Miami disponibles para este cliente. Revisa las tarifas antes de guardar.')
+      return
+    }
+
     if (formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
       toast.error('Ingresa FT3 o libras para calcular la tarifa Miami LCL')
       return
@@ -779,7 +751,9 @@ export default function EditQuotationPage() {
     const miamiGpPercentage =
       miamiTotalSale > 0 ? (miamiProfit / miamiTotalSale) * 100 : 0
 
+    saveInFlight.current = true
     setSaving(true)
+    let persisted = false
 
     try {
       const quotationPayload = {
@@ -853,31 +827,6 @@ export default function EditQuotationPage() {
           : {}),
       }
 
-      const { error } = await supabase
-        .from('quotations')
-        .update(quotationPayload)
-        .eq('id', quotationId)
-
-      if (error) {
-        toast.error(error.message)
-        return
-      }
-
-      if (originalClienteId && originalClienteId !== formData.cliente_id) {
-        await createActivityLog({
-          module: 'quotations',
-          action: 'change_client',
-          entityType: 'quotation',
-          entityId: quotationId,
-          description: `Cliente de la cotización ${quotationNumber || quotationId} actualizado`,
-          metadata: {
-            previous_cliente_id: originalClienteId,
-            new_cliente_id: formData.cliente_id,
-          },
-        })
-        setOriginalClienteId(formData.cliente_id)
-      }
-
       const shouldReplaceContainers =
         saveRequiresContainerLines || saveRequiresLooseCargo
       const shouldReplaceCargo =
@@ -904,138 +853,46 @@ export default function EditQuotationPage() {
           }))
         : []
 
-      if (shouldReplaceContainers || shouldReplaceCargo || saveIsMiamiFlow) {
-        const { error: childLinesError } = await supabase.rpc(
-          'replace_quotation_child_lines',
-          {
-            p_quotation_id: quotationId,
-            p_replace_containers: shouldReplaceContainers,
-            p_container_lines: containerRows,
-            p_replace_cargo: shouldReplaceCargo,
-            p_cargo_lines: cargoRows,
-            p_replace_pricing: saveIsMiamiFlow,
-            p_pricing_items: saveIsMiamiFlow ? miamiPricingItems : [],
-          }
-        )
-
-        if (childLinesError) {
-          toast.error(childLinesError.message)
-          return
-        }
-
-        if (saveIsMiamiFlow) {
-          setPricingItems(miamiPricingItems as PricingItem[])
-        }
+      const { error } = await supabase.rpc('save_quotation_edit', {
+        p_quotation_id: quotationId,
+        p_expected_status: formData.status,
+        p_quotation_data: quotationPayload,
+        p_replace_containers: shouldReplaceContainers,
+        p_container_lines: containerRows,
+        p_replace_cargo: shouldReplaceCargo,
+        p_cargo_lines: cargoRows,
+        p_replace_pricing: saveIsMiamiFlow,
+        p_pricing_items: saveIsMiamiFlow ? miamiPricingItems : [],
+        p_send_to_pricing: sendToPricing,
+      })
+      if (error) throw error
+      persisted = true
+      if (saveIsMiamiFlow) setPricingItems(miamiPricingItems as PricingItem[])
+      if (sendToPricing) {
+        setFormData(previous => ({ ...previous, status: 'Pendiente de Fijar Precios' }))
+        setSendPricingDialogOpen(false)
+        try {
+          const users = await fetchPricingUsers()
+          const results = await Promise.all(users.map(pricingUser => createNotification({
+            userId: pricingUser.id, title: 'Cotización enviada a Pricing',
+            message: 'Se guardaron los cambios y se recibió una solicitud de cotización.', type: 'info',
+          })))
+          if (results.some(result => result.error)) throw new Error('Avisos incompletos')
+        } catch { toast.warning('La cotización se guardó y envió, pero no se pudo notificar a todo el equipo de Pricing.') }
       }
-
-      if (Boolean(false) && saveRequiresContainerLines) {
-        const { error: cargoDeleteError } = await supabase
-          .from('quotation_cargo_lines')
-          .delete()
-          .eq('quotation_id', quotationId)
-
-        if (cargoDeleteError) {
-          toast.error('No se pudieron reemplazar las líneas de carga')
-          return
-        }
-
-        const { error: containerDeleteError } = await supabase
-          .from('quotation_containers')
-          .delete()
-          .eq('quotation_id', quotationId)
-
-        if (containerDeleteError) {
-          toast.error(containerDeleteError.message)
-          return
-        }
-
-        const rows = containerLines.map((line) => ({
-          quotation_id: quotationId,
-          container_type_id: line.container_type_id,
-          container_type_name: line.container_type_name,
-          quantity: Number(line.quantity || 1),
-          notes: line.notes || null,
-        }))
-
-        const { error: containerInsertError } = await supabase
-          .from('quotation_containers')
-          .insert(rows)
-
-        if (containerInsertError) {
-          toast.error(containerInsertError.message)
-          return
-        }
-      }
-
-      if (Boolean(false) && saveRequiresLooseCargo) {
-        const { error: containerDeleteError } = await supabase
-          .from('quotation_containers')
-          .delete()
-          .eq('quotation_id', quotationId)
-
-        if (containerDeleteError) {
-          toast.error(containerDeleteError.message)
-          return
-        }
-
-        const { error: cargoDeleteError } = await supabase
-          .from('quotation_cargo_lines')
-          .delete()
-          .eq('quotation_id', quotationId)
-
-        if (cargoDeleteError) {
-          toast.error('No se pudieron reemplazar las líneas de carga')
-          return
-        }
-
-        const rows = cargoLines.map((line) => ({
-          quotation_id: quotationId,
-          package_type: line.packageType,
-          quantity: Number(line.quantity || 0),
-          length: Number(line.length || 0),
-          width: Number(line.width || 0),
-          height: Number(line.height || 0),
-          dimension_unit: line.dimensionUnit,
-          weight_lbs: getLineUnitWeightLbs(line),
-          ft3: calculateLineFt3(line),
-          cbm: calculateLineCbm(line),
-        }))
-
-        const { error: cargoInsertError } = await supabase
-          .from('quotation_cargo_lines')
-          .insert(rows)
-
-        if (cargoInsertError) {
-          toast.error(cargoInsertError.message)
-          return
-        }
-      }
-
-      if (Boolean(false) && saveIsMiamiFlow) {
-        const { error: pricingDeleteError } = await supabase
-          .from('pricing_items')
-          .delete()
-          .eq('quotation_id', quotationId)
-
-        if (pricingDeleteError) {
-          toast.error('No se pudieron reemplazar los cargos Miami')
-          return
-        }
-
-        if (miamiPricingItems.length > 0) {
-          const { error: pricingInsertError } = await supabase
-            .from('pricing_items')
-            .insert(miamiPricingItems)
-
-          if (pricingInsertError) {
-            toast.error(pricingInsertError.message)
-            return
-          }
-
-          setPricingItems(miamiPricingItems as PricingItem[])
-        } else {
-          setPricingItems([])
-        }
+      if (originalClienteId && originalClienteId !== formData.cliente_id) {
+        await createActivityLog({
+          module: 'quotations',
+          action: 'change_client',
+          entityType: 'quotation',
+          entityId: quotationId,
+          description: `Cliente de la cotización ${quotationNumber || quotationId} actualizado`,
+          metadata: {
+            previous_cliente_id: originalClienteId,
+            new_cliente_id: formData.cliente_id,
+          },
+        })
+        setOriginalClienteId(formData.cliente_id)
       }
 
       // Notify Operaciones if there is an active Shipping Instruction for this quotation
@@ -1077,14 +934,22 @@ export default function EditQuotationPage() {
         }
       }
 
-      toast.success('Cambios guardados correctamente')
+      toast.success(sendToPricing ? 'Cambios guardados y cotización enviada a Pricing' : 'Cambios guardados correctamente')
 
-      if (!saveIsMiamiFlow && formData.status === 'Borrador') {
+      if (!sendToPricing && !saveIsMiamiFlow && formData.status === 'Borrador') {
         setSendPricingDialogOpen(true)
         return
       }
       router.push(`/quotations/${params.id}`)
+    } catch (error) {
+      if (persisted) {
+        toast.warning('Los cambios se guardaron, pero no se completaron los avisos posteriores.')
+        router.push('/quotations/' + params.id)
+      } else {
+        toast.error(error instanceof Error ? error.message : (error as { message?: string })?.message || 'No se pudieron guardar los cambios. Intenta nuevamente.')
+      }
     } finally {
+      saveInFlight.current = false
       setSaving(false)
     }
   }
@@ -1130,6 +995,31 @@ export default function EditQuotationPage() {
 
   if (!canEditQuotes) {
     return <AccessDenied />
+  }
+
+  if (loadError) {
+    return (
+      <div className={cardClass} role="alert">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">
+          {'No se pudo cargar la cotizaci\u00f3n'}
+        </h1>
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+          {loadError}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+            className={primaryButtonClass}
+          >
+            Reintentar
+          </button>
+          <Link href="/quotations" className={secondaryButtonClass}>
+            Volver a cotizaciones
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   const originCountry = countries.find(
@@ -1212,6 +1102,11 @@ export default function EditQuotationPage() {
           </p>
         </div>
 
+        <SectionNav
+          items={editorSections}
+          label="Secciones del editor de cotización"
+        />
+
         <div className={cardClass}>
           <div className="space-y-8">
           {!canEditQuotes && (
@@ -1221,7 +1116,7 @@ export default function EditQuotationPage() {
           )}
 
           <fieldset disabled={!canEditQuotes} className="contents">
-          <section>
+          <section id="quote-general" className="scroll-mt-28">
             <h2 className="text-xl font-bold mb-4">Información General</h2>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -1369,7 +1264,7 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section className="pt-3">
+          <section id="quote-route" className="scroll-mt-28 pt-3">
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -1449,7 +1344,7 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section className="pt-3">
+          <section id="quote-cargo" className="scroll-mt-28 pt-3">
             <h2 className="text-xl font-bold mb-4">Carga</h2>
 
             <div className="space-y-4">
@@ -1944,7 +1839,7 @@ export default function EditQuotationPage() {
                 handleChange={handleChange}
                 fieldClass={fieldClass}
                 cardClass={cardClass}
-                todayString={new Date().toISOString().split('T')[0]}
+                todayString={toDateInputValue()}
                 cargoLines={cargoLines}
                 setCargoLines={setCargoLines}
                 calculateLineCbm={calculateLineCbm}
@@ -1958,7 +1853,7 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <section className="py-6">
+          <section id="quote-insurance" className="scroll-mt-28 py-6">
             <h2 className="text-xl font-bold mb-4">Seguro de Carga</h2>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -1994,7 +1889,10 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
-          <div className={`grid gap-4 ${isMiamiFlow ? 'lg:grid-cols-2' : ''}`}>
+          <div
+            id="quote-notes"
+            className={`scroll-mt-28 grid gap-4 ${isMiamiFlow ? 'lg:grid-cols-2' : ''}`}
+          >
             <section className={cardClass}>
               <h2 className={`${sectionTitleClass} mb-4`}>
                 Observaciones internas para Pricing
@@ -2050,13 +1948,16 @@ export default function EditQuotationPage() {
           </datalist>
           </fieldset>
 
-          <div className="flex justify-end gap-4">
-            <button
-              onClick={() => router.push(`/quotations/${params.id}`)}
+          <div
+            id="quote-actions"
+            className="scroll-mt-28 flex flex-wrap justify-end gap-4"
+          >
+            <Link
+              href={`/quotations/${params.id}`}
               className={secondaryButtonClass}
             >
               Cancelar
-            </button>
+            </Link>
 
             {canEditQuotes && formData.status === 'Borrador' && (
               <button
@@ -2070,7 +1971,7 @@ export default function EditQuotationPage() {
 
             {canEditQuotes && (
               <button
-                onClick={handleSave}
+                onClick={() => void handleSave()}
                 disabled={saving}
                 className={primaryButtonClass}
               >
@@ -2111,7 +2012,6 @@ export default function EditQuotationPage() {
                 await handleSendToPricing()
 
                 setSavingAfterEdit(false)
-                setSendPricingDialogOpen(false)
               }}
               className={primaryButtonClass}
             >
@@ -2164,4 +2064,3 @@ export default function EditQuotationPage() {
     </>
   )
 }
-

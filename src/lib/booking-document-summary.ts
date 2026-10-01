@@ -78,7 +78,7 @@ export function resolveBookingDocumentSummary(
 
   return {
     master: structuredMaster || (
-      masterCache
+      allMasters.length === 0 && masterCache
         ? {
             id: null,
             type: 'MBL',
@@ -91,7 +91,7 @@ export function resolveBookingDocumentSummary(
     ),
     houses: houses.length > 0
       ? houses
-      : houseCache
+      : allHouses.length === 0 && houseCache
         ? [{
             id: null,
             type: 'HBL',

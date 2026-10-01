@@ -12,6 +12,8 @@ import {
   IS_DEMO_ENVIRONMENT,
   isDemoAccessExpired,
 } from '@/src/lib/demo-environment'
+import { PLATFORM_CONTACT_EMAIL } from '@/src/lib/platform-branding'
+import { getLoginDestination } from '@/src/lib/auth-redirect'
 
 const emailInputId = 'portal-login-email'
 const passwordInputId = 'portal-login-password'
@@ -61,8 +63,13 @@ export default function PortalLoginPage() {
         return
       }
 
-      // Staff goes to ERP, clients to portal
-      router.replace(profile.rol === 'Cliente' ? '/portal' : '/dashboard')
+      const requestedNext = new URLSearchParams(window.location.search).get('next')
+      const safePortalDestination = getLoginDestination('Cliente', requestedNext)
+
+      // Staff goes to ERP; clients return to the authenticated portal link.
+      router.replace(profile.rol === 'Cliente' ? safePortalDestination : '/dashboard')
+    } catch {
+      toast.error('No se pudo conectar. Revisa tu conexión e intenta de nuevo.')
     } finally {
       setLoading(false)
     }
@@ -244,7 +251,7 @@ export default function PortalLoginPage() {
             </p>
           )}
           <p className="mt-4.5 text-center text-xs leading-relaxed text-[#9AA3B2] dark:text-slate-500">
-            ¿Problemas para ingresar? Contacta a tu agente de carga.
+            ¿Problemas de acceso? <a href={`mailto:${PLATFORM_CONTACT_EMAIL}`} className="font-medium text-blue-600 underline dark:text-blue-400">Contactar al soporte de la plataforma</a>. Para aprobar tu cuenta, contacta a tu agente de carga.
           </p>
         </div>
       </div>

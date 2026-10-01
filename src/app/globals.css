@@ -131,3 +131,17 @@
     scroll-margin-top: 88px;
   }
 }
+
+@media print {
+  .portal-shell > header,
+  .portal-shell > nav {
+    display: none;
+  }
+  .portal-shell > main {
+    max-width: none;
+    padding: 0;
+  }
+  .portal-shell article section {
+    break-inside: avoid;
+  }
+}

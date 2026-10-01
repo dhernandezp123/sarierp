@@ -1,5 +1,7 @@
 'use client'
 
+import { toDateInputValue } from '@/src/lib/format'
+
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
@@ -15,6 +17,8 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { billingReturnHref } from '@/src/lib/billing-readiness'
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 
 type Invoice = {
   id: string
@@ -224,6 +228,10 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const rawReturnTo = typeof window === 'undefined'
+    ? null
+    : new URLSearchParams(window.location.search).get('returnTo')
+  const returnHref = rawReturnTo ? billingReturnHref(rawReturnTo) : '/invoicing'
   const [loading, setLoading] = useState(true)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [items, setItems] = useState<InvoiceItem[]>([])
@@ -237,7 +245,7 @@ export default function InvoiceDetailPage() {
   // Payment modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [payAmount, setPayAmount] = useState('')
-  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
+  const [payDate, setPayDate] = useState(toDateInputValue())
   const [payFiscalType, setPayFiscalType] = useState<InvoiceFiscalType>('Gravada')
   const [payPointOfSale, setPayPointOfSale] = useState('')
   const [payMethod, setPayMethod] = useState<PaymentMethod | ''>('')
@@ -300,7 +308,7 @@ export default function InvoiceDetailPage() {
     if (!flow) return
     setAdvancing(true)
     const updateData: Record<string, string | null> = { status: flow.next }
-    if (flow.next === 'Pagada') updateData.paid_date = new Date().toISOString().slice(0, 10)
+    if (flow.next === 'Pagada') updateData.paid_date = toDateInputValue()
     const { error } = await supabase.from('invoices').update(updateData).eq('id', invoice.id)
     if (error) { toast.error(error.message); setAdvancing(false); return }
     toast.success(`Estado actualizado: ${flow.next}`)
@@ -538,7 +546,7 @@ export default function InvoiceDetailPage() {
     <div className="space-y-6">
       <Breadcrumbs
         items={[
-          { label: 'Facturación', href: '/invoicing' },
+          { label: 'Facturación', href: returnHref },
           { label: invoice.invoice_number || 'Detalle de factura' },
         ]}
       />
@@ -546,7 +554,7 @@ export default function InvoiceDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex items-start gap-4">
-          <button type="button" onClick={() => router.push('/invoicing')} className={secondaryButtonClass}>
+          <button type="button" onClick={() => router.push(returnHref)} className={secondaryButtonClass}>
             <ChevronLeft className="h-4 w-4" />
             Volver
           </button>
@@ -565,6 +573,16 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <CreateContextTaskDialog
+            context={{
+              entityType: 'invoice',
+              entityId: invoice.id,
+              entityLabel: invoice.invoice_number || 'Factura sin número',
+              sourceModule: 'invoicing',
+              sourcePath: `/invoicing/${invoice.id}`,
+            }}
+            suggestedTitle={`Revisar ${invoice.invoice_number || 'factura'}`}
+          />
           {flow && (
             <button
               type="button"
@@ -1001,7 +1019,7 @@ export default function InvoiceDetailPage() {
                   type="date"
                   value={payDate}
                   onChange={(e) => setPayDate(e.target.value)}
-                  max={new Date().toISOString().slice(0, 10)}
+                  max={toDateInputValue()}
                   className={fieldClass}
                 />
               </div>

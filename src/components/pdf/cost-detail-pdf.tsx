@@ -13,6 +13,7 @@ import {
 } from '@/src/lib/company-branding'
 import { calculateTaxAmount, normalizeTaxRatePercent } from '@/src/lib/tax'
 import { DemoPdfWatermark } from './DemoPdfWatermark'
+import { containerCount, freightBreakdown, type CostContainer } from '@/src/lib/cost-analysis'
 
 function formatCurrency(value: number) {
   return Number(value || 0).toLocaleString('en-US', {
@@ -56,7 +57,7 @@ const styles = StyleSheet.create({
   page: {
     padding: 18,
     paddingBottom: 28,
-    fontSize: 7,
+    fontSize: 8,
     color: '#0F172A',
   },
   pageFooter: {
@@ -65,7 +66,7 @@ const styles = StyleSheet.create({
     left: 18,
     right: 18,
     textAlign: 'center',
-    fontSize: 6,
+    fontSize: 6.5,
     color: '#64748B',
   },
   pageFooterMeta: {
@@ -74,7 +75,7 @@ const styles = StyleSheet.create({
     left: 18,
     right: 18,
     textAlign: 'center',
-    fontSize: 6,
+    fontSize: 6.5,
     color: '#64748B',
   },
   header: {
@@ -91,7 +92,7 @@ const styles = StyleSheet.create({
   badge: {
     backgroundColor: '#0F172A',
     color: '#FFFFFF',
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: 'bold',
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -109,14 +110,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   headerQuoteTitle: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: 'bold',
     color: '#B52A37',
     marginBottom: 2,
     textTransform: 'uppercase',
   },
   headerQuoteText: {
-    fontSize: 6.5,
+    fontSize: 7,
     color: '#0F172A',
     marginBottom: 1,
   },
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   internalBannerText: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: 'bold',
     color: '#B52A37',
     textAlign: 'center',
@@ -151,7 +152,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   boxTitle: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: 'bold',
     color: '#B52A37',
     marginBottom: 4,
@@ -170,19 +171,19 @@ const styles = StyleSheet.create({
   },
   label: {
     width: 58,
-    fontSize: 6,
+    fontSize: 7,
     color: '#64748B',
   },
   value: {
     flex: 1,
-    fontSize: 6,
+    fontSize: 7,
     fontWeight: 'bold',
   },
   section: {
     marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: 'bold',
     color: '#B52A37',
     marginBottom: 2,
@@ -200,14 +201,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     paddingVertical: 3,
     paddingHorizontal: 4,
-    fontSize: 5.4,
+    fontSize: 6.5,
     fontWeight: 'bold',
   },
   tableRow: {
     flexDirection: 'row',
     paddingVertical: 2,
     paddingHorizontal: 4,
-    fontSize: 5.4,
+    fontSize: 6.5,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
@@ -222,7 +223,7 @@ const styles = StyleSheet.create({
   groupText: {
     width: '100%',
     color: '#B3282D',
-    fontSize: 5.6,
+    fontSize: 6.8,
     fontWeight: 700,
     textTransform: 'uppercase',
   },
@@ -230,7 +231,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: 2,
     paddingHorizontal: 4,
-    fontSize: 5.4,
+    fontSize: 6.5,
     fontWeight: 'bold',
     backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
@@ -301,6 +302,10 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 4,
     marginTop: 8,
+  },
+  sectionNote: {
+    fontSize: 7,
+    marginBottom: 4,
   },
 })
 
@@ -401,6 +406,7 @@ const sumLinesByCurrency = (
 export default function CostDetailPDF({
   quotation,
   selectedAgent,
+  quotationContainers = [],
   pricingItems = [],
   wonAt,
   generatedByName,
@@ -410,6 +416,7 @@ export default function CostDetailPDF({
 }: {
   quotation: any
   selectedAgent: any
+  quotationContainers?: CostContainer[]
   pricingItems?: any[]
   wonAt?: string | null
   generatedByName?: string | null
@@ -460,6 +467,9 @@ export default function CostDetailPDF({
   ].filter((group) => group.items.length > 0)
 
   const totalsByCurrency = sumLinesByCurrency(pricingItems, normalizedTaxRate)
+  const canonicalContainers = ['FCL', 'FTL'].includes(quotation.quote_type) ? quotationContainers : []
+  const containers = containerCount(canonicalContainers)
+  const freight = quotation.quote_type === 'FCL' ? freightBreakdown(pricingItems, canonicalContainers, selectedAgent) : null
 
   const customer = quotation.cliente || quotation.clientes
   const quoteDate = quotation.quoted_at || quotation.created_at
@@ -510,7 +520,7 @@ export default function CostDetailPDF({
 
   return (
     <Document>
-      <Page size="LETTER" orientation="portrait" style={styles.page} wrap={false}>
+      <Page size="LETTER" orientation="landscape" style={styles.page}>
         <DemoPdfWatermark />
         <View style={styles.header}>
           <View>
@@ -644,7 +654,10 @@ export default function CostDetailPDF({
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>DETALLE DE COSTOS Y VENTA</Text>
+          <Text style={styles.sectionTitle}>COSTOS Y VENTA COTIZADOS — PRICING ACTUAL</Text>
+          <Text style={styles.sectionNote}>Presupuesto cotizado; no confirma costos facturados ni pagos de proveedor.</Text>
+          {containers !== null && <Text style={styles.sectionNote}>Carga: {canonicalContainers.map(c => `${c.quantity} x ${c.container_type_name}`).join(' / ')}. Promedios distribuidos entre {containers} contenedores; no asignados por BL.</Text>}
+          {freight && <Text style={styles.sectionNote}>Flete guardado {freight.currency} {formatCurrency(freight.total)} = marítimo {formatCurrency(freight.ocean)} + Profit Share agente ({freight.count} x {formatCurrency(freight.ps)}) + MBL ({freight.mbl} x {formatCurrency(freight.fee)}). Desglose conciliado con tarifa actual.</Text>}
 
           <View style={styles.table}>
             <View style={styles.tableHeader}>
@@ -692,7 +705,7 @@ export default function CostDetailPDF({
                         <Text style={styles.colAmount}>
                           {line.currency} {formatCurrency(line.tax)}
                         </Text>
-                        <Text style={styles.colProfit}>
+                        <Text style={[styles.colProfit, line.profit < 0 ? { color: '#B52A37' } : {}]}>
                           {line.currency} {formatCurrency(line.profit)}
                         </Text>
                         <Text style={styles.colMargin}>
@@ -722,7 +735,7 @@ export default function CostDetailPDF({
                       <Text style={styles.colAmount}>
                         {groupTotals.currency} {formatCurrency(groupTotals.tax)}
                       </Text>
-                      <Text style={styles.colProfit}>
+                      <Text style={[styles.colProfit, groupTotals.profit < 0 ? { color: '#B52A37' } : {}]}>
                         {groupTotals.currency} {formatCurrency(groupTotals.profit)}
                       </Text>
                       <Text style={styles.colMargin}>
@@ -775,10 +788,14 @@ export default function CostDetailPDF({
                 <Text>Costo Total</Text>
                 <Text>{totals.currency} {formatCurrency(totals.costTotal)}</Text>
               </View>
+              {containers !== null && <View style={styles.totalRow}>
+                <Text>Promedio costo / contenedor</Text>
+                <Text>{totals.currency} {formatCurrency(totals.costTotal / containers)}</Text>
+              </View>}
 
               <View style={styles.totalDivider} />
 
-              <View style={styles.profitRow}>
+              <View style={[styles.profitRow, totals.profit < 0 ? { color: '#B52A37' } : {}]}>
                 <Text>Profit</Text>
                 <Text>{totals.currency} {formatCurrency(totals.profit)}</Text>
               </View>

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { AlertTriangle, CheckCircle2, ChevronDown, CircleHelp, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
 import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 
@@ -10,6 +10,7 @@ import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import QuotationPDF from '../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
+import { getAgentMblTotal, getFclMblTotal, getMblQuantity, isValidMblQuantity } from '@/src/lib/agent-mbl-cost'
 import { createNotification } from '@/src/lib/notifications'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import {
@@ -37,9 +38,12 @@ import {
   DEFAULT_TAX_RATE_PERCENT,
   calculateTaxAmount,
   normalizeTaxRatePercent,
+  resolvePersistedTaxAmount,
 } from '@/src/lib/tax'
 import {
+  applyInsuranceMinimumCharge,
   DEFAULT_INSURANCE_COST_RATE_PERCENT,
+  INSURANCE_MINIMUM_CHARGE_USD,
 } from '@/src/lib/insurance-calculator'
 import {
   DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS,
@@ -49,6 +53,7 @@ import {
   partitionInsuranceCoverage,
 } from '@/src/lib/insurance-coverage'
 import { CotizacionCombobox } from '@/src/components/ui/CotizacionCombobox'
+import { SectionNav } from '@/src/components/ui/SectionNav'
 import { AgenteCombobox } from '@/src/components/ui/AgenteCombobox'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import { CarrierCombobox } from '@/src/components/ui/CarrierCombobox'
@@ -56,6 +61,12 @@ import {
   FclAgentComparisonTable,
   type FclTableChargeOverrides,
 } from '@/src/components/pricing/FclAgentComparisonTable'
+import { QuotationOptionsPanel } from '@/src/components/pricing/QuotationOptionsPanel'
+import { InsuranceCalculationDetails } from '@/src/components/pricing/InsuranceCalculationDetails'
+import {
+  getClientVisibleQuotationOptions,
+  type QuotationCommercialOption,
+} from '@/src/lib/quotation-options'
 import { cn } from '../../../lib/utils'
 import {
   cardClass,
@@ -68,7 +79,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from '@/src/lib/ui-classes'
-import { formatDateTime } from '@/src/lib/format'
+import { formatDateTime, toDateInputValue } from '@/src/lib/format'
 
 import { Badge } from '../../../components/ui/badge'
 import {
@@ -88,6 +99,15 @@ const pricingItemTypeOptions = [
   'Inland',
   'Profit',
   'Otro',
+]
+
+const pricingSections = [
+  { href: '#pricing-summary' as const, label: 'Cotización' },
+  { href: '#pricing-builder' as const, label: 'Construcción' },
+  { href: '#pricing-agent-quotes' as const, label: 'Comparativo' },
+  { href: '#pricing-sale' as const, label: 'Venta' },
+  { href: '#pricing-options' as const, label: 'Opciones' },
+  { href: '#pricing-close' as const, label: 'Cierre' },
 ]
 import {
   Dialog,
@@ -201,6 +221,15 @@ type FinancialTotalsSnapshot = {
   gp_percentage: number
 }
 
+type PersistedPricingTaxItem = {
+  sale_amount?: number | string | null
+  quantity?: number | string | null
+  taxable?: boolean | null
+  tax_amount?: number | string | null
+  tax_rate?: number | string | null
+  total_amount?: number | string | null
+}
+
 type FclQuantityReview = {
   itemId: string
   description: string
@@ -299,6 +328,8 @@ function PricingComparisonContent() {
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [selectedQuote, setSelectedQuote] = useState<any>(null)
+  const [selectedQuoteLoading, setSelectedQuoteLoading] = useState(false)
+  const selectedQuoteIdRef = useRef<string | null>(null)
   const [clientNotes, setClientNotes] = useState('')
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
@@ -314,6 +345,7 @@ function PricingComparisonContent() {
     useState(false)
   const [insuranceAdditionalItemIds, setInsuranceAdditionalItemIds] =
     useState<string[]>([])
+  const [quotationInsuranceCostRate, setQuotationInsuranceCostRate] = useState('')
   const [applyingCargoInsurance, setApplyingCargoInsurance] = useState(false)
   const defaultSupplierName = getCompanyTradeName(companyBranding)
 
@@ -324,6 +356,9 @@ function PricingComparisonContent() {
   const [fclTableChargeOverrides, setFclTableChargeOverrides] =
     useState<FclTableChargeOverrides>({})
   const [pricingItems, setPricingItems] = useState<any[]>([])
+  const [commercialOptions, setCommercialOptions] =
+    useState<QuotationCommercialOption[]>([])
+  const [savingCommercialOption, setSavingCommercialOption] = useState(false)
   const [quotationContainers, setQuotationContainers] = useState<any[]>([])
   const [containerRateLines, setContainerRateLines] = useState<any[]>([])
   const [cargoLines, setCargoLines] = useState<CargoLine[]>([])
@@ -386,6 +421,7 @@ function PricingComparisonContent() {
     ocean_freight: '',
     exw_cost: '',
     mbl_fee: '',
+    mbl_quantity: '1',
     profit_per_container: '',
     containers_qty: '1',
     free_days_destination: '',
@@ -573,7 +609,9 @@ function PricingComparisonContent() {
       return
     }
 
-    setAgentQuotes(data || [])
+    if (selectedQuoteIdRef.current === quotationId) {
+      setAgentQuotes(data || [])
+    }
   }
 
   const fetchPricingItems = async (quotationId: string) => {
@@ -588,7 +626,38 @@ function PricingComparisonContent() {
       return
     }
 
-    setPricingItems(data || [])
+    if (selectedQuoteIdRef.current === quotationId) {
+      setPricingItems(data || [])
+    }
+  }
+
+  const fetchCommercialOptions = async (quotationId: string) => {
+    const { data, error } = await supabase
+      .from('quotation_options')
+      .select('*, items:quotation_option_items(*)')
+      .eq('quotation_id', quotationId)
+      .order('sort_order', { ascending: true })
+
+    if (error) {
+      toast.error(error.message)
+      if (selectedQuoteIdRef.current === quotationId) {
+        setCommercialOptions([])
+      }
+      return
+    }
+
+    const normalizedOptions = ((data || []) as QuotationCommercialOption[]).map(
+      (option) => ({
+        ...option,
+        items: [...(option.items || [])].sort(
+          (a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0)
+        ),
+      })
+    )
+
+    if (selectedQuoteIdRef.current === quotationId) {
+      setCommercialOptions(normalizedOptions)
+    }
   }
 
   const fetchQuotationContainers = async (quotationId: string) => {
@@ -603,7 +672,9 @@ function PricingComparisonContent() {
       return
     }
 
-    setQuotationContainers(data || [])
+    if (selectedQuoteIdRef.current === quotationId) {
+      setQuotationContainers(data || [])
+    }
   }
 
   const loadCargoLines = async (quotationId?: string) => {
@@ -619,19 +690,25 @@ function PricingComparisonContent() {
 
     if (error) {
       toast.error(error.message)
-      setCargoLines([])
+      if (selectedQuoteIdRef.current === targetQuotationId) {
+        setCargoLines([])
+      }
       return
     }
 
     if (!error && data) {
-      setCargoLines(data as CargoLine[])
+      if (selectedQuoteIdRef.current === targetQuotationId) {
+        setCargoLines(data as CargoLine[])
+      }
     }
   }
 
   const loadMiamiRates = async (quote = selectedQuote) => {
     if (!quote?.cliente_id) {
-      setClientRates([])
-      setSurchargeRules([])
+      if (!quote?.id || selectedQuoteIdRef.current === quote.id) {
+        setClientRates([])
+        setSurchargeRules([])
+      }
       return
     }
 
@@ -653,24 +730,40 @@ function PricingComparisonContent() {
           .eq('is_active', true)
       : { data: [] }
 
-    setClientRates((ratesData || []) as ClientRate[])
-    setSurchargeRules((surchargeData || []) as SurchargeRule[])
+    if (selectedQuoteIdRef.current === quote.id) {
+      setClientRates((ratesData || []) as ClientRate[])
+      setSurchargeRules((surchargeData || []) as SurchargeRule[])
+    }
   }
 
-  useEffect(() => {
-    if (!selectedQuote?.id) return
-
-    loadMiamiRates()
-  }, [selectedQuote?.id, selectedQuote?.cliente_id, selectedQuote?.service_product])
-
   const handleSelectQuote = async (quote: any) => {
+    selectedQuoteIdRef.current = quote.id
     setSelectedQuote(quote)
+    setSelectedQuoteLoading(true)
+    setAgentForm((current) => ({ ...current, mbl_quantity: '1' }))
     setClientNotes(quote.client_notes || '')
-    await fetchAgentQuotes(quote.id)
-    await fetchPricingItems(quote.id)
-    await fetchQuotationContainers(quote.id)
-    await loadCargoLines(quote.id)
-    await loadMiamiRates(quote)
+    setAgentQuotes([])
+    setPricingItems([])
+    setCommercialOptions([])
+    setQuotationContainers([])
+    setCargoLines([])
+    setClientRates([])
+    setSurchargeRules([])
+
+    try {
+      await Promise.all([
+        fetchAgentQuotes(quote.id),
+        fetchPricingItems(quote.id),
+        fetchCommercialOptions(quote.id),
+        fetchQuotationContainers(quote.id),
+        loadCargoLines(quote.id),
+        loadMiamiRates(quote),
+      ])
+    } finally {
+      if (selectedQuoteIdRef.current === quote.id) {
+        setSelectedQuoteLoading(false)
+      }
+    }
   }
 
   const fetchAgentRouteRates = async (agentId: string) => {
@@ -857,6 +950,7 @@ function PricingComparisonContent() {
       ),
       exw_cost: String(quote.exw_cost || ''),
       mbl_fee: String(quote.mbl_fee || ''),
+      mbl_quantity: String(getMblQuantity(quote)),
       profit_per_container: String(quote.profit_per_container || ''),
       containers_qty: String(quote.containers_qty || '1'),
       free_days_destination: String(quote.free_days_destination || ''),
@@ -920,6 +1014,10 @@ function PricingComparisonContent() {
     if (!ensureAgentQuoteCanBeModified()) return
 
     const oldStatus = selectedQuote.status || 'Borrador'
+    if (!isValidMblQuantity(agentForm.mbl_quantity)) {
+      toast.error('La cantidad de MBL debe ser un número entero mayor o igual a 1.')
+      return
+    }
     const nextStatus = 'Pendiente de Fijar Precios'
 
     if (oldStatus !== nextStatus && !canTransition(oldStatus, nextStatus)) {
@@ -941,6 +1039,7 @@ function PricingComparisonContent() {
       Boolean(editingAgentQuote) &&
       (Number(editingAgentQuote?.mbl_fee || 0) !==
         Number(agentForm.mbl_fee || 0) ||
+        getMblQuantity(editingAgentQuote || {}) !== Number(agentForm.mbl_quantity) ||
         Number(editingAgentQuote?.profit_per_container || 0) !==
           Number(agentForm.profit_per_container || 0))
 
@@ -982,7 +1081,7 @@ function PricingComparisonContent() {
     const suggestedSale =
       baseFreight +
       Number(agentForm.exw_cost || 0) +
-      Number(agentForm.mbl_fee || 0) +
+      getAgentMblTotal(agentForm) +
       Number(agentForm.profit_per_container || 0) * totalContainersQty
 
     const agentQuotePayload = {
@@ -992,6 +1091,7 @@ function PricingComparisonContent() {
       ocean_freight: baseFreight,
       exw_cost: Number(agentForm.exw_cost || 0),
       mbl_fee: Number(agentForm.mbl_fee || 0),
+      mbl_quantity: normalizeText(selectedQuote.quote_type) === 'fcl' ? Number(agentForm.mbl_quantity) : 1,
       profit_per_container: Number(agentForm.profit_per_container || 0),
       containers_qty: Number(agentForm.containers_qty || 1),
       free_days_destination: Number(agentForm.free_days_destination || 0),
@@ -1117,6 +1217,7 @@ function PricingComparisonContent() {
       if (currentQuoteOverrides) {
         const nextQuoteOverrides = { ...currentQuoteOverrides }
         delete nextQuoteOverrides.mbl
+        delete nextQuoteOverrides.mblSource
         delete nextQuoteOverrides.ps
 
         const nextOverrides = { ...fclTableChargeOverrides }
@@ -1177,7 +1278,9 @@ function PricingComparisonContent() {
 
       if (pricingItems.length > 0) {
         toast.warning(
-          'La tarifa seleccionada fue actualizada. Revisa o regenera las líneas de venta para reflejar los cambios.'
+          normalizeText(selectedQuote.quote_type) === 'fcl'
+            ? 'Tarifa guardada. Usa «Aplicar costo» para actualizar el flete conservando la venta y los demás cargos.'
+            : 'La tarifa seleccionada fue actualizada. Revisa o regenera las líneas de venta para reflejar los cambios.'
         )
       }
     }
@@ -1188,6 +1291,7 @@ function PricingComparisonContent() {
       ocean_freight: '',
       exw_cost: '',
       mbl_fee: '',
+      mbl_quantity: '1',
       profit_per_container: '',
       containers_qty: '1',
       free_days_destination: '',
@@ -1241,7 +1345,16 @@ function PricingComparisonContent() {
       selectedAgentQuote = data
     }
 
-    const reason = await requestChangeReason('Regenerar pricing')
+    const shouldPreserveExistingPricing =
+      pricingItems.length > 0 &&
+      (normalizeText(selectedQuote.quote_type) === 'fcl' ||
+        (isAirConsolidatedQuote() &&
+          agentQuotes.some((quote) => isSelectedQuote(quote))))
+    const reason = await requestChangeReason(
+      shouldPreserveExistingPricing
+        ? 'Actualizar costos conservando venta'
+        : 'Regenerar pricing'
+    )
 
     if (reason === null) return
 
@@ -1278,7 +1391,7 @@ function PricingComparisonContent() {
         : Math.max(Number.isFinite(fallbackAmount) ? fallbackAmount : 0, 0)
     }
     const mblFee = isFclSelection
-      ? getSelectedFclAmount('mbl', selectedAgentQuote.mbl_fee)
+      ? getFclMblTotal(selectedAgentQuote, selectedFclOverrides)
       : Number(selectedAgentQuote.mbl_fee || 0)
     const agentProfitPerContainer = isFclSelection
       ? getSelectedFclAmount(
@@ -2350,9 +2463,18 @@ function PricingComparisonContent() {
     const oldStatus = selectedQuote.status || 'Borrador'
     const activeAgentQuote = agentQuotes.find((quote) => quote.is_selected) || null
     const impact = await getOperationalImpact(activeAgentQuote)
+    const hasPendingCommercialOptionSelection =
+      commercialOptions.some((option) =>
+        option.status === 'Borrador' || option.status === 'Ofrecida'
+      ) &&
+      !commercialOptions.some((option) => option.status === 'Aceptada')
+    const isCommercialOptionRepricing = Boolean(
+      impact?.isRepricing && hasPendingCommercialOptionSelection
+    )
     const shouldAskOperationalAction =
       impact &&
       (impact.hasShippingInstruction || impact.bookings.length > 0) &&
+      !isCommercialOptionRepricing &&
       !operationalSyncMode
 
     if (shouldAskOperationalAction) {
@@ -2363,7 +2485,8 @@ function PricingComparisonContent() {
     }
 
     const isRepricing = Boolean(impact?.isRepricing)
-    const nextStatus = isRepricing ? 'Ganada' : 'Pricing Aprobado'
+    const closesRepricing = isRepricing && !isCommercialOptionRepricing
+    const nextStatus = closesRepricing ? 'Ganada' : 'Pricing Aprobado'
     const isReapproval = oldStatus === 'Pricing Aprobado'
     const previousFinancialTotals = shouldCreateFinancialSnapshot(
       selectedQuote,
@@ -2394,7 +2517,7 @@ function PricingComparisonContent() {
             change_type: changeType,
           }
 
-    if (!isRepricing && !isReapproval && !canTransition(oldStatus, nextStatus)) {
+    if (!closesRepricing && !isReapproval && !canTransition(oldStatus, nextStatus)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${nextStatus}`)
       return false
     }
@@ -2420,7 +2543,7 @@ function PricingComparisonContent() {
       return false
     }
 
-    if (operationalSyncMode === 'sync' && impact) {
+    if (operationalSyncMode === 'sync' && impact && closesRepricing) {
       try {
         await syncOperationalRepricing(impact)
       } catch (syncError: any) {
@@ -2449,7 +2572,7 @@ function PricingComparisonContent() {
       metadata: getFinancialSnapshotMetadata('pricing_approved'),
     })
 
-    if (isRepricing && operationalSyncMode) {
+    if (closesRepricing && operationalSyncMode) {
       const repricingAction =
         operationalSyncMode === 'sync'
           ? 'repricing_approved_with_operational_sync'
@@ -2479,6 +2602,25 @@ function PricingComparisonContent() {
       })
     }
 
+    if (isCommercialOptionRepricing) {
+      await createActivityLog({
+        module: 'pricing',
+        action: 'repricing_options_approved_for_client',
+        entityType: 'quotation',
+        entityId: selectedQuote.id,
+        description: `Repricing aprobado para enviar opciones al cliente en ${
+          selectedQuote.quotation_number || selectedQuote.id
+        }`,
+        metadata: {
+          ...getFinancialSnapshotMetadata('repricing_options_approved_for_client'),
+          previous_status: oldStatus,
+          new_status: nextStatus,
+          commercial_options_count: commercialOptions.length,
+          operational_sync_deferred: true,
+        },
+      })
+    }
+
     if (selectedQuote.created_by) {
       await createNotification({
         userId: selectedQuote.created_by,
@@ -2491,9 +2633,11 @@ function PricingComparisonContent() {
     }
 
     toast.success(
-      isRepricing
-        ? 'Repricing aprobado. La cotización volvió a Ganada.'
-        : 'Pricing aprobado correctamente'
+      isCommercialOptionRepricing
+        ? 'Repricing aprobado. Envía las opciones y registra la elección del cliente.'
+        : isRepricing
+          ? 'Repricing aprobado. La cotización volvió a Ganada.'
+          : 'Pricing aprobado correctamente'
     )
 
     await fetchPricingItems(selectedQuote.id)
@@ -2545,6 +2689,200 @@ function PricingComparisonContent() {
     toast.success('Observaciones guardadas')
   }
 
+  const saveCurrentPricingAsOption = async ({
+    label,
+    isRecommended,
+    clientNotes: optionClientNotes,
+    optionId,
+  }: {
+    label: string
+    isRecommended: boolean
+    clientNotes: string
+    optionId?: string
+  }): Promise<boolean> => {
+    if (!selectedQuote?.id || savingCommercialOption) return false
+    if (!ensureQuoteIsEditable()) return false
+
+    setSavingCommercialOption(true)
+
+    try {
+      const { data, error } = await supabase.rpc(
+        'save_current_pricing_as_option_v2',
+        {
+          p_quotation_id: selectedQuote.id,
+          p_label: label.trim() || null,
+          p_is_recommended: isRecommended,
+          p_option_id: optionId || null,
+          p_client_notes: optionClientNotes,
+        }
+      )
+
+      if (error) {
+        toast.error(error.message)
+        return false
+      }
+
+      const saved = Array.isArray(data) ? data[0] : data
+      toast.success(
+        optionId
+          ? `Opción ${saved?.option_code || ''} actualizada`
+          : `Opción ${saved?.option_code || ''} guardada`
+      )
+      await fetchCommercialOptions(selectedQuote.id)
+      return true
+    } finally {
+      setSavingCommercialOption(false)
+    }
+  }
+
+  const updateDraftCommercialOptionDetails = async ({
+    optionId,
+    label,
+    isRecommended,
+    clientNotes: optionClientNotes,
+  }: {
+    optionId: string
+    label: string
+    isRecommended: boolean
+    clientNotes: string
+  }): Promise<boolean> => {
+    if (!selectedQuote?.id || savingCommercialOption) return false
+    if (!ensureQuoteIsEditable()) return false
+
+    setSavingCommercialOption(true)
+    try {
+      const { error } = await supabase.rpc(
+        'update_draft_quotation_option_details',
+        {
+          p_option_id: optionId,
+          p_label: label.trim(),
+          p_is_recommended: isRecommended,
+          p_client_notes: optionClientNotes,
+        }
+      )
+
+      if (error) {
+        toast.error(error.message)
+        return false
+      }
+
+      toast.success('Detalles de la opción actualizados')
+      await fetchCommercialOptions(selectedQuote.id)
+      return true
+    } finally {
+      setSavingCommercialOption(false)
+    }
+  }
+
+  const viewSourceAgentQuote = (agentQuoteId: string) => {
+    if (!agentQuotes.some((quote) => quote.id === agentQuoteId)) {
+      toast.error('No se encontró la tarifa de origen vinculada a esta opción')
+      return
+    }
+
+    setAgentQuotesViewMode('cards')
+    setHighlightedAgentQuoteId(agentQuoteId)
+
+    window.setTimeout(() => {
+      const sourceCard = document.getElementById(`agent-quote-${agentQuoteId}`)
+      const scrollTarget = sourceCard || agentQuotesSectionRef.current
+      scrollTarget?.scrollIntoView({
+        behavior: 'smooth',
+        block: sourceCard ? 'center' : 'start',
+      })
+    }, 50)
+
+    window.setTimeout(() => {
+      setHighlightedAgentQuoteId((current) =>
+        current === agentQuoteId ? null : current
+      )
+    }, 2200)
+  }
+
+  const deleteDraftCommercialOption = async (optionId: string) => {
+    if (!selectedQuote?.id || savingCommercialOption) return
+
+    setSavingCommercialOption(true)
+    try {
+      const { error } = await supabase.rpc('delete_draft_quotation_option', {
+        p_option_id: optionId,
+      })
+
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      toast.success('Opción eliminada')
+      await fetchCommercialOptions(selectedQuote.id)
+    } finally {
+      setSavingCommercialOption(false)
+    }
+  }
+
+  const getNormalizedPdfCargoLines = () =>
+    cargoLines.map((line) => ({
+      quantity: Number(line.quantity || 0),
+      package_type: line.package_type || 'Caja',
+      length:
+        line.length === null || line.length === undefined
+          ? null
+          : Number(line.length || 0),
+      width:
+        line.width === null || line.width === undefined
+          ? null
+          : Number(line.width || 0),
+      height:
+        line.height === null || line.height === undefined
+          ? null
+          : Number(line.height || 0),
+      dimension_unit: line.dimension_unit || 'in',
+      weight_lbs:
+        line.weight_lbs === null || line.weight_lbs === undefined
+          ? null
+          : Number(line.weight_lbs || 0),
+      ft3:
+        line.ft3 === null || line.ft3 === undefined
+          ? calculateCargoLineFt3(line)
+          : Number(line.ft3 || 0),
+      cbm:
+        line.cbm === null || line.cbm === undefined
+          ? calculateCargoLineCbm(line)
+          : Number(line.cbm || 0),
+    }))
+
+  const printCommercialOption = async (option: QuotationCommercialOption) => {
+    if (!selectedQuote) {
+      toast.error('Selecciona una cotización primero')
+      return
+    }
+
+    try {
+      const blob = await pdf(
+        <QuotationPDF
+          quotation={{
+            ...selectedQuote,
+            client_notes: clientNotes || selectedQuote.client_notes,
+          }}
+          selectedAgent={option}
+          pricingItems={option.items || []}
+          commercialOptions={[option]}
+          quotationContainers={quotationContainers}
+          cargoLines={getNormalizedPdfCargoLines()}
+          company={companyBranding}
+        />
+      ).toBlob()
+
+      window.open(URL.createObjectURL(blob), '_blank')
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `No se pudo generar la opción ${option.option_code}`
+      )
+    }
+  }
+
   const previewQuotationPdf = async () => {
     if (!selectedQuote) {
       toast.error('Selecciona una cotización primero')
@@ -2557,36 +2895,6 @@ function PricingComparisonContent() {
     }
 
     try {
-      const normalizedCargoLines = cargoLines.map((line) => ({
-        quantity: Number(line.quantity || 0),
-        package_type: line.package_type || 'Caja',
-        length:
-          line.length === null || line.length === undefined
-            ? null
-            : Number(line.length || 0),
-        width:
-          line.width === null || line.width === undefined
-            ? null
-            : Number(line.width || 0),
-        height:
-          line.height === null || line.height === undefined
-            ? null
-            : Number(line.height || 0),
-        dimension_unit: line.dimension_unit || 'in',
-        weight_lbs:
-          line.weight_lbs === null || line.weight_lbs === undefined
-            ? null
-            : Number(line.weight_lbs || 0),
-        ft3:
-          line.ft3 === null || line.ft3 === undefined
-            ? calculateCargoLineFt3(line)
-            : Number(line.ft3 || 0),
-        cbm:
-          line.cbm === null || line.cbm === undefined
-            ? calculateCargoLineCbm(line)
-            : Number(line.cbm || 0),
-      }))
-
       const blob = await pdf(
         <QuotationPDF
           quotation={{
@@ -2595,8 +2903,9 @@ function PricingComparisonContent() {
           }}
           selectedAgent={selectedAgentQuote || null}
           pricingItems={pricingItems}
+          commercialOptions={getClientVisibleQuotationOptions(commercialOptions)}
           quotationContainers={quotationContainers}
-          cargoLines={normalizedCargoLines}
+          cargoLines={getNormalizedPdfCargoLines()}
           company={companyBranding}
         />
       ).toBlob()
@@ -2696,6 +3005,36 @@ function PricingComparisonContent() {
       return
     }
 
+    if (commercialOptions.length > 0) {
+      const { error: publishOptionsError } = await supabase.rpc(
+        'send_quotation_with_options',
+        { p_quotation_id: selectedQuote.id }
+      )
+
+      if (publishOptionsError) {
+        toast.error(publishOptionsError.message)
+        return
+      }
+
+      toast.success('Cotización marcada como Enviada al Cliente')
+
+      if (selectedQuote.created_by) {
+        await createNotification({
+          userId: selectedQuote.created_by,
+          title: 'Cotización enviada al cliente',
+          message: `La cotización ${
+            selectedQuote.quotation_number || ''
+          } fue marcada como enviada al cliente.`,
+          type: 'info',
+        })
+      }
+
+      setSelectedQuote({ ...selectedQuote, status: nextStatus })
+      await fetchCommercialOptions(selectedQuote.id)
+      await fetchQuotations()
+      return
+    }
+
     const { error } = await supabase
       .from('quotations')
       .update({ status: nextStatus })
@@ -2744,6 +3083,10 @@ function PricingComparisonContent() {
       ...selectedQuote,
       status: nextStatus,
     })
+
+    if (commercialOptions.length > 0) {
+      await fetchCommercialOptions(selectedQuote.id)
+    }
   }
 
   const totalCost = pricingItems.reduce(
@@ -2758,8 +3101,42 @@ function PricingComparisonContent() {
     0
   )
 
+  const getPersistedPricingTax = (item: PersistedPricingTaxItem) => {
+    const subtotal =
+      Number(item.sale_amount || 0) * Number(item.quantity || 1)
+
+    return resolvePersistedTaxAmount({
+      taxable: Boolean(item.taxable),
+      subtotal,
+      taxAmount: item.tax_amount,
+      taxRatePercent: item.tax_rate,
+      fallbackTaxRatePercent: defaultTaxRate,
+    })
+  }
+
+  const getPersistedPricingTotal = (item: PersistedPricingTaxItem) => {
+    if (
+      item.total_amount !== null &&
+      item.total_amount !== undefined &&
+      item.total_amount !== '' &&
+      Number.isFinite(Number(item.total_amount))
+    ) {
+      return Number(item.total_amount)
+    }
+
+    return (
+      Number(item.sale_amount || 0) * Number(item.quantity || 1) +
+      getPersistedPricingTax(item)
+    )
+  }
+
   const totalSaleWithTax = pricingItems.reduce(
-    (sum, item) => sum + Number(item.total_amount || 0),
+    (sum, item) => sum + getPersistedPricingTotal(item),
+    0
+  )
+
+  const totalTax = pricingItems.reduce(
+    (sum, item) => sum + getPersistedPricingTax(item),
     0
   )
 
@@ -2859,7 +3236,7 @@ const profitabilityColor =
   const agentTotalCost =
     totalOceanFreight +
     Number(agentForm.exw_cost || 0) +
-    Number(agentForm.mbl_fee || 0) +
+    getAgentMblTotal(agentForm) +
     Number(agentForm.profit_per_container || 0) * totalContainersQty
 
   const suggestedSales = [8, 10, 15, 20, 25].map((margin) => ({
@@ -2890,7 +3267,7 @@ const profitabilityColor =
     return (
       Number(quote.ocean_freight || 0) +
       Number(quote.exw_cost || 0) +
-      Number(quote.mbl_fee || 0) +
+      getAgentMblTotal(quote) +
       Number(quote.profit_per_container || 0) * containersQty
     )
   }
@@ -3185,8 +3562,10 @@ const profitabilityColor =
     selectedQuote?.status === 'Enviada al Cliente' ||
     selectedQuote?.status === 'Ganada' ||
     selectedQuote?.status === 'Perdida'
-  const isPricingActionDisabled = !canManagePricing || isLockedQuote
-  const isAgentQuoteFormActionDisabled = !canManagePricing
+  const isPricingActionDisabled =
+    !canManagePricing || isLockedQuote || selectedQuoteLoading
+  const isAgentQuoteFormActionDisabled =
+    !canManagePricing || selectedQuoteLoading
 
   const optionalClientRates = clientRates.filter((rate) => {
     return (
@@ -3257,6 +3636,14 @@ const profitabilityColor =
         .map((item) => item.id)
         .filter((itemId) => itemId && candidateIds.has(itemId))
     )
+    const savedCostRate = Number(selectedQuote?.insurance_cost_rate_percent)
+    setQuotationInsuranceCostRate(
+      String(
+        Number.isFinite(savedCostRate) && savedCostRate > 0
+          ? savedCostRate
+          : insuranceCostRatePercent
+      )
+    )
     setInsuranceCoverageDialogOpen(true)
   }
 
@@ -3284,6 +3671,12 @@ const profitabilityColor =
     )
     if (saleRatePercent <= 0) {
       toast.error('El cliente no tiene porcentaje de seguro configurado')
+      return
+    }
+
+    const costRatePercent = Number(quotationInsuranceCostRate)
+    if (!Number.isFinite(costRatePercent) || costRatePercent <= 0 || costRatePercent > 5) {
+      toast.error('Ingresa un porcentaje de costo mayor a 0% y hasta 5%')
       return
     }
 
@@ -3323,9 +3716,12 @@ const profitabilityColor =
     const insuredBaseCost = fob + serviceCostWithoutInsurance
     const insuredValueSale = insuredBaseSale * insuranceMarkupMultiplier
     const insuredValueCost = insuredBaseCost * insuranceMarkupMultiplier
-    const insuranceSale = insuredValueSale * (saleRatePercent / 100)
-    const insuranceCost =
-      insuredValueCost * (insuranceCostRatePercent / 100)
+    const calculatedInsuranceSale =
+      insuredValueSale * (saleRatePercent / 100)
+    const calculatedInsuranceCost =
+      insuredValueCost * (costRatePercent / 100)
+    const insuranceSale = applyInsuranceMinimumCharge(calculatedInsuranceSale)
+    const insuranceCost = applyInsuranceMinimumCharge(calculatedInsuranceCost)
     const insuranceTaxAmount = calculateTaxAmount(
       insuranceTaxable,
       insuranceSale,
@@ -3356,8 +3752,14 @@ const profitabilityColor =
       }`,
       `Valor asegurado costo: (FOB + costos) × 1.10 = USD ${formatCurrency(insuredValueCost)}`,
       `Valor asegurado venta: (FOB + ventas) × 1.10 = USD ${formatCurrency(insuredValueSale)}`,
-      `Seguro costo: USD ${formatCurrency(insuredValueCost)} × ${insuranceCostRatePercent}% = USD ${formatCurrency(insuranceCost)}`,
-      `Seguro venta: USD ${formatCurrency(insuredValueSale)} × ${saleRatePercent}% = USD ${formatCurrency(insuranceSale)}`,
+      `Seguro costo calculado: USD ${formatCurrency(insuredValueCost)} × ${costRatePercent}% = USD ${formatCurrency(calculatedInsuranceCost)}`,
+      calculatedInsuranceCost <= INSURANCE_MINIMUM_CHARGE_USD
+        ? `Mínimo de seguro aplicado al costo: USD ${formatCurrency(INSURANCE_MINIMUM_CHARGE_USD)}`
+        : `Seguro costo final: USD ${formatCurrency(insuranceCost)}`,
+      `Seguro venta calculada: USD ${formatCurrency(insuredValueSale)} × ${saleRatePercent}% = USD ${formatCurrency(calculatedInsuranceSale)}`,
+      calculatedInsuranceSale <= INSURANCE_MINIMUM_CHARGE_USD
+        ? `Mínimo de seguro aplicado a la venta: USD ${formatCurrency(INSURANCE_MINIMUM_CHARGE_USD)}`
+        : `Seguro venta final: USD ${formatCurrency(insuranceSale)}`,
       `ISV ${defaultTaxRate}% aplicado: ${insuranceTaxable ? 'Sí' : 'No'}`,
     ].join('\n')
     const existingInsuranceItem = pricingItems.find(isInsurancePricingItem)
@@ -3371,7 +3773,7 @@ const profitabilityColor =
       sale_amount: insuranceSale,
       currency: 'USD',
       taxable: insuranceTaxable,
-      tax_rate: insuranceTaxable ? 15 : 0,
+      tax_rate: insuranceTaxable ? defaultTaxRate : 0,
       tax_amount: insuranceTaxAmount,
       total_amount: insuranceTotalAmount,
       notes,
@@ -3408,6 +3810,22 @@ const profitabilityColor =
         return
       }
     }
+
+    const { error: quotationRateError } = await supabase
+      .from('quotations')
+      .update({ insurance_cost_rate_percent: costRatePercent })
+      .eq('id', selectedQuote.id)
+
+    if (quotationRateError) {
+      toast.error('No se pudo guardar la tasa de costo en la cotización')
+      setApplyingCargoInsurance(false)
+      return
+    }
+
+    setSelectedQuote({
+      ...selectedQuote,
+      insurance_cost_rate_percent: costRatePercent,
+    })
 
     const { error } = existingInsuranceItem
       ? await supabase
@@ -3633,6 +4051,7 @@ const profitabilityColor =
                 <CotizacionCombobox
                   quotations={quotations}
                   value={selectedQuote?.id || ''}
+                  disabled={selectedQuoteLoading}
                   onChange={(id) => {
                     const quote = quotations.find((q) => q.id === id)
                     if (quote) handleSelectQuote(quote)
@@ -3668,13 +4087,35 @@ const profitabilityColor =
                   </div>
                 )}
 
+                {selectedQuoteLoading && (
+                  <div
+                    role="status"
+                    className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+                  >
+                    {'Cargando tarifas, cargos y opciones de esta cotizaci\u00f3n...'}
+                  </div>
+                )}
+
                 {isLockedQuote && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">
                     Esta cotización ya fue enviada, ganada o perdida. La edición está bloqueada para proteger el historial comercial.
                   </div>
                 )}
 
-                <Card>
+                <SectionNav
+                  items={
+                    isMiamiFlow
+                      ? pricingSections.filter(
+                          (item) =>
+                            item.href !== '#pricing-builder' &&
+                            item.href !== '#pricing-agent-quotes'
+                        )
+                      : pricingSections
+                  }
+                  label="Secciones del comparativo de Pricing"
+                />
+
+                <Card id="pricing-summary" className="scroll-mt-28">
                   <CardHeader>
                     <CardTitle>
                       {selectedQuote.quotation_number} - {selectedQuote.origen} a {selectedQuote.destino}
@@ -3852,7 +4293,7 @@ const profitabilityColor =
 
                 {!isMiamiFlow && (
                   <>
-                    <Card>
+                    <Card id="pricing-builder" className="scroll-mt-28">
                   <CardHeader>
                     <CardTitle>Construcción de Tarifa</CardTitle>
                   </CardHeader>
@@ -3915,7 +4356,7 @@ const profitabilityColor =
                                 </p>
                                 <div className="space-y-1">
                                   {toShow.map((r: any) => {
-                                    const expired = r.valid_until && r.valid_until < new Date().toISOString().slice(0, 10)
+                                    const expired = r.valid_until && r.valid_until < toDateInputValue()
                                     return (
                                       <button
                                         key={r.id}
@@ -4292,6 +4733,27 @@ const profitabilityColor =
                         </div>
                       )}
 
+                      {normalizeText(selectedQuote.quote_type) === 'fcl' && (
+                        <div>
+                          <label htmlFor="agent-mbl-quantity" className={labelClass}>Cantidad de MBL</label>
+                          <input
+                            id="agent-mbl-quantity"
+                            type="number"
+                            name="mbl_quantity"
+                            min="1"
+                            step="1"
+                            required
+                            value={agentForm.mbl_quantity}
+                            onChange={handleAgentChange}
+                            className={cn(fieldClass, 'mt-1 w-full')}
+                          />
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            {getMblQuantity(agentForm)} MBL × {agentForm.moneda || 'USD'} {formatCurrency(Number(agentForm.mbl_fee || 0))} por MBL.
+                            {' '}Se prorratea entre los {totalContainersQty} contenedores de esta cotización.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="col-span-full w-full max-w-4xl">
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-slate-900/60">
                           <div className="flex items-center justify-between gap-4">
@@ -4383,9 +4845,9 @@ const profitabilityColor =
                                 </span>
                               </div>
                               <div className="flex items-center justify-between gap-4">
-                                <span className="text-slate-600 dark:text-slate-300">MBL / Documentación del agente</span>
+                                <span className="text-slate-600 dark:text-slate-300">MBL / Documentación del agente ({getMblQuantity(agentForm)} × {formatCurrency(Number(agentForm.mbl_fee || 0))})</span>
                                 <span className="font-medium tabular-nums text-slate-900 dark:text-white">
-                                  {agentForm.moneda || 'USD'} {formatCurrency(Number(agentForm.mbl_fee || 0))}
+                                  {agentForm.moneda || 'USD'} {formatCurrency(getAgentMblTotal(agentForm))}
                                 </span>
                               </div>
                               <div className="flex items-center justify-between gap-4">
@@ -4437,8 +4899,9 @@ const profitabilityColor =
                 </Card>
 
                 <div
+                  id="pricing-agent-quotes"
                   ref={agentQuotesSectionRef}
-                  className={cn(cardClass, 'p-6')}
+                  className={cn(cardClass, 'scroll-mt-28 p-6')}
                 >
                   <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
@@ -4601,9 +5064,10 @@ const profitabilityColor =
                               return (
                                 <div
                                   key={quote.id}
+                                  id={`agent-quote-${quote.id}`}
                                   className={`rounded-2xl border p-6 shadow-sm transition ${getAgentQuoteCardClass(
                                     quote
-                                  )} ${isNew && !isSelected ? 'ring-2 ring-green-400' : ''}`}
+                                  )} ${isNew ? 'ring-2 ring-green-400 ring-offset-2 dark:ring-offset-slate-950' : ''}`}
                                 >
                                   <div className="mb-4 flex items-start justify-between gap-3">
                                     <div>
@@ -4783,12 +5247,10 @@ const profitabilityColor =
 
                                     <div>
                                       <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                        MBL:
+                                        MBL ({getMblQuantity(quote)} × {formatCurrency(Number(quote.mbl_fee || 0))}):
                                       </span>{' '}
                                       USD{' '}
-                                      {Number(
-                                        quote.mbl_amount || quote.mbl_cost || quote.mbl_fee || 0
-                                      ).toFixed(2)}
+                                      {getAgentMblTotal(quote).toFixed(2)}
                                     </div>
 
                                     <div>
@@ -4823,7 +5285,7 @@ const profitabilityColor =
 
                                     <button
                                       type="button"
-                                      disabled={isPricingActionDisabled || isSelected}
+                                      disabled={isPricingActionDisabled || (isSelected && normalizeText(selectedQuote.quote_type) !== 'fcl')}
                                       onClick={() => {
                                         setSelectedRateForConfirm(quote)
                                         setConfirmSelectRateOpen(true)
@@ -4835,7 +5297,7 @@ const profitabilityColor =
                                       }
                                     >
                                       {isSelected
-                                        ? 'Tarifa seleccionada'
+                                        ? normalizeText(selectedQuote.quote_type) === 'fcl' ? 'Aplicar costo' : 'Tarifa seleccionada'
                                         : 'Seleccionar tarifa'}
                                     </button>
                                   </div>
@@ -4850,7 +5312,7 @@ const profitabilityColor =
                   </>
                 )}
 
-                <Card>
+                <Card id="pricing-sale" className="scroll-mt-28">
                   {!isMiamiFlow && (
                     <CardHeader>
                       <CardTitle>Detalle de Venta al Cliente</CardTitle>
@@ -5450,7 +5912,8 @@ const profitabilityColor =
                         No hay líneas de cotización.
                       </p>
                     ) : (
-                      <table className="w-full text-left">
+                      <div className="overflow-x-auto">
+                      <table className="min-w-[1100px] w-full text-left">
                         <thead className="bg-zinc-950 text-white">
                           <tr>
                             <th className="p-2 text-xs uppercase text-gray-500">Descripción</th>
@@ -5471,8 +5934,8 @@ const profitabilityColor =
                           {pricingItems.map((item) => {
                             const qty = Number(item.quantity || 1)
                             const subtotal = qty * Number(item.sale_amount || 0)
-                            const tax = calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
-                            const total = subtotal + tax
+                            const tax = getPersistedPricingTax(item)
+                            const persistedTotal = getPersistedPricingTotal(item)
                             const currency = item.currency || 'USD'
                             const costSubtotal =
                               qty * Number(item.cost_amount || 0)
@@ -5518,7 +5981,7 @@ const profitabilityColor =
                                     : 'dark:bg-[#131c2e]'
                                 }`}
                               >
-                                <td className="p-2 text-sm">
+                                <td className="min-w-[19rem] p-2 align-top text-sm">
                                   {editingPricingItemId === item.id ? (
                                     <input
                                       value={editingPricingItemForm?.description || ''}
@@ -5531,25 +5994,11 @@ const profitabilityColor =
                                       className="border rounded px-2 py-1 text-sm w-full"
                                     />
                                   ) : isInsurancePricingItem(item) ? (
-                                    <div className="group/insurance relative inline-flex items-center gap-1.5">
-                                      <span>{item.description}</span>
-                                      <button
-                                        type="button"
-                                        aria-label="Ver calculo del seguro"
-                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-blue-600 transition hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:text-blue-300 dark:hover:bg-blue-950 dark:focus:bg-blue-950"
-                                      >
-                                        <CircleHelp className="h-4 w-4" />
-                                      </button>
-                                      <div
-                                        role="tooltip"
-                                        className="pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-96 max-w-[min(24rem,80vw)] whitespace-pre-line rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs leading-5 text-slate-100 shadow-xl group-hover/insurance:block group-focus-within/insurance:block"
-                                      >
-                                        <p className="mb-1 font-semibold text-white">
-                                          Cálculo del seguro
-                                        </p>
-                                        {item.notes ||
-                                          'Esta línea no tiene el detalle histórico del cálculo.'}
-                                      </div>
+                                    <div className="min-w-0">
+                                      <span className="font-medium text-slate-900 dark:text-white">
+                                        {item.description}
+                                      </span>
+                                      <InsuranceCalculationDetails notes={item.notes} />
                                     </div>
                                   ) : (
                                     item.description
@@ -5674,7 +6123,7 @@ const profitabilityColor =
                                 <td className="p-2 text-sm font-bold">
                                   {editingPricingItemId === item.id
                                     ? `USD ${formatCurrency(displaySaleTotal)}`
-                                    : `USD ${formatCurrency(item.total_amount)}`
+                                    : `USD ${formatCurrency(persistedTotal)}`
                                   }
                                 </td>
 
@@ -5740,17 +6189,37 @@ const profitabilityColor =
                           })}
                         </tbody>
                       </table>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
 
-                <div className={cn(cardClass, 'p-6')}>
+                <div id="pricing-options" className="scroll-mt-28">
+                  <QuotationOptionsPanel
+                    options={commercialOptions}
+                    disabled={isPricingActionDisabled}
+                    saving={savingCommercialOption}
+                    formatCurrency={formatCurrency}
+                    onSave={saveCurrentPricingAsOption}
+                    onEdit={updateDraftCommercialOptionDetails}
+                    onDelete={deleteDraftCommercialOption}
+                    onViewSource={viewSourceAgentQuote}
+                    onPreview={previewQuotationPdf}
+                    onPrintOption={printCommercialOption}
+                  />
+                </div>
+
+                <div
+                  id="pricing-close"
+                  className={cn(cardClass, 'scroll-mt-28 p-6')}
+                >
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
-                    Observaciones para Cliente (PDF)
+                    Observaciones generales para Cliente (PDF)
                   </h3>
 
                   <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Estas observaciones aparecerán en la cotización enviada al cliente.
+                    Se mostrarán en todas las opciones. Las condiciones exclusivas se
+                    editan dentro de cada opción comercial.
                   </p>
 
                   <textarea
@@ -5765,6 +6234,7 @@ const profitabilityColor =
                       type="button"
                       className={primaryButtonClass}
                       onClick={saveClientNotes}
+                      disabled={isPricingActionDisabled}
                     >
                       Guardar observaciones
                     </button>
@@ -5775,6 +6245,7 @@ const profitabilityColor =
                   <button
                     type="button"
                     onClick={previewQuotationPdf}
+                    disabled={selectedQuoteLoading}
                     className={cn(
                       secondaryButtonClass,
                       'inline-flex items-center justify-center gap-2'
@@ -6140,7 +6611,9 @@ const profitabilityColor =
           <DialogHeader>
             <DialogTitle>Seleccionar tarifa de agente</DialogTitle>
             <DialogDescription>
-              Esta acción marcará esta tarifa como la opción seleccionada para pricing.
+              {normalizeText(selectedQuote?.quote_type) === 'fcl' && pricingItems.length > 0
+                ? 'Se seleccionará esta tarifa y se actualizarán los costos de flete y EXW existentes. Se conservarán los precios de venta, impuestos y demás cargos.'
+                : 'Esta acción marcará esta tarifa como la opción seleccionada para pricing.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -6187,11 +6660,11 @@ const profitabilityColor =
         open={costReviewDialogOpen}
         onOpenChange={setCostReviewDialogOpen}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle>Revisión de costos antes de aprobar</DialogTitle>
             <DialogDescription>
-              Confirma las cantidades y los totales que quedarán aprobados en Pricing.
+              Confirma cantidades, venta sin ISV, impuesto y total final para el cliente.
             </DialogDescription>
           </DialogHeader>
 
@@ -6235,7 +6708,7 @@ const profitabilityColor =
           )}
 
           <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="bg-slate-950 text-white dark:bg-slate-900">
                 <tr>
                   <th className="px-3 py-2">Descripción</th>
@@ -6243,12 +6716,17 @@ const profitabilityColor =
                   <th className="px-3 py-2 text-right">QTY</th>
                   <th className="px-3 py-2 text-right">Costo unit.</th>
                   <th className="px-3 py-2 text-right">Costo total</th>
-                  <th className="px-3 py-2 text-right">Venta total</th>
+                  <th className="px-3 py-2 text-right">Venta sin ISV</th>
+                  <th className="px-3 py-2 text-right">ISV</th>
+                  <th className="px-3 py-2 text-right">Total cliente</th>
                 </tr>
               </thead>
               <tbody>
                 {pricingItems.map((item) => {
                   const quantity = Number(item.quantity || 0)
+                  const saleSubtotal = Number(item.sale_amount || 0) * quantity
+                  const tax = Number(item.tax_amount || 0)
+                  const clientTotal = Number(item.total_amount || saleSubtotal + tax)
                   const hasQuantityIssue = fclQuantityReview.some(
                     (review) => review.itemId === String(item.id)
                   )
@@ -6275,7 +6753,13 @@ const profitabilityColor =
                         {item.currency || 'USD'} {formatCurrency(Number(item.cost_amount || 0) * quantity)}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {item.currency || 'USD'} {formatCurrency(Number(item.sale_amount || 0) * quantity)}
+                        {item.currency || 'USD'} {formatCurrency(saleSubtotal)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {item.currency || 'USD'} {formatCurrency(tax)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold">
+                        {item.currency || 'USD'} {formatCurrency(clientTotal)}
                       </td>
                     </tr>
                   )
@@ -6286,6 +6770,8 @@ const profitabilityColor =
                   <td colSpan={4} className="px-3 py-2 text-right">Totales</td>
                   <td className="px-3 py-2 text-right">USD {formatCurrency(totalCost)}</td>
                   <td className="px-3 py-2 text-right">USD {formatCurrency(totalSale)}</td>
+                  <td className="px-3 py-2 text-right">USD {formatCurrency(totalTax)}</td>
+                  <td className="px-3 py-2 text-right">USD {formatCurrency(totalSaleWithTax)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -6570,6 +7056,25 @@ const profitabilityColor =
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/60 dark:bg-blue-950/30">
+              <label className="block text-sm font-semibold text-blue-950 dark:text-blue-100">
+                Porcentaje de costo de la aseguradora (%)
+                <input
+                  type="number"
+                  min="0.0001"
+                  max="5"
+                  step="0.01"
+                  value={quotationInsuranceCostRate}
+                  onChange={(event) => setQuotationInsuranceCostRate(event.target.value)}
+                  disabled={applyingCargoInsurance}
+                  className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-slate-950 dark:border-blue-800 dark:bg-slate-950 dark:text-white"
+                />
+              </label>
+              <p className="mt-2 text-xs text-blue-800 dark:text-blue-200">
+                Predeterminado corporativo: {insuranceCostRatePercent}%. Ajusta este valor únicamente cuando la aseguradora aplique una tasa especial para esta cotización.
+              </p>
+            </div>
+
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100">
               <p className="font-semibold">Incluidos por la regla general</p>
               <ul className="mt-1 list-inside list-disc text-xs">

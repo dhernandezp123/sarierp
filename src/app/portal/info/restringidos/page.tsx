@@ -1,5 +1,8 @@
 'use client'
 
+import { useState } from 'react'
+import Link from 'next/link'
+import { PortalSearchInput } from '@/src/components/portal/PortalUI'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, AlertTriangle, XCircle } from 'lucide-react'
 
@@ -83,13 +86,15 @@ const CATEGORIES = [
 
 export default function RestringidosPage() {
   const router = useRouter()
+  const [search, setSearch] = useState('')
+  const categories = CATEGORIES.filter(cat => [cat.name, ...cat.items].join(' ').toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
 
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          aria-label="Volver" onClick={() => router.push('/portal/perfil')}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
         >
           <ChevronLeft className="h-5 w-5" />
@@ -110,7 +115,10 @@ export default function RestringidosPage() {
         </div>
       </div>
 
-      {CATEGORIES.map(cat => (
+      <Link href="/portal/contacto" className="block text-sm font-semibold text-blue-600 underline dark:text-blue-400">Consultar un artículo antes de comprar</Link>
+      <PortalSearchInput value={search} onChange={setSearch} placeholder="Buscar artículo o categoría" />
+      {categories.length === 0 && <p className="text-sm text-slate-500">No encontramos coincidencias. Consulta con el equipo; la ausencia en esta lista no confirma que el artículo se pueda transportar.</p>}
+      {categories.map(cat => (
         <div key={cat.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className={`flex items-center gap-2 border-b px-5 py-3.5 ${
             cat.danger
@@ -139,7 +147,7 @@ export default function RestringidosPage() {
       ))}
 
       <p className="text-center text-xs text-slate-400 dark:text-slate-600">
-        Lista actualizada al 2026. Sujeta a cambios por regulaciones aduaneras.
+        Consulta con el equipo las condiciones aplicables a tu artículo, origen y destino antes de enviarlo.
       </p>
     </div>
   )

@@ -13,6 +13,7 @@ import {
 import {
   calculateInsuranceDeclaration,
   DEFAULT_INSURANCE_COST_RATE_PERCENT,
+  INSURANCE_MINIMUM_CHARGE_USD,
   INSURANCE_SURCHARGE_PERCENT,
 } from '@/src/lib/insurance-calculator'
 
@@ -182,6 +183,12 @@ export default function ReferenceInsuranceCalculatorDialog({
               <p className="mt-1 text-xl font-bold text-blue-950 dark:text-blue-100">
                 USD {formatAmount(calculation.insuranceSale)}
               </p>
+              {calculation.insuranceSaleMinimumApplied && (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  Prima calculada: USD {formatAmount(calculation.calculatedInsuranceSale)}.
+                  Se aplica el mínimo de USD {formatAmount(INSURANCE_MINIMUM_CHARGE_USD)}.
+                </p>
+              )}
             </div>
           </div>
         </div>

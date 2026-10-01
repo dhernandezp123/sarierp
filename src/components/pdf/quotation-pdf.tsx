@@ -13,6 +13,7 @@ import {
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import { DemoPdfWatermark } from './DemoPdfWatermark'
+import type { QuotationCommercialOption } from '@/src/lib/quotation-options'
 
 function formatCurrency(value: number) {
   return value.toLocaleString('en-US', {
@@ -692,35 +693,48 @@ function CargoDetailsTable({
   )
 }
 
-export default function QuotationPDF({
+type QuotationPdfCargoLine = {
+  quantity: number
+  package_type: string
+  length: number | null
+  width: number | null
+  height: number | null
+  dimension_unit: string
+  weight_lbs: number | null
+  ft3: number | null
+  cbm: number | null
+}
+
+type QuotationPdfBaseProps = {
+  quotation: any
+  selectedAgent: any
+  pricingItems?: any[]
+  quotationContainers?: any[]
+  cargoLines?: QuotationPdfCargoLine[]
+  company?: Partial<CompanyBranding> | null
+}
+
+function QuotationPDFPages({
   quotation,
   selectedAgent,
   pricingItems = [],
   quotationContainers = [],
   cargoLines = [],
   company,
-}: {
-  quotation: any
-  selectedAgent: any
-  pricingItems?: any[]
-  quotationContainers?: any[]
-  cargoLines?: Array<{
-    quantity: number
-    package_type: string
-    length: number | null
-    width: number | null
-    height: number | null
-    dimension_unit: string
-    weight_lbs: number | null
-    ft3: number | null
-    cbm: number | null
-  }>
-  company?: Partial<CompanyBranding> | null
+  optionLabel,
+  optionClientNotes,
+  includeTerms = true,
+}: QuotationPdfBaseProps & {
+  optionLabel?: string
+  optionClientNotes?: string | null
+  includeTerms?: boolean
 }) {
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
   const companyAddressLines = getCompanyAddressLines(companyBranding)
   const companyLogo = companyBranding.logo_url || '/brand/lockup-h-color.png'
+  const generalClientNotes = String(quotation.client_notes || '').trim()
+  const specificOptionNotes = String(optionClientNotes || '').trim()
   const quoteTitle = getQuoteTitleByProduct(quotation)
   const freightItems = filterItems(pricingItems, ['freight', 'Flete'])
   const knownGroupedTypes = [
@@ -855,7 +869,7 @@ export default function QuotationPDF({
   const useCargoAnnex = cargoLines.length > 4
 
   return (
-    <Document>
+    <>
       <Page size="A4" style={styles.page}>
         <DemoPdfWatermark />
         <View style={styles.header}>
@@ -887,6 +901,10 @@ export default function QuotationPDF({
             <Text style={styles.badge}>
               {quoteTitle}
             </Text>
+
+            {optionLabel && (
+              <Text style={styles.badge}>{optionLabel}</Text>
+            )}
 
             <View style={styles.headerQuoteBox}>
               <Text style={styles.headerQuoteTitle}>
@@ -1224,12 +1242,21 @@ export default function QuotationPDF({
           </View>
         </View>
 
-        <View style={styles.observationNotes} wrap={false}>
-          <Text style={styles.sectionTitle}>Observaciones</Text>
-          <Text>
-            {quotation.client_notes || 'Sin observaciones'}
-          </Text>
-        </View>
+        {(!optionLabel || generalClientNotes) && (
+          <View style={styles.observationNotes} wrap={false}>
+            <Text style={styles.sectionTitle}>
+              {optionLabel ? 'Observaciones generales' : 'Observaciones'}
+            </Text>
+            <Text>{generalClientNotes || 'Sin observaciones'}</Text>
+          </View>
+        )}
+
+        {optionLabel && (
+          <View style={styles.observationNotes} wrap={false}>
+            <Text style={styles.sectionTitle}>Observaciones de esta opción</Text>
+            <Text>{specificOptionNotes || 'Sin observaciones específicas'}</Text>
+          </View>
+        )}
 
         {useCargoAnnex && (
           <View wrap={false}>
@@ -1255,6 +1282,7 @@ export default function QuotationPDF({
 
       </Page>
 
+      {includeTerms && (
       <Page size="A4" style={styles.page}>
         <DemoPdfWatermark />
         <View style={styles.terms}>
@@ -1281,6 +1309,58 @@ export default function QuotationPDF({
           fixed
         />
       </Page>
+      )}
+    </>
+  )
+}
+
+export default function QuotationPDF({
+  quotation,
+  selectedAgent,
+  pricingItems = [],
+  commercialOptions = [],
+  quotationContainers = [],
+  cargoLines = [],
+  company,
+}: QuotationPdfBaseProps & {
+  commercialOptions?: QuotationCommercialOption[]
+}) {
+  if (commercialOptions.length === 0) {
+    return (
+      <Document>
+        <QuotationPDFPages
+          quotation={quotation}
+          selectedAgent={selectedAgent}
+          pricingItems={pricingItems}
+          quotationContainers={quotationContainers}
+          cargoLines={cargoLines}
+          company={company}
+        />
+      </Document>
+    )
+  }
+
+  return (
+    <Document>
+      {commercialOptions.map((option, index) => (
+        <QuotationPDFPages
+          key={option.id}
+          quotation={{
+            ...quotation,
+            valid_until: option.valid_until || quotation.valid_until,
+          }}
+          selectedAgent={option}
+          pricingItems={option.items || []}
+          quotationContainers={quotationContainers}
+          cargoLines={cargoLines}
+          company={company}
+          optionLabel={`OPCIÓN ${option.option_code} · ${option.label}${
+            option.is_recommended ? ' · RECOMENDADA' : ''
+          }`}
+          optionClientNotes={option.client_notes}
+          includeTerms={index === commercialOptions.length - 1}
+        />
+      ))}
     </Document>
   )
 }

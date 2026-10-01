@@ -1,5 +1,770 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-01 - DEMO-SYNC-001 - Sincronización funcional de main al Demo
+
+- Estado: integrado y validado localmente; SQL y Preview pendientes de postflight.
+- Comparación: Demo `e682f9e`, Production `8313d67`. Merge funcional hasta
+  `3dd2e4f`, con adaptación de `9b6d460`, `b572efe`, `5b3694b` y `a688c19`.
+  Alcance y exclusiones: `docs/demo-sync-2026-10-01.md`.
+- Archivos y SQL:
+  - Módulos de cotizaciones/Pricing, seguros, operaciones/BL, costos, facturación,
+    reportes, dashboards, portal y navegación; helpers y pruebas correspondientes.
+  - Se conservan archivos, migraciones, scripts y controles exclusivos de Demo.
+  - 23 migraciones funcionales pendientes más la nueva
+    `supabase/migrations/20261001120000_demo_workflow_sync.sql`.
+  - La nueva migración adapta cola de facturación a proformas, numeración HBL,
+    guard de cierre operativo y RPC de reset. No ejecuta el reset ni rota accesos.
+  - Pruebas adaptadas: `supabase/tests/demo_validated_quotation_proforma.sql`,
+    `supabase/tests/air_consolidated_agent_selection.sql`,
+    `supabase/tests/bill_of_lading_document_integrity.sql` y
+    `tests/cost-validation-data.test.mjs`.
+- Hallazgos de integración:
+  - El nuevo loader de costos buscaba Factura y omitía la Proforma Demo.
+  - La cola seguía ofreciendo cotizaciones con Proforma ya vinculada.
+  - El allocator HBL productivo introducía el prefijo SARI.
+  - La suite de reset reprodujo una FK de `quotation_options` fuera de la
+    allowlist; después reprodujo incompatibilidad del MBL ficticio y del cierre
+    operativo. Se adaptaron sin relajar los controles de acceso del sandbox.
+- Validaciones ejecutadas:
+  - Sentinel remoto confirmado: Demo, project ref `wlssekvxpfxhwedsjhpz`, dataset
+    Atlas v1, reset desarmado.
+  - Esquema remoto, sin datos, restaurado en `demo_sync_20261001`; 24 migraciones
+    pendientes ejecutadas en esa base local separada.
+  - 15/15 suites SQL dirigidas correctas después de actualizar las fixtures.
+  - `npm.cmd test`: 130/130 pruebas correctas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint de helpers/pruebas nuevas y desglose de seguro: OK. Lint ampliado:
+    29 errores históricos frente a 34 en la base funcional y 63 en Demo anterior;
+    no se desactivaron reglas globales.
+  - Build final Next.js: exit code 0, 75/75 páginas.
+  - Dry-run remoto: únicamente las 24 migraciones revisadas en Demo.
+  - Preflight: Auth/perfiles 3/3, cotizaciones 4, proformas 1, BL 2; sin HBL
+    duplicados ni buckets públicos.
+- Riesgos / trabajo pendiente:
+  - Verificar SQL remoto, RLS efectiva y deployment Preview antes de cerrar el
+    despliegue. UAT autenticado/visual pendiente con un acceso vigente.
+  - El cutover multiempresa, tenants/dominios y Landing V2 requieren un proyecto
+    Demo adaptado a esa arquitectura; no se introducen en el sandbox Atlas.
+  - No se ejecutó reset remoto ni se enviaron correos reales de prueba.
+- Commit: pendiente hasta registrar el commit funcional y el postflight.
+
+### 2026-09-18 - FLOW-033 / DB-029 / UX-064 - Excepciones documentales auditables
+
+- Estado: implementado, migrado y publicado en Production; UAT autenticado
+  pendiente.
+- Hallazgo:
+  - El motor documental advertía diferencias entre BL y sus fuentes, pero una
+    excepción válida (Switch BL, triangulación u otra instrucción especial) no
+    podía justificar ni conservar autor, valores revisados e historial.
+  - Las diferencias seguían siendo advertencias en cada revisión o podían
+    normalizarse copiando la fuente, sin distinguir una corrección de una
+    decisión operativa deliberada.
+- Archivos / SQL:
+  - `src/lib/bl-document-workflow.ts`.
+  - `src/components/operations/BLValidationPanel.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `tests/bl-document-workflow.test.mjs`.
+  - `supabase/migrations/20260918100000_bl_validation_exceptions.sql`.
+  - `supabase/migrations/20260918103000_bl_exception_transition_gate.sql`.
+  - `supabase/tests/bl_validation_exceptions.sql`.
+  - `HARDENING.md`.
+- Cambios:
+  - Se incorpora un registro append-only para excepciones documentales con
+    campo, valor del BL, valor y nombre de la fuente, justificación, autor,
+    fecha y estado `ACTIVE`, `SUPERSEDED` o `REVOKED`.
+  - La justificación solo resuelve la diferencia exacta revisada. Si cambia el
+    documento, la fuente o su contexto, la diferencia reaparece; una nueva
+    justificación reemplaza la vigente sin borrar la anterior.
+  - Operaciones/Admin justifican o revocan mediante RPCs atómicos. La tabla es
+    de solo lectura para usuarios autenticados, aplica RLS por acceso al BL y
+    cada acción genera un evento en `activity_logs`.
+  - El panel separa diferencias pendientes de excepciones vigentes, presenta
+    autor/motivo y ofrece historial. Crear una excepción exige un BL guardado;
+    un HBL emitido o liberado no admite cambios de excepciones.
+  - La UI y un trigger de base exigen corregir o justificar diferencias de
+    fuente antes de validar el MBL o emitir el HBL. El gate SQL recalcula las
+    fuentes de Booking, SI, cotización, líneas de carga o MBL padre y solo
+    acepta una excepción cuyo snapshot coincida exactamente.
+  - Las reglas lógicas ETD/ETA y POL/POD continúan como alertas no
+    justificables.
+- Migración:
+  - `20260918100000_bl_validation_exceptions.sql` aplicada correctamente con
+    `npx.cmd supabase db push --local`.
+  - `20260918103000_bl_exception_transition_gate.sql` aplicada correctamente
+    con `npx.cmd supabase db push --local`.
+  - Preflight `npx.cmd supabase db push --linked --dry-run`: Production propuso
+    únicamente `20260918100000` y `20260918103000`.
+  - Ambas migraciones aplicadas correctamente en Supabase Production el
+    18/09/2026; el dry-run posterior confirmó `Remote database is up to date`.
+- Validaciones:
+  - Prueba Node dirigida del workflow: 7/7. Incluye coincidencia exacta,
+    invalidación al cambiar la fuente y revocación lógica.
+  - Prueba SQL `bl_validation_exceptions.sql`: OK con rollback. Cubre bloqueo de
+    inserción directa, alta atómica, reemplazo con historial, revocación y
+    eventos de auditoría, bloqueo SQL de finalización y desbloqueo mediante un
+    snapshot exacto.
+  - Regresiones SQL `bill_of_lading_document_integrity.sql` y
+    `bill_of_lading_parent_integrity.sql`: OK con rollback.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 94/94.
+  - ESLint dirigido: sin errores ni advertencias.
+  - `npx.cmd supabase db lint --local --level warning`: sin errores.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - Postdeploy público: `https://forwarders.app/` responde `200`; la ruta
+    `/operations/shipping-instructions` responde `307` hacia
+    `/login?next=%2Foperations%2Fshipping-instructions`.
+- Riesgos / pendientes:
+  - Ejecutar UAT autenticado con un MBL y un HBL reales antes de marcar el
+    hallazgo como completado.
+  - Verificar en UAT que descripciones y tipos de bulto compuestos se presentan
+    igual en la UI y en el gate SQL cuando existen varias líneas de carga.
+- Publicación (18/09/2026): implementación `00f9cf1` publicada en `main`;
+  GitHub Production `6527725938` finalizó en `success`. Vercel deployment
+  `dpl_EBnQ1usgQ6AfkK23X8BHhZkBng5Z` quedó `Ready` con alias
+  `https://forwarders.app`.
+- Commit de implementación: `00f9cf1`.
+
+### 2026-09-17 - UX-063 / DB-028 - Motor de validación documental MBL/HBL
+
+- Estado: implementado, migrado y publicado en Production; revisión visual y
+  UAT autenticado pendientes.
+- Hallazgo:
+  - La validación del BL detectaba campos vacíos, pero no advertía cuando ruta,
+    carrier, buque/viaje, fechas, carga o parties diferían de Booking, Shipping
+    Instructions, cotización o MBL padre.
+  - La relación `parent_bl_id` tenía FK y la copia de contenedores comprobaba el
+    padre cuando estaba informado, pero todavía era posible crear o avanzar un
+    HBL sin un MBL padre válido.
+- Archivos / SQL:
+  - `src/lib/bl-document-workflow.ts`.
+  - `src/components/operations/BLValidationPanel.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `tests/bl-document-workflow.test.mjs`.
+  - `supabase/migrations/20260917170000_bill_of_lading_parent_integrity.sql`.
+  - `supabase/tests/bill_of_lading_parent_integrity.sql`.
+  - `supabase/tests/bill_of_lading_document_integrity.sql`.
+  - `HARDENING.md`.
+- Cambios:
+  - El editor compara los campos compartidos del MBL contra Booking/SI y los del
+    HBL contra su MBL padre; las partes comerciales del HBL se comparan contra
+    SI/cotización, no contra las partes maestras del MBL.
+  - Se detectan también ETA anterior a ETD y POL igual a POD. Las diferencias se
+    muestran como revisiones, no como bloqueos, porque pueden corresponder a
+    Switch BL, triangle shipment u otra excepción documental válida.
+  - Cada discrepancia muestra valor del documento, fuente y una acción `Usar
+    fuente`; nunca se reemplazan datos automáticamente. Documentos HBL emitidos
+    o liberados conservan su snapshot y no se comparan con fuentes que hayan
+    cambiado después.
+  - El panel separa bloqueos obligatorios, datos recomendados y diferencias de
+    consistencia, y está visible también durante la creación del BL.
+  - Todo HBL nuevo exige `parent_bl_id` apuntando a un MBL del mismo booking. El
+    MBL puede estar en draft mientras se prepara el HBL, pero debe estar en
+    `MBL Validado` antes de que el HBL abandone `HBL Draft`. Un MBL no puede
+    tener padre.
+  - Se eliminó deuda local de lint del editor: tipos `any`, llamada síncrona de
+    carga dentro del efecto y comillas JSX sin escapar.
+- Migración:
+  - `20260917170000_bill_of_lading_parent_integrity.sql` aplicada correctamente
+    mediante `npx.cmd supabase db push --local`.
+  - Aplicada correctamente en Production el 17/09/2026.
+- Validaciones:
+  - Pruebas Node dirigidas de workflow + workspace: 10/10. Cubren padre
+    obligatorio, diferencias contra MBL/SI, regla ETD/ETA y POL/POD.
+  - Prueba SQL `bill_of_lading_parent_integrity.sql`: OK con rollback. Cubre HBL
+    sin padre, padre de otro booking, MBL draft y jerarquía válida.
+  - Regresión SQL `bill_of_lading_document_integrity.sql`: OK con rollback.
+  - `npx.cmd supabase db lint --local --level warning`: sin errores.
+  - `npm.cmd test`: 93/93.
+  - ESLint dirigido: sin errores ni advertencias.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / pendientes:
+  - Auditar HBL históricos sin padre o asociados a un MBL no validado; la regla
+    desplegada protege escrituras futuras y no reescribe snapshots históricos.
+  - Ejecutar UAT de una diferencia intencional, `Usar fuente`, guardado y
+    transición HBL Draft → Pendiente Aprobación Cliente.
+  - Las discrepancias son advertencias deliberadas; convertirlas en bloqueos o
+    exigir un motivo persistente para excepciones corresponde a workflows
+    avanzados y requiere modelo/auditoría adicional.
+- Publicación (17/09/2026): migraciones `20260917150000`, `20260917160000` y
+  `20260917170000` aplicadas en Supabase Production. Commit `e79cabc` publicado
+  en `main`; Vercel deployment `4M27W7HJ7Lj8iP1h82aZC5DyEsQ7` finalizó en
+  `success`. `/operations/shipping-instructions` responde 307 hacia el login
+  preservando `next`; UAT autenticado continúa pendiente.
+- Commit de implementación: `e79cabc`.
+
+### 2026-09-17 - UX-062 / FLOW-032 - Documentation Workspace unificado
+
+- Estado: implementado y publicado en Production; revisión visual y UAT
+  autenticado pendientes.
+- Hallazgo:
+  - El detalle del booking ya contenía Shipping Instructions, readiness,
+    adjuntos y BL, pero como secciones independientes y extensas. El operador
+    debía recorrer toda la pantalla para descubrir qué estaba listo, qué lo
+    bloqueaba y dónde continuar el MBL/HBL.
+  - No existía una representación única del expediente documental ni una
+    siguiente acción sugerida basada en las fuentes de verdad actuales.
+- Archivos:
+  - `src/lib/documentation-workspace.ts`.
+  - `src/components/operations/DocumentationWorkspace.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`.
+  - `tests/documentation-workspace.test.mjs`.
+  - `HARDENING.md`.
+- SQL: no aplica. El workspace es una vista derivada; no crea estados, tablas ni
+  una fuente documental paralela y no modifica RLS.
+- Cambios:
+  - Se incorpora al inicio del booking un expediente con tarjetas para Shipping
+    Instructions, booking/routing, preparación operativa, archivos de soporte,
+    MBL, HBL y aviso de llegada.
+  - Cada tarjeta muestra estado `Completo`, `En curso`, `Falta información`,
+    `Bloqueado` o `Por iniciar`, además del responsable, contexto y acceso a la
+    acción existente correspondiente.
+  - La siguiente acción respeta la secuencia SI → booking → readiness → MBL →
+    HBL. El HBL no se ofrece hasta que exista un MBL validado y el MBL no se
+    ofrece hasta confirmar `Booking Number` o `Carrier Booking`.
+  - Los enlaces internos llevan directamente a datos, confirmación, readiness,
+    adjuntos y BL sin duplicar formularios. El aviso de llegada conserva su
+    disponibilidad únicamente después del arribo.
+- Validaciones:
+  - Pruebas dirigidas del workspace: 4/4. Cubren creación de MBL por referencia,
+    bloqueo y habilitación del HBL y exposición de bloqueos de readiness.
+  - Pruebas documentales combinadas: 7/7.
+  - `npm.cmd test`: 90/90.
+  - ESLint dirigido: sin errores ni advertencias.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / pendientes:
+  - Validar visualmente en escritorio y móvil con datos reales, modos marítimo,
+    aéreo y terrestre, y con roles Admin/Operaciones/solo lectura.
+  - El workspace resume el expediente de un booking; una vista transversal de
+    todos los bookings de un shipment queda fuera de esta fase.
+  - Adjuntar un PDF generado como evidencia continúa siendo una acción explícita;
+    el workspace no presupone que descargar un PDF lo haya archivado.
+- Commit de implementación: `e79cabc`.
+
+### 2026-09-17 - FLOW-031 / UX-061 - Confirmación operativa del booking
+
+- Estado: implementado, migrado y publicado en Production; UAT autenticado
+  pendiente.
+- Hallazgo:
+  - Operaciones veía `Booking Number` y `Carrier Booking` como solo lectura, pero
+    la única interfaz capaz de modificarlos era `Corrección Admin` o el flujo de
+    reemplazo. Sin una referencia, la pantalla tampoco permitía crear el MBL.
+  - El trigger canónico protegía correctamente la identidad del booking, por lo
+    que agregar los campos al guardado genérico no era una solución válida.
+- Archivos / SQL:
+  - `supabase/migrations/20260917160000_booking_reference_confirmation.sql`.
+  - `supabase/tests/booking_reference_confirmation.sql`.
+  - `src/components/operations/BookingScheduleManager.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`.
+  - `HARDENING.md`.
+- Cambios:
+  - Se agrega `confirm_booking_reference`, disponible solo para Admin y
+    Operaciones, con control optimista por `updated_at` y motivo obligatorio.
+  - La acción solo completa `booking_number` o `carrier_booking` vacíos; no puede
+    borrar ni reemplazar valores confirmados. Una corrección real continúa
+    requiriendo el flujo administrativo.
+  - Cada confirmación crea una revisión inmutable `BOOKING_CONFIRMATION` y un
+    `activity_log` dentro de la misma transacción.
+  - `BookingScheduleManager` muestra `Confirmar referencia` cuando falta alguno
+    de los dos campos, conserva bloqueadas las referencias ya confirmadas y
+    recarga el booking al terminar.
+  - La creación del MBL se habilita con `Booking Number` o `Carrier Booking`, y
+    el encabezado usa la referencia disponible.
+- Migración:
+  - Aplicada correctamente en Supabase local mediante
+    `npx.cmd supabase db push --local`.
+  - Aplicada correctamente en Production el 17/09/2026.
+- Validaciones:
+  - Prueba SQL dirigida en contenedor local: OK con rollback. Cubre bloqueo de
+    `UPDATE` directo, autorización, confirmación incremental, preservación de
+    valores, rechazo de reemplazo y creación de revisión/actividad.
+  - `npx.cmd supabase db lint --local --level warning`: sin errores de esquema.
+  - ESLint dirigido de ambos componentes: sin errores ni advertencias.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 86/86.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+- Riesgos / pendientes:
+  - Ejecutar UAT con rol Operaciones: confirmar primero una referencia, agregar
+    la segunda después y crear el MBL desde el mismo booking.
+  - Los bookings históricos/finalizados y las referencias existentes mantienen
+    su protección; cualquier corrección requiere Admin.
+- Commit de implementación: `e79cabc`.
+
+### 2026-09-17 - FLOW-030 / DB-027 - Integridad transaccional MBL/HBL
+
+- Estado: implementado, migrado y publicado en Production; UAT operativo
+  pendiente.
+- Hallazgos:
+  - La numeración `SARI-HBL-YYYYMMDD-NNN` se calculaba en el navegador con
+    `max + 1`, por lo que dos usuarios podían reservar el mismo número.
+  - Las transiciones actualizaban directamente `bills_of_lading`; la validación,
+    las fechas, la bitácora y la sincronización del booking no eran una sola
+    transacción y podían ser omitidas por un `UPDATE` directo.
+  - Un HBL emitido seguía admitiendo cambios en sus datos y contenedores.
+- Archivos / SQL:
+  - `supabase/migrations/20260917150000_bill_of_lading_document_integrity.sql`.
+  - `supabase/tests/bill_of_lading_document_integrity.sql`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `HARDENING.md`.
+- Cambios:
+  - Un trigger asigna el número HBL dentro de la misma transacción del `INSERT`,
+    usando un contador diario bloqueado y una restricción única normalizada.
+  - `transition_bill_of_lading` valida autorización, versión, transición y
+    campos documentales; registra fechas, enmienda, actividad y sincroniza el
+    resumen del booking mediante `update_booking_canonical` atómicamente.
+  - Se retira a `authenticated` el permiso de actualizar columnas de estado y
+    control; solo el RPC puede avanzar el documento.
+  - Un HBL `Emitido` o `Liberado` y sus `bl_containers` quedan inmutables. La
+    única excepción es la transición canónica `Emitido` → `Liberado`.
+  - El editor exige guardar primero, usa control optimista por `updated_at`,
+    bloquea los campos del HBL emitido y muestra las fechas de control como
+    valores administrados por el workflow.
+- Migración:
+  - Aplicada correctamente en Supabase local mediante
+    `npx.cmd supabase db push --local`.
+  - Aplicada correctamente en Production el 17/09/2026.
+- Validaciones:
+  - Prueba SQL dirigida en contenedor local: OK con rollback. Cubre numeración
+    única, bloqueo de estado directo, rechazo de documento incompleto,
+    transiciones completas, fechas, booking cache, bitácora e inmutabilidad.
+  - `npx.cmd supabase db lint --local --level warning`: sin errores de esquema.
+  - `npm.cmd test`: 86/86.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint final del helper, componentes, editor y pruebas: sin errores ni
+    advertencias; la deuda previa del editor se corrigió en `UX-063 / DB-028`.
+  - La ejecución global `supabase test db --local` alcanza y ejecuta la prueba
+    nueva sin error, pero el comando global continúa fallando por pruebas
+    históricas ajenas (`booking_documents_*`, `phase1_rls` y
+    `phase4_receivables`).
+- Riesgos / pendientes:
+  - La migración de Production comprobó la ausencia de números HBL duplicados y
+    se aplicó correctamente; queda pendiente el UAT autenticado del flujo.
+  - Ejecutar UAT autenticado de MBL Draft → Validado y HBL Draft → Liberado.
+  - La edición ordinaria del draft aún usa `UPDATE` directo; una fase posterior
+    puede mover también el guardado y su enmienda a un RPC con versión.
+  - La acción operativa para registrar referencias del booking se completa en
+    `FLOW-031 / UX-061`.
+- Commit de implementación: `e79cabc`.
+
+### 2026-09-17 - FLOW-029 / UX-060 - Preparación documental MBL/HBL
+
+- Estado: implementado y publicado en Production; UAT operativo pendiente.
+- Hallazgos:
+  - Al crear un HBL desde su MBL padre, el editor heredaba también `shipper`,
+    `consignee` y `notify party`. Esas partes corresponden al contrato del MBL
+    y podían reemplazar incorrectamente las partes comerciales del HBL.
+  - Los nuevos documentos no precargaban descripción, bultos, peso ni volumen
+    desde la cotización y sus `quotation_cargo_lines` canónicas.
+  - Las transiciones permitían validar o enviar documentos con datos críticos
+    incompletos, y el editor no mostraba el contexto SI → Booking → BL.
+- Archivos:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `src/lib/bl-document-workflow.ts`.
+  - `tests/bl-document-workflow.test.mjs`.
+  - `HARDENING.md`.
+- Cambios:
+  - El HBL conserva las partes comerciales configuradas en la Shipping
+    Instruction/cotización y solo hereda del MBL ruta, carrier, buque/viaje y
+    datos de carga compartidos.
+  - Los nuevos BL precargan mercancía desde `quotation_cargo_lines`; el peso
+    unitario en libras se multiplica por cantidad y se convierte a kilogramos.
+    Si no hay líneas utilizables, se usan los campos de cabecera de la
+    cotización como respaldo.
+  - Se incorporan breadcrumbs y contexto visible de SI y Booking.
+  - Antes de una transición se muestran faltantes obligatorios y recomendados;
+    se bloquea el avance si faltan partes, ruta, carrier, carga, peso o datos de
+    buque/viaje. Para validar un MBL también se exige el draft del agente.
+- SQL: no aplica en esta fase; no se modificaron esquema, RLS ni datos
+  persistidos existentes.
+- Validaciones:
+  - Pruebas dirigidas del workflow documental: 3/3.
+  - `npm.cmd test`: 86/86.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint del helper y prueba nuevos: OK. El editor conserva 8 errores y 1
+    aviso preexistentes fuera de las líneas modificadas.
+- Riesgos / pendientes:
+  - Ejecutar UAT creando MBL/HBL marítimo, aéreo y terrestre desde bookings
+    reales, incluyendo un HBL con MBL padre.
+  - La validación transaccional y la protección en base de datos se completan en
+    `FLOW-030 / DB-027`.
+  - No se corrigen automáticamente documentos existentes porque hacerlo exige
+    validar las partes contractuales caso por caso.
+  - La acción operativa explícita para registrar el número de booking continúa
+    pendiente; la numeración HBL y la inmutabilidad se completan en `FLOW-030`.
+- Commit de implementación: `e79cabc`.
+
+### 2026-09-17 - PDF-019 - Vessel/voyage y puerto de descarga en HBL
+
+- Estado: implementado y validado por codigo; UAT visual pendiente.
+- Hallazgo:
+  - En el HBL `SARI-HBL-20260917-001`, el item 14 se titulaba `Exporting
+    Carrier`, pero mostraba buque y viaje (`vessel_name / voyage`). Repetir la
+    naviera en ese espacio tambien duplicaria el item 12 `Pre-Carriage By`.
+  - El item 16 usaba la etiqueta `Foreign port of unloading (Vessel and air
+    only)` en lugar de la denominacion solicitada `Port of Discharge`.
+- Archivos:
+  - `src/components/pdf/house-bl-pdf.tsx`.
+  - `tests/house-bl-pdf.test.mjs`.
+  - `HARDENING.md`.
+- Cambio:
+  - El item 12 conserva la naviera desde `carrier` y el item 14 se renombra
+    `Vessel / Voy. No.`, alimentado por `vessel_name / voyage`; se elimina
+    completamente la etiqueta duplicada `Exporting Carrier`.
+  - El item 16 se renombra exactamente a `Port of Discharge` y conserva
+    `port_of_discharge` como valor.
+  - El item 17 conserva su etiqueta y `place_of_delivery` sin cambios.
+- SQL: no aplica; no se modificaron datos ni documentos persistidos.
+- Validaciones:
+  - Pruebas HBL: 3/3. Verifican que el item 12 use carrier, que el item 14 use
+    vessel/voyage, que items 16 y 17 conserven sus fuentes y que el PDF siga
+    renderizando en una pagina.
+  - `npm.cmd test`: 83/83.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 paginas.
+  - ESLint dirigido de HBL y su prueba: sin hallazgos.
+- Riesgos / pendientes:
+  - Regenerar y revisar visualmente `SARI-HBL-20260917-001`; el cambio corrige la
+    plantilla y no altera los datos operativos del booking.
+- Commit: incluido en este commit.
+
+### 2026-09-17 - UX-059 / PDF-018 - Cargos Miami LCL y detalle de costos legible
+
+- Estado: implementado y validado por codigo; UAT visual pendiente.
+- Hallazgos:
+  - En `/quotations/new`, Hazmat, Declaracion IMO y Certificado IMO permanecian
+    dentro de la calculadora Miami. Si el cliente no tenia tarifas activas, todo
+    el bloque desaparecia y Ventas no podia distinguir una opcion inexistente de
+    una tarifa pendiente de configurar.
+  - El detalle interno de costos se generaba en LETTER vertical con texto de
+    tabla de 5.4 puntos. La cantidad de columnas reducia su legibilidad impresa.
+- Archivos:
+  - `src/components/quotations/MiamiQuotationSection.tsx`.
+  - `src/lib/miami-pricing-items.ts`.
+  - `src/components/pdf/cost-detail-pdf.tsx`.
+  - `tests/miami-optional-charges.test.mjs`.
+  - `tests/cost-detail-pdf.test.mjs`.
+  - `HARDENING.md`.
+- Cambios UX/UI:
+  - Los tres cargos condicionales se muestran siempre en Miami Maritimo LCL.
+    Cada opcion indica su tarifa activa y solo puede marcarse con monto mayor a
+    cero; sin cliente o tarifa muestra el motivo y permanece deshabilitada.
+  - La configuracion de codigos y campos queda centralizada para que la interfaz
+    y la generacion de `pricing_items` no diverjan.
+  - El detalle de costos usa LETTER horizontal y aumenta tipografia de tabla,
+    encabezados, datos del embarque, notas y pie de pagina.
+- SQL: no aplica; no se modificaron esquema, RLS ni datos remotos.
+- Validaciones:
+  - Pruebas dirigidas Miami/PDF: 4/4. Confirman disponibilidad solo con tarifa
+    activa positiva, las tres opciones canonicas, LETTER horizontal, una pagina
+    para el caso normal y paginacion para un detalle extenso.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 83/83 en la validacion final del lote.
+  - `npm.cmd run build`: OK, 73/73 paginas.
+  - ESLint dirigido: el helper y las pruebas nuevas no agregan hallazgos. Los
+    dos componentes conservan 8 errores y 7 avisos preexistentes fuera de las
+    lineas modificadas (`any`, props sin uso, comillas JSX y `alt` del renderer).
+- Riesgos / pendientes:
+  - Ejecutar UAT visual en claro/oscuro y movil con cliente sin tarifas, con
+    tarifas parciales y con las tres tarifas configuradas.
+  - Revisar una impresion fisica o vista previa del detalle de costos; la prueba
+    automatizada valida orientacion y paginacion, no percepcion visual.
+- Commit: incluido en este commit.
+
+### 2026-09-17 - FLOW-028 - Carrier seleccionado en Shipping Instructions
+
+- Estado: implementado, validado, migrado y reparado en Production; UAT
+  autenticado pendiente.
+- Hallazgo:
+  - La cotizacion `SARIHN-2609-0266-AP` tiene seleccionada la tarifa de APS
+    EXPRESS con Maersk (`MSK`), pero su Shipping Instruction `RT0032` conserva
+    `COSCO`. El booking canonico ya refleja `MSK`.
+  - El RPC canonico de repricing sincronizaba agente, contacto y correo hacia
+    la Shipping Instruction, y el carrier hacia bookings elegibles, pero omitia
+    actualizar `shipping_instructions.carrier`. Por eso la sincronizacion manual
+    podia reportar `MSK` sin corregir el carrier visible de la SI.
+- Archivos:
+  - `supabase/migrations/20260917120000_shipping_instruction_carrier_sync.sql`.
+  - `supabase/migrations/20260917123000_repair_rt0032_carrier.sql`.
+  - `supabase/tests/booking_canonical_consumers.sql`.
+  - `HARDENING.md`.
+- SQL:
+  - Se conserva la implementacion vigente del RPC como funcion interna y se
+    envuelve la sincronizacion canonica para propagar a la SI el carrier no
+    vacio devuelto por la tarifa seleccionada.
+  - La migracion incluye una reparacion idempotente y auditada para `RT0032`,
+    limitada al caso COSCO -> MSK/Maersk de la cotizacion afectada.
+  - Como `RT0032` es una referencia visible que no esta persistida en
+    `shipping_instructions.reference_number`, la primera condicion no encontro
+    la fila y no escribio datos. Una segunda migracion usa el UUID canonico
+    comprobado, manteniendo las mismas guardas de cotizacion y carrier.
+  - La correccion no modifica campos operativos legacy ni fuerza cambios sobre
+    bookings confirmados. Las funciones internas mantienen ejecucion revocada
+    para `public`, `anon` y `authenticated`.
+- Validaciones:
+  - `supabase migration up --local`: migracion aplicada en Docker local.
+  - `booking_canonical_consumers.sql`: OK. Verifica carrier canonico en SI,
+    preservacion de bookings confirmados y permisos de funciones internas.
+  - `npx.cmd supabase db lint --local --level error`: sin errores de esquema.
+  - `npx.cmd supabase migration list --local`: historial local alineado hasta
+    `20260917120000`.
+  - `npx.cmd supabase db push --linked --dry-run`: Production propone solo
+    `20260917120000_shipping_instruction_carrier_sync.sql`; no se escribieron
+    datos ni esquema remoto.
+  - `npx.cmd supabase db push --linked --yes`: aplico
+    `20260917120000_shipping_instruction_carrier_sync.sql` en Production.
+  - Lectura REST posterior: el RPC quedo publicado; la SI seguia en `COSCO` y
+    `reference_number` era `NULL`, confirmando por que el primer backfill seguro
+    no actuo.
+  - `npx.cmd supabase migration up --local`: aplico
+    `20260917123000_repair_rt0032_carrier.sql` sin errores.
+  - `npx.cmd supabase db push --linked --yes`: aplico
+    `20260917123000_repair_rt0032_carrier.sql` en Production.
+  - Lectura REST posterior: la SI `62909f82-241e-462b-90f0-f6e89421f4db`
+    muestra `carrier = MSK`; sus tres bookings permanecen en `MSK` y conservan
+    sus timestamps previos. La auditoria registra `COSCO -> MSK`, la tarifa
+    seleccionada `c05d6f8b-0b05-4b26-a3c4-a864a536df9b` y la migracion
+    correctiva.
+  - `npm.cmd test`: 78/78.
+  - `npx.cmd tsc --noEmit`: OK.
+- Riesgos / pendientes:
+  - Confirmar mediante UAT autenticado que la SI muestra Maersk en la interfaz.
+    La verificacion directa certifica los datos y la auditoria, pero no sustituye
+    la revision visual con una sesion operativa.
+- Commits: implementacion `0f28d10`; reparacion puntual `95a8d5b`; registro de
+  publicacion en commit documental posterior.
+
+### 2026-09-16 - FLOW-027 / SEC-025 / PERF-006 - Workflow y bandeja de Shipping Instructions
+
+- Estado: implementado, validado, migrado y publicado en Production; UAT
+  autenticado pendiente.
+- Hallazgos:
+  - La bandeja descargaba todas las SI autorizadas, sus relaciones y bookings
+    para filtrar, contar y paginar en el navegador. Esto aumentaba el costo de
+    lectura y podia producir una experiencia lenta a medida que crecieran las
+    operaciones.
+  - Ventas y Pricing podian pasar la politica RLS de `UPDATE` de una SI y enviar
+    columnas fuera de su formulario mediante una llamada directa. Validar,
+    asignar y cancelar ejecutaban escrituras y auditoria separadas, sin bloqueo
+    de fila ni control de version.
+  - El guardado operativo tampoco detectaba una pestaña desactualizada. Asignar
+    podia regresar una SI ya validada al estado `Asignado`, y cancelar no cerraba
+    el shipment canonico en la misma transaccion.
+- Archivos:
+  - `supabase/migrations/20260916120000_shipping_instruction_workflow_hardening.sql`.
+  - `supabase/tests/shipping_instruction_workflow_hardening.sql`.
+  - `src/app/(protected)/operations/shipping-instructions/page.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`.
+  - `HARDENING.md`.
+- SQL:
+  - `list_shipping_instructions` resuelve permisos, busqueda literal, estado
+    agregado de bookings, filtros, conteos y paginas de 25/50/100 en servidor.
+  - RPC atomicas y con `FOR UPDATE`/`updated_at` para guardar informacion inicial
+    de Ventas, guardar detalles operativos, validar, asignar y cancelar.
+  - `can_update_shipping_instruction` deja la edicion directa solo a Admin y
+    Operaciones; Ventas usa una lista explicita de campos antes de enviar la SI.
+  - Cancelar sincroniza SI y shipment, y registra actividad/evento operativo en
+    la misma transaccion. Asignar sincroniza `shipments.assigned_to` sin degradar
+    un estado avanzado.
+- Cambios UX/UI:
+  - Busqueda con espera de 300 ms y descarte de respuestas obsoletas; filtros,
+    metricas y paginacion conservan la misma interfaz pero ahora reflejan el
+    resultado calculado por la base.
+  - Los errores de concurrencia explican que la SI cambio en otra sesion y piden
+    recargar, evitando que un guardado silencioso sobrescriba trabajo reciente.
+  - La respuesta canonica de cada accion actualiza la pantalla; se eliminaron
+    escrituras y logs duplicados desde el cliente. Las instrucciones especiales
+    que Ventas podia editar ahora tambien se persisten en su guardado inicial.
+- Validaciones:
+  - Prueba SQL transaccional local: OK. Cubre RLS directo, listas de campos,
+    propietario de Ventas, envio unico, versiones obsoletas, guardado operativo,
+    validacion, asignacion y sincronizacion, cancelacion atomica/auditoria,
+    bloqueo con bookings, paginacion, busqueda escapada, filtros y alcance RLS.
+  - `npx.cmd supabase db lint --local --level error`: sin errores de esquema.
+  - Historial local reconciliado: se comprobaron columna, default, constraint,
+    comentario y uso de `mbl_quantity`; despues se marco solo `20260908150000`
+    como aplicada. `supabase migration up --local` aplico y registro
+    `20260914233000` y `20260916120000`; `migration list --local` quedo alineado.
+  - `npx.cmd supabase db push --linked --dry-run`: Production propone unicamente
+    `20260916120000_shipping_instruction_workflow_hardening.sql`.
+  - `npm.cmd test`: 78/78.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 paginas.
+  - ESLint dirigido de la bandeja: sin hallazgos. El detalle conserva 8 errores
+    y 4 avisos preexistentes; este ajuste no agrega nuevas infracciones.
+- Riesgos / pendientes:
+  - Ejecutar UAT con cuentas Ventas, Operaciones y Admin. La prueba SQL local
+    certifica RLS y transacciones, pero no sustituye una sesion real desplegada.
+  - Revisar visualmente busqueda rapida, cambio de filtros/pagina y conflictos
+    entre dos sesiones. Las notificaciones internas ocurren despues de la
+    transaccion principal y su fallo no revierte una transicion ya confirmada.
+- Publicacion (16/09/2026):
+  - `npx.cmd supabase db push --linked --yes`: aplico unicamente
+    `20260916120000_shipping_instruction_workflow_hardening.sql` en Production.
+    `migration list --linked` quedo alineado y el dry-run posterior confirma
+    `Remote database is up to date`.
+  - Implementacion `96b2108c4e77655b311ca5a27cd84bba2b8f2021` publicada en
+    `origin/main`. GitHub Production `6491672404` y Vercel
+    `78CgmcqV6JXfQ8uRCX84GPaVt1FK` reportan `success / Deployment has completed`.
+  - URL del deployment:
+    `https://sarierp-kd3ux1t4w-claudherhn-5641s-projects.vercel.app`.
+  - GET sin sesion en `https://forwarders.app`: `/login` responde 200;
+    `/pricing-comparison`, `/operations/shipping-instructions` y
+    `/quotations/new` responden 307 al login conservando la ruta de retorno.
+    No se crearon ni modificaron datos comerciales durante esta comprobacion.
+- Commit de implementacion: `96b2108`. Registro de publicacion en commit
+  documental posterior.
+
+### 2026-09-16 - CALC-008 / FLOW-026 / UX-058 - Pricing, editor y bandeja de Shipping Instructions
+
+- Estado: implementado, validado y publicado en Production; UAT autenticado
+  pendiente.
+- Hallazgos:
+  - Pricing podia mostrar temporalmente cargos y tarifas de la cotizacion previa
+    mientras cargaba otra seleccion, y respuestas tardias podian reemplazar el
+    estado de una seleccion mas reciente.
+  - La tabla recalculaba ISV historico con la tasa corporativa actual mientras
+    mostraba el total persistido; el seguro guardaba `tax_rate = 15` aunque la
+    configuracion usada para el importe fuera distinta.
+  - La bandeja de Shipping Instructions ofrecía etiquetas de filtro que no
+    coincidían con los estados mostrados y dependia del estado legacy de la SI,
+    sin considerar sus bookings.
+  - El editor terminaba su carga al recibir solo la cabecera y su accion Cancelar
+    evitaba el guard de cambios sin guardar.
+  - El editor, Pricing y el detalle de SI eran paginas extensas sin navegacion
+    interna. La bandeja dependia de filas clicables con mouse, no identificaba
+    sus filtros y no permitia recuperarse de un error sin recargar la pagina.
+    Sus fechas tampoco seguian el formato estandar DD/MM/YYYY del ERP.
+- Archivos:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/page.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`.
+  - `src/components/ui/SectionNav.tsx`.
+  - `src/lib/tax.ts`, `src/lib/operation-status.ts`.
+  - `tests/tax-and-documents.test.mjs`, `tests/operation-status.test.mjs`.
+  - `HARDENING.md`.
+- SQL: no aplica; no se modificaron esquema, funciones, RLS ni datos remotos.
+- Cambios:
+  - El cambio de cotizacion limpia el workspace dependiente, bloquea acciones
+    mientras carga, consulta tarifas/cargos/opciones/contenedores/carga en
+    paralelo y descarta respuestas cuyo ID ya no sea el seleccionado. Se retiro
+    la segunda carga automatica de tarifas Miami.
+  - ISV y total conservan `tax_amount`, `tax_rate` y `total_amount` persistidos;
+    solo registros legacy sin esos valores usan la tasa corporativa actual. El
+    seguro persiste la misma tasa con la que calcula el importe.
+  - Shipping Instructions excluye eliminados, solicita solo columnas necesarias,
+    agrega el estado de bookings y comparte etiquetas canonicas de filtro. La
+    tabla extensa de Pricing tiene desplazamiento propio en pantallas angostas.
+  - El editor espera cabecera, catalogos, cliente, contenedores, carga y Pricing;
+    separa error de carga con reintento y Cancelar pasa por el guard existente.
+  - Las tres paginas largas comparten navegacion interna fija, desplazamiento
+    accesible y destinos con margen para el topbar. Bandeja y bookings exponen
+    encabezados semanticos, regiones desplazables y enlaces operables por
+    teclado; la bandeja agrega etiquetas, Actualizar, Reintentar, limpiar filtros
+    y evita una pagina vacia cuando cambia el total.
+  - Las fechas de bandeja y detalle de SI reutilizan `formatDate`, conservando
+    columnas DATE y el formato DD/MM/YYYY.
+- Validaciones:
+  - `npm.cmd test`: 78/78, incluidas tres regresiones nuevas para impuesto
+    historico, tasa cero, etiquetas y agregado de bookings.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK, 73/73 paginas.
+  - ESLint dirigido: `SectionNav`, helpers y pruebas sin hallazgos. Se conserva
+    deuda previa en las cuatro paginas; frente a HEAD baja de 58 errores/16
+    avisos a 49/12, sin desactivar reglas ni agregar hallazgos en el detalle SI.
+  - `git diff --check`: OK; solo avisos esperados de LF/CRLF.
+- Riesgos / pendientes:
+  - UAT autenticado: alternar cotizaciones con respuestas lentas, editar/aprobar,
+    validar totales con tasas historicas 0%, 12% y default, probar filtros de SI
+    con multiples bookings y confirmar Cancelar en el editor.
+  - La paginacion en servidor, la restriccion de escritura de Ventas y las
+    transiciones atomicas quedaron implementadas y probadas localmente en
+    `FLOW-027 / SEC-025 / PERF-006`; el despliegue esta completo y falta UAT.
+  - Falta revision visual autenticada de la navegacion fija, foco y tablas en
+    movil. La comprobacion postdeploy fue publica y sin escrituras comerciales.
+- Commit de implementacion: `96b2108`. Evidencia de publicacion registrada en
+  `FLOW-027 / SEC-025 / PERF-006`.
+
+### 2026-09-16 — COST-001 — Detalle y conciliación de costos operativos
+
+- Estado: implementado, validado localmente y publicado en producción;
+  UAT autenticado y verificación de permisos desplegados pendientes.
+- Hallazgo: sin facturas, Validación mostraba todo el ingreso como “Profit Real”
+  y el presupuesto faltante como ahorro. Emparejaba facturas por descripción,
+  mezclaba monedas bajo USD y no explicaba el promedio por contenedor.
+- Archivos:
+  - `src/lib/cost-analysis.ts`, `src/lib/cost-validation-data.ts`.
+  - `src/components/pricing/CostAnalysisPanel.tsx`.
+  - `src/app/(protected)/cost-validation/page.tsx` y `[id]/page.tsx`.
+  - `src/app/(protected)/quotations/[id]/page.tsx`.
+  - `src/components/pdf/cost-detail-pdf.tsx`.
+  - `tests/cost-analysis.test.mjs`, `tests/cost-analysis-panel.test.mjs`,
+    `tests/cost-validation-data.test.mjs`, `tests/cost-detail-pdf.test.mjs`.
+- SQL: no aplica; reutiliza `provider_invoice_items.pricing_item_id`, RLS y el
+  trigger existente de invalidación financiera. La reasignación incluye la
+  descripción sin modificarla para activar ese trigger en la misma escritura.
+- Cambios:
+  - Costos ausentes quedan pendientes, cero registrado sigue siendo válido;
+    utilidad con registros siempre provisional hasta validación y conciliación.
+    Facturas parciales no producen un ahorro ni cierre automático.
+  - Comparación por ID de cargo y moneda; registros legacy/adicionales quedan
+    sin vínculo hasta revisión explícita. Una factura puede cubrir parte de un
+    cargo y un cargo puede recibir varias facturas. Formularios con etiquetas,
+    verificación de moneda y cantidades, guardado con bloqueo de doble clic.
+  - Monedas separadas e impuestos de proveedor separados de la base. La utilidad
+    se identifica como comparación sin impuestos; no determina crédito fiscal,
+    pagos ni utilidad contable definitiva. Impuesto solo si se selecciona aplicar.
+  - Lectura paginada de Pricing/facturas, eliminación lógica excluida, permiso
+    de lectura comprobado antes de interpretar un resultado vacío, errores
+    bloqueantes con reintento y resultados obsoletos descartados por sesión/ruta.
+  - Promedios sobre contenedores canónicos, pérdidas por concepto y desglose
+    marítimo/Profit Share/MBL solo cuando coincide con el flete guardado. Panel
+    en Tarifas y costos limitado al permiso interno existente Admin/Pricing.
+  - PDF interno identifica Pricing actual, promedio, desglose y pérdidas; permite
+    paginación de detalles extensos. No modifica PDF comercial ni opciones.
+  - Opción aceptada visible como referencia histórica independiente; Pricing
+    actual identificado, con aviso de repricing. Listado conserva operaciones
+    cuya cotización se reabrió; validar sigue requiriendo Ganada.
+- Validaciones:
+  - `npm.cmd test`: 75/75; incluye ausencia de facturas, parciales, monedas,
+    vínculos por ID, cero válido, líneas eliminadas, errores/paginación y permisos.
+    Caso de referencia: costo 95,200, promedio 9,520 y DTHC con pérdida 300.
+  - Render estático del panel; PDF normal de una página y PDF de 100 cargos
+    paginado, con logo en memoria y sin solicitudes a producción.
+  - `npx.cmd tsc --noEmit`: OK tras el último cambio de código.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - ESLint de helpers, panel, detalle de validación y pruebas: sin hallazgos.
+    Comparación con HEAD: listado mantiene 3 errores previos, cotización 6 y
+    PDF 6 errores/1 aviso previos; sin desactivaciones de reglas.
+  - `git diff --check`: OK.
+- Riesgos / pendientes:
+  - UAT con cuentas Admin/Finanzas/Contabilidad: alta parcial, reasignación,
+    eliminación, invalidación, cierre y factura; confirmar RLS desplegado. El
+    permiso existente puede denegar Finanzas o cotizaciones en repricing; se
+    muestra el bloqueo, sin ampliar permisos ni tratarlo como costo cero.
+  - La validación de completitud es revisión humana: no existe estado individual
+    de cierre de cargo. El guard adicional de conciliación en UI no sustituye la
+    autorización ni constituye un nuevo constraint de cierre en servidor.
+  - Sin asignación física por BL/contenedor, proyección de facturas parciales,
+    conversión de monedas ni modificación de snapshots aceptados. Nuevos cargos
+    sin presupuesto requieren conciliación con Pricing antes de cerrar por UI.
+  - Render estático de UI y PDFs probado; falta revisión visual móvil/oscuro y
+    prueba autenticada en navegador. No hubo escrituras comerciales remotas.
+- Publicación (16/09/2026): commit `97d3d2a884ee760f515243676713fe3ded00eea4`
+  enviado a `origin/main`. GitHub Production `6486521154` y Vercel
+  `7P8urUJk787NmLPttQvpnBpB5PE8` confirman `success / Deployment has completed`.
+  - URL del deployment:
+    `https://sarierp-13se44l39-claudherhn-5641s-projects.vercel.app`.
+  - GET en `https://forwarders.app`: `/login` devuelve 200;
+    `/cost-validation` y `/quotations/efc8766f-867c-4d8a-b865-e9a7cc82341f`
+    devuelven 307 al login con retorno a la ruta solicitada. Sin sesiones,
+    escrituras de datos ni cambios SQL. Esto no certifica el flujo autenticado.
+- Commit de implementación: `97d3d2a`. Registro de publicación en commit
+  documental posterior. Se conservan todos los pendientes de UAT/RLS anteriores.
+
 Este archivo es el registro versionado del plan de correcciones del ERP.
 Debe actualizarse en el mismo commit de cada fix para que el estado viaje con
 Git entre computadoras y ambientes.
@@ -35,6 +800,177 @@ Git entre computadoras y ambientes.
 
 - Estado: Implementado y desplegado en Producción; integrado en Demo y
   pendiente de UAT funcional en ambos ambientes.
+### 2026-09-08 - CALC-007 - Cantidad de MBL y aplicación de costo FCL
+
+- Estado: Implementado, validado localmente, migrado y desplegado en Producción; UAT pendiente.
+- Hallazgo: CALC-007. El costo base sumaba un solo importe de MBL. Al volver a
+  seleccionar una tarifa se reemplazaban las líneas de venta existentes.
+- Archivos:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/components/pricing/FclAgentComparisonTable.tsx`.
+  - `src/lib/agent-mbl-cost.ts`.
+  - `tests/agent-mbl-cost.test.mjs`.
+  - `supabase/tests/agent_quote_mbl_quantity.sql`.
+- SQL: `supabase/migrations/20260908150000_agent_quote_mbl_quantity.sql`.
+- Cambios:
+  - `agent_quotes.mbl_quantity`: entero positivo, obligatorio, default 1.
+    El importe unitario del catálogo de agentes no cambia. Cada tarifa conserva
+    su cantidad; guardar, editar, Cards y Tabla usan el total de documentación.
+  - El total MBL se prorratea entre los contenedores canónicos. Los overrides
+    de Tabla siguen siendo totales y se descartan si su cantidad/costo fuente
+    quedó obsoleto; los ajustes legacy de un MBL conservan compatibilidad.
+  - La RPC atómica existente conserva IDs, precios de venta, cantidades,
+    impuestos, notas y cargos adicionales cuando aplica costos FCL existentes.
+    Coincidencias ambiguas, cambios de moneda/cantidad/composición EXW y
+    cotizaciones bloqueadas se rechazan sin escrituras parciales.
+  - Botón «Aplicar costo» para volver a aplicar la tarifa seleccionada.
+    Guardar una tarifa por sí solo no modifica las líneas comerciales.
+  - Se mantienen la selección única, la auditoría y los snapshots comerciales.
+    La primera selección y el reemplazo de modalidades no FCL conservan su flujo.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 29 pruebas exitosas.
+  - `npx.cmd tsc --noEmit` y `npm.cmd run build`: exitosos.
+  - SQL local: migración aplicada; pruebas `agent_quote_mbl_quantity.sql` y
+    `phase5_atomic_agent_selection.sql` exitosas, con rollback de fixtures.
+  - RLS local: Pricing guarda cantidad; Cliente no puede cambiarla ni ejecutar
+    la selección; anon sin permiso RPC. Políticas remotas revisadas, sin cambios.
+  - SQL local verifica 10 × 40HC, 3 MBL × USD 50.00, costo USD 8,601.00,
+    venta USD 9,365.00 intacta, destino intacto y opción ofrecida congelada.
+  - ESLint dirigido comparado con HEAD: mismos hallazgos previos; helpers y
+    pruebas nuevos sin hallazgos. `git diff --check` exitoso.
+  - Dry-run remoto: únicamente esta migración pendiente.
+  - Migración `20260908150000` aplicada y registrada en Producción. Verificados
+    tipo integer, NOT NULL, default 1, check positivo, RLS activo, RPC autenticada
+    y anon sin ejecución. Las tarifas existentes mantienen cantidad 1.
+  - Vercel confirmó `success / Deployment has completed` para `98ad579` el
+    08/09/2026; interfaz publicada desde `origin/main`.
+- Riesgos / acciones pendientes:
+  - UAT autenticado de Cards/Tabla, móvil, guardado/recarga y aplicación del
+    costo; no se dispuso de navegador para verificación visual.
+  - En `SARIHN-2609-0266-AP`, configurar 3 MBL en la tarifa MSK y aplicar su
+    costo. La consulta previa encontró COSCO seleccionada con flete a costo MSK.
+    No se modificaron los datos comerciales de esta cotización desde scripts.
+  - Líneas renombradas, carga o moneda distinta requieren revisión explícita;
+    la aplicación de costos no adivina correspondencias ni agrega/elimina cargos.
+- Commit de implementación: `98ad579`.
+
+### 2026-09-08 - UX-057 - Última conexión de usuarios
+
+- Estado: Implementado, validado localmente y desplegado en Producción; UAT pendiente.
+- Hallazgo: UX-057. El perfil y Administración de usuarios no mostraban la fecha
+  del último inicio de sesión disponible en Supabase Auth.
+- Archivos:
+  - `src/app/(protected)/profile/page.tsx`.
+  - `src/app/(protected)/admin/users/page.tsx`.
+  - `src/app/api/admin/users/last-sign-in/route.ts`.
+  - `tests/user-last-sign-in.test.mjs`.
+- SQL: No aplica; sin cambios de esquema, políticas RLS ni escrituras en Auth.
+- Cambios:
+  - Fecha y hora local del último inicio de sesión en Mi perfil y columna en
+    Administración, reutilizando `formatDateTime` y `last_sign_in_at` de Auth.
+  - Consulta administrativa paginada desde servidor, sin caché, con sesión
+    validada y perfil Admin/Aprobado/activo. Solo devuelve ID y fecha.
+  - Diferencia entre ausencia de registro y consulta fallida, con reintento.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 26 pruebas exitosas; incluye permisos, paginación,
+    exclusión de metadata privada, ausencia de registro y fallos del proveedor.
+  - `npx.cmd tsc --noEmit`: exitoso.
+  - `npm.cmd run build`: exitoso, incluida la nueva ruta administrativa.
+  - ESLint dirigido: sin hallazgos nuevos; conserva un error previo de
+    `react-hooks/set-state-in-effect` y un warning de `no-img-element` en perfil.
+  - `git diff --check`: exitoso.
+  - GitHub/Vercel: deployment `6335900546`, ambiente `Production`, commit
+    `e233ea37e9f1f3b51bd4f472f809e975057de615`, completado exitosamente el
+    08/09/2026.
+- Riesgos / acciones pendientes:
+  - UAT autenticado: revisar ambas pantallas, fecha/hora, usuario sin registro,
+    acceso denegado por rol y recuperación tras fallo de red; comprobar móvil.
+  - No hubo navegador disponible; la UI se revisó en código y los controles de
+    servidor se probaron con dependencias simuladas, sin certificar RLS remoto.
+  - La consulta administrativa requiere `SUPABASE_SERVICE_ROLE_KEY` en servidor,
+    ya utilizada por invitaciones. Verificarla en el ambiente de despliegue.
+  - El dato representa último inicio de sesión, no presencia ni última actividad
+    de una sesión persistente. Se consulta al cargar/refrescar la lista.
+- Commit de implementación: `e233ea3`; enviado a `origin/main` y desplegado.
+
+### 2026-09-02 - INS-027 - Tasa excepcional de costo de seguro por cotización
+
+- Estado: Implementado, migrado y validado; pendiente de UAT y deployment de
+  la interfaz en Producción.
+- Hallazgo: INS-027.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/components/quotations/InsuranceCalculationDialog.tsx`.
+- SQL:
+  - `supabase/migrations/20260902120000_quotation_insurance_cost_rate.sql`.
+- Cambios:
+  - Pricing puede ajustar la tasa de costo de la aseguradora al aplicar el
+    seguro, sin modificar el porcentaje comercial configurado para el cliente.
+  - La tasa corporativa continúa siendo el valor predeterminado; una tasa
+    excepcional se guarda en la cotización y se reutiliza al recalcular o
+    consultar el detalle histórico.
+  - Se valida que la tasa sea mayor que 0% y no exceda 5%, tanto en la interfaz
+    como en la base de datos.
+- Validaciones ejecutadas:
+  - `npx.cmd next typegen` exitoso.
+  - `npx.cmd tsc --noEmit` exitoso.
+  - Migración `20260902120000` aplicada y registrada en la base remota.
+  - Columna remota verificada como `numeric(7,4)` nullable.
+  - ESLint dirigido ejecutado; conserva deuda previa del módulo (`any`, estados
+    dentro de efectos y variables no usadas), sin errores nuevos del cambio.
+- Riesgos o trabajo pendiente:
+  - Validar en UAT un caso con costo 0.33% y venta 0.40%, confirmando línea de
+    pricing, margen y detalle para aseguradora.
+- Commit: `4365234`.
+
+### 2026-08-14 - UX-056 - Recorrido visual real en la landing
+
+- Estado: Implementado y validado localmente; pendiente de UAT y deployment en
+  Producción.
+- Hallazgo: UX-056.
+- Código y assets:
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `public/product/dashboard-comercial.webp`.
+  - `public/product/cotizacion-rentabilidad.webp`.
+  - `public/product/booking-bl.webp`.
+  - `public/product/inventario-miami.webp`.
+  - `public/product/dashboard-financiero.webp`.
+  - `public/product/portal-tracking.webp`.
+- SQL: No aplica.
+- Cambios:
+  - La landing incorpora un recorrido por pestañas con vistas reales del
+    dashboard comercial, cotización, booking/BL, bodega Miami, finanzas y
+    portal del cliente.
+  - Sólo se publican capturas del ambiente Demo con nombres, correos,
+    identificadores y montos ficticios. Se excluyeron las capturas de
+    Producción por contener datos operativos o personales y las vistas vacías
+    que no explicaban el valor del producto.
+  - Las seis imágenes se normalizaron a WebP de 1920 x 1080; el conjunto pesa
+    menos de 0.5 MB y se sirve mediante `next/image` con dimensiones estables.
+  - La navegación principal y el footer enlazan directamente al nuevo
+    recorrido; los controles usan semántica accesible `tab`/`tabpanel`.
+  - La imagen comparativa de Excel también pasó a `next/image`, eliminando el
+    warning de rendimiento de la landing.
+- Validaciones ejecutadas:
+  - Guía local de Next.js 16 sobre optimización de imágenes: revisada.
+  - Inspección visual de las capturas fuente y de los WebP finales: OK.
+  - `npx.cmd next typegen`: OK.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a la landing: OK.
+  - Revisión headless en Chrome a 1440 x 1200 y 390 x 844: OK; pestañas
+    desplazables en móvil, imagen estable y sin desborde horizontal de página.
+  - `git diff --check`: OK; sólo aviso esperado LF/CRLF.
+- Riesgos o pendientes:
+  - En pantallas móviles las capturas conservan el contexto completo, por lo
+    que los textos internos se leen mejor al ampliar; la leyenda exterior
+    comunica el contenido sin depender de ese texto.
+  - Pendiente desplegar la rama `main` y verificar la landing pública en
+    `https://forwarders.app`.
+- Commit: incluido en este commit.
+
+### 2026-08-10 - UX-053 - Capturas en la creación de tickets
+
+- Estado: Implementado y validado localmente; pendiente de UAT en Producción.
 - Hallazgo: UX-053.
 - Código:
   - `src/app/(protected)/support/new/page.tsx`.
@@ -119,6 +1055,426 @@ Git entre computadoras y ambientes.
   - Esta integración conserva las migraciones exclusivas de Demo y debe
     desplegarse sólo contra el project ref correspondiente a esa rama.
 - Commit de implementación en la rama de integración Demo: `7c3c135`.
+- Estado: Implementado, desplegado y habilitado en Producción. Pendiente de UAT
+  funcional y de que `dher@forwarders.app` complete su invitación.
+- Hallazgo: SEC-024.
+- Alcance:
+  - Cada instalación conserva sus propios tickets, mensajes y adjuntos. No se
+    introdujo una base central ni acceso cruzado entre proyectos de clientes.
+  - El canal es exclusivo para usuarios internos aprobados del ERP y Hernova
+    Systems. Los perfiles `Cliente` del portal de carga quedan excluidos.
+- Código:
+  - `src/app/(protected)/support/layout.tsx`.
+  - `src/app/(protected)/support/page.tsx`.
+  - `src/app/(protected)/support/new/page.tsx`.
+  - `src/app/(protected)/support/[id]/page.tsx`.
+  - `src/app/api/support/notify/route.ts`.
+  - `src/lib/support.ts`.
+  - `src/components/layout/sidebar.tsx`.
+  - `src/lib/permissions.ts`.
+  - `src/types/index.ts`.
+  - `src/proxy.ts`.
+  - `src/app/login/page.tsx`.
+  - `docs/support-ticketing-runbook.md`.
+- SQL:
+  - `supabase/migrations/20260810170000_support_ticketing_foundation.sql`.
+- Pruebas:
+  - `supabase/tests/support_ticketing_foundation.sql`.
+- Cambios de seguridad e integridad:
+  - `profiles.is_platform_admin` distingue a Hernova de los administradores de
+    la empresa cliente. Un trigger impide autoconceder o modificar ese acceso
+    desde una sesión autenticada; sólo una operación confiable sin JWT de
+    usuario puede configurarlo.
+  - La numeración usa una secuencia PostgreSQL y un prefijo configurable por
+    instalación, evitando la carrera de `max + 1`.
+  - El módulo queda deshabilitado por defecto. Cada instalación debe configurar
+    prefijo, buzón y cuenta Hernova antes de abrirlo explícitamente.
+  - Tickets y mensajes se crean mediante RPC con validación de rol y entrada.
+    Sólo el Administrador Supremo cambia estado, prioridad o responsable.
+  - Las notas internas se filtran por RLS y sólo son visibles para perfiles de
+    plataforma. Los eventos administrativos son append-only para usuarios.
+  - `support-attachments` es privado, limita PDF/PNG/JPEG a 10 MB y exige que
+    el path pertenezca al ticket y al usuario autenticado. Las descargas usan
+    URL firmada de 60 segundos.
+  - El endpoint de Resend vuelve a autenticar y autorizar al emisor, bloquea
+    Demo, conserva idempotencia y registra intentos, errores y `message_id` en
+    `support_notification_outbox`. Una falla de correo no revierte el ticket.
+  - Proxy y login interno conservan un destino local autorizado, permitiendo
+    abrir el ticket exacto después de iniciar sesión sin admitir open redirect.
+- Validaciones ejecutadas:
+  - Guías locales de Next.js 16 sobre Route Handlers y seguridad de datos
+    revisadas antes de implementar.
+  - Migración ejecutada en Supabase Docker local con transacción y
+    `ON_ERROR_STOP=1`: OK.
+  - Prueba SQL transaccional: OK. Confirmó exclusión de `Cliente`, bloqueo de
+    autoelevación, numeración, permisos de administración, primera respuesta,
+    historial y ocultamiento de notas internas.
+  - `npx supabase db lint --local --level error`: OK, cero errores de esquema.
+  - `npx tsc --noEmit`: OK al cierre.
+  - `npm run build`: OK; 70/70 páginas generadas y el Route Handler de
+    notificaciones quedó dinámico.
+  - ESLint dirigido a todos los archivos nuevos y al retorno del login: OK.
+  - El lint global conserva 391 hallazgos preexistentes, incluidos temporales
+    dentro de `.ua`; no forman parte de SEC-024.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Reenvío externo de `soporte@forwarders.app` mediante ImprovMX: confirmado.
+  - Demo: migración aplicada, deployment Vercel `Ready` y módulo habilitado
+    temporalmente para UAT.
+  - Producción: dry-run mostró únicamente
+    `20260810170000_support_ticketing_foundation.sql`; migración aplicada sin
+    incluir las cuatro migraciones exclusivas de Demo.
+  - Deployment productivo de Vercel: `Ready`, asociado a `forwarders.app`.
+  - `support_settings`: prefijo `SUP`, buzón `soporte@forwarders.app` y
+    `enabled=true` verificados después de la transacción.
+  - `admin@admin.com` y `dher@forwarders.app` quedaron como Admin aprobados,
+    activos y `is_platform_admin=true`. La cuenta `admin@admin.com` ya estaba
+    confirmada; a `dher@forwarders.app` se le envió invitación mediante
+    Supabase Auth y Resend con retorno a `/onboarding`.
+- Riesgos o trabajo pendiente:
+  - El Supabase local registra las migraciones exclusivas de la rama `demo`
+    `20260731190000`, `20260731213000`, `20260731214000` y `20260731215000`.
+    Por diseño no existen en `main`: no copiarlas a Producción ni ejecutar
+    `migration repair`. Cada push debe hacerse desde la rama enlazada al
+    proyecto correcto; para pruebas locales conviene separar los worktrees.
+  - `dher@forwarders.app` no podrá iniciar sesión hasta abrir la invitación y
+    completar el onboarding; `admin@admin.com` queda disponible para el UAT
+    inmediato de administración.
+  - El conector visual del navegador no estuvo disponible en esta sesión;
+    falta UAT de lista, creación, conversación, adjuntos, retorno post-login y
+    diseño responsive en Demo.
+  - No existe análisis antivirus de adjuntos. El MVP reduce riesgo mediante
+    bucket privado, allowlist MIME, límite de tamaño y URLs firmadas; un
+    escáner de malware queda como mejora futura.
+- Commit de implementación: `88b0c6a`.
+
+### 2026-08-10 - UX-052 - Hora Miami e historial de ingresos de bodega
+
+- Estado: Implementado y validado localmente; pendiente de desplegar y ejecutar
+  UAT en Producción.
+- Hallazgo: UX-052.
+- Causa raíz:
+  - El portal mostraba sólo la fecha de `miami_packages.received_at`, aunque la
+    base ya conserva el instante exacto de recepción.
+  - Inventario ordenaba toda la carga por recepción, pero no permitía consultar
+    un día o rango ni distinguir ingresos individuales de paquetes escaneados
+    dentro de un manifiesto.
+- Código:
+  - `src/lib/format.ts`.
+  - `src/app/portal/paquetes/page.tsx`.
+  - `src/app/portal/paquetes/[id]/page.tsx`.
+  - `src/app/(protected)/miami/inventario/page.tsx`.
+  - `src/app/api/miami/package-assignment-email/route.ts`.
+- SQL: ninguno; se reutilizan `received_at` y `manifest_id` existentes.
+- Cambios:
+  - La lista de paquetes, el seguimiento, la información del paquete y los
+    movimientos muestran fecha y hora rotuladas como `hora Miami`.
+  - El formato usa explícitamente `America/New_York`; no depende de la zona
+    horaria del navegador del cliente y respeta automáticamente horario de
+    verano de Miami.
+  - Los correos nuevos de carga recibida incluyen también el instante de
+    recepción en Miami.
+  - Inventario agrega accesos `Hoy`, `Ayer`, `Últimos 7 días`, rango manual y
+    filtro de origen `Ingreso individual`/`Por manifiesto`. Al consultar fechas
+    se incluyen todos los estados actuales para que una carga ya avanzada o
+    entregada no desaparezca del historial de lo recibido ese día.
+  - La tabla identifica el origen y muestra la hora exacta de recepción.
+  - No se crean manifiestos artificiales por cada ingreso individual. Un
+    manifiesto sigue representando un lote real de un transportista; el
+    historial operativo se obtiene de la tabla canónica de paquetes.
+- Validaciones ejecutadas:
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 67/67 páginas generadas.
+  - ESLint dirigido: cero errores; conserva dos advertencias preexistentes de
+    dependencias de efectos en las dos pantallas del portal de paquetes.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Riesgos o trabajo pendiente:
+  - UAT con un ingreso individual y otro por manifiesto, verificando fecha/hora
+    en correo, lista, seguimiento e Inventario para Hoy/Ayer/rango.
+  - Inventario ya cargaba el conjunto completo antes de este cambio y los
+    filtros nuevos operan sobre ese conjunto en cliente. Cuando el volumen sea
+    alto convendrá mover filtros y paginación a la consulta de Supabase.
+  - Un correo ya marcado `sent` conserva por idempotencia su plantilla original;
+    la hora aparecerá en avisos nuevos.
+- Commit: incluido en este commit.
+
+### 2026-08-10 - UX-051 - Retorno al paquete después del login del portal
+
+- Estado: Implementado y validado localmente; pendiente de desplegar y repetir
+  la prueba autenticada en Producción.
+- Hallazgo: UX-051.
+- Causa raíz:
+  - `src/proxy.ts` interceptaba la visita no autenticada antes de que el layout
+    del portal pudiera guardar el destino y redirigía a `/portal/login`
+    eliminando la ruta original.
+  - El fragmento `#factura-comercial` no forma parte de la petición HTTP que
+    recibe Proxy, por lo que no puede utilizarse por sí solo para transportar
+    la sección solicitada a través del login.
+- Código:
+  - `src/proxy.ts`.
+  - `src/app/api/miami/package-assignment-email/route.ts`.
+  - `src/app/(protected)/miami/inventario/page.tsx`.
+  - `src/app/portal/paquetes/[id]/page.tsx`.
+- SQL: ninguno.
+- Cambios:
+  - Proxy conserva `pathname` y query de cualquier ruta protegida del portal
+    en un parámetro `next` codificado antes de enviar al login.
+  - El login mantiene su allowlist existente y sólo acepta destinos locales
+    bajo `/portal`; no se amplió la superficie de redirección.
+  - Los correos nuevos y los enlaces copiados desde Inventario incluyen
+    `?section=factura-comercial` además del ancla visual.
+  - El detalle del paquete reconoce tanto la query nueva como el ancla para
+    enfocar la sección de carga al terminar la autenticación.
+- Validaciones ejecutadas:
+  - Guía local de Proxy de Next.js 16 revisada antes del cambio.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 67/67 páginas generadas.
+  - Prueba HTTP sobre el build local sin sesión: `/portal/paquetes/{id}` con
+    `section=factura-comercial` responde `307` a `/portal/login` conservando
+    exactamente el paquete y la query dentro de `next`.
+  - ESLint dirigido: cero errores; conserva dos advertencias preexistentes de
+    dependencias de efectos en las pantallas del portal de paquetes.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Riesgos o trabajo pendiente:
+  - Desplegar el commit en Producción y repetir el flujo correo → login →
+    paquete → sección de factura comercial con una sesión cerrada.
+  - Los correos emitidos antes de este cambio no contienen la query de sección;
+    Proxy sí conservará su paquete exacto, pero el desplazamiento automático
+    queda garantizado para los enlaces nuevos.
+- Commit: incluido en este commit.
+
+### 2026-08-10 - SEC-023 - Factura comercial privada y aviso de carga Miami
+
+- Estado: Aplicado y verificado en Producción; el defecto de retorno exacto
+  posterior al login se corrige separadamente en UX-051.
+- Hallazgo: SEC-023.
+- Código:
+  - `src/app/api/miami/package-assignment-email/route.ts`.
+  - `src/lib/miami-assignment-email.ts`.
+  - `src/app/(protected)/miami/ingreso/page.tsx`.
+  - `src/app/(protected)/miami/inventario/page.tsx`.
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`.
+  - `src/app/portal/layout.tsx`.
+  - `src/app/portal/login/page.tsx`.
+  - `src/app/portal/paquetes/[id]/page.tsx`.
+- SQL:
+  - `supabase/migrations/20260810120000_miami_commercial_invoice_upload.sql`.
+- Cambio:
+  - Al asignar o autoasignar un paquete Miami, el backend puede enviar por
+    Resend un aviso exclusivamente a `clientes.email_1`, el correo principal.
+  - El mensaje incluye tracking, WH y un enlace al paquete con ancla
+    `#factura-comercial`. El portal conserva el destino al pedir login y sólo
+    permite continuar a rutas locales bajo `/portal`.
+  - El cliente puede adjuntar PDF, JPG o PNG de hasta 10 MB. Cada carga crea
+    una versión auditable y no sobrescribe archivos anteriores.
+  - El bucket `miami-package-documents` es privado. Las policies relacionan el
+    primer segmento del path con `cliente_id` y el segundo con `package_id`;
+    el cliente sólo accede a paquetes de su empresa y Administración u
+    Operaciones conservan acceso operativo.
+  - Inventario muestra si la factura está pendiente o recibida. Operaciones
+    puede abrirla mediante URL firmada de 60 segundos y únicamente Admin ve
+    las acciones para copiar el enlace autenticado, compartirlo manualmente y
+    enviar/reintentar el aviso.
+  - `client_email_deliveries` conserva destinatario, intentos, estado, error
+    y `resend_message_id`. La combinación paquete/evento es única y la
+    petición a Resend usa `Idempotency-Key`.
+  - La asignación de carga no se revierte si el proveedor de correo falla; el
+    personal recibe una advertencia y el fallo queda listo para reintento.
+  - El endpoint exige usuario aprobado Admin/Operaciones, service role sólo
+    en servidor, `OUTBOUND_EMAIL_ENABLED=true` y `RESEND_API_KEY`. Bloquea
+    `APP_ENV=demo`, `NEXT_PUBLIC_APP_ENV=demo` y el sentinel privado
+    `platform_environment` cuando existe en la base demo.
+- Validaciones ejecutadas:
+  - Guías locales de Next.js 16 sobre Route Handlers, variables de entorno y
+    separación Server/Client revisadas antes de implementar.
+  - La migración completa se ejecutó en Supabase Docker local con
+    `psql --single-transaction -v ON_ERROR_STOP=1`: OK.
+  - `npx supabase db lint --local --level error`: OK, cero errores.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 67 páginas generadas y el nuevo Route Handler quedó
+    dinámico.
+  - ESLint dirigido al endpoint, helper y flujo de retorno login/layout: OK.
+  - El lint global continúa fallando por 392 hallazgos preexistentes, incluidos
+    archivos temporales de `.ua`; no se introdujeron como parte de SEC-023.
+- Riesgos o trabajo pendiente:
+  - Completar el redeploy y la UAT de retorno post-login documentada en UX-051.
+  - No se implementó análisis antivirus del contenido; se restringieron MIME,
+    tamaño, bucket y ownership, pero un escáner de malware sigue siendo una
+    mejora futura antes de aceptar formatos adicionales.
+- Commit: `50f284b`.
+
+### 2026-08-10 - SEC-022 - SMTP transaccional y redirecciones Auth de Producción
+
+- Estado: Aplicado y verificado manualmente en Producción.
+- Hallazgo: SEC-022.
+- Código y SQL: No aplica; el cierre fue de configuración administrada en
+  Resend, Vercel DNS y Supabase Auth.
+- Configuración aplicada:
+  - Resend verificó `mail.forwarders.app` en `us-east-1` para envío
+    transaccional, con DKIM y SPF publicados mediante Vercel DNS.
+  - Los MX y SPF de ImprovMX en `forwarders.app` permanecieron intactos para
+    la recepción y el reenvío de correo.
+  - Supabase Producción `fwspgdzvlbtbgiupvrzo` quedó conectado a Resend por
+    SMTP con el remitente `Forwarders ERP <no-reply@mail.forwarders.app>`.
+  - Auth Site URL quedó en `https://forwarders.app`; la allowlist conserva
+    exclusivamente los callbacks productivos de recuperación y onboarding.
+  - Se publicó `_dmarc.mail.forwarders.app` con
+    `v=DMARC1; p=none;` como política inicial de monitoreo.
+  - Se retiró `RESEND_API_KEY` de Vercel Preview. Como Vercel la había
+    almacenado como una sola entrada compartida entre Preview y Production,
+    la operación eliminó esa entrada completa. El ERP no tenía consumidores
+    de la variable y Supabase conserva una credencial SMTP dedicada e
+    independiente, por lo que no se afectó el envío verificado.
+  - Se eliminó el archivo local no versionado `send-test.js`; no formaba parte
+    de Next.js, dependía de `dotenv` sin instalar y contenía un destinatario de
+    prueba hardcodeado.
+- Validaciones ejecutadas:
+  - Resend mostró `mail.forwarders.app` en estado `Verified` y `Ready to send`.
+  - DNS autoritativo y los resolvers públicos `1.1.1.1`/`8.8.8.8`
+    confirmaron el nuevo DMARC. DKIM y el SPF/MX de Amazon SES para
+    `send.mail.forwarders.app` permanecen publicados; ImprovMX conservó sus
+    dos MX y SPF en el dominio raíz.
+  - Un correo real de recuperación llegó desde
+    `no-reply@mail.forwarders.app`.
+  - El primer enlace reveló que Supabase aún usaba `localhost:3000`; la causa
+    se corrigió en URL Configuration y un enlace nuevo completó el callback
+    PKCE hasta `/portal/reset-password`, donde se mostró el formulario de
+    nueva contraseña.
+  - El inventario sanitizado de Vercel confirmó cero entradas
+    `RESEND_API_KEY` en Preview y Production después de la limpieza.
+  - `npx tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Riesgos o trabajo pendiente:
+  - DMARC permanece en `p=none`; antes de elevarlo a `quarantine` o `reject`
+    debe definirse un buzón de reportes y observar alineación SPF/DKIM.
+  - Probar separadamente una invitación real y su llegada a `/onboarding`.
+  - Producción conserva signup público y autoconfirmación de email; revisar
+    esta decisión junto con el gate de aprobación de perfiles.
+  - Cotizaciones, estados de cuenta y Draft HBL siguen usando `mailto:`. Una
+    futura integración Resend API debe crear una clave nueva limitada sólo a
+    Production, con autorización, idempotencia y auditoría de entrega.
+- Commit: incluido en este commit de documentación.
+
+### 2026-08-03 - SEC-021 - Eliminación segura de documentos de Booking
+
+- Estado: Aplicado y verificado en Producción; pendiente de UAT manual.
+- Hallazgo: SEC-021.
+- Código:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`.
+- SQL:
+  - `supabase/migrations/20260803143000_booking_document_delete_permissions.sql`.
+- Prueba:
+  - `supabase/tests/booking_document_delete_permissions.sql`.
+- Causa raíz:
+  - Storage permitía eliminar a Admin y Operaciones, pero la policy DELETE de
+    `booking_documents` sólo aceptaba Admin. Operaciones podía borrar el blob y
+    fallar después al eliminar la metadata.
+  - La UI borraba primero Storage. Un documento asociado a VGM usa una FK
+    `ON DELETE RESTRICT`, por lo que PostgreSQL podía rechazar la fila después
+    de que el archivo ya hubiera sido destruido.
+- Cambios:
+  - La policy DELETE queda alineada con carga, actualización y Storage:
+    `can_manage_operations()` y acceso al booking.
+  - La UI sólo muestra carga y eliminación a Admin u Operaciones; Ventas
+    conserva lectura y descarga cuando es propietario de la SI.
+  - La eliminación ocurre primero en base de datos y exige una fila retornada.
+    Si RLS, una FK o una relación la bloquean, el archivo queda intacto.
+  - Storage se limpia únicamente después del DELETE autorizado. Si esa limpieza
+    falla, se informa al usuario y se registra el cleanup pendiente.
+- Validaciones ejecutadas:
+  - `supabase/tests/booking_document_delete_permissions.sql`: OK con transacción
+    y `ROLLBACK`; Admin y Operaciones eliminaron una fila, mientras Ventas
+    propietario, Ventas ajeno y Operaciones inactivo conservaron las suyas.
+  - La migración se ejecutó dos veces dentro de la prueba y dejó una sola
+    policy DELETE, confirmando idempotencia.
+  - `npx tsc --noEmit`: OK.
+  - ESLint dirigido de la pantalla de Booking: OK, cero hallazgos.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `npx supabase db lint --local --level error`: OK, cero errores de esquema.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Commits `d89d21a` y `88d68c9` enviados a `origin/main`; Vercel confirmó el
+    deployment Production de `88d68c9` en estado `READY` antes del cambio SQL.
+  - `supabase db push --linked --dry-run` desde un workdir temporal enlazado al
+    project ref productivo mostró exclusivamente las migraciones
+    `20260803121500` y `20260803143000`.
+  - `supabase db push --linked`: ambas migraciones aplicadas y registradas en
+    el historial remoto de Producción.
+  - Verificación SQL remota: dos migraciones esperadas, una sola policy DELETE,
+    expresión alineada con `can_manage_operations()` y `can_select_booking()`,
+    y `booking-documents` conservado como privado.
+  - `npx supabase db lint --linked --level error` en Producción: OK, cero
+    errores de esquema.
+  - El workdir temporal fue eliminado y el link permanente del workspace se
+    verificó sin cambios en staging `wlssekvxpfxhwedsjhpz`.
+- Validaciones pendientes:
+  - UAT de eliminación como Admin y Operaciones.
+- Riesgos o trabajo pendiente:
+  - `supabase migration up --local` no se forzó porque el link conservado a
+    staging contiene cuatro migraciones exclusivas de Demo que no existen en
+    `main`; no se reparó ni alteró ese historial. La prueba SQL transaccional
+    ejecutó directamente la migración versionada.
+  - El borrado en cascada de un booking elimina metadata, pero no limpia
+    automáticamente sus objetos de Storage; requiere una estrategia de cleanup
+    separada si se habilita eliminación física de bookings.
+- Commit de implementación: `d89d21a`.
+
+### 2026-08-03 - SEC-020 - Documentos de Booking en Storage privado
+
+- Estado: Aplicado y verificado en Producción y SQL local; pendiente de UAT
+  autenticado y registro de la migración en el historial remoto.
+- Hallazgo: SEC-020.
+- Código:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+- SQL:
+  - `supabase/migrations/20260803121500_booking_documents_private.sql`.
+- Prueba:
+  - `supabase/tests/booking_documents_private.sql`.
+- Causa raíz:
+  - El bucket `booking-documents` estaba configurado como público en
+    Producción. Además, el Draft MBL guardaba y consumía una URL pública,
+    aunque el flujo general de documentos ya utilizaba enlaces firmados.
+- Cambios:
+  - El bucket queda definido como privado mediante una migración productiva,
+    idempotente y sin alterar sus límites o tipos MIME actuales.
+  - Los Draft MBL nuevos guardan la ruta del objeto, no una URL pública.
+  - Los Draft MBL se abren con una URL firmada por 60 segundos y se conservó
+    compatibilidad con las URLs públicas heredadas.
+  - La ruta se valida contra el UUID del booking actual antes de solicitar el
+    enlace firmado.
+- Validaciones ejecutadas:
+  - Revisión dirigida de todos los consumidores de `booking-documents`: sólo
+    el Draft MBL dependía de `getPublicUrl`; no hay consumidores en API, PDF o
+    envío real de correo.
+  - Preflight remoto de Producción: bucket existente con `public = true` y una
+    referencia heredada de Draft MBL; no se mostraron rutas ni datos sensibles.
+  - `npx tsc --noEmit`: OK.
+  - `npm run build`: OK; 66/66 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - ESLint dirigido: sin hallazgos nuevos; la pantalla conserva ocho errores y
+    una advertencia históricos fuera de las líneas modificadas.
+  - Commits `18307e4` y `f25e882` enviados a `origin/main`; Vercel confirmó el
+    deployment Production de `f25e882` en estado `READY` antes de privatizar.
+  - Cambio remoto mediante Storage Admin API limitado a
+    `booking-documents.public = false`; se conservaron exactamente la
+    configuración previa de tamaño y MIME, sin mover ni borrar objetos.
+  - Probe anónimo sobre el Draft MBL existente: HTTP `206` antes del cambio y
+    HTTP `400` después del cambio, sin imprimir URL, ruta o contenido.
+  - Probe firmado del mismo objeto después del cambio: HTTP `206` con URL de 60
+    segundos; confirma compatibilidad del archivo heredado.
+  - `supabase/tests/booking_documents_private.sql`: OK contra Supabase local;
+    comprobó privacidad, preservación exacta de límites/MIME e idempotencia y
+    finalizó con `ROLLBACK`.
+  - `npx supabase db lint --local --level error`: OK, cero errores de esquema.
+- Validaciones pendientes:
+  - Registrar la migración idempotente en el historial remoto durante la
+    próxima sincronización controlada de `main`; el estado privado ya está
+    aplicado mediante la API administrativa.
+  - UAT autenticado de carga, descarga y eliminación.
+- Riesgos o trabajo pendiente:
+  - La eliminación conserva una inconsistencia preexistente: Storage permite
+    borrar a Admin u Operaciones, pero la fila `booking_documents` sólo permite
+    DELETE a Admin. Se atenderá como hallazgo independiente para evitar blobs o
+    metadatos huérfanos.
+- Commit de implementación: `18307e4`.
 
 ### 2026-07-28 - CALC-005 - Retiro de Bank Transfer Fee del comparativo FCL
 
@@ -5101,6 +6457,92 @@ Agregar una entrada por fix:
 
 - Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
   pendientes.
+  - Las referencias contractuales a DHer permanecen sin cambios hasta completar
+    la revisión de identidad jurídica de Hernova Systems.
+- Commit: `d0f6923`.
+
+### 2026-08-03 - UX-050 - Correo público oficial unificado
+
+- Estado: Completado en código; pendiente de verificar el deployment Production.
+- Hallazgo: UX-050.
+- Código:
+  - `src/lib/platform-branding.ts`
+  - `src/components/marketing/ForwardersLanding.tsx`
+  - `src/app/politicas/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - Se centralizó `contacto@forwarders.app` en
+    `PLATFORM_CONTACT_EMAIL`.
+  - El formulario y el footer del landing usan el correo oficial tanto en el
+    texto visible como en sus enlaces `mailto:`.
+  - La sección de contacto de Políticas reutiliza la misma constante para
+    evitar otra divergencia.
+- Validaciones:
+  - `npm run build`: OK, 66/66 páginas generadas.
+  - `npx tsc --noEmit`: OK después de regenerar los tipos de `.next` para
+    `main`.
+  - ESLint dirigido: cero errores; conserva dos advertencias preexistentes en
+    `ForwardersLanding.tsx` (`AnimatePresence` y `<img>`).
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Búsqueda en código y artefactos generados: ninguna referencia restante a
+    `contacto@dher.dev`; el correo y `mailto:` oficiales aparecen en landing y
+    Políticas.
+- Riesgos o trabajo pendiente:
+  - Confirmar en `forwarders.app` que el deployment de `main` esté Ready y que
+    ambos enlaces abran `mailto:contacto@forwarders.app`.
+- Commit: pendiente.
+
+### 2026-08-13 - UX-057 - Guardado de BL bloqueado por consulta ambigua del booking
+
+- Estado: Corregido, validado y desplegado en Production; UAT de escritura
+  pendiente.
+- Hallazgo: UX-057.
+- Causa raiz:
+  - La carga del editor de BL embebia `shipping_instructions` sin indicar la
+    relacion. Al existir dos llaves foraneas entre esa tabla y `bookings`,
+    PostgREST respondia `PGRST201` y no devolvia `bookings.updated_at`.
+  - La misma consulta solicitaba `quotations.origin_port` y
+    `quotations.destination_port`, columnas que no existen en Production; las
+    columnas canonicas son `puerto_origen` y `puerto_destino`.
+  - El error de carga se descartaba y el guardado posterior mostraba que no
+    podia validar la version del booking, aunque el BL ya podia haberse
+    actualizado antes de fallar la sincronizacion heredada.
+- Codigo:
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+- SQL: ninguno.
+- Cambios:
+  - La consulta usa explicitamente
+    `shipping_instructions!bookings_shipping_instruction_id_fkey`.
+  - El prellenado usa `puerto_origen` y `puerto_destino`.
+  - La sincronizacion de `master_bl`/`house_bl` conserva la version leida al
+    abrir el editor para detectar cambios concurrentes. Si esa version falta,
+    intenta recuperarla mediante una consulta directa antes de llamar
+    `update_booking_canonical`.
+  - Si falla esa sincronizacion secundaria, la interfaz informa que el BL si
+    fue guardado y presenta una advertencia separada sobre el resumen del
+    booking.
+- Validaciones:
+  - Consulta original contra Production: reprodujo `PGRST201` por relacion
+    ambigua; al especificar la FK revelo `42703` por columnas inexistentes.
+  - Consulta corregida contra Production: OK, devolvio una fila y
+    `bookings.updated_at` sin exponer datos del registro.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd run build`: OK; 70/70 paginas generadas.
+  - Vercel Production `dpl_BV6gvvF8JxE3Prby1kcoRfnjxC6T`: `Ready`, con alias
+    `https://forwarders.app`.
+  - ESLint dirigido: no se agregaron hallazgos; la pagina conserva 8 errores y
+    1 advertencia preexistentes (`any`, efecto de carga y texto JSX).
+- Verificacion manual pendiente:
+  - Guardar el HBL afectado, confirmar `BL guardado` y revisar que el numero se
+    refleje en el resumen del booking.
+  - Verificar manualmente el guardado con un BL real en `https://forwarders.app`.
+- Riesgos o trabajo pendiente:
+  - No se ejecuto una escritura de prueba contra un BL real de Production.
+- Commit: `f2b8878`.
+
+### 2026-08-13 - FIN-058 - Registro estructurado de pagos de factura
+
+- Estado: Implementado, migrado y desplegado en Production; UAT pendiente.
 - Hallazgo: FIN-058.
 - Causa raiz:
   - El pago de una factura solo guardaba monto, fecha, moneda, un metodo de
@@ -5150,6 +6592,8 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; build de produccion de Next.js completado.
   - `npx.cmd supabase db push --linked`: migracion `20260813180000` aplicada al
     proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - Vercel Production `dpl_BV6gvvF8JxE3Prby1kcoRfnjxC6T`: `Ready`, con alias
+    `https://forwarders.app`.
   - `npx.cmd supabase db lint --local --level error`: conserva un hallazgo
     preexistente en `is_platform_admin()` por referencia a
     `is_demo_environment()` inexistente; no fue introducido por FIN-058.
@@ -5157,6 +6601,7 @@ Agregar una entrada por fix:
   - Registrar y reversar un pago simple y uno mixto desde la interfaz local.
   - Confirmar con Contabilidad los nombres finales de los puntos de venta.
   - Desplegar el frontend y ejecutar UAT en Production.
+  - Ejecutar UAT en Production.
 - Riesgos o trabajo pendiente:
   - `Exenta` y `Exonerada` se validan contra la composicion fiscal ya emitida;
     registrar un pago no reclasifica ni altera los impuestos de la factura.
@@ -5168,6 +6613,11 @@ Agregar una entrada por fix:
 
 - Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
   pendientes.
+- Commit: `f2b8878`.
+
+### 2026-08-13 - FIN-059 - Condiciones de credito y aplicacion integra de notas
+
+- Estado: Implementado, migrado y desplegado en Production; UAT pendiente.
 - Hallazgo: FIN-059.
 - Causa raiz:
   - La factura permitia editar manualmente el vencimiento y no conservaba la
@@ -5217,6 +6667,10 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; build de produccion de Next.js completado.
   - `npx.cmd supabase db push --linked`: migracion `20260813200000` aplicada al
     proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - Preflight Production de solo lectura: 55 clientes activos, 0 clientes de
+    credito sin dias validos, 0 facturas emitidas y 0 sobrepagos ajustados.
+  - Vercel Production `dpl_BV6gvvF8JxE3Prby1kcoRfnjxC6T`: `Ready`, con alias
+    `https://forwarders.app`.
   - `npx.cmd supabase db lint --local --level error`: solo conserva el hallazgo
     preexistente de `is_platform_admin()` documentado en FIN-058.
 - Verificacion manual pendiente:
@@ -5237,6 +6691,13 @@ Agregar una entrada por fix:
 
 - Estado: Implementado y validado; SQL aplicado en Production; UAT y deployment
   pendientes.
+  - La migracion protege cambios futuros; el UAT debe confirmar el flujo con
+    facturas nuevas porque Production todavia no tenia facturas emitidas.
+- Commit: `f2b8878`.
+
+### 2026-08-13 - REP-010 - Reportes de facturacion y pagos completos
+
+- Estado: Implementado, migrado y desplegado en Production; UAT pendiente.
 - Hallazgo: REP-010.
 - Causa raiz:
   - Los reportes de facturacion no consultaban condicion ni dias de credito,
@@ -5290,6 +6751,10 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; 70/70 paginas generadas.
   - `npx.cmd supabase db push --linked`: migracion `20260813210000` aplicada al
     proyecto Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - Vercel Production `dpl_BV6gvvF8JxE3Prby1kcoRfnjxC6T`: `Ready`, con alias
+    `https://forwarders.app`.
+  - Smoke HTTP: `/` y `/login` respondieron 200; `/reports` redirigio a
+    `/login?next=%2Freports` y respondio 200.
   - `git diff --check`: OK; solo avisos esperados LF/CRLF de Git.
   - `npx.cmd supabase db lint --local --level error`: la vista nueva no reporta
     errores; permanece el hallazgo preexistente de `is_platform_admin()` por
@@ -5308,6 +6773,7 @@ Agregar una entrada por fix:
     punto de venta o desglose; el reporte los mostrara con `-` y no inventara
     datos retroactivos.
 - Commit: pendiente.
+- Commit: `f2b8878`.
 
 ### 2026-08-13 - UX-056 - HBL Draft alineado al formato documental real
 
@@ -5368,6 +6834,7 @@ Agregar una entrada por fix:
   - Descripciones o condiciones excepcionalmente extensas requieren UAT con un
     caso real antes del deployment.
 - Commit: pendiente.
+- Commit: `43a62ad`.
 
 ### 2026-08-14 - FIN-060 - Factura trazable desde cotizacion validada
 
@@ -5485,6 +6952,7 @@ Agregar una entrada por fix:
 ### 2026-08-13 - UX-055 - Proteccion integral de eliminaciones y reemplazos
 
 - Estado: Implementado y validado localmente; SQL y deployment Production pendientes.
+- Estado: Implementado y validado; SQL aplicado en Production; UAT y verificacion del deployment pendientes.
 - Hallazgo: UX-055.
 - Causa raiz:
   - Varias acciones `Eliminar`, `Quitar` y `Enviar a papelera` descartaban
@@ -5522,10 +6990,16 @@ Agregar una entrada por fix:
   - `npm.cmd run build`: OK; 70/70 paginas generadas.
   - Migracion aplicada correctamente en Supabase local con
     `npx.cmd supabase migration up --local`.
+  - `npx.cmd supabase db push`: migracion `20260813140000` aplicada al proyecto
+    Production `sarierp` (`fwspgdzvlbtbgiupvrzo`).
+  - `npx.cmd supabase migration list`: `20260813140000` coincide en las columnas
+    Local y Remote.
   - `npx.cmd supabase db lint --local --level error`: las funciones nuevas no
     reportan errores; permanece un hallazgo preexistente en
     `public.is_platform_admin` por `public.is_demo_environment()` ausente del
     esquema local.
+  - `npx.cmd supabase db lint --linked --level error`: las funciones nuevas no
+    reportan errores; el mismo hallazgo preexistente permanece en Production.
   - ESLint dirigido: 126 errores y 21 advertencias preexistentes en los modulos
     auditados (`any`, reglas de hooks y texto JSX); TypeScript y build pasan.
 - Verificacion manual pendiente:
@@ -5540,6 +7014,14 @@ Agregar una entrada por fix:
   - No se modificaron los borrados tecnicos de archivos subidos cuando falla su
     registro, porque son compensaciones necesarias y no acciones del usuario.
 - Commit: pendiente.
+    Production vinculado.
+  - Verificar el deployment de Production en `https://forwarders.app`.
+- Riesgos o trabajo pendiente:
+  - La dependencia de despliegue quedo resuelta al aplicar primero la migracion
+    remota; falta confirmar el deployment del frontend y ejecutar UAT.
+  - No se modificaron los borrados tecnicos de archivos subidos cuando falla su
+    registro, porque son compensaciones necesarias y no acciones del usuario.
+- Commit: `43a62ad`.
 
 ### 2026-08-13 - UX-054 - Confirmación al quitar contenedores del borrador BL
 
@@ -5638,6 +7120,15 @@ Agregar una entrada por fix:
 
 - Estado: Implementado; SQL aplicado en Production y Demo; UAT pendiente.
 - Hallazgo: UX-056.
+- Commit: `43a62ad`.
+### 2026-08-26 - UX-056 - Catálogo editable de navieras y colores
+
+- Estado: Implementado en código; SQL aplicado en Production y Demo; UAT pendiente.
+- Hallazgo: UX-056.
+- Causa raíz:
+  - Las navieras, sus tipos y colores de badge estaban definidos en
+    `src/lib/constants/carriers.ts`, por lo que agregar o modificar una opción
+    requería un cambio de código y un nuevo deployment.
 - Código:
   - `src/app/(protected)/catalogs/page.tsx`
   - `src/components/ui/CarrierBadge.tsx`
@@ -5659,3 +7150,1521 @@ Agregar una entrada por fix:
 - Riesgos o trabajo pendiente:
   - Falta UAT funcional con perfiles Admin, Pricing, Ventas y usuario Demo.
 - Commits de implementación: main `6a640b1`; demo `3ebca62`.
+- SQL:
+  - `supabase/migrations/20260826120000_carrier_catalog.sql`
+- Cambios:
+  - Se agregó `carrier_catalog` con código, nombre, tipo, colores, visibilidad
+    y orden; la migración conserva como semilla todas las opciones actuales.
+  - Catálogos permite crear, editar y ocultar navieras, incluida la selección
+    visual de color de fondo y texto.
+  - El selector, los badges y la impresión comparativa consumen el catálogo
+    activo; la lista anterior queda como respaldo si la consulta no está
+    disponible durante el despliegue.
+  - RLS permite lectura a usuarios internos aprobados y escritura únicamente
+    a Admin/Pricing mediante `can_manage_pricing_catalogs()`.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - `npx.cmd supabase migration list --local`: no ejecutable porque la instancia
+    local de PostgreSQL no está iniciada en `127.0.0.1:54322`.
+  - `npx.cmd supabase db push`: migración `20260826120000` aplicada a Demo
+    (`sarierp-staging`, `wlssekvxpfxhwedsjhpz`) sin ejecutar las tres
+    migraciones históricas locales pendientes.
+  - `npx.cmd supabase db push --dry-run --include-all` contra Production
+    (`fwspgdzvlbtbgiupvrzo`): propuso únicamente `20260826120000`.
+  - `npx.cmd supabase db push`: migración `20260826120000` aplicada a Production.
+  - `npx.cmd supabase migration list --linked`: `20260826120000` coincide en
+    Local y Remote en ambos proyectos.
+  - ESLint dirigido: el hook y los componentes modificados no agregan hallazgos;
+    permanecen errores preexistentes de efectos/`any` en Catálogos,
+    `CarrierCombobox` y la tabla comparativa.
+- Verificación manual pendiente:
+  - Verificar RLS con perfiles Admin, Pricing y Ventas.
+  - Crear una naviera, modificar sus colores y confirmar su aparición en el
+    selector, badges y vista de impresión.
+- Riesgos o trabajo pendiente:
+  - Falta UAT funcional de creación, edición, visibilidad y consumo del catálogo.
+- Commit: `6a640b1`.
+
+### 2026-09-03 - FLOW-021 - Opciones comerciales múltiples por cotización
+
+- Estado: Implementado, validado y desplegado en Production; UAT funcional pendiente.
+- Hallazgo: FLOW-021.
+- Causa raíz:
+  - `agent_quotes` permitía comparar varias tarifas, pero el índice de selección y
+    `pricing_items` conservaban solamente una alternativa comercial final.
+  - Cambiar de naviera reemplazaba el pricing visible, por lo que enviar dos
+    opciones requería duplicar la cotización o perder el cálculo anterior.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pricing/QuotationOptionsPanel.tsx`
+  - `src/components/pdf/quotation-pdf.tsx`
+  - `src/lib/quotation-options.ts`
+- SQL:
+  - `supabase/migrations/20260903120000_quotation_commercial_options.sql`
+  - `supabase/tests/quotation_commercial_options.sql`
+- Cambios:
+  - Se agregaron `quotation_options` y `quotation_option_items` como snapshots
+    independientes de tarifa, condiciones, costos, venta, ISV, profit y GP.
+  - Pricing puede guardar el pricing actual como Opción A/B, marcar una
+    recomendada, reemplazar un borrador y cambiar de tarifa sin perder snapshots.
+  - Enviar al cliente publica y congela las opciones junto con el cambio de estado
+    dentro de una sola RPC transaccional.
+  - El PDF comercial genera una sección completa por opción bajo el mismo número
+    de cotización y conserva una sola sección de términos y condiciones.
+  - Ventas/Admin registra mediante confirmación la opción elegida; la RPC restaura
+    exclusivamente sus líneas en `pricing_items`, selecciona su `agent_quote` y
+    sincroniza totales y datos comerciales de la cotización.
+  - Guards PostgreSQL impiden marcar la cotización como `Ganada` o crear Shipping
+    Instructions cuando existen opciones pero ninguna ha sido aceptada.
+  - Cotizaciones sin opciones conservan íntegramente el flujo legacy.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npx.cmd supabase migration up --local`: migración aplicada correctamente.
+  - `npx.cmd supabase test db supabase/tests/quotation_commercial_options.sql`: PASS.
+  - `npx.cmd supabase db lint --local --level warning`: sin hallazgos.
+  - `npx.cmd supabase db push --dry-run`: Production propone únicamente
+    `20260903120000_quotation_commercial_options.sql`.
+  - `npx.cmd supabase db push`: migración aplicada correctamente en Production.
+  - `npx.cmd supabase migration list --linked`: Local y Remote coinciden hasta
+    `20260903120000`.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Supabase Production: migración `20260903120000` aplicada y confirmada en Remote.
+  - Vercel Production: deployment `dpl_HiUdcT5yAggJuRxmUNDEeF5bLD5s` en estado
+    `Ready`, con alias `https://forwarders.app`.
+  - ESLint dirigido: los archivos nuevos no agregan hallazgos; las páginas y el
+    PDF conservan errores preexistentes de `any`, hooks y accesibilidad.
+- Verificación manual pendiente:
+  - Crear dos opciones FCL con navieras y profits distintos y revisar el PDF.
+  - Repetir con carga suelta/Aéreo Consolidado, ISV, seguro y multicontenedor.
+  - Confirmar con perfiles Pricing y Ventas que publicación, selección y permisos
+    coincidan con el flujo definido.
+  - Completar UAT con perfiles Pricing y Ventas.
+- Riesgos o trabajo pendiente:
+  - El flujo multiópción se habilita para cotizaciones comerciales previas a
+    operación. El repricing de una cotización que ya tiene SI/Booking continúa con
+    el mecanismo legacy y requiere una fase posterior si debe reenviar opciones.
+  - Falta revisión visual del PDF con datos reales y UAT del correo; el correo
+    informa que las condiciones por opción se encuentran en el PDF adjunto.
+- Commit: `47c3467`.
+
+### 2026-09-03 - FLOW-022 - Notas comerciales específicas por opción
+
+- Estado: Implementado, validado y desplegado en Production; UAT funcional pendiente.
+- Hallazgo: FLOW-022.
+- Causa raíz:
+  - `quotations.client_notes` era la única fuente de observaciones comerciales,
+    por lo que el mismo texto se repetía en todas las opciones del PDF.
+  - Las opciones en borrador solo podían reemplazarse con el pricing actual; no
+    existía una edición aislada de nombre, recomendación o notas.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pricing/QuotationOptionsPanel.tsx`
+  - `src/components/pdf/quotation-pdf.tsx`
+  - `src/lib/quotation-options.ts`
+- SQL:
+  - `supabase/migrations/20260903190000_quotation_option_client_notes.sql`
+  - `supabase/tests/quotation_commercial_options.sql`
+- Cambios:
+  - Se agregó `quotation_options.client_notes` para conservar hasta 4000
+    caracteres de observaciones comerciales exclusivas de cada alternativa.
+  - `save_current_pricing_as_option_v2` guarda o reemplaza el snapshot y sus
+    notas dentro de la misma transacción, manteniendo disponible la RPC anterior
+    durante el despliegue para no romper clientes abiertos.
+  - `update_draft_quotation_option_details` permite editar nombre, recomendación
+    y notas sin alterar tarifa, cargos, costo, venta, profit o GP.
+  - La edición y el reemplazo solo están disponibles para opciones `Borrador`;
+    las opciones ofrecidas continúan congeladas.
+  - El PDF separa observaciones generales de la cotización y observaciones de
+    cada opción. Ventas también puede leer la nota antes de registrar la elección.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npx.cmd supabase migration up --local`: migración aplicada correctamente.
+  - `npx.cmd supabase test db supabase/tests/quotation_commercial_options.sql`: PASS.
+  - `npx.cmd supabase db lint --local --level warning`: sin hallazgos.
+  - `npx.cmd supabase migration list --local`: historial local actualizado hasta
+    `20260903190000`.
+  - `npx.cmd supabase db push --dry-run`: Production propone únicamente
+    `20260903190000_quotation_option_client_notes.sql`.
+  - `npx.cmd supabase db push`: migración aplicada correctamente en Production.
+  - `npx.cmd supabase migration list --linked`: Local y Remote coinciden hasta
+    `20260903190000`.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - ESLint dirigido a `QuotationOptionsPanel.tsx` y `quotation-options.ts`: OK.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Vercel Production: deployment `dpl_93GGHp5EEcRxpjGi6Z6VhuvNYLMM` en estado
+    `Ready`, con alias `https://forwarders.app`.
+- Verificación manual pendiente:
+  - Crear dos opciones con notas distintas y confirmar que cada página del PDF
+    muestre únicamente la nota específica correspondiente.
+  - Editar solo nombre/notas de una opción borrador y confirmar que sus líneas y
+    totales no cambien.
+  - Confirmar con una opción ofrecida que los controles de edición permanezcan
+    ocultos y que la RPC rechace una modificación directa.
+- Riesgos o trabajo pendiente:
+  - Las opciones creadas antes de esta migración comienzan sin nota específica;
+    conservan las observaciones generales y pueden completarse mientras sean borrador.
+- Commit: `54f33f1`.
+
+### 2026-09-03 - FLOW-023 - Trazabilidad visual entre opción y tarifa de agente
+
+- Estado: Implementado, validado y desplegado en Production; UAT funcional pendiente.
+- Hallazgo: FLOW-023.
+- Causa raíz:
+  - Cada `quotation_option` conservaba `agent_quote_id` y `agent_name`, pero la
+    tarjeta solo mostraba carrier, tránsito y ETD.
+  - Pricing y Ventas no podían identificar visualmente qué agente proporcionó
+    cada alternativa ni navegar a su tarifa original.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pricing/QuotationOptionsPanel.tsx`
+- SQL: no aplica; se reutiliza la relación persistida `agent_quote_id`.
+- Cambios:
+  - Cada opción muestra internamente `Agente/Proveedor` usando el nombre
+    congelado al crear el snapshot.
+  - `Ver tarifa de origen` cambia la comparación FCL a vista Cards cuando es
+    necesario, desplaza hasta la tarifa exacta y la resalta temporalmente.
+  - La vista de detalle para Ventas/Admin también muestra el agente de cada opción.
+  - El PDF comercial no fue modificado y continúa ocultando el proveedor interno.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a `QuotationOptionsPanel.tsx`: OK.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - Vercel Production: deployment `dpl_3HJQzz2k8zfcDa43AtBrXC3wC4KW`
+    en estado `Ready`, con alias `https://forwarders.app`.
+- Verificación manual pendiente:
+  - Abrir opciones A/B ligadas a agentes distintos y confirmar nombre, scroll y
+    resaltado tanto desde vista Cards como desde Tabla FCL.
+  - Confirmar en Ventas que el agente sea visible y que no aparezca en el PDF.
+- Riesgos o trabajo pendiente:
+  - Opciones históricas sin `agent_name` mostrarán `No especificado`, pero el
+    vínculo a su tarifa seguirá disponible mediante `agent_quote_id`.
+- Commit: `f438837`.
+
+### 2026-09-04 - FLOW-024 - Repricing con opciones y operación existente
+
+- Estado: Implementado, migrado y desplegado en Production; UAT funcional pendiente.
+- Hallazgo: FLOW-024.
+- Causa raíz:
+  - Al aprobar un repricing con Shipping Instruction, Pricing intentaba devolver
+    inmediatamente la cotización a `Ganada` y abrir la propagación operativa.
+  - El guard de integridad impedía `Ganada` hasta registrar una opción `Aceptada`,
+    pero la elección solo era posible después de publicar las opciones como
+    `Ofrecida`; el flujo quedaba en una dependencia circular.
+  - El selector general también permitía marcar la cotización como enviada sin
+    ejecutar la RPC que publica los snapshots, dejándolos en `Borrador`.
+  - El modal de revisión llamaba `Venta total` al subtotal sin ISV.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+- SQL:
+  - `supabase/migrations/20260904120000_quotation_option_repricing_flow.sql`
+  - `supabase/tests/quotation_commercial_options.sql`
+- Cambios:
+  - Un repricing con opciones pendientes se aprueba como `Pricing Aprobado` sin
+    modificar todavía la operación; luego se publica mediante el botón dedicado.
+  - Ventas/Admin registra la opción elegida desde el detalle y decide si desea
+    propagarla a las Shipping Instructions vinculadas.
+  - La nueva RPC `finalize_quotation_option_selection` acepta la opción, restaura
+    sus líneas y tarifa, sincroniza opcionalmente la operación y cambia la
+    cotización a `Ganada` dentro de una sola transacción.
+  - Ventas solo puede ejecutar la sincronización canónica para una SI cuya
+    cotización ya tenga una opción `Aceptada`; bookings confirmados y BL continúan
+    protegidos por las reglas existentes.
+  - El cambio manual a `Enviada al Cliente` queda bloqueado en UI y mediante un
+    trigger de integridad cuando existen opciones sin publicar; debe usarse
+    Pricing Comparison para publicarlas transaccionalmente.
+  - El modal de aprobación ahora separa costo, venta sin ISV, ISV y total cliente.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npx.cmd supabase migration up --local`: migración aplicada correctamente.
+  - `npx.cmd supabase test db supabase/tests/quotation_commercial_options.sql`: PASS.
+  - `npx.cmd supabase db lint --local --level warning`: sin hallazgos.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+  - `npx.cmd supabase db push --dry-run`: Production propuso únicamente
+    `20260904120000_quotation_option_repricing_flow.sql`.
+  - `npx.cmd supabase db push`: migración aplicada correctamente en Production.
+  - `npx.cmd supabase migration list --linked`: Local y Remote coinciden hasta
+    `20260904120000`.
+  - Vercel Production: deployment `dpl_2vjFt3oUkidCat363ERo7FzkeuJn` en estado
+    `Ready`, con alias `https://forwarders.app`.
+- Verificación manual pendiente:
+  - Repetir el caso real con una cotización reabierta y SI sin bookings: aprobar,
+    publicar, elegir A y confirmar `Aceptar y propagar`.
+  - Confirmar que la opción ganadora quede `Aceptada`, la otra `No seleccionada`,
+    la cotización `Ganada` y la SI con agente/ETD/días libres de la opción A.
+  - Probar `Aceptar sin actualizar operación` y un booking confirmado para
+    verificar que no se sobrescriban datos operativos consolidados.
+- Riesgos o trabajo pendiente:
+  - La migración se aplicó antes del frontend para evitar llamadas a una RPC
+    inexistente durante el rollout.
+  - El flujo de rondas múltiples después de una opción ya aceptada no forma parte
+    de este ajuste y requiere versionado explícito de rondas si se habilita.
+- Commit: `627650b`.
+
+### 2026-09-04 - FLOW-025 - Fechas seguras e impresión individual de opciones comerciales
+
+- Estado: Implementado y validado localmente; despliegue y UAT pendientes.
+- Hallazgo: FLOW-025.
+- Causa raíz:
+  - El detalle de la cotización convertía columnas `DATE` mediante
+    `new Date('YYYY-MM-DD')`; en Honduras esto desplazaba visualmente ETD y
+    vigencia al día anterior.
+  - El PDF comercial agrupaba todas las opciones visibles en un solo documento,
+    sin una acción para generar y compartir cada alternativa por separado.
+- Código:
+  - `src/app/(protected)/pricing-comparison/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/components/pricing/QuotationOptionsPanel.tsx`
+- SQL: no aplica.
+- Cambios:
+  - El detalle reutiliza el helper central `formatDate`, que interpreta fechas
+    sin hora en el calendario local y conserva el formato `DD/MM/YYYY`.
+  - Cuando existen varias opciones, cada tarjeta muestra `Imprimir opción A/B`.
+  - La impresión individual usa exclusivamente el snapshot de la opción elegida:
+    tarifa, cargos, impuestos, naviera, ETD, vigencia y notas comerciales.
+  - `Previsualizar opciones` y la impresión general permanecen disponibles para
+    generar el documento conjunto, preservando el flujo existente.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a `QuotationOptionsPanel.tsx`: OK.
+  - `npm.cmd run build`: OK; 70/70 páginas generadas.
+  - `git diff --check`: OK; únicamente avisos de conversión LF/CRLF.
+- Verificación manual pendiente:
+  - Confirmar en Pricing Comparison y `quotations/[id]` que A y B abran PDFs
+    independientes y que cada archivo contenga solamente sus cargos y condiciones.
+  - Confirmar ETD/vigencia 12/09/2026 y 18/09/2026 sin desplazamiento de zona
+    horaria en las tarjetas del caso real.
+- Riesgos o trabajo pendiente:
+  - La apertura del PDF conserva el comportamiento actual del navegador; un
+    bloqueador de ventanas emergentes puede requerir autorizar el dominio.
+- Commit: pendiente.
+
+### 2026-09-07 - REV-20260907-01 - Fechas locales y vencimientos de calendario
+
+- Estado: Implementado y validado con pruebas locales; UAT autenticado pendiente.
+- Hallazgo: Fechas de formularios, pagos y vencimientos usaban el día UTC, que
+  cambia a las 18:00 en Honduras. Las alertas de ETA interpretaban DATE como UTC;
+  el parser aceptaba fechas imposibles trasladándolas silenciosamente a otro mes.
+- Archivos:
+  - `src/lib/format.ts`, `src/lib/alerts.ts`, `src/lib/tarifa-expiry-check.ts`.
+  - `src/app/(protected)/ventas/page.tsx`.
+  - `src/app/(protected)/agents/[id]/page.tsx`.
+  - `src/app/(protected)/invoicing/page.tsx`.
+  - `src/app/(protected)/invoicing/new/page.tsx`.
+  - `src/app/(protected)/invoicing/[id]/page.tsx`.
+  - `src/app/(protected)/accounts-payable/[id]/page.tsx`.
+  - `src/app/(protected)/quotations/new/page.tsx`.
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`.
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/app/(protected)/operations/garantias/page.tsx`.
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`.
+  - `src/app/portal/pickup/page.tsx`, `src/app/portal/pre-alertas/nueva/page.tsx`.
+  - `tests/calendar-and-auth.test.mjs`.
+- SQL: no aplica; no modifica fechas persistidas, timestamps de auditoría ni
+  aritmética UTC explícita de vencimientos por plazo.
+- Validación: pruebas en Honduras después de las 18:00, DATE, fechas imposibles,
+  año bisiesto y diferencia de días durante cambios de horario de Miami; TypeScript.
+- Riesgos / acción manual: probar altas, fechas de pago, filtros de Ventas,
+  vencimiento de tarifa y alertas de ETA con usuarios reales. El dashboard Miami
+  aún requiere un intervalo propio para sus filtros «hoy» sobre timestamps.
+- Commit: `48080c4`; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-02 - Sesión obsoleta y destinos de login
+
+- Estado: Implementado y validado con dependencias simuladas; UAT de sesión pendiente.
+- Hallazgo: una consulta de perfil tardía podía restaurar información del usuario
+  anterior. El login validaba la ruta junto con sus filtros, perdiendo algunos
+  destinos permitidos, y no capturaba excepciones de conexión.
+- Archivos: `src/hooks/useUser.tsx`, `src/lib/auth-redirect.ts`,
+  `src/app/login/page.tsx`, `src/app/portal/login/page.tsx`,
+  `tests/user-session.test.mjs`, `tests/calendar-and-auth.test.mjs`.
+- SQL: no aplica; permisos de roles y RLS conservados.
+- Cambios: invalidación de respuestas obsoletas, limpieza del perfil al cambiar
+  sesión, consulta diferida fuera del callback de auth, salida de loading ante
+  fallos y normalización del destino antes de comprobar permisos.
+- Validación: logout con consulta pendiente, A→B con respuestas invertidas,
+  bootstrap antiguo, reintento tras fallo, desmontaje, sesión SSR, filtros/hash,
+  rutas externas y normalización de segmentos; TypeScript y ESLint dirigido.
+- Riesgos / acción manual: verificar login ERP/portal, refresco de token,
+  recuperación de contraseña y cambio de sesión con cuentas reales de cada rol.
+- Commit: `48080c4`; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-03 - Tasa ausente distinta de exención explícita
+
+- Estado: Implementado y validado con regresiones; UAT comercial/financiero pendiente.
+- Hallazgo: `Number(null)` y `Number('')` generaban 0, evitando el default existente
+  de la aplicación para una tasa no configurada.
+- Archivos: `src/lib/tax.ts`, `tests/tax-and-documents.test.mjs`.
+- SQL: no aplica; no se reescribieron facturas ni snapshots.
+- Validación: prueba que falló antes del fix; null/undefined/vacío/inválido usan
+  default, 0 y '0' permanecen exentos, tasa personalizada y cargo no gravable
+  conservan sus resultados; TypeScript y ESLint dirigido.
+- Riesgos / acción manual: verificar cotización Miami, Pricing y PDF de costos
+  con default ausente y con 0 explícito. No constituye revisión normativa fiscal.
+- Commit: `48080c4`; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-04 - Autoridad del documento BL estructurado
+
+- Estado: Implementado y validado con regresiones; UAT de reportes/portal pendiente.
+- Hallazgo: un MBL/HBL estructurado sin número podía mostrar el número antiguo
+  almacenado en el cache del booking, contradiciendo la autoridad documental.
+- Archivos: `src/lib/booking-document-summary.ts`, `tests/tax-and-documents.test.mjs`.
+- SQL: no aplica; no se modifica la numeración ni se eliminan documentos.
+- Validación: prueba que falló antes del fix; documento vacío no resucita cache,
+  documento numerado tiene prioridad y fallback legacy sigue disponible cuando
+  no existe registro estructurado de ese tipo; TypeScript y ESLint dirigido.
+- Riesgos / acción manual: comprobar reportes y detalle del envío en el portal
+  con documentos nuevos sin número y expedientes históricos.
+- Commit: `48080c4`; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-05 - Landing accesible y formulario recuperable
+
+- Estado: Implementado y probado en navegador local; verificación de recepción real pendiente.
+- Hallazgo: intro obligatoria retrasaba el contenido; tabs carecían de manejo de
+  teclado; formulario sin labels persistentes ni captura de excepciones; menú
+  móvil sin estado accesible y comparativa demasiado ancha para móvil.
+- Archivos: `src/components/marketing/ForwardersLanding.tsx`,
+  `docs/review-2026-09-07.md`.
+- SQL: no aplica; se conserva la inserción de leads y sus políticas actuales.
+- Cambios: retirada de la intro en la landing; reutilización de Tabs; CTA hacia
+  capturas del producto; scroll/márgenes para cabecera fija; labels/autocomplete;
+  validación de espacios, exclusión de doble envío, try/catch/finally y errores
+  visibles; privacidad enlazada; menú con Escape y retorno de foco; tabla con
+  desplazamiento horizontal accesible.
+- Validación: Chrome 1440×1000 y 390×844, teclado en tabs, panel único, labels,
+  menú/Escape/foco, ancho móvil y cabecera fija; fallo de conexión, reintento,
+  doble submit y éxito con solicitudes interceptadas. Cero leads reales y sin
+  excepciones JS. Capturas locales en `.ua/intermediate/landing-*.png`.
+- Riesgos / acción manual: verificar la recepción de un lead autorizado en un
+  ambiente de prueba; auditoría completa de contraste, zoom y lector de pantalla
+  pendiente. La reorganización visual/comercial se propone en el informe.
+- Commit: `48080c4`; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-06 - Guía específica y validaciones reproducibles
+
+- Estado: Implementado y validado estructuralmente; sin evaluación conductual independiente.
+- Hallazgo: AGENTS enumeraba estados históricos; no existía skill específica del
+  ERP. Los artefactos temporales ignorados por Git eran recorridos por ESLint.
+- Archivos: `AGENTS.md`, `skills/sari-erp-maintenance/SKILL.md`,
+  `skills/sari-erp-maintenance/references/module-map.md`, `package.json`,
+  `tests/load-ts.mjs`, `eslint.config.mjs`, `docs/review-2026-09-07.md`.
+- SQL: no aplica; no se modificaron skills globales ni permisos locales de Codex.
+- Cambios: fuente actual de estados, skill cargable desde AGENTS con invariantes
+  y mapa de módulos, comando `npm.cmd test` con Node/TypeScript instalados y
+  exclusión de `.ua/intermediate/**` del lint. No se desactivaron reglas del código.
+- Validación: parser YAML instalado, nombre/descripción, campos admitidos,
+  ausencia de placeholders y enlaces existentes. Python no está disponible para
+  `quick_validate.py`; se ejecutaron comprobaciones estructurales equivalentes.
+- Riesgos / trabajo pendiente: ESLint global conserva 307 errores y 69 advertencias
+  preexistentes. Revisarlos por módulo; no confundir build verde con UAT/RLS.
+- Commit: `48080c4`; cambios locales sin despliegue.
+
+### 2026-09-07 - REV-20260907-07 - Respuestas inválidas del proveedor de correo
+
+- Estado: Implementado y validado con proveedor/base simulados; UAT de correo pendiente.
+- Hallazgo: `response.json()` podía lanzar antes de actualizar la auditoría,
+  dejando el aviso en `processing` e impidiendo el reintento previsto por el flujo.
+- Archivos: `src/lib/email-provider-response.ts`,
+  `src/app/api/miami/package-assignment-email/route.ts`,
+  `src/app/api/support/notify/route.ts`, `tests/email-notifications.test.mjs`.
+- SQL: no aplica; las tablas de auditoría y claves de idempotencia se conservan.
+- Cambios: parser compartido para respuestas vacías, HTML, null y JSON inválido;
+  la ausencia de confirmación pasa por el registro existente de fallo.
+- Validación: ambos handlers devuelven 502 y actualizan `failed` ante HTML;
+  respuesta válida conserva `sent` e ID del proveedor; demo no llama al proveedor
+  ni crea auditorías de envío. No se enviaron correos reales.
+- Riesgos / acción manual: probar en staging la auditoría y el reintento autorizado.
+  La conciliación si falla la BD tras confirmación del proveedor y los fallos al
+  consultar el ambiente siguen pendientes de revisión; no hay reintento automático nuevo.
+- Commit: `48080c4`; cambios locales sin despliegue.
+
+### Validación conjunta de REV-20260907-01 a REV-20260907-07
+
+- `npm.cmd test`: PASS, 19 pruebas.
+- `npx.cmd tsc --noEmit`: OK después del último cambio de código.
+- ESLint dirigido a helpers, sesión, login, landing, APIs, pruebas y configuración:
+  OK, sin errores ni advertencias. Global: deuda inicial sin incremento
+  (307 errores / 69 advertencias).
+- `npm.cmd run build`: OK, 70/70 páginas generadas en la compilación final.
+- `git diff --check`: OK; solo avisos de conversión LF/CRLF del entorno Windows.
+- No se ejecutó SQL ni se verificó RLS en una base activa. No se hizo deploy;
+  la UAT autenticada y las acciones manuales indicadas siguen abiertas.
+
+### 2026-09-07 - REV-20260907-08 - Rediseño de landing orientado a producto y demo
+
+- Estado: Implementado; validado localmente en navegador. Despliegue y recepción
+  real de un lead autorizado pendientes.
+- Hallazgo: la landing repetía beneficios en varias secciones, relegaba las
+  capturas reales y no permitía leerlas con ampliación. Todo el contenido se
+  incluía en un componente cliente grande y había cifras/promesas no verificadas.
+- Archivos:
+  - `src/components/marketing/ForwardersLanding.tsx`.
+  - `src/components/marketing/LandingHeader.tsx`.
+  - `src/components/marketing/LandingContact.tsx`.
+  - `src/components/marketing/ProductShowcase.tsx`.
+  - `src/components/marketing/landing-content.ts`.
+  - `src/components/marketing/landing.module.css`.
+  - `skills/sari-erp-maintenance/references/module-map.md`.
+  - `docs/review-2026-09-07.md`.
+- SQL: no aplica. No se modifican registro de leads, permisos ni rutas del ERP.
+- Cambios:
+  - Hero centrado en cotizar, coordinar y controlar márgenes junto a una captura
+    real identificada como demostración; prioridad de carga para esa imagen.
+  - Seis vistas del producto con Tabs existentes, visor Dialog, tamaño original,
+    desplazamiento, cierre con Escape y retorno de foco al disparador exacto.
+  - Flujo de cuatro etapas, tres áreas internas y acceso al portal del cliente.
+    Se conservan destinos anteriores `#beneficios`, `#funcionalidades`, `#workflow`,
+    `#portal`, `#producto` y `#demo`.
+  - FAQ nativa con información verificable y alcance por definir para migración,
+    implementación y precio. Se retiran «+70 cotizaciones» y «menos de 24h».
+  - Secciones estáticas de servidor y componentes cliente para menú, visor y
+    formulario. Se conserva trim, guard de doble envío, validación y recuperación
+    de errores. Sin nuevas librerías ni servicios de analítica.
+  - Mayor contraste del texto secundario, foco visible y movimiento reducido
+    acotado a la landing; no hay animaciones continuas ni contenido oculto al entrar.
+- Validaciones:
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a `src/components/marketing`: OK.
+  - `npm.cmd test`: PASS, 19 regresiones existentes.
+  - `npm.cmd run build`: OK, 70/70 páginas generadas.
+  - Chrome: anchos 320, 390, 768, 1024 y 1440 sin overflow global; tabs por teclado;
+    zoom al 100%; foco contenido en modal y restituido al botón correcto; FAQ;
+    movimiento reducido; enlaces internos; menú/Escape y cabecera fija.
+  - Formulario con campos vacíos/espacios, fallo de conexión, reintento, doble
+    submit y éxito simulados. Cero leads o correos reales.
+  - Medición puntual local en build de producción, 1440×1000 y cache de navegador
+    desactivada: JS inicial (`encodedBodySize`) 310,690 → 271,657 bytes (~12.6%
+    menos); altura 9,300 → 4,742 px. LCP observado 968 → 432 ms. Son observaciones
+    locales, no métricas de campo ni una garantía de rendimiento o conversión.
+  - Evidencia temporal en `.ua/intermediate/redesign-*.png` y
+    `.ua/intermediate/landing-metrics-{before,after}.json`.
+  - La suite de navegador se repitió sobre el build final de producción: PASS,
+    sin excepciones JS. `git diff --check`: OK.
+- Riesgos / trabajo pendiente:
+  - Confirmar recepción real del formulario en un ambiente autorizado antes de
+    cerrar el flujo de contacto como validado de extremo a extremo.
+  - Analítica de conversión pendiente de elegir/configurar proveedor aprobado.
+    No se añadió seguimiento ni se recolectan datos adicionales.
+  - No se verificó conformidad WCAG completa ni se modificaron las condiciones
+    comerciales. Los flujos autenticados del ERP conservan sus UAT pendientes.
+- Commit: `48080c4`; cambios locales sin despliegue.
+
+### 2026-09-07 - POL-REVIEW-01 - Revisión de privacidad y términos
+
+- Estado: revisión documental realizada; propuestas sin implementar ni publicar.
+  Cobertura jurídica pendiente; LEG-001 a LEG-004 no se cierran.
+- Archivos: `docs/privacy-terms-review-2026-09-07.md`, `HARDENING.md`.
+- Código / SQL: sin cambios. RLS fuera del alcance solicitado.
+- Hallazgos: POL-01 a POL-08 en el informe: identidad y marcas, plazo de contacto
+  contradictorio, aviso para prospectos, destinatarios/proveedores, acceso previo
+  y aceptación versionada, condiciones logísticas, anexos operativos y versiones.
+- Validaciones: contraste de políticas, branding, formulario de demo, registros,
+  proxy/layout de portal e integraciones de correo; consulta de fuentes jurídicas
+  públicas con límites documentados. No se verificó el sitio desplegado ni contratos.
+- Riesgos / pendientes: confirmar identidad y condiciones con el titular; aprobación
+  jurídica, inventario de proveedores/regiones, conservación y prueba de derechos;
+  implementación y validación de acceso público/aceptación después de definir textos.
+- Commit: pendiente; informe local sin despliegue.
+
+### 2026-09-07 - POL-IMPLEMENT-01 - Privacidad, condiciones y declaración versionada
+
+- Estado: implementado y validado localmente. Migración remota, publicación y
+  validación jurídica pendientes; no se declara cobertura legal completa.
+- Decisión del titular: Hernova Systems es nombre comercial sin sociedad constituida;
+  dominio `forwarders.app`, correo `contacto@forwarders.app`. No se aportó identidad
+  personal/domicilio/RTN; LEG-001 conserva ese pendiente.
+- Archivos:
+  - `.gitattributes`, `public/legal/platform-2026-06-22.json`,
+    `public/legal/platform-2026-09-07.json`, `public/legal/logistics-2026-06.json`,
+    `public/legal/logistics-2026-09-07.json`.
+  - `src/app/layout.tsx`, `src/app/politicas/page.tsx`,
+    `src/app/terminos-logisticos/page.tsx`, `src/app/portal/info/terminos/page.tsx`.
+  - `src/components/legal/LogisticsTerms.tsx`,
+    `src/components/legal/TermsAcknowledgement.tsx`, `src/lib/legal-documents.ts`.
+  - `src/app/register/page.tsx`, `src/app/portal/register/page.tsx`, `src/proxy.ts`,
+    `src/components/marketing/LandingContact.tsx`.
+  - `tests/legal-documents.test.mjs`, `docs/privacy-operations-runbook.md`,
+    `docs/privacy-terms-review-2026-09-07.md`, `HARDENING.md`.
+- SQL: `supabase/migrations/20260907160000_signup_legal_acceptance.sql`;
+  suite `supabase/tests/signup_legal_acceptance.sql`.
+- Cambios: POL-01 a POL-08: marca/dominio corregidos, eliminación de promesa de
+  tres días y condiciones logísticas no confirmadas, finalidad de prospectos,
+  proveedores/derechos/conservación, textos separados y archivos versionados.
+  Ruta pública específica sin abrir módulos privados. Índice móvil y lectura
+  sin justificación forzada. Casilla de uso/lectura sin consentimiento publicitario.
+- Integridad: captura de declaración en trigger independiente de perfiles, fecha
+  del servidor, catálogo con hash SHA-256, sin permisos API para modificar evidencia.
+  Se conserva aprobación/roles; altas legacy sin declaración no se inventan como
+  aceptaciones. No se da por probado correo ni representación de organización.
+- Validaciones:
+  - TypeScript y ESLint dirigido: OK; 21 pruebas Node: PASS; build: 71/71 páginas.
+  - Migración y suite en PostgreSQL local `supabase_db_sarierp`, transacción con
+    rollback: PASS. Declaraciones inválidas rechazadas, fecha no falsificable,
+    lectura propia por RLS, anon sin lectura, usuarios sin inserción/update/delete,
+    cambios de metadata sin alterar evidencia, perfiles Pendiente conservados.
+  - Chrome: 320/390/1440 sin overflow, archivos y páginas públicas, módulos del
+    portal protegidos; casilla no premarcada/obligatoria, fallo/reintento/doble
+    submit y payload de ambos registros. Solicitudes interceptadas, cero cuentas,
+    leads o correos reales. Capturas locales `.ua/intermediate/legal-*-mobile.png`.
+  - `git diff --check`: OK.
+- Riesgos / acciones pendientes:
+  - Aplicar migración en staging y producción antes de publicar frontend; probar
+    altas con confirmación de correo e invitaciones autorizadas en staging.
+  - Las pruebas de navegador simulan Supabase; no sustituyen UAT de extremo a extremo.
+  - Acreditar identidad jurídica, condiciones del operador, atención del buzón,
+    acuerdos/proveedores/regiones y conservación/exportación/eliminación/restauración.
+  - La evidencia se elimina al borrar la cuenta; resolver antes cualquier deber
+    de conservación legal. No existe aceptación retrospectiva ni universal.
+  - LEG-002/003/004 no se cierran hasta resolver anexos, revisión jurídica y rollout.
+- Commit: pendiente; cambios locales sin despliegue ni SQL remoto.
+
+### 2026-09-07 - POL-RELEASE-01 - Publicación de políticas y registro de aceptación
+
+- Estado: migración aplicada y frontend publicado en Production; comprobaciones
+  públicas completadas. UAT de altas reales y validación jurídica pendientes.
+- Autorización: titular solicitó migración, commit y despliegue juntos.
+- SQL: `20260907160000_signup_legal_acceptance.sql` aplicada mediante Supabase CLI
+  al proyecto Production vinculado `fwspgdzvlbtbgiupvrzo`.
+- Archivos: los de POL-IMPLEMENT-01 y documentación de esta publicación.
+- Validaciones: dry-run mostró únicamente esta migración; `db push --yes`: OK.
+  Se conservan TypeScript, lint dirigido, build 71/71, 21 pruebas Node, pruebas
+  SQL/RLS locales y navegador registradas en POL-IMPLEMENT-01.
+- Esquema remoto: dump de estructura `public,auth` confirmó tablas, claves,
+  RLS habilitado, SELECT propio para authenticated, ausencia de permisos de
+  escritura de usuarios y trigger `on_auth_user_created_legal_acceptance`.
+  Evidencia temporal ignorada: `.ua/intermediate/legal-prod-schema.sql`.
+- GitHub: commit `44cda8c` publicado en `origin/main`.
+- Vercel: despliegue automático del push `dpl_4ZwZV1E6KCDhbKxqT95PegY4e4de`,
+  estado `Ready`, Production, alias `https://forwarders.app`.
+- Comprobación pública: `/politicas`, `/terminos-logisticos`, `/register` y
+  `/portal/register`: HTTP 200 y contenido nuevo; cuatro archivos legales con
+  SHA-256 idéntico al commit; `/portal/paquetes` conserva redirección a login.
+  Solo solicitudes GET; no se crearon cuentas ni se enviaron correos reales.
+- Pendientes: UAT de alta real/correo e invitaciones con cuentas autorizadas,
+  identidad legal, condiciones comerciales y procesos señalados anteriormente.
+  La publicación no cierra LEG-001 a LEG-004 como cobertura jurídica completa.
+- Commit de implementación: `44cda8c`. Esta actualización documental registra
+  el resultado de publicación sin modificar código ni SQL aplicado.
+
+### 2026-09-11 — UX-DASH-01 / REP-DASH-01 — Prioridades y métricas comerciales
+
+- Estado: implementado, validado técnicamente en local y publicado en Production.
+  Pendiente UAT autenticado por rol; no se declara cerrado el flujo completo.
+- Hallazgos:
+  - Los pendientes de pricing heredaban el período comercial y mostraban primero
+    los más recientes, ocultando pendientes antiguos.
+  - El contador de creadas seguía restringido al mes actual al elegir otro rango;
+    el margen global se presentaba como media de porcentajes individuales.
+  - El embudo infería transiciones históricas a partir del estado actual.
+  - Indicadores sin acceso a su detalle, tablas estrechas y rankings agrupados
+    por nombre en lugar de identificador.
+- Archivos:
+  - `src/app/(protected)/dashboard/page.tsx`.
+  - `src/lib/commercial-dashboard.ts`.
+  - `tests/commercial-dashboard.test.mjs`.
+  - `HARDENING.md`.
+- SQL: no aplica; sin cambios de esquema, RLS ni transiciones de negocio.
+- Cambios:
+  - Prioridades de todos los períodos: pricing y respuestas por antigüedad de
+    creación, tarifas seleccionadas vencidas o con vencimiento en siete días,
+    y tareas vencidas. Se aclara que la antigüedad es desde creación, no un SLA.
+  - Cuatro indicadores con detalle: venta y utilidad cotizadas ganadas, tasa de
+    cierre y valor abierto. Margen global = utilidad ganada / venta ganada.
+    Sin denominador se muestra ausencia de base, no una tasa de cero.
+  - Períodos por fecha local de creación y comparación con igual cantidad de
+    días inmediatamente anteriores. Ambos grupos usan estados actuales; no se
+    presentan como cierres históricos, facturación o cobros.
+  - Distribución actual por estados canónicos, incluidos borradores, en lugar
+    del embudo estimado. Borradores excluidos del valor de oportunidades abiertas.
+  - Detalle paginado a ancho completo y filtros por estado, cliente y vendedor
+    conservando el período; rankings agrupados por ID. Pestañas reutilizadas.
+  - Pricing abre con pendientes; Ventas conserva su ámbito y no ve rankings de
+    otros vendedores; los accesos respetan permisos existentes por rol.
+  - Lectura paginada de cotizaciones, pricing y tareas para evitar totales
+    truncados; errores de carga con reintento y descarte de respuestas obsoletas.
+    Las mutaciones de tareas mantienen filtro explícito de propietario.
+  - Fechas de tareas con helper compartido, etiquetas visibles/accesibles,
+    vistas de pendientes/vencidas/completadas y contraste de botones en oscuro.
+- Validaciones:
+  - Pruebas Node: 33/33, incluidas cuatro regresiones nuevas para fechas locales,
+    año completo, intervalos comparables, margen ponderado y base de comparación.
+  - Lint dirigido tras el último ajuste: sin errores ni advertencias.
+  - `npx.cmd tsc --noEmit`: OK tras retirar la vista de pruebas.
+  - `npm.cmd run build`: OK, 72/72 páginas, sin la ruta temporal de revisión.
+  - Navegador con datos simulados: PASS en 1440/768/390/320 px, sin overflow
+    del documento; inspección visual en claro y oscuro. Se corrigió una etiqueta
+    `sr-only` de la tabla que escapaba del contenedor con scroll.
+  - Navegador: margen global, filtros de indicadores y estados, pricing antiguo
+    fuera del período, tarifa vencida, paginación, tareas vencidas, foco y
+    recuperación de un fallo de pricing sin mostrar importes falsos de cero.
+    Sin peticiones a Supabase real ni escritura de datos remotos.
+  - `git diff --check`: OK. Harness temporal retirado y caché de tipos de esa
+    ruta eliminada antes de la compilación definitiva.
+- Riesgos y pendientes:
+  - UAT autenticado de Admin, Ventas, Pricing y Operaciones, RLS real, enlaces a
+    destinos y CRUD de tareas; los mocks de navegador no certifican esos flujos.
+  - Vigencia visible según tarifas seleccionadas accesibles mediante RLS.
+  - Las comparaciones no reconstruyen el estado histórico de una cotización.
+  - El cálculo monetario conserva la fuente cotizada y sus fallbacks existentes;
+    no sustituye reportes contables. Validar rendimiento con grandes históricos.
+  - Frontend publicado; sin SQL ni cambios de datos remotos. Harness temporal retirado.
+- Publicación autorizada por el titular el 11/09/2026:
+  - Commit de implementación `ea408c6f26efa17f809a4a3981043705eee1547b`,
+    publicado en `origin/main` mediante Git; integración automática de Vercel.
+  - GitHub deployment `6403164833`, entorno `Production`; estado Vercel
+    `success` / `Deployment has completed` para ese commit.
+  - Vercel: `https://vercel.com/claudherhn-5641s-projects/sarierp/4VFy4YQB2Ubfx3aE13Q5JN72JwuR`.
+  - Comprobaciones HTTPS en `https://forwarders.app` tras completar el despliegue:
+    `/dashboard` devuelve 307 a `/login?next=%2Fdashboard`, `/login` devuelve 200
+    y `/api/dashboard-review` devuelve 404. Sin sesiones ni datos reales de prueba.
+  - La publicación no sustituye el UAT autenticado ni verifica RLS de extremo
+    a extremo; se conservan los pendientes descritos arriba.
+- Commit de implementación: `ea408c6`. Registro de publicación en commit documental posterior.
+
+### 2026-09-14 — UX-NAV-02 / UX-QUOTE-02 — Sidebar y detalle de cotización
+
+- Estado: implementado; validación local de navegador, regresiones y compilación
+  definitiva completadas y frontend publicado en Production. Pendiente UAT
+  autenticado por rol; no se declara cerrado el flujo comercial de extremo a extremo.
+- Hallazgos: menú extenso sin jerarquía por rol, selección incorrecta en detalle
+  y actividad, drawer móvil sin control de foco, breadcrumb incorrecto, acciones
+  de estado que fallaban después del clic, resumen económico ambiguo, correo sin
+  aclarar el adjunto manual y consultas fallidas presentadas como datos vacíos.
+- Archivos:
+  - `src/components/layout/sidebar.tsx`, `protected-shell.tsx`, `topbar.tsx`.
+  - `src/components/ui/Breadcrumbs.tsx`.
+  - `src/app/(protected)/quotations/[id]/page.tsx`.
+  - `src/app/(protected)/historico/page.tsx`.
+  - `src/lib/sidebar-navigation.ts`, `src/lib/quotation-detail-ux.ts`.
+  - `tests/quotation-navigation.test.mjs`, `HARDENING.md`.
+- SQL: no aplica; sin migraciones, cambios de RLS, transiciones canónicas ni RPC.
+- Cambios:
+  - Inicio, Alertas y Reportes como accesos generales; CTA de nueva cotización
+    según permisos. Compras integrada en Finanzas, soporte y perfil al pie.
+  - Grupos plegables, preferencia por usuario/rol, orden por rol y apertura del
+    grupo activo al navegar. Etiquetas completas y un solo badge de notificaciones
+    sin leer; no se fusionaron los sistemas de alertas y notificaciones existentes.
+  - Perfil del sidebar obtenido de `useUser`; descarte de conteos obsoletos al
+    cambiar usuario o marcar notificaciones como leídas. Logout informa fallos.
+  - Dialog existente para navegación móvil: foco contenido, Escape, restitución
+    de foco al botón del menú y cierre al pasar al ancho de escritorio.
+  - Detalle y edición activan Cotizaciones; Registro de actividad y Nueva
+    cotización conservan selección independiente. Breadcrumb a `/historico` con
+    filtros/paginación de origen y validación de la ruta de regreso.
+  - Encabezado con cliente, ruta, servicio y vigencia; siguiente paso según estado
+    y capacidades existentes. Editar queda como acción secundaria. Los requisitos
+    de opciones se explican antes de intentar cambiar a Enviada o Ganada.
+  - Resumen distingue subtotal, ISV, total al cliente, costo, utilidad y margen.
+    Selector de fuente; una opción aceptada usa sus importes guardados por defecto,
+    sin recalcular ni modificar snapshots. Utilidad negativa con color de pérdida;
+    margen sin denominador muestra «Sin base».
+  - Diseño adaptable, pestañas desplazables y tablas con scroll propio. Actividad
+    reciente limitada a tres eventos; historial completo en su pestaña.
+  - Correo en Dialog accesible: descargar PDF, abrir aplicación de correo y adjuntar
+    manualmente. Prepararlo no registra un envío ni cambia el estado. Fallo de
+    portapapeles con mensaje y alternativa manual.
+  - Errores críticos de carga bloquean importes/documentos parciales y ofrecen
+    reintento. Historial y validaciones distinguen errores de ausencia de registros.
+    Versionado de cargas y componente por cotización/usuario evitan mezclar datos.
+- Validaciones:
+  - `npm.cmd test`: 37/37, incluidas selección de rutas, orden por rol, conservación
+    y validación del regreso al listado y requisitos de opciones comerciales.
+  - Navegador Chrome con fixtures locales, sin peticiones a Supabase real:
+    1440/768/390/320 px sin overflow del documento ni del contenedor principal;
+    capturas revisadas en escritorio/móvil y captura en oscuro.
+  - Navegador: selección de Cotizaciones, breadcrumb con filtros, transición Ganada
+    deshabilitada con explicación, correo y adjunto manual, Escape y restitución
+    de foco, 35 tabulaciones dentro del menú móvil, utilidad negativa, fuente de
+    opción aceptada y fallo de pricing con reintento. Sin excepciones de ejecución.
+  - Harness temporal retirado; evidencias locales ignoradas en `.ua/intermediate`.
+  - Lint: sidebar, shell, topbar, Breadcrumbs y helpers sin errores ni advertencias.
+    Detalle pasa de 15 errores/1 advertencia a 6 errores previos de `any`; listado
+    conserva 9 errores/2 advertencias previos (tipado, efecto y código sin uso).
+    No se desactivaron reglas ni se añadieron errores de lint.
+  - `npx.cmd tsc --noEmit`: OK tras retirar el harness y sus tipos temporales.
+  - `npm.cmd run build`: OK, 72/72 páginas; sin la ruta temporal de revisión.
+  - `git diff --check`: OK tras corregir un espacio final en el bloque de correo.
+- Riesgos y pendientes:
+  - UAT autenticado por rol, visibilidad real mediante RLS, vuelta al listado tras
+    cambios de datos, emisión de PDF, correo en clientes instalados y aceptación/
+    repricing/operación con cuentas autorizadas. Los mocks no certifican esas acciones.
+  - Preferencias del menú locales al navegador; no se sincronizan entre dispositivos.
+  - Se conserva la deuda de tipado del listado/detalle y las fuentes monetarias
+    existentes. Sin escrituras en datos remotos durante las pruebas.
+- Publicación: commit y despliegue autorizados por el titular el 14/09/2026.
+  - Commit de implementación `898e38a0aba19dac6bb69bb9219e74bbd472c381`, publicado
+    en `origin/main` mediante Git; despliegue automático de Vercel.
+  - GitHub deployment `6443547683`, entorno `Production`, estado `success` /
+    `Deployment has completed` para ese commit.
+  - Vercel: `https://vercel.com/claudherhn-5641s-projects/sarierp/6tfTefNU7yBJ9p4ivvMFCUYUgZq5`.
+  - Comprobaciones públicas HTTPS del 14/09/2026: `/dashboard` y `/quotations/id`
+    devuelven 307 al login con su ruta de regreso, `/login` devuelve 200 y
+    `/api/ux-review/demo` devuelve 404. Solo GET, sin sesiones ni datos reales.
+  - Se conservan los pendientes de UAT/RLS y la deuda histórica de lint anteriores.
+    La publicación no sustituye una prueba autenticada de los flujos comerciales.
+- Commit de implementación: `898e38a`. Resultado de publicación en commit documental posterior.
+
+### 2026-09-14 — REP-011 / UX-REP-01 — Consulta y exportación de reportes
+
+- Estado: implementado y validado con pruebas locales, navegador simulado y
+  compilación definitiva. Publicado en producción; UAT autenticado pendiente.
+- Hallazgos: Vencidas heredaba el mes actual y ocultaba deudas anteriores; errores
+  de consulta terminaban como datos vacíos, los SELECT no recorrían todas las
+  páginas y la tabla estaba limitada a 120 filas. Filtros mezclaban estados y
+  campos de distintos módulos; indicadores operativos mostraban un monto sin base.
+- Archivos: `src/app/(protected)/reports/page.tsx`, `src/lib/report-query.ts`,
+  `src/lib/report-view.ts`, `src/components/ui/Pagination.tsx`,
+  `tests/reports.test.mjs`, `HARDENING.md`.
+- SQL: no aplica. Se conservan fuentes financieras canónicas y RPC de readiness;
+  no se modifican permisos, RLS, snapshots, facturas, pagos ni estados de negocio.
+- Cambios:
+  - Lectura paginada por fuente con orden estable y desempate por ID. Avanza por
+    la cantidad realmente recibida hasta una página vacía, incluso si el servidor
+    limita las respuestas por debajo del tamaño solicitado. Detecta IDs repetidos.
+  - Carga solamente las fuentes del reporte seleccionado. Errores persistentes
+    con reintento, descarte de cargas obsoletas y aislamiento por usuario/rol.
+    Importes y exportación bloqueados hasta completar todas sus dependencias.
+  - Vencidas abre con todas las fechas; aclara que muestra saldos actuales, no una
+    reconstrucción histórica. Cada reporte indica su fecha de filtrado. Trimestre
+    corresponde al trimestre calendario hasta hoy; validación de rangos invertidos.
+  - Estados derivados del reporte y filtros aplicables al módulo; los parámetros
+    de campos ajenos se ignoran. Selección inicial por rol, grupos por área y
+    selector móvil. Fechas, filtros, búsqueda, página y orden se conservan en URL;
+    al cambiar de reporte se recuerda su selección durante la visita.
+  - Búsqueda, orden numérico/monetario y cronológico, paginación 25/50/100 y enlaces
+    al documento original condicionados a permisos. Totales sobre todas las filas
+    filtradas; CSV/PDF incluyen todas, independientemente de la página visible.
+  - Indicadores propios para operaciones y preparación de embarques, sin montos
+    ficticios. Comercial usa Venta cotizada, Utilidad cotizada y Margen global;
+    se mantiene la separación de monedas y la fuente de importes existente.
+  - Exportaciones con etiquetas visibles y PDF generado a petición. Apertura de
+    pestaña asociada al clic, alternativa de descarga y mensajes de error. CSV
+    con BOM UTF-8, campos entrecomillados y neutralización de fórmulas de planilla.
+  - Filtros plegables en móvil, tablas con scroll propio y paginación adaptable.
+    Botones y selector de la paginación compartida reciben nombres accesibles.
+- Validaciones:
+  - `npm.cmd test`: 45/45. Ocho pruebas nuevas cubren lectura completa con límite
+    menor, error en página posterior, duplicados/respuestas obsoletas, deuda
+    anterior, trimestre calendario, filtros/URL/permisos, CSV y orden por valores.
+  - ESLint dirigido a los cinco archivos de código/pruebas: sin errores ni avisos.
+  - Navegador Chrome con 1,302 cotizaciones simuladas y API limitada a 100 filas:
+    total USD 130,200.00, 1,302 filas en CSV, búsqueda de la última cotización,
+    tamaño de página, persistencia de filtros entre reportes y al recargar URL.
+  - Navegador: Vencidas incluye CxC/CxP de agosto; USD y HNL separados; campos de
+    pago solo donde aplican; indicadores operativos; enlaces al documento; fallo
+    en la segunda página sin exportación parcial ni ceros falsos y reintento.
+  - Navegador en 1440/768/390/320 px sin overflow del documento o main. Revisión
+    visual en escritorio/móvil y oscuro; filtros móviles expanden/colapsan.
+    Se corrigió un desbordamiento de los controles de paginación a 320 px.
+  - PDF generado efectivamente con fixture de una fila: 7,109 bytes y cabecera PDF
+    válida; rango invertido bloquea exportaciones. Sin excepciones en las pruebas
+    finales y sin peticiones a Supabase real ni mutaciones de datos remotos.
+  - Caché local de Turbopack invalidaba una ruta temporal antigua; se limpió y
+    se repitieron las pruebas correctamente. Harness retirado; evidencias locales
+    ignoradas en `.ua/intermediate`. Caché de desarrollo retirada antes del build.
+  - `npx.cmd tsc --noEmit`: OK tras retirar la ruta de revisión y su caché.
+  - `npm.cmd run build`: OK, 72/72 páginas; ruta temporal ausente del build.
+  - `git diff --check`: OK.
+- Riesgos y pendientes:
+  - UAT autenticado por rol y RLS real, enlaces completos a destinos, revisión de
+    PDF con tablas anchas y grandes volúmenes, compatibilidad CSV con Excel y
+    conciliación con datos reales. Los fixtures no certifican estos flujos.
+  - Los saldos son actuales. El filtro de vencimiento no calcula saldos históricos.
+    Consultas paginadas no son un snapshot transaccional entre múltiples tablas;
+    conviene actualizar tras cambios concurrentes. Validar rendimiento/memoria
+    de reportes muy grandes y de exportaciones PDF extensas.
+  - Nombres de cliente/vendedor y cálculos financieros mantienen sus fuentes
+    existentes; no se introduce conversión de monedas ni se recalculan documentos.
+- Publicación (14/09/2026):
+  - Commit y despliegue autorizados por el usuario. Implementación `305f605`
+    publicada en `main`; Vercel y GitHub confirman Production `success`.
+  - Deployment GitHub `6444275867`, Vercel `FXqzYFhuQiaw4LVGvuU6mEeAUa3a`.
+    URL: `https://sarierp-ed9sfzifv-claudherhn-5641s-projects.vercel.app`.
+  - Verificación pública en `https://forwarders.app`: `/reports` devuelve 307
+    a `/login?next=%2Freports`, `/login` devuelve 200 y `/api/reports-review`
+    devuelve 404. Solo solicitudes GET, sin sesiones ni mutaciones de datos.
+  - Se conservan los pendientes de UAT/RLS, conciliación y exportaciones extensas.
+    La publicación no certifica el flujo autenticado con datos reales.
+- Commit de implementación: `305f605`. Resultado de publicación en commit
+  documental posterior.
+
+### 2026-09-14 — REP-012 / UX-FIN-01 — Rentabilidad y cobertura del Dashboard Financiero
+
+- Estado: implementado y validado con pruebas locales, navegador y build final.
+  Publicado en producción; UAT autenticado y verificación de RLS desplegado pendientes.
+- Hallazgos: consultas sin paginación y errores de costos ignorados; suma de
+  monedas distintas bajo USD; utilidad presentada como real con costos parciales;
+  CSV limitado a ocho nombres truncados y montos redondeados. Filtros sin
+  persistencia ni etiquetas de fecha, pérdidas sin enlace al detalle y baja
+  visibilidad de registros pendientes de revisar.
+- Archivos: `src/app/(protected)/financial-dashboard/page.tsx`,
+  `src/lib/financial-dashboard.ts`, `tests/financial-dashboard.test.mjs`,
+  `HARDENING.md`.
+- SQL: no aplica. No se modifican políticas, permisos, documentos ni estados.
+- Cambios:
+  - Lectura completa con `readAllReportRows`, orden por ID, cláusulas IN de hasta
+    100 cotizaciones y exclusión de líneas eliminadas. Publicación del resultado
+    solo al completar todas las fuentes; errores persistentes, reintento,
+    invalidación de consultas obsoletas y aislamiento por usuario/rol.
+  - Comprobación de acceso mediante `can_select_provider_invoice_item` para una
+    cotización ganada visible. Si devuelve false, el costo y la detección de
+    pérdidas quedan explícitamente no disponibles; una restricción RLS no se
+    interpreta como ausencia de costos. Un error en esa comprobación bloquea
+    la consulta. No se sustituye la política RLS ni se amplían permisos.
+  - Registro por cotización y moneda. La venta de cabecera existente se conserva
+    cuando Pricing identifica una sola moneda; para Pricing multimoneda se usan
+    sus ventas por moneda sin duplicar ni consolidar la cabecera. Sin Pricing o
+    sin moneda identificable se exige revisión y no se inventa una base USD.
+  - Costos registrados incluyen los impuestos de proveedor existentes. Utilidad
+    y variación comparan importes de la misma moneda. Costos cero son válidos;
+    cantidades cero no se reemplazan por uno. Importes inválidos no son ceros.
+    Margen ponderado sobre ventas/costos comparables, con cobertura visible.
+  - “Utilidad con costos registrados” declara su carácter provisional. Alertas
+    de pérdidas, ausencia de costos, validación pendiente y datos por revisar
+    filtran el detalle y llevan el foco al encabezado. Enlaces a validación de
+    costos por cotización, Facturación, CxC y CxP.
+  - Fechas locales de creación, trimestre calendario, rangos invertidos
+    bloqueados, moneda/búsqueda/revisión/orden/paginación en URL. Filtros plegables
+    en móvil; etiquetas Desde/Hasta y calendarios legibles en oscuro.
+  - Gráficos con leyenda, centavos conservados, márgenes negativos permitidos y
+    nombres completos de cliente; agrupación por ID de cliente. El ranking
+    muestra ocho clientes y se identifica como tal. Meses sin datos no se
+    reconstruyen ni se presentan como ventas cero.
+  - CSV de todo el detalle filtrado, independiente de la página visible: moneda,
+    importes a dos decimales, nombres completos, estado de validación y cobertura.
+    BOM UTF-8 y neutralización de fórmulas; campos vacíos distinguen falta de
+    base de un monto cero. Tabla paginada 25/50/100 con desplazamiento propio.
+- Validaciones:
+  - `npm.cmd test`: 55/55, incluidas diez regresiones del dashboard financiero.
+    Monedas, cobertura parcial/costo cero, importes inválidos, eliminados,
+    margen ponderado, CSV, URL/orden, lectura completa, errores y permiso denegado.
+  - ESLint dirigido: sin errores ni avisos tras corregir el inicio de la carga.
+  - Chrome local con 1,302 cotizaciones simuladas y respuestas limitadas a 100:
+    1,300 registros USD, venta USD 130,715.00 y CSV de 1,300 filas con centavos y
+    nombres completos. Separación de HNL y registros sin moneda; paginación,
+    búsqueda del último registro, enlace de pérdida a su validación y URL al
+    recargar. Error en página posterior de Pricing/proveedor bloquea resultados
+    y CSV; reintento recupera. Permiso denegado se muestra sin falsas pérdidas.
+  - Navegador 1440/768/390/320 px sin desbordamiento de documento/main;
+    filtros móviles, etiquetas de fecha, rango inválido y oscuro comprobados.
+    Sin excepciones en la ejecución final. Solo fixtures; Supabase bloqueado.
+  - Harness temporal retirado; caché dev retirada con ruta absoluta verificada.
+    Evidencias locales ignoradas en `.ua/intermediate/financial-adjusted-*.png`.
+  - `npx.cmd tsc --noEmit`: OK después de retirar el harness y la caché dev.
+  - `npm.cmd run build`: OK, 72/72 páginas; la ruta de revisión no está incluida.
+  - ESLint final y `git diff --check`: OK.
+- Riesgos y pendientes:
+  - La función de lectura versionada no incluye Finanzas, aunque la página sí.
+    No se comprobó la definición desplegada con una sesión real. La interfaz
+    respeta la respuesta del servidor y muestra la limitación. Revisar el rol,
+    la visibilidad de Pricing y RLS en UAT antes de cerrar este hallazgo.
+  - Conciliar importes contra datos reales y validar navegación completa por rol,
+    Excel y volúmenes grandes. Las lecturas paginadas no son un snapshot
+    transaccional; actualizar tras cambios concurrentes. La muestra consultada
+    de permiso usa la política actual, uniforme para cotizaciones ganadas visibles;
+    revisar esa comprobación si se introduce autorización por cotización.
+  - No es facturación, caja ni utilidad contable definitiva. No se convierten
+    monedas, no se reconstruyen costos históricos y no se recalculan documentos.
+- Publicación (14/09/2026): implementación `e800cc7` publicada junto con el portal.
+  GitHub Production `6447587170` y Vercel `FYn7fkF1fdr6ojnF18WViVcqESgi`
+  confirman `success`. `/financial-dashboard` en `https://forwarders.app`
+  devuelve 307 a `/login?next=%2Ffinancial-dashboard` sin sesión.
+  Se mantienen pendientes la conciliación y el UAT/RLS con cuentas reales.
+- Commit de implementación: `e800cc7`. Registro de publicación en commit documental posterior.
+
+### 2026-09-14 - UX-PORTAL-20260914 - Navegación y autoservicio del cliente
+
+- Estado: publicado en producción y validado localmente con fixtures; UAT autenticado pendiente.
+- Hallazgos de origen: UX-PORTAL-01 a UX-PORTAL-12 en
+  `docs/portal-ux-review-2026-09-14.md`. UX-PORTAL-06 se atiende con acceso a
+  soporte tras entrega; la elegibilidad de reclamaciones queda pendiente de
+  definición operativa, sin modificar transiciones.
+- Archivos:
+  - Las 22 páginas existentes de `src/app/portal/**/page.tsx`, su `layout.tsx`
+    y la nueva `src/app/portal/solicitudes/page.tsx`.
+  - `src/components/portal/PortalUI.tsx`, `PortalFeedback.tsx`,
+    `PortalConfirmation.tsx`, `PortalPrintButton.tsx`.
+  - `src/lib/portal.ts`, `src/hooks/useClientNotifications.ts`,
+    `src/components/legal/LogisticsTerms.tsx`, `src/app/globals.css`.
+  - `tests/portal-ux.test.mjs`, documento de análisis y
+    `docs/uat/portal-ux-2026-09-14.md`.
+- SQL: ninguno. No se modifican políticas RLS, estados comerciales,
+  condiciones legales ni cálculos de facturación.
+- Cambios:
+  - Cinco destinos móviles y Solicitudes; regreso predecible, acceso a ayuda,
+    cuenta sin herramientas deshabilitadas y carga explícita de sesión/vinculación.
+  - Búsqueda de paquetes sobre el conjunto autorizado, filtros y paginación
+    en servidor, URL persistente y descarte de consultas obsoletas. Prealertas
+    con búsqueda/páginas; avisos con historial paginado y filtro sin leer.
+  - Errores de consultas separados de listas vacías. Los avisos y el
+    portapapeles solo confirman éxito tras completar su operación.
+  - Transporte y asignación diferenciados; factura vigente con corrección
+    visible; historial plegable y detalle móvil sin desbordamiento. Inicio
+    enlaza indicadores/paquetes y muestra correcciones de paquetes recientes.
+  - Historial de envíos finalizados/cancelados, fechas estimadas visibles,
+    plazos convertidos a la zona indicada y contacto para documentos pendientes.
+  - Confirmaciones persistentes, etiquetas accesibles, contraseñas consistentes,
+    dirección copiable por campo y conversión física de unidades en calculadora.
+  - Ayuda y búsqueda de materiales, retiro de métricas/promesas no verificadas
+    de Nosotros e impresión de términos conservando versiones y registro JSON.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 59/59 OK; incluye cuatro regresiones de portal sobre estados,
+    escape de tracking, zonas horarias de verano/invierno y cambio de unidades.
+  - ESLint de las rutas, componentes, hook y helper afectados: sin errores ni avisos.
+  - Chrome local: 23 pantallas a 1280/390/320 px, sin desbordamiento de documento
+    ni campos/botones sin nombre en las pantallas examinadas. Comprobación
+    adicional oscura en Inicio, Paquetes, detalle de Envío y Solicitudes.
+  - 18 comprobaciones de interacción con respuestas simuladas: búsqueda del
+    paquete 25, página 2, error/reintento, unidades, historial, zona horaria,
+    fallo/éxito de avisos, portapapeles denegado y confirmaciones de prealerta,
+    incidencia, recogida y acceso pendiente. Sin excepciones durante los recorridos.
+  - Harness temporal retirado. Caché dev eliminada tras verificar ruta absoluta
+    dentro del workspace. Evidencias locales ignoradas en `.ua/intermediate/`.
+  - `npm.cmd run build`: OK, 73/73 páginas; incluye Solicitudes y excluye el harness.
+  - `npx.cmd tsc --noEmit`: OK después de retirar el harness y del último ajuste.
+  - `git diff --check`: OK con la configuración de finales de línea del repositorio.
+- Riesgos / acciones pendientes:
+  - Validar cuentas reales y aislamiento RLS, carga de facturas privadas, enlaces
+    firmados, correos y recuperación de contraseña. Mocks no certifican estos flujos.
+  - Verificar la consulta de documentos anidados de Inicio contra esquema/RLS
+    desplegados. Las correcciones del Inicio abarcan los tres paquetes recientes;
+    no se presentan como inventario completo de tareas del cliente.
+  - Elegibilidad después de entrega, edición/cancelación de solicitudes,
+    adjuntos de incidencias y publicación de documentos requieren definición
+    operativa y permisos antes de ampliar el flujo.
+  - Incidencia y estado de paquete siguen siendo escrituras separadas: ante
+    fallo de la segunda se conserva la confirmación del caso y se informa del
+    pendiente, evitando duplicarlo. Atomicidad futura requiere migración propia.
+  - Incidencias, recogidas y RPC de envíos conservan su alcance de lectura actual;
+    revisar límites con volúmenes altos. Validar horarios y contenido operativo.
+  - Guion de aceptación completo: `docs/uat/portal-ux-2026-09-14.md`.
+- Publicación (14/09/2026):
+  - Commit y despliegue autorizados por el usuario, incluyendo Dashboard Financiero.
+    Implementación `e800cc7` publicada en `main`; GitHub y Vercel confirman Production `success`.
+  - Deployment GitHub `6447587170`, Vercel `FYn7fkF1fdr6ojnF18WViVcqESgi`.
+    URL: `https://sarierp-ak8s6oypw-claudherhn-5641s-projects.vercel.app`.
+  - Verificación pública en `https://forwarders.app`: `/portal/login` y
+    `/portal/register` devuelven 200; `/portal/solicitudes` devuelve 307 a
+    `/portal/login?next=%2Fportal%2Fsolicitudes`. `/api/portal-review/inicio`
+    y `/api/financial-review` devuelven 404. Solo GET, sin mutaciones de datos.
+  - Suite conjunta antes del commit: 59/59 pruebas, TypeScript, ESLint dirigido
+    y build de 73/73 páginas correctos. La publicación no certifica UAT autenticado
+    ni RLS; se conservan los pendientes anteriores.
+- Commit de implementación: `e800cc7`. Registro de publicación en commit documental posterior.
+
+### 2026-09-14 — INT-20260914 — Hallazgos de pruebas integrales
+
+- Estado: SQL y frontend publicados y verificados el 16/09/2026.
+  Regresiones locales realizadas; UAT autenticado pendiente. No cerrar los hallazgos aún.
+- IDs: INT-01 shipment Miami; INT-02 fecha CAI; INT-03 Garantías;
+  INT-04 guardado/envío a Pricing; INT-05 apertura/foco de formularios;
+  INT-06 contacto; INT-07 carga Miami sin tarifas; INT-08 garantías multimoneda.
+- Archivos:
+  - `src/app/(protected)/settings/cai/page.tsx`, `src/lib/cai-validation.ts`.
+  - `src/app/(protected)/operations/garantias/page.tsx`, `src/lib/guarantees.ts`.
+  - `src/app/(protected)/quotations/[id]/edit/page.tsx`,
+    `src/app/(protected)/quotations/new/page.tsx`,
+    `src/components/quotations/MiamiQuotationSection.tsx`.
+  - `tests/integral-findings.test.mjs`, `supabase/tests/integral_ux_flow_fixes.sql`.
+  - `docs/uat/integral-findings-2026-09-14.md`, `docs/uat/integral-cai-audit.sql`.
+- SQL: nueva `supabase/migrations/20260914233000_integral_ux_flow_fixes.sql`.
+  Probada en transacción local con rollback; aplicada en producción el 16/09/2026.
+- Cambios:
+  - `save_quotation_edit`, SECURITY INVOKER y política UPDATE existente: whitelist de
+    campos, bloqueo de fila y estado esperado, cabecera/hijos/pricing/historial y
+    envío en una transacción. Reutiliza `replace_quotation_child_lines`.
+    Los dos botones usan el mismo guardado, con exclusión de envíos simultáneos;
+    la UI conserva los campos ante error y distingue fallos de avisos posteriores.
+    Se retiran bloques legacy inactivos de delete/insert en el editor.
+  - No exige agente únicamente para Miami LCL/Aéreo. Conserva autorización,
+    idempotencia, SI/shipment atómicos y datos del agente cuando existe.
+    Ningún rol crea un shipment nuevo desde cotización no ganada.
+  - CAI valida formato calendario/año y orden de rango; triggers bloquean fechas
+    no finitas o fuera de años 0001–9999 y emisión desde un CAI histórico corrupto.
+    Permite desactivar un rango inválido para su revisión. No deduce fechas correctas
+    ni modifica datos fiscales existentes. UI señala fechas anómalas.
+  - Garantías obtiene routing desde la FK explícita a Shipping Instructions, evita
+    ambigüedad por booking primario, recorre páginas y separa error de lista vacía.
+    Recuperación comprueba fila devuelta y estado previo; lectura/escritura conserva
+    roles Admin/Operaciones y cuenta aprobada/activa. Totales por moneda.
+  - CAI/Garantías abren y enfocan en lugar de alternar cierre. Calendarios legibles
+    en oscuro; carga Miami visible sin tarifas, precios condicionados a disponibilidad.
+    Creación y edición autocompletan `clientes.contacto`.
+- Validaciones:
+  - Node: 62/62 pruebas correctas; tres regresiones nuevas de fecha/rango CAI y monedas.
+  - SQL local: migración compila y pasan assertions de persistencia, rollback de
+    cabecera/carga/pricing, estado obsoleto, campos no editables, Miami/idempotencia,
+    FCL con/sin agente, rechazo de cotización no ganada y rol Cliente, fechas CAI,
+    emisión rechazada sin consumir correlativo y RLS de Garantías por rol.
+  - REST local: ambas consultas de Garantías responden HTTP 200 con FK explícita.
+  - Chrome con respuestas simuladas: 22 comprobaciones correctas, sin excepciones
+    durante interacciones; año extendido no se envía, fecha válida exacta, foco y
+    apertura repetida, registro con booking, error/reintento, moneda, carga Miami,
+    payload completo al enviar, retención ante fallo y contacto en edición.
+    CAI/Garantías a 1280/390/320 px sin desbordamiento y capturas oscuras revisadas.
+  - Harness retirado y caché dev eliminada comprobando ruta absoluta del workspace.
+    Evidencia ignorada en `.ua/intermediate/integral-*`. Los fixtures requieren
+    sesión simulada; no certifican hidratación ni autenticación en producción.
+  - ESLint de CAI, Garantías y helpers sin infracciones. Cotizaciones nueva/edición
+    y componente Miami conservan 30 errores y 12 avisos preexistentes, comprobados
+    contra HEAD; no se desactivaron reglas ni añadieron infracciones.
+  - `npm.cmd run build`: OK, 73/73 páginas; harness excluido.
+    `npx.cmd tsc --noEmit` final y `git diff --check`: OK.
+    La prueba SQL también confirma emisión válida y consumo de un solo correlativo.
+- Riesgos / acciones pendientes:
+  - SQL aplicado antes del frontend y auditoría CAI realizada (resultado abajo).
+    Para conciliar el hallazgo original, identificar su registro/ambiente y contrastar
+    la fecha con el documento original; no truncar años ni inferir correcciones.
+  - Verificar perfiles/RLS desplegados, persistencia al recargar y avisos reales.
+    La política de edición existente puede restringir Operaciones aunque la UI del
+    editor muestre ese rol; esta RPC no amplía permisos por el mero control visual.
+  - El historial local de migraciones difiere del esquema: `mbl_quantity` ya existe
+    sin registrar su migración. El push local se detuvo ahí; aceptación legal previa
+    sí se aplicó localmente. Nueva migración probada transaccionalmente, sin reparar
+    historial por inferencia ni ejecutar SQL remoto.
+- Publicación SQL (16/09/2026):
+  - Commit y despliegue autorizados por el usuario. Host de Supabase verificado
+    contra los assets públicos de `forwarders.app`: proyecto `fwspgdzvlbtbgiupvrzo`.
+  - Dry run: solo `20260914233000_integral_ux_flow_fixes.sql` pendiente.
+    Copia del esquema anterior guardada localmente e ignorada. La definición
+    anterior de `create_shipment_from_quotation` coincide con la fuente versionada.
+  - `supabase db push --yes`: correcto. Registro remoto de migración confirmado,
+    cuatro cuerpos de función coincidentes por MD5 con el SQL local y ambos
+    triggers activos. `save_quotation_edit` conserva SECURITY INVOKER;
+    ejecución denegada a `anon` y concedida a `authenticated`.
+  - Auditoría remota de solo lectura como `postgres`, sin filtrado RLS:
+    0 rangos CAI y 0 documentos con fecha CAI no representable. No había fechas
+    que corregir en esta base. La fecha reportada por las pruebas anteriores
+    requiere identificar su registro/ambiente para contrastarla con el original.
+  - No se emitieron facturas ni se crearon registros de prueba en producción.
+- Publicación frontend (16/09/2026):
+  - Implementación `7b4eff5` publicada en `main`; Vercel y GitHub Production
+    confirman `success`. Deployment GitHub `6484076735`, Vercel
+    `A3WabPMXwFi1qRThLXht3Meycdea`.
+  - URL: `https://sarierp-pnjen3c88-claudherhn-5641s-projects.vercel.app`.
+  - En `https://forwarders.app`, `/login` y `/portal/login` responden 200;
+    `/settings/cai`, `/operations/garantias` y `/quotations/new` responden 307
+    al login conservando destino. `/api/integral-review/demo` responde 404.
+    Comprobaciones GET sin sesión ni mutaciones de datos.
+  - Estas verificaciones no cierran el UAT autenticado descrito en el guion.
+- Commit de implementación: `7b4eff5`. Registro de publicación en commit documental posterior.
+
+### 2026-09-18 - OPS-P0-01 - Restauración de Dashboard y bandeja de bookings
+
+- Estado: implementado, validado y desplegado; UAT autenticado pendiente.
+- Fase: 0 - restaurar verdad operacional, sin modificar reglas de negocio,
+  estados, ownership ni diseño de Control Tower.
+- Hallazgos: O-01, O-02 y D-01 de la auditoría transversal del 18/09/2026.
+- Causa raíz:
+  - `bookings` y `shipping_instructions` tienen dos relaciones válidas desde
+    la introducción de `shipping_instructions.primary_booking_id`.
+  - Dashboard Operativo y `/operations/bookings` embebían
+    `shipping_instructions` sin especificar la FK. PostgREST respondía
+    `PGRST201` y ambas pantallas descartaban el error como si no hubiera filas.
+- Código:
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/app/(protected)/operations/bookings/page.tsx`
+  - `tests/operations-dashboard-query.test.mjs`
+- SQL: ninguno. No se modificaron migraciones, RLS ni datos productivos.
+- Cambios:
+  - Ambas consultas usan la relación canónica explícita
+    `shipping_instructions!bookings_shipping_instruction_id_fkey`.
+  - Los errores de bookings, contenedores cotizados o readiness dejan de
+    convertirse en métricas cero y muestran un estado persistente con detalle
+    y acción `Reintentar`.
+  - Dashboard y bandeja incluyen `Actualizar`; la bandeja distingue entre
+    cero bookings activos y cero resultados por filtros.
+  - Se agregó una regresión de fuente que impide reintroducir el embed ambiguo
+    y comprueba los estados de error/vacío.
+- Validaciones ejecutadas:
+  - Producción, solo lectura: la consulta original reprodujo `PGRST201`; la
+    misma consulta con la FK canónica respondió correctamente con 9 bookings
+    activos. No se realizaron escrituras.
+  - `npm.cmd test`: 96/96 pruebas correctas, incluidas 2 regresiones nuevas.
+  - ESLint dirigido sobre las dos rutas y la prueba: sin errores ni avisos.
+  - `npm.cmd run build`: OK, 73/73 páginas; incluye ambas rutas operativas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos de conversión LF/CRLF.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT con una cuenta Admin y una de Operaciones para confirmar RLS,
+    carga de readiness, enlaces de detalle, refresh y recuperación ante error.
+  - La corrección restaura los datos existentes; no corrige todavía reglas de
+    prioridad, documentos por modalidad, ETAs vencidas ni asignación. Esos
+    cambios pertenecen a las fases siguientes del plan aprobado.
+- Commit de implementación y despliegue: `c93548c`.
+
+### 2026-09-18 - OPS-P1-01 - Unificación de reglas operativas
+
+- Estado: implementado, validado y desplegado; migraciones productivas aplicadas
+  y UAT autenticado pendiente.
+- Fase: 1 - unificar estado derivado, riesgo, siguiente acción, readiness,
+  documentación por modalidad y visibilidad de ownership.
+- Hallazgos: O-03 y H-01 de la auditoría transversal del 18/09/2026.
+- Causa raíz:
+  - Dashboard, bandeja de bookings y alertas duplicaban reglas de estado, ETA y
+    documentos; algunas contradecían readiness y Documentation Workspace.
+  - La lista fija exigía Booking Confirmation, MBL, HBL, Packing List y
+    Commercial Invoice a todas las modalidades.
+  - Una ETA vencida desaparecía de “próximos 7 días”, y un booking podía seguir
+    visualmente como solicitado aun teniendo ambas referencias confirmadas.
+  - `booking_operational_mode` evaluaba textos compartidos antes del
+    `quote_type`; `usa_ltl_ftl` impedía distinguir confiablemente LTL de FTL.
+- Código:
+  - `src/lib/booking-operational-state.ts`
+  - `src/lib/documentation-workspace.ts`
+  - `src/lib/alerts.ts`
+  - `src/components/operations/DocumentationWorkspace.tsx`
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/app/(protected)/operations/bookings/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `tests/booking-operational-state.test.mjs`
+  - `tests/documentation-workspace.test.mjs`
+  - `tests/operations-dashboard-query.test.mjs`
+- SQL:
+  - `supabase/migrations/20260918170000_booking_operational_mode_priority.sql`
+  - `supabase/migrations/20260918171000_booking_operational_mode_explicit_quote_type.sql`
+  - `supabase/tests/booking_cutoffs_and_readiness.sql`
+- Cambios:
+  - Se creó una derivación pura y reutilizable para estado visible, drift,
+    severidad, ETA, ownership, documentos y siguiente acción.
+  - Los estados persistidos no se modifican automáticamente: cualquier
+    incompatibilidad con referencias o fechas reales se presenta como “por
+    conciliar”, conservando el valor almacenado para auditoría.
+  - Dashboard muestra ETAs vencidas, operaciones sin asignar y estados por
+    conciliar; la bandeja añade filtro de asignación y siguiente acción.
+  - Readiness alimenta las mismas decisiones en Dashboard, bandeja y detalle.
+  - MBL/HBL dejan de bloquear modalidades terrestres; `requires_hbl = false`
+    evita exigir HBL en operaciones marítimas configuradas de esa forma.
+  - Alertas reutiliza los requisitos documentales por modalidad y ahora genera
+    una alerta explícita para ETA vencida sin arribo.
+  - La clasificación SQL prioriza `quote_type` explícito y mantiene textos de
+    transporte/servicio únicamente como fallback.
+- Validaciones ejecutadas:
+  - Producción, solo lectura: la consulta ampliada recuperó 9 bookings activos;
+    los 9 están sin asignar, los 9 tienen readiness bloqueado, 4 tienen ETA
+    vencida sin arribo y 2 tienen referencias completas con estado solicitado.
+    `evaluate_booking_readiness` respondió para los 9. No hubo escrituras.
+  - Base local: ambas migraciones aplicadas; prueba SQL transaccional ejecutada
+    directamente con `psql -v ON_ERROR_STOP=1`: `BEGIN`,
+    `booking_cutoffs_and_readiness: OK`, `ROLLBACK`.
+  - `npm.cmd test`: 105/105 pruebas correctas.
+  - ESLint dirigido sobre helpers, componentes, rutas y pruebas: sin errores ni
+    avisos.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos de conversión LF/CRLF.
+- Producción:
+  - Migraciones `20260918170000` y `20260918171000` aplicadas el 18/09/2026
+    al proyecto enlazado `fwspgdzvlbtbgiupvrzo`.
+  - `supabase migration list --linked`: historial local/remoto alineado.
+  - Dump remoto posterior: `booking_operational_mode` prioriza `quote_type`
+    explícito para FTL, LTL, LCL y FCL antes de usar el contexto como fallback.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT autenticado con Admin y Operaciones para verificar RLS del RPC
+    `get_booking_readiness_overview`, navegación de acciones, filtros y estados
+    derivados. Service role no reproduce el contexto de `auth.uid()` requerido
+    por `can_select_booking`.
+  - Revisar manualmente los 2 drifts de confirmación y asignar responsables a
+    los 9 expedientes; esta fase no altera datos productivos automáticamente.
+  - La cola única de Control Tower, aging y persistencia de filtros pertenecen
+    a la Fase 2 y no se implementaron aquí.
+- Commit de implementación y despliegue: `c93548c`.
+
+### 2026-09-18 - P2-CTRL-01 - Control Tower Operativo y Mi día comercial
+
+- Estado: implementado, validado y desplegado; UAT autenticado pendiente.
+- Fase: 2 - priorización diaria y trazabilidad de trabajo. No incluye handoff
+  formal de ownership, cierre operativo/facturación ni Agent 360, reservados
+  para fases posteriores.
+- Hallazgos: cola operativa fragmentada, aging no visible, dashboard comercial
+  limitado a actividades históricas y pérdida de filtros al abrir un detalle.
+- Código:
+  - `src/lib/operations-control-tower.ts`
+  - `src/lib/operations-navigation.ts`
+  - `src/lib/sales-work-queue.ts`
+  - `src/lib/quotation-detail-ux.ts`
+  - `src/app/(protected)/operations/dashboard/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`
+  - `src/app/(protected)/ventas/page.tsx`
+  - `tests/operations-control-tower.test.mjs`
+  - `tests/operations-navigation.test.mjs`
+  - `tests/sales-work-queue.test.mjs`
+  - `tests/quotation-navigation.test.mjs`
+- SQL: ninguno. Esta fase consume `operational_events`,
+  `quotation_status_history` y los RPC vigentes de readiness sin modificar
+  esquema, RLS ni datos.
+- Cambios:
+  - El Dashboard Operativo abre con una Control Tower única, filtros por
+    atención, asignación, salidas, arribos, documentos, excepciones y cierres
+    recientes, además de búsqueda por booking, RT, cliente o carrier.
+  - La cola reutiliza `get_booking_readiness_alerts`; combina cut-offs,
+    readiness, ETA, free days, ownership, drift y documentos con una sola
+    severidad y siguiente acción. Los paneles especializados se conservan como
+    vistas secundarias.
+  - El aging operativo parte del último `operational_event` del booking y usa
+    `bookings.updated_at`/`created_at` solo como fallback. Los tres primeros
+    elementos se presentan como “Siguientes 3 acciones”.
+  - `/ventas` pasa a encabezar con “Mi día”: seguimiento vencido o de hoy,
+    vigencia de propuesta, cotización enviada sin respuesta, cotización ganada
+    sin shipment y lead sin primera gestión. Agenda y calendario permanecen
+    debajo como historial.
+  - El aging comercial de cotizaciones parte del último cambio al estado actual
+    en `quotation_status_history`; no se calcula desde la creación salvo que no
+    exista historial. Para no duplicar pendientes, solo se proyecta la próxima
+    acción de la actividad más reciente por cuenta/prospecto.
+  - Los filtros de ambas colas se serializan en la URL. Los detalles validan un
+    `returnTo` interno y permiten volver al Control Tower o a Mi día sin perder
+    búsqueda/filtro; URLs externas o rutas ajenas se descartan.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 114/114 pruebas correctas; 9 regresiones nuevas para
+    prioridad, aging desde eventos/historial, deduplicación de seguimientos,
+    leads gestionados y navegación segura.
+  - ESLint dirigido sobre Control Tower, Mi día, detalle de booking y helpers:
+    sin errores ni avisos. El detalle legacy de Shipping Instruction también
+    se comprobó con sus cuatro reglas preexistentes deshabilitadas de forma
+    dirigida; no se añadieron nuevas excepciones al repositorio.
+  - `npm.cmd run build`: OK, 73/73 páginas, incluidas `/operations/dashboard`
+    y `/ventas`.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos de conversión LF/CRLF.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT autenticado con Ventas, Operaciones y Admin para confirmar RLS,
+    volumen real, orden de las tres primeras acciones, anclas y retorno de
+    filtros. La validación local no sustituye esa prueba de aceptación.
+  - `sales_activities` no tiene estado de ejecución. La cola considera resuelto
+    un seguimiento anterior cuando existe una actividad más reciente para la
+    misma cuenta/prospecto; una fase futura podría introducir tareas explícitas
+    si el negocio necesita conservar varios pendientes simultáneos.
+  - Los leads tampoco tienen relación formal con actividades. “Sin gestión” se
+    infiere por coincidencia normalizada de empresa o contacto; revisar falsos
+    positivos/negativos durante UAT antes de endurecer el modelo.
+  - Las dos migraciones de modalidad de la Fase 1 fueron aplicadas en
+    Production el 18/09/2026; su UAT autenticado continúa pendiente.
+- Commit de implementación y despliegue: `c93548c`.
+
+### 2026-09-18 - FLOW-P3-01 - Handoffs formales y cola Por facturar
+
+- Estado: implementado, validado y desplegado; migración productiva aplicada y UAT autenticado pendiente.
+- Fase: 3 - aceptación Ventas → Operaciones, cierre operativo verificable y handoff Operaciones → Finanzas. No incluye Agent 360.
+- Hallazgos: ownership operativo implícito, validación de costos antes del cierre real y ausencia de una bandeja derivada por facturar.
+- Código:
+  - `src/lib/billing-readiness.ts`
+  - `src/lib/cost-validation-data.ts`
+  - `src/lib/operations-navigation.ts`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/cost-validation/[id]/page.tsx`
+  - `src/app/(protected)/invoicing/page.tsx`
+  - `src/app/(protected)/invoicing/new/page.tsx`
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `tests/billing-readiness.test.mjs`
+  - `tests/operations-navigation.test.mjs`
+- SQL:
+  - `supabase/migrations/20260918180000_phase3_handoffs_billing_readiness.sql`
+  - `supabase/tests/phase3_handoffs_billing_readiness.sql`
+  - `supabase/tests/shipping_instruction_workflow_hardening.sql`
+- Cambios:
+  - La entrega de Ventas queda aceptada explícitamente por el usuario de Operaciones responsable, con actor y fecha. Si no había asignación, el operativo que acepta asume ownership; una reasignación reinicia la aceptación.
+  - `validate_shipping_instruction` exige una aceptación vigente y coherente con el asignado. Admin puede asignar, pero solo el operativo responsable acepta el expediente.
+  - El cierre reutiliza exclusivamente `finalize_shipping_instruction_canonical`; `shipments.closed_at` y `Finalizado` siguen siendo los hechos canónicos.
+  - Finanzas valida mediante `validate_quotation_financial_costs`, evitando que RLS convierta el cierre en un `UPDATE` de cero filas y dejando auditoría. El servidor exige operación cerrada, todos los cargos con costos vinculados, moneda coherente e importes válidos.
+  - No se puede crear una Factura vinculada hasta que exista al menos un shipment activo y todos los activos estén cerrados canónicamente.
+  - `/invoicing` abre con `Por facturar`: clasifica operación pendiente, costos pendientes, RTN faltante, Pricing inválido y listo para facturar, con bloqueo y siguiente acción.
+  - Cola, Validación de Costos, creación y detalle de factura conservan un `returnTo` interno validado; retornos externos se descartan.
+- Validaciones ejecutadas:
+  - Base local: migración aplicada de forma idempotente.
+  - SQL transaccional con `psql -v ON_ERROR_STOP=1`: `phase3_handoffs_billing_readiness: OK` y `shipping_instruction_workflow_hardening.sql: OK`; ambos con `ROLLBACK`.
+  - `npm.cmd test`: 117/117 pruebas correctas.
+  - ESLint dirigido: sin errores ni avisos.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos LF/CRLF.
+- Producción:
+  - Migración `20260918180000` aplicada el 18/09/2026 al proyecto enlazado
+    `fwspgdzvlbtbgiupvrzo`.
+  - `supabase migration list --linked`: historial local/remoto alineado.
+  - Dump remoto posterior: presentes `operations_accepted_at`,
+    `operations_accepted_by`, el constraint de aceptación, los RPC de handoff,
+    cierre/validación/cola y el trigger que protege Facturación.
+  - Respaldo previo del esquema público guardado fuera del repositorio con
+    SHA-256 `0970CDF66C49F047D968C2842299F5E1BB4771C114C6A661B50EEB61F1AE0689`.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT con Ventas, dos usuarios de Operaciones, Admin y Finanzas: envío, aceptación, reasignación, validación, cierre multishipment, costos, RTN, factura y retornos.
+  - No se inventó aceptación histórica: expedientes existentes aún previos a Booking deberán ser aceptados por su responsable.
+  - Cotizaciones históricas ya `Validado` no se reescriben; cola y guarda de Factura igualmente bloquean si la operación no cerró.
+- Commit de implementación y despliegue: `c93548c`.
+
+### 2026-09-18 - AGT-P4-01 - Agent 360 basado en relaciones canónicas
+
+- Estado: implementado, validado y desplegado; migración productiva aplicada y
+  UAT autenticado pendiente.
+- Fase: 4 - consulta contextual de agentes. No introduce scoring, documentos de
+  agentes, actividad transversal ni modelos nuevos.
+- Hallazgos: `/agents` funcionaba como catálogo editable sin mostrar uso real;
+  Ventas y Operaciones podían leer `agents` por RLS, pero la navegación les
+  bloqueaba el módulo y `agent_route_rates` solo permitía lectura a Admin/Pricing.
+- Código:
+  - `src/lib/agent-360.ts`
+  - `src/components/agents/Agent360Panel.tsx`
+  - `src/app/(protected)/agents/page.tsx`
+  - `src/app/(protected)/agents/[id]/page.tsx`
+  - `src/lib/permissions.ts`
+  - `tests/agent-360.test.mjs`
+  - `tests/quotation-navigation.test.mjs`
+- SQL:
+  - `supabase/migrations/20260918190000_agent_360_read_access.sql`
+  - `supabase/tests/phase4_agent_360_access.sql`
+- Cambios:
+  - El perfil consolida ofertas, selecciones, cotizaciones ganadas, shipments,
+    bookings visibles, última actividad y lanes utilizados a partir de
+    `agents → agent_quotes → quotations → shipments → bookings`.
+  - Un shipment solo se atribuye al agente cuando existe una tarifa activa con
+    `is_selected = true`; no se relacionan operaciones por nombres legacy.
+  - Activos/cerrados reutilizan el hecho canónico `shipments.closed_at`; los
+    conteos no inventan performance ni mezclan costo cotizado con costo real.
+  - Cotizaciones y expedientes conservan enlaces permitidos por rol. Pricing
+    abre el comparativo; Operaciones/Ventas abren únicamente rutas autorizadas.
+  - La contraparte de Proveedores permanece separada y solo se consulta cuando
+    el rol ya tiene permiso financiero; los demás roles reciben una explicación.
+  - Ventas y Operaciones obtienen acceso de consulta a `/agents` y lanes. Crear,
+    editar o eliminar agentes/tarifas queda oculto y sigue protegido por RLS
+    para Admin/Pricing.
+- Validaciones ejecutadas:
+  - Migración aplicada en Supabase local.
+  - SQL directo con `psql -v ON_ERROR_STOP=1`: Ventas/Operaciones leen lanes y
+    no pueden modificarlas; Pricing conserva escritura; Finanzas ve cero filas;
+    prueba finalizada con `ROLLBACK` y `phase4_agent_360_access.sql: OK`.
+  - `npm.cmd test`: 119/119 pruebas correctas.
+  - ESLint dirigido sobre rutas, panel, helpers y pruebas: sin errores ni avisos.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `git diff --check`: OK; solo avisos LF/CRLF.
+  - Preflight Production: historial remoto alineado hasta `20260918180000` y
+    dry-run limitado exclusivamente a `20260918190000_agent_360_read_access.sql`.
+  - Respaldo previo del esquema `public` guardado fuera del repositorio en
+    `sarierp-prod-pre-phase4-20260918.sql` (852,992 bytes), SHA-256
+    `75386573E6166E10E22C00D41E1913A94F62CDA177F8798ADBA86FA1C3899A5D`.
+  - Migración aplicada en Production al proyecto vinculado
+    `fwspgdzvlbtbgiupvrzo`; historial local/remoto alineado en
+    `20260918190000` y postflight `db push --dry-run`: base remota al día.
+  - Snapshot posterior `sarierp-prod-post-phase4-20260918.sql` (853,076 bytes),
+    SHA-256 `4CD502B528F31A8574BEA3CC3B2272C1E2632955B871B4F5A7098B3252125152`;
+    confirma `agent_route_rates_select_policy` para Admin, Pricing,
+    Operaciones y Ventas, condicionado a usuario activo/aprobado.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT con Admin, Pricing, Operaciones y Ventas: visibilidad por rol,
+    ofertas versus seleccionadas, expedientes 0/1/N, lanes, enlaces y edición.
+  - Los registros históricos que solo guardan `agent_name`/`agente_nombre` sin
+    `agent_id` no se atribuyen automáticamente; conciliarlos requiere evidencia
+    y no forma parte de esta fase.
+  - Los totales son relativos a lo que RLS permite ver al usuario autenticado;
+    una suite local no certifica el volumen ni los datos de Production.
+  - La comprobación pública no sustituye el UAT autenticado de datos y permisos.
+- Publicación frontend:
+  - Commit `c93548c` publicado en `origin/main` el 18/09/2026.
+  - Vercel Production `dpl_5hTtAkXSfTVQFaQMJAS8xBNHdsYJ`, estado `Ready`;
+    URL inmutable `https://sarierp-k08pbshr4-claudherhn-5641s-projects.vercel.app`.
+  - Alias confirmados: `https://forwarders.app`, `https://sarierp.vercel.app` y
+    rama `main`.
+  - Smoke público posterior: `/` y `/login` respondieron HTTP 200 desde Vercel;
+    comprobaciones GET sin sesión y sin escrituras.
+- Commit de implementación y despliegue: `c93548c`. Registro de publicación en
+  commit documental posterior.
+
+### 2026-09-18 - TASK-P5-01 - Tareas contextuales sin duplicar fuentes de verdad
+
+- Estado: implementado, validado y desplegado; migración productiva aplicada y
+  UAT autenticado pendiente.
+- Fase: 5 - arquitectura transversal de recordatorios manuales y next actions.
+  No copia a `user_tasks` los estados derivados de Control Tower, readiness o
+  facturación, ni reemplaza `sales_activities`/`operational_events` como historia.
+- Evidencia de Production, solo lectura y sin exponer contenido:
+  - `user_tasks`: 1 registro, ya completado, con prioridad media y vencimiento;
+    la migración conserva sus campos y completa `completed_at`.
+  - `sales_activities`: 0 registros; no existe historia comercial que migrar o
+    reconciliar en este ambiente.
+  - `operational_events`: 51 registros; continúan como hechos operativos y no se
+    convierten en tareas manualmente completables.
+- Código:
+  - `src/lib/user-tasks.ts`
+  - `src/components/tasks/CreateContextTaskDialog.tsx`
+  - `src/app/(protected)/dashboard/page.tsx`
+  - `src/app/(protected)/quotations/[id]/page.tsx`
+  - `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`
+  - `src/app/(protected)/agents/[id]/page.tsx`
+  - `src/app/(protected)/invoicing/[id]/page.tsx`
+  - `tests/user-tasks.test.mjs`
+- SQL:
+  - `supabase/migrations/20260918200000_phase5_contextual_user_tasks.sql`
+  - `supabase/tests/phase5_contextual_user_tasks.sql`
+- Cambios:
+  - Se extendió la tabla existente `user_tasks`; no se creó una tabla paralela.
+    El contexto opcional admite cliente, lead, actividad comercial, cotización,
+    Shipping Instruction, booking, BL, agente o factura.
+  - Las tareas guardan módulo, etiqueta y ruta interna. Frontend y constraint SQL
+    rechazan destinos externos; el enlace se vuelve a validar según entidad.
+  - `can_access_user_task_context` reutiliza las funciones canónicas de acceso a
+    clientes, cotizaciones, SI, bookings, BL y facturas. Agentes, leads y
+    actividades exigen rol y usuario activo/aprobado.
+  - RLS mantiene cada tarea privada para su propietario. No existe política de
+    `DELETE`; `soft_delete_user_task` valida sesión/propiedad y deja auditoría.
+  - El trigger de lifecycle mantiene `updated_at`, registra `completed_at` al
+    completar y lo limpia al reabrir.
+  - Cotización, SI, Agent 360 y factura permiten crear un recordatorio contextual.
+    “Mis tareas” muestra notas, módulo y retorno seguro al expediente.
+  - Las colas de Ventas, Operaciones y Facturación siguen derivándose de hechos;
+    el modal aclara que un recordatorio no cambia estado ni resuelve bloqueos.
+- Validaciones ejecutadas:
+  - Migración aplicada idempotentemente en Supabase local.
+  - SQL directo transaccional con `psql -v ON_ERROR_STOP=1`: creación contextual,
+    aislamiento entre Ventas/Operaciones, lifecycle, bloqueo de borrado físico y
+    borrado lógico; finalizó con `ROLLBACK` y
+    `phase5_contextual_user_tasks.sql: OK`.
+  - `npm.cmd test`: 121/121 pruebas correctas.
+  - ESLint dirigido: helpers, componente, dashboard y detalles modificados sin
+    errores. El detalle legacy de cotización conserva sus excepciones dirigidas
+    preexistentes para `no-explicit-any`; no se añadieron `any` nuevos.
+  - `npm.cmd run build`: OK, 73/73 páginas.
+  - `npx.cmd tsc --noEmit`: OK.
+  - Preflight Production: historial remoto alineado hasta `20260918190000` y
+    dry-run limitado exclusivamente a
+    `20260918200000_phase5_contextual_user_tasks.sql`.
+  - Respaldo previo del esquema `public` guardado fuera del repositorio en
+    `sarierp-prod-pre-phase5-tasks-20260918.sql` (853,076 bytes), SHA-256
+    `4CD502B528F31A8574BEA3CC3B2272C1E2632955B871B4F5A7098B3252125152`.
+  - Migración aplicada en Production al proyecto `fwspgdzvlbtbgiupvrzo`;
+    historial local/remoto alineado en `20260918200000` y postflight dry-run:
+    base remota al día.
+  - Snapshot posterior `sarierp-prod-post-phase5-tasks-20260918.sql` (860,260
+    bytes), SHA-256
+    `3FA1746AB4C5DCDF38F848158BFF7195FE3D98E032F80C1B8D981095565258CF`;
+    confirma columnas, constraints, índices, trigger, RLS y RPC de borrado.
+  - Verificación agregada posterior: 1 tarea histórica, 1 completada, 1 con
+    `completed_at` y `updated_at`; cero contextuales y cero borradas. No se
+    imprimieron títulos, notas ni datos personales.
+- Riesgos / trabajo pendiente:
+  - Ejecutar UAT con Ventas, Operaciones, Pricing, Admin y Finanzas: crear desde
+    cada contexto, completar, reabrir, borrar lógicamente y regresar al origen.
+  - La fase no convierte automáticamente `proxima_accion` de Ventas en tarea:
+    hoy Production no tiene `sales_activities`, y hacerlo sin transacción única
+    introduciría dos fuentes de verdad. Evaluar sólo cuando exista uso real.
+  - No hay asignación de tareas entre usuarios. `user_tasks.user_id` conserva el
+    modelo privado existente; un workflow de delegación requiere reglas y UAT de
+    ownership explícitos antes de ampliar RLS.
+- Publicación frontend:
+  - Commit `6637e82` publicado en `origin/main` el 18/09/2026.
+  - Vercel Production `dpl_2bukdyTDSiDEBS6XXsTDJ9ipdC2R`, estado `Ready`;
+    URL inmutable
+    `https://sarierp-o2x9hibeo-claudherhn-5641s-projects.vercel.app`.
+  - Smoke público posterior en `https://forwarders.app`: `/` y `/login`
+    respondieron HTTP 200; `/dashboard` sin sesión respondió HTTP 307 hacia
+    `/login?next=%2Fdashboard`, sin escrituras ni credenciales.
+- Commit de implementación y despliegue: `6637e82`. Registro de publicación en
+  commit documental posterior.

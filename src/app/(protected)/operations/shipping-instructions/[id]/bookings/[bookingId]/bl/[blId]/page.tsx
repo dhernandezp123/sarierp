@@ -13,7 +13,28 @@ import HouseBLPdf, { type HBLData } from '@/src/components/pdf/house-bl-pdf'
 import AWBPdf, { type AWBData } from '@/src/components/pdf/awb-pdf'
 import CartaPortePdf, { type CartaPorteData } from '@/src/components/pdf/carta-porte-pdf'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/src/components/ui/dialog'
+import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
+import { BLValidationPanel } from '@/src/components/operations/BLValidationPanel'
+import {
+  buildQuotationCargoDefaults,
+  getBlConsistencyWarnings,
+  getBlReadiness,
+  inheritParentMblData,
+  isBlValidationExceptionMatch,
+  type BlConsistencyField,
+  type BlConsistencyWarning,
+  type BlValidationException,
+  type BlValidationSources,
+} from '@/src/lib/bl-document-workflow'
 import {
   COMPANY_BRANDING_SELECT,
   type CompanyBranding,
@@ -190,6 +211,15 @@ type DraftSend = {
   sent_at: string
   notes: string | null
 }
+
+type DocumentContext = {
+  routingNumber: string
+  bookingNumber: string
+}
+
+type ExceptionAction =
+  | { kind: 'justify'; warning: BlConsistencyWarning }
+  | { kind: 'revoke'; exception: BlValidationException }
 
 function formToHBLData(
   form: BLForm,
@@ -387,6 +417,19 @@ export default function BLPage() {
   const [amendmentNote, setAmendmentNote] = useState('')
   const [sendingDraft, setSendingDraft] = useState(false)
   const [bookingUpdatedAt, setBookingUpdatedAt] = useState<string | null>(null)
+  const [documentUpdatedAt, setDocumentUpdatedAt] = useState<string | null>(null)
+  const [documentContext, setDocumentContext] = useState<DocumentContext>({
+    routingNumber: '',
+    bookingNumber: '',
+  })
+  const [validationSources, setValidationSources] = useState<BlValidationSources>({
+    operational: {},
+    commercial: {},
+  })
+  const [validationExceptions, setValidationExceptions] = useState<BlValidationException[]>([])
+  const [exceptionAction, setExceptionAction] = useState<ExceptionAction | null>(null)
+  const [exceptionReason, setExceptionReason] = useState('')
+  const [savingException, setSavingException] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const savedFormRef = useRef<BLForm | null>(null)
 
@@ -441,11 +484,16 @@ export default function BLPage() {
       supabase
         .from('bookings')
         .select(`
-          id, booking_number, carrier, vessel_name, voyage, etd, eta, freight_terms, release_type, updated_at,
+          id, booking_number, carrier_booking, carrier, vessel_name, voyage, etd, eta, freight_terms, release_type,
+          hbl_freight_visibility, printed_at_destination, updated_at,
           shipping_instruction:shipping_instructions!bookings_shipping_instruction_id_fkey (
-            id, routing_number, supplier_name, supplier_contact, supplier_email, origin_address, destination_address,
+            id, routing_number, supplier_name, supplier_contact, supplier_email, supplier_address,
+            origin_address, destination_address, special_instructions,
+            shipper, consignee, consignee_tax_id, consignee_address, consignee_contact, consignee_email,
+            notify_party, notify_party_tax_id, notify_party_address, notify_party_contact, notify_party_email,
             quotation:quotations (
-              id, incoterm, puerto_origen, puerto_destino, tipo_transporte,
+              id, incoterm, puerto_origen, puerto_destino, tipo_transporte, service_product, quote_type,
+              commodity, package_details, peso_kg, gross_weight, volumen_cbm, cantidad_bultos, package_type,
               cliente:clientes (nombre, direccion, ciudad, pais, rtn, contacto, email_1)
             )
           )
@@ -467,9 +515,9 @@ export default function BLPage() {
 
     if (settingsData) {
       setCompanyBranding(normalizeCompanyBranding(settingsData))
-      setCondicionesBL((settingsData as any).condiciones_bl ?? null)
-      setCondicionesAWB((settingsData as any).condiciones_awb ?? null)
-      setCondicionesCP((settingsData as any).condiciones_carta_porte ?? null)
+      setCondicionesBL(settingsData.condiciones_bl ?? null)
+      setCondicionesAWB(settingsData.condiciones_awb ?? null)
+      setCondicionesCP(settingsData.condiciones_carta_porte ?? null)
     }
 
     setBookingUpdatedAt(bookingData.updated_at)
@@ -477,7 +525,53 @@ export default function BLPage() {
     // Extract tipo_transporte from quotation
     const siForType = Array.isArray(bookingData?.shipping_instruction) ? bookingData.shipping_instruction[0] : bookingData?.shipping_instruction
     const quotationForType = Array.isArray(siForType?.quotation) ? siForType.quotation[0] : siForType?.quotation
-    setTipoTransporte((quotationForType as any)?.tipo_transporte ?? '')
+    const clientForValidation = Array.isArray(quotationForType?.cliente) ? quotationForType.cliente[0] : quotationForType?.cliente
+    const quotationId = quotationForType?.id || null
+    const { data: cargoLines } = quotationId
+      ? await supabase
+          .from('quotation_cargo_lines')
+          .select('quantity, package_type, weight_lbs, cbm')
+          .eq('quotation_id', quotationId)
+          .order('created_at', { ascending: true })
+      : { data: [] }
+    const cargoDefaults = buildQuotationCargoDefaults(quotationForType, cargoLines || [])
+    const baseValidationSources: BlValidationSources = {
+      operational: {
+        carrier: bookingData.carrier,
+        vessel_name: bookingData.vessel_name,
+        voyage: bookingData.voyage,
+        etd: bookingData.etd?.split('T')[0] || null,
+        eta: bookingData.eta?.split('T')[0] || null,
+        port_of_loading: quotationForType?.puerto_origen || siForType?.origin_address || null,
+        port_of_discharge: quotationForType?.puerto_destino || siForType?.destination_address || null,
+        description_of_goods: cargoDefaults.description_of_goods || null,
+        number_of_packages: cargoDefaults.number_of_packages || null,
+        package_type: cargoDefaults.package_type || null,
+        gross_weight_kg: cargoDefaults.gross_weight_kg || null,
+        measurement_cbm: cargoDefaults.measurement_cbm || null,
+        freight_terms: bookingData.freight_terms,
+        release_type: bookingData.release_type,
+      },
+      commercial: {
+        shipper: siForType?.shipper || siForType?.supplier_name || null,
+        shipper_address: siForType?.supplier_address || null,
+        consignee: siForType?.consignee || clientForValidation?.nombre || null,
+        consignee_address:
+          siForType?.consignee_address ||
+          [clientForValidation?.direccion, clientForValidation?.ciudad, clientForValidation?.pais]
+            .filter(Boolean)
+            .join(', ') ||
+          null,
+        notify_party: siForType?.notify_party || null,
+        notify_party_address: siForType?.notify_party_address || null,
+      },
+    }
+    setValidationSources(baseValidationSources)
+    setTipoTransporte(quotationForType?.tipo_transporte ?? '')
+    setDocumentContext({
+      routingNumber: siForType?.routing_number || '',
+      bookingNumber: bookingData.booking_number || bookingData.carrier_booking || '',
+    })
 
     if (!isNew) {
       // Load existing BL
@@ -501,7 +595,7 @@ export default function BLPage() {
         .order('created_at', { ascending: true })
 
       setContainers(
-        (containerData || []).map((c: any) => ({
+        (containerData || []).map((c) => ({
           id: c.id,
           container_number: c.container_number || '',
           seal_number: c.seal_number || '',
@@ -555,21 +649,48 @@ export default function BLPage() {
         measurement_cbm: blData.measurement_cbm ? String(blData.measurement_cbm) : '',
         special_instructions: blData.special_instructions || '',
         printed_at_destination: blData.printed_at_destination ?? true,
-        draft_file_url: blData.draft_file_url || '',
+        draft_file_url: normalizeBookingDocumentPath(blData.draft_file_url || ''),
         draft_file_name: blData.draft_file_name || '',
         placa_camion: blData.placa_camion || '',
         nombre_operador: blData.nombre_operador || '',
       }
       setForm(loadedForm)
       savedFormRef.current = loadedForm
+      setDocumentUpdatedAt(blData.updated_at || null)
+
+      if (loadedForm.bl_type === 'HBL' && loadedForm.parent_bl_id) {
+        const { data: parentBL } = await supabase
+          .from('bills_of_lading')
+          .select('*')
+          .eq('id', loadedForm.parent_bl_id)
+          .eq('booking_id', bookingId)
+          .eq('bl_type', 'MBL')
+          .maybeSingle()
+
+        setValidationSources({
+          ...baseValidationSources,
+          parentMbl: parentBL
+            ? {
+                ...parentBL,
+                number_of_packages: parentBL.number_of_packages ? String(parentBL.number_of_packages) : null,
+                gross_weight_kg: parentBL.gross_weight_kg ? String(parentBL.gross_weight_kg) : null,
+                measurement_cbm: parentBL.measurement_cbm ? String(parentBL.measurement_cbm) : null,
+              }
+            : null,
+        })
+      } else {
+        setValidationSources(baseValidationSources)
+      }
 
       // Load amendment history
-      const [{ data: amendData }, { data: sendData }] = await Promise.all([
+      const [{ data: amendData }, { data: sendData }, { data: exceptionData }] = await Promise.all([
         supabase.from('bl_amendments').select('*').eq('bl_id', blId).order('amendment_number', { ascending: true }),
         supabase.from('bl_draft_sends').select('*').eq('bl_id', blId).order('sent_at', { ascending: false }),
+        supabase.from('bl_validation_exceptions').select('*').eq('bl_id', blId).order('created_at', { ascending: false }),
       ])
       setAmendments((amendData || []) as Amendment[])
       setDraftSends((sendData || []) as DraftSend[])
+      setValidationExceptions((exceptionData || []) as BlValidationException[])
 
       setLoading(false)
       return
@@ -580,7 +701,6 @@ export default function BLPage() {
     const si = Array.isArray(booking?.shipping_instruction) ? booking.shipping_instruction[0] : booking?.shipping_instruction
     const quotation = Array.isArray(si?.quotation) ? si.quotation[0] : si?.quotation
     const client = Array.isArray(quotation?.cliente) ? quotation.cliente[0] : quotation?.cliente
-
     const prefilled: Partial<BLForm> = {
       carrier: booking?.carrier || '',
       vessel_name: booking?.vessel_name || '',
@@ -589,15 +709,24 @@ export default function BLPage() {
       eta: booking?.eta?.split('T')[0] || '',
       freight_terms: (booking?.freight_terms as string) || 'Prepaid',
       release_type: (booking?.release_type as string) || '',
-      shipper: si?.supplier_name || '',
-      shipper_address: '',
-      consignee: client?.nombre || '',
-      consignee_address: [client?.direccion, client?.ciudad, client?.pais].filter(Boolean).join(', '),
-      consignee_tax_id: client?.rtn || '',
-      consignee_contact: client?.contacto || '',
-      consignee_email: client?.email_1 || '',
+      hbl_freight_visibility: booking?.hbl_freight_visibility || 'No Freight Charges',
+      printed_at_destination: booking?.printed_at_destination ?? true,
+      shipper: si?.shipper || si?.supplier_name || '',
+      shipper_address: si?.supplier_address || '',
+      consignee: si?.consignee || client?.nombre || '',
+      consignee_address: si?.consignee_address || [client?.direccion, client?.ciudad, client?.pais].filter(Boolean).join(', '),
+      consignee_tax_id: si?.consignee_tax_id || client?.rtn || '',
+      consignee_contact: si?.consignee_contact || client?.contacto || '',
+      consignee_email: si?.consignee_email || client?.email_1 || '',
+      notify_party: si?.notify_party || '',
+      notify_party_address: si?.notify_party_address || '',
+      notify_party_tax_id: si?.notify_party_tax_id || '',
+      notify_party_contact: si?.notify_party_contact || '',
+      notify_party_email: si?.notify_party_email || '',
       port_of_loading: (quotation?.puerto_origen as string) || si?.origin_address || '',
       port_of_discharge: (quotation?.puerto_destino as string) || si?.destination_address || '',
+      special_instructions: si?.special_instructions || '',
+      ...cargoDefaults,
     }
 
     if (typeParam === 'HBL' && parentBlIdParam) {
@@ -609,37 +738,24 @@ export default function BLPage() {
         .single()
 
       if (parentBL) {
-        Object.assign(prefilled, {
-          bl_number: '',
-          carrier: parentBL.carrier || prefilled.carrier,
-          vessel_name: parentBL.vessel_name || prefilled.vessel_name,
-          voyage: parentBL.voyage || prefilled.voyage,
-          etd: parentBL.etd || prefilled.etd,
-          eta: parentBL.eta || prefilled.eta,
-          shipper: parentBL.shipper || prefilled.shipper,
-          shipper_address: parentBL.shipper_address || '',
-          consignee: parentBL.consignee || prefilled.consignee,
-          consignee_address: parentBL.consignee_address || prefilled.consignee_address,
-          consignee_tax_id: parentBL.consignee_tax_id || prefilled.consignee_tax_id,
-          consignee_contact: parentBL.consignee_contact || prefilled.consignee_contact,
-          consignee_email: parentBL.consignee_email || prefilled.consignee_email,
-          notify_party: parentBL.notify_party || '',
-          notify_party_address: parentBL.notify_party_address || '',
-          notify_party_tax_id: parentBL.notify_party_tax_id || '',
-          notify_party_contact: parentBL.notify_party_contact || '',
-          notify_party_email: parentBL.notify_party_email || '',
-          place_of_receipt: parentBL.place_of_receipt || '',
-          port_of_loading: parentBL.port_of_loading || prefilled.port_of_loading,
-          port_of_discharge: parentBL.port_of_discharge || prefilled.port_of_discharge,
-          place_of_delivery: parentBL.place_of_delivery || '',
-          description_of_goods: parentBL.description_of_goods || '',
-          marks_and_numbers: parentBL.marks_and_numbers || '',
+        Object.assign(prefilled, inheritParentMblData(prefilled, {
+          ...parentBL,
           number_of_packages: parentBL.number_of_packages ? String(parentBL.number_of_packages) : '',
-          package_type: parentBL.package_type || '',
           gross_weight_kg: parentBL.gross_weight_kg ? String(parentBL.gross_weight_kg) : '',
           measurement_cbm: parentBL.measurement_cbm ? String(parentBL.measurement_cbm) : '',
+        }))
+        setValidationSources({
+          ...baseValidationSources,
+          parentMbl: {
+            ...parentBL,
+            number_of_packages: parentBL.number_of_packages ? String(parentBL.number_of_packages) : null,
+            gross_weight_kg: parentBL.gross_weight_kg ? String(parentBL.gross_weight_kg) : null,
+            measurement_cbm: parentBL.measurement_cbm ? String(parentBL.measurement_cbm) : null,
+          },
         })
       }
+    } else {
+      setValidationSources(baseValidationSources)
     }
 
     setForm((prev) => ({ ...prev, ...prefilled }))
@@ -647,48 +763,32 @@ export default function BLPage() {
   }
 
   useEffect(() => {
-    loadData()
+    const timeout = window.setTimeout(() => {
+      void loadData()
+    }, 0)
+    return () => window.clearTimeout(timeout)
+    // loadData se reinicia cuando cambia la identidad canónica de la ruta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, bookingId, blId])
 
-  const generateHBLNumber = async (): Promise<string> => {
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    const prefix = `${IS_DEMO_ENVIRONMENT ? 'DEMO' : 'SARI'}-HBL-${dateStr}-`
-    const { data } = await supabase
-      .from('bills_of_lading')
-      .select('bl_number')
-      .eq('bl_type', 'HBL')
-      .like('bl_number', `${prefix}%`)
-      .order('bl_number', { ascending: false })
-      .limit(1)
-    const lastSeq = data?.[0]?.bl_number?.replace(prefix, '')
-    const seq = lastSeq ? Number.parseInt(lastSeq, 10) + 1 : 1
-    return `${prefix}${String(seq).padStart(3, '0')}`
-  }
-
   const saveBL = async () => {
-    setSaving(true)
-
-    let blNumber = form.bl_number || null
-    if (isNew && form.bl_type === 'HBL' && !blNumber) {
-      blNumber = await generateHBLNumber()
-      setForm((prev) => ({ ...prev, bl_number: blNumber! }))
+    if (!isNew && form.bl_type === 'HBL' && ['Emitido', 'Liberado'].includes(form.status)) {
+      toast.error('El HBL emitido está protegido y ya no admite cambios.')
+      return
     }
 
+    setSaving(true)
+
+    const blNumber = form.bl_number || null
+
     const payload = {
-      booking_id: bookingId,
-      shipping_instruction_id: id,
-      bl_type: form.bl_type,
-      parent_bl_id: form.parent_bl_id || null,
       bl_number: blNumber,
-      status: form.status,
       release_type: form.release_type || null,
       originals_count: form.originals_count,
       copies_count: form.copies_count,
       freight_terms: form.freight_terms || null,
       hbl_freight_visibility: form.hbl_freight_visibility || null,
       bl_date: form.bl_date || null,
-      issue_date: form.issue_date || null,
-      release_date: form.release_date || null,
       shipper: form.shipper || null,
       shipper_address: form.shipper_address || null,
       consignee: form.consignee || null,
@@ -718,7 +818,7 @@ export default function BLPage() {
       measurement_cbm: form.measurement_cbm ? Number(form.measurement_cbm) : null,
       special_instructions: form.special_instructions || null,
       printed_at_destination: form.printed_at_destination,
-      draft_file_url: form.draft_file_url || null,
+      draft_file_url: normalizeBookingDocumentPath(form.draft_file_url) || null,
       draft_file_name: form.draft_file_name || null,
       placa_camion: form.placa_camion || null,
       nombre_operador: form.nombre_operador || null,
@@ -727,9 +827,20 @@ export default function BLPage() {
 
     if (isNew) {
       const newBlId = crypto.randomUUID()
-      const { error } = await supabase
+      const { data: createdBL, error } = await supabase
         .from('bills_of_lading')
-        .insert({ id: newBlId, ...payload, created_by: user?.id || null })
+        .insert({
+          id: newBlId,
+          booking_id: bookingId,
+          shipping_instruction_id: id,
+          bl_type: form.bl_type,
+          parent_bl_id: form.parent_bl_id || null,
+          status: form.status,
+          ...payload,
+          created_by: user?.id || null,
+        })
+        .select('id, bl_number')
+        .single()
 
       setSaving(false)
 
@@ -738,7 +849,7 @@ export default function BLPage() {
         return
       }
 
-      toast.success(`${form.bl_type} creado`)
+      toast.success(`${form.bl_type} creado${createdBL?.bl_number ? ` · ${createdBL.bl_number}` : ''}`)
       await createActivityLog({
         module: 'operations_bl',
         action: 'create',
@@ -752,10 +863,12 @@ export default function BLPage() {
       return
     }
 
-    const { error } = await supabase
+    const { data: updatedBL, error } = await supabase
       .from('bills_of_lading')
       .update(payload)
       .eq('id', blId)
+      .select('updated_at')
+      .single()
 
     setSaving(false)
 
@@ -763,6 +876,8 @@ export default function BLPage() {
       toast.error(error.message)
       return
     }
+
+    setDocumentUpdatedAt(updatedBL?.updated_at || null)
 
     // Sync bl_number back to bookings for legacy display.
     let bookingCacheSynced = true
@@ -903,31 +1018,51 @@ export default function BLPage() {
     const transition = STATUS_FLOW[form.status]
     if (!transition) return
 
+    const readiness = getBlReadiness(form, tipoTransporte, transition.next)
+    if (readiness.blocking.length > 0) {
+      toast.error(
+        `Completa antes de avanzar: ${readiness.blocking.map(({ label }) => label).join(', ')}`
+      )
+      return
+    }
+
+    if (['MBL Validado', 'Emitido'].includes(transition.next)) {
+      const unresolvedDifferences = getBlConsistencyWarnings(form, validationSources)
+        .filter((warning) => warning.kind === 'source_mismatch')
+        .filter((warning) =>
+          !validationExceptions.some((exception) =>
+            isBlValidationExceptionMatch(exception, warning)
+          )
+        )
+
+      if (unresolvedDifferences.length > 0) {
+        toast.error(
+          `Corrige o justifica antes de finalizar: ${unresolvedDifferences
+            .map(({ label }) => label)
+            .join(', ')}`
+        )
+        return
+      }
+    }
+
+    if (!documentUpdatedAt) {
+      toast.error('No se pudo verificar la versión del documento. Recarga la página.')
+      return
+    }
+
+    if (savedFormRef.current && JSON.stringify(savedFormRef.current) !== JSON.stringify(form)) {
+      toast.error('Guarda los cambios del documento antes de avanzar su estado.')
+      return
+    }
+
     setTransitioning(true)
 
-    const extraFields: Record<string, unknown> = {
-      status: transition.next,
-      updated_at: new Date().toISOString(),
-    }
-
-    if (transition.next === 'Emitido') {
-      extraFields.issued_by = user?.id || null
-      extraFields.issue_date = new Date().toISOString().split('T')[0]
-    }
-
-    if (transition.next === 'Liberado') {
-      extraFields.release_date = new Date().toISOString().split('T')[0]
-    }
-
-    if (transition.next === 'Aprobado por Cliente') {
-      extraFields.client_approved_at = new Date().toISOString()
-      extraFields.client_approved_by = user?.id || null
-    }
-
-    const { error } = await supabase
-      .from('bills_of_lading')
-      .update(extraFields)
-      .eq('id', blId)
+    const { data, error } = await supabase.rpc('transition_bill_of_lading', {
+      p_bl_id: blId,
+      p_expected_status: form.status,
+      p_target_status: transition.next,
+      p_expected_updated_at: documentUpdatedAt,
+    })
 
     setTransitioning(false)
 
@@ -936,29 +1071,102 @@ export default function BLPage() {
       return
     }
 
-    const newStatus = transition.next
-    setForm((prev) => ({ ...prev, status: newStatus, ...Object.fromEntries(Object.entries(extraFields).filter(([k]) => k !== 'updated_at')) }))
-
-    // Sync HBL number to bookings when issued
-    let bookingCacheSynced = true
-    if (newStatus === 'Emitido' && form.bl_type === 'HBL' && form.bl_number) {
-      bookingCacheSynced = await syncBookingBlCache({ house_bl: form.bl_number })
+    const result = data as {
+      bill_of_lading?: {
+        status?: string
+        issue_date?: string | null
+        release_date?: string | null
+        updated_at?: string | null
+      }
+      amendment?: Amendment
+      booking_updated_at?: string | null
+    } | null
+    const transitionedBL = result?.bill_of_lading
+    const updatedForm: BLForm = {
+      ...form,
+      status: transitionedBL?.status || transition.next,
+      issue_date: transitionedBL?.issue_date || form.issue_date,
+      release_date: transitionedBL?.release_date || form.release_date,
     }
 
-    if (bookingCacheSynced) {
-      toast.success(`Estado actualizado: ${newStatus}`)
+    setForm(updatedForm)
+    savedFormRef.current = updatedForm
+    setDocumentUpdatedAt(transitionedBL?.updated_at || null)
+    if (result?.booking_updated_at) setBookingUpdatedAt(result.booking_updated_at)
+    if (result?.amendment) setAmendments((current) => [...current, result.amendment!])
+    toast.success(`Estado actualizado: ${updatedForm.status}`)
+  }
+
+  const closeExceptionDialog = () => {
+    if (savingException) return
+    setExceptionAction(null)
+    setExceptionReason('')
+  }
+
+  const submitExceptionAction = async () => {
+    if (!exceptionAction) return
+    const reason = exceptionReason.trim()
+    if (reason.length < 8) {
+      toast.error('Escribe un motivo de al menos 8 caracteres.')
+      return
+    }
+
+    setSavingException(true)
+
+    if (exceptionAction.kind === 'justify') {
+      const warning = exceptionAction.warning
+      const { data, error } = await supabase.rpc('acknowledge_bl_validation_exception', {
+        p_bl_id: blId,
+        p_field_name: warning.field,
+        p_document_value: warning.documentValue,
+        p_source_value: warning.sourceValue,
+        p_source_label: warning.sourceLabel,
+        p_reason: reason,
+      })
+
+      setSavingException(false)
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      const inserted = data as BlValidationException
+      setValidationExceptions((current) => [
+        inserted,
+        ...current.map((exception) =>
+          exception.status === 'ACTIVE' && exception.field_name === inserted.field_name
+            ? {
+                ...exception,
+                status: 'SUPERSEDED' as const,
+                closed_at: inserted.created_at,
+                closed_by: user?.id || null,
+                closure_reason: 'Reemplazada por una nueva justificación para el campo',
+              }
+            : exception
+        ),
+      ])
+      toast.success('Diferencia documental justificada')
     } else {
-      toast.warning(`Estado actualizado: ${newStatus}. La referencia del HBL no pudo sincronizarse con el resumen del booking.`)
+      const { data, error } = await supabase.rpc('revoke_bl_validation_exception', {
+        p_exception_id: exceptionAction.exception.id,
+        p_reason: reason,
+      })
+
+      setSavingException(false)
+      if (error) {
+        toast.error(error.message)
+        return
+      }
+
+      const revoked = data as BlValidationException
+      setValidationExceptions((current) =>
+        current.map((exception) => exception.id === revoked.id ? revoked : exception)
+      )
+      toast.success('Excepción revocada; la diferencia requiere revisión nuevamente')
     }
 
-    await createActivityLog({
-      module: 'operations_bl',
-      action: 'status_change',
-      entityType: 'bill_of_lading',
-      entityId: blId,
-      description: `${form.bl_type} pasó a "${transition.next}"`,
-      metadata: { from: form.status, to: transition.next, booking_id: bookingId },
-    })
+    setExceptionAction(null)
+    setExceptionReason('')
   }
 
   const uploadDraftFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -981,13 +1189,9 @@ export default function BLPage() {
       return
     }
 
-    const { data: urlData } = supabase.storage
-      .from(BOOKING_DOCUMENTS_BUCKET)
-      .getPublicUrl(path)
-
     setForm((prev) => ({
       ...prev,
-      draft_file_url: urlData.publicUrl,
+      draft_file_url: path,
       draft_file_name: file.name,
     }))
     setUploadingDraft(false)
@@ -1091,6 +1295,7 @@ export default function BLPage() {
       setPrintingDraft(false)
     }
   }
+
   if (loading) return <PageSkeleton cards={2} rows={4} />
 
   const transition = isNew ? null : STATUS_FLOW[form.status]
@@ -1102,6 +1307,7 @@ export default function BLPage() {
         ? 'Carta Porte'
         : 'House BL'
   const canSendDraft = !isNew && form.bl_type === 'HBL' && ['HBL Draft', 'Pendiente Aprobación Cliente'].includes(form.status)
+  const isDocumentLocked = !isNew && form.bl_type === 'HBL' && ['Emitido', 'Liberado'].includes(form.status)
 
   const fmtDate = (d: string) =>
     d ? new Date(d + 'T00:00:00').toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
@@ -1127,9 +1333,34 @@ export default function BLPage() {
   const mailtoLink = form.consignee_email
     ? `mailto:${form.consignee_email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`
     : ''
+  const currentTransition = STATUS_FLOW[form.status]
+  const readiness = currentTransition
+    ? getBlReadiness(form, tipoTransporte, currentTransition.next)
+    : { blocking: [], warnings: [] }
+  const consistencyWarnings = isDocumentLocked
+    ? []
+    : getBlConsistencyWarnings(form, validationSources)
+  const useValidationSource = (field: BlConsistencyField, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }))
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
+
+      <Breadcrumbs
+        items={[
+          { label: 'Shipping Instructions', href: '/operations/shipping-instructions' },
+          {
+            label: documentContext.routingNumber || 'Shipping Instruction',
+            href: `/operations/shipping-instructions/${id}`,
+          },
+          {
+            label: documentContext.bookingNumber || 'Booking',
+            href: `/operations/shipping-instructions/${id}/bookings/${bookingId}`,
+          },
+          { label: isNew ? `Nuevo ${blLabel}` : form.bl_number || blLabel },
+        ]}
+      />
 
       {/* Email Draft Modal */}
       {showEmailModal && (
@@ -1217,6 +1448,9 @@ export default function BLPage() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             {isNew ? `Nuevo ${blLabel}` : `${blLabel} · ${form.bl_number || 'Sin número'}`}
           </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            SI {documentContext.routingNumber || 'sin número'} · Booking {documentContext.bookingNumber || 'sin número confirmado'}
+          </p>
           {!isNew && (
             <span className={`mt-1 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(form.status)}`}>
               {form.status}
@@ -1261,6 +1495,25 @@ export default function BLPage() {
           </button>
         </div>
       </div>
+
+      <BLValidationPanel
+        transitionLabel={currentTransition?.label || null}
+        blocking={readiness.blocking}
+        recommended={readiness.warnings}
+        consistencyWarnings={consistencyWarnings}
+        validationExceptions={validationExceptions}
+        locked={isDocumentLocked}
+        canManageExceptions={!isNew && !isDocumentLocked}
+        onUseSource={useValidationSource}
+        onJustify={(warning) => {
+          setExceptionAction({ kind: 'justify', warning })
+          setExceptionReason('')
+        }}
+        onRevoke={(exception) => {
+          setExceptionAction({ kind: 'revoke', exception })
+          setExceptionReason('')
+        }}
+      />
 
       {/* MBL Draft Upload */}
       {form.bl_type === 'MBL' && (
@@ -1308,6 +1561,14 @@ export default function BLPage() {
           </div>
         </section>
       )}
+
+      {isDocumentLocked && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+          Este HBL está emitido y sus datos documentales están protegidos. Solo puede registrarse su liberación.
+        </div>
+      )}
+
+      <fieldset disabled={isDocumentLocked} className="contents">
 
       {/* Identificación */}
       <SectionCard title="Identificación" cols={3}>
@@ -1538,7 +1799,7 @@ export default function BLPage() {
 
           {containers.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Sin contenedores. Usa "Agregar" para FCL.
+              Sin contenedores. Usa &quot;Agregar&quot; para FCL.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -1673,10 +1934,10 @@ export default function BLPage() {
       {!isNew && (
         <SectionCard title="Fechas de Control" cols={3}>
           <Field label="Fecha de Emisión">
-            <input type="date" value={form.issue_date} onChange={set('issue_date')} className={fieldClass} />
+            <input type="date" value={form.issue_date} disabled className={fieldClass} />
           </Field>
           <Field label="Fecha de Liberación">
-            <input type="date" value={form.release_date} onChange={set('release_date')} className={fieldClass} />
+            <input type="date" value={form.release_date} disabled className={fieldClass} />
           </Field>
         </SectionCard>
       )}
@@ -1696,13 +1957,15 @@ export default function BLPage() {
         </section>
       )}
 
+      </fieldset>
+
       {/* Acciones */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-3">
           <button
             type="button"
             onClick={saveBL}
-            disabled={saving}
+            disabled={saving || isDocumentLocked}
             className={`${primaryButtonClass} disabled:opacity-50`}
           >
             {saving ? 'Guardando...' : isNew ? `Crear ${blLabel}` : 'Guardar'}
@@ -1837,6 +2100,86 @@ export default function BLPage() {
           )}
         </section>
       )}
+
+      <Dialog
+        open={Boolean(exceptionAction)}
+        onOpenChange={(open) => {
+          if (!open) closeExceptionDialog()
+        }}
+      >
+        <DialogContent className="sm:max-w-lg" showCloseButton={!savingException}>
+          <DialogHeader>
+            <DialogTitle>
+              {exceptionAction?.kind === 'justify'
+                ? 'Justificar diferencia documental'
+                : 'Revocar excepción documental'}
+            </DialogTitle>
+            <DialogDescription>
+              {exceptionAction?.kind === 'justify'
+                ? 'La justificación quedará vinculada a los valores comparados y registrada en la bitácora.'
+                : 'La diferencia volverá a mostrarse como pendiente de revisión. El historial anterior no se elimina.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {exceptionAction?.kind === 'justify' && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900/60 dark:bg-amber-950/20">
+              <p className="font-semibold text-slate-900 dark:text-white">
+                {exceptionAction.warning.label}
+              </p>
+              <p className="mt-1 break-words text-slate-600 dark:text-slate-300">
+                Documento: {exceptionAction.warning.documentValue}
+              </p>
+              <p className="mt-0.5 break-words text-slate-500 dark:text-slate-400">
+                {exceptionAction.warning.sourceLabel}: {exceptionAction.warning.sourceValue}
+              </p>
+            </div>
+          )}
+
+          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            {exceptionAction?.kind === 'justify' ? 'Justificación' : 'Motivo de revocación'}
+            <textarea
+              rows={4}
+              maxLength={2000}
+              value={exceptionReason}
+              onChange={(event) => setExceptionReason(event.target.value)}
+              className={`${fieldClass} mt-1 min-h-24`}
+              placeholder={
+                exceptionAction?.kind === 'justify'
+                  ? 'Ej: Switch BL autorizado por el cliente el 18/09/2026...'
+                  : 'Explica por qué la excepción ya no es válida...'
+              }
+              disabled={savingException}
+              autoFocus
+            />
+            <span className="mt-1 block text-slate-400">
+              Mínimo 8 caracteres. No incluyas datos sensibles innecesarios.
+            </span>
+          </label>
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={closeExceptionDialog}
+              disabled={savingException}
+              className={secondaryButtonClass}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={submitExceptionAction}
+              disabled={savingException || exceptionReason.trim().length < 8}
+              className={`${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              {savingException
+                ? 'Guardando...'
+                : exceptionAction?.kind === 'justify'
+                  ? 'Guardar justificación'
+                  : 'Revocar excepción'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

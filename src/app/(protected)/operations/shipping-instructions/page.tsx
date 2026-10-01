@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { ExternalLink } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { ExternalLink, RefreshCw, Route } from 'lucide-react'
 
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
@@ -14,16 +14,13 @@ import {
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
-import { Route } from 'lucide-react'
+import { formatDate } from '@/src/lib/format'
+import {
+  resolveShippingInstructionStatus,
+  shippingInstructionFilterStatuses,
+} from '@/src/lib/operation-status'
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
-
-const shippingInstructionStatuses = [
-  'Pendiente de Validación',
-  'Asignado',
-  'Listo para Booking',
-  'En Booking',
-] as const
 
 type RoutingItem = {
   id: string
@@ -39,24 +36,43 @@ type RoutingItem = {
   destination_address: string | null
   container_qty: number | null
   container_type: string | null
+  display_status: string
   cliente?: { nombre: string | null } | null
   quotation?: { quotation_number: string | null } | null
   assigned_user?: { nombre: string | null; apellido: string | null } | null
 }
 
+type RoutingMetrics = {
+  total: number
+  pendientes: number
+  listos: number
+  enBooking: number
+}
+
+type RoutingInboxResponse = {
+  items?: RoutingItem[]
+  total?: number
+  page?: number
+  page_size?: number
+  metrics?: {
+    total?: number
+    pendientes?: number
+    listos?: number
+    en_booking?: number
+  }
+}
+
+const emptyMetrics: RoutingMetrics = {
+  total: 0,
+  pendientes: 0,
+  listos: 0,
+  enBooking: 0,
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function resolveStatus(item: RoutingItem): string {
-  const s = item.shipment_status || ''
-  if (s === 'Pendiente Validación') return 'Pendiente Validación'
-  if (s === 'Validada')             return 'Listo para Booking'
-  if (s === 'Booking Solicitado')   return 'Booking Solicitado'
-  if (s === 'Booking Confirmado')   return 'Booking Confirmado'
-  if (s === 'En Tránsito')          return 'En Tránsito'
-  if (s === 'Arribado')             return 'Arribado'
-  if (s === 'Finalizado')           return 'Finalizado'
-  if (s === 'Cancelada')            return 'Cancelada'
-  return s || 'Pendiente Validación'
+  return item.display_status || resolveShippingInstructionStatus(item)
 }
 
 function getStatusBadge(status: string) {
@@ -66,11 +82,17 @@ function getStatusBadge(status: string) {
     case 'Listo para Booking':
       return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
     case 'Booking Solicitado':
+    case 'En Booking':
       return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
     case 'Booking Confirmado':
+    case 'Parcialmente Confirmado':
+    case 'Documentación Pendiente':
+    case 'Listo para Embarque':
       return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+    case 'Embarcado':
     case 'En Tránsito':
       return 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
+    case 'Arribo Parcial':
     case 'Arribado':
     case 'Finalizado':
       return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
@@ -90,103 +112,121 @@ function formatContainer(item: RoutingItem): string {
   return 'N/A'
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('es-HN', {
-    day:   '2-digit',
-    month: 'short',
-    year:  'numeric',
-  })
-}
-
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function RoutingInboxPage() {
-  const router = useRouter()
-  const { user, profile, loading: userLoading } = useUser()
+  const { user, loading: userLoading } = useUser()
 
   const [routingList, setRoutingList] = useState<RoutingItem[]>([])
   const [loading,      setLoading]      = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [search,       setSearch]       = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('Todos')
   const [assignFilter, setAssignFilter] = useState('Todos')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
+  const [total, setTotal] = useState(0)
+  const [metrics, setMetrics] = useState<RoutingMetrics>(emptyMetrics)
+  const requestSequence = useRef(0)
 
-  const loadRouting = async () => {
+  const clearFilters = () => {
+    setSearch('')
+    setStatusFilter('Todos')
+    setAssignFilter('Todos')
+    setPage(1)
+  }
+
+  const loadRouting = useCallback(async () => {
     if (userLoading) return
+
+    if (!user?.id) {
+      setRoutingList([])
+      setTotal(0)
+      setMetrics(emptyMetrics)
+      setLoading(false)
+      return
+    }
+
+    const requestId = ++requestSequence.current
     setLoading(true)
     setErrorMessage('')
 
-    let query = supabase
-      .from('shipping_instructions')
-      .select(`
-        *,
-        cliente:clientes ( nombre ),
-        quotation:quotations ( quotation_number ),
-        assigned_user:profiles!shipping_instructions_operations_assigned_to_fkey (
-          nombre,
-          apellido
-        )
-      `)
-      .order('created_at', { ascending: false })
+    const { data, error } = await supabase.rpc('list_shipping_instructions', {
+      p_search: debouncedSearch,
+      p_status: statusFilter,
+      p_assignment: assignFilter,
+      p_page: page,
+      p_page_size: pageSize,
+    })
 
-    if (profile?.rol === 'Ventas') {
-      if (!user?.id) { setRoutingList([]); setLoading(false); return }
-      query = query.eq('created_by', user.id)
+    if (requestId !== requestSequence.current) return
+
+    if (error) {
+      setErrorMessage(error.message)
+      setLoading(false)
+      return
     }
 
-    const { data, error } = await query
-    if (error) { setErrorMessage(error.message); setLoading(false); return }
-    setRoutingList((data || []) as RoutingItem[])
+    const response = (data || {}) as RoutingInboxResponse
+    const responseMetrics = response.metrics || {}
+
+    setRoutingList(response.items || [])
+    setTotal(response.total || 0)
+    setMetrics({
+      total: responseMetrics.total || 0,
+      pendientes: responseMetrics.pendientes || 0,
+      listos: responseMetrics.listos || 0,
+      enBooking: responseMetrics.en_booking || 0,
+    })
+    if (response.page && response.page !== page) setPage(response.page)
     setLoading(false)
-  }
+  }, [assignFilter, debouncedSearch, page, pageSize, statusFilter, user?.id, userLoading])
 
-  useEffect(() => { loadRouting() }, [profile?.rol, user?.id, userLoading])
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, 300)
 
-  // Métricas
-  const metrics = useMemo(() => ({
-    total:      routingList.length,
-    pendientes: routingList.filter(i => resolveStatus(i) === 'Pendiente Validación').length,
-    listos:     routingList.filter(i => resolveStatus(i) === 'Listo para Booking').length,
-    enBooking:  routingList.filter(i => ['Booking Solicitado', 'Booking Confirmado'].includes(resolveStatus(i))).length,
-  }), [routingList])
+    return () => window.clearTimeout(timer)
+  }, [search])
 
-  // Filtros
-  const filtered = routingList.filter((item) => {
-    const q      = search.toLowerCase()
-    const status = resolveStatus(item)
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadRouting()
+    }, 0)
 
-    const matchesSearch =
-      item.routing_number?.toLowerCase().includes(q) ||
-      item.agent_name?.toLowerCase().includes(q) ||
-      item.cliente?.nombre?.toLowerCase().includes(q) ||
-      item.quotation?.quotation_number?.toLowerCase().includes(q)
+    return () => window.clearTimeout(timer)
+  }, [loadRouting])
 
-    const matchesStatus =
-      statusFilter === 'Todos' || status === statusFilter
-
-    const matchesAssign =
-      assignFilter === 'Todos' ||
-      (assignFilter === 'Sin asignar'   && !item.operations_assigned_to) ||
-      (assignFilter === 'Mis asignados' && item.operations_assigned_to === profile?.id)
-
-    return matchesSearch && matchesStatus && matchesAssign
-  })
-
-  const paginatedRouting = filtered.slice((page - 1) * pageSize, page * pageSize)
+  const hasActiveFilters =
+    debouncedSearch !== '' || statusFilter !== 'Todos' || assignFilter !== 'Todos'
 
   return (
     <div className="space-y-6">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-          Shipping Instructions
-        </h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Instrucciones operativas enviadas por Ventas antes del booking.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            Shipping Instructions
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Instrucciones operativas enviadas por Ventas antes del booking.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void loadRouting()}
+          disabled={loading}
+          className={`${secondaryButtonClass} inline-flex items-center justify-center gap-2 self-start`}
+        >
+          <RefreshCw
+            aria-hidden="true"
+            className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+          />
+          Actualizar
+        </button>
       </div>
 
       {/* Métricas */}
@@ -199,31 +239,47 @@ export default function RoutingInboxPage() {
 
       {/* Filtros */}
       <div className="grid gap-3 lg:grid-cols-3">
-        <input
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-          placeholder="Buscar RT, cotización, cliente o agente..."
-          className={fieldClass}
-        />
-        <select
-          value={assignFilter}
-          onChange={(e) => { setAssignFilter(e.target.value); setPage(1) }}
-          className={fieldClass}
-        >
-          <option value="Todos">Toda la asignación</option>
-          <option value="Sin asignar">Sin asignar</option>
-          <option value="Mis asignados">Mis asignados</option>
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-          className={fieldClass}
-        >
-          <option value="Todos">Todos los estados</option>
-          {shippingInstructionStatuses.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+        <label className="space-y-1.5">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Buscar
+          </span>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+            placeholder="RT, cotización, cliente o agente"
+            className={fieldClass}
+          />
+        </label>
+        <label className="space-y-1.5">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Asignación
+          </span>
+          <select
+            value={assignFilter}
+            onChange={(e) => { setAssignFilter(e.target.value); setPage(1) }}
+            className={fieldClass}
+          >
+            <option value="Todos">Toda la asignación</option>
+            <option value="Sin asignar">Sin asignar</option>
+            <option value="Mis asignados">Mis asignados</option>
+          </select>
+        </label>
+        <label className="space-y-1.5">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Estado
+          </span>
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+            className={fieldClass}
+          >
+            <option value="Todos">Todos los estados</option>
+            {shippingInstructionFilterStatuses.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {/* Tabla */}
@@ -233,9 +289,20 @@ export default function RoutingInboxPage() {
             <TableSkeleton rows={6} cols={10} />
           </div>
         ) : errorMessage ? (
-          <p className="p-6 text-sm text-red-500">{errorMessage}</p>
-        ) : filtered.length === 0 ? (
-          routingList.length === 0 ? (
+          <div className="flex flex-col items-start gap-3 p-6">
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              No se pudieron cargar las Shipping Instructions. {errorMessage}
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadRouting()}
+              className={secondaryButtonClass}
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : routingList.length === 0 ? (
+          metrics.total === 0 && !hasActiveFilters ? (
             <EmptyState
               icon={<Route className="h-6 w-6" />}
               title="Sin instrucciones de embarque"
@@ -245,16 +312,23 @@ export default function RoutingInboxPage() {
             <EmptyState
               title="Sin resultados"
               description="Ninguna SI coincide con los filtros aplicados."
+              action={{ label: 'Limpiar filtros', onClick: clearFilters }}
             />
           )
         ) : (
-          <div className="overflow-x-auto">
+          <div
+            className="overflow-x-auto"
+            role="region"
+            aria-label="Listado de Shipping Instructions"
+            tabIndex={0}
+          >
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-900 dark:bg-[#081120]">
                   {['SI', 'Cotización', 'Cliente', 'Ruta', 'Agente', 'Contenedor', 'Fecha', 'Asignado a', 'Estado', ''].map((h) => (
                     <th
                       key={h}
+                      scope="col"
                       className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-300"
                     >
                       {h}
@@ -263,7 +337,7 @@ export default function RoutingInboxPage() {
                 </tr>
               </thead>
               <tbody>
-                {paginatedRouting.map((item) => {
+                {routingList.map((item) => {
                   const status  = resolveStatus(item)
                   const badge   = getStatusBadge(status)
                   const assigned = item.assigned_user
@@ -273,11 +347,15 @@ export default function RoutingInboxPage() {
                   return (
                     <tr
                       key={item.id}
-                      onClick={() => router.push(`/operations/shipping-instructions/${item.id}`)}
-                      className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+                      className="border-b border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
                     >
                       <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
-                        {item.routing_number || item.id}
+                        <Link
+                          href={`/operations/shipping-instructions/${item.id}`}
+                          className="rounded-sm text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-300"
+                        >
+                          {item.routing_number || item.id}
+                        </Link>
                       </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
                         {item.quotation?.quotation_number || 'N/A'}
@@ -307,18 +385,15 @@ export default function RoutingInboxPage() {
                           {status}
                         </span>
                       </td>
-                      <td
-                        className="px-4 py-3 text-right"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/operations/shipping-instructions/${item.id}`)}
+                      <td className="px-4 py-3 text-right">
+                        <Link
+                          href={`/operations/shipping-instructions/${item.id}`}
+                          aria-label={`Abrir Shipping Instruction ${item.routing_number || item.id}`}
                           title="Abrir SI"
                           className={`${secondaryButtonClass} inline-flex h-8 w-8 items-center justify-center p-0`}
                         >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </button>
+                          <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" />
+                        </Link>
                       </td>
                     </tr>
                   )
@@ -329,9 +404,12 @@ export default function RoutingInboxPage() {
             <Pagination
               page={page}
               pageSize={pageSize}
-              total={filtered.length}
+              total={total}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(nextPageSize) => {
+                setPageSize(nextPageSize)
+                setPage(1)
+              }}
             />
           </div>
         )}

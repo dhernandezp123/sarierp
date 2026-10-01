@@ -6,7 +6,7 @@ import {
   Ship, Plane, Truck, Package,
   MapPin, Calendar,
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   PortalCard,
@@ -67,7 +67,7 @@ function fmt(date: string | null) {
   return new Date(year, month - 1, day).toLocaleDateString('es-HN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-const FILTERS = ['Todos', 'FCL', 'LCL', 'Aéreo', 'Terrestre'] as const
+const FILTERS = ['Todos', 'FCL', 'LCL', 'Aéreo', 'Terrestre', 'Courier'] as const
 type Filter = (typeof FILTERS)[number]
 
 function matchesFilter(sp: string | null | undefined, filter: Filter): boolean {
@@ -75,6 +75,7 @@ function matchesFilter(sp: string | null | undefined, filter: Filter): boolean {
   if (filter === 'FCL') return sp === 'other_origin_fcl'
   if (filter === 'LCL') return sp === 'miami_lcl' || sp === 'other_origin_lcl'
   if (filter === 'Aéreo') return sp === 'miami_air' || sp === 'other_origin_air'
+  if (filter === 'Courier') return sp === 'courier'
   if (filter === 'Terrestre') return sp === 'usa_ltl_ftl'
   return true
 }
@@ -85,20 +86,31 @@ export default function EnviosPage() {
   const [filter, setFilter] = useState<Filter>('Todos')
   const [search, setSearch] = useState('')
 
+  const [scope, setScope] = useState<'Activos' | 'Historial'>('Activos')
+  const [loadError, setLoadError] = useState(false)
+  const [revision, setRevision] = useState(0)
   useEffect(() => {
+    let active = true
     async function load() {
       setLoading(true)
+      setLoadError(false)
+      try {
       const { data, error } = await supabase.rpc('get_client_shipments_v2', {
-        p_include_completed: false,
+        p_include_completed: true,
       })
-      if (error) toast.error('No se pudieron cargar tus envíos')
+      if (error) throw error
+      if (!active) return
       setAll((data ?? []) as unknown as Shipment[])
-      setLoading(false)
+      } catch { if (active) setLoadError(true) } finally { if (active) setLoading(false) }
     }
-    void load()
-  }, [])
+    const timer = window.setTimeout(() => void load(), 0)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [revision])
 
   const filtered = all.filter(s => {
+    const completed = ['Finalizado', 'Cancelado'].includes(s.aggregate_status)
+    if (scope === 'Activos' && completed) return false
+    if (scope === 'Historial' && !completed) return false
     const sp = s.service_product
     if (!matchesFilter(sp, filter)) return false
     if (search) {
@@ -120,6 +132,7 @@ export default function EnviosPage() {
         subtitle="Contenedores, carga LCL, aérea y terrestre"
       />
 
+      <PortalFilterPills options={['Activos', 'Historial'] as const} value={scope} onChange={setScope} />
       <PortalSearchInput
         value={search}
         onChange={setSearch}
@@ -129,7 +142,7 @@ export default function EnviosPage() {
       <PortalFilterPills options={FILTERS} value={filter} onChange={setFilter} />
 
       {/* List */}
-      {loading ? (
+      {loadError ? <PortalError onRetry={() => setRevision(v => v + 1)} /> : loading ? (
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />
@@ -139,7 +152,7 @@ export default function EnviosPage() {
         <PortalCard>
           <PortalEmptyState
             icon={<Ship className="h-10 w-10" />}
-            title={all.length === 0 ? 'No tienes envíos activos' : 'Sin resultados'}
+            title={search || filter !== 'Todos' ? 'Sin resultados' : scope === 'Activos' ? 'No tienes envíos activos' : 'No tienes envíos en el historial'}
             description={all.length === 0
               ? 'Aquí verás tus contenedores, carga LCL y aérea.'
               : 'Intenta con otro filtro o búsqueda.'}

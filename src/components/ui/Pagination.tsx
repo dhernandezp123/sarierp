@@ -31,10 +31,11 @@ export function Pagination({
           : `Mostrando ${from}–${to} de ${total}`}
       </p>
 
-      <div className="flex items-center gap-2">
+      <div className="flex max-w-full flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => onPageChange(page - 1)}
+          aria-label="Página anterior"
           disabled={page <= 1}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
         >
@@ -48,6 +49,7 @@ export function Pagination({
         <button
           type="button"
           onClick={() => onPageChange(page + 1)}
+          aria-label="Página siguiente"
           disabled={page >= totalPages}
           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
         >
@@ -55,6 +57,7 @@ export function Pagination({
         </button>
 
         <select
+          aria-label="Registros por página"
           value={pageSize}
           onChange={(e) => {
             onPageSizeChange(Number(e.target.value))
