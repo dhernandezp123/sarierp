@@ -2,7 +2,7 @@
 
 ### 2026-10-01 - DEMO-SYNC-001 - Sincronización funcional de main al Demo
 
-- Estado: integrado y validado localmente; SQL y Preview pendientes de postflight.
+- Estado: integrado, migrado y publicado en Demo; UAT autenticado/visual pendiente.
 - Comparación: Demo `e682f9e`, Production `8313d67`. Merge funcional hasta
   `3dd2e4f`, con adaptación de `9b6d460`, `b572efe`, `5b3694b` y `a688c19`.
   Alcance y exclusiones: `docs/demo-sync-2026-10-01.md`.
@@ -41,12 +41,31 @@
   - Preflight: Auth/perfiles 3/3, cotizaciones 4, proformas 1, BL 2; sin HBL
     duplicados ni buckets públicos.
 - Riesgos / trabajo pendiente:
-  - Verificar SQL remoto, RLS efectiva y deployment Preview antes de cerrar el
-    despliegue. UAT autenticado/visual pendiente con un acceso vigente.
+  - UAT autenticado/visual pendiente con un acceso vigente. Las verificaciones
+    remotas cubren definiciones SQL y acceso anónimo; no sustituyen esa UAT.
   - El cutover multiempresa, tenants/dominios y Landing V2 requieren un proyecto
     Demo adaptado a esa arquitectura; no se introducen en el sandbox Atlas.
   - No se ejecutó reset remoto ni se enviaron correos reales de prueba.
-- Commit: pendiente hasta registrar el commit funcional y el postflight.
+- Postflight Demo:
+  - Commit funcional `ada18ddf4ecd381660627ae45a586a3581168e9b`, rama `demo`.
+  - Las 24 migraciones revisadas constan aplicadas en Supabase Demo; última
+    versión `20261001120000`. No se modificó el historial mediante repair.
+  - Nueve definiciones de funciones remotas coinciden por hash con las probadas
+    localmente, incluidos acceso Demo, proformas, reset y selección de agentes.
+  - La API anónima devuelve `401` para opciones, líneas de opciones, excepciones
+    BL y tareas. La política restrictiva de Storage sigue presente; cero buckets
+    públicos. Auth/perfiles 3/3, cotizaciones 4, proformas 1 y BL 2 conservados.
+  - Vercel `dpl_xDxovSHoUUJ5L6BFNZ2CvEDdGgur`: target `preview`, rama `demo`,
+    estado `Ready`; GitHub/Vercel `success / Deployment has completed`.
+  - Alias `https://demo.forwarders.app`; URL inmutable
+    `https://sarierp-ifw13yopr-claudherhn-5641s-projects.vercel.app`.
+  - Smoke público: ambos login `200` con aviso Demo; raíz/registro/protected
+    redirigen al login; retorno a Pricing y SI conservado; robots bloquea indexado
+    y el logo productivo devuelve `404`. Headers `noindex, nofollow, noarchive`.
+  - Build final exit code 0 y TypeScript final OK. ESLint de helpers, pruebas,
+    desglose de seguro y pantallas de agentes/booking reconciliadas: OK.
+  - No se reinició el dataset, no se rotaron cuentas y no se enviaron correos.
+- Commit: `ada18dd` (`feat(demo): sync ERP workflows and preserve sandbox guards`).
 
 ### 2026-09-18 - FLOW-033 / DB-029 / UX-064 - Excepciones documentales auditables
 
