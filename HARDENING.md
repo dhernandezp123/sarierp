@@ -1,5 +1,61 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-02 - MAIL-035 - Solicitudes de Outlook aisladas para Sari
+
+- Estado: en espera por decisión del usuario (02/10/2026), sin acceso
+  administrativo a Microsoft 365. Código preparado para despliegue inactivo;
+  pendiente SQL/RLS, credenciales, scheduler y UAT. No está activa.
+- Stand by: bloqueo explícito `OUTLOOK_INTAKE_STANDBY = true`; ambos endpoints
+  responden 503 antes de consultar sesión, base o Microsoft. Menú oculto y ruta
+  directa con mensaje «En espera», sin consultas a tablas no provisionadas.
+  Migración conservada para el futuro, sin aplicarla durante este despliegue.
+- Hallazgo: se requiere registrar solicitudes recibidas por Pricing y comunicar
+  una referencia persistida sin calcular correlativos fuera del ERP ni permitir
+  que la automatización alcance otros tenants.
+- Archivos y SQL modificados:
+  - `src/lib/mail-intake.ts`, `src/lib/server/outlook-intake.ts`.
+  - `src/app/api/integrations/outlook/{check,run}/route.ts`.
+  - `src/app/(protected)/settings/mail-intake/page.tsx`.
+  - `src/components/layout/sidebar.tsx`.
+  - `supabase/migrations/20261002120000_sari_outlook_intake.sql`.
+  - `supabase/tests/sari_outlook_intake.sql`, `tests/mail-intake.test.mjs`.
+  - `docs/outlook-intake-runbook.md`, `HARDENING.md`.
+- Cambio: configuración provisionada únicamente para el dominio activo
+  `sari.forwarders.app`, buzón `Pricing@sarihn.com`, desactivada por defecto.
+  Selección de vendedor y prioridad opcional del vendedor del cliente; busca
+  Admin pruebas sin inventar un perfil. RPC transaccional registra mensaje y
+  Borrador usando el trigger de numeración por empresa. RLS solo para Admin
+  aprobado/activo; runtime y RPC restringidos al servicio. Demo bloqueado con
+  helper compatible con su rama, sin depender de tablas exclusivas de Demo.
+  Delta de Inbox y lease evitan replay/concurrencia. Acuse en el hilo original;
+  errores ambiguos quedan para conciliación y no se reenvían automáticamente.
+- Validaciones ejecutadas:
+  - Pruebas dirigidas: incluye bloqueo de ambos endpoints en stand by, timeout posterior al envío y replay sin
+    reenvío, rechazo de llamadas no autorizadas, seguimiento, automáticos y
+    validación del destino del cursor.
+  - `npm.cmd test`: 160/160 pruebas correctas, incluida la regresión de stand by.
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint dirigido a los archivos TypeScript y prueba modificados: OK.
+  - `npm.cmd run build`: OK, 79/79 páginas.
+  - `git diff --check`: OK; aviso esperado de LF/CRLF en sidebar.
+  - Docker local no disponible (daemon ausente); SQL y RLS **no ejecutados**.
+  - UI revisada en código; falta comprobación visual autenticada.
+- Riesgos / trabajo pendiente:
+  - Aplicar y probar migración en base aislada; ejecutar pruebas SQL y validar
+    RLS/Admin/Ventas/otro tenant. No se certifica numeración desplegada ni flujo
+    end-to-end por resultados de mocks o build.
+  - Autorizar Mail.Read y Mail.Send mediante Exchange RBAC limitado al buzón;
+    revisar concesiones globales aditivas. Configurar secretos y scheduler POST.
+  - La primera versión usa reglas conservadoras, no IA ni DOTS; ambigüedades y
+    seguimientos requieren revisión manual desde Outlook. No procesa adjuntos ni
+    carpetas fuera de Inbox, ni extrae los datos de carga.
+  - Un `202` es aceptación de Microsoft, no prueba de entrega. Conciliar estados
+    inciertos y cursor expirado manualmente. Completar UAT con destinatario
+    controlado y verificar notas internas fuera del PDF antes de activar.
+  - Capacidad: una página de delta y hasta dos acuses por ejecución; vigilar
+    backlog y ajustar programación al volumen.
+- Commit y despliegue: pendientes de esta entrega; hash en el postflight.
+
 ### 2026-09-28 - FLOW-034 - Shipping Instruction conserva contexto tras guardar
 
 - Estado: corrección implementada, validada y desplegada en Production; UAT

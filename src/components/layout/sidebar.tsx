@@ -12,6 +12,7 @@ import { NOTIFICATIONS_READ_EVENT } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
 import { TenantBrand } from '@/src/components/tenant/TenantBrand'
 import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { OUTLOOK_INTAKE_STANDBY } from '@/src/lib/mail-intake'
 import {
   LayoutDashboard, LogOut, Users, FileText, ActivitySquare, CalendarClock,
   Scale, DollarSign, BarChart3, Building2, Database, Route, Bell, Receipt,
@@ -253,6 +254,11 @@ export default function Sidebar({ role }: { role?: string }) {
       href: '/settings/email-templates',
       icon: Mail,
     },
+    ...(!OUTLOOK_INTAKE_STANDBY && tenant?.hostname === 'sari.forwarders.app' ? [{
+      label: 'Solicitudes por Outlook',
+      href: '/settings/mail-intake',
+      icon: Mail,
+    }] : []),
   ]
 
 
