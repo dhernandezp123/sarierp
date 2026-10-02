@@ -3,7 +3,7 @@
 ### 2026-10-02 - MAIL-035 - Solicitudes de Outlook aisladas para Sari
 
 - Estado: en espera por decisión del usuario (02/10/2026), sin acceso
-  administrativo a Microsoft 365. Código preparado para despliegue inactivo;
+  administrativo a Microsoft 365. Código desplegado en Production, inactivo;
   pendiente SQL/RLS, credenciales, scheduler y UAT. No está activa.
 - Stand by: bloqueo explícito `OUTLOOK_INTAKE_STANDBY = true`; ambos endpoints
   responden 503 antes de consultar sesión, base o Microsoft. Menú oculto y ruta
@@ -54,7 +54,18 @@
     controlado y verificar notas internas fuera del PDF antes de activar.
   - Capacidad: una página de delta y hasta dos acuses por ejecución; vigilar
     backlog y ajustar programación al volumen.
-- Commit y despliegue: pendientes de esta entrega; hash en el postflight.
+- Postflight Production:
+  - Commit funcional `9c7724d` publicado en `main` y
+    `feat/multi-tenant-domains`.
+  - Vercel `dpl_A8TwfSCGLyd394EAAuoMMoKfHpwM`: target `production`, `Ready`;
+    dominio `sari.forwarders.app` incluido entre los aliases.
+  - GitHub deployment Production `6814754290` corresponde al mismo SHA.
+  - Smoke de producción: `/login` HTTP 200; ambos POST a
+    `/api/integrations/outlook/{run,check}` devuelven HTTP 503 con
+    «Integración de Outlook en espera», sin conectar sesión/base/Microsoft.
+  - No se aplicó SQL, no se configuraron credenciales ni scheduler y no se
+    leyeron ni enviaron correos. Activación, SQL/RLS y UAT siguen pendientes.
+- Commit funcional: `9c7724d` (`feat: prepare Sari Outlook intake in standby`).
 
 ### 2026-09-28 - FLOW-034 - Shipping Instruction conserva contexto tras guardar
 
