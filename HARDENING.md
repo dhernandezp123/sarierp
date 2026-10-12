@@ -9730,8 +9730,8 @@ Agregar una entrada por fix:
 
 ### 2026-10-12 - UX-065 - Costos por contenedor en tarjetas de comparativo
 
-- Estado: implementado y validado en código con datos reales de solo lectura;
-  pendiente revisión visual y UAT autenticado. Sin despliegue.
+- Estado: implementado, validado en código con datos reales de solo lectura y
+  desplegado en Production; pendiente revisión visual y UAT autenticado.
 - Hallazgo: las tarjetas de Pricing mostraban únicamente el flete agregado de
   `agent_quotes`, aunque los costos unitarios ya estaban registrados en
   `agent_quote_container_rates`.
@@ -9772,5 +9772,19 @@ Agregar una entrada por fix:
   - La lectura privilegiada verifica los datos y la relación, sin certificar
     RLS con una sesión de Pricing. Se conserva el cliente autenticado existente
     y se revisaron las policies vigentes; no se agregó acceso privilegiado a UI.
-  - No se ejecutó SQL ni se publicó el cambio.
-- Commit: hash de implementación pendiente de registrar tras publicación.
+  - No se ejecutó SQL; la base de datos no requirió cambios.
+- Postflight Production:
+  - Commit funcional `39e9a6e` publicado en `origin/main`.
+  - Sin despliegue automático para el commit; se ejecutó el despliegue
+    autorizado mediante `vercel deploy --prod` sobre el proyecto `sarierp`.
+  - Vercel: `dpl_4wSD9gz3JV2GBo3QFBsFbxzhutU5`, target `production`, estado
+    `READY`; compilación remota y TypeScript exitosos, 79/79 páginas generadas.
+  - URL inmutable:
+    `https://sarierp-nq1o6n9yz-claudherhn-5641s-projects.vercel.app`.
+  - Vercel confirma los aliases `sari.forwarders.app` y `forwarders.app` en
+    ese despliegue.
+  - Smoke público de solo lectura: `https://sari.forwarders.app/login` responde
+    `200`; `/pricing-comparison` responde `307` hacia
+    `/login?next=%2Fpricing-comparison`; `https://forwarders.app/` responde `200`.
+- Commit de implementación y despliegue: `39e9a6e`. Registro de publicación en
+  commit documental posterior.
