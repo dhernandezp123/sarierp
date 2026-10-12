@@ -121,6 +121,10 @@ export function ManualInvoiceEditor() {
   }
   async function makePdf(download = false) {
     if (busy) return
+    // Reserve the tab during the click, before asynchronous PDF generation.
+    const pdfWindow = download ? null : window.open('about:blank', '_blank')
+    if (!download && !pdfWindow) { toast.error('El navegador bloqueó la pestaña. Permite las ventanas emergentes o usa Descargar PDF.'); return }
+    if (pdfWindow) pdfWindow.opener = null
     setBusy('pdf')
     try {
       const checked = validateManualInvoice(data)
@@ -130,11 +134,12 @@ export function ManualInvoiceEditor() {
         url = URL.createObjectURL(await createManualInvoiceBlob(checked))
         setPreview({ url, snapshot })
       }
+      if (pdfWindow && !pdfWindow.closed) pdfWindow.location.replace(url)
       if (download) {
         const link = document.createElement('a'); link.href = url; link.download = manualInvoiceFileName(checked)
         document.body.appendChild(link); link.click(); link.remove()
       }
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo generar el PDF.') }
+    } catch (error) { pdfWindow?.close(); toast.error(error instanceof Error ? error.message : 'No se pudo generar el PDF.') }
     finally { setBusy(null) }
   }
   async function reloadHistory() {
@@ -187,7 +192,7 @@ export function ManualInvoiceEditor() {
       <TabsContent value="editor" className="space-y-6">
         <div className={cardClass}>
           <h2 className="mb-2 font-semibold">1. Carga un documento o completa la factura manualmente</h2>
-          <p className="mb-4 text-sm text-slate-500">PDF o foto (JPG, PNG, WEBP), hasta 3 MB y 5 páginas de una sola factura. La lectura gratuita se realiza en tu dispositivo. El original se usa para comparar y no se guarda en el historial.</p>
+          <p className="mb-4 text-sm text-slate-500">PDF o foto (JPG, PNG, WEBP), hasta 3 MB y 5 páginas de una sola factura. El original se usa para comparar y no se guarda en el historial.</p>
           <div className="flex flex-wrap items-end gap-3"><label className="min-w-0 flex-1 space-y-1 text-sm font-medium"><span className="block">Factura original</span>
             <input ref={fileInput} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={Boolean(busy)} className={`${fieldClassSm} h-auto py-2`} onChange={(event) => selectFile(event.target.files?.[0])} /></label>
             <label className="space-y-1 text-sm font-medium"><span className="block">Formato de fechas (OCR y PDF)</span><select value={data.date_format} disabled={Boolean(busy)} onChange={(event) => change({ ...data, date_format: event.target.value as ManualInvoiceDateOrder })} className={fieldClassSm}>
@@ -199,8 +204,7 @@ export function ManualInvoiceEditor() {
           </div>
           <p className="mt-2 text-sm text-slate-500">El formato se guarda con la factura y se aplica al PDF. Cambiarlo conserva las fechas ingresadas; para reinterpretar el original, vuelve a leerlo con OCR.</p>
           {file && <p className="mt-2 break-all text-sm">Archivo cargado: {file.name}</p>}
-          {busy === 'ocr' ? <div className="mt-3 space-y-1"><p role="status" className="text-sm">{ocrProgress.message} {ocrProgress.percent}%</p><progress aria-label="Progreso de lectura" className="h-2 w-full" max={100} value={ocrProgress.percent} /></div>
-            : <p className="mt-3 text-sm text-slate-500">OCR gratuito, sin clave API ni saldo. La primera lectura puede tardar mientras se prepara el lector. Revisa siempre los resultados.</p>}
+          {busy === 'ocr' && <div className="mt-3 space-y-1"><p role="status" className="text-sm">{ocrProgress.message} {ocrProgress.percent}%</p><progress aria-label="Progreso de lectura" className="h-2 w-full" max={100} value={ocrProgress.percent} /></div>}
         </div>
         {warnings.length > 0 && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Observaciones de la lectura</p><ul className="mt-2 list-inside list-disc">{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
         {recognizedText && <details className={cardClass}><summary className="cursor-pointer font-semibold">Ver texto reconocido</summary><label className="mt-3 block space-y-1 text-sm"><span>Texto de apoyo para completar datos que no se ubicaron</span><textarea readOnly rows={8} value={recognizedText} className={`${fieldClassSm} h-auto py-2`} /></label></details>}
@@ -224,7 +228,7 @@ export function ManualInvoiceEditor() {
             <div className={cardClass}><h2 className="font-semibold">3. Guarda o genera el PDF</h2>
               <label className="my-4 flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={reviewed} disabled={Boolean(busy)} onChange={(event) => setReviewed(event.target.checked)} /><span>Revisé los campos, los cargos y el total de esta factura.</span></label>
               <div className="flex flex-wrap gap-2"><button className={`${primaryButtonClass} flex items-center gap-2`} disabled={!reviewed || Boolean(busy) || savedSnapshot === snapshot} onClick={save}><Save size={16} />{busy === 'save' ? 'Guardando…' : savedSnapshot === snapshot ? 'Guardada' : 'Guardar documento'}</button>
-                <button className={`${secondaryButtonClass} flex items-center gap-2`} disabled={!reviewed || Boolean(busy)} onClick={() => makePdf()}><Eye size={16} />Vista previa PDF</button>
+                <button className={`${secondaryButtonClass} flex items-center gap-2`} disabled={!reviewed || Boolean(busy)} onClick={() => makePdf()}><Eye size={16} />Visualizar PDF</button>
                 <button className={`${secondaryButtonClass} flex items-center gap-2`} disabled={!reviewed || Boolean(busy)} onClick={() => makePdf(true)}><Download size={16} />Descargar PDF</button></div>
               {busy === 'pdf' && <p role="status" className="mt-2 text-sm">Generando PDF…</p>}
             </div>
@@ -237,7 +241,7 @@ export function ManualInvoiceEditor() {
             </div>}
             <div className={cardClass}><h2 className="mb-3 font-semibold">PDF generado</h2>
               {preview && previewCurrent ? <><iframe title="PDF generado de SARI USA" src={preview.url} className="h-[650px] w-full rounded-lg bg-slate-100" /><a href={preview.url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-blue-600 underline">Abrir PDF</a></>
-                : <p className="text-sm text-slate-500">{preview ? 'Los datos cambiaron. Genera una nueva vista previa.' : 'Completa y revisa los campos, luego selecciona Vista previa PDF. El PDF conserva la plantilla sin resaltados amarillos.'}</p>}
+                : <p className="text-sm text-slate-500">{preview ? 'Los datos cambiaron. Genera una nueva vista previa.' : 'Completa y revisa los campos, luego selecciona Visualizar PDF para abrirlo en otra pestaña. El PDF conserva la plantilla sin resaltados amarillos.'}</p>}
             </div>
           </div>
         </div>

@@ -10099,3 +10099,28 @@ Agregar una entrada por fix:
   En `sari.forwarders.app`: login 200, factura manual 307 al login,
   ambas API 401 JSON sin sesión; workers/core/modelo OCR 200 y checksum del
   modelo correcto. Estos checks no sustituyen el recorrido autenticado.
+
+### 2026-10-12 - UX-070 - Texto del scanner y visualizar PDF en otra pestaña
+
+- Estado: implementado y validado localmente; publicación pendiente.
+- Hallazgo: textos técnicos sobre gratuidad/clave/saldo innecesarios para el
+  flujo solicitado; el botón solo generaba la vista previa dentro del editor.
+- Archivos: `src/components/invoicing/ManualInvoiceEditor.tsx`,
+  `docs/manual-sari-usa-invoices.md`, esta bitácora. SQL: sin cambios.
+- Cambios: retirados ambos textos indicados por el usuario. Botón «Visualizar
+  PDF» abre una pestaña durante el clic, antes de generar el documento, usando
+  el patrón existente de Reportes. Se desvincula opener y se navega al blob
+  generado o a la vista previa vigente. Ante bloqueo se ofrece descarga en
+  Sonner; errores de validación/generación cierran la pestaña reservada.
+  Descarga directa y preview dentro del editor conservan su funcionamiento.
+- Validaciones: TypeScript y ESLint afectado OK; comprobación del handler real
+  extraído del componente con ventana/generador PDF simulados: pestaña nueva,
+  reutilizar PDF vigente, apertura bloqueada, formulario inválido, fallo al
+  generar, descarga sin abrir pestaña y bloqueo por busy; ausencia de los dos
+  textos solicitados. Build local OK, 82/82 páginas; postflight se registra
+  al terminar.
+- Riesgos / pendiente: validación de comportamiento simulada, sin UAT del
+  editor autenticado ni verificación de ventanas reales en móviles/navegadores.
+  El navegador del usuario puede bloquear pestañas; se muestra recuperación.
+  No se envían documentos ni se crean facturas de prueba en Production.
+- Commit: hash disponible después de crear el commit funcional.

@@ -21,7 +21,9 @@ Disponible para Admin, Operaciones, Finanzas y Contabilidad de Sari.
    si faltan datos, abrir **Ver texto reconocido** para apoyar la transcripción.
    Los campos ilegibles quedan vacíos; un importe ausente nunca se convierte
    en cero. Revisar especialmente HBL/MBL, fechas, cargos, WR y total.
-5. Confirmar la revisión, generar la vista previa y descargar el PDF.
+5. Confirmar la revisión y seleccionar **Visualizar PDF** para abrirlo en otra
+   pestaña, o **Descargar PDF** para guardarlo en el dispositivo. Si el navegador
+   bloquea la pestaña, permitir ventanas emergentes para el ERP o usar la descarga.
 6. **Guardar documento** agrega una versión al historial. Abrir una versión y
    guardar cambios crea otra versión, conservando la anterior. El historial
    muestra las 100 versiones más recientes; no modifica cuentas por cobrar.
