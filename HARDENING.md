@@ -10051,7 +10051,7 @@ Agregar una entrada por fix:
 
 ### 2026-10-12 - UX-069 - Formato seleccionado de fechas en factura manual y PDF
 
-- Estado: implementado y validado localmente; publicación pendiente. UAT
+- Estado: implementado, validado localmente y publicado en Production. UAT
   autenticada con guardado/historial en Production continúa pendiente.
 - Hallazgo: el selector solo cambiaba la interpretación de fechas del OCR;
   el PDF imprimía siempre DD/MM/YYYY y el formato no se guardaba con la factura.
@@ -10083,7 +10083,7 @@ Agregar una entrada por fix:
     persistencia/restauración mediante API simulada y JSON; rechazo de metadata
     inválida; OCR conserva el formato seleccionado; fechas calendario sin cambios.
   - TypeScript y ESLint de archivos afectados OK. Build local OK, 82/82 páginas.
-    Postflight se registra al concluir.
+    Build remoto OK, TypeScript correcto y 82/82 páginas generadas.
   - Dos PDFs ficticios rasterizados e inspeccionados: emisión 12 de octubre =
     10/12/2026 (MM/DD) o 12/10/2026 (DD/MM); vencimiento 5 de noviembre =
     11/05/2026 o 05/11/2026. Flechas y número destacado visibles.
@@ -10091,4 +10091,11 @@ Agregar una entrada por fix:
   autenticada de persistencia real. Inputs date conservan el calendario nativo
   del navegador, con una indicación explícita del formato usado en el PDF.
   Sin documentos de prueba en Production ni envíos a servicios OCR externos.
-- Commit: hash disponible después de crear el commit funcional.
+- Commit funcional: `d193f1b`; postflight en commit documental posterior.
+  Commits locales en esta sesión.
+- Publicación: `dpl_D7GuqNHq7JkuQtv81E9uq821BMo6`, Production `READY`.
+  URL inmutable:
+  `https://sarierp-1a21wev2j-claudherhn-5641s-projects.vercel.app`.
+  En `sari.forwarders.app`: login 200, factura manual 307 al login,
+  ambas API 401 JSON sin sesión; workers/core/modelo OCR 200 y checksum del
+  modelo correcto. Estos checks no sustituyen el recorrido autenticado.
