@@ -9941,7 +9941,7 @@ Agregar una entrada por fix:
 
 ### 2026-10-12 - UX-067 - OCR gratuito en el navegador para facturas SARI USA
 
-- Estado: implementado y validado localmente; publicación en curso, pendiente
+- Estado: implementado, validado localmente y publicado en Production; pendiente
   UAT autenticada de guardar/historial y aprobación visual del PDF. El usuario
   autorizó integrar Tesseract.js y PDF.js tras indicar que no dispone de saldo
   para la API. No se declara completado el recorrido operativo.
@@ -10003,5 +10003,19 @@ Agregar una entrada por fix:
     descarga motor/modelo. No se certifica exactitud OCR sin revisión humana.
   - Verificar móvil/teclado y recorrido autenticado completo de edición,
     generación, guardado e historial; la prueba Chrome usa un harness local.
-  - Publicación y HTTP de recursos/rutas se registran al concluir. Hash del
-    commit funcional pendiente hasta crear el commit.
+  - Pendiente UAT con documentos reales y sesión autorizada; las comprobaciones
+    HTTP siguientes verifican disponibilidad y protección, no el flujo autenticado.
+- Publicación y postflight (12/10/2026):
+  - Commit funcional: `2a1f47e`; registro postflight en commit documental posterior.
+    Los commits permanecen locales en esta sesión.
+  - Vercel Production: `dpl_HQkChWLhuXFFyr7FQAv8vHzkhmCQ`, estado `READY`.
+    Build remoto, prebuild de assets y TypeScript OK; 82/82 páginas generadas.
+    URL inmutable:
+    `https://sarierp-f2bpfr2qk-claudherhn-5641s-projects.vercel.app`.
+  - En `https://sari.forwarders.app`: `/login` = 200; `/manual-invoices` = 307
+    al login; `/api/manual-invoices` y `/api/manual-invoices/ocr` = 401 JSON
+    sin sesión. Workers Tesseract/PDF.js y core relaxed-SIMD LSTM JS/WASM = 200,
+    con tipos JavaScript/WebAssembly correctos.
+  - Modelo inglés servido = 200, 2,952,873 bytes; SHA-256 idéntico al modelo
+    versionado: `45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91`.
+    Verificación HTTPS con certificados de Windows y TLS activo.

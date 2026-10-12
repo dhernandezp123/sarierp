@@ -76,6 +76,9 @@ el cupo diario de la API OCR anterior.
 
 ## Validación y pendientes
 
+Publicado en `https://sari.forwarders.app/manual-invoices` el 12/10/2026.
+Build remoto correcto y recursos OCR verificados en el dominio de Production.
+
 Los resultados de pruebas, verificaciones de navegador y publicación se
 registran en `HARDENING.md`, UX-066 y UX-067. No se insertan documentos de prueba
 en Production ni se envían originales a OpenAI durante estas verificaciones.
