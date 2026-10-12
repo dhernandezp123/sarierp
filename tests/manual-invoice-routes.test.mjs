@@ -37,8 +37,14 @@ test('save API rejects incomplete documents and derives total before insert', as
   const incomplete = await POST(new Request('https://sari.forwarders.app/api/manual-invoices', { method: 'POST', headers: headers(), body: JSON.stringify(blankManualInvoice()) }))
   assert.equal(incomplete.status, 400); assert.equal(saved.length, 0)
   const data = { ...blankManualInvoice(), invoice_number: '131326', bill_to_name: 'Client', items: [{ description: 'Freight', amount: '3300.00' }], total: 1, tenant_id: 'evil' }
-  const response = await POST(new Request('https://sari.forwarders.app/api/manual-invoices', { method: 'POST', headers: headers(), body: JSON.stringify(data) }))
-  assert.equal(response.status, 201); assert.equal(response.headers.get('cache-control'), 'no-store')
+  for (const date_format of ['mdy', 'dmy']) {
+    const response = await POST(new Request('https://sari.forwarders.app/api/manual-invoices', { method: 'POST', headers: headers(), body: JSON.stringify({ ...data, date_format }) }))
+    assert.equal(response.status, 201); assert.equal(response.headers.get('cache-control'), 'no-store')
+    assert.equal(saved.at(-1).data.date_format, date_format)
+    assert.equal((await response.json()).document.data.date_format, date_format)
+  }
+  const invalid = await POST(new Request('https://sari.forwarders.app/api/manual-invoices', { method: 'POST', headers: headers(), body: JSON.stringify({ ...data, date_format: 'unexpected' }) }))
+  assert.equal(invalid.status, 400); assert.equal(saved.length, 2)
   assert.equal(saved[0].total, 3300); assert.equal(saved[0].tenant_id, tenant.id); assert.equal(saved[0].created_by, 'user-1')
 })
 

@@ -10048,3 +10048,47 @@ Agregar una entrada por fix:
   ambas API del módulo 401 JSON sin sesión; workers/core/modelo OCR 200
   y SHA-256 del modelo coincide con el versionado. Sin datos de prueba
   insertados ni originales enviados a proveedores.
+
+### 2026-10-12 - UX-069 - Formato seleccionado de fechas en factura manual y PDF
+
+- Estado: implementado y validado localmente; publicación pendiente. UAT
+  autenticada con guardado/historial en Production continúa pendiente.
+- Hallazgo: el selector solo cambiaba la interpretación de fechas del OCR;
+  el PDF imprimía siempre DD/MM/YYYY y el formato no se guardaba con la factura.
+  Reproducido antes del fix con una prueba del renderer real: MM/DD fallaba
+  al imprimir 12/10/2026 en lugar de 10/12/2026 para el 12 de octubre.
+- Archivos: `src/lib/manual-invoice.ts`, `src/lib/manual-invoice-ocr-parser.ts`,
+  `src/components/invoicing/ManualInvoiceEditor.tsx`,
+  `src/components/pdf/manual-invoice-pdf.tsx`,
+  `tests/manual-invoice.test.mjs`, `tests/manual-invoice-pdf.test.mjs`,
+  `tests/manual-invoice-routes.test.mjs`, `tests/manual-invoice-browser-ocr.test.mjs`,
+  `docs/manual-sari-usa-invoices.md`, esta bitácora.
+- SQL: sin cambios. El formato usa `date_format` en el JSON existente;
+  el trigger vigente conserva las propiedades adicionales del documento.
+  Fechas calendario, totales, políticas y grants conservan sus reglas.
+- Cambios:
+  - Un único formato guardado (`mdy` / `dmy`) gobierna OCR y PDF de la factura.
+    Validación rechaza opciones inválidas. Fechas internas continúan siendo ISO;
+    cambiar el formato cambia la presentación, no el día/mes ingresados.
+  - Nuevas facturas usan MM/DD; versiones antiguas sin metadata conservan DD/MM
+    al abrirse. No se reescriben versiones históricas ni fechas existentes.
+  - El formato participa en el snapshot: cambiarlo exige revisión, marca cambios
+    por guardar e invalida la vista previa anterior. Carga de archivo conserva
+    la selección; abrir historial restaura la selección de esa versión.
+  - Selector explícito «Formato de fechas (OCR y PDF)» y texto bajo las fechas
+    con su presentación en PDF; instrucciones para volver a leer el original
+    si se desea reinterpretar sus fechas. Formato general del ERP sin cambios.
+- Validaciones:
+  - Suite completa 188/188: PDF real en ambos formatos y fallback histórico;
+    persistencia/restauración mediante API simulada y JSON; rechazo de metadata
+    inválida; OCR conserva el formato seleccionado; fechas calendario sin cambios.
+  - TypeScript y ESLint de archivos afectados OK. Build local OK, 82/82 páginas.
+    Postflight se registra al concluir.
+  - Dos PDFs ficticios rasterizados e inspeccionados: emisión 12 de octubre =
+    10/12/2026 (MM/DD) o 12/10/2026 (DD/MM); vencimiento 5 de noviembre =
+    11/05/2026 o 05/11/2026. Flechas y número destacado visibles.
+- Riesgos / pendiente: la prueba de API usa Supabase simulado; no acredita UAT
+  autenticada de persistencia real. Inputs date conservan el calendario nativo
+  del navegador, con una indicación explícita del formato usado en el PDF.
+  Sin documentos de prueba en Production ni envíos a servicios OCR externos.
+- Commit: hash disponible después de crear el commit funcional.

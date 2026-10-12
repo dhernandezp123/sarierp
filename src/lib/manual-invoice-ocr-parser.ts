@@ -1,9 +1,9 @@
-import { manualInvoiceFields, manualInvoiceCents, validateManualInvoice, type ManualInvoiceData, type ManualInvoiceField } from './manual-invoice'
+import { manualInvoiceFields, manualInvoiceCents, validateManualInvoice, type ManualInvoiceData, type ManualInvoiceDateOrder, type ManualInvoiceField } from './manual-invoice'
 import { parseDateValue } from './format'
 
 export type InvoiceOcrWord = { text: string; x: number; y: number; width: number; height: number; confidence?: number }
 export type InvoiceOcrPage = { width: number; height: number; words: InvoiceOcrWord[] }
-export type InvoiceDateOrder = 'mdy' | 'dmy'
+export type InvoiceDateOrder = ManualInvoiceDateOrder
 type Row = { y: number; height: number; words: InvoiceOcrWord[]; text: string }
 const labels: Partial<Record<ManualInvoiceField, RegExp>> = {
   invoice_number: /\bInvoice\s*[#№:]\s*:?/i, issue_date: /\bDate\s*:/i, due_date: /\bDue\s*date\s*:/i,
@@ -66,11 +66,11 @@ export function invoiceOcrDate(value: string, order: InvoiceDateOrder) {
 export function parseInvoiceOcr(pages: InvoiceOcrPage[], dateOrder: InvoiceDateOrder = 'mdy') {
   // OCR must never fill unreadable fields with the manual form's default/example values.
   const data = Object.fromEntries(manualInvoiceFields.map(([key]) => [key, ''])) as Record<ManualInvoiceField, string>
-  const result: ManualInvoiceData = { ...data, items: [], warehouse_receipts: [] }
+  const result: ManualInvoiceData = { ...data, date_format: dateOrder, items: [], warehouse_receipts: [] }
   const warnings: string[] = []
   const allRows = pages.map(invoiceOcrRows)
   const text = allRows.map((rows) => rows.map((r) => r.text).join('\n')).join('\n\n').slice(0, 100_000)
-  const empty = () => ({ data: { ...data, items: [], warehouse_receipts: [] } as ManualInvoiceData, source_total: '', warnings, text })
+  const empty = () => ({ data: { ...data, date_format: dateOrder, items: [], warehouse_receipts: [] } as ManualInvoiceData, source_total: '', warnings, text })
   const headerBottom = allRows[0]?.find((row) => billLabel.test(row.text))?.y ?? (pages[0]?.height ?? 0) * 0.2
   const header = (allRows[0] ?? []).filter((row) => row.y < headerBottom).map((row) => row.text).join(' ')
   if (!/\bSAR[I1]\b/i.test(header) || !/\bINVOICE\b/i.test(text)) {

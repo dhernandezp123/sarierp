@@ -37,6 +37,23 @@ test('strict fields and calendar dates reject malformed provider or direct reque
   assert.equal(invoice.validateManualInvoice({ ...complete(), issue_date: '2028-02-29' }).issue_date, '2028-02-29')
 })
 
+test('invoice date format survives validation while old versions preserve DD/MM', () => {
+  assert.equal(invoice.blankManualInvoice().date_format, 'mdy')
+  for (const date_format of ['mdy', 'dmy']) {
+    const restored = invoice.validateManualInvoice(JSON.parse(JSON.stringify({ ...complete(), date_format })))
+    assert.equal(restored.date_format, date_format)
+    assert.equal(restored.issue_date, '2026-09-28')
+    assert.equal(invoice.formatManualInvoiceDate(restored.issue_date, date_format), date_format === 'mdy' ? '09/28/2026' : '28/09/2026')
+  }
+  const legacy = complete(); delete legacy.date_format
+  assert.equal(invoice.validateManualInvoice(legacy).date_format, 'dmy')
+  for (const date_format of ['YYYY/MM/DD', '', null, 12, {}]) {
+    assert.throws(() => invoice.validateManualInvoice({ ...complete(), date_format }), /Selecciona/)
+  }
+  assert.equal(invoice.formatManualInvoiceDate('2028-02-29', 'mdy'), '02/29/2028')
+  assert.equal(invoice.formatManualInvoiceDate('2026-02-30', 'mdy'), '')
+})
+
 test('large documents paginate all charges and WR references without dropping data', () => {
   const data = { ...complete(), items: Array.from({ length: 40 }, (_, i) => ({ description: `${i}-` + 'W'.repeat(170), amount: '12.00' })), warehouse_receipts: Array.from({ length: 200 }, (_, i) => String(i)) }
   const pages = invoice.manualInvoicePrintPages(data)

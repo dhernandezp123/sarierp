@@ -1,4 +1,4 @@
-import { parseDateValue, toMiamiDateInputValue } from './format'
+import { formatDate, parseDateValue, toMiamiDateInputValue } from './format'
 
 export const MANUAL_INVOICE_PATH = '/manual-invoices'
 export const MANUAL_INVOICE_ROLES = ['Admin', 'Operaciones', 'Finanzas', 'Contabilidad']
@@ -18,8 +18,10 @@ export const manualInvoiceFields = [
 ] as const
 
 export type ManualInvoiceField = typeof manualInvoiceFields[number][0]
+export type ManualInvoiceDateOrder = 'mdy' | 'dmy'
 export type ManualInvoiceItem = { description: string; amount: string }
 export type ManualInvoiceData = Record<ManualInvoiceField, string> & {
+  date_format: ManualInvoiceDateOrder
   items: ManualInvoiceItem[]
   warehouse_receipts: string[]
 }
@@ -29,9 +31,16 @@ export type SavedManualInvoice = {
 
 export function blankManualInvoice(): ManualInvoiceData {
   const fields = Object.fromEntries(manualInvoiceFields.map(([key]) => [key, ''])) as Record<ManualInvoiceField, string>
-  return { ...fields, issue_date: toMiamiDateInputValue(), due_date: toMiamiDateInputValue(),
+  return { ...fields, date_format: 'mdy', issue_date: toMiamiDateInputValue(), due_date: toMiamiDateInputValue(),
     shipper: 'SARI EXPRESS CONSOLIDATORS', origin: 'PORT EVERGLADES, FL', destination: 'PUERTO CORTES/HONDURAS',
     charges_term: 'COLLECT', items: [{ description: '', amount: '' }], warehouse_receipts: [] }
+}
+
+/** Standalone SARI PDFs use their saved format; other ERP documents keep DD/MM. */
+export function formatManualInvoiceDate(value: string, order: ManualInvoiceDateOrder = 'dmy'): string {
+  if (order === 'dmy') return formatDate(value, '')
+  const date = parseDateValue(value)
+  return date ? date.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : ''
 }
 
 /** USD strings are kept as strings while editing; totals are calculated in cents. */
@@ -49,6 +58,9 @@ export function manualInvoiceTotal(data: ManualInvoiceData): number {
 export function validateManualInvoice(value: unknown, requireComplete = true): ManualInvoiceData {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('La factura no es válida.')
   const source = value as Record<string, unknown>
+  // Older saved invoices printed DD/MM and must keep that format when reopened.
+  const date_format = source.date_format === undefined ? 'dmy' : source.date_format
+  if (date_format !== 'mdy' && date_format !== 'dmy') throw new Error('Selecciona MM/DD/YYYY o DD/MM/YYYY para las fechas de la factura.')
   const fields = {} as Record<ManualInvoiceField, string>
   for (const [key, label, max] of manualInvoiceFields) {
     if (typeof source[key] !== 'string' || source[key].length > max || /[\u0000-\u001f\u007f]/.test(source[key])) {
@@ -81,7 +93,7 @@ export function validateManualInvoice(value: unknown, requireComplete = true): M
     || source.warehouse_receipts.some((wr) => typeof wr !== 'string' || wr.length > 40 || /[\u0000-\u001f\u007f]/.test(wr))) {
     throw new Error('Revisa los WR: hasta 200 referencias de 40 caracteres.')
   }
-  return { ...fields, items, warehouse_receipts: source.warehouse_receipts.map((wr: string) => wr.trim()).filter(Boolean) }
+  return { ...fields, date_format, items, warehouse_receipts: source.warehouse_receipts.map((wr: string) => wr.trim()).filter(Boolean) }
 }
 
 export type ManualInvoicePrintRow = { description: string; amount: string; wr?: boolean }

@@ -8,10 +8,9 @@ import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs'
 import { cardClass, fieldClassSm, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { formatDateTime, formatMoney } from '@/src/lib/format'
-import type { InvoiceDateOrder } from '@/src/lib/manual-invoice-ocr-parser'
 import type { OcrProgress } from '@/src/lib/browser/manual-invoice-ocr'
-import { blankManualInvoice, MANUAL_INVOICE_MAX_BYTES, MANUAL_INVOICE_MIMES, manualInvoiceCents, manualInvoiceFields,
-  manualInvoiceFileName, manualInvoiceTotal, validateManualInvoice, type ManualInvoiceData, type ManualInvoiceField, type SavedManualInvoice } from '@/src/lib/manual-invoice'
+import { blankManualInvoice, formatManualInvoiceDate, MANUAL_INVOICE_MAX_BYTES, MANUAL_INVOICE_MIMES, manualInvoiceCents, manualInvoiceFields,
+  manualInvoiceFileName, manualInvoiceTotal, validateManualInvoice, type ManualInvoiceData, type ManualInvoiceDateOrder, type ManualInvoiceField, type SavedManualInvoice } from '@/src/lib/manual-invoice'
 
 async function readResponse(response: Response) {
   const body = await response.json()
@@ -24,7 +23,6 @@ export function ManualInvoiceEditor() {
   const [file, setFile] = useState<File | null>(null)
   const [sourceUrl, setSourceUrl] = useState('')
   const [preview, setPreview] = useState<{ url: string; snapshot: string } | null>(null)
-  const [dateOrder, setDateOrder] = useState<InvoiceDateOrder>('mdy')
   const [ocrProgress, setOcrProgress] = useState<OcrProgress>({ message: '', percent: 0 })
   const [recognizedText, setRecognizedText] = useState('')
   const scanController = useRef<AbortController | null>(null)
@@ -84,7 +82,7 @@ export function ManualInvoiceEditor() {
     if (!MANUAL_INVOICE_MIMES.includes(selected.type) || selected.size <= 0 || selected.size > MANUAL_INVOICE_MAX_BYTES) {
       toast.error('Selecciona un PDF, JPG, PNG o WEBP de hasta 3 MB.'); return
     }
-    replaceDocument(() => { reset(); setFile(selected); setSourceUrl(URL.createObjectURL(selected)) })
+    replaceDocument(() => { reset(); setData({ ...blankManualInvoice(), date_format: data.date_format }); setFile(selected); setSourceUrl(URL.createObjectURL(selected)) })
   }
   async function scan() {
     if (!file || busy) return
@@ -95,7 +93,7 @@ export function ManualInvoiceEditor() {
     try {
       const { readInvoiceInBrowser } = await import('@/src/lib/browser/manual-invoice-ocr')
       if (controller.signal.aborted) return
-      const body = await readInvoiceInBrowser(file, dateOrder, setOcrProgress, controller.signal)
+      const body = await readInvoiceInBrowser(file, data.date_format, setOcrProgress, controller.signal)
       if (controller.signal.aborted) return
       const extracted = validateManualInvoice(body.data, false)
       setRecognizedText(body.text); setWarnings(body.warnings)
@@ -162,6 +160,7 @@ export function ManualInvoiceEditor() {
       <input type={isDate ? 'date' : 'text'} value={data[key]} maxLength={definition[2]} disabled={Boolean(busy)}
         onChange={(event) => change({ ...data, [key]: event.target.value })}
         className={`${fieldClassSm} !border-amber-300 !bg-amber-50 dark:!border-amber-700 dark:!bg-amber-950/30`} />
+      {isDate && data[key] && <span className="block text-xs text-slate-500">En el PDF: {formatManualInvoiceDate(data[key], data.date_format)}</span>}
     </label>
   }
   const section = (title: string, fields: ManualInvoiceField[]) => <fieldset className={cardClass}>
@@ -191,13 +190,14 @@ export function ManualInvoiceEditor() {
           <p className="mb-4 text-sm text-slate-500">PDF o foto (JPG, PNG, WEBP), hasta 3 MB y 5 páginas de una sola factura. La lectura gratuita se realiza en tu dispositivo. El original se usa para comparar y no se guarda en el historial.</p>
           <div className="flex flex-wrap items-end gap-3"><label className="min-w-0 flex-1 space-y-1 text-sm font-medium"><span className="block">Factura original</span>
             <input ref={fileInput} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={Boolean(busy)} className={`${fieldClassSm} h-auto py-2`} onChange={(event) => selectFile(event.target.files?.[0])} /></label>
-            <label className="space-y-1 text-sm font-medium"><span className="block">Fechas del original</span><select value={dateOrder} disabled={Boolean(busy)} onChange={(event) => setDateOrder(event.target.value as InvoiceDateOrder)} className={fieldClassSm}>
+            <label className="space-y-1 text-sm font-medium"><span className="block">Formato de fechas (OCR y PDF)</span><select value={data.date_format} disabled={Boolean(busy)} onChange={(event) => change({ ...data, date_format: event.target.value as ManualInvoiceDateOrder })} className={fieldClassSm}>
               <option value="mdy">MM/DD/YYYY · SARI USA</option><option value="dmy">DD/MM/YYYY</option>
             </select></label>
             <button className={`${primaryButtonClass} flex items-center gap-2`} disabled={!file || Boolean(busy)} onClick={() => dirty ? setPendingAction(() => () => { void scan() }) : void scan()}>
               {busy === 'ocr' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileScan className="h-4 w-4" />} {busy === 'ocr' ? 'Leyendo…' : 'Leer con OCR'}</button>
             {busy === 'ocr' && <button className={secondaryButtonClass} onClick={() => scanController.current?.abort()}>Cancelar lectura</button>}
           </div>
+          <p className="mt-2 text-sm text-slate-500">El formato se guarda con la factura y se aplica al PDF. Cambiarlo conserva las fechas ingresadas; para reinterpretar el original, vuelve a leerlo con OCR.</p>
           {file && <p className="mt-2 break-all text-sm">Archivo cargado: {file.name}</p>}
           {busy === 'ocr' ? <div className="mt-3 space-y-1"><p role="status" className="text-sm">{ocrProgress.message} {ocrProgress.percent}%</p><progress aria-label="Progreso de lectura" className="h-2 w-full" max={100} value={ocrProgress.percent} /></div>
             : <p className="mt-3 text-sm text-slate-500">OCR gratuito, sin clave API ni saldo. La primera lectura puede tardar mientras se prepara el lector. Revisa siempre los resultados.</p>}

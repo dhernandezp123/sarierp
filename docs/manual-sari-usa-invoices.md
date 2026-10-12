@@ -8,8 +8,11 @@ Disponible para Admin, Operaciones, Finanzas y Contabilidad de Sari.
 1. Cargar una sola factura en PDF, JPG, PNG o WEBP de hasta 3 MB. El lector
    admite hasta 5 páginas de una factura. También se puede completar el
    formulario sin archivo. Para Word, exportar primero a PDF.
-2. Elegir el formato de las fechas del original: MM/DD/YYYY para SARI USA;
-   DD/MM/YYYY para documentos regenerados por este ERP.
+2. Elegir **Formato de fechas (OCR y PDF)**: MM/DD/YYYY para SARI USA o
+   DD/MM/YYYY. Se aplica tanto a la lectura del original como al PDF generado,
+   incluso al completar la factura manualmente, y se guarda con cada versión.
+   Cambiarlo conserva el día/mes ingresados; para reinterpretar el original,
+   volver a leer con OCR. Bajo cada fecha se muestra cómo aparecerá en el PDF.
 3. Seleccionar **Leer con OCR**. La lectura gratuita se realiza en el dispositivo,
    con progreso y **Cancelar lectura**. La primera lectura descarga el motor y
    el modelo de idioma desde nuestra propia aplicación. No requiere clave API,
@@ -27,7 +30,9 @@ El PDF reconstruye la plantilla en papel Letter: logotipo extraído del Word
 aportado, encabezado SARI USA, recuadros, cargos, WR, total y Remarks fijos.
 No incorpora resaltados. Los documentos extensos continúan en otras páginas
 con el encabezado repetido y el total al final. Las fechas del PDF generado
-se muestran DD/MM/YYYY y los importes en USD. El total se deriva de los cargos,
+respetan el formato seleccionado y los importes se muestran en USD. Las
+versiones antiguas sin formato guardado conservan DD/MM/YYYY al abrirse;
+las nuevas usan MM/DD/YYYY de forma predeterminada. El total se deriva de los cargos,
 con precisión de centavos, y se compara con el total leído cuando es legible.
 
 El original y el texto reconocido permanecen solo en memoria del navegador.

@@ -1,6 +1,5 @@
 import { Document, Image as PdfImage, Page, Polygon, StyleSheet, Svg, Text, View, pdf } from '@react-pdf/renderer'
-import { formatDate } from '@/src/lib/format'
-import { MANUAL_INVOICE_REMARKS, manualInvoiceCents, manualInvoicePrintPages, manualInvoiceTotal, type ManualInvoiceData } from '@/src/lib/manual-invoice'
+import { MANUAL_INVOICE_REMARKS, formatManualInvoiceDate, manualInvoiceCents, manualInvoicePrintPages, manualInvoiceTotal, type ManualInvoiceData } from '@/src/lib/manual-invoice'
 
 const s = StyleSheet.create({
   page: { fontFamily: 'Helvetica', fontSize: 8, color: '#111', padding: 32, minHeight: 792 },
@@ -52,10 +51,10 @@ export function ManualInvoicePdf({ data, logo }: { data: ManualInvoiceData; logo
       </View>
       <View style={[s.box, s.invoice]}>
         <Detail label="Invoice #:" value={data.invoice_number} prominent />
-        <Detail label="Date:" value={formatDate(data.issue_date, '')} dense />
+        <Detail label="Date:" value={formatManualInvoiceDate(data.issue_date, data.date_format)} dense />
         <Detail label="File #:" value={data.file_number} dense />
         <Detail label="Cust. Ref.:" value={data.customer_reference} dense />
-        <Detail label="Due date:" value={formatDate(data.due_date, '')} dense />
+        <Detail label="Due date:" value={formatManualInvoiceDate(data.due_date, data.date_format)} dense />
       </View>
       <View style={[s.box, s.leftDetails]}>
         <Detail label="Shipper:" value={data.shipper} />

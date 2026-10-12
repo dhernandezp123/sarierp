@@ -42,6 +42,7 @@ test('browser parser separates SARI columns, WR and totals without a provider', 
   assert.equal(result.data.bill_to_city, 'SAN PEDRO SULA, HONDURAS')
   assert.equal(result.data.issue_date, '2026-09-28')
   assert.equal(result.data.due_date, '2026-09-28')
+  assert.equal(result.data.date_format, 'mdy')
   assert.equal(result.data.hbl, 'HBL-87574')
   assert.equal(result.data.carrier, 'SERVIPORT MARINE SOLUTIONS, LLC')
   assert.equal(result.data.weight_lb, '44,984')
@@ -58,6 +59,7 @@ test('date order is explicit and impossible or OCR-corrupted dates stay empty', 
   assert.equal(invoiceOcrDate('02/30/2026', 'mdy'), '')
   assert.equal(invoiceOcrDate('O9/28/2026', 'mdy'), '')
   assert.equal(parseInvoiceOcr([example()], 'dmy').data.issue_date, '')
+  assert.equal(parseInvoiceOcr([example()], 'dmy').data.date_format, 'dmy')
 })
 
 test('frame punctuation does not pollute totals and charges cannot overwrite header fields', () => {

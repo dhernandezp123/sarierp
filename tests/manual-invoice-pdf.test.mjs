@@ -76,3 +76,22 @@ test('maximum field lengths fit inside their template boxes', async () => {
   assert.ok(checkedTextNodes > 20, 'Inspect actual text layout, not just outer boxes')
   assert.deepEqual(overflow, [])
 })
+
+test('printed issue and due dates respect the selected format after saving and reopening', async () => {
+  const { validateManualInvoice } = loadTs('src/lib/manual-invoice.ts')
+  for (const [date_format, expected] of [['mdy', ['10/12/2026', '11/05/2026']], ['dmy', ['12/10/2026', '05/11/2026']], [undefined, ['12/10/2026', '05/11/2026']]]) {
+    const saved = JSON.parse(JSON.stringify({ ...data, date_format, issue_date: '2026-10-12', due_date: '2026-11-05' }))
+    const reopened = validateManualInvoice(saved)
+    let layout
+    await renderer.pdf(React.cloneElement(ManualInvoicePdf({ data: reopened, logo }), { onRender: (result) => { layout = result._INTERNAL__LAYOUT__DATA_ } })).toBlob()
+    const printed = []
+    const collect = (node) => {
+      if (node.type === 'TEXT') printed.push(...(node.lines ?? []).map((line) => line.string))
+      for (const child of node.children ?? []) collect(child)
+    }
+    collect(layout)
+    for (const value of expected) assert.ok(printed.includes(value), `Missing printed ${value} for ${date_format}`)
+    assert.equal(reopened.issue_date, '2026-10-12')
+    assert.equal(reopened.due_date, '2026-11-05')
+  }
+})
