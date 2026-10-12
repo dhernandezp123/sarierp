@@ -10132,3 +10132,23 @@ Agregar una entrada por fix:
   Alias `sari.forwarders.app` resuelve a este despliegue. Login 200; factura
   manual 307 al login; ambas API 401 JSON sin sesión; assets OCR 200 y checksum
   del modelo correcto. No se comprobó el editor con sesión autenticada.
+
+### 2026-10-12 - UX-071 - Título INVOICE y ancho de cuadros izquierdos
+
+- Estado: implementado y validado visualmente en PDF real; publicación pendiente.
+- Hallazgo: INVOICE se imprimía con Helvetica regular; Bill to tenía 286 pt
+  de ancho frente a los 271 pt del cuadro inferior de embarque, desalineando
+  sus bordes derechos en la columna izquierda.
+- Archivos: `src/components/pdf/manual-invoice-pdf.tsx`, esta bitácora.
+  SQL: sin cambios.
+- Cambios: título INVOICE en Helvetica-Bold; Bill to con 271 pt de ancho,
+  igual al cuadro inferior y con el mismo margen izquierdo de 32 pt.
+- Validaciones: pruebas existentes del renderer 4/4 (paginación, límites de
+  campos y fechas en ambos formatos); TypeScript OK. PDF de ejemplo generado,
+  rasterizado con PDF.js e inspeccionado: título en negrita y bordes izquierdos/
+  derechos alineados. ESLint afectado y build local OK, 82/82 páginas.
+  Postflight se registra al concluir.
+- Riesgos / pendiente: UAT autenticada general permanece pendiente; esta
+  validación comprueba la plantilla generada. No se escriben datos ni se
+  envían documentos de prueba a proveedores.
+- Commit: hash disponible después de crear el commit funcional.
