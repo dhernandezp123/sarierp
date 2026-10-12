@@ -10022,8 +10022,8 @@ Agregar una entrada por fix:
 
 ### 2026-10-12 - UX-068 - Flechas y número destacado en PDF de factura manual
 
-- Estado: ajuste implementado y validado visualmente en PDF real; publicación
-  pendiente de las comprobaciones de compilación y despliegue.
+- Estado: ajuste implementado, validado visualmente en PDF real y publicado
+  en Production; postflight de disponibilidad y acceso correcto.
 - Hallazgo: Helvetica no imprime los caracteres de flecha del indicador PAGE;
   el número de factura tenía el mismo tamaño y peso que los demás valores.
 - Archivos: `src/components/pdf/manual-invoice-pdf.tsx`, esta bitácora.
@@ -10036,7 +10036,15 @@ Agregar una entrada por fix:
   de campos sin recorte/desbordamiento; TypeScript y ESLint afectado OK.
   PDF de ejemplo generado localmente, rasterizado con PDF.js e inspeccionado:
   ambas flechas visibles y número 131326 grande/negrita, sin solapamientos.
-  Build local OK, 82/82 páginas; postflight se registra al terminar.
+  Build local OK, 82/82 páginas; build remoto y TypeScript también correctos.
 - Riesgos / pendiente: UAT autenticada general de UX-066/067 continúa pendiente;
   esta inspección valida el PDF generado, no el recorrido de guardado/historial.
-- Commit: hash disponible después de crear el commit funcional.
+- Commit funcional: `a753301`; postflight en commit documental posterior.
+  Commits locales en esta sesión.
+- Publicación: `dpl_2iyzKAD9gYhjV7ven4HqzT8SiGNr`, Production `READY`.
+  URL inmutable:
+  `https://sarierp-87qibzlsc-claudherhn-5641s-projects.vercel.app`.
+  Dominio `sari.forwarders.app`: login 200, factura manual 307 hacia login,
+  ambas API del módulo 401 JSON sin sesión; workers/core/modelo OCR 200
+  y SHA-256 del modelo coincide con el versionado. Sin datos de prueba
+  insertados ni originales enviados a proveedores.
