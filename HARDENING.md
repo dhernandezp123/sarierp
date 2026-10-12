@@ -9793,8 +9793,9 @@ Agregar una entrada por fix:
 
 - Estado: implementado, validado y publicado en Production tras autorización
   de configurar el servidor; migración aplicada y captura manual/PDF/historial
-  disponibles. Clave y activación OCR configuradas; OpenAI rechaza la lectura
-  por saldo agotado. Pendiente recarga, lectura real exitosa y UAT autenticada.
+  disponibles. La opción de OpenAI quedó bloqueada por saldo agotado y fue
+  sustituida en la interfaz por el lector gratuito de UX-067. Pendiente UAT
+  autenticada y aprobación visual del documento final.
   No se declara completado el flujo operativo.
 - Hallazgo / necesidad: no existía un módulo para leer PDF/fotos de facturas
   SARI USA, corregir los campos del ejemplo y regenerar documentos independientes
@@ -9866,8 +9867,8 @@ Agregar una entrada por fix:
     por lo que no se certifica revisión visual en navegador.
   - Los intentos fallidos consumen el cupo OCR; la lectura requiere revisión
     humana. El costo y retención del proveedor deben configurarse en su cuenta.
-  - La lectura OCR continúa pendiente por saldo agotado de OpenAI
-    (`credit_balance_exhausted`), confirmado después de agregar la clave.
+  - El saldo agotado de OpenAI (`credit_balance_exhausted`) impide usar esa
+    opción anterior; no afecta al lector local gratuito agregado en UX-067.
 - Configuración Production autorizada el 12/10/2026:
   - Proyecto Supabase `sarierp`, ref `fwspgdzvlbtbgiupvrzo`.
   - Prerrequisitos verificados: helpers de tenant, aprobación y rol; dominio
@@ -9937,3 +9938,70 @@ Agregar una entrada por fix:
     `/api/manual-invoices/ocr` 401 JSON sin sesión. No se realizó UAT autenticada
     ni una lectura exitosa en Production. El bloqueo de saldo se comprobó con
     la clave local; en Vercel solo se verificó presencia del secreto.
+
+### 2026-10-12 - UX-067 - OCR gratuito en el navegador para facturas SARI USA
+
+- Estado: implementado y validado localmente; publicación en curso, pendiente
+  UAT autenticada de guardar/historial y aprobación visual del PDF. El usuario
+  autorizó integrar Tesseract.js y PDF.js tras indicar que no dispone de saldo
+  para la API. No se declara completado el recorrido operativo.
+- Hallazgo: la opción de OpenAI impedía leer documentos sin créditos, aun con
+  clave y límites Free configurados. Se necesita lectura sin cargos por API.
+- Archivos:
+  - `src/lib/browser/manual-invoice-ocr.ts`.
+  - `src/lib/manual-invoice-ocr-parser.ts`.
+  - `src/components/invoicing/ManualInvoiceEditor.tsx`.
+  - `src/proxy.ts`, `tests/manual-invoice-browser-ocr.test.mjs`.
+  - `package.json`, `package-lock.json`, `scripts/sync-invoice-ocr-assets.mjs`.
+  - `public/ocr-assets/NOTICE.md`, `LICENSE.txt`, `lang/eng.traineddata.gz`.
+  - `.gitignore`, `.vercelignore`, `docs/manual-sari-usa-invoices.md`, esta bitácora.
+- SQL: sin cambios. Migración, policies, grants e historial independiente de
+  UX-066 se conservan; no se crean facturas/cuentas por cobrar por leer un archivo.
+- Cambios:
+  - Lectura únicamente en navegador: PDF con texto, PDF escaneado y fotos;
+    imports diferidos, engine en worker, progreso, cancelación y limpieza.
+  - Recursos del motor/modelo/fuentes desde el mismo origen. Predev/prebuild
+    copia los runtimes fijados; modelo inglés versionado con checksum SHA-256.
+    Solo `/ocr-assets/` omite el proxy, por contener archivos públicos de librería.
+    Las rutas de factura/API continúan cubiertas por proxy y autorización/RLS.
+  - Parser por posiciones/etiquetas: cliente y columnas separados, cargos y WR,
+    total impreso, fechas con selector explícito MM/DD o DD/MM. Datos ilegibles
+    vacíos, cero conservado, importes inválidos advertidos y facturas diferentes
+    rechazadas sin combinar cargos. Texto de apoyo solo en memoria, sin ejecutar
+    instrucciones ni scripts del documento.
+  - Límite de 3 MB, 5 páginas, render de hasta 8 millones de píxeles y 3 minutos.
+    La captura manual, revisión obligatoria y PDF SARI USA mantienen sus reglas.
+  - Tesseract.js 7.0.0 y PDF.js 6.2.108 fijados. La versión de PDF.js incorpora
+    el parche de GHSA-hq66-cqwq-w95j; no se habilita scripting/XFA de documentos.
+  - Interfaz sin llamadas a la API de OCR de pago. Variable anterior
+    `MANUAL_INVOICE_OCR_ENABLED=false` en `.env.local` y Vercel Production;
+    credenciales existentes conservadas exclusivamente en el servidor.
+- Validaciones:
+  - Suite Node: 186/186 (9 pruebas nuevas), incluidas columnas, fechas, cargos
+    cero/faltantes, bordes, instrucciones en descripciones, facturas distintas,
+    cancelación tardía, firmas falsas y matcher real de Next para assets/rutas.
+  - TypeScript y ESLint de archivos afectados: OK. Build local: 82/82 páginas.
+  - Chrome headless con perfil aislado y código real del lector: PDF con texto,
+    imagen rasterizada, PDF escaneado y foto inclinada 4° recuperan número,
+    cliente, tres cargos, seis WR y USD 3,845.00; fechas bajo selección DD/MM.
+    Se verificó rechazo de PDF de 6 páginas y cancelación de lectura real.
+  - Imagen/PDF escaneado pueden incluir puntuación de bordes en referencias;
+    foto inclinada no recuperó el total impreso y emitió advertencia. No se
+    inventó ni reemplazó ese total; se conservan cargos calculados y revisión.
+  - Network de página/workers sin peticiones externas del OCR ni a OpenAI.
+    El antivirus local inyectó sus propias peticiones a Kaspersky; se separaron
+    de las del código de la aplicación y no se desactivó la protección.
+  - `npm audit`: sin hallazgos en Tesseract/PDF.js/canvas/wasm; permanecen 15
+    hallazgos previos de otras dependencias, fuera de este cambio.
+  - Dry-run Vercel: 661 archivos, modelo de idioma incluido; sin `.local/`,
+    `.demo-sync/`, `.ua/`, variables `.env` ni runtime generado en el upload.
+    Los workers/wasm se generan mediante prebuild en el servidor de compilación.
+  - Sin envío de originales a proveedores ni inserciones de prueba en Production.
+- Riesgos / pendiente:
+  - Fotos reales con perspectiva, mala iluminación o texto borroso requieren
+    UAT y correcciones. Rendimiento depende del dispositivo; primera carga
+    descarga motor/modelo. No se certifica exactitud OCR sin revisión humana.
+  - Verificar móvil/teclado y recorrido autenticado completo de edición,
+    generación, guardado e historial; la prueba Chrome usa un harness local.
+  - Publicación y HTTP de recursos/rutas se registran al concluir. Hash del
+    commit funcional pendiente hasta crear el commit.

@@ -8,6 +8,8 @@ import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs'
 import { cardClass, fieldClassSm, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { formatDateTime, formatMoney } from '@/src/lib/format'
+import type { InvoiceDateOrder } from '@/src/lib/manual-invoice-ocr-parser'
+import type { OcrProgress } from '@/src/lib/browser/manual-invoice-ocr'
 import { blankManualInvoice, MANUAL_INVOICE_MAX_BYTES, MANUAL_INVOICE_MIMES, manualInvoiceCents, manualInvoiceFields,
   manualInvoiceFileName, manualInvoiceTotal, validateManualInvoice, type ManualInvoiceData, type ManualInvoiceField, type SavedManualInvoice } from '@/src/lib/manual-invoice'
 
@@ -22,8 +24,10 @@ export function ManualInvoiceEditor() {
   const [file, setFile] = useState<File | null>(null)
   const [sourceUrl, setSourceUrl] = useState('')
   const [preview, setPreview] = useState<{ url: string; snapshot: string } | null>(null)
-  const [ocrEnabled, setOcrEnabled] = useState<boolean | null>(null)
-  const [ocrStatusError, setOcrStatusError] = useState('')
+  const [dateOrder, setDateOrder] = useState<InvoiceDateOrder>('mdy')
+  const [ocrProgress, setOcrProgress] = useState<OcrProgress>({ message: '', percent: 0 })
+  const [recognizedText, setRecognizedText] = useState('')
+  const scanController = useRef<AbortController | null>(null)
   const [busy, setBusy] = useState<'ocr' | 'save' | 'pdf' | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [sourceTotal, setSourceTotal] = useState('')
@@ -44,15 +48,14 @@ export function ManualInvoiceEditor() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/manual-invoices/ocr', { cache: 'no-store' }).then(readResponse)
-      .then((body) => { if (!cancelled) { setOcrEnabled(body.enabled === true); setOcrStatusError('') } })
-      .catch((error) => { if (!cancelled) setOcrStatusError(error.message) })
     fetch('/api/manual-invoices', { cache: 'no-store' }).then(readResponse)
       .then((body) => { if (!cancelled) setHistory(body.documents) })
       .catch((error) => { if (!cancelled) setHistoryError(error.message) })
       .finally(() => { if (!cancelled) setLoadingHistory(false) })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => () => { scanController.current?.abort() }, [])
 
   useEffect(() => () => { if (sourceUrl) URL.revokeObjectURL(sourceUrl) }, [sourceUrl])
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url) }, [preview])
@@ -72,6 +75,7 @@ export function ManualInvoiceEditor() {
   function reset() {
     setData(blankManualInvoice()); setFile(null); setSourceUrl(''); setWarnings([]); setSourceTotal(''); setReviewed(false)
     setPreview(null); setSavedSnapshot(''); setDirty(false); setTab('editor')
+    setRecognizedText(''); setOcrProgress({ message: '', percent: 0 })
     if (fileInput.current) fileInput.current.value = ''
   }
   function selectFile(selected: File | undefined) {
@@ -84,17 +88,26 @@ export function ManualInvoiceEditor() {
   }
   async function scan() {
     if (!file || busy) return
+    const controller = new AbortController()
+    scanController.current = controller
     setBusy('ocr')
+    setOcrProgress({ message: 'Preparando lectura…', percent: 0 })
     try {
-      const form = new FormData(); form.append('file', file)
-      const body = await readResponse(await fetch('/api/manual-invoices/ocr', { method: 'POST', body: form }))
+      const { readInvoiceInBrowser } = await import('@/src/lib/browser/manual-invoice-ocr')
+      if (controller.signal.aborted) return
+      const body = await readInvoiceInBrowser(file, dateOrder, setOcrProgress, controller.signal)
+      if (controller.signal.aborted) return
       const extracted = validateManualInvoice(body.data, false)
+      setRecognizedText(body.text); setWarnings(body.warnings)
       if (!extracted.invoice_number && !extracted.bill_to_name && !extracted.items.length) throw new Error('No se identificó una factura legible. Prueba otra foto o completa los campos manualmente.')
       change({ ...extracted, items: extracted.items.length ? extracted.items : [{ description: '', amount: '' }] })
       setWarnings(body.warnings); setSourceTotal(body.source_total); setPreview(null); setSavedSnapshot('')
       toast.success('Lectura lista. Revisa los campos amarillos antes de generar el PDF.')
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo leer el archivo.') }
-    finally { setBusy(null) }
+    } catch (error) {
+      if (controller.signal.aborted) toast.info('Lectura cancelada. Tus campos se conservaron.')
+      else toast.error(error instanceof Error ? error.message : 'No se pudo leer el archivo.')
+    }
+    finally { if (scanController.current === controller) { scanController.current = null; setBusy(null) } }
   }
   async function save() {
     if (busy) return
@@ -175,16 +188,22 @@ export function ManualInvoiceEditor() {
       <TabsContent value="editor" className="space-y-6">
         <div className={cardClass}>
           <h2 className="mb-2 font-semibold">1. Carga un documento o completa la factura manualmente</h2>
-          <p className="mb-4 text-sm text-slate-500">PDF o foto (JPG, PNG, WEBP), hasta 3 MB. Selecciona un documento con una sola factura. Al leer con OCR se envía al proveedor OpenAI; el original se usa para comparar y no se guarda en el historial.</p>
+          <p className="mb-4 text-sm text-slate-500">PDF o foto (JPG, PNG, WEBP), hasta 3 MB y 5 páginas de una sola factura. La lectura gratuita se realiza en tu dispositivo. El original se usa para comparar y no se guarda en el historial.</p>
           <div className="flex flex-wrap items-end gap-3"><label className="min-w-0 flex-1 space-y-1 text-sm font-medium"><span className="block">Factura original</span>
             <input ref={fileInput} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={Boolean(busy)} className={`${fieldClassSm} h-auto py-2`} onChange={(event) => selectFile(event.target.files?.[0])} /></label>
-            <button className={`${primaryButtonClass} flex items-center gap-2`} disabled={!file || ocrEnabled !== true || Boolean(busy)} onClick={() => dirty ? setPendingAction(() => () => { void scan() }) : void scan()}>
+            <label className="space-y-1 text-sm font-medium"><span className="block">Fechas del original</span><select value={dateOrder} disabled={Boolean(busy)} onChange={(event) => setDateOrder(event.target.value as InvoiceDateOrder)} className={fieldClassSm}>
+              <option value="mdy">MM/DD/YYYY · SARI USA</option><option value="dmy">DD/MM/YYYY</option>
+            </select></label>
+            <button className={`${primaryButtonClass} flex items-center gap-2`} disabled={!file || Boolean(busy)} onClick={() => dirty ? setPendingAction(() => () => { void scan() }) : void scan()}>
               {busy === 'ocr' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileScan className="h-4 w-4" />} {busy === 'ocr' ? 'Leyendo…' : 'Leer con OCR'}</button>
+            {busy === 'ocr' && <button className={secondaryButtonClass} onClick={() => scanController.current?.abort()}>Cancelar lectura</button>}
           </div>
           {file && <p className="mt-2 break-all text-sm">Archivo cargado: {file.name}</p>}
-          <p className="mt-3 text-sm text-slate-500" role="status">{ocrStatusError || (ocrEnabled === null ? 'Verificando disponibilidad del OCR…' : ocrEnabled ? 'OCR disponible. Revisa siempre los resultados.' : 'OCR pendiente de habilitar. La captura manual y la generación de PDF están disponibles.')}</p>
+          {busy === 'ocr' ? <div className="mt-3 space-y-1"><p role="status" className="text-sm">{ocrProgress.message} {ocrProgress.percent}%</p><progress aria-label="Progreso de lectura" className="h-2 w-full" max={100} value={ocrProgress.percent} /></div>
+            : <p className="mt-3 text-sm text-slate-500">OCR gratuito, sin clave API ni saldo. La primera lectura puede tardar mientras se prepara el lector. Revisa siempre los resultados.</p>}
         </div>
         {warnings.length > 0 && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Observaciones de la lectura</p><ul className="mt-2 list-inside list-disc">{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
+        {recognizedText && <details className={cardClass}><summary className="cursor-pointer font-semibold">Ver texto reconocido</summary><label className="mt-3 block space-y-1 text-sm"><span>Texto de apoyo para completar datos que no se ubicaron</span><textarea readOnly rows={8} value={recognizedText} className={`${fieldClassSm} h-auto py-2`} /></label></details>}
         <div className="grid items-start gap-6 xl:grid-cols-[1.15fr_1fr]">
           <div className="space-y-4"><h2 className="font-semibold">2. Revisa y edita los campos amarillos</h2>
             {section('Factura', ['invoice_number', 'issue_date', 'due_date', 'file_number', 'customer_reference'])}

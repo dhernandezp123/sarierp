@@ -18,3 +18,4 @@ release-evidence
 *.log
 *.tsbuildinfo
 supabase/.temp
+public/ocr-assets/runtime

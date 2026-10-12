@@ -5,132 +5,83 @@ Disponible para Admin, Operaciones, Finanzas y Contabilidad de Sari.
 
 ## Uso
 
-1. Cargar una factura en PDF, JPG, PNG o WEBP de hasta 3 MB. También se puede
-   completar el formulario sin archivo. Para Word, exportar primero a PDF.
-2. Seleccionar **Leer con OCR** cuando esté disponible. Comparar el original
-   con los campos amarillos; corregir datos ilegibles y revisar los importes.
-3. Editar cliente, factura, embarque, referencias, cargos y WR (uno por línea).
-   El total se calcula sumando los cargos, con precisión de centavos.
-4. Confirmar la revisión, generar la vista previa y descargar el PDF.
-5. **Guardar documento** agrega una versión al historial. Abrir una versión y
+1. Cargar una sola factura en PDF, JPG, PNG o WEBP de hasta 3 MB. El lector
+   admite hasta 5 páginas de una factura. También se puede completar el
+   formulario sin archivo. Para Word, exportar primero a PDF.
+2. Elegir el formato de las fechas del original: MM/DD/YYYY para SARI USA;
+   DD/MM/YYYY para documentos regenerados por este ERP.
+3. Seleccionar **Leer con OCR**. La lectura gratuita se realiza en el dispositivo,
+   con progreso y **Cancelar lectura**. La primera lectura descarga el motor y
+   el modelo de idioma desde nuestra propia aplicación. No requiere clave API,
+   saldo ni una instalación del usuario.
+4. Comparar los campos amarillos con el original. Revisar las observaciones y,
+   si faltan datos, abrir **Ver texto reconocido** para apoyar la transcripción.
+   Los campos ilegibles quedan vacíos; un importe ausente nunca se convierte
+   en cero. Revisar especialmente HBL/MBL, fechas, cargos, WR y total.
+5. Confirmar la revisión, generar la vista previa y descargar el PDF.
+6. **Guardar documento** agrega una versión al historial. Abrir una versión y
    guardar cambios crea otra versión, conservando la anterior. El historial
    muestra las 100 versiones más recientes; no modifica cuentas por cobrar.
 
 El PDF reconstruye la plantilla en papel Letter: logotipo extraído del Word
 aportado, encabezado SARI USA, recuadros, cargos, WR, total y Remarks fijos.
 No incorpora resaltados. Los documentos extensos continúan en otras páginas
-con el encabezado repetido y el total al final. Las fechas se muestran como
-DD/MM/YYYY según la convención del ERP y los importes en USD.
+con el encabezado repetido y el total al final. Las fechas del PDF generado
+se muestran DD/MM/YYYY y los importes en USD. El total se deriva de los cargos,
+con precisión de centavos, y se compara con el total leído cuando es legible.
 
-El original se conserva solo en memoria del navegador durante la edición.
-El historial guarda los datos, no el archivo original ni un PDF binario; el
-PDF se regenera desde la versión guardada. Cerrar o recargar sin guardar pierde
-los cambios. El módulo avisa antes de reemplazar datos y al cerrar la pestaña.
+El original y el texto reconocido permanecen solo en memoria del navegador.
+El historial guarda los datos, no el original ni un PDF binario; el PDF se
+regenera desde la versión guardada. Cerrar o recargar sin guardar pierde los
+cambios. El módulo avisa antes de reemplazar datos y al cerrar la pestaña.
 
-## Activación del servidor
+## Funcionamiento del OCR gratuito
 
-No se agregaron dependencias. El OCR usa `fetch` con Responses API y esquema
-JSON estricto, siguiendo la documentación oficial de
-[archivos](https://developers.openai.com/api/docs/guides/file-inputs) y
-[salidas estructuradas](https://developers.openai.com/api/docs/guides/structured-outputs).
+- Tesseract.js 7.0.0 para imágenes y páginas escaneadas; PDF.js 6.2.108 para
+  texto existente y rasterización de PDF. El usuario autorizó ambas librerías.
+- Imports diferidos: el motor se carga al solicitar una lectura. Los workers,
+  WebAssembly, fuentes y modelo inglés se sirven bajo `/ocr-assets/`.
+- `predev` y `prebuild` ejecutan `scripts/sync-invoice-ocr-assets.mjs`, copiando
+  archivos de las dependencias fijadas. El modelo de idioma está versionado
+  en `public/ocr-assets/lang`; procedencia y licencias en `NOTICE.md`.
+- Los recursos públicos son código/modelos sin documentos ni credenciales;
+  solo este prefijo se excluye del proxy. Página, API de historial y RLS
+  conservan los controles de acceso existentes.
+- PDFs con texto suficiente usan su capa de texto. Los escaneados se procesan
+  en un worker. Las imágenes se ajustan para lectura y se convierten a gris.
+- El parser utiliza posiciones y etiquetas del formato SARI para separar
+  columnas, cliente, referencias, cargos y WR. Números de factura diferentes
+  provocan rechazo, sin combinar cargos. El texto del documento es solo datos.
+- Límite de 3 MB, 5 páginas, 8 millones de píxeles para render y 3 minutos por
+  lectura. Cancelar o salir libera los workers y los recursos disponibles.
+- La velocidad depende del dispositivo. Fotos borrosas, recortes, inclinación
+  o perspectivas pueden requerir correcciones. La revisión humana es obligatoria.
+- El modelo de idioma puede quedar en IndexedDB; los documentos no se guardan
+  allí. No hay llamadas del lector a OpenAI ni un servicio OCR externo.
 
-1. Aplicar mediante el procedimiento aprobado del proyecto la migración
-   `supabase/migrations/20261012160000_manual_sari_usa_invoices.sql`.
-2. Ejecutar `supabase/tests/manual_sari_usa_invoices.sql` en una base aislada con
-   las migraciones vigentes. La prueba usa una transacción y termina en rollback.
-3. Configurar solo en el servidor:
+## Servidor y opción anterior de OpenAI
 
-   ```dotenv
-   MANUAL_INVOICE_OCR_ENABLED=true
-   OPENAI_API_KEY=<clave privada del proyecto OpenAI>
-   MANUAL_INVOICE_OCR_MODEL=gpt-4.1-mini
-   ```
+La migración `20261012160000_manual_sari_usa_invoices.sql` ya está aplicada en
+Supabase Production. No hay SQL nuevo por el cambio a lectura local.
 
-4. Revisar el presupuesto del proyecto OpenAI y publicar con el procedimiento
-   aprobado. El modelo es configurable; debe aceptar imágenes, PDF y el esquema
-   de salidas estructuradas. No usar variables `NEXT_PUBLIC_` para la clave.
+La integración anterior de OpenAI sigue en código como opción administrativa,
+pero la interfaz utiliza exclusivamente el lector gratuito. Para evitar llamadas
+facturables desde la API anterior, `MANUAL_INVOICE_OCR_ENABLED` se establece en
+`false` en Production y `.env.local`. La clave privada existente se conserva
+en el servidor y nunca se envía al navegador.
 
-La conexión permanece deshabilitada salvo activación explícita. Cada lectura
-envía el documento a OpenAI y puede generar cargos en esa cuenta. `store: false`
-evita guardar el estado de Responses; no equivale a una garantía de retención
-cero del proveedor. No se envían documentos durante las pruebas locales.
+La prueba anterior con una factura ficticia recibió `credit_balance_exhausted`.
+La alternativa actual funciona independientemente de ese saldo y no consume
+el cupo diario de la API OCR anterior.
 
-El servidor valida sesión, aprobación, actividad, rol y empresa antes de leer
-archivos o llamar al proveedor. Los bytes deben corresponder al tipo declarado.
-El cuerpo se limita aun si falta Content-Length. La clave y los documentos no
-se registran en logs. El cupo atómico es de 20 intentos diarios por usuario,
-reiniciado a medianoche de Miami; los intentos fallidos consumen cupo.
+## Validación y pendientes
 
-## Validación pendiente antes de uso operativo
+Los resultados de pruebas, verificaciones de navegador y publicación se
+registran en `HARDENING.md`, UX-066 y UX-067. No se insertan documentos de prueba
+en Production ni se envían originales a OpenAI durante estas verificaciones.
 
-- Aplicar SQL y comprobar RLS con usuarios de los cuatro roles, usuario
-  suspendido, otro tenant y sesión anónima.
-- Habilitar una clave real y leer PDF escaneado y foto inclinada; comprobar
-  fechas estadounidenses MM/DD/YYYY, HBL/MBL, WR y total. El OCR requiere revisión
-  humana y no debe completar datos ilegibles por suposición.
-- Recorrer carga → lectura → edición → revisión → PDF → guardado → historial.
-- Comparar impresión Letter con el formato aprobado por SARI USA. Confirmar
-  logotipo a color del Word frente al monocromo de la fotografía, dirección
-  y texto fijo del encabezado/Remarks.
-- Revisar escritorio/móvil, teclado, pérdida de red, recuperación de errores,
-  y documentos con muchas líneas.
-
-## Configuración del servidor — 12/10/2026
-
-El usuario autorizó configurar el servidor después de la validación local.
-Se aplicó únicamente la migración `20261012160000` en el proyecto Supabase
-`sarierp` (`fwspgdzvlbtbgiupvrzo`), con transacción y registro en el historial.
-La migración pendiente de Outlook `20261002120000` se conserva pendiente.
-
-En Production de Vercel, proyecto `sarierp`, se configuraron:
-
-```dotenv
-MANUAL_INVOICE_OCR_ENABLED=false
-MANUAL_INVOICE_OCR_MODEL=gpt-4.1-mini
-```
-
-El usuario confirmó que todavía no tiene una clave API. Para habilitar la
-lectura automática más adelante:
-
-1. Crear la clave desde [OpenAI API keys](https://platform.openai.com/api-keys),
-   siguiendo la [guía oficial](https://developers.openai.com/api/docs/quickstart).
-2. Guardarla como `OPENAI_API_KEY` en las variables de entorno de Production
-   del proyecto `sarierp` en Vercel, como secreto. No pegarla en el chat ni
-   incorporarla al repositorio.
-3. Cambiar `MANUAL_INVOICE_OCR_ENABLED` a `true` y volver a desplegar.
-4. Probar la lectura y revisar presupuesto y condiciones de la cuenta API.
-
-La captura manual, el PDF y el historial funcionan de forma independiente de
-la clave OCR. La configuración y el resultado de publicación se registran en
-`HARDENING.md`, hallazgo UX-066; el OCR real y la UAT siguen pendientes.
-
-El módulo está publicado en
-[sari.forwarders.app/manual-invoices](https://sari.forwarders.app/manual-invoices).
-La compilación de Production y las verificaciones HTTP fueron exitosas; la
-ruta y las API exigen sesión. Se comprobaron las políticas y grants instalados
-en Supabase. El recorrido completo con un usuario autenticado y una factura
-real aún requiere UAT.
-
-## Activación OCR posterior — 12/10/2026
-
-El usuario agregó `OPENAI_API_KEY` en Production de Vercel y en `.env.local`.
-Se verificó su presencia sin mostrar la clave y se activó
-`MANUAL_INVOICE_OCR_ENABLED=true` en Production. El entorno local ya tiene
-activación `true` y modelo `gpt-4.1-mini`.
-
-La comprobación de conexión con un PDF totalmente ficticio recibió HTTP 429,
-`credit_balance_exhausted`. La configuración está preparada, pero la cuenta
-API necesita créditos para efectuar lecturas. Agregar saldo desde
-[Billing de OpenAI](https://platform.openai.com/settings/organization/billing/overview)
-y volver a probar; consultar la
-[documentación oficial de límites y saldo](https://developers.openai.com/api/docs/guides/spend-limits).
-El módulo muestra un mensaje específico de falta de saldo. La captura manual,
-el PDF y el historial continúan disponibles.
-
-No se envió el PDF aportado ni información de clientes durante esta comprobación;
-se utilizó un documento generado en memoria con TEST CUSTOMER y USD 1.00.
-La lectura exitosa de PDF/fotos y el recorrido autenticado siguen pendientes.
-La activación y el mensaje de falta de saldo están publicados en Production
-(`dpl_AT21haRc2qbvMoDr3YLTLvvPimXM`, READY); las rutas mantienen la exigencia de
-sesión. La clave de Vercel se verificó por presencia; la prueba del proveedor
-utilizó la clave local.
+Antes de uso operativo, recorrer con sesión real: carga → lectura → comparación
+→ edición → revisión → PDF → guardado → historial. Revisar escritorio/móvil,
+teclado, pérdida de red y fotos de cámara. Aprobar la impresión contra el formato
+SARI USA: logotipo rojo del Word frente a monocromo de la foto, encabezado y
+Remarks. Los campos recuperados por OCR deben comprobarse contra el original.
