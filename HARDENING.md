@@ -10102,7 +10102,8 @@ Agregar una entrada por fix:
 
 ### 2026-10-12 - UX-070 - Texto del scanner y visualizar PDF en otra pestaña
 
-- Estado: implementado y validado localmente; publicación pendiente.
+- Estado: implementado, validado localmente y publicado en Production;
+  pendiente UAT de pestañas en el navegador del usuario.
 - Hallazgo: textos técnicos sobre gratuidad/clave/saldo innecesarios para el
   flujo solicitado; el botón solo generaba la vista previa dentro del editor.
 - Archivos: `src/components/invoicing/ManualInvoiceEditor.tsx`,
@@ -10117,10 +10118,17 @@ Agregar una entrada por fix:
   extraído del componente con ventana/generador PDF simulados: pestaña nueva,
   reutilizar PDF vigente, apertura bloqueada, formulario inválido, fallo al
   generar, descarga sin abrir pestaña y bloqueo por busy; ausencia de los dos
-  textos solicitados. Build local OK, 82/82 páginas; postflight se registra
-  al terminar.
+  textos solicitados. Build local y remoto OK, 82/82 páginas; TypeScript
+  remoto correcto.
 - Riesgos / pendiente: validación de comportamiento simulada, sin UAT del
   editor autenticado ni verificación de ventanas reales en móviles/navegadores.
   El navegador del usuario puede bloquear pestañas; se muestra recuperación.
   No se envían documentos ni se crean facturas de prueba en Production.
-- Commit: hash disponible después de crear el commit funcional.
+- Commit funcional: `a84269f`; postflight en commit documental posterior.
+  Commits locales en esta sesión.
+- Publicación: `dpl_HTHzKwsigcNdnbB3yzDBUYv4yCSN`, Production `READY`.
+  URL inmutable:
+  `https://sarierp-gmtc3r8ib-claudherhn-5641s-projects.vercel.app`.
+  Alias `sari.forwarders.app` resuelve a este despliegue. Login 200; factura
+  manual 307 al login; ambas API 401 JSON sin sesión; assets OCR 200 y checksum
+  del modelo correcto. No se comprobó el editor con sesión autenticada.
