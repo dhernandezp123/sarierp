@@ -10019,3 +10019,24 @@ Agregar una entrada por fix:
   - Modelo inglés servido = 200, 2,952,873 bytes; SHA-256 idéntico al modelo
     versionado: `45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91`.
     Verificación HTTPS con certificados de Windows y TLS activo.
+
+### 2026-10-12 - UX-068 - Flechas y número destacado en PDF de factura manual
+
+- Estado: ajuste implementado y validado visualmente en PDF real; publicación
+  pendiente de las comprobaciones de compilación y despliegue.
+- Hallazgo: Helvetica no imprime los caracteres de flecha del indicador PAGE;
+  el número de factura tenía el mismo tamaño y peso que los demás valores.
+- Archivos: `src/components/pdf/manual-invoice-pdf.tsx`, esta bitácora.
+- SQL: sin cambios; no modifica datos, permisos ni documentos independientes.
+- Cambios: triángulos SVG negros antes y después de PAGE, apuntando hacia
+  afuera como en la referencia Word. Número en Helvetica-Bold de 12 pt
+  (antes 7.5 pt); tamaño adaptable para referencias largas. Altura y ancho
+  del renglón ajustados dentro del mismo recuadro de factura.
+- Validaciones: pruebas existentes de PDF 3/3, incluidas paginación y máximos
+  de campos sin recorte/desbordamiento; TypeScript y ESLint afectado OK.
+  PDF de ejemplo generado localmente, rasterizado con PDF.js e inspeccionado:
+  ambas flechas visibles y número 131326 grande/negrita, sin solapamientos.
+  Build local OK, 82/82 páginas; postflight se registra al terminar.
+- Riesgos / pendiente: UAT autenticada general de UX-066/067 continúa pendiente;
+  esta inspección valida el PDF generado, no el recorrido de guardado/historial.
+- Commit: hash disponible después de crear el commit funcional.
