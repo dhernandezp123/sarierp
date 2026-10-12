@@ -146,6 +146,11 @@ export default function Sidebar({ role }: { role?: string }) {
   ]
 
   const financialItems = [
+    ...(tenant?.hostname === 'sari.forwarders.app' ? [{
+      label: 'Scanner / Factura manual',
+      href: '/manual-invoices',
+      icon: Receipt,
+    }] : []),
     {
       label: 'Dashboard Financiero',
       href: '/financial-dashboard',

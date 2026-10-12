@@ -9788,3 +9788,101 @@ Agregar una entrada por fix:
     `/login?next=%2Fpricing-comparison`; `https://forwarders.app/` responde `200`.
 - Commit de implementación y despliegue: `39e9a6e`. Registro de publicación en
   commit documental posterior.
+
+### 2026-10-12 - UX-066 - Scanner y generador de factura manual SARI USA
+
+- Estado: implementado y validado localmente; migración aplicada en Production
+  tras autorización de configurar el servidor; publicación en curso. Pendiente
+  clave/activación del OCR y UAT.
+  No se declara completado el flujo operativo.
+- Hallazgo / necesidad: no existía un módulo para leer PDF/fotos de facturas
+  SARI USA, corregir los campos del ejemplo y regenerar documentos independientes
+  con su plantilla. El usuario confirmó PDF/fotos y documentos independientes.
+- Archivos:
+  - `src/app/(protected)/manual-invoices/page.tsx`.
+  - `src/components/invoicing/ManualInvoiceEditor.tsx`.
+  - `src/components/pdf/manual-invoice-pdf.tsx`.
+  - `src/lib/manual-invoice.ts`.
+  - `src/lib/server/manual-invoices.ts`, `manual-invoice-ocr.ts`.
+  - `src/app/api/manual-invoices/route.ts`, `ocr/route.ts`.
+  - `src/lib/permissions.ts`, `src/components/layout/sidebar.tsx`.
+  - `public/logo/sari-usa-invoice.jpeg`: extraído del Word proporcionado.
+  - `tests/manual-invoice.test.mjs`, `manual-invoice-routes.test.mjs`,
+    `manual-invoice-pdf.test.mjs`.
+  - `docs/manual-sari-usa-invoices.md`, `.gitignore`, `.vercelignore`, `HARDENING.md`.
+- SQL:
+  - `supabase/migrations/20261012160000_manual_sari_usa_invoices.sql`.
+  - `supabase/tests/manual_sari_usa_invoices.sql`.
+- Cambios:
+  - Ruta propia con acceso de Admin, Operaciones, Finanzas y Contabilidad de
+    Sari; controles en página, API y RLS. Sin acceso de clientes, otros tenants
+    ni administradores exclusivos de plataforma.
+  - Captura manual, comparación del original, lectura PDF/JPG/PNG/WEBP,
+    revisión de campos, cargos y WR, y confirmación de revisión antes de guardar
+    o generar PDF. El total se calcula en centavos; un cero explícito es válido.
+  - Plantilla Letter con identidad fija SARI USA, recuadros, detalle y Remarks;
+    sin resaltados, con paginación explícita para documentos extensos. Las
+    fechas y moneda usan helpers del ERP. El original se mantiene en memoria,
+    no se publica ni se almacena como asset del historial.
+  - Historial de versiones inmutables en tabla independiente: no crea partidas
+    en `invoices`, cuentas por cobrar, CAI o operaciones. El trigger deriva
+    número, cliente y total del contenido incluso en inserciones REST directas.
+  - OCR con Responses API, esquema estricto y `store: false`, clave solo en
+    servidor, habilitación explícita, límite de 3 MB, validación de firmas y
+    lectura acotada del cuerpo aun sin Content-Length. Cupo atómico de 20
+    intentos diarios por usuario en calendario Miami. Sin nuevas librerías.
+- Validaciones ejecutadas:
+  - `npx.cmd tsc --noEmit`: OK.
+  - ESLint sobre todos los archivos TS/TSX modificados y nuevas pruebas: OK.
+  - `npm.cmd test`: 176/176 pruebas correctas; incluye 16 pruebas del módulo
+    sobre totales, fechas, datos ilegibles, cargas falsas, permisos, cupos,
+    solicitudes a OCR simuladas y render real del PDF.
+  - Render real del ejemplo: una página Letter 612 × 792 y USD 3,845.00;
+    documento extenso conserva cargos/WR en sus páginas, y campos con longitudes
+    máximas se comprueban contra líneas y cajas sin recorte.
+  - Migración y regresión SQL ejecutadas en `supabase_db_sarierp` dentro de una
+    única transacción con rollback: OK. Pruebas de RLS para Admin, Ventas,
+    otro tenant y usuario suspendido; disponibilidad para Operaciones,
+    Finanzas y Contabilidad; sin grants de lectura anónima; versiones no
+    actualizables/eliminables; resumen derivado, fechas/importes inválidos,
+    tenant/autor falsificados y cupo 20/21.
+  - `npm.cmd run build`: OK, 82/82 páginas; incluye ambas API y el módulo.
+  - Ejemplo local generado en
+    `.local/manual-invoice/SARI-USA-Invoice-131326.pdf` (artefacto ignorado).
+- Riesgos / trabajo pendiente:
+  - Migración aplicada en Production el 12/10/2026 tras la solicitud explícita
+    de configurar el servidor; conservar verificación del flujo con sesión real
+    en UAT. La ejecución local original se revirtió.
+  - Configurar `OPENAI_API_KEY`, activar `MANUAL_INVOICE_OCR_ENABLED=true` y
+    validar OCR real con PDF escaneado/foto. No hubo llamada facturable al
+    proveedor ni envío del documento aportado durante las pruebas locales.
+  - UAT autenticado: carga, comparación, edición, revisión, descarga, guardado,
+    historial, escritorio/móvil, teclado y errores de red. El original no queda
+    guardado y los datos no guardados se pierden al salir.
+  - Aprobar visualmente la impresión contra el formato de SARI USA: logotipo
+    rojo del Word frente a monocromo de la foto, encabezado y texto fijo. Se
+    verificó layout con el renderer; Chrome headless no produjo captura local,
+    por lo que no se certifica revisión visual en navegador.
+  - Los intentos fallidos consumen el cupo OCR; la lectura requiere revisión
+    humana. El costo y retención del proveedor deben configurarse en su cuenta.
+  - La lectura OCR continúa pendiente porque el usuario confirmó que todavía
+    no tiene una clave API.
+- Configuración Production autorizada el 12/10/2026:
+  - Proyecto Supabase `sarierp`, ref `fwspgdzvlbtbgiupvrzo`.
+  - Prerrequisitos verificados: helpers de tenant, aprobación y rol; dominio
+    Sari activo. Tabla del módulo ausente y conteo de `invoices` = 0.
+  - Migración `20261012160000` aplicada aisladamente mediante transacción y
+    registrada con el SQL exacto en `supabase_migrations.schema_migrations`.
+    No se ejecutó `db push` general ni la migración de Outlook `20261002120000`,
+    que permanece pendiente.
+  - Postflight: RLS habilitado; sin SELECT de anon; sin UPDATE/DELETE de
+    authenticated; sin EXECUTE anónimo de OCR. Conteos: `invoices` = 0,
+    `manual_invoices` = 0, cupos OCR = 0. No se insertaron facturas de prueba.
+  - Vercel `sarierp`: `MANUAL_INVOICE_OCR_ENABLED=false` y
+    `MANUAL_INVOICE_OCR_MODEL=gpt-4.1-mini`, solo Production. No existe
+    `OPENAI_API_KEY`; el usuario confirmó que todavía no tiene una.
+  - El dry-run de Vercel detectó inclusión de artefactos locales y del checkout
+    Demo; se agregó `.vercelignore` para excluirlos junto con credenciales,
+    perfiles del navegador y cachés. No se publicó el manifiesto inicial.
+  - Publicación y comprobaciones HTTP: en curso.
+- Commit: pendiente al cerrar la configuración.

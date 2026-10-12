@@ -1,0 +1,20 @@
+# Deployment source only. Exclude local credentials, evidence, browser profiles,
+# database caches and the separate Demo checkout from production uploads.
+.git
+.vercel
+.next
+node_modules
+.local
+.demo-sync
+.ua
+.agents
+.codex
+.claude
+backups
+release-evidence
+.env
+.env.*
+*.pem
+*.log
+*.tsbuildinfo
+supabase/.temp

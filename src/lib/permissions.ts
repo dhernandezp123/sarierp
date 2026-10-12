@@ -52,6 +52,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/operations/shipping-instructions',
     '/agents',
     '/operations/garantias',
+    '/manual-invoices',
     '/reports',
     '/historico',
     '/miami',
@@ -62,6 +63,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
   ],
 
   Contabilidad: [
+    '/manual-invoices',
     '/dashboard',
     '/alerts',
     '/financial-dashboard',
@@ -77,6 +79,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
   ],
 
   Finanzas: [
+    '/manual-invoices',
     '/dashboard',
     '/alerts',
     '/financial-dashboard',
