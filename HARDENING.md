@@ -9727,3 +9727,50 @@ Agregar una entrada por fix:
     `/login?next=%2Fpricing-comparison`; `https://forwarders.app/` responde `200`.
 - Commit de implementación y despliegue: `a688c19`. Registro de publicación en
   commit documental posterior.
+
+### 2026-10-12 - UX-065 - Costos por contenedor en tarjetas de comparativo
+
+- Estado: implementado y validado en código con datos reales de solo lectura;
+  pendiente revisión visual y UAT autenticado. Sin despliegue.
+- Hallazgo: las tarjetas de Pricing mostraban únicamente el flete agregado de
+  `agent_quotes`, aunque los costos unitarios ya estaban registrados en
+  `agent_quote_container_rates`.
+- Archivos:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `src/components/pricing/AgentContainerRateBreakdown.tsx`.
+  - `HARDENING.md`.
+- SQL: no aplica; no se modificaron esquema, RLS ni datos.
+- Cambios:
+  - La consulta carga las líneas guardadas en una relación anidada, ordenadas
+    por fecha y con FK explícita para evitar ambigüedad entre relaciones.
+  - Las tarjetas FCL/FTL muestran cantidad, tipo y flete unitario; cantidades
+    mayores a uno muestran también su subtotal.
+  - Los totales y cálculos existentes se conservan; se etiquetan como totales
+    y se aclara que EXW, MBL y PS están incluidos en el costo final.
+  - Las tarifas históricas sin líneas informan que no hay desglose registrado;
+    no se distribuye un total arbitrariamente entre tipos de contenedor.
+- Validaciones ejecutadas:
+  - Consulta remota de solo lectura de `SARIHN-2609-0317-AP`: dos contenedores
+    canónicos, 1 × 40HC y 1 × 20GP, y dos tarifas con sus líneas guardadas.
+    Tarifa de la captura: USD 8,400.00 y USD 8,200.00, base USD 16,600.00.
+    Tarifa seleccionada: USD 7,400.00 y USD 7,600.00, base USD 15,000.00.
+  - Consulta anidada exacta del componente: exitosa para ambas tarifas.
+  - Render estático del componente real: ambos desgloses coinciden con sus
+    totales; cantidad 3 calcula su subtotal; cero explícito, costo ausente y
+    desglose ausente se distinguen correctamente.
+  - `npx.cmd tsc --noEmit`: OK.
+  - `npm.cmd test`: 160/160 pruebas correctas.
+  - `npm.cmd run build`: OK, 79/79 páginas generadas.
+  - ESLint: componente nuevo sin hallazgos; página conserva los mismos
+    33 errores y 5 advertencias de `HEAD`, sin hallazgos nuevos.
+  - Intento de vista aislada con CSS de producción en Chrome/Edge headless:
+    el entorno no produjo capturas; revisión visual pendiente.
+- Riesgos / trabajo pendiente:
+  - UAT autenticado en escritorio/móvil: abrir la cotización, verificar ambos
+    desgloses, editar una tarifa y comprobar actualización; alternar Cards/Tabla
+    y comprobar que selección, totales y venta mantienen su comportamiento.
+  - La lectura privilegiada verifica los datos y la relación, sin certificar
+    RLS con una sesión de Pricing. Se conserva el cliente autenticado existente
+    y se revisaron las policies vigentes; no se agregó acceso privilegiado a UI.
+  - No se ejecutó SQL ni se publicó el cambio.
+- Commit: hash de implementación pendiente de registrar tras publicación.

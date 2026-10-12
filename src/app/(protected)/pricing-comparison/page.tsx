@@ -63,6 +63,7 @@ import {
 } from '@/src/components/pricing/FclAgentComparisonTable'
 import { QuotationOptionsPanel } from '@/src/components/pricing/QuotationOptionsPanel'
 import { InsuranceCalculationDetails } from '@/src/components/pricing/InsuranceCalculationDetails'
+import { AgentContainerRateBreakdown } from '@/src/components/pricing/AgentContainerRateBreakdown'
 import {
   getClientVisibleQuotationOptions,
   type QuotationCommercialOption,
@@ -596,9 +597,10 @@ function PricingComparisonContent() {
   const fetchAgentQuotes = async (quotationId: string) => {
     const { data, error } = await supabase
       .from('agent_quotes')
-      .select('*')
+      .select('*, container_rates:agent_quote_container_rates!agent_quote_container_rates_agent_quote_id_fkey(id, container_type_name, quantity, ocean_freight, created_at)')
       .eq('quotation_id', quotationId)
       .order('created_at', { ascending: false })
+      .order('created_at', { referencedTable: 'container_rates', ascending: true })
 
     if (error) {
       toast.error(error.message)
@@ -5042,6 +5044,9 @@ const profitabilityColor =
                         {agentQuotes.map((quote) => {
                               const finalSariCost = getAgentQuoteFinalCost(quote)
                               const baseCost = getAgentQuoteBaseCost(quote)
+                              const showContainerBreakdown = ['fcl', 'ftl'].includes(
+                                normalizeText(selectedQuote.quote_type)
+                              )
                               const airRatePerKg = getAgentAirRatePerKg(quote)
                               const actualWeightKg =
                                 Number(quote.actual_weight_kg || 0) ||
@@ -5126,6 +5131,14 @@ const profitabilityColor =
                                     </div>
                                   </div>
 
+                                  {showContainerBreakdown && (
+                                    <AgentContainerRateBreakdown
+                                      rates={quote.container_rates}
+                                      currency={quote.moneda || 'USD'}
+                                      formatCurrency={formatCurrency}
+                                    />
+                                  )}
+
                                   {isAirConsolidatedQuote() ? (
                                     <div className="grid grid-cols-2 gap-3 text-sm">
                                       <div className={cn(mutedCardClass, 'p-3')}>
@@ -5189,7 +5202,7 @@ const profitabilityColor =
                                           {quote.moneda || 'USD'} {formatCurrency(baseCost)}
                                         </p>
                                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                          Costo base
+                                          {showContainerBreakdown ? 'Costo base total' : 'Costo base'}
                                         </p>
                                       </div>
 
@@ -5198,7 +5211,7 @@ const profitabilityColor =
                                           USD {formatCurrency(finalSariCost)}
                                         </p>
                                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                          Costo final
+                                          {showContainerBreakdown ? 'Costo final total' : 'Costo final'}
                                         </p>
                                       </div>
                                     </div>
