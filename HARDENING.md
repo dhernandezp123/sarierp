@@ -9793,7 +9793,8 @@ Agregar una entrada por fix:
 
 - Estado: implementado, validado y publicado en Production tras autorización
   de configurar el servidor; migración aplicada y captura manual/PDF/historial
-  disponibles. Pendiente clave/activación del OCR y UAT autenticada.
+  disponibles. Clave y activación OCR configuradas; OpenAI rechaza la lectura
+  por saldo agotado. Pendiente recarga, lectura real exitosa y UAT autenticada.
   No se declara completado el flujo operativo.
 - Hallazgo / necesidad: no existía un módulo para leer PDF/fotos de facturas
   SARI USA, corregir los campos del ejemplo y regenerar documentos independientes
@@ -9853,9 +9854,9 @@ Agregar una entrada por fix:
   - Migración aplicada en Production el 12/10/2026 tras la solicitud explícita
     de configurar el servidor; conservar verificación del flujo con sesión real
     en UAT. La ejecución local original se revirtió.
-  - Configurar `OPENAI_API_KEY`, activar `MANUAL_INVOICE_OCR_ENABLED=true` y
-    validar OCR real con PDF escaneado/foto. No hubo llamada facturable al
-    proveedor ni envío del documento aportado durante las pruebas locales.
+  - Clave y activación configuradas. Agregar créditos en OpenAI y validar OCR
+    real con PDF escaneado/foto. Las pruebas originales no llamaron al proveedor;
+    la comprobación posterior usó solo datos ficticios y recibió error de saldo.
   - UAT autenticado: carga, comparación, edición, revisión, descarga, guardado,
     historial, escritorio/móvil, teclado y errores de red. El original no queda
     guardado y los datos no guardados se pierden al salir.
@@ -9865,8 +9866,8 @@ Agregar una entrada por fix:
     por lo que no se certifica revisión visual en navegador.
   - Los intentos fallidos consumen el cupo OCR; la lectura requiere revisión
     humana. El costo y retención del proveedor deben configurarse en su cuenta.
-  - La lectura OCR continúa pendiente porque el usuario confirmó que todavía
-    no tiene una clave API.
+  - La lectura OCR continúa pendiente por saldo agotado de OpenAI
+    (`credit_balance_exhausted`), confirmado después de agregar la clave.
 - Configuración Production autorizada el 12/10/2026:
   - Proyecto Supabase `sarierp`, ref `fwspgdzvlbtbgiupvrzo`.
   - Prerrequisitos verificados: helpers de tenant, aprobación y rol; dominio
@@ -9904,3 +9905,26 @@ Agregar una entrada por fix:
   - No se crearon documentos de prueba en Production ni se llamó a OpenAI.
 - Commit funcional/despliegue: `2cbbd04`; registro postflight en commit documental
   posterior. Los commits permanecen locales en esta sesión.
+
+- Activación OCR autorizada el 12/10/2026 tras confirmación del usuario:
+  - `OPENAI_API_KEY` presente como Sensitive/Production en Vercel; clave local
+    presente sin espacios externos, OCR `true` y modelo `gpt-4.1-mini`.
+    No se imprimió, copió al repositorio ni descargó la clave de Vercel.
+  - Variable Vercel `MANUAL_INVOICE_OCR_ENABLED` actualizada a `true`.
+  - La revisión automática rechazó enviar el PDF de ejemplo por posible
+    información sensible sin autorización específica. No se envió ese archivo.
+    Se usó una alternativa con un PDF generado en memoria: TEST CUSTOMER,
+    OCR-TEST-001 y USD 1.00, sin documentos aportados ni datos de clientes.
+  - Comprobación con certificados confiables de Windows y validación TLS activa:
+    OpenAI respondió HTTP 429, código `credit_balance_exhausted`. No hubo
+    extracción exitosa ni cambios en la base de datos por esta comprobación.
+  - Fix: el módulo distingue falta de saldo de límites temporales, indica al
+    administrador agregar créditos y conserva la captura manual. No devuelve
+    mensajes internos del proveedor. Archivos: `manual-invoice-ocr.ts`,
+    `tests/manual-invoice.test.mjs`, esta bitácora y la guía del módulo.
+    SQL: sin cambios.
+  - Validación: 17/17 pruebas del módulo, incluidos errores de saldo, rate limit
+    y respuesta no JSON; suite completa 177/177, TypeScript, ESLint y build
+    82/82 páginas OK. Publicación y checks finales se registran al terminar.
+  - Pendiente: recarga de la organización API, lectura exitosa, UAT autenticada
+    y aprobación visual del PDF. No se declara completado el flujo operativo.

@@ -110,3 +110,23 @@ La compilación de Production y las verificaciones HTTP fueron exitosas; la
 ruta y las API exigen sesión. Se comprobaron las políticas y grants instalados
 en Supabase. El recorrido completo con un usuario autenticado y una factura
 real aún requiere UAT.
+
+## Activación OCR posterior — 12/10/2026
+
+El usuario agregó `OPENAI_API_KEY` en Production de Vercel y en `.env.local`.
+Se verificó su presencia sin mostrar la clave y se activó
+`MANUAL_INVOICE_OCR_ENABLED=true` en Production. El entorno local ya tiene
+activación `true` y modelo `gpt-4.1-mini`.
+
+La comprobación de conexión con un PDF totalmente ficticio recibió HTTP 429,
+`credit_balance_exhausted`. La configuración está preparada, pero la cuenta
+API necesita créditos para efectuar lecturas. Agregar saldo desde
+[Billing de OpenAI](https://platform.openai.com/settings/organization/billing/overview)
+y volver a probar; consultar la
+[documentación oficial de límites y saldo](https://developers.openai.com/api/docs/guides/spend-limits).
+El módulo muestra un mensaje específico de falta de saldo. La captura manual,
+el PDF y el historial continúan disponibles.
+
+No se envió el PDF aportado ni información de clientes durante esta comprobación;
+se utilizó un documento generado en memoria con TEST CUSTOMER y USD 1.00.
+La lectura exitosa de PDF/fotos y el recorrido autenticado siguen pendientes.

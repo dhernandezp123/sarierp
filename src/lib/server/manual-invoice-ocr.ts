@@ -28,9 +28,19 @@ export async function extractManualInvoice(bytes: Buffer, mime: string, apiKey: 
       text: { format: { type: 'json_schema', name: 'sari_usa_invoice', strict: true, schema: manualInvoiceOcrSchema } },
     }),
   })
-  if (!response.ok) throw new ManualInvoiceError(response.status === 429
-    ? 'El servicio OCR alcanzó su límite. Intenta más tarde o utiliza la captura manual.'
-    : 'El servicio OCR no pudo leer el documento. Puedes reintentar o completar los campos manualmente.', 502)
+  if (!response.ok) {
+    let code: unknown
+    try {
+      const failure = await response.json() as { error?: { code?: unknown } }
+      code = failure?.error?.code
+    } catch { /* A non-JSON provider error still receives a safe generic message. */ }
+    if (code === 'credit_balance_exhausted') {
+      throw new ManualInvoiceError('El OCR no tiene saldo disponible. Solicita al administrador agregar créditos en la cuenta API de OpenAI. Puedes continuar con la captura manual.', 502)
+    }
+    throw new ManualInvoiceError(response.status === 429
+      ? 'El servicio OCR alcanzó su límite. Intenta más tarde o utiliza la captura manual.'
+      : 'El servicio OCR no pudo leer el documento. Puedes reintentar o completar los campos manualmente.', 502)
+  }
   const result = await response.json() as { status?: string; output?: { type?: string; content?: { type?: string; text?: string }[] }[] }
   if (result.status !== 'completed') throw new ManualInvoiceError('La lectura quedó incompleta. Intenta con una foto más clara.', 422)
   const text = result.output?.filter((item) => item.type === 'message').flatMap((item) => item.content ?? [])

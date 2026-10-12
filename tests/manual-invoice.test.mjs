@@ -100,3 +100,23 @@ test('OCR never accepts incomplete responses, refusals or invalid fields', async
     }
   } finally { globalThis.fetch = previousFetch }
 })
+
+test('OCR distinguishes exhausted credits from rate limits and hides provider error details', async () => {
+  const previousFetch = globalThis.fetch
+  try {
+    const { extractManualInvoice } = loadTs('src/lib/server/manual-invoice-ocr.ts', { '@/src/lib/supabase/server': {} })
+    for (const [response, expected] of [
+      [Response.json({ error: { code: 'credit_balance_exhausted', message: 'private provider detail' } }, { status: 429 }), /agregar créditos/],
+      [Response.json({ error: { code: 'rate_limit_exceeded', message: 'private provider detail' } }, { status: 429 }), /Intenta más tarde/],
+      [new Response('private provider detail', { status: 500 }), /no pudo leer/],
+    ]) {
+      globalThis.fetch = async () => response
+      await assert.rejects(() => extractManualInvoice(Buffer.from('synthetic'), 'image/jpeg', 'test', 'model'), (error) => {
+        assert.equal(error.status, 502)
+        assert.match(error.message, expected)
+        assert.doesNotMatch(error.message, /private provider detail/)
+        return true
+      })
+    }
+  } finally { globalThis.fetch = previousFetch }
+})
