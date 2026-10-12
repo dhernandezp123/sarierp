@@ -103,3 +103,10 @@ lectura automática más adelante:
 La captura manual, el PDF y el historial funcionan de forma independiente de
 la clave OCR. La configuración y el resultado de publicación se registran en
 `HARDENING.md`, hallazgo UX-066; el OCR real y la UAT siguen pendientes.
+
+El módulo está publicado en
+[sari.forwarders.app/manual-invoices](https://sari.forwarders.app/manual-invoices).
+La compilación de Production y las verificaciones HTTP fueron exitosas; la
+ruta y las API exigen sesión. Se comprobaron las políticas y grants instalados
+en Supabase. El recorrido completo con un usuario autenticado y una factura
+real aún requiere UAT.

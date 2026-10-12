@@ -9791,9 +9791,9 @@ Agregar una entrada por fix:
 
 ### 2026-10-12 - UX-066 - Scanner y generador de factura manual SARI USA
 
-- Estado: implementado y validado localmente; migración aplicada en Production
-  tras autorización de configurar el servidor; publicación en curso. Pendiente
-  clave/activación del OCR y UAT.
+- Estado: implementado, validado y publicado en Production tras autorización
+  de configurar el servidor; migración aplicada y captura manual/PDF/historial
+  disponibles. Pendiente clave/activación del OCR y UAT autenticada.
   No se declara completado el flujo operativo.
 - Hallazgo / necesidad: no existía un módulo para leer PDF/fotos de facturas
   SARI USA, corregir los campos del ejemplo y regenerar documentos independientes
@@ -9884,5 +9884,23 @@ Agregar una entrada por fix:
   - El dry-run de Vercel detectó inclusión de artefactos locales y del checkout
     Demo; se agregó `.vercelignore` para excluirlos junto con credenciales,
     perfiles del navegador y cachés. No se publicó el manifiesto inicial.
-  - Publicación y comprobaciones HTTP: en curso.
-- Commit: pendiente al cerrar la configuración.
+  - Dry-run final de Vercel: 654 archivos; incluye módulo y logotipo, sin
+    `.local/`, `.demo-sync/`, `.ua/`, `supabase/.temp/` ni archivos `.env`/PEM.
+  - `npx.cmd tsc --noEmit` y `git diff --check`: OK antes de publicación.
+  - Commit funcional local: `2cbbd04`.
+  - Publicación Vercel: `dpl_AVhCXMJNxAfapJgCjpSUQa1w1MiD`, target
+    `production`, estado `READY`. Compilación remota y TypeScript exitosos;
+    82/82 páginas generadas.
+  - URL inmutable:
+    `https://sarierp-4su76v44x-claudherhn-5641s-projects.vercel.app`.
+  - Smoke en `https://sari.forwarders.app`: `/login` = 200;
+    `/manual-invoices` = 307 hacia `/login?next=%2Fmanual-invoices`;
+    ambas API nuevas = 401 JSON sin sesión; logotipo del módulo = 200 JPEG.
+  - REST Supabase sin sesión de usuario: lectura de `manual_invoices` y
+    ejecución de `claim_manual_invoice_ocr` rechazadas con 401/42501.
+  - Policies remotas comprobadas: SELECT por tenant/rol; INSERT también exige
+    autor = auth.uid(); trigger de validación instalado; tabla de cupos con
+    RLS y sin grants directos a authenticated.
+  - No se crearon documentos de prueba en Production ni se llamó a OpenAI.
+- Commit funcional/despliegue: `2cbbd04`; registro postflight en commit documental
+  posterior. Los commits permanecen locales en esta sesión.
