@@ -130,3 +130,7 @@ el PDF y el historial continúan disponibles.
 No se envió el PDF aportado ni información de clientes durante esta comprobación;
 se utilizó un documento generado en memoria con TEST CUSTOMER y USD 1.00.
 La lectura exitosa de PDF/fotos y el recorrido autenticado siguen pendientes.
+La activación y el mensaje de falta de saldo están publicados en Production
+(`dpl_AT21haRc2qbvMoDr3YLTLvvPimXM`, READY); las rutas mantienen la exigencia de
+sesión. La clave de Vercel se verificó por presencia; la prueba del proveedor
+utilizó la clave local.

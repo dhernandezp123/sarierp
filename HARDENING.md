@@ -9928,3 +9928,12 @@ Agregar una entrada por fix:
     82/82 páginas OK. Publicación y checks finales se registran al terminar.
   - Pendiente: recarga de la organización API, lectura exitosa, UAT autenticada
     y aprobación visual del PDF. No se declara completado el flujo operativo.
+  - Commit del ajuste: `e1a1a0d`. Publicación Production
+    `dpl_AT21haRc2qbvMoDr3YLTLvvPimXM`, estado `READY`, dominio
+    `sari.forwarders.app`; build remoto y TypeScript OK, 82/82 páginas.
+    URL inmutable:
+    `https://sarierp-cjkyirkzd-claudherhn-5641s-projects.vercel.app`.
+  - Smoke tras publicar: `/login` 200, `/manual-invoices` 307 al login y
+    `/api/manual-invoices/ocr` 401 JSON sin sesión. No se realizó UAT autenticada
+    ni una lectura exitosa en Production. El bloqueo de saldo se comprobó con
+    la clave local; en Vercel solo se verificó presencia del secreto.
