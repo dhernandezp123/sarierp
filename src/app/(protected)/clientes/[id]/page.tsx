@@ -11,6 +11,7 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { canManageClientRates } from '@/src/lib/permissions'
 import {
   defaultClientRateCatalog,
   fetchActiveClientRateCatalog,
@@ -40,6 +41,7 @@ const getMiamiRateDestinationLabel = (value: string | null | undefined) => {
 
 export default function ClienteProfilePage() {
   const { profile } = useUser()
+  const canManageRates = canManageClientRates(profile?.rol)
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
@@ -201,6 +203,10 @@ export default function ClienteProfilePage() {
 
   const saveClientRates = async () => {
     if (!id) return
+    if (!canManageRates) {
+      toast.error('Solo Administración, Pricing y Ventas pueden modificar tarifas del cliente')
+      return
+    }
 
     setSavingRates(true)
 
@@ -725,7 +731,8 @@ export default function ClienteProfilePage() {
               </p>
             </div>
 
-            <div className="grid gap-0 lg:grid-cols-2 lg:divide-x lg:divide-slate-200 dark:lg:divide-slate-700/60">
+            <fieldset disabled={!canManageRates || savingRates} className="grid min-w-0 gap-0 lg:grid-cols-2 lg:divide-x lg:divide-slate-200 dark:lg:divide-slate-700/60">
+              <legend className="sr-only">Tarifas del cliente</legend>
               <div className="divide-y divide-slate-200 dark:divide-slate-700/60">
                 {Array.from(new Set(clientRateCatalog.map((r) => r.category)))
                   .filter((cat) => cat.toLowerCase() !== 'otros cargos')
@@ -809,20 +816,22 @@ export default function ClienteProfilePage() {
                     )
                   })}
               </div>
-            </div>
+            </fieldset>
 
             <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-700/60">
               <p className="text-xs text-slate-400 dark:text-slate-500">
-                Los cambios se aplican a cotizaciones nuevas de este cliente.
+                {canManageRates
+                  ? 'Los cambios se aplican a cotizaciones nuevas de este cliente.'
+                  : 'Tarifas de consulta. Administración, Pricing y Ventas gestionan los cambios.'}
               </p>
-              <button
+              {canManageRates && <button
                 type="button"
                 onClick={saveClientRates}
                 disabled={savingRates}
                 className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
                 {savingRates ? 'Guardando...' : 'Guardar tarifas'}
-              </button>
+              </button>}
             </div>
           </div>
         )}

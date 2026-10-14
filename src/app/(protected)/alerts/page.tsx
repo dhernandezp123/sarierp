@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowRight, BellRing, BriefcaseBusiness, Clock3, RefreshCw, Ship } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
@@ -51,27 +51,34 @@ export default function AlertsPage() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('Todas')
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('Todas')
   const [refreshing, setRefreshing] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const loadVersion = useRef(0)
 
-  const loadAlerts = async (silent = false) => {
+  const loadAlerts = useCallback(async (silent = false) => {
+    const version = ++loadVersion.current
+    const isCurrent = () => version === loadVersion.current
     if (userLoading || !user) {
       if (!userLoading) { setAlerts([]); setLoading(false) }
       return
     }
     if (silent) setRefreshing(true)
     else setLoading(true)
+    setLoadError('')
     try {
-      const data = await getSystemAlerts(supabase, profile, user)
-      setAlerts(data)
+      const data = await getSystemAlerts(supabase, profile, user, isCurrent)
+      if (isCurrent()) setAlerts(data)
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'No se pudieron cargar las alertas.'
-      toast.error(msg)
+      if (isCurrent()) setLoadError(msg)
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (isCurrent()) { setLoading(false); setRefreshing(false) }
     }
-  }
+  }, [profile, user, userLoading])
 
-  useEffect(() => { loadAlerts() }, [profile, user, userLoading])
+  useEffect(() => {
+    const timer = setTimeout(() => { void loadAlerts() }, 0)
+    return () => { clearTimeout(timer); loadVersion.current += 1 }
+  }, [loadAlerts])
 
   useEffect(() => {
     if (profile?.rol === 'Pricing' || profile?.rol === 'Admin') {
@@ -108,6 +115,9 @@ export default function AlertsPage() {
   }), [alerts, categoryFilter, severityFilter])
 
   const emptyState = !loading && filteredAlerts.length === 0
+
+  if (loadError) return <div role="alert" className="rounded-xl border border-amber-300 p-4"><p>{loadError}</p><button type="button" onClick={() => void loadAlerts()} className="mt-3 rounded-lg border px-3 py-2">Reintentar</button></div>
+
 
   return (
     <div className="space-y-6">

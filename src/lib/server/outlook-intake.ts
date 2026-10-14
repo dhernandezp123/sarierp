@@ -1,6 +1,7 @@
 import 'server-only'
 import { createClient } from '@supabase/supabase-js'
 import { SARI_MAILBOX, validateGraphCursor } from '@/src/lib/mail-intake'
+import { readEmailEnvironment, EmailEnvironmentUnavailableError } from './email-environment'
 
 export function intakeAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -46,7 +47,8 @@ export function inboxDeltaUrl(startsAt: string, cursor: string | null) {
 }
 
 export async function isIntakeDemo(admin: ReturnType<typeof intakeAdminClient>) {
+  if (await readEmailEnvironment(admin) === 'demo') return true
   const { data, error } = await admin.rpc('mail_intake_is_demo')
-  if (error) throw new Error('No se pudo verificar el ambiente')
-  return data === true || process.env.APP_ENV?.trim().toLowerCase() === 'demo' || process.env.NEXT_PUBLIC_APP_ENV?.trim().toLowerCase() === 'demo'
+  if (error || typeof data !== 'boolean') throw new EmailEnvironmentUnavailableError()
+  return data
 }

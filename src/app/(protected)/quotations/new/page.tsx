@@ -1,6 +1,13 @@
 ﻿'use client'
 
+import {
+  type CargoDimensionLine, getCargoVolumeMode, hasLineVolume, calculateLineCbm,
+  calculateLineFt3, getCargoWeightUnit, getLineUnitWeightLbs,
+  getLineTotalWeightLbs, getLineTotalWeightKg,
+} from '@/src/lib/quotation-cargo'
+
 import { toDateInputValue } from '@/src/lib/format'
+import { createQuotation } from '@/src/lib/quotation-create'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -36,19 +43,7 @@ const formatNumber = (value: number, decimals = 2) =>
     maximumFractionDigits: decimals,
   })
 
-type CargoDimensionLine = {
-  id: string
-  quantity: string
-  packageType: 'Caja' | 'Pallet' | 'Pieza'
-  length: string
-  width: string
-  height: string
-  dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
-  weight: string
-  weightUnit?: 'lbs' | 'kg'
-  volumeMode?: 'dimensions' | 'manual'
-  manualCbm?: string | number
-}
+
 
 type ContainerLine = {
   container_type_id: string
@@ -869,75 +864,9 @@ export default function NewQuotationPage() {
 
       const autoItems = miami.buildMiamiPricingItems(quotationId)
 
-      const { data: quotationResult, error } = await supabase.rpc(
-        'create_quotation_with_child_lines',
-        {
-          p_quotation_data: quotationPayload,
-          p_container_lines: containerRows,
-          p_cargo_lines: cargoRows,
-          p_pricing_items: autoItems,
-        }
-      )
-
-      const quotation =
-        (quotationResult as Array<{ id: string; quotation_number: string | null }> | null)?.[0] || null
-
-      if (error) {
-        toast.error(error.message)
-        return
-      }
-
-      if (!quotation) {
-        toast.error('No se pudo crear la cotización')
-        return
-      }
-
-      if (Boolean(false) && requiresContainerLines && containerLines.length > 0) {
-        const rows = containerLines.map((line) => ({
-          quotation_id: quotation.id,
-          container_type_id: line.container_type_id,
-          container_type_name: line.container_type_name,
-          quantity: line.quantity,
-          notes: line.notes,
-        }))
-
-        const { error: containerError } = await supabase
-          .from('quotation_containers')
-          .insert(rows)
-
-        if (containerError) {
-          toast.error(
-            'La cotización se creó, pero no se guardaron los contenedores'
-          )
-          return
-        }
-      }
-
-      if (Boolean(false) && autoItems.length > 0) {
-        const { error: pricingItemsError } = await supabase
-          .from('pricing_items')
-          .insert(autoItems)
-
-        if (pricingItemsError) {
-          toast.error(
-            'La cotización se creó, pero no se pudieron aplicar las tarifas'
-          )
-          return
-        }
-      }
-
-      if (Boolean(false) && cargoRows.length > 0) {
-        const { error: cargoLinesError } = await supabase
-          .from('quotation_cargo_lines')
-          .insert(cargoRows)
-
-        if (cargoLinesError) {
-          toast.error(
-            'La cotización se creó, pero no se pudo guardar el detalle de carga'
-          )
-          return
-        }
-      }
+      const quotation = await createQuotation(supabase, {
+        quotation: quotationPayload, containers: containerRows, cargo: cargoRows, pricing: autoItems,
+      })
 
       if (initialStatus === 'Pendiente de Fijar Precios') {
         const pricingUsers = await fetchPricingUsers()
@@ -1080,81 +1009,6 @@ export default function NewQuotationPage() {
 
   const moneyFieldClass = `${fieldClass} md:max-w-[180px]`
   const dateFieldClass = `${fieldClass} md:max-w-[220px]`
-
-  const getCbmPerUnit = (line: CargoDimensionLine) => {
-    const length = Number(line.length || 0)
-    const width = Number(line.width || 0)
-    const height = Number(line.height || 0)
-
-    if (!length || !width || !height) return 0
-
-    if (line.dimensionUnit === 'in') {
-      return (length * width * height) / 61023.7441
-    }
-
-    if (line.dimensionUnit === 'cm') {
-      return (length * width * height) / 1_000_000
-    }
-
-    if (line.dimensionUnit === 'mm') {
-      return (length * width * height) / 1_000_000_000
-    }
-
-    if (line.dimensionUnit === 'm') {
-      return length * width * height
-    }
-
-    return 0
-  }
-
-  const getCargoVolumeMode = (line: CargoDimensionLine) =>
-    line.volumeMode || 'dimensions'
-
-  const hasLineVolume = (line: CargoDimensionLine) => {
-    if (getCargoVolumeMode(line) === 'manual') {
-      return Number(line.manualCbm || 0) > 0
-    }
-
-    return (
-      Number(line.length || 0) > 0 &&
-      Number(line.width || 0) > 0 &&
-      Number(line.height || 0) > 0
-    )
-  }
-
-  const calculateLineCbm = (line: CargoDimensionLine) => {
-    if (getCargoVolumeMode(line) === 'manual') {
-      return Number(line.manualCbm || 0)
-    }
-
-    const quantity = Number(line.quantity || 0)
-    if (!quantity) return 0
-
-    return getCbmPerUnit(line) * quantity
-  }
-
-  const calculateLineFt3 = (line: CargoDimensionLine) => {
-    return calculateLineCbm(line) * 35.3147
-  }
-
-  const getCargoWeightUnit = (line: CargoDimensionLine) =>
-    line.weightUnit || 'lbs'
-
-  const getLineUnitWeightLbs = (line: CargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
-    return getCargoWeightUnit(line) === 'kg' ? weight * 2.20462 : weight
-  }
-
-  const getLineUnitWeightKg = (line: CargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
-    return getCargoWeightUnit(line) === 'kg' ? weight : weight / 2.20462
-  }
-
-  const getLineTotalWeightLbs = (line: CargoDimensionLine) =>
-    getLineUnitWeightLbs(line) * Number(line.quantity || 0)
-
-  const getLineTotalWeightKg = (line: CargoDimensionLine) =>
-    getLineUnitWeightKg(line) * Number(line.quantity || 0)
 
   const totalCargoFt3 = cargoLines.reduce(
     (sum, line) => sum + calculateLineFt3(line),

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { readEmailProviderResponse } from '@/src/lib/email-provider-response'
+import { deliverEmail } from '@/src/lib/server/email-delivery'
+import { readEmailEnvironment, EmailEnvironmentUnavailableError } from '@/src/lib/server/email-environment'
+import { reportDiagnostic } from '@/src/lib/diagnostics'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const SUPPORTED_EVENTS = ['ticket_created', 'message_added', 'ticket_updated'] as const
@@ -31,13 +33,6 @@ type TicketRow = {
   creator: ProfileRow | ProfileRow[] | null
 }
 
-type DeliveryRow = {
-  id: string
-  status: 'pending' | 'processing' | 'sent' | 'failed' | 'skipped'
-  attempts: number
-  updated_at: string
-}
-
 function resolveJoin<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value
 }
@@ -57,6 +52,7 @@ function escapeHtml(value: string) {
 }
 
 export async function POST(request: Request) {
+  const diagnostic: { tenantId?: string; entityId?: string } = {}
   try {
     const payload = await request.json() as {
       ticketId?: string
@@ -116,17 +112,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'No autorizado' }, { status: 403 })
     }
 
-    const { data: environmentData } = await adminClient
-      .from('platform_environment')
-      .select('environment')
-      .eq('singleton', true)
-      .maybeSingle()
-    const isDemoEnvironment =
-      process.env.APP_ENV?.trim().toLowerCase() === 'demo'
-      || process.env.NEXT_PUBLIC_APP_ENV?.trim().toLowerCase() === 'demo'
-      || environmentData?.environment === 'demo'
-
-    if (isDemoEnvironment) {
+    if (await readEmailEnvironment(adminClient) === 'demo') {
       return NextResponse.json({ ok: true, skipped: true, reason: 'demo' })
     }
 
@@ -148,6 +134,8 @@ export async function POST(request: Request) {
     if (caller.is_platform_admin !== true && caller.tenant_id !== ticket.tenant_id) {
       return NextResponse.json({ ok: false, error: 'Ticket no encontrado' }, { status: 404 })
     }
+    diagnostic.tenantId = ticket.tenant_id
+    diagnostic.entityId = ticket.id
 
     const { data: tenantDomain } = await adminClient
       .from('tenant_domains')
@@ -217,65 +205,6 @@ export async function POST(request: Request) {
         ? `support/${payload.eventType}/${ticket.id}/${ticket.updated_at}`
         : `support/${payload.eventType}/${ticket.id}`
 
-    const { data: existingData, error: existingError } = await adminClient
-      .from('support_notification_outbox')
-      .select('id, status, attempts, updated_at')
-      .eq('idempotency_key', idempotencyKey)
-      .eq('tenant_id', ticket.tenant_id)
-      .maybeSingle()
-    if (existingError) {
-      return NextResponse.json({ ok: false, error: 'No se pudo validar la auditoría del correo' }, { status: 500 })
-    }
-
-    let delivery: DeliveryRow
-    const existing = existingData as DeliveryRow | null
-    if (existing?.status === 'sent' || existing?.status === 'processing') {
-      return NextResponse.json({ ok: true, alreadySent: true })
-    }
-    if (existing && existing.attempts >= 5) {
-      return NextResponse.json({ ok: false, error: 'El aviso alcanzó el máximo de intentos' }, { status: 429 })
-    }
-
-    if (existing) {
-      const { data: claimed, error: claimError } = await adminClient
-        .from('support_notification_outbox')
-        .update({
-          status: 'processing',
-          attempts: existing.attempts + 1,
-          recipient_email: recipientEmail,
-          error_message: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id)
-        .eq('tenant_id', ticket.tenant_id)
-        .eq('status', 'failed')
-        .eq('updated_at', existing.updated_at)
-        .select('id, status, attempts, updated_at')
-        .maybeSingle()
-      if (claimError || !claimed) return NextResponse.json({ ok: true, alreadySent: true })
-      delivery = claimed as DeliveryRow
-    } else {
-      const { data: created, error: createError } = await adminClient
-        .from('support_notification_outbox')
-        .insert({
-          tenant_id: ticket.tenant_id,
-          ticket_id: ticket.id,
-          message_id: payload.messageId || null,
-          event_type: payload.eventType,
-          recipient_email: recipientEmail,
-          idempotency_key: idempotencyKey,
-          status: 'processing',
-          attempts: 1,
-        })
-        .select('id, status, attempts, updated_at')
-        .single()
-      if (createError || !created) {
-        if (createError?.code === '23505') return NextResponse.json({ ok: true, alreadySent: true })
-        return NextResponse.json({ ok: false, error: 'No se pudo iniciar la auditoría del correo' }, { status: 500 })
-      }
-      delivery = created as DeliveryRow
-    }
-
     const siteUrl = `https://${tenantDomain.hostname}`
     const ticketUrl = `${siteUrl}/support/${ticket.id}`
     const safeTicketNumber = escapeHtml(ticket.ticket_number)
@@ -331,55 +260,27 @@ export async function POST(request: Request) {
       ],
     }
 
-    let resendResponse: Response
-    try {
-      resendResponse = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': idempotencyKey,
-        },
-        body: JSON.stringify(resendRequest),
+    const result = await deliverEmail(adminClient, {
+      table: 'support_notification_outbox', tenantId: ticket.tenant_id,
+      identity: { idempotency_key: idempotencyKey },
+      values: { ticket_id: ticket.id, message_id: payload.messageId || null, event_type: payload.eventType, recipient_email: recipientEmail },
+      request: resendRequest, key: idempotencyKey, apiKey: resendApiKey,
+    })
+    if (result.status >= 500 || result.body.uncertain) {
+      const reference = reportDiagnostic('support_email_failed', {
+        ...diagnostic, code: result.body.uncertain ? 'DELIVERY_UNCONFIRMED' : 'DELIVERY_FAILED',
       })
-    } catch {
-      await adminClient
-        .from('support_notification_outbox')
-        .update({ status: 'failed', error_message: 'No se pudo conectar con Resend', updated_at: new Date().toISOString() })
-        .eq('id', delivery.id)
-        .eq('tenant_id', ticket.tenant_id)
-      return NextResponse.json({ ok: false, error: 'No se pudo conectar con Resend' }, { status: 502 })
+      return NextResponse.json({ ...result.body, reference, error: `${result.body.error} Referencia: ${reference}.` },
+        { status: result.status, headers: { 'X-Request-ID': reference } })
     }
-
-    const resendPayload = await readEmailProviderResponse(resendResponse)
-    if (!resendResponse.ok || !resendPayload.id) {
-      const errorMessage = resendPayload.message
-      await adminClient
-        .from('support_notification_outbox')
-        .update({ status: 'failed', error_message: errorMessage.slice(0, 500), updated_at: new Date().toISOString() })
-        .eq('id', delivery.id)
-        .eq('tenant_id', ticket.tenant_id)
-      return NextResponse.json({ ok: false, error: 'Resend no aceptó el correo' }, { status: 502 })
+    return NextResponse.json(result.body, { status: result.status })
+  } catch (error) {
+    const reference = reportDiagnostic('support_email_failed', {
+      ...diagnostic, code: error instanceof EmailEnvironmentUnavailableError ? 'ENVIRONMENT_UNAVAILABLE' : 'UNEXPECTED',
+    })
+    if (error instanceof EmailEnvironmentUnavailableError) {
+      return NextResponse.json({ ok: false, error: `${error.message} Referencia: ${reference}.`, reference }, { status: 503, headers: { 'X-Request-ID': reference } })
     }
-
-    const sentAt = new Date().toISOString()
-    const { error: updateError } = await adminClient
-      .from('support_notification_outbox')
-      .update({
-        status: 'sent',
-        resend_message_id: resendPayload.id,
-        sent_at: sentAt,
-        updated_at: sentAt,
-      })
-      .eq('id', delivery.id)
-      .eq('tenant_id', ticket.tenant_id)
-
-    if (updateError) {
-      return NextResponse.json({ ok: false, error: 'El correo fue enviado, pero falta conciliar su auditoría' }, { status: 500 })
-    }
-
-    return NextResponse.json({ ok: true, sent: true })
-  } catch {
-    return NextResponse.json({ ok: false, error: 'Error interno al notificar soporte' }, { status: 500 })
+    return NextResponse.json({ ok: false, error: `Error interno al notificar soporte. Referencia: ${reference}.`, reference }, { status: 500, headers: { 'X-Request-ID': reference } })
   }
 }

@@ -25,11 +25,11 @@ import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
-import { createActivityLog } from '@/src/lib/activity-logger'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 import { createNotification } from '@/src/lib/notifications'
-import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
+import { transitionQuotation, quotationRevision } from '@/src/lib/quotation-transition'
+import { allowedTransitions, canTransition, canTransitionForRole } from '@/src/lib/quotation-status'
 import { quotationListHref, quotationTransitionHint } from '@/src/lib/quotation-detail-ux'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import {
@@ -763,7 +763,7 @@ function QuotationDetail() {
       return
     }
 
-    if (oldStatus === 'Ganada' && newStatus === 'Pendiente de Fijar Precios') {
+    if (oldStatus !== 'Borrador' && newStatus === 'Pendiente de Fijar Precios') {
       await openRepricingDialog()
       return
     }
@@ -791,63 +791,17 @@ function QuotationDetail() {
       return false
     }
 
-    const { error } = await supabase
-      .from('quotations')
-      .update({
-        status: newStatus,
-        ...(loss
-          ? {
-              loss_reason: loss.reason,
-              loss_reason_detail: loss.detail || null,
-            }
-          : {}),
-      })
-      .eq('id', quotation.id)
-
-    if (error) {
-      toast.error(error.message)
+    let updatedQuotation
+    try {
+      updatedQuotation = await transitionQuotation(supabase, quotation, newStatus, { loss })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo cambiar el estado')
       return false
     }
 
-    await supabase.from('quotation_status_history').insert([
-      {
-        quotation_id: quotation.id,
-        old_status: oldStatus,
-        new_status: newStatus,
-        changed_by: profile?.id,
-        notes: loss
-          ? `Razón: ${loss.reason}${loss.detail ? `. Detalle: ${loss.detail}` : ''}`
-          : null,
-      },
-    ])
-
-    await createActivityLog({
-      module: 'quotations',
-      action: 'status_changed',
-      entityType: 'quotation',
-      entityId: quotation.id,
-      description: `Estado actualizado de ${oldStatus} a ${newStatus}`,
-      metadata: {
-        oldStatus,
-        newStatus,
-        ...(loss
-          ? { lossReason: loss.reason, lossReasonDetail: loss.detail || null }
-          : {}),
-      },
-    })
-
     toast.success('Estado actualizado')
 
-    setQuotation({
-      ...quotation,
-      status: newStatus,
-      ...(loss
-        ? {
-            loss_reason: loss.reason,
-            loss_reason_detail: loss.detail || null,
-          }
-        : {}),
-    })
+    setQuotation((current: typeof quotation) => current?.id === quotation.id ? { ...current, ...updatedQuotation } : current)
 
     await fetchStatusHistory()
     await loadChangeLogs()
@@ -926,6 +880,8 @@ function QuotationDetail() {
         {
           p_option_id: optionPendingAcceptance.id,
           p_sync_operation: syncOperation,
+          p_expected_status: quotation.status,
+          p_expected_revision: quotationRevision(quotation),
         }
       )
 
@@ -1047,70 +1003,14 @@ function QuotationDetail() {
 
     setReopeningRepricing(true)
 
-    const { error } = await supabase
-      .from('quotations')
-      .update({
-        status: newStatus,
-        pricing_approved: false,
-        pricing_approved_at: null,
-        pricing_approved_by: null,
-      })
-      .eq('id', quotation.id)
-
-    if (error) {
+    try {
+      const updatedQuotation = await transitionQuotation(supabase, quotation, newStatus, { reason })
+      setQuotation((current: typeof quotation) => current?.id === quotation.id ? { ...current, ...updatedQuotation } : current)
+    } catch (error) {
       setReopeningRepricing(false)
-      toast.error(error.message)
+      toast.error(error instanceof Error ? error.message : 'No se pudo reabrir la cotizacion')
       return
     }
-
-    await supabase.from('quotation_status_history').insert([
-      {
-        quotation_id: quotation.id,
-        old_status: previousStatus,
-        new_status: newStatus,
-        changed_by: profile?.id,
-      },
-    ])
-
-    const { error: changeLogError } = await supabase
-      .from('quotation_change_logs')
-      .insert([
-        {
-          quotation_id: quotation.id,
-          change_type: 'quotation_reopened_for_repricing',
-          reason,
-          changed_by: profile?.id,
-        },
-      ])
-
-    if (changeLogError) {
-      toast.error(changeLogError.message)
-    }
-
-    await createActivityLog({
-      module: 'quotations',
-      action: 'quotation_reopened_for_repricing',
-      entityType: 'quotation',
-      entityId: quotation.id,
-      description: `Cotización ${
-        quotation.quotation_number || quotation.id
-      } reabierta para repricing`,
-      metadata: {
-        previous_status: previousStatus,
-        new_status: newStatus,
-        reason,
-        has_shipping_instruction: repricingImpact.hasShippingInstruction,
-        bookings_count: repricingImpact.bookingsCount,
-      },
-    })
-
-    setQuotation({
-      ...quotation,
-      status: newStatus,
-      pricing_approved: false,
-      pricing_approved_at: null,
-      pricing_approved_by: null,
-    })
 
     await fetchStatusHistory()
     await loadChangeLogs()
@@ -1549,7 +1449,7 @@ const pricingTotals = pricingItems.reduce(
 
 const hasPricingItems = pricingItems.length > 0
 const statusActions = statusOptions.filter((status) =>
-  canTransition(quotation.status || 'Borrador', status) &&
+  canTransitionForRole(quotation.status || 'Borrador', status, userRole) &&
   !(quotation.status === 'Ganada' && status === 'Pendiente de Fijar Precios')
 )
 const hasStatusActions = canEditQuotation && (statusActions.length > 0 || quotation.status === 'Perdida')
@@ -3158,7 +3058,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         <DialogHeader>
           <DialogTitle>Reabrir para Repricing</DialogTitle>
           <DialogDescription>
-            Regresa esta cotización ganada a Pendiente de Fijar Precios para corregir tarifa, costos o carrier/naviera.
+            Regresa esta cotización a Pendiente de Fijar Precios para corregir tarifa, costos o carrier/naviera. El motivo quedará registrado junto con el cambio de estado.
           </DialogDescription>
         </DialogHeader>
 

@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { useMiamiCarriers } from '@/src/hooks/useMiamiCarriers'
-import { notifyClientPackageAssigned } from '@/src/lib/client-notifications'
+import { receiveMiamiPackage } from '@/src/lib/miami-assignment'
 import { sendMiamiPackageAssignmentEmail } from '@/src/lib/miami-assignment-email'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
@@ -18,7 +18,10 @@ type ClienteOption = { id: string; nombre: string; codigo_cliente: string | null
 
 export default function MiamiIngresoPage() {
   const router = useRouter()
-  const { user } = useUser()
+  const { user, profile } = useUser()
+  const context = (profile?.tenant_id || '') + ':' + (user?.id || '')
+  const activeContext = useRef(context)
+  const saveInFlight = useRef(false)
   const { carriers } = useMiamiCarriers()
   const trackingRef = useRef<HTMLInputElement>(null)
 
@@ -58,6 +61,7 @@ export default function MiamiIngresoPage() {
   // Client search
   useEffect(() => {
     if (!assignClient || clientSearch.trim().length < 2) { setClientResults([]); return }
+    let current = true
     const timeout = setTimeout(async () => {
       const { data } = await supabase
         .from('clientes')
@@ -65,16 +69,23 @@ export default function MiamiIngresoPage() {
         .ilike('nombre', `%${clientSearch}%`)
         .is('deleted_at', null)
         .limit(8)
-      setClientResults((data ?? []) as ClienteOption[])
-      setSearchOpen(true)
+      if (current) { setClientResults((data ?? []) as ClienteOption[]); setSearchOpen(true) }
     }, 250)
-    return () => clearTimeout(timeout)
-  }, [clientSearch, assignClient])
+    return () => { current = false; clearTimeout(timeout) }
+  }, [clientSearch, assignClient, context])
+
+  useEffect(() => {
+    activeContext.current = context
+    return () => { activeContext.current = '' }
+  }, [context])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saveInFlight.current) return
     if (!form.tracking_number.trim()) { toast.error('El tracking es requerido'); return }
+    if (assignClient && !selectedClient) { toast.error('Selecciona el cliente antes de guardar'); return }
 
+    saveInFlight.current = true
     setSaving(true)
     try {
       const weightInput = parseFloat(form.weight) || null
@@ -86,66 +97,24 @@ export default function MiamiIngresoPage() {
       const width_in   = parseFloat(form.width_in)   || null
       const height_in  = parseFloat(form.height_in)  || null
 
-      const { data: pkg, error } = await supabase
-        .from('miami_packages')
-        .insert({
-          tracking_number: form.tracking_number.trim().toUpperCase(),
-          carrier:         form.carrier || null,
-          tipo_carga:      form.tipo_carga,
-          cargo_status:    'Recibido en Miami',
-          weight_lbs,
-          weight_kg,
-          length_in,
-          width_in,
-          height_in,
-          description:     form.description || null,
-          notes:           form.notes || null,
-          received_by:     user?.id ?? null,
-          status:          'Sin asignar',
-          cliente_id:      assignClient && selectedClient ? selectedClient.id : null,
-        })
-        .select('id, status, warehouse_number, cliente_id')
-        .single()
-
-      if (error) throw error
-
-      // If assigning to client immediately, generate WH number
-      if (assignClient && selectedClient && pkg) {
-        const { data: whData } = await supabase.rpc('next_warehouse_number')
-        await supabase.from('miami_packages').update({
-          warehouse_number: whData,
-          status: 'Asignado',
-          assigned_at: new Date().toISOString(),
-          assigned_by: user?.id ?? null,
-        }).eq('id', pkg.id)
-
-        // Notify client portal
-        await notifyClientPackageAssigned({
-          clienteId:       selectedClient.id,
-          packageId:       pkg.id,
-          trackingNumber:  form.tracking_number.trim().toUpperCase(),
-          warehouseNumber: whData,
-        })
+      const pkg = await receiveMiamiPackage(supabase, {
+        tracking_number: form.tracking_number,
+        carrier: form.carrier || null,
+        tipo_carga: form.tipo_carga,
+        weight_lbs, weight_kg, length_in, width_in, height_in,
+        description: form.description || null,
+        notes: form.notes || null,
+      }, assignClient && selectedClient ? selectedClient.id : null)
+      if (activeContext.current !== context) return
+      if (pkg.status === 'Asignado') {
         const emailResult = await sendMiamiPackageAssignmentEmail(pkg.id)
+        if (activeContext.current !== context) return
         if (!emailResult.ok) {
-          toast.warning('Paquete asignado, pero el correo no fue enviado', {
-            description: emailResult.error,
-          })
+          toast.warning('Paquete asignado, pero el correo no fue enviado', { description: emailResult.error })
         } else if (emailResult.skipped) {
           toast.info('El cliente no tiene correo principal configurado')
         }
-        toast.success('Paquete ingresado y asignado al cliente')
-      } else if (pkg?.status === 'Asignado') {
-        // DB trigger auto-matched a pending pre-alert
-        const emailResult = await sendMiamiPackageAssignmentEmail(pkg.id)
-        if (!emailResult.ok) {
-          toast.warning('Paquete auto-asignado, pero el correo no fue enviado', {
-            description: emailResult.error,
-          })
-        } else if (emailResult.skipped) {
-          toast.info('El cliente no tiene correo principal configurado')
-        }
-        toast.success(`✓ Auto-asignado por pre-alerta · WH: ${pkg.warehouse_number}`, { duration: 6000 })
+        toast.success(assignClient ? 'Paquete ingresado y asignado al cliente' : 'Auto-asignado por prealerta - WH: ' + pkg.warehouse_number)
       } else {
         toast.success('Paquete ingresado correctamente')
       }
@@ -157,9 +126,10 @@ export default function MiamiIngresoPage() {
       setAssignClient(false)
       trackingRef.current?.focus()
 
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al guardar el paquete')
+    } catch (error) {
+      if (activeContext.current === context) toast.error(error instanceof Error ? error.message : 'Error al guardar el paquete')
     } finally {
+      saveInFlight.current = false
       setSaving(false)
     }
   }
@@ -306,6 +276,10 @@ export default function MiamiIngresoPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              role="checkbox"
+              aria-checked={assignClient}
+              aria-label="Asignar a cliente al ingresar"
+              disabled={saving}
               onClick={() => { setAssignClient(!assignClient); setSelectedClient(null); setClientSearch('') }}
               className={`h-5 w-5 rounded border-2 transition ${assignClient ? 'border-blue-600 bg-blue-600' : 'border-slate-300 dark:border-slate-600'}`}
             >

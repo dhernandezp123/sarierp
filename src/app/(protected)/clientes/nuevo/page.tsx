@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
-import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { UnsavedChangesGuard, requestFormNavigation, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 import { createClienteRecord } from '@/src/lib/clientes'
 import { useUser } from '../../../../hooks/useUser'
 import { cn } from '../../../../lib/utils'
@@ -216,6 +216,7 @@ export default function NuevoClientePage() {
     setFormData(initialFormData)
 
     setTimeout(() => {
+      markFormSaved()
       router.push(createdCliente?.id ? `/clientes/${createdCliente.id}` : '/clientes')
     }, 1200)
   }
@@ -240,7 +241,7 @@ export default function NuevoClientePage() {
 
         <button
           type="button"
-          onClick={() => router.push('/clientes')}
+          onClick={() => requestFormNavigation(() => router.push('/clientes'))}
           className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           Volver

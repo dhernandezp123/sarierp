@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { toast } from 'sonner'
-
+import { useUser } from '@/src/hooks/useUser'
+import { loadHistoricalQuotations } from '@/src/lib/history-quotations'
+import { isInCreationPeriod } from '@/src/lib/commercial-dashboard'
+import { calendarDaysUntil, formatDate } from '@/src/lib/format'
 import { supabase } from '../../../lib/supabase/client'
+
 import { cn } from '../../../lib/utils'
 import { allowedTransitions } from '@/src/lib/quotation-status'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
@@ -171,11 +174,9 @@ function getExpiryDisplay(quote: any): ExpiryDisplay | null {
   const selected = (quote.agent_quotes || []).find((aq: any) => aq.is_selected)
   if (!selected?.valid_until) return null
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const expiry = new Date(selected.valid_until + 'T00:00:00')
-  const diffDays = Math.floor((expiry.getTime() - today.getTime()) / 86400000)
-  const label = expiry.toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const diffDays = calendarDaysUntil(selected.valid_until)
+  if (diffDays === null) return null
+  const label = formatDate(selected.valid_until)
 
   if (diffDays < 0) return { label, cls: 'bg-red-100 text-red-700 ring-red-200' }
   if (diffDays <= 7) return { label, cls: 'bg-orange-100 text-orange-700 ring-orange-200' }
@@ -187,6 +188,11 @@ function getExpiryDisplay(quote: any): ExpiryDisplay | null {
 export default function HistoricoPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { user, profile } = useUser()
+  const context = (profile?.tenant_id || '') + ':' + (user?.id || '')
+  const loadVersion = useRef(0)
+  const [loadedContext, setLoadedContext] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const [quotations, setQuotations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -204,37 +210,23 @@ export default function HistoricoPage() {
     router.push('/quotations/' + id + '?returnTo=' + encodeURIComponent(returnTo))
   }
 
-  const fetchQuotations = async () => {
-    // Temporal: Ventas tambien ve todo.
-    // Mas adelante aplicamos filtro por vendedor.
-    let query = supabase
-      .from('quotations')
-      .select(`
-        *,
-        cliente:clientes(*),
-        created_by_profile:profiles!quotations_created_by_fkey(*),
-        agent_quotes(valid_until, is_selected),
-        quotation_containers(quantity),
-        quotation_cargo_lines(quantity)
-      `)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-
-    const { data, error } = await query
-
-    if (error) {
-      toast.error(error.message)
-      setLoading(false)
-      return
-    }
-
-    setQuotations(data || [])
-    setLoading(false)
-  }
+  const fetchQuotations = useCallback(async () => {
+    const version = ++loadVersion.current
+    const isCurrent = () => version === loadVersion.current
+    setLoading(true)
+    setLoadError('')
+    try {
+      const rows = await loadHistoricalQuotations(supabase, isCurrent)
+      if (isCurrent()) { setQuotations(rows); setLoadedContext(context) }
+    } catch (error) {
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'No se pudo cargar el historico.')
+    } finally { if (isCurrent()) setLoading(false) }
+  }, [context])
 
   useEffect(() => {
-    fetchQuotations()
-  }, [])
+    const timer = setTimeout(() => { void fetchQuotations() }, 0)
+    return () => { clearTimeout(timer); loadVersion.current += 1 }
+  }, [fetchQuotations])
 
   const filteredQuotations = quotations.filter((quote) => {
     const search = searchTerm.toLowerCase().trim()
@@ -242,15 +234,7 @@ export default function HistoricoPage() {
     const matchesStatus =
       statusFilter === 'Todos' || quote.status === statusFilter
 
-    const quoteDate = quote.created_at
-      ? quote.created_at.slice(0, 10)
-      : ''
-
-    const matchesDateFrom =
-      !dateFrom || quoteDate >= dateFrom
-
-    const matchesDateTo =
-      !dateTo || quoteDate <= dateTo
+    const matchesPeriod = isInCreationPeriod(quote.created_at, dateFrom, dateTo)
 
     const matchesSearch =
       !search ||
@@ -264,7 +248,7 @@ export default function HistoricoPage() {
         .toLowerCase()
         .includes(search)
 
-    return matchesStatus && matchesDateFrom && matchesDateTo && matchesSearch
+    return matchesStatus && matchesPeriod && matchesSearch
   })
 
   const paginatedQuotations = filteredQuotations.slice(
@@ -283,6 +267,9 @@ export default function HistoricoPage() {
   const sentQuotationsCount = filteredQuotations.filter(
     (quote) => quote.status === 'Enviada al Cliente'
   ).length
+
+  if (loadError) return <div className={cardClass}><p role="alert">{loadError}</p><button type="button" onClick={() => void fetchQuotations()} className={secondaryButtonClass}>Reintentar</button></div>
+  if (loading || loadedContext !== context) return <TableSkeleton rows={6} cols={6} />
 
   return (
     <>
@@ -482,9 +469,7 @@ export default function HistoricoPage() {
                   >
 
                     <TableCell className="px-4 py-3 whitespace-nowrap">
-                      {quote.created_at
-                        ? new Date(quote.created_at).toLocaleDateString('es-HN')
-                        : 'N/A'}
+                      {formatDate(quote.created_at, 'N/A')}
                     </TableCell>
 
                     <TableCell className="px-4 py-3 font-bold whitespace-nowrap">

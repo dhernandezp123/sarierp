@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { readEmailProviderResponse } from '@/src/lib/email-provider-response'
+import { deliverEmail } from '@/src/lib/server/email-delivery'
 import { formatMiamiDateTime } from '@/src/lib/format'
 import { loadTenantEmailBranding } from '@/src/lib/company-settings'
+import { readEmailEnvironment, EmailEnvironmentUnavailableError } from '@/src/lib/server/email-environment'
+import { reportDiagnostic } from '@/src/lib/diagnostics'
 
 const EVENT_TYPE = 'miami_package_assigned'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -25,13 +27,6 @@ type PackageRow = {
   clientes: ClientRow | ClientRow[] | null
 }
 
-type DeliveryRow = {
-  id: string
-  status: 'processing' | 'sent' | 'failed'
-  attempts: number
-  updated_at: string
-}
-
 function resolveJoin<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value
 }
@@ -46,6 +41,7 @@ function escapeHtml(value: string) {
 }
 
 export async function POST(request: Request) {
+  const diagnostic: { tenantId?: string; entityId?: string } = {}
   try {
     const { packageId } = await request.json() as { packageId?: string }
     if (!packageId) {
@@ -57,9 +53,6 @@ export async function POST(request: Request) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     const resendApiKey = process.env.RESEND_API_KEY
     const outboundEmailEnabled = process.env.OUTBOUND_EMAIL_ENABLED === 'true'
-    let isDemoEnvironment =
-      process.env.APP_ENV?.trim().toLowerCase() === 'demo'
-      || process.env.NEXT_PUBLIC_APP_ENV?.trim().toLowerCase() === 'demo'
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       return NextResponse.json(
@@ -106,14 +99,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data: environmentData } = await supabaseAdmin
-      .from('platform_environment')
-      .select('environment')
-      .eq('singleton', true)
-      .maybeSingle()
-    isDemoEnvironment = isDemoEnvironment || environmentData?.environment === 'demo'
-
-    if (isDemoEnvironment) {
+    if (await readEmailEnvironment(supabaseAdmin) === 'demo') {
       return NextResponse.json(
         { ok: false, error: 'Los correos están bloqueados en el ambiente demo' },
         { status: 403 }
@@ -146,6 +132,8 @@ export async function POST(request: Request) {
     }
 
     const pkg = packageData as unknown as PackageRow
+    diagnostic.tenantId = pkg.tenant_id
+    diagnostic.entityId = pkg.id
     if (pkg.status !== 'Asignado' || !pkg.cliente_id || !pkg.warehouse_number) {
       return NextResponse.json(
         { ok: false, error: 'El paquete todavía no está asignado a un cliente' },
@@ -174,84 +162,6 @@ export async function POST(request: Request) {
         { ok: false, error: 'La empresa no tiene un dominio principal activo' },
         { status: 409 }
       )
-    }
-
-    const { data: existingData, error: existingError } = await supabaseAdmin
-      .from('client_email_deliveries')
-      .select('id, status, attempts, updated_at')
-      .eq('package_id', pkg.id)
-      .eq('event_type', EVENT_TYPE)
-      .eq('tenant_id', pkg.tenant_id)
-      .maybeSingle()
-
-    if (existingError) {
-      return NextResponse.json(
-        { ok: false, error: 'No se pudo validar la auditoría del correo' },
-        { status: 500 }
-      )
-    }
-
-    let delivery: DeliveryRow
-    const existing = existingData as DeliveryRow | null
-    if (existing?.status === 'sent') {
-      return NextResponse.json({ ok: true, alreadySent: true })
-    }
-    if (existing?.status === 'processing') {
-      return NextResponse.json({ ok: true, alreadySent: true })
-    }
-    if (existing && existing.attempts >= 5) {
-      return NextResponse.json(
-        { ok: false, error: 'El aviso alcanzó el máximo de intentos' },
-        { status: 429 }
-      )
-    }
-
-    if (existing) {
-      const now = new Date().toISOString()
-      const { data: claimed, error: claimError } = await supabaseAdmin
-        .from('client_email_deliveries')
-        .update({
-          status: 'processing',
-          attempts: existing.attempts + 1,
-          recipient_email: recipientEmail,
-          error_message: null,
-          updated_at: now,
-        })
-        .eq('id', existing.id)
-        .eq('tenant_id', pkg.tenant_id)
-        .eq('status', 'failed')
-        .eq('updated_at', existing.updated_at)
-        .select('id, status, attempts, updated_at')
-        .maybeSingle()
-
-      if (claimError || !claimed) {
-        return NextResponse.json({ ok: true, alreadySent: true })
-      }
-      delivery = claimed as DeliveryRow
-    } else {
-      const { data: created, error: createError } = await supabaseAdmin
-        .from('client_email_deliveries')
-        .insert({
-          tenant_id: pkg.tenant_id,
-          package_id: pkg.id,
-          event_type: EVENT_TYPE,
-          recipient_email: recipientEmail,
-          status: 'processing',
-          attempts: 1,
-        })
-        .select('id, status, attempts, updated_at')
-        .single()
-
-      if (createError || !created) {
-        if (createError?.code === '23505') {
-          return NextResponse.json({ ok: true, alreadySent: true })
-        }
-        return NextResponse.json(
-          { ok: false, error: 'No se pudo iniciar la auditoría del correo' },
-          { status: 500 }
-        )
-      }
-      delivery = created as DeliveryRow
     }
 
     const siteUrl = `https://${tenantDomain.hostname}`
@@ -314,78 +224,30 @@ export async function POST(request: Request) {
         ],
       }
 
-    let resendResponse: Response
-    try {
-      resendResponse = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': `${EVENT_TYPE}/${pkg.id}`,
-        },
-        body: JSON.stringify(resendRequest),
+    const result = await deliverEmail(supabaseAdmin, {
+      table: 'client_email_deliveries', tenantId: pkg.tenant_id,
+      identity: { package_id: pkg.id, event_type: EVENT_TYPE },
+      values: { recipient_email: recipientEmail }, request: resendRequest,
+      key: EVENT_TYPE + '/' + pkg.id, apiKey: resendApiKey,
+    })
+    if (result.status >= 500 || result.body.uncertain) {
+      const reference = reportDiagnostic('miami_email_failed', {
+        ...diagnostic, code: result.body.uncertain ? 'DELIVERY_UNCONFIRMED' : 'DELIVERY_FAILED',
       })
-    } catch {
-      await supabaseAdmin
-        .from('client_email_deliveries')
-        .update({
-          status: 'failed',
-          error_message: 'No se pudo conectar con Resend',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', delivery.id)
-        .eq('tenant_id', pkg.tenant_id)
-
-      return NextResponse.json(
-        { ok: false, error: 'No se pudo conectar con Resend' },
-        { status: 502 }
-      )
+      return NextResponse.json({ ...result.body, reference, error: `${result.body.error} Referencia: ${reference}.` },
+        { status: result.status, headers: { 'X-Request-ID': reference } })
     }
-
-    const resendPayload = await readEmailProviderResponse(resendResponse)
-
-    if (!resendResponse.ok || !resendPayload.id) {
-      const errorMessage = resendPayload.message
-      await supabaseAdmin
-        .from('client_email_deliveries')
-        .update({
-          status: 'failed',
-          error_message: errorMessage.slice(0, 500),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', delivery.id)
-        .eq('tenant_id', pkg.tenant_id)
-
-      return NextResponse.json(
-        { ok: false, error: 'Resend no aceptó el correo' },
-        { status: 502 }
-      )
+    return NextResponse.json(result.body, { status: result.status })
+  } catch (error) {
+    const reference = reportDiagnostic('miami_email_failed', {
+      ...diagnostic, code: error instanceof EmailEnvironmentUnavailableError ? 'ENVIRONMENT_UNAVAILABLE' : 'UNEXPECTED',
+    })
+    if (error instanceof EmailEnvironmentUnavailableError) {
+      return NextResponse.json({ ok: false, error: `${error.message} Referencia: ${reference}.`, reference }, { status: 503, headers: { 'X-Request-ID': reference } })
     }
-
-    const sentAt = new Date().toISOString()
-    const { error: deliveryUpdateError } = await supabaseAdmin
-      .from('client_email_deliveries')
-      .update({
-        status: 'sent',
-        resend_message_id: resendPayload.id,
-        sent_at: sentAt,
-        updated_at: sentAt,
-      })
-      .eq('id', delivery.id)
-      .eq('tenant_id', pkg.tenant_id)
-
-    if (deliveryUpdateError) {
-      return NextResponse.json(
-        { ok: false, error: 'El correo fue enviado, pero falta conciliar su auditoría' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({ ok: true, sent: true })
-  } catch {
     return NextResponse.json(
-      { ok: false, error: 'Error interno al enviar el aviso' },
-      { status: 500 }
+      { ok: false, error: `Error interno al enviar el aviso. Referencia: ${reference}.`, reference },
+      { status: 500, headers: { 'X-Request-ID': reference } }
     )
   }
 }

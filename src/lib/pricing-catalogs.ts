@@ -1,3 +1,5 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+
 export type ServiceProductCatalogItem = {
   value: string
   label: string
@@ -24,8 +26,16 @@ export type OptionalClientRateConfig = Record<
   { itemType: string; taxable: boolean }
 >
 
-type SupabaseLike = {
-  from: (table: string) => any
+type SupabaseLike = Pick<SupabaseClient, 'from'>
+type ServiceProductRow = {
+  value: string; label: string; applies_client_rates: boolean | null
+  active: boolean | null; sort_order: number | null
+}
+type ClientRateRow = {
+  code: string; label: string; category: string; unit: string | null
+  is_destination_rate: boolean | null; is_optional_charge: boolean | null
+  optional_item_type: string | null; taxable: boolean | null
+  active: boolean | null; sort_order: number | null
 }
 
 export const tradeDirections = [
@@ -390,7 +400,7 @@ export async function fetchActiveServiceProducts(client: SupabaseLike) {
 
     if (error || !data?.length) return defaultServiceProducts
 
-    return data.map((item: any) => ({
+    return data.map((item: ServiceProductRow) => ({
       value: item.value,
       label: item.label,
       appliesClientRates: item.applies_client_rates === true,
@@ -413,7 +423,7 @@ export async function fetchActiveClientRateCatalog(client: SupabaseLike) {
 
     if (error || !data?.length) return defaultClientRateCatalog
 
-    return data.map((item: any) => ({
+    return data.map((item: ClientRateRow) => ({
       code: item.code,
       label: item.label,
       category: item.category,

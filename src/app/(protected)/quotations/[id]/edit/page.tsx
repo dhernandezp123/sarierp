@@ -1,5 +1,11 @@
 'use client'
 
+import {
+  type CargoDimensionLine, getCargoVolumeMode, calculateLineCbm,
+  calculateLineFt3, getCargoWeightUnit, getLineUnitWeightLbs,
+  getLineTotalWeightLbs, getLineTotalWeightKg,
+} from '@/src/lib/quotation-cargo'
+
 import { toDateInputValue } from '@/src/lib/format'
 
 import { useEffect, useRef, useState } from 'react'
@@ -14,10 +20,11 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { SectionNav } from '@/src/components/ui/SectionNav'
 import { createNotification } from '@/src/lib/notifications'
-import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { UnsavedChangesGuard, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { canTransition } from '@/src/lib/quotation-status'
+import { quotationRevision } from '@/src/lib/quotation-transition'
 import {
   fetchActiveServiceProducts,
   serviceProducts,
@@ -52,20 +59,6 @@ const editorSections = [
   { href: '#quote-notes' as const, label: 'Observaciones' },
   { href: '#quote-actions' as const, label: 'Guardar' },
 ]
-
-type CargoDimensionLine = {
-  id: string
-  quantity: string
-  packageType: 'Caja' | 'Pallet' | 'Pieza'
-  length: string
-  width: string
-  height: string
-  dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
-  weight: string
-  weightUnit?: 'lbs' | 'kg'
-  volumeMode?: 'dimensions' | 'manual'
-  manualCbm?: string | number
-}
 
 type ContainerLine = {
   container_type_id: string
@@ -114,6 +107,8 @@ export default function EditQuotationPage() {
   const saveInFlight = useRef(false)
   const [quotationNumber, setQuotationNumber] = useState<string | null>(null)
   const [sendPricingDialogOpen, setSendPricingDialogOpen] = useState(false)
+  const [statusRevision, setStatusRevision] = useState<number | string | null>(null)
+  const [repricingReason, setRepricingReason] = useState('')
   const [savingAfterEdit, setSavingAfterEdit] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
   const [originalClienteId, setOriginalClienteId] = useState('')
@@ -275,6 +270,7 @@ export default function EditQuotationPage() {
       return
     }
 
+    setStatusRevision(data.status_revision)
     setFormData({
       cliente_id: data.cliente_id || '',
       status: data.status || '',
@@ -596,81 +592,6 @@ export default function EditQuotationPage() {
     }
   }
 
-  const getCbmPerUnit = (line: CargoDimensionLine) => {
-    const length = Number(line.length || 0)
-    const width = Number(line.width || 0)
-    const height = Number(line.height || 0)
-
-    if (!length || !width || !height) return 0
-
-    if (line.dimensionUnit === 'in') {
-      return (length * width * height) / 61023.7441
-    }
-
-    if (line.dimensionUnit === 'cm') {
-      return (length * width * height) / 1_000_000
-    }
-
-    if (line.dimensionUnit === 'mm') {
-      return (length * width * height) / 1_000_000_000
-    }
-
-    if (line.dimensionUnit === 'm') {
-      return length * width * height
-    }
-
-    return 0
-  }
-
-  const calculateLineCbm = (line: CargoDimensionLine) => {
-    if ((line.volumeMode || 'dimensions') === 'manual') {
-      return Number(line.manualCbm || 0)
-    }
-
-    const quantity = Number(line.quantity || 0)
-    if (!quantity) return 0
-
-    return getCbmPerUnit(line) * quantity
-  }
-
-  const calculateLineFt3 = (line: CargoDimensionLine) => {
-    return calculateLineCbm(line) * 35.3147
-  }
-
-  const getCargoVolumeMode = (line: CargoDimensionLine) =>
-    line.volumeMode || 'dimensions'
-
-  const hasLineVolume = (line: CargoDimensionLine) => {
-    if (getCargoVolumeMode(line) === 'manual') {
-      return Number(line.manualCbm || 0) > 0
-    }
-
-    return (
-      Number(line.length || 0) > 0 &&
-      Number(line.width || 0) > 0 &&
-      Number(line.height || 0) > 0
-    )
-  }
-
-  const getCargoWeightUnit = (line: CargoDimensionLine) =>
-    line.weightUnit || 'lbs'
-
-  const getLineUnitWeightLbs = (line: CargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
-    return getCargoWeightUnit(line) === 'kg' ? weight * 2.20462 : weight
-  }
-
-  const getLineUnitWeightKg = (line: CargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
-    return getCargoWeightUnit(line) === 'kg' ? weight : weight / 2.20462
-  }
-
-  const getLineTotalWeightLbs = (line: CargoDimensionLine) =>
-    getLineUnitWeightLbs(line) * Number(line.quantity || 0)
-
-  const getLineTotalWeightKg = (line: CargoDimensionLine) =>
-    getLineUnitWeightKg(line) * Number(line.quantity || 0)
-
   const handleSendToPricing = async () => { await handleSave(true) }
 
   const handleSave = async (sendToPricing = false) => {
@@ -681,6 +602,11 @@ export default function EditQuotationPage() {
     }
     if (sendToPricing && (!formData.tipo_transporte || !formData.quote_type)) {
       toast.error('Selecciona el transporte y tipo de cotización')
+      return
+    }
+    if (sendToPricing && formData.status !== 'Borrador' && !repricingReason.trim()) {
+      setSendPricingDialogOpen(true)
+      toast.error('Ingresa el motivo para volver a solicitar pricing.')
       return
     }
 
@@ -856,6 +782,8 @@ export default function EditQuotationPage() {
       const { error } = await supabase.rpc('save_quotation_edit', {
         p_quotation_id: quotationId,
         p_expected_status: formData.status,
+        p_expected_revision: quotationRevision({ id: quotationId, status: formData.status, status_revision: statusRevision }),
+        p_repricing_reason: repricingReason.trim() || null,
         p_quotation_data: quotationPayload,
         p_replace_containers: shouldReplaceContainers,
         p_container_lines: containerRows,
@@ -940,6 +868,7 @@ export default function EditQuotationPage() {
         setSendPricingDialogOpen(true)
         return
       }
+      markFormSaved()
       router.push(`/quotations/${params.id}`)
     } catch (error) {
       if (persisted) {
@@ -1993,6 +1922,13 @@ export default function EditQuotationPage() {
               Los cambios fueron guardados correctamente. ¿Deseas enviar esta cotización al equipo de Pricing?
             </DialogDescription>
           </DialogHeader>
+
+          {formData.status !== 'Borrador' && (
+            <label className="block space-y-2 text-sm font-medium">
+              <span>Motivo de la nueva solicitud de pricing</span>
+              <textarea value={repricingReason} onChange={(event) => setRepricingReason(event.target.value)} rows={3} className={fieldClass} />
+            </label>
+          )}
 
           <div className="flex justify-end gap-2">
             <button

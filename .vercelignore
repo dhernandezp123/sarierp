@@ -19,3 +19,4 @@ release-evidence
 *.tsbuildinfo
 supabase/.temp
 public/ocr-assets/runtime
+tests/browser

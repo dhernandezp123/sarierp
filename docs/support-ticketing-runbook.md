@@ -38,6 +38,18 @@ Antes de habilitar correos:
    - `RESEND_FROM_EMAIL`.
    - `NEXT_PUBLIC_SITE_URL` con el dominio exacto de esa instalación.
 3. Confirmar que el proyecto Supabase y la rama Git corresponden al cliente.
+4. Verificar la fila `singleton = true` de `platform_environment` desde el
+   servidor. Desde AUD-07, error/ausencia/valor inesperado bloquea el aviso con
+   HTTP 503; `production` debe corresponder al ambiente real y Demo conserva
+   su bloqueo. Si esta fuente no está provisionada, resolver la configuración
+   mediante un despliegue revisado antes de habilitar correo; no copiar las
+   migraciones exclusivas de Demo ni asumir producción por omisión. Véase
+   [el guion de configuración y aceptación de AUD-07](uat/aud07-email-environment.md).
+5. Publicar AUD-08 con sus tres migraciones de auditoría/conciliación. Un aviso
+   `processing` responde en curso y un resultado desconocido exige recuperación
+   con snapshot/clave vigentes o revisión del proveedor. No limpiar filas ni
+   reiniciar contadores para forzar reenvíos. Véase
+   [el procedimiento de recuperación y conciliación](uat/aud08-email-recovery.md).
 
 Después de aplicar la migración, configurar desde SQL Editor confiable. Cambiar
 el prefijo y correo antes de ejecutar:

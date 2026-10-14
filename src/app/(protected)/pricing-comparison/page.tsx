@@ -24,7 +24,8 @@ import {
   fetchActiveClientRateCatalog,
   type OptionalClientRateConfig,
 } from '@/src/lib/pricing-catalogs'
-import { canTransition } from '@/src/lib/quotation-status'
+import { transitionQuotation } from '@/src/lib/quotation-transition'
+import { canTransition, isWonRepricing } from '@/src/lib/quotation-status'
 import {
   calculateGrossProfitPercent,
   validatePricingCompleteness,
@@ -1047,12 +1048,14 @@ function PricingComparisonContent() {
         : editingAgentQuoteId
           ? 'Actualizar tarifa de agente'
           : 'Agregar tarifa de agente',
-      isEditingSelectedAgentQuote
+      isEditingSelectedAgentQuote || (oldStatus !== nextStatus && oldStatus !== 'Borrador')
         ? {
             force: true,
-            title: 'Editar tarifa seleccionada',
+            title: isEditingSelectedAgentQuote ? 'Editar tarifa seleccionada' : 'Solicitar nuevo pricing',
             description:
-              'Esta tarifa ya está seleccionada para pricing. Debes registrar el motivo de la edición para mantener trazabilidad.',
+              isEditingSelectedAgentQuote
+                ? 'Esta tarifa ya está seleccionada para pricing. Debes registrar el motivo de la edición para mantener trazabilidad.'
+                : 'La cotización volverá a Pendiente de Fijar Precios. Registra el motivo para mantener trazabilidad.',
           }
         : undefined
     )
@@ -1183,29 +1186,13 @@ function PricingComparisonContent() {
     }
 
     if (oldStatus !== nextStatus) {
-      const { error: statusError } = await supabase
-        .from('quotations')
-        .update({ status: nextStatus })
-        .eq('id', selectedQuote.id)
-
-      if (statusError) {
-        toast.error(statusError.message)
+      try {
+        const updatedQuotation = await transitionQuotation(supabase, selectedQuote, nextStatus, { reason: reason || undefined })
+        setSelectedQuote((current: typeof selectedQuote) => current?.id === selectedQuote.id ? { ...current, ...updatedQuotation } : current)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'No se pudo solicitar pricing')
         return
       }
-
-      await supabase.from('quotation_status_history').insert([
-        {
-          quotation_id: selectedQuote.id,
-          old_status: oldStatus,
-          new_status: nextStatus,
-          changed_by: profile?.id,
-        },
-      ])
-
-      setSelectedQuote({
-        ...selectedQuote,
-        status: nextStatus,
-      })
     }
 
     if (shouldClearFclCostOverrides) {
@@ -2098,32 +2085,6 @@ function PricingComparisonContent() {
     if (!selectedQuote?.id) return null
 
     const quoteStatus = selectedQuote.status || 'Borrador'
-    const isPendingPricing = quoteStatus === 'Pendiente de Fijar Precios'
-
-    const { data: changeLogs, error: changeLogError } = await supabase
-      .from('quotation_change_logs')
-      .select('id')
-      .eq('quotation_id', selectedQuote.id)
-      .eq('change_type', 'quotation_reopened_for_repricing')
-      .limit(1)
-
-    if (changeLogError) {
-      toast.error(changeLogError.message)
-      return null
-    }
-
-    const { data: activityLogs, error: activityLogError } = await supabase
-      .from('activity_logs')
-      .select('id')
-      .eq('entity_type', 'quotation')
-      .eq('entity_id', selectedQuote.id)
-      .eq('action', 'quotation_reopened_for_repricing')
-      .limit(1)
-
-    if (activityLogError) {
-      toast.error(activityLogError.message)
-      return null
-    }
 
     const { data: shippingInstructions, error: siError } = await supabase
       .from('shipping_instructions')
@@ -2175,11 +2136,7 @@ function PricingComparisonContent() {
       bookings = (bookingsData || []) as OperationalBookingSnapshot[]
     }
 
-    const wasReopenedForRepricing =
-      (changeLogs || []).length > 0 || (activityLogs || []).length > 0
-    const isRepricing =
-      isPendingPricing &&
-      (wasReopenedForRepricing || shippingInstructionIds.length > 0 || bookings.length > 0)
+    const isRepricing = isWonRepricing(quoteStatus, selectedQuote.repricing_return_status)
 
     if (!isRepricing) return null
 
@@ -2327,22 +2284,6 @@ function PricingComparisonContent() {
     }
   }
 
-  const syncOperationalRepricing = async (impact: OperationalImpact) => {
-    if (!impact.hasShippingInstruction) return
-
-    for (const shippingInstructionId of impact.shippingInstructionIds) {
-      const { error } = await supabase.rpc(
-        'sync_shipping_instruction_from_selected_agent_quote_v2',
-        {
-          p_shipping_instruction_id: shippingInstructionId,
-          p_reason: 'Repricing desde Pricing Comparison',
-        }
-      )
-
-      if (error) throw error
-    }
-  }
-
   const getPersistedFinancialTotals = (quote: any): FinancialTotalsSnapshot | null => {
     const fields = [
       quote?.total_cost,
@@ -2367,49 +2308,6 @@ function PricingComparisonContent() {
     }
 
     return snapshot
-  }
-
-  const calculateFinancialTotalsFromItems = (
-    items: Array<{
-      cost_amount?: number | string | null
-      sale_amount?: number | string | null
-      quantity?: number | string | null
-    }>
-  ): FinancialTotalsSnapshot => {
-    const currentTotalCost = items.reduce(
-      (sum, item) =>
-        sum + Number(item.cost_amount || 0) * Number(item.quantity || 1),
-      0
-    )
-    const currentTotalSale = items.reduce(
-      (sum, item) =>
-        sum + Number(item.sale_amount || 0) * Number(item.quantity || 1),
-      0
-    )
-
-    return {
-      total_cost: currentTotalCost,
-      total_sale: currentTotalSale,
-      profit_amount: currentTotalSale - currentTotalCost,
-      gp_percentage: calculateGrossProfitPercent({
-        saleTotal: currentTotalSale,
-        costTotal: currentTotalCost,
-      }),
-    }
-  }
-
-  const fetchCurrentFinancialTotals = async (quotationId: string) => {
-    const { data, error } = await supabase
-      .from('pricing_items')
-      .select('cost_amount, sale_amount, quantity')
-      .eq('quotation_id', quotationId)
-
-    if (error) {
-      toast.error(error.message)
-      return null
-    }
-
-    return calculateFinancialTotalsFromItems(data || [])
   }
 
   const getFinancialDelta = (
@@ -2493,15 +2391,7 @@ function PricingComparisonContent() {
     )
       ? getPersistedFinancialTotals(selectedQuote)
       : null
-    const currentFinancialTotals = await fetchCurrentFinancialTotals(
-      selectedQuote.id
-    )
-
-    if (!currentFinancialTotals) return false
-
-    const newFinancialTotals = previousFinancialTotals
-      ? currentFinancialTotals
-      : null
+    let newFinancialTotals: FinancialTotalsSnapshot | null = null
     const getFinancialSnapshotMetadata = (changeType: string) =>
       previousFinancialTotals && newFinancialTotals
         ? buildFinancialSnapshotMetadata(
@@ -2520,44 +2410,17 @@ function PricingComparisonContent() {
       return false
     }
 
-    const { data: updatedQuote, error } = await supabase
-      .from('quotations')
-      .update({
-        status: nextStatus,
-        total_cost: currentFinancialTotals.total_cost,
-        total_sale: currentFinancialTotals.total_sale,
-        profit_amount: currentFinancialTotals.profit_amount,
-        gp_percentage: currentFinancialTotals.gp_percentage,
-        pricing_approved: true,
-        pricing_approved_by: profile?.id,
-        pricing_approved_at: new Date().toISOString(),
+    let updatedQuote
+    try {
+      updatedQuote = await transitionQuotation(supabase, selectedQuote, nextStatus, {
+        reason,
+        syncOperation: operationalSyncMode === 'sync' && closesRepricing,
       })
-      .eq('id', selectedQuote.id)
-      .select('*')
-      .single()
-
-    if (error) {
-      toast.error(error.message)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo aprobar pricing')
       return false
     }
-
-    if (operationalSyncMode === 'sync' && impact && closesRepricing) {
-      try {
-        await syncOperationalRepricing(impact)
-      } catch (syncError: any) {
-        toast.error(syncError?.message || 'No se pudo sincronizar la operación')
-        return false
-      }
-    }
-
-    await supabase.from('quotation_status_history').insert([
-      {
-        quotation_id: selectedQuote.id,
-        old_status: oldStatus,
-        new_status: nextStatus,
-        changed_by: profile?.id,
-      },
-    ])
+    newFinancialTotals = previousFinancialTotals ? getPersistedFinancialTotals(updatedQuote) : null
 
     await createActivityLog({
       module: 'pricing',
@@ -2642,7 +2505,7 @@ function PricingComparisonContent() {
     await fetchQuotations()
 
     setSelectedQuote((current: any) =>
-      current ? { ...current, ...updatedQuote } : updatedQuote
+      current?.id === selectedQuote.id ? { ...current, ...updatedQuote } : current
     )
 
     return true
@@ -3003,54 +2866,15 @@ function PricingComparisonContent() {
       return
     }
 
-    if (commercialOptions.length > 0) {
-      const { error: publishOptionsError } = await supabase.rpc(
-        'send_quotation_with_options',
-        { p_quotation_id: selectedQuote.id }
-      )
-
-      if (publishOptionsError) {
-        toast.error(publishOptionsError.message)
-        return
-      }
-
-      toast.success('Cotización marcada como Enviada al Cliente')
-
-      if (selectedQuote.created_by) {
-        await createNotification({
-          userId: selectedQuote.created_by,
-          title: 'Cotización enviada al cliente',
-          message: `La cotización ${
-            selectedQuote.quotation_number || ''
-          } fue marcada como enviada al cliente.`,
-          type: 'info',
-        })
-      }
-
-      setSelectedQuote({ ...selectedQuote, status: nextStatus })
-      await fetchCommercialOptions(selectedQuote.id)
-      await fetchQuotations()
+    let updatedQuotation
+    try {
+      updatedQuotation = await transitionQuotation(supabase, selectedQuote, nextStatus)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo registrar el envio')
       return
     }
-
-    const { error } = await supabase
-      .from('quotations')
-      .update({ status: nextStatus })
-      .eq('id', selectedQuote.id)
-
-    if (error) {
-      toast.error(error.message)
-      return
-    }
-
-    await supabase.from('quotation_status_history').insert([
-      {
-        quotation_id: selectedQuote.id,
-        old_status: oldStatus,
-        new_status: nextStatus,
-        changed_by: profile?.id,
-      },
-    ])
+    setSelectedQuote((current: typeof selectedQuote) => current?.id === selectedQuote.id ? { ...current, ...updatedQuotation } : current)
+    await fetchCommercialOptions(selectedQuote.id)
 
     toast.success('Cotizacion marcada como Enviada al Cliente')
 
@@ -3077,10 +2901,7 @@ function PricingComparisonContent() {
       })
     }
 
-    setSelectedQuote({
-      ...selectedQuote,
-      status: nextStatus,
-    })
+    setSelectedQuote((current: typeof selectedQuote) => current?.id === selectedQuote.id ? { ...current, ...updatedQuotation } : current)
 
     if (commercialOptions.length > 0) {
       await fetchCommercialOptions(selectedQuote.id)

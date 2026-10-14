@@ -26,7 +26,8 @@ Disponible para Admin, Operaciones, Finanzas y Contabilidad de Sari.
    bloquea la pestaña, permitir ventanas emergentes para el ERP o usar la descarga.
 6. **Guardar documento** agrega una versión al historial. Abrir una versión y
    guardar cambios crea otra versión, conservando la anterior. El historial
-   muestra las 100 versiones más recientes; no modifica cuentas por cobrar.
+   permite buscar y cargar páginas de versiones anteriores; no modifica cuentas
+   por cobrar ni genera facturas fiscales.
 
 El PDF reconstruye la plantilla en papel Letter: logotipo extraído del Word
 aportado, encabezado SARI USA, recuadros, cargos, WR, total y Remarks fijos.

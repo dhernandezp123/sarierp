@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Plane, Ship, CheckSquare, Square, SendHorizonal, PackageCheck } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
@@ -13,6 +13,10 @@ import {
   getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { loadMiamiDispatch } from '@/src/lib/miami-reads'
+import { useUser } from '@/src/hooks/useUser'
+import { Pagination } from '@/src/components/ui/Pagination'
+
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -47,6 +51,16 @@ const fmtDate = (d: string) =>
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EmbarquesPage() {
+  const { profile, user } = useUser()
+  const context = (profile?.tenant_id || '') + ':' + (user?.id || '')
+  const loadVersion = useRef(0)
+  const activeContext = useRef<string | null>(context)
+  const [loadedContext, setLoadedContext] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [packagePage, setPackagePage] = useState(1)
+  const [packagePageSize, setPackagePageSize] = useState(25)
+  const [shipmentPage, setShipmentPage] = useState(1)
+  const [shipmentPageSize, setShipmentPageSize] = useState(25)
   const [packages, setPackages]     = useState<Pkg[]>([])
   const [loading, setLoading]       = useState(true)
   const [selected, setSelected]     = useState<Set<string>>(new Set())
@@ -57,40 +71,31 @@ export default function EmbarquesPage() {
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
 
-  useEffect(() => { load() }, [])
-
-  const load = async () => {
+  const load = useCallback(async () => {
+    if (activeContext.current !== context) return
+    const version = ++loadVersion.current
+    const isCurrent = () => version === loadVersion.current && activeContext.current === context
     setLoading(true)
-    // Only show packages that are ready to dispatch (in bodega, not yet in transit)
-    const packagesQuery = supabase
-      .from('miami_packages')
-      .select('id, tracking_number, carrier, tipo_carga, cargo_status, weight_lbs, warehouse_number, received_at, clientes(nombre, codigo_cliente)')
-      .in('cargo_status', ['Recibido en Miami', 'En Consolidación'])
-      .order('received_at', { ascending: true })
-      .limit(500)
-    const shipmentsQuery = supabase
-      .from('miami_shipments')
-      .select('id, shipment_number, transport_mode, status, total_packages, total_weight_lbs, dispatched_at')
-      .order('dispatched_at', { ascending: false })
-      .limit(10)
-    const companyQuery = loadCurrentCompanySettings(supabase)
-    const [
-      { data, error },
-      { data: shipmentData, error: shipmentError },
-      { data: companyData },
-    ] = await Promise.all([
-      packagesQuery,
-      shipmentsQuery,
-      companyQuery,
-    ])
-    if (error) toast.error('Error al cargar paquetes')
-    if (shipmentError) toast.error('Error al cargar embarques Miami')
-    setPackages((data || []) as unknown as Pkg[])
-    setShipments((shipmentData || []) as ShipmentRow[])
-    setCompanyBranding(normalizeCompanyBranding(companyData))
-    setLoading(false)
-    setSelected(new Set())
-  }
+    setLoadError('')
+    try {
+      const [rows, company] = await Promise.all([loadMiamiDispatch(supabase, isCurrent), loadCurrentCompanySettings(supabase)])
+      if (!isCurrent()) return
+      if (company.error) throw new Error('No se pudo cargar la informacion de la empresa.')
+      setPackages(rows.packages as unknown as Pkg[])
+      setShipments(rows.shipments as ShipmentRow[])
+      setCompanyBranding(normalizeCompanyBranding(company.data))
+      setSelected(new Set())
+      setLoadedContext(context)
+    } catch (error) {
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'No se pudieron cargar los paquetes y embarques.')
+    } finally { if (isCurrent()) setLoading(false) }
+  }, [context])
+
+  useEffect(() => {
+    activeContext.current = context
+    const timeout = window.setTimeout(() => void load(), 0)
+    return () => { window.clearTimeout(timeout); activeContext.current = null; loadVersion.current += 1 }
+  }, [load, context])
 
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
@@ -100,11 +105,12 @@ export default function EmbarquesPage() {
     })
 
   const toggleAll = () => {
-    if (selected.size === filtered.length) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map((p) => p.id)))
-    }
+    setSelected(previous => {
+      const next = new Set(previous)
+      const remove = filtered.every(row => next.has(row.id))
+      for (const row of filtered) { if (remove) next.delete(row.id); else next.add(row.id) }
+      return next
+    })
   }
 
   const dispatchSelected = async () => {
@@ -129,7 +135,7 @@ export default function EmbarquesPage() {
   }
 
   const printList = () => {
-    const items = filtered.filter((p) => selected.has(p.id))
+    const items = packages.filter((p) => selected.has(p.id))
     if (items.length === 0) { toast.info('Selecciona paquetes para imprimir la lista'); return }
 
     const today = new Date().toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -180,12 +186,17 @@ export default function EmbarquesPage() {
     filterTipo === 'Todos' || p.tipo_carga === filterTipo
   )
 
-  const allSelected = filtered.length > 0 && selected.size === filtered.length
-  const totalWeightSelected = filtered
+  const allSelected = filtered.length > 0 && filtered.every(p => selected.has(p.id))
+  const visiblePackagePage = Math.min(packagePage, Math.max(1, Math.ceil(filtered.length / packagePageSize)))
+  const visibleShipmentPage = Math.min(shipmentPage, Math.max(1, Math.ceil(shipments.length / shipmentPageSize)))
+  const totalWeightSelected = packages
     .filter((p) => selected.has(p.id))
     .reduce((s, p) => s + Number(p.weight_lbs || 0), 0)
 
   // ─── Render ───────────────────────────────────────────────────────────────
+  if (loadError) return <div className={cardClass}><p role="alert">{loadError}</p><button type="button" onClick={() => void load()} className={fieldClass}>Reintentar</button></div>
+  if (loading || loadedContext !== context) return <TableSkeleton rows={6} cols={6} />
+
   return (
     <div className="space-y-6">
 
@@ -254,7 +265,7 @@ export default function EmbarquesPage() {
                 </tr>
               </thead>
               <tbody>
-                {shipments.map((shipment) => (
+                {shipments.slice((visibleShipmentPage - 1) * shipmentPageSize, visibleShipmentPage * shipmentPageSize).map((shipment) => (
                   <tr key={shipment.id} className="border-t border-slate-100 dark:border-slate-800">
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
                       {shipment.shipment_number}
@@ -278,6 +289,7 @@ export default function EmbarquesPage() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={visibleShipmentPage} pageSize={shipmentPageSize} total={shipments.length} onPageChange={setShipmentPage} onPageSizeChange={setShipmentPageSize} />
           </div>
         )}
       </div>
@@ -290,7 +302,7 @@ export default function EmbarquesPage() {
               <button
                 key={t}
                 type="button"
-                onClick={() => setFilterTipo(t)}
+                onClick={() => { setFilterTipo(t); setPackagePage(1) }}
                 className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
                   filterTipo === t
                     ? 'border-blue-600 bg-blue-600 text-white'
@@ -335,7 +347,7 @@ export default function EmbarquesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => {
+                {filtered.slice((visiblePackagePage - 1) * packagePageSize, visiblePackagePage * packagePageSize).map((p) => {
                   const isSelected = selected.has(p.id)
                   return (
                     <tr
@@ -390,6 +402,7 @@ export default function EmbarquesPage() {
                 })}
               </tbody>
             </table>
+            <Pagination page={visiblePackagePage} pageSize={packagePageSize} total={filtered.length} onPageChange={setPackagePage} onPageSizeChange={setPackagePageSize} />
           </div>
         )}
       </div>

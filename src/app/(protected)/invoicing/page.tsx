@@ -1,8 +1,10 @@
 'use client'
 
+import { loadInvoiceList, type Invoice, type InvoiceType, type ReceivableSummary } from '@/src/lib/invoice-list'
+
 import { toDateInputValue } from '@/src/lib/format'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, FileText, CheckCircle2, Clock, XCircle, AlertCircle, DollarSign, BarChart2, BookOpen, Mail, ArrowRight, ClipboardList } from 'lucide-react'
 import { toast } from 'sonner'
@@ -18,54 +20,14 @@ import {
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
 import {
-  billingQueueActionHref,
+  billingQueueHandoff,
   billingQueueHref,
   type BillingQueueRow,
   type BillingReadinessCode,
 } from '@/src/lib/billing-readiness'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import { useTenant } from '@/src/components/tenant/TenantProvider'
-
-type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
-
-type Invoice = {
-  id: string
-  invoice_number: string | null
-  invoice_type: InvoiceType
-  status: string
-  cliente_id: string | null
-  cliente_nombre: string | null
-  cliente_rtn: string | null
-  cliente_email: string | null
-  issue_date: string | null
-  due_date: string | null
-  payment_condition: string | null
-  credit_days: number | null
-  total: number
-  currency: string
-  quotation_id: string | null
-  parent_invoice_id: string | null
-  invoice_payments: Array<{
-    amount: number
-    currency: string
-    payment_date: string
-    status: 'Aplicado' | 'Reversado'
-  }> | null
-}
-
-type ReceivableSummary = {
-  invoice_id: string
-  currency: string
-  original_total: number
-  credit_notes: number
-  debit_notes: number
-  adjusted_total: number
-  balance: number
-  paid_total: number
-  stored_status: string
-  receivable_status: string
-  days_overdue: number
-}
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 
 type EcCompanySettings = {
   legal_name: string | null
@@ -110,7 +72,11 @@ export default function InvoicingPage() {
   const tenant = useTenant()
   const tenantName = tenant?.tradeName || 'Forwarders ERP'
   const router = useRouter()
-  const { profile } = useUser()
+  const { profile, user } = useUser()
+  const context = (profile?.tenant_id || '') + ':' + (user?.id || '')
+  const loadVersion = useRef(0)
+  const [loadedContext, setLoadedContext] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [loading, setLoading] = useState(true)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [receivables, setReceivables] = useState<ReceivableSummary[]>([])
@@ -134,41 +100,24 @@ export default function InvoicingPage() {
   const [ecLoadingCompany, setEcLoadingCompany] = useState(false)
   const [ecPdfData, setEcPdfData] = useState<EstadoCuentaData | null>(null)
 
-  async function fetchInvoices() {
+  const fetchInvoices = useCallback(async () => {
+    const version = ++loadVersion.current
+    const isCurrent = () => version === loadVersion.current
     setLoading(true)
+    setLoadError('')
     setWorkQueueError('')
-    const [invoicesResult, receivablesResult, workQueueResult] = await Promise.all([
-      supabase
-        .from('invoices')
-        .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, payment_condition, credit_days, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date, status)')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('invoice_receivables')
-        .select('invoice_id, currency, original_total, credit_notes, debit_notes, adjusted_total, balance, paid_total, stored_status, receivable_status, days_overdue'),
-      supabase.rpc('get_billing_work_queue'),
-    ])
-
-    if (invoicesResult.error || receivablesResult.error) {
-      toast.error('Error al cargar facturas y saldos')
-      setLoading(false)
-      return
-    }
-    const receivableRows = (receivablesResult.data || []) as ReceivableSummary[]
-    const statuses = new Map(receivableRows.map((row) => [row.invoice_id, row.receivable_status]))
-    setInvoices(((invoicesResult.data || []) as Invoice[]).map((invoice) => ({
-      ...invoice,
-      status: statuses.get(invoice.id) || invoice.status,
-    })))
-    setReceivables(receivableRows)
-    if (workQueueResult.error) {
-      setWorkQueue([])
-      setWorkQueueError(workQueueResult.error.message || 'No se pudo cargar la cola por facturar.')
-    } else {
-      setWorkQueue((workQueueResult.data || []) as BillingQueueRow[])
-    }
-    setLoading(false)
-  }
+    try {
+      const result = await loadInvoiceList(supabase, isCurrent)
+      if (!isCurrent()) return
+      setInvoices(result.invoices)
+      setReceivables(result.receivables)
+      setWorkQueue(result.workQueue)
+      setWorkQueueError(result.workQueueError)
+      setLoadedContext(context)
+    } catch (error) {
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'No se pudieron cargar las facturas y saldos.')
+    } finally { if (isCurrent()) setLoading(false) }
+  }, [context])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -176,8 +125,8 @@ export default function InvoicingPage() {
       if (requestedView === 'documents') setView('documents')
       void fetchInvoices()
     }, 0)
-    return () => window.clearTimeout(timer)
-  }, [])
+    return () => { window.clearTimeout(timer); loadVersion.current += 1 }
+  }, [fetchInvoices])
 
   const changeView = (nextView: 'work' | 'documents') => {
     setView(nextView)
@@ -409,7 +358,8 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
     ? `mailto:${ecPdfData.cliente_email}?subject=${encodeURIComponent(ecEmailSubject)}&body=${encodeURIComponent(ecEmailBody)}`
     : ''
 
-  if (loading) return <PageSkeleton cards={3} rows={6} />
+  if (loadError) return <div className={cardClass}><p role="alert">{loadError}</p><button type="button" onClick={() => void fetchInvoices()} className={primaryButtonClass}>Reintentar</button></div>
+  if (loading || loadedContext !== context) return <PageSkeleton cards={3} rows={6} />
 
   return (
     <div className="space-y-6">
@@ -703,9 +653,8 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                   </thead>
                   <tbody>
                     {workQueue.map((row) => {
-                      const actionHref = row.readiness_code === 'OPERATIONS_PENDING' && profile?.rol !== 'Admin'
-                        ? null
-                        : billingQueueActionHref(row, billingQueueHref('work'))
+                      const handoff = billingQueueHandoff(row, profile?.rol, billingQueueHref('work'))
+                      const actionHref = handoff.href
                       const ready = row.readiness_code === 'READY_TO_INVOICE'
                       return (
                         <tr key={row.quotation_id} className="border-b border-slate-100 align-top dark:border-slate-800">
@@ -724,6 +673,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                               {ready ? 'Lista para facturar' : row.next_action}
                             </span>
                             {row.blocker && <p className="mt-2 max-w-xs text-xs text-slate-500 dark:text-slate-400">{row.blocker}</p>}
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Resuelve: {handoff.owner}</p>
                           </td>
                           <td className="py-4 text-right">
                             {actionHref ? (
@@ -736,7 +686,11 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                                 <ArrowRight className="h-4 w-4" />
                               </button>
                             ) : (
-                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{row.next_action}</span>
+                              <CreateContextTaskDialog label="Programar seguimiento"
+                                suggestedTitle={`${row.quotation_number || row.quotation_id}: ${row.next_action} · ${handoff.owner}`}
+                                context={{ entityType: 'quotation', entityId: row.quotation_id,
+                                  entityLabel: row.quotation_number || row.quotation_id,
+                                  sourceModule: 'invoicing', sourcePath: billingQueueHref('work') }} />
                             )}
                           </td>
                         </tr>

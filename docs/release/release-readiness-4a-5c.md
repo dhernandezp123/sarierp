@@ -1,5 +1,8 @@
 # Release Readiness 4A–5C
 
+Este veredicto corresponde a 4A–5C. No certifica correcciones posteriores ni
+la auditoría AUD-01 a AUD-20: consultar la [matriz vigente](audit-release-matrix.md).
+
 ## Veredicto actual
 
 **SQL 4A–5C aplicado y postdeploy aprobado. Frontend pendiente.**

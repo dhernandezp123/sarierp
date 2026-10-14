@@ -1,5 +1,9 @@
 # Runbook de corte multiempresa
 
+Referencia histórica de esa fase. Para el candidato de auditoría de octubre,
+consultar la [matriz vigente por ambiente y UAT](release/audit-release-matrix.md).
+El estado de este runbook no acredita la publicación de correcciones posteriores.
+
 Estado: preparado, no autorizado para ejecución.
 Objetivo inicial: habilitar Sari en `sari.forwarders.app` sin crear todavía un
 tenant real para MYA.

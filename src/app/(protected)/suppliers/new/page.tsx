@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
-import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { UnsavedChangesGuard, requestFormNavigation, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 
 type Agente = { id: string; name: string }
 
@@ -80,6 +80,7 @@ export default function NewSupplierPage() {
     }
 
     toast.success('Proveedor creado')
+    markFormSaved()
     router.push(`/suppliers/${data.id}`)
   }
 
@@ -88,7 +89,7 @@ export default function NewSupplierPage() {
       <UnsavedChangesGuard />
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Nuevo proveedor</h1>
-        <button type="button" onClick={() => router.push('/suppliers')} className={secondaryButtonClass}>
+        <button type="button" onClick={() => requestFormNavigation(() => router.push('/suppliers'))} className={secondaryButtonClass}>
           Volver
         </button>
       </div>

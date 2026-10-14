@@ -147,6 +147,9 @@ values (
   '40HC',
   1
 );
+-- AUD-01: el fixture financiero lo escribe Pricing; Ventas conserva la
+-- creacion de cotizacion/contenedores y su derivacion de tenant.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000923","role":"authenticated"}', true);
 insert into public.pricing_items (
   id, quotation_id, item_type, description, created_by
 )
@@ -221,6 +224,8 @@ select set_config(
 );
 insert into public.agents (id, name, type)
 values ('00000000-0000-4000-8000-000000000701', 'Agente Sari P3', 'Agente');
+update public.quotations set status = 'Pendiente de Fijar Precios'
+where id = '00000000-0000-4000-8000-000000000401';
 insert into public.agent_quotes (id, quotation_id, agent_id, carrier)
 values (
   '00000000-0000-4000-8000-000000000801',
@@ -262,6 +267,8 @@ select set_config(
 );
 insert into public.agents (id, name, type)
 values ('00000000-0000-4000-8000-000000000702', 'Agente MYA P3', 'Agente');
+update public.quotations set status = 'Pendiente de Fijar Precios'
+where id = '00000000-0000-4000-8000-000000000402';
 insert into public.agent_quotes (id, quotation_id, agent_id, carrier)
 values (
   '00000000-0000-4000-8000-000000000802',

@@ -1,13 +1,29 @@
 import { authorizeManualInvoices, manualInvoiceErrorResponse, ManualInvoiceError, readLimitedInvoiceBody } from '@/src/lib/server/manual-invoices'
 import { manualInvoiceTotal, validateManualInvoice } from '@/src/lib/manual-invoice'
+import { literalTextFilter } from '@/src/lib/postgrest-search'
 
 export async function GET(request: Request) {
   try {
     const { supabase, tenant } = await authorizeManualInvoices(request)
-    const { data, error } = await supabase.from('manual_invoices').select('id,invoice_number,client_name,total,created_at,data')
-      .eq('tenant_id', tenant.id).order('created_at', { ascending: false }).limit(100)
-    if (error) throw new ManualInvoiceError('No se pudo cargar el historial. Verifica que la migración del módulo esté aplicada.', 503)
-    return Response.json({ documents: data }, { headers: { 'Cache-Control': 'no-store' } })
+    const params = new URL(request.url).searchParams
+    const rawOffset = params.get('offset') || '0'
+    const rawSize = params.get('pageSize') || '25'
+    const search = (params.get('search') || '').trim()
+    if (!/^\d+$/.test(rawOffset) || !/^\d+$/.test(rawSize) || !Number.isSafeInteger(Number(rawOffset))
+      || Number(rawOffset) > 10000000 || ![25,50,100].includes(Number(rawSize)) || search.length > 120) {
+      throw new ManualInvoiceError('Paginacion o busqueda no valida.', 400)
+    }
+    const offset = Number(rawOffset), pageSize = Number(rawSize)
+    let query = supabase.from('manual_invoices').select('id,invoice_number,client_name,total,created_at,data', { count: 'exact' })
+      .eq('tenant_id', tenant.id)
+    if (search) query = query.or(literalTextFilter(['invoice_number','client_name'], search))
+    const { data, error, count } = await query.order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + pageSize - 1)
+    if (error || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0 || !data || (offset < count && data.length === 0)) {
+      throw new ManualInvoiceError('No se pudo cargar el historial completo. Reintenta la consulta.', 503)
+    }
+    const nextOffset = offset + data.length
+    return Response.json({ documents: data, total: count, nextOffset, hasMore: nextOffset < count }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) { return manualInvoiceErrorResponse(error) }
 }
 

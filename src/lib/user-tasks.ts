@@ -67,6 +67,9 @@ export function userTaskSourceHref(task: Pick<UserTask, 'entity_type' | 'source_
     const base = 'https://forwarders.app'
     const url = new URL(task.source_path, base)
     if (url.origin !== base) return null
+    if (task.entity_type === 'quotation' && url.pathname === '/invoicing') {
+      return '/invoicing?view=work'
+    }
     if (!allowedPrefixes[task.entity_type].some((prefix) => url.pathname.startsWith(prefix))) {
       return null
     }

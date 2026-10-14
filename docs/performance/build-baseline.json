@@ -1,0 +1,86 @@
+{
+  "measured_at": "2026-10-14T22:02:10.177Z",
+  "head": "4b58aa9c1d5f31bb8c7a756ca5156234013175f4",
+  "uncommitted": true,
+  "scope": "All generated client JS/CSS chunks; not route transfer size or browser latency",
+  "chunk_count": 126,
+  "total_bytes": 6125432,
+  "total_gzip_bytes": 1792370,
+  "largest_chunks": [
+    {
+      "file": "170wwx8par3g2.js",
+      "bytes": 1442216,
+      "gzip_bytes": 480182
+    },
+    {
+      "file": "03qky~kxvu0lz.js",
+      "bytes": 429437,
+      "gzip_bytes": 126978
+    },
+    {
+      "file": "0.3vqvi.l~-33.js",
+      "bytes": 399312,
+      "gzip_bytes": 114524
+    },
+    {
+      "file": "10u3y4bw1ayzs.js",
+      "bytes": 227314,
+      "gzip_bytes": 70981
+    },
+    {
+      "file": "0uqu32ntmld0j.js",
+      "bytes": 221243,
+      "gzip_bytes": 57077
+    },
+    {
+      "file": "0hrl3bxgcpd~..css",
+      "bytes": 185188,
+      "gzip_bytes": 28756
+    },
+    {
+      "file": "091~c1zcty8w1.js",
+      "bytes": 184174,
+      "gzip_bytes": 40527
+    },
+    {
+      "file": "0is6ao6a~e_v7.js",
+      "bytes": 137447,
+      "gzip_bytes": 37368
+    },
+    {
+      "file": "0o.lptsr8up~m.js",
+      "bytes": 119349,
+      "gzip_bytes": 28152
+    },
+    {
+      "file": "0k8l-m7n-zbe~.js",
+      "bytes": 115973,
+      "gzip_bytes": 27511
+    },
+    {
+      "file": "03~yq9q893hmn.js",
+      "bytes": 112594,
+      "gzip_bytes": 39627
+    },
+    {
+      "file": "0toci6.6_c8c-.js",
+      "bytes": 94447,
+      "gzip_bytes": 22076
+    },
+    {
+      "file": "08-pmawifkqy7.js",
+      "bytes": 87715,
+      "gzip_bytes": 29625
+    },
+    {
+      "file": "0qnl9jjqr640n.js",
+      "bytes": 63786,
+      "gzip_bytes": 17259
+    },
+    {
+      "file": "0_81td6kw631z.js",
+      "bytes": 60184,
+      "gzip_bytes": 14198
+    }
+  ]
+}

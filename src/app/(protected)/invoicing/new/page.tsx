@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon, LockKeyhole } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
-import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { UnsavedChangesGuard, requestFormNavigation, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
   primaryButtonClass,
@@ -588,6 +588,7 @@ export default function NewInvoicePage() {
     }
 
     toast.success(`${invoiceType} ${invoice.invoice_number} creada`)
+    markFormSaved()
     router.push(
       requestedReturnTo
         ? `/invoicing/${invoice.invoice_id}?returnTo=${encodeURIComponent(returnHref)}`
@@ -610,7 +611,7 @@ export default function NewInvoicePage() {
       <div className="flex items-center gap-4">
         <button
           type="button"
-          onClick={() => router.push(parentId ? `/invoicing/${parentId}` : returnHref)}
+          onClick={() => requestFormNavigation(() => router.push(parentId ? `/invoicing/${parentId}` : returnHref))}
           className={secondaryButtonClass}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -1148,7 +1149,7 @@ export default function NewInvoicePage() {
           </button>
           <button
             type="button"
-            onClick={() => router.push(parentId ? `/invoicing/${parentId}` : returnHref)}
+            onClick={() => requestFormNavigation(() => router.push(parentId ? `/invoicing/${parentId}` : returnHref))}
             className={`w-full ${secondaryButtonClass}`}
           >
             Cancelar

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Copy, ExternalLink, FileText, History, Mail, MapPin, Package, ScanLine, Search, X } from 'lucide-react'
+import { loadMiamiInventory } from '@/src/lib/miami-reads'
+import { readAllReportRows } from '@/src/lib/report-query'
+
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { sendMiamiPackageAssignmentEmail } from '@/src/lib/miami-assignment-email'
@@ -101,7 +104,14 @@ const previousStatus = (current: CargoStatus | string | null): CargoStatus | nul
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function InventarioPage() {
-  const { profile } = useUser()
+  const { profile, user } = useUser()
+  const context = (profile?.tenant_id || '') + ':' + (user?.id || '')
+  const loadVersion = useRef(0)
+  const activeContext = useRef<string | null>(context)
+  const historyVersion = useRef(0)
+  const [loadedContext, setLoadedContext] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [historyError, setHistoryError] = useState('')
   const [packages, setPackages] = useState<Pkg[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
@@ -130,20 +140,24 @@ export default function InventarioPage() {
   const scanRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
+    if (activeContext.current !== context) return
+    const version = ++loadVersion.current
+    const isCurrent = () => version === loadVersion.current && activeContext.current === context
     setLoading(true)
-    const { data, error } = await supabase
-      .from('miami_packages')
-      .select('id, tracking_number, carrier, tipo_carga, cargo_status, status, weight_lbs, warehouse_number, cliente_id, rack_location, manifest_id, received_at, clientes(nombre), miami_package_documents(id, file_name, file_path, status, created_at)')
-      .order('received_at', { ascending: false })
-    if (error) toast.error('Error al cargar inventario')
-    setPackages((data || []) as unknown as Pkg[])
-    setLoading(false)
-  }, [])
+    setLoadError('')
+    try {
+      const rows = await loadMiamiInventory(supabase, isCurrent)
+      if (isCurrent()) { setPackages(rows as unknown as Pkg[]); setLoadedContext(context) }
+    } catch (error) {
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'No se pudo cargar el inventario completo.')
+    } finally { if (isCurrent()) setLoading(false) }
+  }, [context])
 
   useEffect(() => {
+    activeContext.current = context
     const timeout = window.setTimeout(() => void load(), 0)
-    return () => window.clearTimeout(timeout)
-  }, [load])
+    return () => { window.clearTimeout(timeout); activeContext.current = null; loadVersion.current += 1 }
+  }, [load, context])
 
   const copyInvoiceUploadLink = async (pkg: Pkg) => {
     const link = `${window.location.origin}/portal/paquetes/${pkg.id}?section=factura-comercial#factura-comercial`
@@ -206,17 +220,21 @@ export default function InventarioPage() {
   }
 
   const openHistory = async (pkg: Pkg) => {
+    const version = ++historyVersion.current
+    const isCurrent = () => version === historyVersion.current && activeContext.current === context
     setHistoryPackage(pkg)
     setHistoryEvents([])
+    setHistoryError('')
     setHistoryLoading(true)
-    const { data, error } = await supabase
-      .from('miami_package_events')
-      .select('id, event_type, old_status, new_status, notes, created_at, metadata')
-      .eq('package_id', pkg.id)
-      .order('created_at', { ascending: false })
-    setHistoryLoading(false)
-    if (error) { toast.error(error.message); return }
-    setHistoryEvents((data || []) as PackageEvent[])
+    try {
+      const rows = await readAllReportRows((from, to) => supabase.from('miami_package_events')
+        .select('id, event_type, old_status, new_status, notes, created_at, metadata')
+        .eq('package_id', pkg.id).order('created_at', { ascending: false }).order('id').range(from, to),
+        { label: 'historial del paquete', isCurrent })
+      if (isCurrent()) setHistoryEvents(rows as PackageEvent[])
+    } catch (error) {
+      if (isCurrent()) setHistoryError(error instanceof Error ? error.message : 'No se pudo cargar el historial.')
+    } finally { if (isCurrent()) setHistoryLoading(false) }
   }
 
   const reverseStatus = async () => {
@@ -365,6 +383,9 @@ export default function InventarioPage() {
   const paginatedPackages = filtered.slice((page - 1) * pageSize, page * pageSize)
 
   // ─── Render ───────────────────────────────────────────────────────────────
+  if (loadError) return <div className={cardClass}><p role="alert">{loadError}</p><button type="button" onClick={() => void load()} className={fieldClass}>Reintentar</button></div>
+  if (loading || loadedContext !== context) return <TableSkeleton rows={6} cols={6} />
+
   return (
     <div className="space-y-6">
 
@@ -699,7 +720,7 @@ export default function InventarioPage() {
             </div>
 
             <div className="max-h-[60vh] overflow-y-auto px-5 py-4">
-              {historyLoading ? (
+              {historyError ? <p role="alert" className="text-red-600">{historyError}<button type="button" onClick={() => historyPackage && void openHistory(historyPackage)} className={fieldClass}>Reintentar</button></p> : historyLoading ? (
                 <div className="space-y-3">
                   {[...Array(3)].map((_, index) => (
                     <div key={index} className="h-16 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />

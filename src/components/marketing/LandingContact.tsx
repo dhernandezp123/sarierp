@@ -6,6 +6,7 @@ import { ArrowRight, Check, LoaderCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { PLATFORM_CONTACT_EMAIL, PLATFORM_ORIGIN } from '@/src/lib/platform-branding'
+import { emitMeasurement, measureOperation } from '@/src/lib/browser/measurements'
 
 type LeadField = 'nombre' | 'empresa' | 'email'
 
@@ -19,6 +20,7 @@ export function LandingContact() {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<LeadField, string>>>({})
   const [submitError, setSubmitError] = useState('')
   const submittingRef = useRef(false)
+  const formStarted = useRef(false)
   const nombreRef = useRef<HTMLInputElement>(null)
   const empresaRef = useRef<HTMLInputElement>(null)
   const emailRef = useRef<HTMLInputElement>(null)
@@ -59,8 +61,10 @@ export function LandingContact() {
     submittingRef.current = true
     setSubmitting(true)
     try {
-      const { error } = await supabase.from('leads').insert([lead])
-      if (error) throw error
+      await measureOperation('demo_submit', async () => {
+        const { error } = await supabase.from('leads').insert([lead])
+        if (error) throw error
+      })
       setSubmitted(true)
       toast.success('Solicitud recibida.')
     } catch {
@@ -97,7 +101,9 @@ export function LandingContact() {
         <p className="mt-2 text-xs leading-5 text-slate-400">Sin suscripción publicitaria. El alcance se confirma antes de contratar.</p>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate aria-label="Solicitar una demo" aria-busy={submitting} className="flex min-w-0 flex-col gap-4">
+      <form onSubmit={handleSubmit} onInput={() => {
+        if (!formStarted.current) { formStarted.current = true; emitMeasurement({ name: 'demo_form', stage: 'started' }) }
+      }} noValidate aria-label="Solicitar una demo" aria-busy={submitting} className="flex min-w-0 flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <label htmlFor="demo-nombre" className="flex min-w-0 flex-col gap-2 text-sm font-medium text-slate-200">
             Tu nombre

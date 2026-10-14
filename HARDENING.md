@@ -10159,3 +10159,1197 @@ Agregar una entrada por fix:
   Alias `sari.forwarders.app` confirmado en esta versión. Login 200, factura
   manual 307 al login, ambas API 401 JSON sin sesión; assets OCR 200 y checksum
   del modelo correcto. Estos checks no sustituyen el recorrido autenticado.
+
+### 2026-10-13 - AUD-01 - Separar consulta y escritura de pricing
+
+- Estado: implementado y validado localmente con RLS real y fixtures aislados.
+  Pendientes publicación SQL/frontend, comprobación de RLS remoto y UAT por rol.
+  No se declara cerrado ni se modificó Production.
+- Hallazgo: las policies de pricing/tarifas usaban autorización de lectura para
+  permitir escritura; los reemplazos SECURITY DEFINER podían conservar ese
+  permiso amplio aun después de ajustar RLS.
+- Reproducción: en `sarierp_aud01`, antes de aplicar el cambio, la suite falló
+  con `ASSERTION FAILED: Ventas no debe editar venta FCL por tener lectura`.
+  El UPDATE había afectado la fila; el fixture se revirtió al cerrar la sesión.
+- Archivos:
+  - `supabase/migrations/20261013120000_pricing_write_authorization.sql`.
+  - `supabase/tests/aud01_pricing_write_permissions.sql`.
+  - `supabase/tests/phase3_commercial_tenant_isolation.sql`: fixtures financieros
+    escritos por Pricing en el estado requerido, conservando el test de tenant.
+  - `src/lib/permissions.ts`, `src/lib/tarifa-expiry-check.ts`.
+  - `src/app/(protected)/clientes/[id]/page.tsx`.
+  - `tests/pricing-write-permissions.test.mjs`.
+  - `docs/uat/aud01-pricing-write-permissions.md`, seguimiento en
+    `docs/review-2026-10-13.md` y esta bitácora.
+- SQL/cambios:
+  - Doce policies restrictivas para INSERT/UPDATE/DELETE de `pricing_items`,
+    `agent_quotes`, `agent_quote_container_rates` y `client_rates`. Las policies
+    de SELECT, tenant y borrado físico existentes se conservan.
+  - Helpers de escritura por rol, tenant, estado y ownership. Pricing general:
+    Admin/Pricing en estados editables. Ventas conserva Miami propio/asignado,
+    incluida la excepción del editor comercial enviado. Tarifas de cliente:
+    Admin/Pricing/Ventas; agentes/contenedores: Admin/Pricing en Pendiente de
+    Fijar Precios. Ganada/Perdida no admiten escritura directa de cargos.
+  - `is_selected` no cambia por escritura directa: se utiliza la selección o
+    aceptación atómica existente. El trigger es INVOKER y reconoce el rol real
+    de ejecución de esas RPC, sin excepciones basadas en GUC del cliente.
+  - Los cores de creación y reemplazo se conservan privados; los entrypoints
+    mantienen firma/transacción y comprueban autorización bajo lock. Creación
+    comercial FCL no acepta cargos inyectados por Ventas; creación sin estado
+    usa Borrador y no reintroduce Solicitud. Aceptación de opciones conserva el
+    snapshot y el cierre Ganada por Admin/Ventas.
+  - Checker de vencimientos mediante RPC transaccional por tenant; no necesita
+    habilitar escritura libre sobre tarifas cerradas. Avisos internos y marcador
+    se confirman juntos, con idempotencia y rollback. No envía correo.
+  - Tarifas del cliente en modo consulta para roles sin permiso, sin botón de
+    guardado y con guard en el handler, además de la autorización SQL efectiva.
+- Validaciones ejecutadas:
+  - Instalación limpia de 107 migraciones en stack `sarierp_aud01`, puertos
+    575xx y seed deshabilitado; versión máxima `20261013120000`. No se reseteó
+    ni migró el stack de trabajo `sarierp`.
+  - `aud01_pricing_write_permissions.sql`: aprobado con doce perfiles ficticios,
+    dos tenants, roles autenticados, INSERT/UPDATE/DELETE, denegación de cores,
+    casos positivos Miami/selección/opciones y rollback de notificaciones.
+  - `phase3_commercial_tenant_isolation.sql`: aprobado con rollback.
+  - `air_consolidated_agent_selection.sql`: aprobado con rollback; conservación
+    de venta/cargos y cambios de tarifas aéreas.
+  - `npm.cmd test`: 190/190 aprobadas.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio de código.
+  - `npm.cmd run build`, incluido prebuild OCR: aprobado, 82/82 páginas.
+  - ESLint: helpers y prueba nuevos/modificados sin infracciones; Clientes
+    conserva 29 errores y 1 warning previos. Comparación programática con HEAD:
+    mismos conteos por regla, sin desactivaciones globales ni nuevas infracciones.
+  - DB lint del stack aislado: no reportó problemas de funciones AUD-01;
+    reportó el diagnóstico existente `mail_intake_is_demo` sobre una referencia
+    dinámica opcional a `is_demo_environment()`, protegida por `to_regprocedure`.
+    El comando devolvió 0, pero no se presenta el lint global como libre de avisos.
+  - `git diff --check`: aprobado.
+- Riesgos / acciones pendientes:
+  - SQL debe publicarse antes del frontend: Alertas depende de la nueva RPC.
+    Guion de publicación/UAT y matriz completa en el documento citado.
+  - Probar en navegador con cuentas autorizadas, incluyendo Miami propio y
+    asignado, perfiles sin edición, dos empresas y aceptación/repricing.
+    Las pruebas SQL locales no acreditan el estado de RLS desplegado ni UX móvil.
+  - La máquina completa de transiciones y los campos financieros de la cabecera
+    de cotización permanecen dentro de AUD-05; este cambio protege las cuatro
+    tablas de precios y sus RPC de reemplazo/creación.
+  - Suites históricas de etapas anteriores pueden expresar permisos previos;
+    la nueva matriz y la suite comercial actualizada son el gate de esta entrega.
+  - Conservar los guards ante fallos de integración y preparar forward-fix;
+    no restaurar permisos amplios como rollback automático.
+- Commit: pendiente; cambios locales sin commit, push ni despliegue.
+
+### AUD-02 — Pagos y ajustes de proveedores atómicos, idempotentes y reversables
+
+- Prioridad: P1. Fecha: 13/10/2026.
+- Estado: implementado y validado localmente; **abierto para publicación SQL,
+  verificación de RLS desplegado, conciliación legacy y UAT autenticado**.
+- Archivos y SQL:
+  - `supabase/migrations/20261013130000_atomic_supplier_payments.sql`.
+  - `supabase/migrations/20261013131000_supplier_cancelled_document_guard.sql`:
+    forward-fix separado, conserva también AP anuladas sin movimientos.
+  - `supabase/tests/aud02_supplier_payments_before.sql` y
+    `supabase/tests/aud02_supplier_payments.sql`.
+  - `scripts/validate-aud02-concurrency.mjs`.
+  - `src/lib/supplier-payables.ts`.
+  - `src/app/(protected)/accounts-payable/[id]/page.tsx` y
+    `src/app/(protected)/accounts-payable/page.tsx`.
+  - `src/app/(protected)/suppliers/[id]/page.tsx` y
+    `src/app/(protected)/reports/page.tsx`.
+  - `tests/supplier-payables.test.mjs`, `tests/supplier-payment-flow.test.mjs`.
+  - `docs/review-2026-10-13.md`,
+    `docs/uat/aud02-supplier-payments.md` y este registro.
+- Resultado:
+  - Cuatro RPC por tenant y rol financiero activo/aprobado. Movimiento, estado
+    de AP y auditoría quedan juntos; todas bloquean primero la cuenta principal.
+    Un pago/NC no supera el saldo actualizado, y una anulación ND no crea un
+    sobrepago. Moneda, monto finito/positivo con dos decimales, método y fechas
+    se validan en servidor; fecha financiera usa calendario Honduras.
+  - Claves UUID con payload por pago/nota; replay confirma el mismo original,
+    datos distintos se rechazan, claves de pagos reversados no los reaplican.
+    Clave del navegador conservada por tenant/usuario/cuenta/acción hasta
+    confirmación o recuperación desde historial; doble clic bloqueado.
+  - Reverso/anulación con actor, fecha y motivo; originales inmutables,
+    sin borrar movimientos ni AP anuladas. AP con pagos aplicados/notas activas
+    requiere resolver esos movimientos primero. Reverso legacy compatible.
+  - Escritura directa de pagos cerrada por RLS; guards financieros para
+    estados, notas y originales; cores privados sin EXECUTE de cliente/servicio.
+    Alta AP, adjuntos y generación desde flete conservan los flujos existentes.
+  - Historial del detalle sin truncado, errores recuperables y protección de
+    respuestas obsoletas. Pagos reversados excluidos de sumas y reporte activo
+    en los cuatro consumidores. No se reescriben importes/estados históricos al
+    migrar; los pagos anteriores adquieren estado Aplicado.
+- Validaciones ejecutadas:
+  - Stack aislado `sarierp_aud01`: 109 migraciones, máxima `20261013131000`,
+    seed deshabilitado. No se migró ni reseteó el stack principal `sarierp`.
+  - Reproducción antes del SQL: sobrepago120/100 y anulación sin motivo,
+    bajo rol authenticated/Finanzas, con rollback.
+  - Suite `aud02_supplier_payments.sql`: aprobada con perfiles ficticios,
+    dos empresas, lectura/escritura/RPC, claves repetidas/datos diferentes,
+    monedas/fechas/montos inválidos, NC/ND, originales, reverso legacy,
+    anulación y rollback por fallo de auditoría (alta, ajuste, reverso y anulación).
+  - Cinco carreras reales en dos conexiones PostgreSQL, comprobando espera por
+    lock en `pg_stat_activity`: pagos60+60, misma clave, pago60/NC60 en ambos
+    órdenes y anulación/pago. Resultado: sin duplicados ni sobrepagos.
+  - `phase5_finance_catalog_tenant_isolation.sql`: aprobada con rollback,
+    incluida CxP de flete idempotente y cobros de facturas por tenant.
+  - `npm.cmd test`: 197/197 aprobadas. Siete regresiones nuevas, incluidas
+    pruebas del componente real con hooks/red simulados para doble clic,
+    respuesta perdida, recuperación de historial, fallos de lectura y cambio
+    de cuenta durante un guardado. No acreditan navegador/RLS por sí solas.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio de código.
+  - `npm.cmd run build`, incluido prebuild OCR: aprobado, 82/82 páginas.
+  - ESLint afectado: detalle AP, proveedor, reportes, helper, script y pruebas
+    nuevos sin infracciones. Bandeja AP conserva sus cuatro errores previos
+    (tres any y un set-state-in-effect), mismos conteos por regla; sin nuevos
+    errores ni desactivaciones. Detalle pasó de 9 errores/1 warning a cero.
+  - DB lint local devolvió 0. Conserva el error histórico opcional de
+    `mail_intake_is_demo`/`is_demo_environment()`. En AUD-02 reportó dos avisos
+    de variable `v_account` no leída en reverso/anulación: su asignación ejecuta
+    el helper que autoriza/bloquea AP. No se presenta DB lint como limpio.
+  - `git diff --check`: aprobado, con avisos de normalización LF/CRLF.
+- Riesgos / trabajo pendiente:
+  - Publicar SQL antes del frontend y coordinar la ventana sin escrituras del
+    frontend anterior; éste usa INSERT/UPDATE que ahora se rechazan.
+  - Aplicar el guion UAT y revisar datos reales: sobrepagos, monedas/proveedores
+    inconsistentes y estados legacy requieren conciliación, no saneamiento
+    automático. Los guards no sustituyen la gestión de credenciales privilegiadas.
+  - UAT visual, móvil, teclado y usuarios autenticados pendiente; hubo inspección
+    de código y pruebas simuladas, sin navegador conectado en esta sesión.
+  - `sessionStorage` bloqueado limita recuperación de la clave tras recarga
+    completa; conciliar historial antes de una nueva operación. Una clave nueva
+    es una operación nueva y no equivale a deduplicar comprobantes bancarios.
+  - Conciliación general de NC/ND permanece en AUD-03; completitud de otras
+    bandejas en AUD-04. Reporte de pagos refleja estado aplicado actual, no
+    reconstrucción histórica anterior a reversos posteriores.
+  - `phase4_payment_atomic.sql` histórica no superó su fixture de cliente sin
+    tenant en el esquema vigente; no llegó al flujo de cobros. No se declara
+    aprobada; regresión vigente de aislamiento financiero sí aprobada.
+  - Fixtures de carreras tienen commit y quedan solo en el volumen de la base
+    aislada. Suites principales terminan en rollback. No se enviaron correos,
+    pagos bancarios ni mensajes a terceros.
+  - Mantener el SQL publicado y corregir hacia adelante si aparece una incidencia;
+    no restaurar permisos amplios ni borrar historial como rollback.
+- Commit: pendiente; incluir este registro junto con el cambio, sin commit,
+  push ni despliegue en esta sesión.
+
+### AUD-03 — Saldos canónicos de CxP en detalle, bandeja, proveedor y reportes
+
+- Prioridad: P1. Fecha: 13/10/2026.
+- Estado: implementado y validado localmente; **abierto para publicación SQL,
+  verificación RLS del ambiente destino y UAT autenticado/visual**.
+- Archivos y SQL:
+  - `supabase/migrations/20261013140000_supplier_payable_balances.sql`.
+  - `supabase/tests/aud03_supplier_payable_balances.sql`.
+  - `src/lib/supplier-payables.ts` (contrato, lectura completa, resúmenes,
+    formato/anomalías y filas compartidas de tabla/CSV/PDF).
+  - `src/app/(protected)/accounts-payable/page.tsx` y
+    `src/app/(protected)/accounts-payable/[id]/page.tsx`.
+  - `src/app/(protected)/suppliers/[id]/page.tsx` y
+    `src/app/(protected)/reports/page.tsx`.
+  - `tests/supplier-payable-balances.test.mjs` y
+    `tests/supplier-payment-flow.test.mjs`.
+  - `docs/review-2026-10-13.md`,
+    `docs/uat/aud03-supplier-payable-balances.md` y este registro.
+- Resultado:
+  - Vista `supplier_payable_balances`, solo SELECT, INVOKER, RLS de origen,
+    filtro explícito por tenant y rol financiero aprobado/activo. Una fila por
+    AP principal, agregados de NC/ND activas y pagos Aplicado, sin producto
+    cartesiano ni límite de embeds. No expone notas como obligaciones separadas.
+  - Misma fórmula NUMERIC para lecturas y core privado de mutaciones AUD-02:
+    base − NC + ND − pagos. Estado/días vencidos y pagos mensuales según
+    calendario Honduras. Leer no actualiza importes ni estados históricos;
+    `stored_status` queda disponible para diagnóstico.
+  - Saldo negativo visible en sobrepagos; totales positivos Por pagar/Vencido
+    separados de sobrepagos. Anuladas excluidas de esos KPIs, conservadas en
+    Todos/reporte. Obligación negativa o movimientos inconsistentes requieren
+    conciliación; importes no comparables muestran Por conciliar.
+  - Proveedor con totales por cada moneda; bandeja permite monedas presentes
+    además de USD/HNL. Reporte, CSV y PDF usan las mismas filas y explican qué
+    incluye el total Por pagar, con sobrepagos y conciliaciones separados.
+    Vencidas de CxP usa saldo y días canónicos; CxC conserva su implementación.
+  - Loader común hasta agotar páginas, orden estable, filtro de proveedor en
+    servidor y rechazo de respuesta parcial/repetida/obsoleta. Pantallas con
+    errores recuperables y actualización explícita. Enlaces históricos a notas
+    redirigen a la AP principal; historial de notas y reversos sigue accesible.
+- Validaciones ejecutadas:
+  - Reproducción previa con las funciones reales de bandeja transpileadas:
+    base1000/NC200 devolvía1000 en vez de800; base1000/ND300/pago100 devolvía900
+    en vez de1200; base100/pagos120 ocultaba el sobrepago con saldo0 en vez de-20.
+  - Migración aplicada solo en `sarierp_aud01`:110 migraciones, máxima
+    `20261013140000`. No se migró/reseteó el stack principal ni se desplegó.
+  - `aud03_supplier_payable_balances.sql`: aprobada con rollback, once perfiles
+    ficticios y dos empresas; notas anuladas, reversos, centavos, estados,
+    sobrepagos, inconsistencias, lectura/autorización y equivalencia con el core.
+    Una AP con1005 NC y1005 pagos verifica agregado completo sin multiplicación.
+  - `aud02_supplier_payments.sql`: aprobada con rollback sobre el nuevo core.
+  - `phase5_finance_catalog_tenant_isolation.sql`: aprobada con rollback.
+  - Cinco carreras reales de `validate-aud02-concurrency.mjs`: aprobadas con
+    el esquema nuevo y espera por lock verificada; sin duplicados/sobrepagos.
+  - `npm.cmd test`:209/209 aprobadas. Doce casos nuevos en este cambio:
+    saldos/resúmenes/exportación, monedas, sobrepago, nulos, centavos, lectura
+    limitada50 de1301 AP, páginas fallidas/repetidas y contexto obsoleto;
+    detalle canónico con historial de otra instantánea, saldo negativo, URL
+    histórica de nota y fallo de la lectura canónica con historial disponible.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio de código.
+  - ESLint de los cuatro consumidores, helper y pruebas afectados:0 errores,
+    0 warnings. Bandeja pasa de sus cuatro errores históricos a cero; sin
+    desactivaciones de reglas ni reescrituras generales.
+  - `npm.cmd run build`, incluido prebuild OCR: aprobado después del último
+    cambio de código,82/82 páginas.
+  - `git diff --check`: aprobado, con avisos LF/CRLF; archivos nuevos revisados
+    también sin espacios al final de línea ni ausencia de newline final.
+  - DB lint local devolvió0; no reportó problemas del core redefinido de AUD-03.
+    Mantiene el error histórico opcional de `mail_intake_is_demo` sobre
+    `is_demo_environment()` y los dos avisos de variables no leídas de AUD-02.
+    No se presenta el lint global de base como limpio.
+- Riesgos / trabajo pendiente:
+  - Aplicar SQL antes del frontend, con el historial AUD-01/AUD-02 pendiente
+    en orden. La nueva versión del frontend depende de la vista.
+  - Validar RLS remoto y UAT con los mismos filtros/moneda/período en las cuatro
+    vistas; el reporte mensual inicial tiene otro alcance que la bandeja completa.
+  - Inspección visual de móvil, teclado, CSV/PDF e impresión pendiente; se
+    inspeccionó código y se ejecutaron pruebas SQL y de hooks/red simulados.
+    No hubo un navegador conectado para este cambio.
+  - Datos legacy inconsistentes requieren conciliación de Finanzas, sin borrar
+    originales ni forzar importes a cero. La migración no sanea esos documentos.
+    El guion incluye revisión de pagos asignados a notas y jerarquías huérfanas:
+    la vista no reasigna esos movimientos históricos ni los interpreta como
+    pagos directos de una AP. AUD-02 impide nuevas altas de ese tipo.
+  - Cada consulta tiene su instantánea: actualizar pantallas sin escrituras
+    simultáneas al comparar. No se reconstruyen cierres históricos ni tasas FX.
+    Pagado este mes refleja pagos actualmente aplicados del mes de Honduras.
+  - Completitud de CxP resuelta en estos consumidores; AUD-04 mantiene el alcance
+    sobre facturación, histórico, Miami y otras consultas del informe.
+  - Fixtures de concurrencia retenidos solo en el volumen aislado; suites SQL
+    principales con rollback. Sin correos, pagos bancarios ni datos productivos.
+- Commit: pendiente; cambios locales sin commit, push ni despliegue. Incluir
+  este registro y el guion de UAT junto con la implementación.
+
+### AUD-04 — Lecturas completas y acceso paginado a documentos antiguos
+
+- Prioridad: P1. Fecha: 13/10/2026.
+- Estado: implementado y validado localmente; **abierto para publicación y UAT
+  autenticado/visual, con verificación de límites y permisos del ambiente destino**.
+- Archivos y SQL:
+  - `src/lib/report-query.ts`: paginación de relaciones en grupos acotados de IDs.
+  - `src/lib/invoice-list.ts`, `src/lib/history-quotations.ts`,
+    `src/lib/miami-reads.ts`: loaders completos por caso de uso.
+  - `src/lib/alerts.ts`: fuentes completas, incluidas relaciones y readiness RPC.
+  - `src/lib/postgrest-search.ts` y `src/lib/portal.ts`: extracción y reutilización
+    del escape literal existente del portal, sin cambiar su comportamiento.
+  - `src/lib/manual-invoice-history.ts`: contrato/merge de páginas manuales.
+  - `src/app/(protected)/invoicing/page.tsx`,
+    `src/app/(protected)/historico/page.tsx`,
+    `src/app/(protected)/miami/inventario/page.tsx`,
+    `src/app/(protected)/miami/embarques/page.tsx`,
+    `src/app/(protected)/alerts/page.tsx`.
+  - `src/components/layout/topbar.tsx`,
+    `src/components/invoicing/ManualInvoiceEditor.tsx`,
+    `src/app/api/manual-invoices/route.ts`.
+  - `tests/complete-reads.test.mjs`, `tests/manual-invoice-history.test.mjs`,
+    `tests/complete-read-pages.test.mjs`, `tests/paged-client.mjs`,
+    `tests/page-harness.mjs`.
+  - `docs/review-2026-10-13.md`, `docs/uat/aud04-complete-queries.md` y este registro.
+  - SQL modificado: ninguno. No se modifican políticas, permisos, RPC ni tablas.
+- Resultado:
+  - Facturas, saldos y cobros se leen completos y se asocian por ID. La falta de
+    saldo de una factura activa o de cabecera correspondiente exige recargar;
+    no se interpreta como cero. Cierre/estado de cuenta conservan sus fórmulas,
+    monedas y tratamiento de reversos, sobre conjuntos completos.
+  - Cola por facturar paginada por quotation_id; si falla, se muestra un error
+    independiente y no se publica una cola parcial. Documentos financieros
+    cargados correctamente pueden consultarse sin afirmar que la cola está vacía.
+  - Histórico completo con vigencias, contenedores y carga suelta; inventario
+    completo con documentos e historial del paquete. No se usan embeds limitados
+    como si fueran la totalidad de las líneas.
+  - Embarques sin topes ocultos de 500 paquetes/10 despachos: ambas tablas
+    paginadas visualmente. Selección, peso, impresión y payload de despacho
+    conservan todos los seleccionados al cambiar página/filtro. RPC existente
+    conservada; no se introduce escritura alternativa ni despacho de prueba real.
+  - Alertas completas por rol/propiedad, incluidas sus líneas, documentos,
+    revisiones y RPC readiness. Centro/campana distinguen fallos de ausencia de
+    alertas y permiten reintentar; respuestas obsoletas descartadas.
+  - Manuales: API con offset/tamaño validado, conteo real, siguiente offset
+    según filas recibidas y búsqueda literal por número/cliente. UI Cargar más,
+    sin cortar versiones antiguas a 100, con recuperación ante páginas repetidas
+    o metadatos inconsistentes. Guardar sigue creando versiones independientes;
+    no se integra este documento al libro contable ni se altera OCR/PDF.
+  - Se reutiliza readAllReportRows. Filtros de relaciones de hasta 100 IDs por
+    petición, cada uno con todas sus páginas. Errores y cambios de contexto no
+    publican totales/colecciones parciales como resultados completos.
+- Validaciones ejecutadas:
+  - GET real de HEAD frente a fixture de 1,301 documentos, servidor limitado a
+    50: devolvía 50 sin acceso a otra página. GET corregido devuelve 25 visibles,
+    total 1,301 y continuidad de páginas; sin datos ni peticiones productivas.
+  - 18 regresiones nuevas: nueve de loaders/relaciones/RPC, cinco del contrato
+    y API de historial y cuatro de componentes reales con hooks/red simulados.
+    Incluyen 1,301 cabeceras/saldos, 2,602 cobros, 1,101 filas de cola, 1,005
+    líneas/documentos, historial antiguo, fallos posteriores y contexto obsoleto.
+  - Componentes: navegación al registro 1,301 del histórico; error/reintento de
+    facturación sin exportación parcial; búsqueda/carga de versiones manuales
+    antiguas y ausencia de coincidencias; selección entre páginas/filtros Miami
+    con peso y payload completos. La RPC de despacho de esta prueba es simulada.
+  - Autorización manual existente conservada en tests: tenant/host/rol/perfil;
+    la búsqueda no sustituye el filtro explícito de tenant. Se verifica escape
+    de comillas/comas/%/_/barras y equivalencia con el filtro previo del portal.
+  - `npm.cmd test`: 227/227 aprobadas.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio de código.
+  - `npm.cmd run build`, incluido prebuild OCR: aprobado, 82/82 páginas.
+  - ESLint: archivos nuevos, helpers, facturación, inventario, alertas, campana,
+    API/editor manual y portal sin infracciones. Histórico conserva 7 errores
+    any y 2 warnings de helpers no usados; Embarques conserva 7 errores y 1 warning
+    previos. Total afectado: 14 errores/3 warnings, frente a 18/4 antes.
+    Comparación por archivo/regla sin hallazgos nuevos ni reglas desactivadas.
+- Riesgos / trabajo pendiente:
+  - UAT en staging con perfiles autenticados de los roles/tenants pertinentes:
+    orden/rangos reales de PostgREST y RPC, documentos Storage y selección de
+    carga. No se certifica RLS desplegado mediante los clientes simulados.
+  - Revisión visual móvil/teclado, impresión/PDF y tiempos de respuesta pendiente;
+    hubo inspección de código y pruebas de flujo simuladas, sin navegador conectado.
+  - Lecturas completas para filtros/KPIs/exportaciones aumentan red/memoria.
+    Medir volúmenes reales; evolucionar a agregados/búsqueda de servidor si es
+    necesario, sin restaurar límites silenciosos. No garantiza coste constante
+    para volúmenes arbitrarios. API manual permanece explícitamente paginada.
+  - Las páginas no forman una única instantánea transaccional. Duplicados o
+    desajustes detectados exigen actualizar; una inserción concurrente puede
+    desplazar páginas por offset en el historial manual. No se afirma aislamiento
+    de snapshot entre peticiones ni reconstrucción histórica de saldos.
+  - Publicar frontend/API juntos y actualizar pestañas anteriores. AUD-04 no
+    requiere SQL nuevo; el worktree completo sigue dependiendo de las migraciones
+    AUD-01/02/03 pendientes del ambiente destino antes de desplegar ese frontend.
+  - Sin cambios al stack principal/aislado de Supabase en esta etapa, ni correos,
+    pagos bancarios, OCR de proveedor o despachos reales enviados como prueba.
+    Alcance: consultas del hallazgo y relaciones necesarias; no todas las
+    consultas de la aplicación. CxP quedó cubierto en AUD-03.
+- Commit: pendiente; cambios locales sin commit, push ni despliegue. Incluir
+  este registro y el guion UAT junto con la implementación.
+
+### AUD-05 — Transiciones e historial atómicos de cotizaciones (14/10/2026)
+
+- Prioridad: P1, integridad de flujo y auditoría.
+- Estado: implementado y validado localmente; abierto para publicar SQL/frontend,
+  revisar repricing legado y ejecutar UAT autenticado en el ambiente destino.
+- Archivos:
+  - `src/lib/quotation-status.ts` y `src/lib/quotation-transition.ts`.
+  - `src/app/(protected)/quotations/[id]/page.tsx` y `edit/page.tsx`.
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - `tests/quotation-transition.test.mjs`.
+  - `scripts/validate-aud05-concurrency.mjs`.
+  - `supabase/tests/aud05_quotation_transitions_before.sql` y `aud05_quotation_transitions.sql`.
+  - `supabase/tests/aud01_pricing_write_permissions.sql`, `quotation_commercial_options.sql`
+    e `integral_ux_flow_fixes.sql`: contratos versionados y fixtures explícitos de
+    tenant/datos comerciales; conservan comprobaciones de permisos/snapshots/operación.
+  - `docs/uat/aud05-quotation-transitions.md` y `docs/review-2026-10-13.md`.
+- SQL nuevo, en orden:
+  - `20261014120000_atomic_quotation_transitions.sql`.
+  - `20261014121000_quotation_transition_entry_guards.sql`.
+  - `20261014122000_quotation_conflict_http_status.sql`.
+- Corrección:
+  - RPC de transición con lock, tenant/perfil/rol y estado/revisión esperados.
+    Estado, flags de aprobación, pérdida/motivo, historial y auditoría básica
+    se confirman o revierten juntos. Reaprobación también aumenta la revisión.
+  - Guard INVOKER rechaza escrituras directas de estado/aprobación/revisión;
+    el cliente no puede insertar/borrar/modificar/truncar historial. No se usan
+    GUC de cliente como excepción de autorización. Creación conserva los estados
+    iniciales actuales y el pricing automático Miami; bloquea terminales/legacy.
+  - La aprobación toma totales netos de líneas persistidas activas; no cambia
+    facturas emitidas ni snapshots ofrecidos. Repricing ganado puede sincronizar
+    operaciones dentro de la misma transacción usando la RPC operativa vigente.
+  - Opciones conservan sus cuerpos canónicos de publicación, aceptación y
+    propagación, bajo entradas versionadas. El editor sigue INVOKER/RLS y llama
+    a la transición dentro de su transacción; no duplica inserts de historial.
+  - Marcador de retorno a Ganada en reaperturas ganadas; las reaperturas anteriores
+    a la venta no cierran como ganadas por logs antiguos u operaciones. Backfill
+    conservador solo cuando la última transición histórica demuestra el origen.
+  - Conflictos deliberados usan PT409: PostgREST reintentaba 40001 hasta HTTP 504.
+    El contrato final devuelve HTTP 409 inmediatamente, comprobado por API local.
+- Validaciones ejecutadas:
+  - Antes: Ventas aprobó por UPDATE y no se generó historial de transición.
+    Fixture ficticio, base aislada y rollback.
+  - SQL AUD-05 aprobado: creación, escrituras directas, roles/perfil/tenant,
+    estado/revisión obsoletos, regreso al mismo estado, reaprobación, razón Otra,
+    repricing, editor y rollback de motivo/estado/historial por fallo de auditoría.
+    Fallo real de sincronización también revierte aprobación e historial.
+  - Regresiones SQL AUD-01, opciones comerciales y editor integral aprobadas.
+  - Cuatro carreras reales entre dos conexiones, comprobando espera por lock:
+    doble solicitud, regreso a Ganada, aprobación contra pérdida y reaprobación.
+    La segunda revisión obsoleta se rechaza; no duplica historial ni sobrescribe.
+  - API PostgREST local autenticada: RPC 200 con objeto/revisión persistida,
+    UPDATE directo 403/42501, conflicto 409/PT409, historial único visible por RLS.
+  - Seis regresiones Node nuevas; suite completa 233/233 aprobada.
+  - `npx.cmd tsc --noEmit` aprobado después del último cambio TypeScript.
+  - `npm.cmd run build` aprobado, incluido prebuild OCR y 82/82 páginas.
+  - Helpers, test y script nuevo con lint limpio. Pantallas afectadas conservan
+    44 errores y 7 warnings previos (antes 45/7), sin nuevas infracciones por regla.
+  - `db lint` del esquema público no reporta errores AUD-05. Reporta referencia
+    opcional preexistente en `mail_intake_is_demo` a `is_demo_environment()`; está
+    protegida por `to_regprocedure`. Invocación real local devuelve false sin error.
+  - `git diff --check` aprobado; advertencias de normalización LF/CRLF existentes.
+- Riesgos / trabajo pendiente:
+  - Aplicar las tres migraciones y publicar frontend coordinadamente, después
+    del SQL anterior requerido por el worktree. Actualizar pestañas antiguas y
+    consumidores de RPC sin revisión. Sin SQL, commit, push ni despliegue remoto.
+  - Revisar reaperturas legacy pendientes sin evidencia suficiente para el
+    marcador de retorno. No fabricar historial ni inferir una venta ganada.
+  - UAT autenticado/RLS del ambiente destino, PDF, timeline, móvil y teclado
+    pendientes; hubo SQL/API local y pruebas Node, sin navegador conectado.
+  - `status_revision` versiona estados/aprobación, no contactos, tarifas ni todas
+    las líneas. Las ediciones previas de tarifas conservan sus escrituras/RPC
+    independientes; no se afirma una transacción global de edición de pricing.
+  - Notificaciones y snapshots adicionales del cliente siguen posteriores al
+    commit; su fallo no elimina la auditoría básica atómica del servidor.
+  - Stack usado: `sarierp_aud01`, 113 migraciones. SQL de flujo con rollback;
+    concurrencia/API dejaron datos ficticios en su volumen aislado. Docker reanudó
+    automáticamente contenedores principales existentes al arrancar; no se aplicó
+    SQL ni se escribieron datos de negocio en ese stack. Sin correos, pagos,
+    OCR externo o despachos reales. Parada del stack aislado conservando volúmenes.
+- Commit: pendiente; incluir este registro y el guion UAT con la implementación.
+
+### AUD-06 — Asignación Miami sin sobrescritura concurrente (14/10/2026)
+
+- Prioridad: P1, bodega/concurrencia e integridad del flujo.
+- Estado: implementado y validado localmente; abierto para publicación,
+  regularización administrativa del legado y UAT del ambiente destino.
+- Archivos:
+  - `src/lib/miami-assignment.ts`.
+  - `src/app/(protected)/miami/manifiestos/[id]/page.tsx`.
+  - `src/app/(protected)/miami/ingreso/page.tsx`.
+  - `tests/miami-assignment.test.mjs`.
+  - `scripts/validate-aud06-concurrency.mjs`.
+  - `supabase/tests/aud06_miami_assignment_before.sql`.
+  - `supabase/tests/aud06_miami_assignment.sql`.
+  - `docs/uat/aud06-miami-package-assignment.md` y `docs/review-2026-10-13.md`.
+- SQL nuevo: `20261014130000_atomic_miami_package_assignment.sql`.
+- Corrección:
+  - Asignación inicial por RPC con locks manifiesto → paquete, permiso de
+    Admin/Operaciones aprobado/activo, tenant y cliente disponibles, manifiesto
+    esperado y estado de carga recibido sin despacho. Manifiestos cerrados
+    conservan asignación de paquetes disponibles; no reabre el escaneo.
+  - Paquete/cliente, WH, fecha/actor, evento `assignment`, actividad y avisos
+    del portal se guardan juntos. Errores revierten también la reserva del WH.
+    El segundo operador recibe PT409/HTTP 409 sin sobrescribir ni notificar.
+  - Guard INVOKER impide asignar/modificar ownership directamente desde
+    authenticated, incluso Admin, y protege los eventos de asignación. El core
+    privado no está expuesto a authenticated/anon/service_role.
+  - Ingreso y asignación opcional en una RPC. Cliente explícito prevalece sin
+    consumir una prealerta de otro cliente. Matching posterior a INSERT, por
+    tenant/tracking y prealerta pendiente con lock/SKIP LOCKED; devuelve el estado
+    final, estampa actor y no consume la misma prealerta dos veces.
+  - Avisos del portal generados por servidor para perfiles Cliente aprobados
+    y activos del tenant; resuelve la inserción/lectura fallida de perfiles que
+    el handler anterior de Operaciones ignoraba. No hay envío externo en SQL.
+  - Las pantallas usan resultados persistidos, bloquean doble clic, muestran
+    conflicto/error, conservan tracking ante fallos y solicitan correo únicamente
+    tras confirmar asignación. Se descartan respuestas del contexto desmontado.
+    Lista de manifiesto con lecturas completas, error y reintento; sin nueva librería.
+- Validaciones ejecutadas:
+  - Antes: dos identidades ficticias sobrescribieron cliente/WH por ID y no
+    generaron evento. Reproducción con rollback en la base aislada.
+  - Trigger anterior de prealertas restaurado temporalmente en una transacción
+    local: falló con FK 23503 al referenciar el paquete en BEFORE INSERT. Rollback
+    restauró el trigger actual; la versión AFTER INSERT pasó los casos SQL/API.
+  - SQL de flujo aprobado: ingreso simple/cliente/prealerta, escaneo, asignación,
+    repetición, manifiesto esperado/cerrado, roles/perfil/tenant, cliente eliminado,
+    carga procesada, ACL del core y RLS del portal. Fallos de evento/aviso revierten
+    paquete, contador WH y trazas.
+  - Cuatro carreras reales entre dos conexiones: clientes distintos, mismo
+    cliente, asignación contra eliminación de manifiesto y consumo de prealerta.
+    Las tres primeras comprobaron espera real por lock; la cuarta SKIP LOCKED.
+    Un owner/WH/evento y cero avisos para el cliente de la asignación descartada.
+  - PostgREST local autenticado: UPDATE directo 403/42501, asignación 200 con
+    objeto completo, repetición 409/PT409, evento único, aviso leído mediante RLS
+    por el Cliente y retorno autoasignado después del trigger de ingreso.
+  - Nueve regresiones Node nuevas: cuatro de contrato y cinco de componentes
+    reales con hooks/red simulados. No invocan correo real ni crean despachos.
+  - `npm.cmd test`: 242/242 aprobadas.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio TypeScript.
+  - `npm.cmd run build`: aprobado, incluido prebuild OCR y 82/82 páginas.
+  - Helper, test y script nuevo con lint limpio. Pantallas conservan 7 errores
+    y 0 warnings previos, frente a 10/2 antes; sin infracciones nuevas por regla.
+  - `db lint` no reporta errores AUD-06. Conserva referencia estática previa
+    de `mail_intake_is_demo` a helper opcional protegido por `to_regprocedure`.
+  - `git diff --check` aprobado; advertencias LF/CRLF de normalización existentes.
+- Riesgos / trabajo pendiente:
+  - Aplicar migración y publicar Ingreso/Manifiesto coordinadamente, junto al
+    SQL anterior necesario para el worktree. Recargar pestañas y revisar otros
+    consumidores que escriban asignaciones directamente. Sin SQL remoto/deploy.
+  - Revisar paquetes legacy incoherentes con el SELECT del guion UAT. Cliente
+    precargado sin WH/actor/fecha puede completarse solo para ese mismo cliente;
+    otros casos necesitan Administración. No se inventa historial anterior.
+  - Corregir ownership confirmado requiere mantenimiento administrativo revisado
+    con motivo/actor/valores esperados/trazas, preservando WH y reconciliando
+    prealertas, documentos/Storage, despachos y avisos. Asignar no es una herramienta
+    general de reasignación; no se corrigieron datos existentes de negocio.
+  - Correo posterior al commit: fallo o cierre de vista puede dejar aviso pendiente
+    de reintento desde Inventario. AUD-07 conserva la revisión del ambiente de
+    correo. No se garantiza idempotencia nueva del ingreso manual por tracking;
+    tras una respuesta perdida revisar Inventario antes de repetir.
+  - UAT autenticado/RLS del ambiente destino, móvil/teclado y revisión visual
+    pendientes; hubo SQL/API local y componentes simulados, sin navegador conectado.
+    Medir red/memoria de manifiestos grandes al retirar su límite implícito.
+  - Base aislada `sarierp_aud01`, 114 migraciones; fixtures de SQL revertidos,
+    fixtures de concurrencia/API conservados en su volumen. Stack principal
+    sin modificaciones. Sin correos, pagos, OCR externo ni despachos reales.
+    Parada del stack aislado conservando volúmenes.
+- Commit: pendiente; cambios locales sin commit/push. Incluir registro y guion UAT.
+
+## AUD-07 — Bloquear correo ante ambiente no verificable (14/10/2026)
+
+- Prioridad: P1.
+- Estado: implementado y validado localmente; abierto hasta publicación,
+  verificación de configuración/permisos y UAT del ambiente destino.
+- Archivos modificados:
+  - `src/lib/server/email-environment.ts` (nuevo).
+  - `src/app/api/miami/package-assignment-email/route.ts`.
+  - `src/app/api/support/notify/route.ts`.
+  - `src/lib/server/outlook-intake.ts`.
+  - `tests/email-route-fixture.mjs` y `tests/email-environment.test.mjs` (nuevos),
+    `tests/email-notifications.test.mjs`.
+  - `docs/uat/aud07-email-environment.md`, `docs/support-ticketing-runbook.md`,
+    `docs/review-2026-10-13.md` y este registro.
+- SQL modificado: ninguno. No se aplicaron migraciones ni cambios de RLS.
+- Corrección:
+  - Guard común exige una lectura correcta de `platform_environment`, fila
+    singleton y valor exacto `demo` o `production`. Error, excepción, ausencia
+    o valor inválido bloquean el correo con error tipado; sin caché entre solicitudes.
+  - `APP_ENV` y `NEXT_PUBLIC_APP_ENV` en Demo vetan el envío incluso si falla
+    la base. No habilitan producción como fallback. Miami y Soporte conservan
+    sus respuestas Demo; ambiente desconocido devuelve 503 antes del proveedor,
+    reserva del envío o escritura de auditoría. Conservan autorización y opt-in
+    exacto `OUTBOUND_EMAIL_ENABLED=true` para producción verificada.
+  - Outlook reutiliza el guard y conserva el veto de su RPC legacy: error o
+    resultado no booleano bloquean. `OUTLOOK_INTAKE_STANDBY` permanece activo.
+    Las pruebas habilitan esa rama solamente mediante mocks.
+- Validaciones ejecutadas:
+  - Reproducción sobre copias de ambos handlers anteriores: una lectura fallida
+    del ambiente todavía llamaba al proveedor una vez. Proveedor simulado,
+    rechazo 502; sin correo real.
+  - 14 regresiones nuevas: ambientes inválidos/ausentes, errores/excepciones,
+    Demo, producción con opt-in exacto, autenticación/perfiles y Outlook.
+    Casos bloqueados sin llamada al proveedor, reserva ni actualización de envío;
+    mocks restauran variables y fetch al finalizar.
+  - Suite focalizada: 29/29 aprobadas. `npm.cmd test`: 256/256 aprobadas.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio de código.
+  - `npm.cmd run build`: aprobado, incluido prebuild OCR y 82/82 páginas.
+  - ESLint de los siete archivos de código/pruebas afectados: 0 errores y
+    0 warnings. `git diff --check`: aprobado.
+- Riesgos / trabajo pendiente:
+  - Publicar y ejecutar el guion UAT. Verificar en destino la fila singleton,
+    su ambiente real y acceso del servidor a `platform_environment`. Las
+    migraciones actuales no crean esa tabla; si falta, el correo queda bloqueado.
+    Resolver su configuración mediante un cambio revisado; no copiar SQL exclusivo
+    de Demo ni asumir producción por ausencia de datos.
+  - Una instalación que antes ignoraba errores de esa lectura puede dejar de
+    enviar hasta corregir la configuración. Un fallo de correo posterior a una
+    operación persistida no revierte dicha operación; revisar antes de repetirla.
+  - Las pruebas simuladas no certifican permisos/RLS remotos ni entrega real.
+    No hubo llamadas a Microsoft, proveedores de correo u OCR externo, ni cambios
+    en Docker o bases de negocio. El plan Trial de un tenant no determina el
+    ambiente global. La comprobación es por solicitud, no un lock entre cambio
+    de ambiente y llamada al proveedor.
+  - AUD-08 sigue pendiente: envíos atascados en processing y conciliación de
+    respuestas inciertas. No se cambiaron políticas de reintento en esta etapa.
+- Commit: pendiente; cambios locales sin commit/push. Incluir este registro y
+  el guion UAT en el mismo commit de la corrección.
+
+### AUD-08 — Recuperar y conciliar correo con resultado incierto (14/10/2026)
+
+- Prioridad: P1.
+- Estado: implementado y validado localmente; abierto para aplicar SQL, publicar,
+  verificar permisos del destino y ejecutar UAT. Sin despliegue remoto.
+- Archivos modificados:
+  - `src/lib/server/email-delivery.ts` (nuevo).
+  - `src/app/api/miami/package-assignment-email/route.ts` y
+    `src/app/api/support/notify/route.ts`.
+  - `tests/email-delivery.test.mjs` (nuevo), `tests/email-route-fixture.mjs` y
+    `tests/email-notifications.test.mjs`.
+  - `scripts/validate-aud08-email-recovery.mjs` (nuevo).
+  - `docs/uat/aud08-email-recovery.md` (nuevo),
+    `docs/support-ticketing-runbook.md`, `docs/review-2026-10-13.md` y este registro.
+- SQL nuevo:
+  - `supabase/migrations/20261014140000_email_delivery_reconciliation.sql`.
+  - `supabase/migrations/20261014141000_email_delivery_credential_guard.sql`.
+  - `supabase/migrations/20261014142000_email_reconciliation_actor_guard.sql`.
+  - `supabase/tests/aud08_email_delivery.sql`.
+- Corrección:
+  - Helper común reserva después de los controles existentes de rol/perfil,
+    recurso, tenant, ambiente y opt-in. Processing activo devuelve 409/inProgress,
+    no alreadySent. Sent exige ID persistido; sent sin ID pasa a uncertain.
+  - Guarda JSON exacto, destinatario, clave de idempotencia, primer intento,
+    hash de credencial y token de lease antes del proveedor. Repite solo el
+    snapshot original dentro de 23 horas, con margen para timeout; no renueva
+    la ventana. Respeta cinco intentos, reserva única y CAS por estado/revisión.
+  - Timeout de 20 segundos incluye cuerpo y abort; red/200 sin ID/409/5xx dejan
+    uncertain. Aceptación con fallo de auditoría nunca confirma envío al usuario.
+    Cierre condicionado por token impide sobrescritura de una solicitud tardía.
+  - Legacy sin snapshot, ventana vencida o credencial distinta no se reenvía.
+    Un cambio de credencial podría cambiar la cuenta donde vive la idempotencia.
+  - RPC de mantenimiento solo service_role: Admin activo/aprobado del tenant
+    para Miami o plataforma para Soporte. Roles null fallan cerrados. Exige
+    versión y evidencia, bloquea lease activo y persiste conciliación/historial
+    atómicamente. Aceptado exige ID; no aceptado habilita un nuevo snapshot/clave
+    sin reiniciar intentos. Un ID ya conocido impide habilitar otro envío.
+  - SELECT del navegador conserva metadatos/RLS pero no cuerpo, hash ni tokens.
+    Evidencia solo SELECT/INSERT para service_role; sin UPDATE/DELETE de ese rol.
+    Outlook continúa en standby. Sin nuevos workers, cron o librerías.
+- Validaciones ejecutadas:
+  - Antes: ambas rutas reales respondieron alreadySent a una fila processing
+    antigua; cero llamadas de recuperación. Fixtures/proveedor simulados.
+  - 18 regresiones nuevas con handlers reales, SDK y timers simulados: lease,
+    replay congelado, expiración antes/después de reservar, credencial, errores
+    de DB/red/cuerpo, pérdida de CAS/token, auditoría fallida y límite de intentos.
+  - `npm.cmd test`: 274/274 aprobadas. `npx.cmd tsc --noEmit`: aprobado.
+  - `npm.cmd run build`: aprobado; prebuild OCR y 82/82 páginas.
+  - ESLint de siete archivos de código/pruebas/script: 0 errores y 0 warnings.
+  - Tres migraciones aplicadas solo a sarierp_aud01. Guion SQL con rollback:
+    ACL/RLS de tenant/columnas, actor ajeno/inactivo de estado/sin rol, conflicto,
+    lease activo, provider ID conocido y reversión por fallo de evidencia.
+  - PostgREST aislado con Supabase SDK real, dos lecturas del mismo estado en
+    paralelo: inserción única y recuperación CAS en ambas tablas, escritor
+    tardío y fallo real del UPDATE final seguido de recuperación. Un correo
+    aceptado por proveedor simulado; snapshots/clave idénticos y contador correcto.
+    Fixtures de ese script eliminados al terminar.
+  - Lint SQL sin errores AUD-08; conserva error previo de mail_intake_is_demo
+    por helper opcional is_demo_environment y dos variables previas sin uso
+    en funciones financieras. No se declara aprobado el lint global.
+  - `git diff --check` y revisión de whitespace/UTF-8 de archivos nuevos aprobados.
+- Riesgos / trabajo pendiente:
+  - Aplicar las tres migraciones y publicar helper/rutas coordinadamente.
+    Verificar fuente de ambiente AUD-07 y ACL/RLS en destino. No rellenar ni
+    reiniciar auditorías legacy. No volver a handlers antiguos que ignoran uncertain.
+  - UAT autenticado/visual y entrega del proveedor pendientes. Suite simulada y
+    SQL/API aislados no certifican permisos remotos. No hubo correos, Microsoft,
+    OCR externo, pagos ni despachos reales; base principal sin modificaciones.
+  - Recuperación a demanda del mismo evento, sin worker automático. La revisión
+    de Soporte conserva eventType/messageId originales; una revisión posterior
+    del ticket no recupera un aviso anterior. Diagnóstico y conciliación están
+    documentados en el guion UAT; desconocido nunca equivale a no aceptado.
+  - Verificar logs/ID/destinatario/evento antes de conciliación manual. La RPC
+    requiere mantenimiento coordinado: antes de autorizar nueva clave por no
+    aceptación, terminar/cancelar las solicitudes anteriores de todas las
+    instancias. Un lease vencido no prueba que un proceso pausado terminó.
+    Sin esa comprobación, conservar uncertain y escalar.
+  - La RPC
+    almacena evidencia declarada por mantenimiento confiable, no consulta Resend
+    ni prueba por sí sola que la evidencia sea verdadera. Sent significa aceptado,
+    no entregado. No forzar nuevo intento por rebote o ausencia de una búsqueda.
+  - Relojes sincronizados y mantenimiento coordinado. No hay garantía de entrega
+    exactamente una vez ante pausas arbitrarias que crucen las 24 horas del
+    proveedor; abortar tampoco revierte una aceptación externa. Rotación de
+    credencial requiere revisión, incluso si continúa en la misma cuenta.
+  - Revisar consumidores externos que hagan SELECT * como authenticated;
+    los consumidores actuales de las tablas de entrega son handlers de servidor.
+  - Stack aislado con 117 migraciones, detenido conservando volúmenes. AUD-09
+    queda siguiente: no presentar fallos de consulta como cero/listas vacías.
+- Commit: pendiente; cambios locales sin commit/push. Incluir este registro,
+  SQL y procedimiento UAT en el mismo commit de la corrección.
+
+### AUD-09 — No presentar errores de consulta como cero registros (14/10/2026)
+
+- Prioridad: P2.
+- Estado: implementado y validado localmente; abierto para publicación y UAT
+  visual/autenticado y permisos del ambiente destino.
+- Archivos modificados:
+  - `src/lib/miami-dashboard.ts` (nuevo).
+  - `src/app/(protected)/miami/page.tsx` y `src/components/layout/topbar.tsx`.
+  - `tests/read-error-fixture.mjs`, `tests/read-error-states.test.mjs` (nuevos),
+    `tests/page-harness.mjs` y `tests/supplier-payment-flow.test.mjs`.
+  - `docs/uat/aud09-read-errors.md` (nuevo), `docs/review-2026-10-13.md` y este registro.
+- SQL modificado: ninguno. Sin cambios en RLS, RPCs, esquema o datos financieros.
+- Corrección:
+  - Miami comprueba error en las seis respuestas, counts enteros no negativos y
+    listas válidas. Count/lista null no equivale a cero/vacío. Publica una lectura
+    completa en UI; un fallo de subconsulta no mezcla KPIs nuevos y listas viejas.
+  - Error inicial sin KPIs ni listas vacías exitosas; reintento visible. Al
+    actualizar, conserva datos del mismo contexto con etiqueta de desactualización.
+    Un vacío anterior usa texto histórico, no afirma que todo esté asignado ahora.
+    Botones de actualización/reintento con clases existentes y sin nuevas librerías.
+  - Reutiliza canAccessPath y requiere identidad/perfil, aprobación, actividad,
+    tenant y permiso Miami. Añade tenant explícito a las seis consultas y oculta
+    snapshot ajeno inmediatamente. Versionado descarta respuestas reemplazadas
+    o posteriores al desmontaje. RLS sigue siendo la autorización de la base.
+  - Campana conserva lectura, badge y vistos ante error. Indicador cerrado y
+    aviso dentro del dropdown; vacío anterior se etiqueta como histórico.
+    Actualización/reintento y contexto de usuario/tenant/rol/perfil; no consulta
+    sin permiso o en transición de sesión. Abrir cache durante fallo/carga no
+    marca vistos. Respuestas tardías no cambian lista ni persistencia de vistos.
+  - Detalle CxP ya bloqueaba lecturas parciales desde AUD-02/03/04. Se amplían
+    sus regresiones sin modificar la pantalla financiera ni recalcular importes:
+    cuenta/saldo/pagos/ajustes deben cargar correctamente antes de mostrar datos
+    o permitir acciones. Una actualización fallida conserva el bloqueo.
+- Validaciones ejecutadas:
+  - Antes: dashboard real con seis errores simulados mostraba KPIs cero y
+    estados vacíos exitosos. Campana real perdía su lista al fallar una recarga.
+  - Once regresiones nuevas: nueve para dashboard/helper/campana y dos CxP.
+    Errores por subconsulta, respuestas incompletas, cero válido, recuperación,
+    preservación del snapshot/vistos, cambio de identidad/rol/tenant, perfil
+    inválido, respuestas fuera de orden y desmontaje. Harness admite props.
+  - Suite focalizada 19/19; suite total `npm.cmd test`: 285/285 aprobadas.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio TypeScript.
+  - `npm.cmd run build`: aprobado, incluido prebuild OCR y 82/82 páginas.
+  - ESLint de siete archivos afectados: 0 errores y 0 warnings.
+  - `git diff --check` y revisión de UTF-8/whitespace de archivos nuevos aprobados.
+- Riesgos / trabajo pendiente:
+  - Publicar pantallas/helper y ejecutar `docs/uat/aud09-read-errors.md` en
+    destino. Verificar permisos/RLS y dependencias financieras previas. No hay
+    navegador conectado; mocks no certifican móvil, foco, modo oscuro o RLS remoto.
+  - Son seis lecturas de Miami independientes, no un snapshot transaccional
+    de SQL. Se evita la mezcla parcial por fallo, no los cambios concurrentes
+    de negocio entre consultas. Se mantienen previews de 10 manifiestos/15
+    paquetes con counts exactos; no se presenta un listado limitado como completo.
+  - Los datos anteriores se conservan en memoria y se etiquetan como desactualizados;
+    completar una consulta antes de utilizarlos como información vigente. CxP
+    conserva el bloqueo total para no operar sobre un saldo anterior/parcial.
+  - La frontera UTC de hoy y fechas anteriores se conservan hasta AUD-10; no
+    cambiar reglas de calendario dentro de este fix de errores de lectura.
+  - Sin correos, pagos, ajustes, OCR externo ni despachos reales; sin cambios
+    en Docker, bases de negocio, SQL remoto o despliegues. Sin modificación
+    de los fixes locales previos. AUD-10 queda siguiente.
+- Commit: pendiente; cambios locales sin commit/push. Incluir registro y guion
+  UAT en el mismo commit de la corrección.
+
+### AUD-10 — Calendario de Miami, CxP e Histórico (14/10/2026)
+
+- Prioridad: P2.
+- Estado: implementado y validado localmente; abierto para publicación y UAT
+  visual/autenticado del ambiente destino.
+- Archivos modificados:
+  - `src/lib/format.ts` y `src/lib/miami-dashboard.ts`.
+  - `src/app/(protected)/miami/page.tsx` y `src/app/(protected)/historico/page.tsx`.
+  - `tests/calendar-flows.test.mjs` (nuevo), `tests/read-error-fixture.mjs` y
+    `tests/supplier-payment-flow.test.mjs`.
+  - `docs/uat/aud10-calendar-timezones.md` (nuevo),
+    `docs/review-2026-10-13.md` y este registro.
+- SQL modificado: ninguno. CxP ya usa fecha Honduras y vencimiento posterior
+  a hoy mediante la vista canónica de AUD-03; se revisó esa implementación y se
+  amplió cobertura de interfaz, sin duplicar ni cambiar cálculos financieros.
+- Corrección:
+  - `miamiDayRange` calcula ambas medianoches reales de America/New_York usando
+    Intl. Rango UTC semiabierto: >= inicio y < siguiente medianoche para ambos
+    contadores de hoy. Respeta DST, excluye la siguiente medianoche y fechas
+    futuras, conserva filtros de tenant/estado y validación completa de AUD-09.
+  - Las listas del dashboard muestran DD/MM/YYYY y hora Miami del instante real.
+    Formato numérico opcional en helper existente; consumidores previos, incluido
+    el correo, conservan su formato largo por defecto. No cambia timestamps.
+  - Histórico reutiliza `isInCreationPeriod` del dashboard comercial y `formatDate`:
+    el filtro y la fecha visible comparten calendario local, sin cortar el prefijo
+    UTC. Mantiene paginación/filtros/contexto; rango invertido no incluye filas.
+  - Vigencia de tarifa seleccionada con `calendarDaysUntil` y `formatDate`.
+    No divide horas entre 24 ni normaliza fechas DATE imposibles a otro mes.
+  - CxP conserva as_of_date/status/days_overdue del servidor, calculados con
+    America/Tegucigalpa. Una AP que vence hoy tiene cero días vencidos; no se
+    vuelve a derivar el estado con el reloj/zona del navegador. Sin cambiar
+    saldos, pagos, notas, estados históricos ni snapshots comerciales.
+- Validaciones ejecutadas:
+  - Antes, reloj controlado: Miami a las 21:30 del 14/10 consultaba desde 15/10
+    UTC, sin límite superior. Histórico excluía del filtro 14/10 una cotización
+    de 15/10 01:30Z mostrada como 14/10 en Honduras.
+  - Nueve regresiones nuevas: invierno/verano, días DST de 23/25 horas, hora
+    repetida, medianoches inclusiva/exclusiva, año y febrero bisiesto, counts
+    con tenant, fechas visibles y período local, vigencia de ocho días tras DST,
+    fechas imposibles y CxP en cuatro zonas. Restauran TZ y reloj simulado.
+  - `npm.cmd test`: 294/294 aprobadas.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio TypeScript.
+  - `npm.cmd run build`: aprobado, incluido prebuild OCR y 82/82 páginas.
+  - Seis archivos con ESLint limpio. Histórico conserva siete errores previos
+    de no-explicit-any y dos avisos previos no-unused-vars; comparación de la
+    versión anterior de esta etapa con mismas reglas/cantidades, sin infracciones
+    nuevas. No se declara aprobado el lint global.
+  - `git diff --check` y revisión de whitespace/UTF-8 del test y guion nuevos aprobados.
+- Riesgos / trabajo pendiente:
+  - Publicar helpers/pantallas juntos y ejecutar UAT. Verificar dependencias
+    previas de AUD-03/09 y permisos/RLS del destino. No se ejecutó SQL ni se
+    inició Docker; las pruebas de CxP son de contrato/interfaz, no RLS remoto.
+  - Sin navegador conectado. Verificar tablas en móvil, modo oscuro, zona visible,
+    rangos/paginación y cambios de día desde una sesión real con red interceptada.
+    No hubo correos, pagos, ajustes, OCR externo ni datos de negocio reales.
+  - Histórico mantiene la convención comercial existente de calendario local
+    del navegador; otro navegador puede mostrar otro día para el mismo instante,
+    pero fecha visible y filtro coinciden. No se agrega zona configurable por tenant.
+  - Miami recalcula límites al consultar/actualizar; no hay autorrefresco al
+    cruzar medianoche. Actualizar una pestaña abierta antes de usar sus contadores
+    del nuevo día. Se depende del reloj y datos IANA del dispositivo.
+  - Las consultas siguen siendo independientes, con límites de preview y
+    protección de errores de AUD-09. No reescriben auditoría ni fechas DATE.
+    AUD-11 queda siguiente: incidencia y estado del paquete en una transacción.
+- Commit: pendiente; cambios locales sin commit/push. Incluir registro y guion
+  UAT en el mismo commit de la corrección.
+
+### AUD-11 — Reporte de incidencia atómico desde el portal (14/10/2026)
+
+- Prioridad: P2.
+- Estado: implementado y validado localmente; abierto para SQL, publicación,
+  revisión de datos históricos y UAT del ambiente destino.
+- Archivos modificados:
+  - `src/app/portal/incidencias/nueva/page.tsx`, `src/lib/miami-incidents.ts`
+    (nuevo), `src/lib/pending-request.ts` (nuevo) y `src/lib/supplier-payables.ts`.
+  - `tests/miami-incidents.test.mjs` (nuevo), `tests/paged-client.mjs` y
+    `scripts/validate-aud11-concurrency.mjs` (nuevo).
+  - `supabase/tests/aud11_portal_incidents.sql` (nuevo),
+    `docs/uat/aud11-atomic-portal-incidents.md` (nuevo),
+    `docs/review-2026-10-13.md` y este registro.
+- SQL nuevo, en este orden:
+  - `supabase/migrations/20261014150000_atomic_portal_incidents.sql`.
+  - `supabase/migrations/20261014151000_incident_session_binding.sql`.
+  - `supabase/migrations/20261014152000_incident_trace_guards.sql`.
+- Corrección:
+  - Reproducción anterior con RLS real: INSERT de incidencia aprobado, UPDATE
+    del paquete afecta cero filas sin error. El formulario podía anunciar éxito
+    con incidencia abierta y paquete todavía Asignado.
+  - Una RPC confirma incidencia, estado Con incidencia, evento y actividad en
+    la misma transacción. Deriva tenant, cliente y actor de una sesión Cliente
+    aprobada y activa; valida propietario, cliente vigente y ambos indicadores
+    de entrega. La identidad esperada del navegador debe coincidir con auth.uid.
+    La función interna no es ejecutable por roles de API.
+  - Bloqueos del paquete y de la clave de solicitud serializan reportes y
+    entregas. La misma clave devuelve el comprobante original; otra solicitud
+    no puede abrir un segundo caso activo, incluso desde otra cuenta del mismo
+    cliente o ante un caso histórico. Una repetición después del cierre o la
+    entrega no vuelve a abrir el caso ni sobrescribe el estado del paquete.
+  - El formulario verifica el comprobante completo antes de confirmar, bloquea
+    doble envío y conserva texto/clave ante resultado incierto. sessionStorage
+    guarda UUID e identidad/hash de la solicitud, sin descripción en claro.
+    Si el almacenamiento está bloqueado, usa memoria; el control de casos activos
+    del servidor sigue vigente tras recargar. El helper reutilizable conserva
+    namespace y contrato financiero anteriores, sin cambiar RPC de pagos.
+  - Selector paginado completo, sin resultados parciales ante error; contexto
+    de sesión validado antes de enviar y respuestas tardías descartadas. No se
+    ofrecen paquetes entregados para reportar desde este formulario.
+  - Se bloquea INSERT directo autenticado, incluido personal interno; la gestión
+    existente de estado/resolución se conserva. Identidad, contenido y clave de
+    nuevos reportes son inmutables y su eliminación autenticada se bloquea;
+    el evento incident_reported también queda protegido. Mantenimiento con
+    privilegios elevados conserva su responsabilidad de auditoría.
+  - Sin backfill, eliminación ni conciliación automática de casos históricos.
+    El guion incluye consulta de diagnóstico para duplicados activos, propiedad,
+    entrega y divergencias entre caso/paquete. El cierre conserva la política
+    existente: no restaura automáticamente el estado del paquete.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 303/303 aprobadas; subconjunto de incidencia y pagos: 23/23.
+    Nueve regresiones nuevas cubren contrato, reintento tras recargar, datos
+    inválidos, cambio de sesión, doble envío, paginación y recuperación de error.
+  - `npx.cmd tsc --noEmit`: aprobado después del último cambio TypeScript.
+  - `npm.cmd run build`: aprobado, incluido prebuild OCR y 82/82 páginas.
+  - Siete archivos de esta etapa con ESLint sin errores ni avisos.
+  - SQL de regresión aprobado en base aislada, con rollback: permisos/RLS,
+    entrada inválida, repetición, trazabilidad, cierre/entrega y fallos inyectados
+    en paquete, evento y actividad sin escrituras parciales.
+  - Cinco carreras con conexiones PostgreSQL reales y espera de bloqueo
+    comprobada: misma clave, dos cuentas del cliente, entrega primero, reporte
+    primero y reutilización de clave para otro paquete. Todas aprobadas.
+  - API PostgREST autenticada local: comprobante y repetición correctos,
+    identidad distinta rechazada, INSERT directo rechazado y lectura RLS aislada.
+  - `supabase db lint --local`: sin errores nuevos de AUD-11; conserva el error
+    previo de mail_intake_is_demo por is_demo_environment ausente y dos avisos
+    financieros previos de v_account sin uso. No se declara aprobado el lint global.
+  - `git diff --check` y revisión UTF-8/whitespace de archivos nuevos aprobados.
+- Riesgos / trabajo pendiente:
+  - Aplicar las tres migraciones y publicar el formulario coordinadamente;
+    verificar dependencias de AUD-06 y RLS del destino. La pantalla anterior
+    falla de forma segura después de retirar INSERT directo. Revisar otros
+    consumidores internos que aún inserten incidencias por tabla.
+  - Ejecutar diagnóstico histórico y documentar cualquier conciliación manual
+    con identidad, motivo y trazabilidad en una transacción. No borrar duplicados
+    ni inferir estados de entrega automáticamente.
+  - Ejecutar UAT visual, móvil y autenticado según el guion. Sin navegador
+    conectado ni validación del ambiente remoto; SQL aplicado exclusivamente
+    a sarierp_aud01, con fixtures sintéticos limpiados y sin proveedores externos.
+  - Base aislada con 120 migraciones y cero fixtures AUD-11 restantes; stack
+    detenido conservando volúmenes. El stack principal no se modifica. No hubo
+    correos, pagos ni despachos reales.
+  - Quedan por abordar AUD-12 a AUD-20 (9). Los hallazgos anteriores conservan
+    sus pendientes de publicación, SQL o UAT; no equivalen a cierres productivos.
+- Commit: pendiente; cambios locales sin commit/push. Incluir SQL, registro y
+  guion UAT en el mismo commit de la corrección; hash aún no disponible.
+
+### AUD-12 — Avisos a varias cuentas del portal (14/10/2026)
+
+- Prioridad: P2.
+- Estado: cubierto y validado localmente; abierto para publicación/UAT de AUD-06.
+- Archivos: eliminado `src/lib/client-notifications.ts` (sin consumidores);
+  ampliado `supabase/tests/aud06_miami_assignment.sql`; documentación común de
+  esta ronda: `docs/uat/aud12-20-acceptance.md`,
+  `docs/review-2026-10-13.md`, matriz de release y este registro.
+- SQL de esquema nuevo: ninguno. Se reutiliza
+  `20261014130000_atomic_miami_package_assignment.sql` de AUD-06.
+- Corrección: todos los perfiles Cliente aprobados/activos del cliente y tenant
+  reciben su aviso en la transacción de asignación. No se vuelve a consultar
+  maybeSingle ni se escribe desde un helper separado. Conflicto/reintento no
+  duplica y un fallo del aviso revierte la asignación.
+- Validaciones: búsqueda de consumidores antes de retirar; suite SQL AUD-06
+  aprobada con cero/una/dos cuentas, inactivo/pendiente excluidos, RLS de ambas
+  cuentas, cliente ajeno, prealerta y rollback. Siete suites SQL de auditoría
+  aprobadas en sarierp_aud01 con fixtures revertidos. Véase validación conjunta.
+- Pendientes: desplegar dependencias de AUD-06 y probar portal en destino. No
+  modifica el destinatario comercial email_1 ni crea una política de contactos
+  principales; este fix se refiere a avisos dentro del portal.
+- Commit: pendiente; cambios locales, sin commit/push ni hash disponible.
+
+### AUD-13 — CI y deuda de lint explícita (14/10/2026)
+
+- Prioridad: P2.
+- Estado: implementado localmente; abierto para primera ejecución alojada y
+  configuración de controles de merge.
+- Archivos: `.github/workflows/quality.yml`, `scripts/lint-baseline.mjs`,
+  `scripts/validate-audit-sql.mjs`, `tests/lint-baseline.test.mjs`, `package.json`,
+  `docs/quality/lint-baseline.json`, `docs/quality/continuous-checks.md`,
+  `src/lib/pricing-catalogs.ts`, documentación común y este registro.
+- SQL nuevo: ninguno; el job SQL aplica migraciones en stack Docker desechable
+  y ejecuta siete suites de esta auditoría. Localmente solo admite --isolated
+  sobre sarierp_aud01; sin conexión remota ni reset de la base de trabajo.
+- Corrección: TypeScript/tests/build/lint:ci por PR y push main/master, permisos
+  read-only y sin secretos. Baseline por archivo/regla/severidad/título, con
+  conteo de repeticiones; ignora extractos/rutas/line numbers de React Compiler
+  para igualdad Windows/Linux. Parseo/configuración fallan siempre; no se puede
+  regenerar el baseline en CI y no se desactivan reglas globales.
+- Reducción de deuda: tres no-explicit-any eliminados en pricing-catalogs con
+  tipos del cliente y filas; se conservan catálogos/defaults/comportamiento.
+  Baseline original 227 -> 224; las tres excepciones se retiran, no se trasladan.
+- Validaciones: prueba de comparación para archivo/regla/severidad/repeticiones,
+  disminución permitida y título estable; siete suites SQL locales aprobadas.
+  Gate completo y comandos finales en validación conjunta.
+- Pendientes: GitHub Actions no se ejecutó desde este checkout. Administrador
+  debe exigir jobs application/database al merge tras primera ejecución verde.
+  El job no sustituye todas las suites históricas, carreras reales ni UAT.
+- Commit: pendiente; workflow, baseline y registro deben incluirse juntos.
+
+### AUD-14 — Matriz única de release y aceptación (14/10/2026)
+
+- Prioridad: P2.
+- Estado: preparación documental implementada; abierto para evidencia remota y
+  aceptación funcional. No se declara UAT completada.
+- Archivos: `docs/release/audit-release-matrix.md`,
+  `docs/MULTI_TENANT_CUTOVER_RUNBOOK.md`,
+  `docs/release/release-readiness-4a-5c.md`, documentación común y este registro.
+- SQL nuevo: ninguno.
+- Corrección: matriz con commit, ambiente/hostname, versiones SQL efectivamente
+  aplicadas, RLS, frontend y responsables/evidencia/fecha; pasos integrales FCL,
+  carga suelta y Miami, incluidos dinero, portal, fallos y concurrencia. Runbooks
+  anteriores remiten al índice vigente y conservan sus veredictos históricos.
+- Validaciones: contraste del inventario y guiones AUD-01 a AUD-11 con migraciones
+  versionadas y estados locales; revisión de enlaces/procedimiento. No se
+  consultó esquema productivo ni se inventaron aprobaciones/nombres de firmantes.
+- Pendientes: preparar candidato con SHA real, verificar destino y ejecutar los
+  tres expedientes con roles; responsables por nombre y firmas de negocio. La
+  autorización de correcciones locales no se interpreta como autorización de corte.
+- Commit: pendiente; sin hash disponible.
+
+### AUD-15 — Fallos auxiliares y APIs rastreables (14/10/2026)
+
+- Prioridad: P2.
+- Estado: implementado y probado localmente; abierto para publicación y operación
+  de logs en hosting.
+- Archivos: `src/lib/activity-logger.ts`, `src/lib/diagnostics.ts`,
+  `src/app/api/miami/package-assignment-email/route.ts`,
+  `src/app/api/support/notify/route.ts`, `tests/diagnostics.test.mjs`,
+  documentación común y este registro. SQL nuevo: ninguno.
+- Corrección: createActivityLog comprueba Auth/INSERT y devuelve ok o referencia
+  de fallo; Sonner avisa sin arrojar una excepción que induzca a repetir la
+  operación de negocio ya persistida. Auditoría obligatoria permanece en las RPC.
+  APIs agregan referencia a cuerpo, mensaje y X-Request-ID ante catch/ambiente o
+  entrega incierta/fallida. JSON de diagnóstico contiene evento, UUID, fecha,
+  IDs validados, código y resultado; nunca serializa payload/exception/token.
+- Validaciones: cuatro pruebas de diagnóstico, incluida respuesta/proveedor
+  incierto con una sola llamada; bloque de correo de 45 pruebas aprobado con
+  proveedor simulado y regresiones de aislamiento/demo/recuperación. Se preserva
+  el estado incierto y no se fuerza un reenvío. Véase validación conjunta.
+- Pendientes: captura, permisos y retención de logs reales del hosting; referencias
+  tempranas pueden carecer de tenant/entidad antes de verificarlos. Auditoría
+  auxiliar fallida no reemplaza una traza obligatoria ni se reconstruye a ciegas.
+- Commit: pendiente; cambios locales sin commit/push ni hash disponible.
+
+### AUD-16 — Extraer creación y retirar escrituras muertas (14/10/2026)
+
+- Prioridad: P2.
+- Estado: extracción inicial implementada/probada; refactor incremental abierto.
+- Archivos: `src/lib/quotation-create.ts`,
+  `src/app/(protected)/quotations/new/page.tsx`, `tests/quotation-create.test.mjs`,
+  documentación común y este registro. SQL nuevo: ninguno.
+- Corrección: creación usa helper tipado que comprueba respuesta única, ID
+  esperado y referencia; padre, contenedores, carga y pricing automático siguen
+  en create_quotation_with_child_lines. Retirados los tres bloques Boolean(false)
+  de INSERT separado de contenedores/cargos/carga. Sin cambiar reglas, snapshots,
+  estados ni fórmulas. Las extracciones de transiciones previas siguen vigentes.
+- Validaciones: lectura de RPC y payload vigente antes de extraer; pruebas de
+  una sola RPC con todas las líneas y error/comprobante ajeno/incompleto sin
+  confirmar. Suites SQL de pricing/transiciones aprobadas y validación conjunta.
+- Pendientes: UAT FCL/carga suelta/Miami; descomposición posterior de comparación,
+  booking y SI por casos de uso. No se presenta una extracción como reescritura
+  completa de todas las páginas extensas.
+- Commit: pendiente; cambios locales sin commit/push ni hash disponible.
+
+### AUD-17 — Protección de edición por formulario y navegación (14/10/2026)
+
+- Prioridad: P2.
+- Estado: implementado/probado con harness; abierto para UAT de navegador y
+  compatibilidad de historial.
+- Archivos: `src/components/ui/UnsavedChangesGuard.tsx`,
+  `src/components/invoicing/ManualInvoiceEditor.tsx`, páginas de nuevo proveedor,
+  nuevo/editar cliente, nueva factura y editar cotización,
+  `tests/unsaved-changes.test.mjs`, documentación común y este registro.
+- SQL nuevo: ninguno.
+- Corrección: detección limitada al contenedor del guard, readonly/disabled y
+  data-unsaved-ignore excluidos; dirty controlado del editor manual conserva su
+  confirmación de reemplazo y evita marcar búsqueda del historial como edición.
+  Botones Cancelar solicitan navegación con modal; guardado confirmado limpia
+  dirty y error conserva datos. Enlaces internos mantienen captura y closing
+  usa beforeunload. Traversal interceptable/cancelable usa Navigation API sin
+  parchear history de Next ni insertar entradas ficticias.
+- Validaciones: tres pruebas del componente real para scope/guardado, cancelar
+  sin perder edición/confirmar y destino exacto del historial, además de
+  regresiones de factura manual. Documentación instalada Next Link consultada.
+- Pendientes: navegación/teclado/móvil en browsers de negocio; si Navigation API
+  falta o el traversal no es cancelable, no se certifica bloqueo de atrás/adelante.
+  Las pruebas de eventos simulados no son UAT visual ni garantía multiplataforma.
+- Commit: pendiente; cambios locales sin commit/push ni hash disponible.
+
+### AUD-18 — Responsable y seguimiento de bloqueos (14/10/2026)
+
+- Prioridad: P2.
+- Estado: implementado/probado localmente; abierto para SLA/escalamiento y UAT.
+- Archivos: `src/lib/billing-readiness.ts`, `src/lib/user-tasks.ts`,
+  `src/app/(protected)/invoicing/page.tsx`, `tests/billing-readiness.test.mjs`,
+  `tests/user-tasks.test.mjs`, `tests/complete-read-pages.test.mjs`, documentación
+  común y este registro. SQL nuevo: ninguno.
+- Corrección: cada readiness indica área que lo resuelve. Admin accede a cliente
+  o pricing cuando corresponde; enlaces pasan por permisos existentes. Finanzas
+  no recibe edición de cliente/pricing/operaciones. Sin acción permitida, reutiliza
+  CreateContextTaskDialog para un seguimiento personal con fecha/prioridad y
+  retorno canónico a Por facturar. No duplica Mi día ni Control Tower.
+- Validaciones: helper por rol/readiness, ausencia de acción sin rol, contexto de
+  tareas sin URL externa/query privada y regresión real de listado/error/reintento
+  aprobados. El fixture contempla alias de cliente usado por el diálogo existente.
+- Pendientes: acuerdos de SLA por servicio/handoff, persona responsable y
+  escalamiento; no se inventan plazos ni se asignan tareas a otros usuarios.
+  Indicadores definidos como propuesta, sin métricas reales observadas.
+- Commit: pendiente; cambios locales sin commit/push ni hash disponible.
+
+### AUD-19 — Puesta en marcha y capacidades vigentes (14/10/2026)
+
+- Prioridad: P3.
+- Estado: documentación actualizada; ensayo independiente pendiente.
+- Archivos: `README.md`, `config/development.env.example`,
+  `docs/setup-and-capabilities.md`, `docs/manual-sari-usa-invoices.md`,
+  documentación común y este registro. SQL nuevo: ninguno.
+- Corrección: Node/npm ci, hostname y tenant activo, claves solo locales,
+  aprobación de cuenta, matriz de variables y criterios de activación; sin reset
+  destructivo como paso rutinario. OCR en dispositivo separado de OCR externo,
+  correo bloqueado en demo y Outlook en standby sin secretos/scheduler nuevos.
+  Factura manual independiente, historial paginado y sin contabilización fiscal.
+- Validaciones: contraste con proxy/resolveTenantHost, lecturas process.env,
+  seed vacío, runbooks y constante OUTLOOK_INTAKE_STANDBY=true. No se usaron
+  secretos reales en el ejemplo ni se crearon cuentas de negocio.
+- Pendientes: otro desarrollador debe ensayar instalación nueva y acceso con
+  cuenta sintética aprobada; no se afirma bootstrap completo autenticado en GUI.
+- Commit: pendiente; cambios locales sin commit/push ni hash disponible.
+
+### AUD-20 — Instrumentación local y base de medición (14/10/2026)
+
+- Prioridad: P3.
+- Estado: instrumentación preparada/probada; abierto para medición de navegador,
+  presupuestos de rendimiento y analítica aprobada.
+- Archivos: `src/lib/browser/measurements.ts`,
+  `src/components/marketing/LandingContact.tsx`, `src/lib/quotation-create.ts`,
+  `src/components/invoicing/ManualInvoiceEditor.tsx`, `tests/measurements.test.mjs`,
+  `scripts/measure-build.mjs`, `docs/performance/measurement-plan.md`,
+  `docs/performance/build-baseline.json`, documentación común y este registro.
+- SQL nuevo: ninguno.
+- Corrección: eventos locales de inicio/éxito/error y duración de envío demo,
+  creación y generación PDF, más inicio de edición de demo. Allowlist de campos,
+  sin PII/IDs/URL/error body, cookies, storage, red ni proveedor externo. Excepción
+  y resultado del negocio conservados; medición auxiliar no bloquea el flujo.
+  Script mide JS/CSS/gzip de chunks, SHA y árbol sin commit. Plan define ensayos
+  pricing/booking/PDF frío/caliente/móvil antes de optimizar.
+- Validaciones: pruebas de allowlist/ausencia de PII, resultado y excepción
+  preservados y ausencia de window. Lead/proveedor simulado, sin solicitudes
+  comerciales reales. Resultado estático de build en validación conjunta.
+- Pendientes: no hay medición de navegador ni tasa de conversión real, presupuesto
+  acordado o proveedor analítico aprobado. Suma de chunks no equivale a tamaño
+  descargado por ruta ni prueba una mejora de rendimiento frente a un baseline
+  anterior inexistente. No se difieren componentes por especulación.
+- Commit: pendiente; cambios locales sin commit/push ni hash disponible.
+
+#### Validación conjunta de AUD-12 a AUD-20 — 14/10/2026
+
+- `npm.cmd test`: 316/316 aprobadas, cero fallos (13 regresiones nuevas respecto
+  de AUD-11). Subconjunto de los cambios: 16/16. Bloque de correo: 45/45.
+  La primera corrida detectó un alias Supabase ausente en el fixture de listado;
+  se corrigió el fixture y se repitieron tanto el caso real como la suite completa.
+- `npx.cmd tsc --noEmit`: aprobado después del último cambio de código.
+- `npm.cmd run build`: aprobado, prebuild OCR y 82/82 páginas.
+- `npm.cmd run lint:ci`: aprobado; 364 archivos, 224 diagnósticos históricos,
+  cero regresiones. Deuda explícita: 187 errores y 37 avisos. No es un aprobado
+  de lint global. Se retiraron tres excepciones en pricing-catalogs.
+- `node scripts/validate-audit-sql.mjs --isolated`: siete suites aprobadas,
+  AUD-01/02/03/05/06/08/11, con rollback y sin proveedores. Incluye cobertura
+  ampliada de múltiples destinatarios de AUD-12. No se agregó migración en esta
+  ronda; se conservan las 120 aplicadas exclusivamente al stack aislado.
+- Los fixtures transaccionales de esta ronda se revirtieron; los volúmenes
+  conservan fixtures sintéticos históricos de ensayos anteriores. Stack
+  sarierp_aud01 detenido conservando volúmenes; base principal sin cambios.
+- `node scripts/measure-build.mjs`: artefacto generado con 126 chunks,
+  6,124,258 bytes y 1,792,173 bytes gzip sumados. Registra HEAD y árbol sin commit;
+  no mide transferencia por ruta ni latencia de navegador ni mejora comparativa.
+- `git diff --check`, UTF-8/whitespace y enlaces Markdown locales de 47 archivos
+  de esta ronda aprobados. Sin librerías nuevas ni secretos versionados.
+- Sin commit/push, SQL remoto, hosting, correos, leads reales, OCR externo,
+  cobros, pagos o despachos de negocio. Primera ejecución alojada de CI, reglas
+  de merge, UAT firmado, inventario remoto y medición real siguen pendientes.
+
+### AUD-RELEASE — Preparación del commit y despliegue autorizado (14/10/2026)
+
+- Alcance: paquete AUD-01 a AUD-20. El usuario autorizó commit/despliegue y
+  confirmó que él mismo, como administrador, validará flujos y SLA. Responsabilidad
+  identificada; aceptación de escenarios/plazos todavía no firmada.
+- Destinos comprobados: Vercel sarierp/prj_y4WUxpZULtZ6bdb779GJsPMUJFmC,
+  Supabase fwspgdzvlbtbgiupvrzo, dominio sari.forwarders.app. El main remoto es
+  ancestro de la rama local; se preservan los 14 commits locales anteriores.
+- Preflight remoto de solo lectura: 105 migraciones, última 20261012160000;
+  316 cotizaciones, dos paquetes, cero obligaciones/pagos/incidencias, cero
+  anomalías de vínculos financieros y RLS activo en las tablas auditadas.
+  Cero correos processing. Copia de esquema guardada en evidencia ignorada.
+- Dependencia AUD-07 resuelta en código: nueva migración
+  `20261014153000_verified_platform_environment.sql`, tabla sin acceso de ERP,
+  servidor read-only, default Demo, Production solo con verificación del dueño;
+  función is_demo_environment falla cerrada. Prueba nueva
+  `supabase/tests/aud07_verified_environment.sql` aprobada. Sin activar Outlook.
+- AUD-05 legacy: cuatro casos identificados por historial explícito final
+  Ganada→Pendiente. Nueva `20261014154000_reviewed_legacy_repricing.sql` agrega
+  acción owner-only con revisión/ID de historial esperado y motivo; rechaza
+  ambigüedad, cambios concurrentes y reentrada. Solo recupera metadata de retorno,
+  sin aprobar/renumerar/cambiar importes o documentos. Auditoría obligatoria en
+  la misma transacción; cobertura añadida a aud05_quotation_transitions.sql.
+  Ejecución remota y cantidades efectivas se registrarán en postflight.
+- AUD-16 ampliado: `src/lib/quotation-cargo.ts` comparte diez helpers/tipo de
+  volumen y peso entre creación y edición. Extracción comprobada contra ambas
+  implementaciones anteriores: 960 comparaciones coincidentes. Dos pruebas
+  nuevas verifican unidades, cantidad y volumen manual como total de línea.
+  No se reescriben snapshots ni fórmulas ni se reactiva un camino legacy.
+- AUD-17/20: ensayo real con Chrome/155.0.8059.79 en perfil aislado, fixture
+  compilado y APIs interceptadas; seis grupos aprobados para scope, enlaces,
+  Cancelar, guardado fallido/confirmado, Atrás con confirmación, editor manual
+  y su reemplazo a 390 px, error/reintento/doble submit de demo y eventos sin PII.
+  No hubo UAT autenticada de Production ni solicitud comercial real. El ensayo
+  no certifica cierre/recarga del navegador ni todos los navegadores móviles.
+- Archivos adicionales: `scripts/validate-browser-guards.mjs`,
+  `tests/browser/fixture-app/` (excluido de Vercel),
+  `scripts/release/prepare-audit-package.mjs`, `tests/quotation-cargo.test.mjs`,
+  páginas new/edit de cotizaciones, runner SQL, `.vercelignore`, matriz, guion
+  de navegador y documentación AUD-07/calidad. Sin librerías nuevas.
+- Validaciones: 318 pruebas Node, TypeScript y ocho suites SQL/RLS aisladas
+  aprobadas; fixture browser compilado y seis grupos Chrome aprobados. Build
+  principal aprobado con 82/82 páginas. Lint: 373 archivos, 223 diagnósticos
+  históricos, cero regresiones; un aviso retirado además de los tres any previos.
+  Quince regresiones de correo/listado/carga repetidas tras limpieza de EOF,
+  TypeScript y diff --cached --check aprobados. Revisión de 161 archivos añadidos/
+  modificados: UTF-8 y patrones de credenciales aprobados; un archivo eliminado.
+  Postflight del candidato se registra con su hash en el siguiente asiento.
+- Paquete remoto: 16 migraciones de auditoría, copia/hash por archivo, dry-run
+  verificado y Outlook 20261002120000 expresamente excluido. La preparación no
+  aplica SQL. Estrategia: construir Production sin alias, aplicar SQL revisado,
+  configurar ambiente verificado, postflight y luego promover dominios.
+- Pendientes: publicación, gates remotos, ejecución CI alojada, aceptación
+  administrativa de los tres expedientes y SLA, medición de pricing/booking con
+  datos representativos. No declarar cerrados esos puntos por tener build verde.
+- Commit funcional: en preparación; registrar SHA y despliegue en postflight.

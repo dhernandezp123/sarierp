@@ -1,10 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
+import { useUser } from '@/src/hooks/useUser'
+import { mergeManualInvoicePage } from '@/src/lib/manual-invoice-history'
 import { Download, Eye, FileScan, Loader2, Plus, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { measureOperation } from '@/src/lib/browser/measurements'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs'
 import { cardClass, fieldClassSm, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { formatDateTime, formatMoney } from '@/src/lib/format'
@@ -19,6 +23,17 @@ async function readResponse(response: Response) {
 }
 
 export function ManualInvoiceEditor() {
+  const { user, profile } = useUser()
+  const context = (profile?.tenant_id || '') + ':' + (user?.id || '')
+  const historyVersion = useRef(0)
+  const activeHistoryContext = useRef<string | null>(context)
+  const historyRows = useRef<SavedManualInvoice[]>([])
+  const historyQuery = useRef('')
+  const [historySearch, setHistorySearch] = useState('')
+  const [appliedHistorySearch, setAppliedHistorySearch] = useState('')
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyOffset, setHistoryOffset] = useState(0)
+  const [historyHasMore, setHistoryHasMore] = useState(false)
   const [data, setData] = useState<ManualInvoiceData>(blankManualInvoice)
   const [file, setFile] = useState<File | null>(null)
   const [sourceUrl, setSourceUrl] = useState('')
@@ -44,24 +59,38 @@ export function ManualInvoiceEditor() {
   const totalMismatch = sourceCents !== null && sourceCents !== Math.round(total * 100)
   const previewCurrent = preview?.snapshot === snapshot
 
+  const reloadHistory = useCallback(async (append = false, offset = 0, search = historyQuery.current) => {
+    if (activeHistoryContext.current !== context) return
+    const version = ++historyVersion.current
+    setLoadingHistory(true)
+    if (!append) historyQuery.current = search
+    try {
+      const params = new URLSearchParams({ offset: String(offset), pageSize: '25', search })
+      const body = await readResponse(await fetch('/api/manual-invoices?' + params.toString(), { cache: 'no-store' }))
+      if (historyVersion.current !== version || activeHistoryContext.current !== context) return
+      const page = mergeManualInvoicePage(append ? historyRows.current : [], body, offset)
+      historyRows.current = page.documents
+      setHistory(page.documents)
+      setHistoryTotal(page.total)
+      setHistoryOffset(page.nextOffset)
+      setHistoryHasMore(page.hasMore)
+      setAppliedHistorySearch(search)
+      setHistoryError('')
+    } catch (error) {
+      if (historyVersion.current === version) setHistoryError(error instanceof Error ? error.message : 'No se pudo cargar el historial.')
+    } finally { if (historyVersion.current === version) setLoadingHistory(false) }
+  }, [context])
+
   useEffect(() => {
-    let cancelled = false
-    fetch('/api/manual-invoices', { cache: 'no-store' }).then(readResponse)
-      .then((body) => { if (!cancelled) setHistory(body.documents) })
-      .catch((error) => { if (!cancelled) setHistoryError(error.message) })
-      .finally(() => { if (!cancelled) setLoadingHistory(false) })
-    return () => { cancelled = true }
-  }, [])
+    activeHistoryContext.current = context
+    const timer = setTimeout(() => { void reloadHistory(false, 0, '') }, 0)
+    return () => { clearTimeout(timer); activeHistoryContext.current = null; historyVersion.current += 1 }
+  }, [reloadHistory, context])
 
   useEffect(() => () => { scanController.current?.abort() }, [])
 
   useEffect(() => () => { if (sourceUrl) URL.revokeObjectURL(sourceUrl) }, [sourceUrl])
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url) }, [preview])
-  useEffect(() => {
-    const onLeave = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault() }
-    window.addEventListener('beforeunload', onLeave)
-    return () => window.removeEventListener('beforeunload', onLeave)
-  }, [dirty])
 
   function change(next: ManualInvoiceData) {
     setData(next); setReviewed(false); setDirty(true)
@@ -113,9 +142,10 @@ export function ManualInvoiceEditor() {
     try {
       const checked = validateManualInvoice(data)
       const body = await readResponse(await fetch('/api/manual-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(checked) }))
-      setHistory((previous) => [body.document, ...previous].slice(0, 100)); setHistoryError('')
+      if (!body.document?.id) throw new Error('No se pudo confirmar el documento guardado.')
       setSavedSnapshot(snapshot); setDirty(false)
       toast.success('Factura guardada como documento independiente.')
+      await reloadHistory()
     } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar la factura.') }
     finally { setBusy(null) }
   }
@@ -130,8 +160,11 @@ export function ManualInvoiceEditor() {
       const checked = validateManualInvoice(data)
       let url = previewCurrent && preview ? preview.url : ''
       if (!url) {
-        const { createManualInvoiceBlob } = await import('@/src/components/pdf/manual-invoice-pdf')
-        url = URL.createObjectURL(await createManualInvoiceBlob(checked))
+        const blob = await measureOperation('manual_invoice_pdf', async () => {
+          const { createManualInvoiceBlob } = await import('@/src/components/pdf/manual-invoice-pdf')
+          return createManualInvoiceBlob(checked)
+        })
+        url = URL.createObjectURL(blob)
         setPreview({ url, snapshot })
       }
       if (pdfWindow && !pdfWindow.closed) pdfWindow.location.replace(url)
@@ -141,12 +174,6 @@ export function ManualInvoiceEditor() {
       }
     } catch (error) { pdfWindow?.close(); toast.error(error instanceof Error ? error.message : 'No se pudo generar el PDF.') }
     finally { setBusy(null) }
-  }
-  async function reloadHistory() {
-    setLoadingHistory(true)
-    try { const body = await readResponse(await fetch('/api/manual-invoices', { cache: 'no-store' })); setHistory(body.documents); setHistoryError('') }
-    catch (error) { setHistoryError(error instanceof Error ? error.message : 'No se pudo cargar el historial.') }
-    finally { setLoadingHistory(false) }
   }
   function openSaved(document: SavedManualInvoice) {
     replaceDocument(() => {
@@ -173,6 +200,7 @@ export function ManualInvoiceEditor() {
   </fieldset>
 
   return <div className="mx-auto max-w-7xl space-y-6 p-4 text-slate-900 dark:text-slate-100 sm:p-6">
+    <UnsavedChangesGuard dirty={dirty} />
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="flex items-center gap-2 text-2xl font-bold"><FileScan aria-hidden="true" /> Scanner / Generador de factura manual</h1>
         <p className="mt-1 text-sm text-slate-500">SARI USA · Documentos independientes · PDF con el formato de la plantilla</p></div>
@@ -181,12 +209,18 @@ export function ManualInvoiceEditor() {
     <Tabs value={tab} onValueChange={setTab}>
       <TabsList><TabsTrigger value="editor">Scanner y edición</TabsTrigger><TabsTrigger value="history">Historial</TabsTrigger></TabsList>
       <TabsContent value="history">
-        <div className={cardClass}><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm">Últimas 100 versiones guardadas. Al editar se conserva el documento anterior.</p>
-          <button onClick={reloadHistory} disabled={loadingHistory || Boolean(busy)} className={secondaryButtonClass}>Actualizar</button></div>
+        <div className={cardClass}><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm">Versiones guardadas. Al editar se conserva el documento anterior.</p>
+          <button onClick={() => void reloadHistory()} disabled={loadingHistory || Boolean(busy)} className={secondaryButtonClass}>Actualizar</button></div>
+          <form className="mb-3 flex flex-wrap gap-2" onSubmit={event => { event.preventDefault(); void reloadHistory(false, 0, historySearch.trim()) }}>
+            <label className="flex-1 text-sm">Buscar factura o cliente<input value={historySearch} maxLength={120} onChange={event => setHistorySearch(event.target.value)} className={fieldClassSm} /></label>
+            <button type="submit" disabled={loadingHistory || Boolean(busy)} className={secondaryButtonClass}>Buscar</button>
+          </form>
+          {!loadingHistory && !historyError && <p className="mb-3 text-sm text-slate-500">Mostrando {history.length} de {historyTotal} versiones.</p>}
           {loadingHistory ? <p role="status">Cargando historial…</p> : historyError ? <p role="alert" className="text-red-600">{historyError}</p> : history.length ?
             <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-3">Factura</th><th className="p-3">Cliente</th><th className="p-3">Total</th><th className="p-3">Guardada</th><th className="p-3">Documento</th></tr></thead>
               <tbody>{history.map((document) => <tr key={document.id} className="border-b border-slate-200 dark:border-slate-800"><td className="p-3">{document.invoice_number}</td><td className="p-3">{document.client_name}</td><td className="whitespace-nowrap p-3">{formatMoney(document.total, 'USD')}</td><td className="whitespace-nowrap p-3">{formatDateTime(document.created_at)}</td><td className="p-3"><button className={secondaryButtonClass} disabled={Boolean(busy)} onClick={() => openSaved(document)}>Abrir</button></td></tr>)}</tbody></table></div>
-            : <p className="text-sm text-slate-500">Todavía no hay facturas guardadas.</p>}
+            : <p className="text-sm text-slate-500">{appliedHistorySearch ? 'No hay versiones que coincidan con la busqueda.' : 'Todavía no hay facturas guardadas.'}</p>}
+          {!historyError && historyHasMore && <button type="button" disabled={loadingHistory || Boolean(busy)} onClick={() => void reloadHistory(true, historyOffset)} className={secondaryButtonClass}>Cargar mas versiones</button>}
         </div>
       </TabsContent>
       <TabsContent value="editor" className="space-y-6">

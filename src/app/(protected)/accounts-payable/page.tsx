@@ -1,28 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { formatSupplierAmount, loadSupplierPayables, supplierPayableIssue, supplierPayableSummary, type SupplierPayable } from '@/src/lib/supplier-payables'
+import { formatDate as fmtDate, formatMoney as fmtMoney } from '@/src/lib/format'
+import { useUser } from '@/src/hooks/useUser'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Search, AlertCircle, Clock } from 'lucide-react'
-import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
-import { cardClass, fieldClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
 
-type CuentaPagar = {
-  id: string
-  descripcion: string
-  numero_factura_proveedor: string | null
-  monto: number
-  moneda: string
-  fecha_factura: string | null
-  fecha_vencimiento: string | null
-  status: string
-  pagos_proveedor?: { monto: number; fecha_pago: string | null }[]
-  proveedores: { id: string; nombre: string; tipo: string } | null
-  quotations: { quotation_number: string | null } | null
-}
+type CuentaPagar = SupplierPayable
 
 const STATUS_COLOR: Record<string, string> = {
   Pendiente: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
@@ -32,27 +23,14 @@ const STATUS_COLOR: Record<string, string> = {
   Anulada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 }
 
-const fmtMoney = (n: number, cur = 'USD') =>
-  `${cur} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-
-const fmtDate = (d: string | null) =>
-  d ? new Date(d + 'T00:00:00').toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
-
-const totalPagado = (c: CuentaPagar) =>
-  (c.pagos_proveedor || []).reduce((sum, p) => sum + Number(p.monto || 0), 0)
-
-const saldoCuenta = (c: CuentaPagar) =>
-  Math.max(0, Number(c.monto || 0) - totalPagado(c))
-
-const isOverdue = (c: CuentaPagar) =>
-  ['Pendiente', 'Parcialmente Pagada'].includes(c.status) && !!c.fecha_vencimiento && new Date(c.fecha_vencimiento + 'T00:00:00') < new Date()
-
-const diasVencido = (d: string | null) => {
-  if (!d) return 0
-  return Math.floor((Date.now() - new Date(d + 'T00:00:00').getTime()) / 86400000)
-}
+const isOverdue = (c: CuentaPagar) => c.days_overdue > 0
 
 export default function AccountsPayablePage() {
+  const { user, profile } = useUser()
+  const context = `${profile?.tenant_id || ''}:${user?.id || ''}`
+  const loadVersion = useRef(0)
+  const [loadedContext, setLoadedContext] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [cuentas, setCuentas] = useState<CuentaPagar[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -61,58 +39,62 @@ export default function AccountsPayablePage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
 
-  const fetch = async () => {
+  const load = useCallback(async () => {
+    const version = ++loadVersion.current
+    const isCurrent = () => version === loadVersion.current
     setLoading(true)
-    const { data, error } = await supabase
-      .from('cuentas_pagar')
-      .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, pagos_proveedor(monto, fecha_pago), proveedores(id, nombre, tipo), quotations(quotation_number)')
-      .order('fecha_vencimiento', { ascending: true })
+    setLoadError(null)
+    try {
+      const rows = await loadSupplierPayables(supabase, { isCurrent })
+      if (isCurrent()) {
+        setCuentas(rows.sort((a, b) => (a.fecha_vencimiento || '9999-12-31').localeCompare(b.fecha_vencimiento || '9999-12-31') || a.id.localeCompare(b.id)))
+        setLoadedContext(context)
+        setLoading(false)
+      }
+    } catch (error) {
+      if (isCurrent()) { setLoadError(error instanceof Error ? error.message : 'No se pudieron cargar los saldos'); setLoading(false) }
+    }
+  }, [context])
 
-    if (error) toast.error(error.message)
-    setCuentas((data || []) as unknown as CuentaPagar[])
-    setLoading(false)
-  }
-
-  useEffect(() => { fetch() }, [])
+  useEffect(() => {
+    const timer = setTimeout(() => { void load() }, 0)
+    return () => { clearTimeout(timer); loadVersion.current += 1 }
+  }, [load])
 
   const filtered = cuentas.filter((c) => {
     const q = search.toLowerCase()
-    const prov = (c.proveedores as any)?.nombre?.toLowerCase() || ''
+    const prov = c.proveedores?.nombre?.toLowerCase() || ''
     const desc = c.descripcion.toLowerCase()
     const matchSearch = prov.includes(q) || desc.includes(q) || c.numero_factura_proveedor?.toLowerCase().includes(q)
     const matchMon = c.moneda === monedaFilter
     const matchStatus =
       statusFilter === 'Todos' ? true :
-      statusFilter === 'Pendientes' ? ['Pendiente', 'Parcialmente Pagada'].includes(c.status) :
+      statusFilter === 'Pendientes' ? ['Pendiente', 'Parcialmente Pagada', 'Vencida'].includes(c.status) :
       statusFilter === 'Vencidas' ? isOverdue(c) :
+      statusFilter === 'Revisar' ? c.needs_reconciliation :
       c.status === statusFilter
     return matchSearch && matchMon && matchStatus
   })
 
   const paginatedCuentas = filtered.slice((page - 1) * pageSize, page * pageSize)
 
-  const inUSD = cuentas.filter((c) => c.moneda === monedaFilter)
-  const totalPendiente = inUSD.filter((c) => ['Pendiente', 'Parcialmente Pagada'].includes(c.status)).reduce((s, c) => s + saldoCuenta(c), 0)
-  const totalVencido = inUSD.filter(isOverdue).reduce((s, c) => s + saldoCuenta(c), 0)
-  const totalPagadoMes = inUSD.reduce((sum, c) => {
-    const now = new Date()
-    const paidThisMonth = (c.pagos_proveedor || []).filter((p) => {
-      if (!p.fecha_pago) return false
-      const paidAt = new Date(p.fecha_pago + 'T00:00:00')
-      return paidAt.getMonth() === now.getMonth() && paidAt.getFullYear() === now.getFullYear()
-    })
-    return sum + paidThisMonth.reduce((paidSum, p) => paidSum + Number(p.monto || 0), 0)
-  }, 0)
+  const totals = supplierPayableSummary(cuentas, monedaFilter)
+  const { pending: totalPendiente, overdue: totalVencido, paidThisMonth: totalPagadoMes } = totals
+  const currencies = Array.from(new Set(['USD', 'HNL', ...cuentas.map(row => row.moneda)]))
+
+  if (loadError) return <div className={cardClass}><p role="alert">{loadError}</p><button type="button" onClick={() => void load()} className={secondaryButtonClass}>Reintentar</button></div>
+  if (loading || loadedContext !== context) return <TableSkeleton rows={6} cols={5} />
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Cuentas por Pagar</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Obligaciones con agentes, carriers y otros proveedores.
           </p>
         </div>
+        <button type="button" onClick={() => void load()} className={secondaryButtonClass}>Actualizar saldos</button>
         <Link href="/suppliers" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
           Ver proveedores
         </Link>
@@ -120,13 +102,18 @@ export default function AccountsPayablePage() {
 
       {/* Moneda selector */}
       <div className="flex gap-2">
-        {['USD', 'HNL'].map((m) => (
+        {currencies.map((m) => (
           <button key={m} type="button" onClick={() => { setMonedaFilter(m); setPage(1) }}
             className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${monedaFilter === m ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300'}`}>
             {m}
           </button>
         ))}
       </div>
+
+      {totals.reconciliationCount > 0 && <p role="status" className="rounded-xl border border-amber-300 p-3 text-sm text-amber-700 dark:text-amber-300">
+        {totals.reconciliationCount} cuenta(s) requieren conciliacion. Sobrepagos: {fmtMoney(totals.overpaid, monedaFilter)}.
+        {' '}Los sobrepagos se muestran separados; los totales excluyen saldos con movimientos inconsistentes u obligaciones negativas.
+      </p>}
 
       {/* KPIs */}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -162,6 +149,7 @@ export default function AccountsPayablePage() {
           <option value="Pendientes">Pendientes</option>
           <option value="Vencidas">Vencidas</option>
           <option value="Pagada">Pagadas</option>
+          <option value="Revisar">Por conciliar</option>
           <option value="Todos">Todos</option>
         </select>
       </div>
@@ -177,7 +165,7 @@ export default function AccountsPayablePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700">
-                  {['Proveedor / Descripción', 'Factura', 'Monto', 'Vencimiento', 'Estado', ''].map((h) => (
+                  {['Proveedor / Descripción', 'Factura', 'Total ajustado / Saldo', 'Vencimiento', 'Estado', ''].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                   ))}
                 </tr>
@@ -185,17 +173,22 @@ export default function AccountsPayablePage() {
               <tbody>
                 {paginatedCuentas.map((c) => {
                   const overdue = isOverdue(c)
-                  const dias = overdue ? diasVencido(c.fecha_vencimiento) : 0
-                  const displayStatus = overdue && c.status === 'Pendiente' ? 'Vencida' : c.status
+                  const dias = c.days_overdue
+                  const displayStatus = c.status
                   return (
                     <tr key={c.id} className={`border-b border-slate-100 dark:border-slate-800 ${overdue ? 'bg-red-50/40 dark:bg-red-950/10' : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/20'}`}>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-800 dark:text-slate-200">{(c.proveedores as any)?.nombre || '-'}</div>
+                        <div className="font-medium text-slate-800 dark:text-slate-200">{c.proveedores?.nombre || '-'}</div>
                         <div className="text-xs text-slate-500">{c.descripcion}</div>
-                        {c.quotations && <div className="text-xs text-blue-500">Cot. {(c.quotations as any).quotation_number}</div>}
+                        {c.quotations && <div className="text-xs text-blue-500">Cot. {c.quotations.quotation_number}</div>}
+                        {c.needs_reconciliation && <p className="text-xs text-amber-700 dark:text-amber-300">{supplierPayableIssue(c)}</p>}
                       </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{c.numero_factura_proveedor || '-'}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{fmtMoney(c.monto, c.moneda)}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">
+                        {formatSupplierAmount(c.total_adjusted, c.moneda)}
+                        <p className="text-xs font-normal">Saldo: {formatSupplierAmount(c.pending_balance, c.moneda)}</p>
+                        <p className="text-xs font-normal">Pagado: {formatSupplierAmount(c.paid_total, c.moneda)}</p>
+                      </td>
                       <td className="px-4 py-3">
                         <div className={`text-xs ${overdue ? 'font-semibold text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
                           {fmtDate(c.fecha_vencimiento)}

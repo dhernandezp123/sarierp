@@ -1,5 +1,7 @@
 'use client'
 
+import { loadSupplierPayables, supplierAmount, supplierPayableReportRow, type SupplierPayable } from '@/src/lib/supplier-payables'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -13,7 +15,7 @@ import {
   RefreshCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { calendarDaysUntil, formatDate, formatDateTime, toDateInputValue } from '@/src/lib/format'
+import { formatDate, formatDateTime, toDateInputValue } from '@/src/lib/format'
 import { canAccessPath } from '@/src/lib/permissions'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { readAllReportRows } from '@/src/lib/report-query'
@@ -227,19 +229,7 @@ type ProveedorPaymentRow = {
   }>
 }
 
-type PayableRow = {
-  id: string
-  descripcion: string
-  numero_factura_proveedor: string | null
-  monto: number | string
-  moneda: string
-  fecha_factura: string | null
-  fecha_vencimiento: string | null
-  status: string
-  pagos_proveedor?: { monto: number | string; fecha_pago: string | null }[]
-  proveedores: Join<{ id: string; nombre: string; tipo: string }>
-  quotations: Join<{ quotation_number: string | null }>
-}
+type PayableRow = SupplierPayable
 
 type ReportRow = ReportPdfRow & {
   __href?: string
@@ -259,6 +249,8 @@ type ReportRow = ReportPdfRow & {
   __approvedInPeriod?: number
   __lostInPeriod?: number
   __pendingAtClose?: number
+  __overpayment?: number
+  __reconciliation?: number
   __responseHours?: number
 }
 
@@ -269,7 +261,7 @@ const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[]
   { id: 'billing', label: 'Facturación', scope: 'Documentos, condiciones de pago, ajustes, cobros y saldos', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'customer_payments', label: 'Pagos de clientes', scope: 'Cobros por forma de pago, referencia, tipo fiscal y punto de venta', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'receivable', label: 'Cuentas por cobrar', scope: 'Facturas enviadas/aprobadas/vencidas pendientes', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
-  { id: 'payable', label: 'Cuentas por pagar', scope: 'Proveedores, saldos, pagos y vencimientos', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
+  { id: 'payable', label: 'Cuentas por pagar', scope: 'Obligaciones principales con NC/ND y pagos aplicados. Por pagar excluye anuladas, importes inconsistentes y obligaciones negativas; sobrepagos separados.', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'overdue', label: 'Vencidas', scope: 'Facturas y cuentas por pagar vencidas con días', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'supplier_payments', label: 'Pagos a Proveedores', scope: 'Pagos por proveedor/tipo: mensual, trimestral, anual', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
 ]
@@ -313,10 +305,6 @@ function guatemalaDateKey(value: string) {
   return `${values.year}-${values.month}-${values.day}`
 }
 
-function daysOverdue(value?: string | null) {
-  return Math.max(0, -(calendarDaysUntil(value) ?? 0))
-}
-
 function clientName(value: Join<ClientJoin> | undefined) {
   return resolveJoin(value)?.nombre || 'Sin cliente'
 }
@@ -339,11 +327,6 @@ function formatResponseTime(hours?: number) {
   if (hours === undefined || !Number.isFinite(hours)) return '-'
   if (hours < 24) return `${hours.toFixed(1)} h`
   return `${(hours / 24).toFixed(1)} días`
-}
-
-function payableBalance(row: PayableRow) {
-  const paid = (row.pagos_proveedor || []).reduce((sum, p) => sum + Number(p.monto || 0), 0)
-  return Math.max(0, Number(row.monto || 0) - paid)
 }
 
 function exportCSV(rows: ReportRow[], columns: ReportPdfColumn[], filename: string) {
@@ -629,11 +612,8 @@ function ReportsContent() {
           .then((data) => { if (isCurrent()) setCustomerPayments(data as unknown as CustomerPaymentRow[]) })
       )
       if (['payable', 'overdue'].includes(activeReport)) tasks.push(
-        readAllReportRows((from, to) => supabase
-          .from('cuentas_pagar')
-          .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, pagos_proveedor(monto, fecha_pago), proveedores(id, nombre, tipo), quotations(quotation_number)')
-          .order('fecha_vencimiento', { ascending: true }).order('id').range(from, to), { label: 'cuentas por pagar', key: 'id', isCurrent })
-          .then((data) => { if (isCurrent()) setPayables(data as unknown as PayableRow[]) })
+        loadSupplierPayables(supabase, { isCurrent })
+          .then(data => { if (isCurrent()) setPayables(data) })
       )
       if (activeReport === 'supplier_payments') tasks.push(
         readAllReportRows((from, to) => supabase
@@ -645,7 +625,7 @@ function ReportsContent() {
               proveedores(nombre, tipo)
             )
           `)
-          .order('fecha_pago', { ascending: false }).order('id').range(from, to), { label: 'pagos a proveedores', key: 'id', isCurrent })
+          .eq('status', 'Aplicado').order('fecha_pago', { ascending: false }).order('id').range(from, to), { label: 'pagos a proveedores', key: 'id', isCurrent })
           .then((data) => { if (isCurrent()) setProveedorPayments(data as unknown as ProveedorPaymentRow[]) })
       )
       await Promise.all(tasks)
@@ -1136,30 +1116,7 @@ function ReportsContent() {
         })
     }
 
-    if (activeReport === 'payable') {
-      return payables.map((payable) => {
-        const supplier = resolveJoin(payable.proveedores)
-        const quotation = resolveJoin(payable.quotations)
-        const balance = payableBalance(payable)
-        return {
-          __key: payable.id,
-          __href: '/accounts-payable/' + payable.id,
-          __date: payable.fecha_vencimiento || payable.fecha_factura || '',
-          __client: supplier?.nombre || 'Sin proveedor',
-          __status: payable.status,
-          __currency: payable.moneda,
-          __amount: balance,
-          proveedor: supplier?.nombre || 'Sin proveedor',
-          tipo: supplier?.tipo || '-',
-          factura: payable.numero_factura_proveedor || '-',
-          cotizacion: quotation?.quotation_number || '-',
-          descripcion: payable.descripcion,
-          vencimiento: fmtDate(payable.fecha_vencimiento),
-          estado: payable.status,
-          saldo: fmtMoney(balance, payable.moneda),
-        }
-      })
-    }
+    if (activeReport === 'payable') return payables.map(supplierPayableReportRow)
 
     if (activeReport === 'overdue') {
       return [
@@ -1186,10 +1143,10 @@ function ReportsContent() {
           monto: fmtMoney(Number(receivable.balance), receivable.currency),
         })),
       ...payables
-        .filter((payable) => ['Pendiente', 'Parcialmente Pagada', 'Vencida'].includes(payable.status) && daysOverdue(payable.fecha_vencimiento) > 0)
+        .filter(payable => payable.days_overdue > 0)
         .map((payable) => {
           const supplier = resolveJoin(payable.proveedores)
-          const balance = payableBalance(payable)
+          const balance = supplierAmount(payable.pending_balance) ?? 0
           return {
             __key: `ap-${payable.id}`,
             __href: '/accounts-payable/' + payable.id,
@@ -1202,7 +1159,7 @@ function ReportsContent() {
             tercero: supplier?.nombre || 'Sin proveedor',
             documento: payable.numero_factura_proveedor || payable.descripcion,
             vencimiento: fmtDate(payable.fecha_vencimiento),
-            dias: `${daysOverdue(payable.fecha_vencimiento)} días`,
+            dias: `${payable.days_overdue} días`,
             estado: payable.status,
             monto: fmtMoney(balance, payable.moneda),
           }
@@ -1394,14 +1351,19 @@ function ReportsContent() {
     }
     if (activeReport === 'payable') {
       return [
-        { key: 'proveedor', label: 'Proveedor', width: '20%' },
-        { key: 'tipo', label: 'Tipo', width: '10%' },
-        { key: 'factura', label: 'Factura', width: '13%' },
-        { key: 'cotizacion', label: 'Cotizacion', width: '12%' },
-        { key: 'descripcion', label: 'Descripcion', width: '19%' },
-        { key: 'vencimiento', label: 'Vence', width: '10%' },
-        { key: 'estado', label: 'Estado', width: '9%' },
-        { key: 'saldo', label: 'Saldo', width: '7%', align: 'right' },
+        { key: 'proveedor', label: 'Proveedor', width: '10%' },
+        { key: 'tipo', label: 'Tipo', width: '5%' },
+        { key: 'factura', label: 'Factura', width: '7%' },
+        { key: 'cotizacion', label: 'Cotizacion', width: '6%' },
+        { key: 'descripcion', label: 'Descripcion', width: '9%' },
+        { key: 'vencimiento', label: 'Vence', width: '7%' },
+        { key: 'estado', label: 'Estado', width: '8%' },
+        { key: 'base', label: 'Base', width: '8%', align: 'right' },
+        { key: 'notas', label: 'NC / ND', width: '9%', align: 'right' },
+        { key: 'ajustado', label: 'Ajustado', width: '8%', align: 'right' },
+        { key: 'pagado', label: 'Pagado', width: '7%', align: 'right' },
+        { key: 'saldo', label: 'Saldo', width: '8%', align: 'right' },
+        { key: 'revision', label: 'Conciliacion', width: '8%' },
       ]
     }
     if (activeReport === 'overdue') {
@@ -1445,19 +1407,20 @@ function ReportsContent() {
 
   // REP-001: los totales se agrupan por moneda; nunca sumar USD y HNL juntos.
   const totalsByCurrency = useMemo(() => {
-    const acc = new Map<string, { amount: number; cost: number; gp: number }>()
+    const acc = new Map<string, { amount: number; cost: number; gp: number; overpayment: number }>()
     rows.forEach((row) => {
       const currency = row.__currency || 'USD'
-      const entry = acc.get(currency) ?? { amount: 0, cost: 0, gp: 0 }
+      const entry = acc.get(currency) ?? { amount: 0, cost: 0, gp: 0, overpayment: 0 }
       entry.amount += Number(row.__amount || 0)
       entry.cost += Number(row.__cost || 0)
       entry.gp += Number(row.__gp || 0)
+      entry.overpayment += Number(row.__overpayment || 0)
       acc.set(currency, entry)
     })
     return acc
   }, [rows])
 
-  const fmtTotalsByCurrency = (key: 'amount' | 'cost' | 'gp') => {
+  const fmtTotalsByCurrency = (key: 'amount' | 'cost' | 'gp' | 'overpayment') => {
     if (totalsByCurrency.size === 0) {
       return fmtMoney(0, currencyFilter === ALL ? 'USD' : currencyFilter)
     }
@@ -1518,7 +1481,7 @@ function ReportsContent() {
       } else if (activeTotalColumns.includes(col.key)) {
         pdfTotals[col.key] = fmtTotalsByCurrency('amount')
       } else if (idx === 0) {
-        pdfTotals[col.key] = `${rows.length} registros`
+        pdfTotals[col.key] = activeReport === 'payable' ? `Por pagar (${rows.length} AP)` : `${rows.length} registros`
       } else {
         pdfTotals[col.key] = ''
       }
@@ -1565,7 +1528,14 @@ function ReportsContent() {
       fiscalTypeFilter !== ALL ? `Tipo fiscal: ${fiscalTypeFilter}` : '',
       pointOfSaleFilter !== ALL ? `Punto de venta: ${pointOfSaleFilter}` : '',
     ].filter(Boolean),
-    metrics: activeReport === 'pricing' && pricingMetrics
+    metrics: activeReport === 'payable'
+      ? [
+          { label: 'Obligaciones', value: String(rows.length) },
+          { label: 'Por pagar sin compensar sobrepagos', value: fmtTotalsByCurrency('amount') },
+          { label: 'Sobrepagos separados', value: fmtTotalsByCurrency('overpayment') },
+          { label: 'Por conciliar', value: String(rows.reduce((sum, row) => sum + (row.__reconciliation || 0), 0)) },
+        ]
+      : activeReport === 'pricing' && pricingMetrics
       ? [
           { label: 'Cotizaciones recibidas', value: String(pricingMetrics.received) },
           { label: 'Aprobadas Pricing', value: String(pricingMetrics.approved) },

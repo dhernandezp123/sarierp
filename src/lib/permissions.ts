@@ -99,6 +99,11 @@ function matchesPath(path: string, allowedPath: string) {
   return path === allowedPath || path.startsWith(`${allowedPath}/`)
 }
 
+// La autorizacion efectiva se comprueba tambien en RLS y replace_client_rates.
+export function canManageClientRates(role: string | null | undefined) {
+  return ['Admin', 'Pricing', 'Ventas'].includes(role || '')
+}
+
 export function getDefaultPathForRole(role: string | null | undefined) {
   return role === 'Cliente' ? '/portal' : '/dashboard'
 }
