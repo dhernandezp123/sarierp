@@ -8,13 +8,19 @@ una publicación documentada allí no acredita el despliegue de estas correccion
 
 | Dato | Evidencia actual | Requisito de aceptación |
 | --- | --- | --- |
-| Commit candidato | Cambios locales sin commit | SHA completo del commit revisado |
-| Ambiente y hostname | Destino sin verificar | Production/Trial identificado y dominio validado |
-| Migraciones | Solo base aislada validada | Inventario de versiones aplicado en destino y comparación con repo |
-| RLS | Suites locales, no certificación remota | Resultado fechado por rol y cruce de tenants del destino |
-| Publicación | Pendiente | Versión de frontend/API y fecha, sin pestañas con código anterior |
+| Commit candidato | c767762d40aa657892c5b62d5ea85e17b22fba64 en origin/main | SHA revisado, CI verde |
+| Ambiente y hostname | Vercel Production, sari.forwarders.app; tabla protegida aún Demo | Cambio a production pendiente de aprobación específica |
+| Migraciones | 121 remotas, última 20261014154000; Outlook excluida | Inventario verificado; 16 de auditoría aplicadas |
+| RLS | Catálogo/permisos remotos y ocho suites aisladas aprobados | UAT autenticada por rol/tenant en destino pendiente |
+| Publicación | dpl_Ce8vhFUzn3wocVfr2v4UmKcCyL9z READY y promovido | Recargar pestañas; smoke aprobado |
 | Aceptación | Responsable confirmado: administrador del sistema (usuario solicitante); escenarios pendientes | Nombre/rol, fecha y enlace de evidencia por escenario |
 | Decisión de salida | No autorizado por este documento | Aprobación funcional y técnica registrada con pendientes explícitos |
+
+Estado efectivo y alcance pendiente: [registro del despliegue](audit-deployment-2026-10-14.md).
+Las referencias “SQL pendiente” de la tabla histórica siguiente describen la
+preparación del candidato: sus 16 migraciones ya están aplicadas según ese registro.
+La autorización del usuario cubrió commit/despliegue; el cambio protegido de
+ambiente requiere la aprobación específica solicitada por revisión automática.
 
 ## Estado por hallazgo
 

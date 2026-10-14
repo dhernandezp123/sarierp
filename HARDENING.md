@@ -11353,3 +11353,40 @@ Agregar una entrada por fix:
   administrativa de los tres expedientes y SLA, medición de pricing/booking con
   datos representativos. No declarar cerrados esos puntos por tener build verde.
 - Commit funcional: en preparación; registrar SHA y despliegue en postflight.
+
+### AUD-RELEASE — Postflight publicado (14/10/2026)
+
+- Commit funcional: `c767762d40aa657892c5b62d5ea85e17b22fba64`, origin/main.
+  Contiene AUD-01 a AUD-20, SQL, pruebas, CI y registros de las etapas previas.
+- CI alojada: Quality 38645720142, application y database success. Se retiró
+  otra excepción de lint: baseline final 223 (187 errores/36 avisos), cero nuevas.
+- Vercel: `dpl_Ce8vhFUzn3wocVfr2v4UmKcCyL9z`, Production READY; promovido a
+  sari.forwarders.app tras construir sin dominios y verificar SQL/huellas/CI.
+- Supabase fwspgdzvlbtbgiupvrzo: 105 -> 121 migraciones; exactamente 16 de
+  auditoría aplicadas hasta 20261014154000. Outlook 20261002120000 sigue sin aplicar.
+- Huellas y conteos de negocio iguales al preflight: 316 cotizaciones, dos
+  paquetes, cero obligaciones/pagos/incidencias. RLS activo, cero RPC auditadas
+  para anon y cero cores internos para authenticated.
+- AUD-05: el backfill ya existente en 20261014121000 recuperó retorno de cuatro
+  casos con historial explícito Ganada→Pendiente; cero repricings con operación
+  sin retorno. La RPC adicional owner-only no se ejecutó. Sin aprobar precios
+  ni modificar importes/documentos/estados comerciales.
+- AUD-15: smoke de login/redirects/API sin sesión aprobado; una solicitud JSON
+  inválida falló antes de auth/negocio y permitió comprobar referencia idéntica
+  en cuerpo, X-Request-ID y log JSON real de Vercel, sin payloads privados.
+- Archivo: `docs/release/audit-deployment-2026-10-14.md` y matriz actualizada.
+  SQL adicional de este asiento: ninguno. Evidencia privada en .ua/intermediate.
+- Bloqueo de aprobación: la revisión automática rechazó la consulta combinada
+  de configuración Production y recuperación de cuatro casos, por requerir
+  autorización específica de cambios persistentes. No se ejecutó. La recuperación
+  ya quedó resuelta por la migración previa; solo falta autorización explícita
+  para marcar platform_environment como production. Permanece Demo y bloquea correo.
+- Pendientes: administrador solicitante identificado para UAT/SLA, sin firma aún;
+  medición representativa/multinavegador y refactor incremental. No se certifica
+  aceptación funcional ni se hacen pruebas con datos/envíos de negocio reales.
+- Operación local: al crear el commit falló el repack automático por espacio,
+  pero el commit quedó íntegro. Se retiraron solo compilaciones/caché propios y
+  el temporal de repack; conectividad Git y push aprobados. Stack aislado detenido
+  conservando volúmenes; perfil Chrome de la tarea cerrado.
+- Commit de este postflight: documental posterior al funcional; hash disponible
+  en Git tras confirmar este asiento.
