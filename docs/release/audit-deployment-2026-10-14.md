@@ -2,8 +2,9 @@
 
 ## Resultado comprobado
 
-Código y SQL publicados. La configuración protegida de ambiente permanece en
-Demo, con correo bloqueado, pendiente de autorización específica del propietario.
+Código y SQL publicados. La configuración protegida de ambiente quedó en
+Production, verificada el 14/10/2026 a las 16:21:45 de Honduras después de la
+autorización explícita del administrador, con una entrada de auditoría atómica.
 La aceptación funcional y los SLA serán validados por el administrador solicitante.
 
 | Evidencia | Resultado |
@@ -14,6 +15,7 @@ La aceptación funcional y los SLA serán validados por el administrador solicit
 | URL inmutable | https://sarierp-c576m0vco-claudherhn-5641s-projects.vercel.app |
 | Dominio | https://sari.forwarders.app, candidato promovido después del postflight SQL |
 | Supabase | fwspgdzvlbtbgiupvrzo, 121 migraciones, última 20261014154000 |
+| Ambiente protegido | production, verified_at 2026-10-14T22:21:45.788954+00:00; lectura con service_role y guard SQL comprobados |
 | Outlook | 20261002120000 excluida del paquete; standby conservado |
 | Validación local | 318 pruebas, TypeScript, build 82 páginas, ocho suites SQL/RLS, seis grupos Chrome |
 | Lint | Gate aprobado: 373 archivos, 223 diagnósticos históricos, cero regresiones |
@@ -58,15 +60,30 @@ y CI verde. Configuración de Vercel, claves y módulos opcionales conservados.
   fallo/confirmación, reemplazo manual a 390 px y demo interceptada/doble submit.
   No se usaron sesiones ni datos reales de negocio en el ensayo.
 
-## Configuración pendiente y aceptación
+## Configuración autorizada y aceptación pendiente
 
 La migración de ambiente empieza en Demo por seguridad. La revisión automática
 de permisos rechazó la consulta combinada que habría configurado Production y
 ejecutado cuatro recuperaciones manuales, por considerar insuficientemente
 específica la autorización general de despliegue. Esa consulta no se ejecutó.
 La revisión posterior mostró que las recuperaciones ya estaban resueltas por
-la migración anterior. Solo queda pendiente autorizar expresamente el cambio
-de platform_environment a production en este proyecto; el correo sigue bloqueado.
+la migración anterior.
+
+El administrador respondió expresamente «Autorizar ambos cambios». Se ejecutó
+solo la configuración aún necesaria: platform_environment pasó de Demo a
+Production con verified_at/verified_by y una entrada verify_platform_environment
+en activity_logs en la misma transacción. El SQL exige la fila esperada y el
+tenant activo; un reintento conserva la verificación sin duplicar la auditoría.
+No se repitió la reparación de repricing ni se ejecutó la consulta combinada
+rechazada. Esta configuración operativa no modifica el esquema ni requiere una
+migración o un nuevo despliegue de frontend.
+
+La lectura como service_role devuelve production e is_demo_environment = false.
+Las huellas de los ocho grupos de datos de negocio coinciden con el preflight.
+Se conserva el acceso de solo lectura del servidor y el bloqueo del cliente a
+la tabla. No se cambiaron claves, variables de Vercel ni Outlook en standby.
+Se retiró el veto de Demo de esta fuente; los demás controles de correo siguen
+vigentes. No se enviaron correos para probar la configuración.
 
 El administrador confirmó que él mismo validará flujos y SLA. Pendientes:
 tres expedientes integrales, plazos/responsables por área, navegadores adicionales,

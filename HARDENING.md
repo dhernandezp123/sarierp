@@ -11390,3 +11390,39 @@ Agregar una entrada por fix:
   conservando volúmenes; perfil Chrome de la tarea cerrado.
 - Commit de este postflight: documental posterior al funcional; hash disponible
   en Git tras confirmar este asiento.
+
+### AUD-07 / AUD-RELEASE — Ambiente Production autorizado y verificado (14/10/2026)
+
+- Estado: configuración protegida aplicada en Supabase fwspgdzvlbtbgiupvrzo
+  después de recibir autorización explícita del administrador: «Autorizar ambos
+  cambios». Se resuelve el bloqueo de aprobación descrito en el asiento previo.
+- SQL operativo: `.ua/intermediate/audit-release-environment-approved.sql`
+  (evidencia local ignorada). Una transacción comprueba la fila Demo sin verificar
+  y el tenant activo, configura environment=production con verified_at/verified_by
+  y agrega actividad verify_platform_environment. User_id nulo, actor declarado
+  como mantenimiento del dueño de base; no se suplanta una sesión del ERP.
+  Reintento sobre Production verificada conserva evidencia y no duplica actividad.
+- Verificación efectiva: 2026-10-14T22:21:45.788954+00:00 (16:21:45 Honduras),
+  una entrada de auditoría; service_role lee production e is_demo_environment()
+  devuelve false en transacción de solo lectura. Sin conceder nuevos permisos.
+- AUD-05: los cuatro retornos ya corregidos por 20261014121000 se conservan;
+  no se repitió la reparación ni se ejecutó la consulta combinada rechazada.
+  La autorización adicional no requiere una mutación redundante de cotizaciones.
+- Archivos: este registro, `docs/release/audit-deployment-2026-10-14.md`,
+  `docs/release/audit-release-matrix.md`, `docs/review-2026-10-13.md`.
+  Sin cambios de esquema, migraciones, código o variables de hosting; no requiere
+  redesplegar el frontend funcional c767762, publicado en el asiento anterior.
+- Validaciones: huellas de cotizaciones, agentes, cargos, shipments, bookings,
+  paquetes, obligaciones y pagos idénticas al preflight. Consulta del servidor
+  comprobada sin llamar al proveedor de correo. Postflight remoto: 121 migraciones,
+  316 cotizaciones, dos paquetes, cero repricings con operación sin retorno,
+  cero RPC auditadas para anon, cero cores para authenticated y RLS activo.
+  Cliente sin lectura y service_role sin escritura de la tabla de ambiente.
+  TypeScript (`npx.cmd tsc --noEmit`) y `git diff --check` aprobados. La primera
+  consulta de postflight no respondió y fue interrumpida; reintento de solo
+  lectura aprobado. No se repitió la mutación de configuración.
+- Riesgos/pendientes: permanecen los demás guards de correo y Outlook standby;
+  no hubo envío de prueba ni operación real. UAT/SLA del administrador, políticas
+  de merge/retención, ensayo independiente, medición y refactor incremental siguen
+  abiertos según la matriz. No se declara aceptación funcional completa.
+- Commit: asiento documental posterior a 13c0f47; SHA disponible en Git tras commit.

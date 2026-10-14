@@ -9,7 +9,7 @@ una publicación documentada allí no acredita el despliegue de estas correccion
 | Dato | Evidencia actual | Requisito de aceptación |
 | --- | --- | --- |
 | Commit candidato | c767762d40aa657892c5b62d5ea85e17b22fba64 en origin/main | SHA revisado, CI verde |
-| Ambiente y hostname | Vercel Production, sari.forwarders.app; tabla protegida aún Demo | Cambio a production pendiente de aprobación específica |
+| Ambiente y hostname | Vercel Production, sari.forwarders.app; tabla protegida production verificada | Autorización explícita y auditoría registradas el 14/10/2026 |
 | Migraciones | 121 remotas, última 20261014154000; Outlook excluida | Inventario verificado; 16 de auditoría aplicadas |
 | RLS | Catálogo/permisos remotos y ocho suites aisladas aprobados | UAT autenticada por rol/tenant en destino pendiente |
 | Publicación | dpl_Ce8vhFUzn3wocVfr2v4UmKcCyL9z READY y promovido | Recargar pestañas; smoke aprobado |
@@ -19,8 +19,9 @@ una publicación documentada allí no acredita el despliegue de estas correccion
 Estado efectivo y alcance pendiente: [registro del despliegue](audit-deployment-2026-10-14.md).
 Las referencias “SQL pendiente” de la tabla histórica siguiente describen la
 preparación del candidato: sus 16 migraciones ya están aplicadas según ese registro.
-La autorización del usuario cubrió commit/despliegue; el cambio protegido de
-ambiente requiere la aprobación específica solicitada por revisión automática.
+La aprobación específica solicitada por revisión automática fue recibida:
+«Autorizar ambos cambios». El ambiente protegido ya es production, con auditoría;
+los cuatro repricings ya corregidos por la migración no se repararon de nuevo.
 
 ## Estado por hallazgo
 
@@ -59,7 +60,8 @@ una firma de aceptación de los escenarios.
   historial identifica último cambio explícito Ganada→Pendiente. La acción
   owner-only de 20261014154000 exige ese historial único y revisión esperada;
   solo recupera metadata del retorno y escribe actividad en la misma transacción.
-  Su ejecución efectiva se registrará en el postflight; no aprueba ni cambia importes.
+  El postflight confirmó que el backfill de 20261014121000 ya resolvió esos cuatro
+  casos. No se ejecutó la acción owner-only adicional ni se cambiaron importes.
 - Paquete de 16 migraciones de auditoría, excluyendo Outlook 20261002120000, que
   sigue sin aplicar en Production. Helper prepara copia/hash por archivo en .ua;
   no reparar el historial para simular que Outlook fue aplicado.
