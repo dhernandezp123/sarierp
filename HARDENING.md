@@ -11465,8 +11465,8 @@ Agregar una entrada por fix:
 
 ### 2026-10-15 - FLOW-036 - Ajustar seguro de venta ganada sin nueva elección del cliente
 
-- Estado: implementado y validado en stack aislado; publicación SQL/frontend
-  pendiente. UAT autenticada de la aprobación real permanece pendiente.
+- Estado: implementado, validado en stack aislado y publicado SQL/frontend en
+  Production. UAT autenticada de la aprobación real permanece pendiente.
 - Solicitud: una venta ganada puede reabrirse para agregar/ajustar seguro y
   volver a Ganada al aprobar Pricing, sin pedir al cliente confirmar otra vez.
 - Diagnóstico de solo lectura: SARIHN-2609-0266-AP tenía opción B aceptada,
@@ -11518,16 +11518,34 @@ Agregar una entrada por fix:
     aprobadas. Todas sobre `sarierp_aud01`, fixtures ficticios y rollback/limpieza.
   - Suite Node 320/320, TypeScript OK; ESLint 374 archivos, 0 regresiones sobre
     baseline vigente (223 diagnósticos previos). Build local exitoso.
-  - SQL/frontend remotos y comprobaciones posteriores se registran al concluir.
-- Publicación preparada: dry-run desde el paquete aislado de release incluye
+  - Smoke de Production: login 200; Pricing y detalle de cotización sin sesión
+    redirigen 307 al login. Chunk de Pricing publicado responde 200 y coincide
+    en SHA-256 con el build local validado.
+- Publicación: dry-run y push desde el paquete aislado de release incluyeron
   únicamente las dos migraciones anteriores. Conserva sin aplicar el archivo
   histórico `20261002120000_sari_outlook_intake.sql`, excluido también en el
   release previo; no se usa include-all ni se marca una migración no aplicada.
   La primera consulta CLI de huellas no conectó como rol temporal; se reemplazó
   por lecturas REST con hostname de proyecto verificado y sin imprimir secretos.
+- Postflight Production (15/10/2026):
+  - Ambas versiones SQL registradas en `supabase_migrations.schema_migrations`;
+    columna de sucesión disponible y EXECUTE del helper privado denegado para
+    anon, authenticated y service_role, comprobado con consulta de solo lectura.
+  - Huellas SHA-256 antes/después idénticas para la cotización real, cargos,
+    opciones, snapshots, SI y bookings. Sigue Ganada, revisión 8, sin retorno.
+    Esta publicación no aprobó ni modificó datos comerciales del caso real.
+  - Commit funcional `4796cc7` publicado en `main`. GitHub deployment Production
+    `7107166759`: `success / Deployment has completed`, mismo SHA.
+    URL inmutable: `https://sarierp-ctcpwnirm-claudherhn-5641s-projects.vercel.app`.
+  - Dominio `https://sari.forwarders.app` sirve el chunk nuevo verificado.
+    Stack de pruebas `sarierp_aud01` detenido conservando volúmenes; stack
+    habitual del proyecto sin detener.
+  - CI Quality del SHA funcional, ejecución `38825532550`: jobs application y
+    database aprobados. Incluye TypeScript, 320 pruebas, lint/build y las nueve
+    suites SQL/RLS sobre una base desechable creada desde cero.
 - Riesgos / pendiente: no hay UAT autenticada de la cotización real. La aprobación
   operativa sigue siendo una acción del usuario en su sesión; no se impersonan
   usuarios ni se fuerza una venta mediante la cuenta dueña de base. El máximo
   vigente de 26 opciones/versiones se conserva. Nuevas ventas/cambios de tarifa
   continúan requiriendo su elección comercial habitual.
-- Commit: hash disponible al crear el commit funcional.
+- Commit funcional: `4796cc7` (`fix: approve won quote pricing adjustments without new client selection`).
