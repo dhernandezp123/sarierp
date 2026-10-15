@@ -67,6 +67,7 @@ import { InsuranceCalculationDetails } from '@/src/components/pricing/InsuranceC
 import { AgentContainerRateBreakdown } from '@/src/components/pricing/AgentContainerRateBreakdown'
 import {
   getClientVisibleQuotationOptions,
+  requiresNewCommercialOptionSelection,
   type QuotationCommercialOption,
 } from '@/src/lib/quotation-options'
 import { cn } from '../../../lib/utils'
@@ -2359,11 +2360,8 @@ function PricingComparisonContent() {
     const oldStatus = selectedQuote.status || 'Borrador'
     const activeAgentQuote = agentQuotes.find((quote) => quote.is_selected) || null
     const impact = await getOperationalImpact(activeAgentQuote)
-    const hasPendingCommercialOptionSelection =
-      commercialOptions.some((option) =>
-        option.status === 'Borrador' || option.status === 'Ofrecida'
-      ) &&
-      !commercialOptions.some((option) => option.status === 'Aceptada')
+    if (isWonRepricing(oldStatus, selectedQuote.repricing_return_status) && !impact) return false
+    const hasPendingCommercialOptionSelection = requiresNewCommercialOptionSelection(commercialOptions, activeAgentQuote?.id)
     const isCommercialOptionRepricing = Boolean(
       impact?.isRepricing && hasPendingCommercialOptionSelection
     )
@@ -6090,7 +6088,9 @@ const profitabilityColor =
                     disabled={isPricingActionDisabled}
                     className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900"
                   >
-                    Aprobar Pricing
+                    {isWonRepricing(selectedQuote.status, selectedQuote.repricing_return_status) &&
+                      !requiresNewCommercialOptionSelection(commercialOptions, agentQuotes.find((agent) => agent.is_selected)?.id)
+                      ? 'Aprobar ajuste y volver a Ganada' : 'Aprobar Pricing'}
                   </button>
 
                   <button

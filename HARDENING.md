@@ -11462,3 +11462,72 @@ Agregar una entrada por fix:
   al registrar este postflight. No hay SQL nuevo en este ajuste visual.
 - Pendiente administrativo: restaurar la autorización de Vercel CLI para
   publicaciones directas futuras; no bloquea este cambio ya publicado por GitHub.
+
+### 2026-10-15 - FLOW-036 - Ajustar seguro de venta ganada sin nueva elección del cliente
+
+- Estado: implementado y validado en stack aislado; publicación SQL/frontend
+  pendiente. UAT autenticada de la aprobación real permanece pendiente.
+- Solicitud: una venta ganada puede reabrirse para agregar/ajustar seguro y
+  volver a Ganada al aprobar Pricing, sin pedir al cliente confirmar otra vez.
+- Diagnóstico de solo lectura: SARIHN-2609-0266-AP tenía opción B aceptada,
+  seguro en cargos actuales y borrador C; quedó en Pricing Aprobado con
+  `repricing_return_status=Ganada`. No se cambiaron sus importes ni su estado.
+  Antes de publicar, una nueva lectura mostró Ganada, revisión 8 y retorno
+  vacío. Ese cambio ya existía en Production; no fue ejecutado por esta tarea.
+- Causas: transición atómica prohibía cerrar repricing con cualquier opción,
+  incluso aceptada; UI solo reconocía el retorno desde Pendiente, perdiendo
+  el contexto al llegar al estado intermedio Pricing Aprobado. Además, cerrar
+  solo el estado habría dejado el PDF mostrando el snapshot anterior sin seguro.
+- Archivos:
+  - `src/lib/quotation-status.ts`, `src/lib/quotation-options.ts`.
+  - `src/app/(protected)/pricing-comparison/page.tsx`,
+    `src/app/(protected)/quotations/[id]/page.tsx`.
+  - `src/components/pricing/QuotationOptionsPanel.tsx`.
+  - `tests/quotation-transition.test.mjs`, `tests/won-quotation-repricing.test.mjs`.
+  - `supabase/tests/won_quotation_pricing_adjustments.sql`,
+    `scripts/validate-audit-sql.mjs`, guías UAT y esta bitácora.
+- SQL nuevo:
+  - `20261016010000_won_pricing_adjustments.sql`.
+  - `20261016011000_lock_won_adjustment_pricing.sql`.
+- Cambios:
+  - Admin/Pricing cierra el ajuste por la misma RPC transaccional, con revisión,
+    actor, tenant, rentabilidad y registros obligatorios; Ventas no obtiene
+    permiso de aprobar precios. La lista general de transiciones no se amplía.
+  - Con la misma tarifa elegida, conserva la elección anterior y crea/refresca
+    un borrador mediante la RPC canónica de snapshots. El nuevo vigente enlaza
+    `supersedes_option_id` al anterior, cuyo contenido/aceptación original se
+    conservan. El sucesor no inventa accepted_by/accepted_at de cliente;
+    la aprobación de Pricing queda explícita en actividad. UI: Ajuste aprobado.
+  - Cargos vigentes mantienen IDs e importes; se actualiza su enlace al snapshot.
+    PDF utiliza la versión ajustada con seguro. No se recalculan facturas
+    emitidas, CxP ni documentos operativos por cambiar precios.
+  - Tarifa distinta o falta de opción aceptada mantienen el flujo comercial
+    normal. Helper de snapshots sin EXECUTE para anon/authenticated/service_role.
+  - Se admite cerrar desde Pricing Aprobado cuando persiste el retorno a Ganada.
+    SI/bookings solo se sincronizan si el usuario lo solicita; se reutilizan
+    protecciones vigentes de bookings confirmados y BL. Fallos al leer el
+    impacto operativo detienen la aprobación, sin degradarla a otra transición.
+  - Bloqueo de líneas persistidas antes de leer totales/snapshot del cierre.
+- Validaciones:
+  - Antes del fix, fixture SQL fallaba al retornar Pricing Aprobado a Ganada.
+  - Nueva regresión SQL aprobada: seguro, ambos estados de reapertura, versiones,
+    aceptación original, IDs de cargos, operación sin cambios por defecto,
+    sincronización explícita, permisos, tarifa distinta, falta de aceptación,
+    revisión obsoleta, core privado y rollback de todo el ajuste por auditoría.
+  - Nueve suites SQL/RLS auditadas aprobadas; cuatro carreras reales de AUD-05
+    aprobadas. Todas sobre `sarierp_aud01`, fixtures ficticios y rollback/limpieza.
+  - Suite Node 320/320, TypeScript OK; ESLint 374 archivos, 0 regresiones sobre
+    baseline vigente (223 diagnósticos previos). Build local exitoso.
+  - SQL/frontend remotos y comprobaciones posteriores se registran al concluir.
+- Publicación preparada: dry-run desde el paquete aislado de release incluye
+  únicamente las dos migraciones anteriores. Conserva sin aplicar el archivo
+  histórico `20261002120000_sari_outlook_intake.sql`, excluido también en el
+  release previo; no se usa include-all ni se marca una migración no aplicada.
+  La primera consulta CLI de huellas no conectó como rol temporal; se reemplazó
+  por lecturas REST con hostname de proyecto verificado y sin imprimir secretos.
+- Riesgos / pendiente: no hay UAT autenticada de la cotización real. La aprobación
+  operativa sigue siendo una acción del usuario en su sesión; no se impersonan
+  usuarios ni se fuerza una venta mediante la cuenta dueña de base. El máximo
+  vigente de 26 opciones/versiones se conserva. Nuevas ventas/cambios de tarifa
+  continúan requiriendo su elección comercial habitual.
+- Commit: hash disponible al crear el commit funcional.

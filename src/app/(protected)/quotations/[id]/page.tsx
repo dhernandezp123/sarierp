@@ -2077,7 +2077,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           <p className="mt-1 text-slate-600 dark:text-slate-300">{
             quotation.status === 'Borrador' ? 'Completa los datos del embarque y solicita pricing.' :
             quotation.status === 'Pendiente de Fijar Precios' ? 'Pricing debe revisar costos y preparar las tarifas comerciales.' :
-            quotation.status === 'Pricing Aprobado' ? (commercialOptions.length ? 'Pricing debe ofrecer las opciones antes de compartirlas con el cliente.' : 'Revisa el PDF y prepara la comunicación al cliente.') :
+            quotation.status === 'Pricing Aprobado' ? (quotation.repricing_return_status === 'Ganada' ? 'Pricing debe aprobar el ajuste para volver a Ganada. La venta ya está confirmada por el cliente.' : commercialOptions.length ? 'Pricing debe ofrecer las opciones antes de compartirlas con el cliente.' : 'Revisa el PDF y prepara la comunicación al cliente.') :
             quotation.status === 'Enviada al Cliente' ? (commercialOptions.length && !commercialOptions.some((option) => option.status === 'Aceptada') ? 'Registra cuál de las opciones ofrecidas eligió el cliente para confirmar la venta.' : 'Registra la respuesta del cliente desde el estado de la cotización.') :
             quotation.status === 'Ganada' ? 'Continúa con las Shipping Instructions de esta cotización.' :
             quotation.status === 'Perdida' ? 'Puedes reactivarla creando una nueva cotización vinculada.' : 'Consulta las acciones disponibles según tu rol.'
@@ -2154,7 +2154,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                               ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'
                               : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                         }`}>
-                          {option.status}
+                          {option.status === 'Aceptada' && option.supersedes_option_id ? 'Ajuste aprobado' : option.status}
                         </span>
                         {option.is_recommended && (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 dark:text-violet-300">

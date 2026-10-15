@@ -70,8 +70,9 @@ test('role hints preserve six current statuses and never offer historical transi
 
 test('a pre-sale reopening cannot be closed as won based on old logs or an operation', () => {
   assert.equal(isWonRepricing('Pendiente de Fijar Precios', 'Ganada'), true)
+  assert.equal(isWonRepricing('Pricing Aprobado', 'Ganada'), true)
   for (const [status, previous] of [['Pendiente de Fijar Precios', undefined],
-    ['Pendiente de Fijar Precios', 'Pricing Aprobado'], ['Pricing Aprobado', 'Ganada'], ['Ganada', 'Ganada']]) {
+    ['Pendiente de Fijar Precios', 'Pricing Aprobado'], ['Pricing Aprobado', undefined], ['Ganada', 'Ganada']]) {
     assert.equal(isWonRepricing(status, previous), false)
   }
 })

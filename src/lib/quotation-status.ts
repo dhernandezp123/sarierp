@@ -45,5 +45,5 @@ export function canTransitionForRole(current: string, next: string, role?: strin
 }
 
 export function isWonRepricing(status: string, returnStatus?: string | null) {
-  return status === 'Pendiente de Fijar Precios' && returnStatus === 'Ganada'
+  return ['Pendiente de Fijar Precios', 'Pricing Aprobado'].includes(status) && returnStatus === 'Ganada'
 }

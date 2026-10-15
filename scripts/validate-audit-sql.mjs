@@ -8,7 +8,7 @@ if (!process.env.CI && !process.argv.includes('--isolated')) {
 }
 const files = [
   'aud01_pricing_write_permissions.sql', 'aud02_supplier_payments.sql',
-  'aud03_supplier_payable_balances.sql', 'aud05_quotation_transitions.sql',
+  'aud03_supplier_payable_balances.sql', 'aud05_quotation_transitions.sql', 'won_quotation_pricing_adjustments.sql',
   'aud06_miami_assignment.sql', 'aud07_verified_environment.sql', 'aud08_email_delivery.sql', 'aud11_portal_incidents.sql',
 ]
 for (const file of files) {

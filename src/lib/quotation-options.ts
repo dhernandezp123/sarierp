@@ -27,6 +27,7 @@ export type QuotationOptionItem = {
 }
 
 export type QuotationCommercialOption = {
+  supersedes_option_id?: string | null
   id: string
   quotation_id: string
   agent_quote_id: string
@@ -69,4 +70,13 @@ export const getClientVisibleQuotationOptions = (
   if (offered.length > 0) return offered
 
   return options.filter((option) => option.status === 'Borrador')
+}
+
+/** An existing won choice remains valid when only its pricing is adjusted. */
+export function requiresNewCommercialOptionSelection(
+  options: Pick<QuotationCommercialOption, 'status' | 'agent_quote_id'>[],
+  selectedAgentQuoteId?: string | null
+) {
+  const accepted = options.find((option) => option.status === 'Aceptada')
+  return options.length > 0 && (!accepted || accepted.agent_quote_id !== selectedAgentQuoteId)
 }

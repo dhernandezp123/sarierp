@@ -26,7 +26,7 @@ desde el cliente. No normaliza registros históricos existentes.
 | Marcar enviada sin opciones | Admin, Pricing, Ventas | Pricing Aprobado |
 | Publicar/enviar opciones | Admin, Pricing | Conserva la autorización y publicación de la RPC comercial existente |
 | Registrar respuesta Ganada/Perdida | Admin, Ventas | Enviada; pérdida también desde Pendiente, con razón y detalle para Otra |
-| Cerrar repricing ganado sin opciones | Admin, Pricing | Marcador persistido de reapertura desde Ganada; sincronización operativa opcional y atómica |
+| Cerrar repricing ganado | Admin, Pricing | Marcador de retorno a Ganada; si hay una opción aceptada y se mantiene la tarifa elegida, crea una versión de ajuste sin nueva elección del cliente; sincronización operativa opcional |
 | Elegir opción y cerrar venta | Admin, Ventas | Opción/estado válidos y revisión esperada; conserva aceptación, snapshot y propagación existentes |
 
 Operaciones, Contabilidad, Finanzas, Cliente, perfiles pendientes/inactivos y
@@ -40,8 +40,10 @@ del formulario y las validaciones comerciales existentes de opciones.
 
 `repricing_return_status = Ganada` identifica la reapertura de una venta ganada.
 Una reapertura anterior a la venta no puede convertir una cotización pendiente
-en Ganada por tener un log antiguo o una operación. Para opciones comerciales
-siempre se mantiene aprobación → oferta → elección del cliente.
+en Ganada por tener un log antiguo o una operación. Una nueva venta o cambio de
+tarifa elegida mantiene aprobación → oferta → elección del cliente. Un ajuste
+de precios/seguro de la venta ganada conserva la elección anterior; véase
+[ajustes de venta ganada](won-quotation-adjustments.md).
 
 ## Publicación y datos anteriores
 
