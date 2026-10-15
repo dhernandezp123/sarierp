@@ -11426,3 +11426,21 @@ Agregar una entrada por fix:
   de merge/retención, ensayo independiente, medición y refactor incremental siguen
   abiertos según la matriz. No se declara aceptación funcional completa.
 - Commit: asiento documental posterior a 13c0f47; SHA disponible en Git tras commit.
+
+### 2026-10-15 - UX-072 - Símbolo de dólar en el total del PDF manual
+
+- Estado: implementado y validado localmente; publicación pendiente.
+- Hallazgo: el total de la plantilla SARI USA mostraba el prefijo USD; el
+  usuario solicita el símbolo $.
+- Archivos: `src/components/pdf/manual-invoice-pdf.tsx`,
+  `docs/manual-sari-usa-invoices.md`, esta bitácora. SQL: sin cambios.
+- Cambio: total impreso como $3,845.00, con separadores estadounidenses y dos
+  decimales. Se conserva el cálculo en centavos y la moneda del documento.
+- Validaciones: pruebas existentes del PDF 4/4 y TypeScript OK. PDF ficticio
+  generado y leído con PDF.js: texto Total Amount: $3,845.00 y ausencia de USD;
+  raster del total inspeccionado visualmente. ESLint afectado y build local OK,
+  82/82 páginas. Postflight pendiente.
+- Riesgos / pendiente: UAT autenticada general del módulo continúa pendiente;
+  no se cambian datos, permisos ni totales guardados. Sin documentos enviados
+  a proveedores o registros de prueba en Production.
+- Commit: hash disponible después de crear el commit funcional.

@@ -33,7 +33,7 @@ El PDF reconstruye la plantilla en papel Letter: logotipo extraído del Word
 aportado, encabezado SARI USA, recuadros, cargos, WR, total y Remarks fijos.
 No incorpora resaltados. Los documentos extensos continúan en otras páginas
 con el encabezado repetido y el total al final. Las fechas del PDF generado
-respetan el formato seleccionado y los importes se muestran en USD. Las
+respetan el formato seleccionado y el total usa el símbolo $ (dólares estadounidenses). Las
 versiones antiguas sin formato guardado conservan DD/MM/YYYY al abrirse;
 las nuevas usan MM/DD/YYYY de forma predeterminada. El total se deriva de los cargos,
 con precisión de centavos, y se compara con el total leído cuando es legible.

@@ -85,7 +85,7 @@ export function ManualInvoicePdf({ data, logo }: { data: ManualInvoiceData; logo
         </View>)}
       </View>
       <View style={[s.box, s.total]}><Text>{index === pages.length - 1 ? 'Total Amount:   ' : 'Continued on next page'}</Text>
-        {index === pages.length - 1 && <Text style={{ width: 110, textAlign: 'right' }}>USD {manualInvoiceTotal(data).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>}
+        {index === pages.length - 1 && <Text style={{ width: 110, textAlign: 'right' }}>${manualInvoiceTotal(data).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>}
       </View>
       <View style={[s.box, s.remarks]}><Text style={{ marginBottom: 2 }}>Remarks:</Text><Text>{MANUAL_INVOICE_REMARKS}</Text></View>
     </Page>)}
