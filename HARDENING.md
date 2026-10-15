@@ -11429,7 +11429,7 @@ Agregar una entrada por fix:
 
 ### 2026-10-15 - UX-072 - Símbolo de dólar en el total del PDF manual
 
-- Estado: implementado y validado localmente; publicación pendiente.
+- Estado: implementado, validado localmente y publicado en Production.
 - Hallazgo: el total de la plantilla SARI USA mostraba el prefijo USD; el
   usuario solicita el símbolo $.
 - Archivos: `src/components/pdf/manual-invoice-pdf.tsx`,
@@ -11439,8 +11439,26 @@ Agregar una entrada por fix:
 - Validaciones: pruebas existentes del PDF 4/4 y TypeScript OK. PDF ficticio
   generado y leído con PDF.js: texto Total Amount: $3,845.00 y ausencia de USD;
   raster del total inspeccionado visualmente. ESLint afectado y build local OK,
-  82/82 páginas. Postflight pendiente.
+  82/82 páginas. Postflight y bundle público aprobados.
 - Riesgos / pendiente: UAT autenticada general del módulo continúa pendiente;
   no se cambian datos, permisos ni totales guardados. Sin documentos enviados
   a proveedores o registros de prueba en Production.
-- Commit: hash disponible después de crear el commit funcional.
+- Commit funcional: `2bc4d4f`, enviado a `origin/main`. Postflight en commit
+  documental local posterior.
+- Publicación: Vercel CLI rechazó la creación con 403/invalidToken; consultas
+  de identidad/proyecto funcionaron inicialmente, sin autorización de escritura.
+  Reintento con acceso ampliado tampoco publicó. No hubo rechazo de la revisión
+  automática de permisos. Se usó la integración existente GitHub–Vercel, cuya
+  publicación anterior estaba verificada; sin cambiar secretos ni configuración.
+- Vercel GitHub status: success, Production, deployment GitHub `7104953440`,
+  Vercel `dpl_3QLPGJwn1TcTAfNCavEnT67MMEeU`.
+  URL inmutable: `https://sarierp-gf5uxem9b-claudherhn-5641s-projects.vercel.app`.
+  Dominio `sari.forwarders.app`: chunk PDF `0xfjvfqvv1h4s.js` = 200 y SHA-256
+  idéntico al compilado local validado:
+  `6c569629ce0c68b475bc8d2ece1d9773f052251e0b8a85dd42a6833568df8e5a`.
+  Login 200, manual-invoices 307 al login y ambas API 401 JSON sin sesión;
+  assets OCR 200 y checksum de modelo correcto. Sin UAT autenticada nueva.
+- CI Quality del push: application aprobado; database todavía en ejecución
+  al registrar este postflight. No hay SQL nuevo en este ajuste visual.
+- Pendiente administrativo: restaurar la autorización de Vercel CLI para
+  publicaciones directas futuras; no bloquea este cambio ya publicado por GitHub.
