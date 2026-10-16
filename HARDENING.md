@@ -31,7 +31,7 @@
   ya recibidos mantienen su asunto anterior. La captura muestra SPF/DKIM/DMARC
   PASS, pero esas validaciones no acreditan la codificación del Subject.
   Causa exacta de la recodificación alojada pendiente; se evita con el asunto
-  ASCII sin cambiar proveedor ni credenciales. Commit pendiente de registrar.
+  ASCII sin cambiar proveedor ni credenciales. Commit funcional: `6160acb`.
 
 ### 2026-10-16 - AUTH-BRAND-02 - Destino por empresa, UTF-8 y enlace alternativo
 
