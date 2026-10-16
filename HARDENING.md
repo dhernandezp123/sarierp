@@ -1,7 +1,57 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-16 - AUTH-BRAND-02 - Destino por empresa, UTF-8 y enlace alternativo
+
+- Estado: corrección aplicada y verificada en Supabase Production; pruebas
+  técnicas locales aprobadas. Pendiente nueva recepción real desde el portal
+  del cliente y revisión Gmail/Outlook; no se usaron sus tokens ni se enviaron
+  correos de ensayo a usuarios operativos.
+- Hallazgo: capturas reales posteriores a AUTH-BRAND-01 mostraron marca neutral,
+  `redirect_to=https://forwarders.app` y asunto mal codificado. La allowlist
+  productiva contenía solo destinos de plataforma: Auth descartaba el callback
+  de Sari y usaba Site URL. La publicación desde PowerShell sin BOM interpretó
+  mal la literal UTF-8 del asunto. La comparación previa contra esa misma
+  literal no detectó el error; el HTML sí se había leído correctamente.
+- Archivos: `supabase/templates/recovery.html`,
+  `scripts/publish-recovery-email.mjs`, `tests/recovery-email-template.test.mjs`,
+  `docs/password-recovery.md`, `HARDENING.md`. SQL modificado: ninguno.
+- Cambios:
+  - Callback exacto `https://sari.forwarders.app/auth/callback?next=/portal/reset-password`
+    añadido a `uri_allow_list`, conservando todos los destinos previos.
+  - Publicación versionada con Node: lee asunto y HTML en UTF-8, rechaza daños
+    de codificación y callbacks inesperados. PATCH limitado al asunto, HTML y
+    unión de allowlist; GET posterior verifica valores y que todo lo demás en
+    Auth/SMTP siga igual. No se publica la configuración local completa.
+  - Enlace inferior con etiqueta legible, sin URL/token como texto visible;
+    conserva exactamente el mismo href de Auth que el botón. Esto reduce su
+    exposición visual, no elimina el token del destino ni cambia su sensibilidad.
+- Análisis del enlace: el token es una credencial temporal para recuperar esa
+  cuenta, no su contraseña ni una clave de servicio/base de datos. Debe tratarse
+  como sensible si se comparte o captura. No se abrió ni consumió ningún enlace
+  real aportado; se indica solicitar uno nuevo desde el portal de Sari.
+- Validaciones ejecutadas:
+  - Fallo reproducido en Auth/SMTP aislado con perfil Cliente: sin allowlist de
+    Sari, marca neutral y redirección a Site URL; corregido al añadir el callback.
+  - Después: Sari y respaldo neutral; asunto SMTP real codificado como UTF-8,
+    dos href idénticos, sin token como texto, destino exacto, sesión nueva,
+    lectura RLS de perfil Cliente/tenant, cambio de contraseña, login y rechazo
+    del token ya consumido. Cuentas ficticias eliminadas al terminar.
+  - Chrome 1440/390/320 px: logos visibles y sin desbordes; inspección visual
+    móvil aprobada. Enlaces de demostración, sin tokens reales en capturas.
+  - Suite Node: 338/338; TypeScript final y ESLint dirigido: OK. No cambian
+    rutas, componentes ni lógica de aplicación; build a cargo del CI publicado.
+  - Production: GET confirma `ñ` U+00F1 en asunto, HTML exacto y callback Sari
+    autorizado. Los demás ajustes de Auth/SMTP no cambian. Copia previa de los
+    tres campos en `.ua/intermediate/recovery-fix-auth-before.json`, fuera de Git.
+- Riesgos/pendientes: correos anteriores conservan su destino/asunto viejos;
+  solicitar uno nuevo. La recepción real corregida y UAT siguen pendientes.
+  Nuevas empresas requieren su condición y callback exactos en la plantilla,
+  seguidos del publicador. Commit pendiente de registrar al publicarlo.
+
 ### 2026-10-16 - AUTH-BRAND-01 - Correo de recuperación con marca por empresa
 
+- Seguimiento: AUTH-BRAND-02 corrige la allowlist productiva ausente y el asunto
+  mal codificado que no detectaron las comprobaciones de esta primera entrega.
 - Estado: plantilla aplicada y verificada en Supabase Production; validación
   técnica local aprobada. Presentación final en Gmail/Outlook y UAT del correo
   nuevo pendientes del próximo envío autorizado.

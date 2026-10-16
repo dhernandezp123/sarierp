@@ -61,6 +61,14 @@ registrada y usa Sari Express, `/logo/sari-logo.png` y `#0038BD`, según su
 configuración. Los demás destinos muestran Forwarders ERP; nunca heredan Sari.
 No se usa metadata editable del usuario para elegir marca, logo o enlaces.
 El botón y el enlace alternativo conservan `{{ .ConfirmationURL }}` de Auth.
+Ambos llevan exactamente al mismo enlace. El token de esa URL es una credencial
+temporal de recuperación de la cuenta, no una contraseña, una clave de servicio
+ni acceso general a la base de datos. Desde la corrección del 16/10/2026 se usa
+una etiqueta legible en el enlace alternativo, sin mostrar el token en el texto.
+El token sigue en el destino de ambos enlaces, como requiere Auth; ocultar su
+texto no elimina su carácter sensible. No reenviar ni compartir enlaces,
+capturas que los revelen o archivos `.eml`. Si se expone, solicitar un enlace
+nuevo desde el portal de la empresa. No abrir enlaces reales como prueba técnica.
 
 El remitente compartido sigue siendo
 `Forwarders ERP <no-reply@mail.forwarders.app>`. El nombre del remitente no se
@@ -77,10 +85,18 @@ versionada; no consulta `company_settings` durante cada envío.
 Publicación en Supabase alojado: **Authentication → Emails → Reset password**,
 pegar el HTML versionado y el asunto indicado. También se puede usar la
 [Management API](https://supabase.com/docs/guides/auth/auth-email-templates):
-GET y PATCH `/v1/projects/<project-ref>/config/auth`. Guardar una copia de los
-dos campos anteriores y actualizar **solo** `mailer_subjects_recovery` y
-`mailer_templates_recovery_content`; volver a leerlos y comprobar que los demás
-ajustes de Auth no cambiaron. No publicar el resto de `config.toml` para este
+GET y PATCH `/v1/projects/<project-ref>/config/auth`. Guardar una copia de
+`mailer_subjects_recovery`, `mailer_templates_recovery_content` y `uri_allow_list`.
+El callback completo de cada empresa debe estar en Redirect URLs de Auth, además
+de en la plantilla: si falta, Auth sustituye `.RedirectTo` por Site URL y se
+pierden tanto el destino de la empresa como su marca.
+
+Usar `node scripts/publish-recovery-email.mjs` para revisar el cambio y añadir
+`--apply` para publicarlo, con `SUPABASE_ACCESS_TOKEN` del operador autenticado y
+el proyecto ya vinculado. El script lee asunto/HTML como UTF-8, rechaza texto
+mal codificado, autoriza los callbacks exactos de la plantilla, conserva los
+destinos anteriores y verifica los tres campos tras el PATCH. Comprueba también
+que los demás ajustes de Auth no cambiaron. No publicar el resto de `config.toml` para este
 cambio: sus valores locales difieren de Production. `git push`/Vercel por sí
 solos no actualizan las plantillas alojadas.
 
@@ -88,8 +104,12 @@ El cambio de branding del 16/10/2026 se valida con buzón local y cuentas
 ficticias: asunto español, Sari, respaldo neutral, metadata ignorada, token de
 recuperación, cambio de contraseña y login. Comprobar la presentación final en
 Gmail/Outlook con el próximo envío autorizado; no se envían pruebas a usuarios
-operativos. La captura aportada por el usuario acredita la recepción de la
-plantilla anterior, pero no certifica todavía el correo con marca.
+operativos. Las capturas reales posteriores revelaron el asunto mal codificado
+y el callback de Sari ausente en Production; las pruebas anteriores solo
+autorizaban ese callback en local. Se reproduce el fallo antes de corregirlo y
+se verifica después con perfiles Cliente, ambos enlaces y el encabezado SMTP
+UTF-8 real. Los correos ya enviados no se modifican: solicitar uno nuevo desde
+`https://sari.forwarders.app/portal/forgot-password` tras publicar la corrección.
 
 ## Aceptación pendiente en Production
 
