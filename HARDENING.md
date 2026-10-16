@@ -2,7 +2,7 @@
 
 ### 2026-10-16 - AUTH-RECOVERY-01 - Recuperación interna y administrativa
 
-- Estado: implementado y validado técnicamente; publicación en curso.
+- Estado: implementado y validado técnicamente; código publicado en `origin/main`.
   UAT real de correo/cambio/login pendiente; no se declara completo el flujo.
 - Hallazgo: login interno y Administración no ofrecían recuperación. La del
   portal usaba PKCE en el navegador solicitante; reutilizarla desde Admin habría
@@ -50,7 +50,9 @@
   Cliente según `docs/password-recovery.md`. No se certifica entrega real del SMTP
   productivo con mocks ni con el buzón aislado. Soporte de plataforma sin tenant
   conserva su acceso separado; esta recuperación es para usuarios de empresas.
-- Commit: pendiente.
+- Commit funcional: `76209b7`, publicado en `origin/main`. Despliegue y CI
+  iniciados; confirmación y smoke finales se verifican en la entrega. Evidencias
+  locales `recovery-*` en `.ua/intermediate/`, excluidas de Git.
 
 ### 2026-10-16 - FLOW-VISITS-01 - Planificación e informes de visitas comerciales
 
