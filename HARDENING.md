@@ -2,7 +2,7 @@
 
 ### 2026-10-16 - AUTH-INVITE-NAMES-01 - Nombres desde la invitación y corrección de perfiles
 
-- Estado: implementado y validado localmente; publicación pendiente. UAT real de
+- Estado: implementado y validado localmente; código publicado en main. UAT real de
   invitación/aceptación/edición pendiente; no se editan datos de usuarios reales.
 - Hallazgo: el modal y la API solo recibían correo/rol; los perfiles figuraban
   «Sin nombre» hasta completar onboarding. Su redirección automática por tener
@@ -46,7 +46,8 @@
   Editar nombre o completar la activación. Sin migraciones/RLS nuevas; se
   reutilizan políticas vigentes y no se declara UAT Production por mocks.
   La invitación sigue pudiendo enviarse antes de un error al preparar perfil:
-  la API conserva el aviso explícito y no anuncia éxito completo. Commit pendiente.
+  la API conserva el aviso explícito y no anuncia éxito completo. Commit funcional:
+  `130a91e`; despliegue y CI se verifican en la entrega.
 
 ### 2026-10-16 - AUTH-INVITE-BRAND-01 - Invitación con marca y activación de Sari
 
