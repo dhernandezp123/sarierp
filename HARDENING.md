@@ -45,7 +45,7 @@
   pendiente UAT en Gmail/Outlook y aceptación en navegador. Solo se retocó texto
   del modal, sin cambiar su interacción; sin UAT nueva del modal completo.
   Nuevas empresas requieren su condición y callback exactos en la plantilla.
-  Remitente compartido sigue Forwarders ERP. Commit pendiente de registrar.
+  Remitente compartido sigue Forwarders ERP. Commit funcional: `740cee6`.
 
 ### 2026-10-16 - AUTH-BRAND-03 - Asunto compatible con la entrega SMTP real
 
