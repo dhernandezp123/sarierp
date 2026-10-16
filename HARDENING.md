@@ -1,5 +1,53 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-16 - AUTH-INVITE-NAMES-01 - Nombres desde la invitación y corrección de perfiles
+
+- Estado: implementado y validado localmente; publicación pendiente. UAT real de
+  invitación/aceptación/edición pendiente; no se editan datos de usuarios reales.
+- Hallazgo: el modal y la API solo recibían correo/rol; los perfiles figuraban
+  «Sin nombre» hasta completar onboarding. Su redirección automática por tener
+  nombre/apellido y aprobación habría omitido la contraseña al precargar datos.
+- Archivos: `src/app/(protected)/admin/users/page.tsx`,
+  `src/app/api/admin/invite/route.ts`, `src/app/onboarding/page.tsx`,
+  `tests/admin-invite-tenant.test.mjs`, `tests/invite-onboarding.test.mjs`,
+  `docs/invitaciones.md`, `HARDENING.md`. SQL modificado: ninguno.
+- Cambios:
+  - Nombre y apellido obligatorios en invitación, con etiquetas, límite 100,
+    recorte de espacios y rechazo de tipos inválidos/caracteres de control en API.
+    Se guardan en metadata de Auth y perfil; el update debe devolver una fila.
+  - Modal desplazable dentro de la pantalla móvil, prevención de envío doble,
+    bloqueo de campos durante envío, limpieza al cancelar/terminar y conservación
+    de datos ante fallo de conexión. Sonner informa errores/reintentos.
+  - Edición de nombre/apellido para cuentas existentes mediante sesión normal,
+    ID+tenant explícitos y RLS vigente. Solo se anuncian filas devueltas; se
+    actualiza el listado y registra auditoría auxiliar. No se modifica Auth,
+    roles, aprobación, claves ni correo al corregir un nombre existente.
+  - Onboarding precarga nombres y mantiene creación de contraseña obligatoria;
+    elimina el salto por perfil nombrado/aprobado. SDK fuera del callback Auth,
+    soporte de sesión inicial, respuestas obsoletas descartadas y borradores
+    conservados ante USER_UPDATED. Se mantienen validación de tenant y destinos
+    de Cliente pendiente/interno aprobados.
+- Validaciones ejecutadas:
+  - Antes del cambio, regresiones reprodujeron nombres ausentes en Auth/perfil,
+    aceptación de payload sin nombres y salto al dashboard sin contraseña.
+  - Suite Node 345/345, TypeScript final, ESLint dirigido y build 86 páginas: OK.
+  - Auth/API/SMTP/DB aislados `sarierp_aud01`: nombres presentes antes de abrir
+    correo para Ventas y Cliente; corrección Admin con sesión+tenant, filtro de
+    otro tenant rechazado, marca/destino, contraseña, login y token de un uso: OK.
+    Usuarios ficticios eliminados; sin invitaciones ni modificaciones remotas.
+  - Chrome compilado con APIs simuladas: campos obligatorios, foco inicial,
+    JSON y recorte, error de red/reintento conservando datos, cancelación limpia,
+    modal a 1440/390/320 sin desbordes y desplazable a 320x640. Edición existente,
+    rechazo/reintento sin falso éxito, filtro tenant y actualización de fila: OK.
+  - Activación Chrome: datos precargados sin redirección automática, nombres
+    editados conservados al cambiar sesión, rechazo de contraseñas distintas y
+    guardado con contraseña: OK; revisión visual móvil aprobada.
+- Riesgos/pendientes: registros históricos no se rellenan por inferencia; usar
+  Editar nombre o completar la activación. Sin migraciones/RLS nuevas; se
+  reutilizan políticas vigentes y no se declara UAT Production por mocks.
+  La invitación sigue pudiendo enviarse antes de un error al preparar perfil:
+  la API conserva el aviso explícito y no anuncia éxito completo. Commit pendiente.
+
 ### 2026-10-16 - AUTH-INVITE-BRAND-01 - Invitación con marca y activación de Sari
 
 - Estado: plantilla aplicada y verificada en Supabase Production; validación

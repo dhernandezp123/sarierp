@@ -1,10 +1,25 @@
 # Invitaciones de usuarios
 
-Administración → Usuarios → Invitar nuevo usuario envía un enlace personal para
-completar nombre/apellido y crear contraseña. El rol y la empresa los asigna el
+Administración → Usuarios → Invitar nuevo usuario solicita **Nombre**, **Apellido**,
+correo y rol. Nombre y apellido son obligatorios, de hasta 100 caracteres;
+se recortan espacios exteriores y se guardan tanto en Auth como en el perfil
+desde la invitación, antes de que el destinatario abra el enlace.
+
+El enlace personal permite revisar los nombres precargados y crear contraseña.
+Un nombre ya informado no completa la activación ni omite la contraseña.
+Los eventos de Auth cargan el perfil fuera del callback para evitar bloqueos
+del SDK; las actualizaciones de sesión no borran los nombres que se estén editando.
+El rol y la empresa los asigna el
 servidor según el Admin autenticado; el correo de invitación no concede otro rol.
 Usuarios internos quedan Aprobados; Cliente queda Pendiente y requiere vincularse
 y aprobarse según el flujo actual. El branding no modifica esos permisos.
+
+Para cuentas ya invitadas que aparecen como **Sin nombre**, usar **Editar nombre**
+debajo de su correo, completar ambos campos y **Guardar nombre**. Esta acción
+solo actualiza `profiles.nombre` y `profiles.apellido`, limitada por ID, empresa
+y RLS vigente. No reenvía correos ni cambia contraseña, rol o aprobación. La UI
+solo confirma guardado si la base devuelve una fila. Se registra actividad auxiliar.
+No se deducen ni rellenan nombres históricos automáticamente a partir del correo.
 
 ## Correo con marca
 
@@ -54,7 +69,8 @@ la plantilla versionada mediante `supabase/config.toml`.
 ## Verificación y límites
 
 En el stack aislado se prueba la API real con Admin ficticio invitando Ventas y
-Cliente: correo local, asunto SMTP literal, marca Sari, dos enlaces idénticos,
+Cliente: nombres en Auth/perfil antes de aceptar, edición administrativa con
+sesión y filtro de empresa, correo local, asunto SMTP literal, marca Sari, dos enlaces idénticos,
 dominio/onboarding exactos, sesión receptora nueva, perfil en la empresa,
 contraseña/nombre actualizados, login y rechazo del enlace consumido. El respaldo
 neutral se prueba con envío Auth local directo. Las cuentas se eliminan después.

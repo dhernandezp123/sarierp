@@ -1,7 +1,7 @@
 'use client'
 
 import type React from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
@@ -24,47 +24,61 @@ export default function OnboardingPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [saving, setSaving] = useState(false)
+  const loadedNameUser = useRef<string | null>(null)
 
   useEffect(() => {
-    // Supabase JS picks up the invite token from the URL fragment automatically.
-    // We subscribe to the onAuthStateChange event to catch the SIGNED_IN event.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        if (session?.user) {
-          // Check if profile already completed
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('nombre, apellido, status, rol, tenant_id')
-            .eq('id', session.user.id)
-            .single()
-
-          if (!profileMatchesTenant(profile?.tenant_id, tenant)) {
-            await supabase.auth.signOut()
-            toast.error('La invitaciÃ³n pertenece a otra empresa.')
-            router.push('/login')
-            return
-          }
-
-          if (profile?.nombre && profile?.apellido && profile?.status === 'Aprobado') {
-            router.push(profile.rol === 'Cliente' ? '/portal' : '/dashboard')
-            return
-          }
-
-          setAuthUser(session.user)
-          setChecking(false)
-          return
-        }
+    let active = true
+    let revision = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const loadProfile = async (user: User, current: number) => {
+      const { data: profile, error } = await supabase.from('profiles')
+        .select('nombre, apellido, status, rol, tenant_id').eq('id', user.id).single()
+      if (!active || current !== revision) return
+      if (error) throw error
+      if (!profileMatchesTenant(profile?.tenant_id, tenant)) {
+        setAuthUser(null)
+        await supabase.auth.signOut()
+        toast.error('La invitación pertenece a otra empresa.')
+        router.push('/login')
+        return
       }
-      if (event === 'INITIAL_SESSION') {
-        if (!session?.user) {
-          // No active session — redirect to login
+
+      // A name supplied by Admin does not mean the invitee has set a password.
+      // Only initialize once per user, so USER_UPDATED cannot erase edited names.
+      if (loadedNameUser.current !== user.id) {
+        setNombre(profile?.nombre || '')
+        setApellido(profile?.apellido || '')
+        loadedNameUser.current = user.id
+      }
+      setAuthUser(user)
+      setChecking(false)
+    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!['SIGNED_IN', 'USER_UPDATED', 'INITIAL_SESSION', 'SIGNED_OUT'].includes(event)) return
+      const current = ++revision
+      clearTimeout(timer)
+      if (!session?.user) {
+        loadedNameUser.current = null
+        setAuthUser(null)
+        setChecking(false)
+        router.push('/login')
+        return
+      }
+      const user = session.user
+      // Run SDK requests after Auth releases its event callback lock.
+      timer = setTimeout(() => {
+        if (!active || current !== revision) return
+        void loadProfile(user, current).catch(() => {
+          if (!active || current !== revision) return
+          setAuthUser(null)
           setChecking(false)
+          toast.error('No se pudo validar la invitación. Abre el enlace nuevamente.')
           router.push('/login')
-        }
-      }
+        })
+      }, 0)
     })
 
-    return () => subscription.unsubscribe()
+    return () => { active = false; revision++; clearTimeout(timer); subscription.unsubscribe() }
   }, [router, tenant])
 
   const handleSubmit = async (e: React.FormEvent) => {

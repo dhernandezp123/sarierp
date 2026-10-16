@@ -8,6 +8,8 @@ async function invite({
     is_platform_admin: false, tenant_id: 'tenant-sari',
   },
   domain = { hostname: 'sari.forwarders.app' },
+  body = { email: 'new@example.invalid', rol: 'Ventas', nombre: '  María José  ', apellido: '  Pérez López  ' },
+  profileUpdateError = false,
 } = {}) {
   const previous = {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -33,7 +35,7 @@ async function invite({
         select() { return query },
         update(value) { updateValue = value; updates.push(value); return query },
         eq() { return query },
-        single: async () => ({ data: table === 'profiles' ? profile : domain, error: null }),
+        single: async () => updateValue && profileUpdateError ? {data:null,error:{message:'No profile row'}} : ({ data: updateValue ? { id:'invited-user' } : table === 'profiles' ? profile : domain, error: null }),
         then(resolve, reject) {
           return Promise.resolve({ data: updateValue ? { id: 'invited-user' } : null, error: null }).then(resolve, reject)
         },
@@ -56,7 +58,7 @@ async function invite({
     const response = await POST(new Request('http://localhost/api/admin/invite', {
       method: 'POST',
       headers: { Authorization: 'Bearer token', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'new@example.invalid', rol: 'Ventas' }),
+      body: JSON.stringify(body),
     }))
     return { response, body: await response.json(), invitations, updates }
   } finally {
@@ -76,6 +78,25 @@ test('Invitación: fija tenant y dominio principal tanto en Auth como en profile
   assert.equal(result.invitations[0].options.redirectTo, 'https://sari.forwarders.app/onboarding')
   assert.equal(result.invitations[0].options.data.tenant_id, 'tenant-sari')
   assert.equal(result.updates[0].tenant_id, 'tenant-sari')
+  assert.equal(result.invitations[0].options.data.nombre,'María José')
+  assert.equal(result.invitations[0].options.data.apellido,'Pérez López')
+  assert.equal(result.updates[0].nombre,'María José')
+  assert.equal(result.updates[0].apellido,'Pérez López')
+})
+
+test('Invitación: nombres ausentes, vacíos o inválidos se rechazan antes de enviar correo', async () => {
+  for (const values of [{},{nombre:' ',apellido:'Pérez'},{nombre:'María',apellido:''},{nombre:7,apellido:'Pérez'},{nombre:'A'.repeat(101),apellido:'Pérez'},{nombre:'María\nOtra',apellido:'Pérez'}]) {
+    const result=await invite({body:{email:'new@example.invalid',rol:'Ventas',...values}})
+    assert.equal(result.response.status,400)
+    assert.equal(result.invitations.length,0)
+  }
+})
+
+test('Invitación: un perfil no guardado no se anuncia como una invitación completamente preparada', async () => {
+  const result=await invite({profileUpdateError:true})
+  assert.equal(result.response.status,500)
+  assert.match(result.body.error,/invitación fue enviada/)
+  assert.equal(result.invitations.length,1)
 })
 
 test('Invitación: un Admin sin tenant o de plataforma no usa service_role para invitar', async () => {

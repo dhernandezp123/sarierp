@@ -11,12 +11,26 @@ const INVITABLE_ROLES = [
   'Cliente',
 ] as const
 
+function inviteName(value: unknown) {
+  if (typeof value !== 'string') return null
+  const name = value.trim()
+  return name && name.length <= 100 && !/[\u0000-\u001f\u007f]/.test(name) ? name : null
+}
+
 export async function POST(request: Request) {
   try {
-    const { email, rol } = (await request.json()) as { email: string; rol: string }
+    const body = await request.json() as Record<string, unknown>
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const rol = typeof body.rol === 'string' ? body.rol : ''
+    const nombre = inviteName(body.nombre)
+    const apellido = inviteName(body.apellido)
 
     if (!email || !rol) {
       return NextResponse.json({ error: 'Email y rol son requeridos' }, { status: 400 })
+    }
+
+    if (!nombre || !apellido) {
+      return NextResponse.json({ error: 'Nombre y apellido son requeridos y deben tener hasta 100 caracteres, sin saltos de línea' }, { status: 400 })
     }
 
     if (!INVITABLE_ROLES.includes(rol as (typeof INVITABLE_ROLES)[number])) {
@@ -90,7 +104,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${siteUrl}/onboarding`,
-      data: { rol, invited_by_admin: true, tenant_id: profile.tenant_id },
+      data: { rol, invited_by_admin: true, tenant_id: profile.tenant_id, nombre, apellido },
     })
 
     if (error) {
@@ -101,6 +115,8 @@ export async function POST(request: Request) {
       .from('profiles')
       .update({
         email: email.trim().toLowerCase(),
+        nombre,
+        apellido,
         tenant_id: profile.tenant_id,
         rol,
         status: rol === 'Cliente' ? 'Pendiente' : 'Aprobado',
@@ -109,6 +125,8 @@ export async function POST(request: Request) {
         approved_by: rol === 'Cliente' ? null : authData.user.id,
       })
       .eq('id', data.user.id)
+      .select('id')
+      .single()
 
     if (invitedProfileError) {
       return NextResponse.json(

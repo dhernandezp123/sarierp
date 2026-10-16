@@ -18,6 +18,7 @@ import {
 } from '@/src/components/ui/dialog'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
 
 type Cliente = { id: string; nombre: string; codigo_cliente: string | null }
 
@@ -71,6 +72,7 @@ const getStatusBadgeClass = (status: string) => {
 }
 
 export default function AdminUsersPage() {
+  const tenant = useTenant()
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [lastSignIns, setLastSignIns] = useState<Record<string, string | null>>({})
@@ -90,8 +92,14 @@ export default function AdminUsersPage() {
   // Invite dialog
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteNombre, setInviteNombre] = useState('')
+  const [inviteApellido, setInviteApellido] = useState('')
   const [inviteRol, setInviteRol] = useState('Ventas')
   const [inviteSending, setInviteSending] = useState(false)
+  const [nameTarget, setNameTarget] = useState<Profile | null>(null)
+  const [editNombre, setEditNombre] = useState('')
+  const [editApellido, setEditApellido] = useState('')
+  const [savingName, setSavingName] = useState(false)
 
   // Link to cliente dialog
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
@@ -348,6 +356,11 @@ export default function AdminUsersPage() {
   }
 
   const sendInvite = async () => {
+    if (inviteSending) return
+    if (!inviteNombre.trim() || !inviteApellido.trim()) {
+      toast.error('Ingresa nombre y apellido')
+      return
+    }
     if (!inviteEmail.trim()) {
       toast.error('Ingresa un correo electrónico')
       return
@@ -366,7 +379,7 @@ export default function AdminUsersPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), rol: inviteRol }),
+        body: JSON.stringify({ email: inviteEmail.trim().toLowerCase(), rol: inviteRol, nombre: inviteNombre.trim(), apellido: inviteApellido.trim() }),
       })
       const body = await res.json() as { error?: string; userId?: string }
       if (!res.ok) {
@@ -376,11 +389,36 @@ export default function AdminUsersPage() {
       toast.success(`Invitación enviada a ${inviteEmail}`)
       setInviteDialogOpen(false)
       setInviteEmail('')
+      setInviteNombre('')
+      setInviteApellido('')
       setInviteRol('Ventas')
       fetchUsers()
+    } catch {
+      toast.error('No se pudo enviar la invitación. Revisa tu conexión e intenta nuevamente.')
     } finally {
       setInviteSending(false)
     }
+  }
+
+  const saveName = async () => {
+    if (savingName || !nameTarget || !tenant) return
+    const nombre = editNombre.trim(), apellido = editApellido.trim()
+    if (!nombre || !apellido || nombre.length > 100 || apellido.length > 100 || /[\u0000-\u001f\u007f]/.test(nombre + apellido)) {
+      toast.error('Ingresa nombre y apellido válidos, de hasta 100 caracteres')
+      return
+    }
+    setSavingName(true)
+    try {
+      const { data, error } = await supabase.from('profiles').update({ nombre, apellido })
+        .eq('id', nameTarget.id).eq('tenant_id', tenant.id).select('id, nombre, apellido').single()
+      if (error || !data) { toast.error('No se pudo guardar el nombre. Verifica los permisos e intenta nuevamente.'); return }
+      setUsers(current => current.map(user => user.id === data.id ? { ...user, nombre: data.nombre, apellido: data.apellido } : user))
+      setNameTarget(null)
+      toast.success('Nombre actualizado')
+      await createActivityLog({ module:'admin_users', action:'update_profile_name', entityType:'profile', entityId:data.id, description:'Nombre y apellido del usuario actualizados' })
+    } catch {
+      toast.error('No se pudo guardar el nombre. Revisa tu conexión e intenta nuevamente.')
+    } finally { setSavingName(false) }
   }
 
   const openRoleDialog = (user: Profile) => {
@@ -555,6 +593,10 @@ export default function AdminUsersPage() {
                               <p className="text-xs text-slate-400 dark:text-slate-500">
                                 {user.email || 'Sin email'}
                               </p>
+                              <button type="button" onClick={() => { setNameTarget(user); setEditNombre(user.nombre || ''); setEditApellido(user.apellido || '') }}
+                                className="text-xs text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400">
+                                Editar nombre
+                              </button>
                               {user.registration_company && (
                                 <p className="text-[11px] text-blue-600 dark:text-blue-400">
                                   {user.registration_company}
@@ -684,34 +726,54 @@ export default function AdminUsersPage() {
         confirmLabel="Enviar enlace"
         onConfirm={() => { if (recoveryTarget) void sendRecovery(recoveryTarget) }} />
 
-      <Dialog open={inviteDialogOpen} onOpenChange={(open) => { setInviteDialogOpen(open); if (!open) { setInviteEmail(''); setInviteRol('Ventas') } }}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={inviteDialogOpen} onOpenChange={(open) => { if (inviteSending) return; setInviteDialogOpen(open); if (!open) { setInviteEmail(''); setInviteNombre(''); setInviteApellido(''); setInviteRol('Ventas') } }}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Invitar nuevo usuario</DialogTitle>
             <DialogDescription>
-              Se enviará un correo con un enlace de activación. El usuario completará su nombre al aceptar.
+              Registra los datos del usuario. Recibirá un correo para revisar sus datos y crear su contraseña.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="invite-nombre" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Nombre <span className="text-red-400">*</span>
+                </label>
+                <input id="invite-nombre" value={inviteNombre} onChange={e => setInviteNombre(e.target.value)} autoComplete="given-name" maxLength={100} required disabled={inviteSending} placeholder="Nombre"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+              </div>
+              <div>
+                <label htmlFor="invite-apellido" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Apellido <span className="text-red-400">*</span>
+                </label>
+                <input id="invite-apellido" value={inviteApellido} onChange={e => setInviteApellido(e.target.value)} autoComplete="family-name" maxLength={100} required disabled={inviteSending} placeholder="Apellido"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+              </div>
+            </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+              <label htmlFor="invite-email" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                 Correo electrónico <span className="text-red-400">*</span>
               </label>
               <input
+                id="invite-email"
                 type="email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="usuario@ejemplo.com"
+                disabled={inviteSending}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+              <label htmlFor="invite-rol" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                 Rol asignado <span className="text-red-400">*</span>
               </label>
               <select
+                id="invite-rol"
+                disabled={inviteSending}
                 value={inviteRol}
                 onChange={(e) => setInviteRol(e.target.value)}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
@@ -739,7 +801,8 @@ export default function AdminUsersPage() {
             <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => { setInviteDialogOpen(false); setInviteEmail(''); setInviteRol('Ventas') }}
+                disabled={inviteSending}
+                onClick={() => { setInviteDialogOpen(false); setInviteEmail(''); setInviteNombre(''); setInviteApellido(''); setInviteRol('Ventas') }}
                 className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Cancelar
@@ -747,13 +810,38 @@ export default function AdminUsersPage() {
 
               <button
                 type="button"
-                disabled={inviteSending || !inviteEmail.trim()}
+                disabled={inviteSending || !inviteEmail.trim() || !inviteNombre.trim() || !inviteApellido.trim()}
                 onClick={sendInvite}
                 className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
                 <Mail className="h-4 w-4" />
                 {inviteSending ? 'Enviando...' : 'Enviar invitación'}
               </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(nameTarget)} onOpenChange={open => { if (!open && !savingName) setNameTarget(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar nombre del usuario</DialogTitle>
+            <DialogDescription>{nameTarget?.email}. Actualiza el nombre y apellido de esta cuenta.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="edit-nombre" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Nombre <span className="text-red-400">*</span></label>
+              <input id="edit-nombre" value={editNombre} onChange={e => setEditNombre(e.target.value)} maxLength={100} required disabled={savingName}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+            </div>
+            <div>
+              <label htmlFor="edit-apellido" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Apellido <span className="text-red-400">*</span></label>
+              <input id="edit-apellido" value={editApellido} onChange={e => setEditApellido(e.target.value)} maxLength={100} required disabled={savingName}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" disabled={savingName} onClick={() => setNameTarget(null)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">Cancelar</button>
+              <button type="button" disabled={savingName || !editNombre.trim() || !editApellido.trim()} onClick={saveName} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900">{savingName ? 'Guardando...' : 'Guardar nombre'}</button>
             </div>
           </div>
         </DialogContent>
