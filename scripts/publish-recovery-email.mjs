@@ -6,7 +6,9 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 
 // Only these fields may be patched. Never publish the local Auth/SMTP defaults.
 export function recoveryAuthPatch(current, html, subject) {
-  if (subject !== 'Restablece tu contraseña' || /[\u00c2\u00c3\ufffd]/u.test(html)) {
+  // The hosted SMTP delivery still corrupted a Unicode subject after GET confirmed
+  // correct UTF-8 settings. Keep a natural Spanish ASCII subject across transports.
+  if (subject !== 'Recupera tu acceso' || /[\u00c2\u00c3\ufffd]/u.test(html)) {
     throw Error('Recovery email encoding is invalid; use UTF-8 source files')
   }
   const callbacks = [...html.matchAll(/eq \.RedirectTo "([^"]+)"/g)].map(match => match[1])

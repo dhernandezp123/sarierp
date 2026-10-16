@@ -1,7 +1,42 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-16 - AUTH-BRAND-03 - Asunto compatible con la entrega SMTP real
+
+- Estado: mitigación aplicada y verificada en Supabase Production; validación
+  SMTP local aprobada. Recepción real del nuevo asunto pendiente. No se declara
+  identificada la etapa exacta que recodifica el asunto Unicode en producción.
+- Hallazgo: «Mostrar original» del correo de las 10:34 demuestra que el asunto
+  llegó dañado después de AUTH-BRAND-02 (commit 10:32). No era solo el título de
+  una conversación anterior. La configuración seguía devolviendo `ñ` U+00F1;
+  ese GET y el SMTP local correcto no certificaban la entrega real Unicode.
+- Archivos: `supabase/config.toml`, `scripts/publish-recovery-email.mjs`,
+  `tests/recovery-email-template.test.mjs`, `docs/password-recovery.md`,
+  `HARDENING.md`. SQL modificado: ninguno.
+- Cambio: asunto **Recupera tu acceso**, español solo ASCII, para que una
+  recodificación UTF-8/Latin-1 no altere sus caracteres. El publicador exige ese
+  valor; se conserva contenido HTML, marca de empresa y ambos enlaces.
+- Validaciones ejecutadas:
+  - Regresión de asunto configurado y recodificación, rechazo de mojibake,
+    callback exacto y preservación de destinos/SMTP: OK. Suite Node 339/339.
+  - SMTP aislado `sarierp_aud01`, cuentas ficticias Cliente: Subject literal
+    `Recupera tu acceso` en MIME crudo y buzón, Sari/respaldo, enlaces idénticos,
+    destino correcto, cambio de contraseña, login y token de un solo uso: OK.
+    Usuarios eliminados y stack aislado detenido; cero correos de prueba reales.
+  - TypeScript y ESLint dirigido: OK. No cambia código de aplicación ni HTML;
+    no se repite revisión visual ni build local. CI verificará el build.
+  - PATCH dirigido y GET posterior: asunto exacto; HTML/allowlist iguales a la
+    entrega anterior y todos los demás ajustes de Auth/SMTP sin cambios. Copia
+    previa local `recovery-ascii-auth-before.json`, fuera de Git.
+- Pendientes: confirmar asunto del próximo correo real autorizado. Los correos
+  ya recibidos mantienen su asunto anterior. La captura muestra SPF/DKIM/DMARC
+  PASS, pero esas validaciones no acreditan la codificación del Subject.
+  Causa exacta de la recodificación alojada pendiente; se evita con el asunto
+  ASCII sin cambiar proveedor ni credenciales. Commit pendiente de registrar.
+
 ### 2026-10-16 - AUTH-BRAND-02 - Destino por empresa, UTF-8 y enlace alternativo
 
+- Seguimiento: AUTH-BRAND-03 registra que la entrega real del asunto Unicode
+  seguía dañada y publica un asunto ASCII; el destino y marca Sari sí llegaron.
 - Estado: corrección aplicada y verificada en Supabase Production; pruebas
   técnicas locales aprobadas. Pendiente nueva recepción real desde el portal
   del cliente y revisión Gmail/Outlook; no se usaron sus tokens ni se enviaron

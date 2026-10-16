@@ -50,7 +50,7 @@ Referencias oficiales: [recuperación](https://supabase.com/docs/reference/javas
 ## Marca del correo de recuperación
 
 La plantilla está versionada en `supabase/templates/recovery.html`; el asunto es
-**Restablece tu contraseña**. Incluye logo, nombre de empresa, color principal,
+**Recupera tu acceso**. Incluye logo, nombre de empresa, color principal,
 botón, enlace alternativo y aviso para quien no solicitó el cambio. Usa tablas
 y estilos inline y logos PNG públicos por HTTPS para clientes de correo.
 
@@ -94,7 +94,8 @@ pierden tanto el destino de la empresa como su marca.
 Usar `node scripts/publish-recovery-email.mjs` para revisar el cambio y añadir
 `--apply` para publicarlo, con `SUPABASE_ACCESS_TOKEN` del operador autenticado y
 el proyecto ya vinculado. El script lee asunto/HTML como UTF-8, rechaza texto
-mal codificado, autoriza los callbacks exactos de la plantilla, conserva los
+mal codificado y exige el asunto ASCII previsto para tolerar recodificaciones
+del transporte SMTP. Autoriza los callbacks exactos de la plantilla, conserva los
 destinos anteriores y verifica los tres campos tras el PATCH. Comprueba también
 que los demás ajustes de Auth no cambiaron. No publicar el resto de `config.toml` para este
 cambio: sus valores locales difieren de Production. `git push`/Vercel por sí
@@ -110,6 +111,15 @@ autorizaban ese callback en local. Se reproduce el fallo antes de corregirlo y
 se verifica después con perfiles Cliente, ambos enlaces y el encabezado SMTP
 UTF-8 real. Los correos ya enviados no se modifican: solicitar uno nuevo desde
 `https://sari.forwarders.app/portal/forgot-password` tras publicar la corrección.
+
+Una captura de «Mostrar original» del mensaje de las 10:34 confirmó que el asunto
+todavía llegaba mal después de la primera corrección, aunque la Management API
+devolvía `ñ` U+00F1 y SMTP local generaba un encabezado UTF-8 válido. No era solo
+el encabezado antiguo de una conversación. No está identificado el punto exacto
+de recodificación entre Auth alojado y la entrega real. Se adopta el asunto
+**Recupera tu acceso**, español sin caracteres fuera de ASCII, para evitar esa
+dependencia de codificación. No cambiar el asunto por una cadena MIME codificada
+manualmente ni tratar el GET de configuración como prueba de recepción.
 
 ## Aceptación pendiente en Production
 

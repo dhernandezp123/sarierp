@@ -245,7 +245,7 @@ otp_expiry = 3600
 
 # Uncomment to customize email template
 [auth.email.template.recovery]
-subject = "Restablece tu contraseña"
+subject = "Recupera tu acceso"
 content_path = "./supabase/templates/recovery.html"
 
 # [auth.email.template.invite]
