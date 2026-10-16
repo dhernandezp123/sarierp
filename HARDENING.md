@@ -1,5 +1,45 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-16 - MIAMI-INS-01 - Seguro al crear cotizaciones Miami aprobadas
+
+- Estado: implementado y validado localmente; UAT autenticado en Production
+  pendiente. No se crean ni recalculan cotizaciones reales durante la prueba.
+- Hallazgo: `/quotations/new` guardaba `requires_insurance`, pero el generador
+  automático Miami no añadía un cargo de seguro al aprobar ni al previsualizar.
+  El cálculo legacy leía `fob_value` mientras el campo visible escribía
+  `commercial_value`. La cobertura corporativa Ocean Freight tampoco reconocía
+  el código propio del flete Miami LCL.
+- Archivos: `src/app/(protected)/quotations/new/page.tsx`,
+  `src/lib/miami-insurance.ts`, `src/lib/insurance-coverage.ts`,
+  `tests/miami-insurance.test.mjs`, `tests/miami-insurance-create.test.mjs`,
+  `tests/miami-insurance-pdf.test.mjs`, `HARDENING.md`. SQL modificado: ninguno.
+- Cambios: nueva composición de cargos para creación Miami, compartida por PDF
+  y guardado atómico existente. Usa FOB visible, porcentaje del cliente, costo
+  corporativo, cobertura/exclusiones vigentes, recargo asegurable del 10%, mínimo
+  USD 75 e ISV de empresa (incluido 0 explícito). Se conservan bases de costo y
+  venta independientes. Alias de fletes Miami para pólizas Ocean/Air Freight.
+  Respeta seguro obligatorio del cliente, muestra prima/ISV/total y bloquea
+  aprobación/PDF incompletos; permite guardar borrador. Errores RPC visibles.
+- Validaciones ejecutadas:
+  - Regresiones de composición y página: LCL/aéreo, selección/obligatoriedad,
+    FOB visible, cantidades, exclusiones, mínimo, tasa cero, datos inválidos,
+    borrador y error RPC conservando datos. PDF comercial real con seguro,
+    ISV y total, sin costos/proveedor/notas internas.
+  - Supabase aislado `sarierp_aud01`, sesión Ventas aprobada y cliente ficticio:
+    creación real `Pricing Aprobado` LCL/aéreo con seguro USD 75 + ISV USD 11.25;
+    lectura con sesión normal confirma dos cargos y atributos del padre.
+    Cargo inválido revierte la transacción sin cotización parcial.
+  - Chrome con datos simulados: bloqueo sin FOB, prima/ISV/total, igualdad de
+    PDF y payload, recuperación ante error, LCL/aéreo y anchos 1440/390/320.
+  - Suite Node 353/353, TypeScript, ESLint dirigido, lint sin regresiones y
+    build: OK. Registros ficticios eliminados; stack aislado detenido.
+- Riesgos/pendientes: no hay backfill ni recálculo de cotizaciones existentes
+  u opciones ofrecidas; requieren revisión comercial individual. El ajuste de
+  alias afecta cálculos futuros explícitos de cobertura, nunca un guardado
+  automático de documentos históricos. Sin migración ni cambios de RLS;
+  se conserva RPC transaccional y autorización vigente. UAT real pendiente.
+  Commit funcional: pendiente.
+
 ### 2026-10-16 - AUTH-INVITE-NAMES-01 - Nombres desde la invitación y corrección de perfiles
 
 - Estado: implementado y validado localmente; código publicado en main. UAT real de

@@ -16,7 +16,9 @@ import { pdf } from '@react-pdf/renderer'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
-import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { loadCurrentCompanySettings, type TenantCompanySettings } from '@/src/lib/company-settings'
+import { withMiamiInsurance } from '@/src/lib/miami-insurance'
+import { INSURANCE_SURCHARGE_PERCENT } from '@/src/lib/insurance-calculator'
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
@@ -78,6 +80,7 @@ export default function NewQuotationPage() {
   const [clientes, setClientes] = useState<any[]>([])
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
+  const [companySettings, setCompanySettings] = useState<TenantCompanySettings | null>(null)
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
   const [containerTypes, setContainerTypes] = useState<any[]>([])
@@ -176,8 +179,8 @@ export default function NewQuotationPage() {
   }, [])
 
   const fetchCompanyBranding = async () => {
-    const { data } = await loadCurrentCompanySettings(supabase)
-
+    const { data, error } = await loadCurrentCompanySettings(supabase)
+    setCompanySettings(error ? null : data)
     setCompanyBranding(normalizeCompanyBranding(data))
   }
 
@@ -754,6 +757,11 @@ export default function NewQuotationPage() {
       setLoading(true)
 
       const quotationId = crypto.randomUUID()
+      const automaticPricing = buildMiamiCreationPricing(quotationId)
+      if (submitIsMiamiFlow && !isDraftSave && automaticPricing.error) {
+        toast.error(automaticPricing.error)
+        return
+      }
       const quotationPayload = {
         id: quotationId,
         cliente_id: formData.cliente_id,
@@ -818,14 +826,14 @@ export default function NewQuotationPage() {
             : Number(formData.cantidad_bultos),
         commodity: formData.commodity,
 
-        requires_insurance: formData.requires_insurance,
-        fob_value: Number(formData.fob_value),
+        requires_insurance: requiresCargoInsurance,
+        fob_value: submitIsMiamiFlow && requiresCargoInsurance ? Number(formData.commercial_value) : Number(formData.fob_value),
         freight_value: Number(formData.freight_value),
-        insurance_markup_percentage: Number(
+        insurance_markup_percentage: submitIsMiamiFlow && requiresCargoInsurance ? INSURANCE_SURCHARGE_PERCENT : Number(
           formData.insurance_markup_percentage
         ),
-        insurance_rate: Number(formData.insurance_rate),
-        insurance_cost: Number(formData.insurance_cost),
+        insurance_rate: submitIsMiamiFlow && requiresCargoInsurance ? Number(insuranceCliente?.seguro_porcentaje || 0) : Number(formData.insurance_rate),
+        insurance_cost: automaticPricing.insurance?.cost_amount ?? Number(formData.insurance_cost),
 
         pricing_notes: formData.pricing_notes || null,
         observaciones: formData.observaciones || null,
@@ -862,7 +870,7 @@ export default function NewQuotationPage() {
           cbm: calculateLineCbm(line),
         }))
 
-      const autoItems = miami.buildMiamiPricingItems(quotationId)
+      const autoItems = automaticPricing.items
 
       const quotation = await createQuotation(supabase, {
         quotation: quotationPayload, containers: containerRows, cargo: cargoRows, pricing: autoItems,
@@ -969,8 +977,8 @@ export default function NewQuotationPage() {
       })
 
       await fetchCatalogs()
-    } catch {
-      // silently continue — fetchCatalogs shows its own toasts
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear la cotización. Revisa los datos e intenta nuevamente.')
     } finally {
       setLoading(false)
     }
@@ -1040,6 +1048,19 @@ export default function NewQuotationPage() {
   })
 
   const isMiamiFlow = miami.isMiamiFlow
+  const insuranceCliente = clientes.find(cliente => cliente.id === formData.cliente_id)
+  const clientInsuranceRequired = isMiamiFlow && insuranceCliente?.asegura_carga === true
+  const requiresCargoInsurance = formData.requires_insurance || clientInsuranceRequired
+  const buildMiamiCreationPricing = (quotationId: string) => withMiamiInsurance({
+    quotationId,
+    items: miami.buildMiamiPricingItems(quotationId),
+    required: isMiamiFlow && requiresCargoInsurance,
+    commercialValue: Number(formData.commercial_value),
+    saleRatePercent: Number(insuranceCliente?.seguro_porcentaje || 0),
+    settings: companySettings,
+    createdBy: profile?.id,
+  })
+  const insurancePreview = buildMiamiCreationPricing('preview')
 
   const buildPreviewCargoLines = () => {
     return cargoLines
@@ -1076,6 +1097,7 @@ export default function NewQuotationPage() {
     return {
       ...formData,
       id: 'preview',
+      requires_insurance: requiresCargoInsurance,
       quotation_number: 'PREVIEW',
       cliente: selectedCliente || null,
       clientes: selectedCliente || null,
@@ -1125,11 +1147,13 @@ export default function NewQuotationPage() {
       return
     }
 
+    const previewPricing = buildMiamiCreationPricing('preview')
+    if (previewPricing.error) { toast.error(previewPricing.error); return }
     const blob = await pdf(
       <QuotationPDF
         quotation={buildDraftQuotation()}
         selectedAgent={null}
-        pricingItems={miami.buildMiamiPreviewItems()}
+        pricingItems={previewPricing.items.map(item => ({...item, id:crypto.randomUUID()}))}
         quotationContainers={[]}
         cargoLines={buildPreviewCargoLines()}
         company={companyBranding}
@@ -2226,7 +2250,8 @@ export default function NewQuotationPage() {
               <input
                 type="checkbox"
                 name="requires_insurance"
-                checked={formData.requires_insurance}
+                checked={requiresCargoInsurance}
+                disabled={clientInsuranceRequired}
                 onChange={handleChange}
                 className="h-4 w-4 rounded border-slate-300"
               />
@@ -2235,23 +2260,37 @@ export default function NewQuotationPage() {
                   Cliente solicita seguro de carga
                 </p>
                 <p className="text-xs text-slate-400 dark:text-slate-500">
-                  Se calculará el costo del seguro sobre el valor FOB
+                  {isMiamiFlow ? 'Se incluirá el seguro Full Cover en los cargos y el PDF de la cotización.' : 'Se calculará el costo del seguro sobre el valor FOB'}
                 </p>
               </div>
             </label>
 
-            {formData.requires_insurance && (
+            {requiresCargoInsurance && (
               <div className="mt-4 flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   Valor comercial / Valor FOB (USD)
                 </label>
                 <input
                   name="commercial_value"
+                  type="number"
+                  min="0"
+                  step="0.01"
                   placeholder="0.00"
                   value={formData.commercial_value}
                   onChange={handleChange}
                   className={fieldClass}
                 />
+              </div>
+            )}
+            {isMiamiFlow && requiresCargoInsurance && (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900">
+                {clientInsuranceRequired && <p className="mb-2 text-xs text-slate-500">El seguro es obligatorio según la configuración del cliente.</p>}
+                {insurancePreview.error ? <p role="status" className="text-amber-700 dark:text-amber-300">{insurancePreview.error}</p> : insurancePreview.insurance && <>
+                  <p>Prima del seguro: USD {formatNumber(insurancePreview.insurance.sale_amount)}</p>
+                  <p>ISV ({insurancePreview.insurance.tax_rate}%): USD {formatNumber(insurancePreview.insurance.tax_amount)}</p>
+                  <p className="mt-1 font-semibold">Total del seguro: USD {formatNumber(insurancePreview.insurance.total_amount)}</p>
+                  <p className="mt-2 text-xs text-slate-500">Este cargo se guardará junto con los demás cargos de Miami.</p>
+                </>}
               </div>
             )}
           </section>
