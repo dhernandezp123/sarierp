@@ -5,44 +5,55 @@ import { resolve } from 'node:path'
 const root = fileURLToPath(new URL('../', import.meta.url))
 
 // Only these fields may be patched. Never publish the local Auth/SMTP defaults.
-export function recoveryAuthPatch(current, html, subject) {
+function authEmailPatch(current, html, subject, kind) {
   // The hosted SMTP delivery still corrupted a Unicode subject after GET confirmed
   // correct UTF-8 settings. Keep a natural Spanish ASCII subject across transports.
-  if (subject !== 'Recupera tu acceso' || /[\u00c2\u00c3\ufffd]/u.test(html)) {
-    throw Error('Recovery email encoding is invalid; use UTF-8 source files')
+  const expectedSubject = kind === 'invite' ? 'Activa tu cuenta' : 'Recupera tu acceso'
+  if (subject !== expectedSubject || /[\u00c2\u00c3\ufffd]/u.test(html)) {
+    throw Error('Auth email encoding is invalid; use UTF-8 source files')
   }
   const callbacks = [...html.matchAll(/eq \.RedirectTo "([^"]+)"/g)].map(match => match[1])
-  if (!callbacks.length) throw Error('Recovery template has no tenant callbacks')
+  if (!callbacks.length) throw Error('Auth template has no tenant callbacks')
   for (const callback of callbacks) {
     const url = new URL(callback)
     if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hash
-      || url.pathname !== '/auth/callback' || url.search !== '?next=/portal/reset-password'
+      || url.pathname !== (kind === 'invite' ? '/onboarding' : '/auth/callback')
+      || url.search !== (kind === 'invite' ? '' : '?next=/portal/reset-password')
       || !/^[a-z0-9-]+\.forwarders\.app$/.test(url.hostname)) {
-      throw Error('Unexpected tenant recovery callback')
+      throw Error('Unexpected tenant Auth callback')
     }
   }
   if ((html.match(/href="{{ \.ConfirmationURL }}"/g) || []).length !== 2
     || html.includes('>{{ .ConfirmationURL }}</a>')) {
-    throw Error('Both recovery links must use Auth; the token must not appear as visible text')
+    throw Error('Both Auth links must use Auth; the token must not appear as visible text')
   }
   const existing = (current.uri_allow_list || '').split(',').map(value => value.trim()).filter(Boolean)
   return {
-    mailer_subjects_recovery: subject,
-    mailer_templates_recovery_content: html,
+    [`mailer_subjects_${kind}`]: subject,
+    [`mailer_templates_${kind}_content`]: html,
     uri_allow_list: [...new Set([...existing, ...callbacks])].join(','),
   }
 }
 
+export function recoveryAuthPatch(current, html, subject) {
+  return authEmailPatch(current, html, subject, 'recovery')
+}
+
+export function inviteAuthPatch(current, html, subject) {
+  return authEmailPatch(current, html, subject, 'invite')
+}
+
 async function main() {
-  if (process.argv.slice(2).some(arg => arg !== '--apply')) throw Error('Usage: node scripts/publish-recovery-email.mjs [--apply]')
+  if (process.argv.slice(2).some(arg => !['--apply','--invite'].includes(arg))) throw Error('Usage: node scripts/publish-recovery-email.mjs [--invite] [--apply]')
+  const kind = process.argv.includes('--invite') ? 'invite' : 'recovery'
   const token = process.env.SUPABASE_ACCESS_TOKEN
   if (!token) throw Error('Set SUPABASE_ACCESS_TOKEN using the authenticated operator session')
   const project = (await readFile(resolve(root, 'supabase/.temp/project-ref'), 'utf8')).trim()
   if (!/^[a-z]{20}$/.test(project)) throw Error('Invalid linked project reference')
   const config = await readFile(resolve(root, 'supabase/config.toml'), 'utf8')
-  const section = config.match(/\[auth\.email\.template\.recovery\]([^]*?)(?=\n\[|$)/)?.[1]
+  const section = config.match(new RegExp(`\\[auth\\.email\\.template\\.${kind}\\]([^]*?)(?=\\n\\[|$)`))?.[1]
   const subject = JSON.parse(section?.match(/^subject\s*=\s*(".*")\s*$/m)?.[1] || 'null')
-  const html = await readFile(resolve(root, 'supabase/templates/recovery.html'), 'utf8')
+  const html = await readFile(resolve(root, `supabase/templates/${kind}.html`), 'utf8')
   const endpoint = `https://api.supabase.com/v1/projects/${project}/config/auth`
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8' }
   const request = async options => {
@@ -51,9 +62,9 @@ async function main() {
     return response.json()
   }
   const before = await request()
-  const patch = recoveryAuthPatch(before, html, subject)
+  const patch = authEmailPatch(before, html, subject, kind)
   if (!process.argv.includes('--apply')) {
-    console.log(JSON.stringify({ project, subject, callbacks: patch.uri_allow_list.split(','), apply: false }))
+    console.log(JSON.stringify({ project, kind, subject, callbacks: patch.uri_allow_list.split(','), apply: false }))
     return
   }
   await request({ method: 'PATCH', body: JSON.stringify(patch) })
@@ -66,7 +77,7 @@ async function main() {
       throw Error(`Unrelated Auth configuration changed: ${field}`)
     }
   }
-  console.log(JSON.stringify({ project, subject, apply: true, verified: true, unrelatedSettingsUnchanged: true }))
+  console.log(JSON.stringify({ project, kind, subject, apply: true, verified: true, unrelatedSettingsUnchanged: true }))
 }
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {

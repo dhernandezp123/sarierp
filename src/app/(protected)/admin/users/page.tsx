@@ -731,7 +731,7 @@ export default function AdminUsersPage() {
               <div className="flex items-start gap-2">
                 <Mail className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                 <p className="text-xs text-blue-700 dark:text-blue-300">
-                  Supabase enviará el email de invitación. Asegúrate de que <strong>SUPABASE_SERVICE_ROLE_KEY</strong> esté configurada en <code>.env.local</code>.
+                  La invitación es personal. El destinatario creará su contraseña al activar la cuenta.
                 </p>
               </div>
             </div>

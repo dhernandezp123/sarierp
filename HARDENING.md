@@ -1,5 +1,52 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-16 - AUTH-INVITE-BRAND-01 - Invitación con marca y activación de Sari
+
+- Estado: plantilla aplicada y verificada en Supabase Production; validación
+  técnica local aprobada. Entrega real Gmail/Outlook y UAT de aceptación en
+  navegador pendientes del próximo envío autorizado.
+- Hallazgo: la invitación alojada seguía con `You have been invited`, HTML
+  genérico de 197 caracteres y sin marca Sari. Faltaba autorizar
+  `https://sari.forwarders.app/onboarding`; Auth podía reemplazar el destino por
+  Site URL. El modal mostraba instrucciones sobre claves/archivos del servidor.
+- Archivos:
+  - `supabase/templates/invite.html`, `supabase/config.toml`.
+  - `scripts/publish-recovery-email.mjs`, `tests/invite-email-template.test.mjs`.
+  - `src/app/(protected)/admin/users/page.tsx`, `docs/invitaciones.md`,
+    `HARDENING.md`. SQL modificado: ninguno.
+- Cambios:
+  - Asunto ASCII **Activa tu cuenta**; logo, nombre/color de Sari y texto español,
+    botón Activar mi cuenta, enlace alternativo y aviso de invitación inesperada.
+    Se reutilizan diseño/logos del correo de recuperación; tablas y CSS inline.
+  - Marca por `.RedirectTo` exacto de onboarding y respaldo neutral Forwarders.
+    Dos href `{{ .ConfirmationURL }}`; tokens sin impresión como texto visible.
+  - Publicador existente ampliado con `--invite`: separa los campos de Auth de
+    cada flujo, valida destino y conserva recuperación/SMTP/allowlist previa.
+  - Destino de onboarding Sari añadido en Production. Modal con explicación
+    para la persona administradora, sin instrucciones sobre secretos del servidor.
+    No se modifican API, roles, aprobación, RLS ni lógica de onboarding.
+- Validaciones ejecutadas:
+  - SMTP/Auth/DB aislados `sarierp_aud01`: API real con Admin ficticio invitando
+    Ventas y Cliente; Subject literal, marca Sari, dos links idénticos con
+    type=invite, onboarding exacto, sesión nueva, perfil/tenant por RLS,
+    contraseña/nombre, login y rechazo del token consumido: OK. Ventas Aprobado,
+    Cliente Pendiente según flujo vigente. Respaldo neutral por Auth local directo.
+    Todas las cuentas ficticias eliminadas y stack aislado detenido.
+  - Chrome 1440/390/320 px: Sari y respaldo sin desbordes; logos HTTPS cargados,
+    inspección visual móvil aprobada. Enlaces ficticios en las capturas.
+  - Regresiones de separación invite/recovery, destinos y asunto; suite Node
+    342/342, TypeScript, ESLint dirigido y build Next de 86 páginas: OK.
+  - PATCH en proyecto `fwspgdzvlbtbgiupvrzo`, limitado al asunto/HTML de invite
+    y unión de allowlist. GET posterior coincide exactamente con el repositorio;
+    todo otro ajuste de Auth, incluida recuperación/SMTP, permanece igual.
+    Copia previa `.ua/intermediate/invite-auth-before.json`, fuera de Git.
+- Riesgos/pendientes: no se enviaron invitaciones reales ni se consumieron
+  enlaces de usuarios. Configuración y buzón local no certifican entrega real;
+  pendiente UAT en Gmail/Outlook y aceptación en navegador. Solo se retocó texto
+  del modal, sin cambiar su interacción; sin UAT nueva del modal completo.
+  Nuevas empresas requieren su condición y callback exactos en la plantilla.
+  Remitente compartido sigue Forwarders ERP. Commit pendiente de registrar.
+
 ### 2026-10-16 - AUTH-BRAND-03 - Asunto compatible con la entrega SMTP real
 
 - Estado: mitigación aplicada y verificada en Supabase Production; validación
