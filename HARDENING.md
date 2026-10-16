@@ -2,8 +2,8 @@
 
 ### 2026-10-16 - FLOW-VISITS-01 - Planificación e informes de visitas comerciales
 
-- Estado: implementado y validado técnicamente; SQL aplicado en Production.
-  Pendientes publicación de código y UAT autenticada de negocio.
+- Estado: implementado y validado técnicamente; SQL aplicado en Production y
+  código publicado en `origin/main`. UAT autenticada de negocio pendiente.
 - Hallazgo: la agenda no distinguía visitas pendientes, realizadas y canceladas;
   los filtros históricos no delimitaban un período de planificación y no había
   reporte de visitas ni exportación.
@@ -44,15 +44,18 @@
     `20261016120000_sales_activity_execution_status.sql`; Outlook excluida.
   - Migración aplicada en Production; postflight: columna nullable con default
     Pendiente, RLS habilitado y huellas de datos/políticas idénticas al preflight.
-- Riesgos / pendientes: publicación del código; UAT real con Ventas y
+- Riesgos / pendientes: UAT real con Ventas y
   Admin. El estado es actual, no histórico al cierre; no se infiere estado de
   registros legacy. Clasificar visitas anteriores manualmente según su ejecución.
-- Commit: pendiente.
+- Commit funcional: `1d76403f591348cbcdafd241337e9e8815fb3327`.
+- Publicación: push a `origin/main`; Vercel inició el despliegue de Production
+  `BstiJ4a5uuLqxXVa7mgmj6EoZnqY`. Estado final y smoke se verifican en la entrega;
+  evidencias locales en `.ua/intermediate/visits-*` (excluidas de Git).
 
 ### 2026-10-16 - UX-VENTAS-01 - Código de cliente en actividades comerciales
 
-- Estado: corrección local implementada y validación técnica aprobada. Pendiente
-  despliegue y UAT autenticado; no se declara completo el flujo.
+- Estado: corrección implementada, validada y publicada junto a FLOW-VISITS-01.
+  UAT autenticado pendiente; no se declara completo el flujo.
 - Hallazgo: `/ventas` consultaba solo `id, nombre` para el selector de cuentas.
   `ClienteCombobox` muestra y busca `codigo_cliente`; al no recibirlo, todas las
   opciones mostraban «Sin codigo» aunque el cliente tuviera código guardado.
@@ -76,13 +79,14 @@
   `npx.cmd tsc --noEmit`: OK. ESLint dirigido a `/ventas`: OK, sin errores ni
   advertencias. `npm.cmd test`: 320/320 pruebas correctas. `npm.cmd run build`:
   OK, 82/82 páginas, incluida `/ventas`. `git diff --check`: OK (aviso LF/CRLF).
-- Riesgos / trabajo pendiente: desplegar y verificar con sesión Ventas que el
+- Riesgos / trabajo pendiente: verificar con sesión Ventas que el
   código aparece al abrir/editar, que la búsqueda por código funciona y que se
   guarda la cuenta correcta. Probar RLS con Ventas/Admin y otro tenant; no se
   certifican políticas desplegadas con inspección local. Un cliente cuyo código
   esté vacío en la base seguirá mostrando el fallback. El informe diario,
   semanal/mensual de visitas por ejecutar requiere desarrollo adicional.
-- Commit: pendiente; sin commit ni despliegue en esta revisión.
+- Commit funcional: `1d76403f591348cbcdafd241337e9e8815fb3327`; publicación conjunta
+  con el reporte de visitas FLOW-VISITS-01.
 
 ### 2026-10-02 - MAIL-035 - Solicitudes de Outlook aisladas para Sari
 
