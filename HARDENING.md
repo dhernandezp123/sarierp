@@ -1,5 +1,48 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-16 - AUTH-BRAND-01 - Correo de recuperación con marca por empresa
+
+- Estado: plantilla aplicada y verificada en Supabase Production; validación
+  técnica local aprobada. Presentación final en Gmail/Outlook y UAT del correo
+  nuevo pendientes del próximo envío autorizado.
+- Hallazgo: el correo de recuperación llegaba con asunto y contenido genéricos
+  en inglés, sin marca de la empresa. La captura del usuario confirma recepción
+  de la plantilla anterior; no acredita todavía el diseño nuevo.
+- Archivos: `supabase/templates/recovery.html`, `supabase/config.toml`,
+  `docs/password-recovery.md`, `HARDENING.md`.
+- SQL modificado: ninguno; sin migraciones ni cambios de RLS.
+- Cambios:
+  - Asunto español, logo/nombre/color de Sari Express, botón de recuperación,
+    enlace alternativo, advertencia de solicitud ajena y pie de plataforma.
+  - Selección por callback exacto de `.RedirectTo`; respaldo Forwarders ERP
+    para destinos no configurados. No depende de metadata editable del usuario.
+  - Marca contrastada con `tenant_domains` y `company_settings`: Sari es el
+    único tenant registrado actualmente. Para nuevas empresas/cambios de marca
+    se debe agregar su condición exacta y volver a publicar la plantilla.
+  - HTML por tablas, estilos inline y PNG HTTPS, reutilizando logos existentes.
+    Se conserva `{{ .ConfirmationURL }}` y el remitente compartido ya verificado.
+- Publicación: PATCH dirigido a `mailer_subjects_recovery` y
+  `mailer_templates_recovery_content` en el proyecto `fwspgdzvlbtbgiupvrzo`.
+  GET posterior: ambos coinciden exactamente con el repositorio y todos los
+  demás campos de Auth permanecen iguales. Copia previa de esos dos campos
+  guardada localmente; no se guardan tokens ni configuración SMTP en Git.
+- Validaciones ejecutadas:
+  - Auth/SMTP reales del stack aislado `sarierp_aud01`: dos cuentas ficticias,
+    marca Sari y respaldo neutral, asunto español, metadata ajena ignorada,
+    token consumido por un cliente nuevo, cambio de contraseña y login: OK.
+    Cuentas eliminadas al terminar; sin correos a destinatarios de Production.
+  - Chrome: Sari y respaldo a 1440/390/320 px, logos cargados y sin desborde;
+    capturas y HTML de demostración sin tokens en `.ua/intermediate/branding-*`.
+  - Logos públicos: HTTP 200 y Content-Type imagen desde ambos dominios.
+  - `npx.cmd tsc --noEmit`: OK. Suite Node: 335/335. Sin cambios de lógica de
+    aplicación, rutas o componentes; no se requiere otro build local.
+- Riesgos/pendientes: imágenes sujetas a la preferencia del cliente de correo;
+  el nombre de empresa también aparece como texto. La marca se versiona en la
+  plantilla y no se sincroniza automáticamente al editar Configuración Empresa.
+  Remitentes distintos por empresa requieren hook/proveedor y verificación de
+  dominios. `git push`/Vercel no aplica la configuración de Auth; ya aplicada
+  por separado en esta entrega. Commit pendiente de registrar al publicarlo.
+
 ### 2026-10-16 - AUTH-RECOVERY-01 - Recuperación interna y administrativa
 
 - Estado: implementado y validado técnicamente; código publicado en `origin/main`.

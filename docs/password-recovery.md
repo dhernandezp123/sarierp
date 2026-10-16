@@ -28,7 +28,7 @@ verificar el ambiente mediante `readEmailEnvironment`.
 
 Supabase Auth envía mediante su SMTP configurado. Se reutiliza el redirect
 existente `https://<dominio>/auth/callback?next=/portal/reset-password`; no se
-cambian plantillas, credenciales, allowlist de Auth ni esquema SQL. Mantener ese
+cambian credenciales, allowlist de Auth ni esquema SQL. Mantener ese
 callback autorizado para cada dominio productivo activo.
 
 Los envíos iniciados por servidor no dependen de un verificador PKCE guardado en
@@ -46,6 +46,50 @@ Auth confirma la solicitud; la entrega final depende del SMTP/buzón.
 
 Referencias oficiales: [recuperación](https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail),
 [enlaces y sesiones](https://supabase.com/docs/guides/auth/auth-email-templates).
+
+## Marca del correo de recuperación
+
+La plantilla está versionada en `supabase/templates/recovery.html`; el asunto es
+**Restablece tu contraseña**. Incluye logo, nombre de empresa, color principal,
+botón, enlace alternativo y aviso para quien no solicitó el cambio. Usa tablas
+y estilos inline y logos PNG públicos por HTTPS para clientes de correo.
+
+Supabase comparte la plantilla y el remitente entre empresas. La selección de
+marca compara `.RedirectTo` con el callback exacto de cada empresa, que envía
+el servidor tras validar su dominio. Actualmente Sari es la única empresa
+registrada y usa Sari Express, `/logo/sari-logo.png` y `#0038BD`, según su
+configuración. Los demás destinos muestran Forwarders ERP; nunca heredan Sari.
+No se usa metadata editable del usuario para elegir marca, logo o enlaces.
+El botón y el enlace alternativo conservan `{{ .ConfirmationURL }}` de Auth.
+
+El remitente compartido sigue siendo
+`Forwarders ERP <no-reply@mail.forwarders.app>`. El nombre del remitente no se
+personaliza por empresa con esta plantilla; hacerlo requiere un envío mediante
+hook de Auth/proveedor con remitentes verificados por empresa.
+
+Al incorporar otra empresa o cambiar su marca/dominio, añadir una condición
+exacta para su callback con nombre, URL HTTPS del logo, color hexadecimal y
+ancho de imagen, contrastados con `tenant_domains` y `company_settings`.
+Conservar el respaldo neutral y probar el caso de la nueva empresa y el de
+Sari en Auth/SMTP local antes de publicar. La plantilla es una configuración
+versionada; no consulta `company_settings` durante cada envío.
+
+Publicación en Supabase alojado: **Authentication → Emails → Reset password**,
+pegar el HTML versionado y el asunto indicado. También se puede usar la
+[Management API](https://supabase.com/docs/guides/auth/auth-email-templates):
+GET y PATCH `/v1/projects/<project-ref>/config/auth`. Guardar una copia de los
+dos campos anteriores y actualizar **solo** `mailer_subjects_recovery` y
+`mailer_templates_recovery_content`; volver a leerlos y comprobar que los demás
+ajustes de Auth no cambiaron. No publicar el resto de `config.toml` para este
+cambio: sus valores locales difieren de Production. `git push`/Vercel por sí
+solos no actualizan las plantillas alojadas.
+
+El cambio de branding del 16/10/2026 se valida con buzón local y cuentas
+ficticias: asunto español, Sari, respaldo neutral, metadata ignorada, token de
+recuperación, cambio de contraseña y login. Comprobar la presentación final en
+Gmail/Outlook con el próximo envío autorizado; no se envían pruebas a usuarios
+operativos. La captura aportada por el usuario acredita la recepción de la
+plantilla anterior, pero no certifica todavía el correo con marca.
 
 ## Aceptación pendiente en Production
 
