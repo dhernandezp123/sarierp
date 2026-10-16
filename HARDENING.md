@@ -1,5 +1,89 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-16 - FLOW-VISITS-01 - Planificación e informes de visitas comerciales
+
+- Estado: implementado y validado técnicamente; SQL aplicado en Production.
+  Pendientes publicación de código y UAT autenticada de negocio.
+- Hallazgo: la agenda no distinguía visitas pendientes, realizadas y canceladas;
+  los filtros históricos no delimitaban un período de planificación y no había
+  reporte de visitas ni exportación.
+- Archivos modificados:
+  - `src/app/(protected)/ventas/page.tsx`.
+  - `src/app/(protected)/reports/page.tsx`.
+  - `src/lib/sales-visits.ts`, `src/lib/report-view.ts`.
+  - `tests/sales-visits.test.mjs`, `tests/sales-activities-query.test.mjs`.
+  - `scripts/validate-audit-sql.mjs`, `docs/ventas-visitas.md`, `HARDENING.md`.
+- SQL: `supabase/migrations/20261016120000_sales_activity_execution_status.sql`;
+  prueba `supabase/tests/sales_activity_execution_status.sql`.
+- Cambios:
+  - Estado explícito Pendiente/Realizada/Cancelada; las filas antiguas mantienen
+    NULL («Sin clasificar»), sin inventar ejecución ni modificar datos históricos.
+  - Reporte Visitas para Admin/Ventas con enlace desde la agenda, filtros de
+    cliente/prospecto, vendedor, estado y búsqueda; CSV/PDF/impresión completos.
+  - Períodos inclusivos: hoy, semana lunes-domingo, mes completo y fechas libres.
+    El reporte abre en pendientes del mes completo; mide fecha programada y
+    estado actual. Los demás reportes conservan sus períodos originales.
+  - Lectura paginada con orden estable y bloqueo de exportación ante errores.
+    Relaciones tenant explícitas para clientes y perfiles.
+  - Enlace al detalle; Ventas consulta actividades ajenas en modo de lectura.
+    El guardado comprueba que se devolvió una fila para no anunciar éxito ante
+    una actualización rechazada por permisos. Validación de orden del horario.
+  - Se reutiliza RLS vigente; no se amplían roles, empresas ni permisos.
+- Validaciones ejecutadas:
+  - Migración aplicada en stack aislado `sarierp_aud01`; diez suites SQL/RLS
+    aprobadas, incluyendo defaults, NULL histórico, constraint, edición propia,
+    Admin, lectura de equipo, otro tenant, inactivos, pendientes y otro rol.
+  - Suite Node final: 325/325, incluido PDF real con 50 filas y paginación.
+  - `npx.cmd tsc --noEmit`, ESLint dirigido y build final 82/82 páginas: OK.
+  - Navegador local compilado, con datos simulados y sin escritura remota:
+    filtros y períodos, CSV completo de 1302 pendientes, fallos/reintento y
+    anchuras 1440/390/320 sin desborde de página. Edición propia Pendiente →
+    Realizada, código CLI-001 y consulta ajena de solo lectura: OK.
+  - Preflight Production de solo lectura: cero actividades, RLS habilitado y
+    huella de políticas guardada. Dry-run del paquete limitado: exactamente
+    `20261016120000_sales_activity_execution_status.sql`; Outlook excluida.
+  - Migración aplicada en Production; postflight: columna nullable con default
+    Pendiente, RLS habilitado y huellas de datos/políticas idénticas al preflight.
+- Riesgos / pendientes: publicación del código; UAT real con Ventas y
+  Admin. El estado es actual, no histórico al cierre; no se infiere estado de
+  registros legacy. Clasificar visitas anteriores manualmente según su ejecución.
+- Commit: pendiente.
+
+### 2026-10-16 - UX-VENTAS-01 - Código de cliente en actividades comerciales
+
+- Estado: corrección local implementada y validación técnica aprobada. Pendiente
+  despliegue y UAT autenticado; no se declara completo el flujo.
+- Hallazgo: `/ventas` consultaba solo `id, nombre` para el selector de cuentas.
+  `ClienteCombobox` muestra y busca `codigo_cliente`; al no recibirlo, todas las
+  opciones mostraban «Sin codigo» aunque el cliente tuviera código guardado.
+- Archivos modificados: `src/app/(protected)/ventas/page.tsx`, `HARDENING.md`.
+- SQL modificado: ninguno.
+- Cambio: incluir `codigo_cliente` en la consulta y en el tipo del estado local,
+  reutilizando el selector existente y el código almacenado del cliente.
+- Revisión de visitas (código y migraciones vigentes):
+  - Ventas tiene acceso a `/ventas`; las políticas permiten a usuarios Ventas
+    aprobados/activos crear actividades de su tenant, consultar las del equipo
+    y modificar las propias. Admin puede modificar las del equipo.
+  - Se pueden registrar visitas a clientes/prospectos con fecha futura, horas,
+    comentarios, resultado y próxima acción; hay lista y calendario mensual.
+  - No hay reporte de visitas ni exportación de actividades en `/reports`.
+    `sales_activities` tampoco distingue pendiente, realizada o cancelada.
+  - «Últimos 7 días» y «Últimos 30 días» solo aplican límite inferior; incluyen
+    fechas futuras y no representan una semana/mes delimitados de planificación.
+    El calendario sí limita la consulta al mes seleccionado.
+- Validaciones ejecutadas: inspección de la consulta, del selector compartido,
+  de agenda/calendario, de `/reports`, permisos y políticas versionadas.
+  `npx.cmd tsc --noEmit`: OK. ESLint dirigido a `/ventas`: OK, sin errores ni
+  advertencias. `npm.cmd test`: 320/320 pruebas correctas. `npm.cmd run build`:
+  OK, 82/82 páginas, incluida `/ventas`. `git diff --check`: OK (aviso LF/CRLF).
+- Riesgos / trabajo pendiente: desplegar y verificar con sesión Ventas que el
+  código aparece al abrir/editar, que la búsqueda por código funciona y que se
+  guarda la cuenta correcta. Probar RLS con Ventas/Admin y otro tenant; no se
+  certifican políticas desplegadas con inspección local. Un cliente cuyo código
+  esté vacío en la base seguirá mostrando el fallback. El informe diario,
+  semanal/mensual de visitas por ejecutar requiere desarrollo adicional.
+- Commit: pendiente; sin commit ni despliegue en esta revisión.
+
 ### 2026-10-02 - MAIL-035 - Solicitudes de Outlook aisladas para Sari
 
 - Estado: en espera por decisión del usuario (02/10/2026), sin acceso

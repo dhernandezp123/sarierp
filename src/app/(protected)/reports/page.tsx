@@ -19,6 +19,7 @@ import { formatDate, formatDateTime, toDateInputValue } from '@/src/lib/format'
 import { canAccessPath } from '@/src/lib/permissions'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { readAllReportRows } from '@/src/lib/report-query'
+import { SALES_VISIT_SELECT, VISIT_REPORT_COLUMNS, visitReportRows, type SalesVisit } from '@/src/lib/sales-visits'
 import { defaultReportView, readReportView, reportCsvCell, reportDateBasis, reportDateMatches, reportDateRange, reportRangeLabel, reportSortValue, reportViewQuery, type ReportView, type ReportId, type DatePreset } from '@/src/lib/report-view'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
@@ -255,6 +256,7 @@ type ReportRow = ReportPdfRow & {
 }
 
 const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[] = [
+  { id: 'visits', label: 'Visitas', scope: 'Visitas a clientes y prospectos por fecha programada y estado actual. Las visitas históricas sin estado aparecen como Sin clasificar.', roles: ['Admin', 'Ventas'] },
   { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones por estado actual, venta cotizada y utilidad; no equivale a facturación', roles: ['Admin', 'Ventas', 'Pricing'] },
   { id: 'pricing', label: 'Pricing', scope: 'Entradas, aprobaciones, pendientes al cierre y tiempos de respuesta', roles: ['Admin', 'Pricing'] },
   { id: 'operations', label: 'Operaciones', scope: 'Shipping instructions, bookings, carrier y ETA', roles: ['Admin', 'Operaciones'] },
@@ -353,8 +355,10 @@ function exportCSV(rows: ReportRow[], columns: ReportPdfColumn[], filename: stri
 
 const presetRange = reportDateRange
 
-function resolveDatePreset(dateFrom: string, dateTo: string): DatePreset {
-  const presets: Exclude<DatePreset, 'custom'>[] = ['month', 'quarter', 'year', 'all']
+function resolveDatePreset(dateFrom: string, dateTo: string, report: ReportId): DatePreset {
+  const presets: Exclude<DatePreset, 'custom'>[] = report === 'visits'
+    ? ['day', 'week', 'visit-month', 'all']
+    : ['month', 'quarter', 'year', 'all']
   const match = presets.find((preset) => {
     const range = presetRange(preset)
     return range.from === dateFrom && range.to === dateTo
@@ -403,6 +407,7 @@ function ReportsContent() {
   const invalidRange = Boolean(dateFrom && dateTo && dateFrom > dateTo)
 
   const [quotations, setQuotations] = useState<QuotationRow[]>([])
+  const [visits, setVisits] = useState<SalesVisit[]>([])
   const [pricingHistory, setPricingHistory] = useState<PricingHistoryRow[]>([])
   const [shipments, setShipments] = useState<ShipmentRow[]>([])
   const [bookings, setBookings] = useState<BookingRow[]>([])
@@ -424,6 +429,16 @@ function ReportsContent() {
     setLoadError(null)
     try {
       const tasks: PromiseLike<void>[] = []
+      if (activeReport === 'visits') tasks.push(
+        readAllReportRows((from, to) => supabase
+          .from('sales_activities')
+          .select(SALES_VISIT_SELECT)
+          .eq('tipo_actividad', 'Visita')
+          .is('deleted_at', null)
+          .order('fecha_actividad', { ascending: true }).order('id').range(from, to),
+        { label: 'visitas comerciales', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setVisits(data as unknown as SalesVisit[]) })
+      )
       tasks.push(loadCurrentCompanySettings(supabase).then(({ data, error }) => {
         if (error) throw new Error('No se pudo cargar la configuración del reporte. Reintenta la consulta.')
         if (isCurrent()) setCompanyBranding(normalizeCompanyBranding(data))
@@ -664,6 +679,7 @@ function ReportsContent() {
     : reportConfig.label
 
   const baseRows = useMemo<ReportRow[]>(() => {
+    if (activeReport === 'visits') return visitReportRows(visits)
     if (activeReport === 'pricing') {
       type PricingCycle = {
         entry: PricingHistoryRow
@@ -1195,7 +1211,7 @@ function ReportsContent() {
     }
 
     return []
-  }, [role, activeReport, bookingReadiness, bookings, customerPayments, dateFrom, dateTo, shipments, invoices, operationsGranularity, payables, pricingHistory, proveedorPayments, quotations, receivables])
+  }, [role, activeReport, bookingReadiness, bookings, customerPayments, dateFrom, dateTo, shipments, invoices, operationsGranularity, payables, pricingHistory, proveedorPayments, quotations, receivables, visits])
 
   const rows = useMemo(() => {
     return baseRows.filter((row) => {
@@ -1220,6 +1236,7 @@ function ReportsContent() {
   }, [activeReport, view.search, view.sort, view.direction, baseRows, clientFilter, currencyFilter, dateFrom, dateTo, fiscalTypeFilter, paymentMethodFilter, pointOfSaleFilter, sellerFilter, serviceFilter, statusFilter])
 
   const columns = useMemo<ReportPdfColumn[]>(() => {
+    if (activeReport === 'visits') return VISIT_REPORT_COLUMNS
     if (activeReport === 'pricing') {
       return [
         { key: 'numero', label: 'Cotización', width: '9%' },
@@ -1397,13 +1414,15 @@ function ReportsContent() {
       clients: unique(baseRows.map((row) => row.__client)),
       sellers: unique(baseRows.map((row) => row.__seller)),
       services: unique(baseRows.map((row) => row.__service)),
-      statuses: unique(baseRows.map((row) => row.__status)),
+      statuses: activeReport === 'visits'
+        ? [ALL, 'Pendiente', 'Realizada', 'Cancelada', 'Sin clasificar']
+        : unique(baseRows.map((row) => row.__status)),
       currencies: unique(baseRows.map((row) => row.__currency)),
       paymentMethods: unique(baseRows.flatMap((row) => row.__paymentMethod?.split('|') || [])),
       fiscalTypes: unique(baseRows.map((row) => row.__fiscalType)),
       pointsOfSale: unique(baseRows.map((row) => row.__pointOfSale)),
     }
-  }, [baseRows])
+  }, [baseRows, activeReport])
 
   // REP-001: los totales se agrupan por moneda; nunca sumar USD y HNL juntos.
   const totalsByCurrency = useMemo(() => {
@@ -1436,7 +1455,7 @@ function ReportsContent() {
   const avgMargen = singleCurrencyTotals && singleCurrencyTotals.amount > 0
     ? (singleCurrencyTotals.gp / singleCurrencyTotals.amount) * 100
     : null
-  const activeDatePreset = resolveDatePreset(dateFrom, dateTo)
+  const activeDatePreset = resolveDatePreset(dateFrom, dateTo, activeReport)
   const activeFilterCount = [
     clientFilter,
     sellerFilter,
@@ -1456,6 +1475,7 @@ function ReportsContent() {
 
   // Which columns show totals per report
   const totalColumnsConfig: Record<ReportId, string[]> = {
+    visits: [],
     commercial: ['costo', 'venta', 'gp', 'margen'],
     pricing: [],
     operations: [],
@@ -1528,7 +1548,16 @@ function ReportsContent() {
       fiscalTypeFilter !== ALL ? `Tipo fiscal: ${fiscalTypeFilter}` : '',
       pointOfSaleFilter !== ALL ? `Punto de venta: ${pointOfSaleFilter}` : '',
     ].filter(Boolean),
-    metrics: activeReport === 'payable'
+    metrics: activeReport === 'visits'
+      ? [
+          { label: 'Visitas', value: String(rows.length) },
+          { label: 'Por ejecutar', value: String(rows.filter((row) => row.__status === 'Pendiente').length) },
+          { label: 'Pendientes vencidas', value: String(rows.filter((row) => row.vencida === 'Sí').length) },
+          { label: 'Realizadas', value: String(rows.filter((row) => row.__status === 'Realizada').length) },
+          { label: 'Canceladas', value: String(rows.filter((row) => row.__status === 'Cancelada').length) },
+          { label: 'Sin clasificar', value: String(rows.filter((row) => row.__status === 'Sin clasificar').length) },
+        ]
+      : activeReport === 'payable'
       ? [
           { label: 'Obligaciones', value: String(rows.length) },
           { label: 'Por pagar sin compensar sobrepagos', value: fmtTotalsByCurrency('amount') },
@@ -1604,9 +1633,9 @@ function ReportsContent() {
   }
   const page = Math.min(view.page, Math.max(1, Math.ceil(rows.length / view.pageSize)))
   const visibleRows = rows.slice((page - 1) * view.pageSize, page * view.pageSize)
-  const showSeller = ['commercial', 'pricing', 'operations', 'billing'].includes(activeReport)
+  const showSeller = ['commercial', 'visits', 'pricing', 'operations', 'billing'].includes(activeReport)
   const showService = ['commercial', 'pricing', 'operations'].includes(activeReport)
-  const showCurrency = !['operations', 'pricing'].includes(activeReport)
+  const showCurrency = !['operations', 'pricing', 'visits'].includes(activeReport)
   const showStatus = activeReport !== 'supplier_payments'
   const showPaymentMethod = ['customer_payments', 'supplier_payments'].includes(activeReport)
 
@@ -1669,7 +1698,7 @@ function ReportsContent() {
           <label htmlFor="report-mobile" className="mb-1 block text-sm font-semibold">Reporte</label>
           <select id="report-mobile" value={activeReport} onChange={(event) => selectReport(event.target.value as ReportId)} className={`${fieldClass} w-full`}>
             {[
-              { label: 'Comercial y Pricing', ids: ['commercial', 'pricing'] },
+              { label: 'Comercial y Pricing', ids: ['commercial', 'visits', 'pricing'] },
               { label: 'Operaciones', ids: ['operations'] },
               { label: 'Finanzas', ids: ['billing', 'customer_payments', 'receivable', 'payable', 'overdue', 'supplier_payments'] },
             ].map((group) => availableReports.some((report) => group.ids.includes(report.id)) && <optgroup key={group.label} label={group.label}>{availableReports.filter((report) => group.ids.includes(report.id)).map((report) => <option key={report.id} value={report.id}>{report.label}</option>)}</optgroup>)}
@@ -1677,7 +1706,7 @@ function ReportsContent() {
         </div>
         <div className="hidden flex-wrap gap-x-6 gap-y-3 sm:flex">
           {[
-            { label: 'Comercial y Pricing', ids: ['commercial', 'pricing'] },
+            { label: 'Comercial y Pricing', ids: ['commercial', 'visits', 'pricing'] },
             { label: 'Operaciones', ids: ['operations'] },
             { label: 'Finanzas', ids: ['billing', 'customer_payments', 'receivable', 'payable', 'overdue', 'supplier_payments'] },
           ].map((group) => availableReports.some((report) => group.ids.includes(report.id)) && (
@@ -1720,7 +1749,10 @@ function ReportsContent() {
           </>}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {([['month', 'Este mes'], ['quarter', 'Trimestre actual'], ['year', 'Este año'], ['all', 'Todas las fechas']] as const).map(([preset, label]) => <button key={preset} type="button" onClick={() => updateView(presetRange(preset))} aria-pressed={activeDatePreset === preset} className={presetButtonClass(preset)}>{label}</button>)}
+          {(activeReport === 'visits'
+            ? ([['day', 'Hoy'], ['week', 'Esta semana'], ['visit-month', 'Este mes completo'], ['all', 'Todas las fechas']] as const)
+            : ([['month', 'Este mes'], ['quarter', 'Trimestre actual'], ['year', 'Este año'], ['all', 'Todas las fechas']] as const)
+          ).map(([preset, label]) => <button key={preset} type="button" onClick={() => updateView(presetRange(preset))} aria-pressed={activeDatePreset === preset} className={presetButtonClass(preset)}>{label}</button>)}
           {activeDatePreset === 'custom' && <span className="self-center text-xs text-amber-700 dark:text-amber-300">Período personalizado</span>}
         </div>
         </div>

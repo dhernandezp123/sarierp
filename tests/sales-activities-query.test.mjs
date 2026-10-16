@@ -19,6 +19,6 @@ test('Ventas usa las relaciones tenant canónicas para actividades comerciales',
   assert.doesNotMatch(salesPage, /clientes\(nombre\), profiles\(nombre, apellido\)/)
   assert.equal(
     [...salesPage.matchAll(/\.select\(SALES_ACTIVITY_SELECT\)/g)].length,
-    2
+    3 // agenda, Mi día y enlace de detalle desde el reporte
   )
 })

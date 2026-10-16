@@ -1,7 +1,7 @@
 import { formatDate, parseDateValue, toDateInputValue } from './format'
 
-export type ReportId = 'commercial' | 'pricing' | 'operations' | 'billing' | 'customer_payments' | 'receivable' | 'payable' | 'overdue' | 'supplier_payments'
-export type DatePreset = 'month' | 'quarter' | 'year' | 'all' | 'custom'
+export type ReportId = 'commercial' | 'visits' | 'pricing' | 'operations' | 'billing' | 'customer_payments' | 'receivable' | 'payable' | 'overdue' | 'supplier_payments'
+export type DatePreset = 'day' | 'week' | 'visit-month' | 'month' | 'quarter' | 'year' | 'all' | 'custom'
 export type ReportView = {
   report: ReportId; level: 'operations' | 'bookings' | 'readiness'
   from: string; to: string; client: string; seller: string; service: string; status: string
@@ -11,6 +11,16 @@ export type ReportView = {
 
 export function reportDateRange(preset: Exclude<DatePreset, 'custom'>, now = new Date()) {
   const to = toDateInputValue(now)
+  if (preset === 'day') return { from: to, to }
+  if (preset === 'week') {
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (now.getDay() + 6) % 7)
+    const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)
+    return { from: toDateInputValue(monday), to: toDateInputValue(sunday) }
+  }
+  if (preset === 'visit-month') return {
+    from: toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: toDateInputValue(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
+  }
   if (preset === 'all') return { from: '', to: '' }
   const month = preset === 'quarter' ? Math.floor(now.getMonth() / 3) * 3 : preset === 'year' ? 0 : now.getMonth()
   return { from: toDateInputValue(new Date(now.getFullYear(), month, 1)), to }
@@ -18,9 +28,10 @@ export function reportDateRange(preset: Exclude<DatePreset, 'custom'>, now = new
 
 export function defaultReportView(report: ReportId, now = new Date()): ReportView {
   return {
-    report, level: 'operations', ...reportDateRange(report === 'overdue' ? 'all' : 'month', now),
+    report, level: 'operations', ...reportDateRange(report === 'visits' ? 'visit-month' : report === 'overdue' ? 'all' : 'month', now),
     client: 'Todos', seller: 'Todos', service: 'Todos', status: 'Todos', currency: 'Todos',
     method: 'Todos', fiscal: 'Todos', pos: 'Todos', search: '', page: 1, pageSize: 25, sort: '', direction: 'asc',
+    ...(report === 'visits' ? { status: 'Pendiente' } : {}),
   }
 }
 
@@ -30,9 +41,9 @@ export function readReportView(params: Pick<URLSearchParams, 'get'>, allowed: Re
   for (const key of ['client', 'seller', 'service', 'status', 'currency', 'method', 'fiscal', 'pos', 'search', 'sort'] as const) {
     view[key] = params.get(key)?.slice(0, 500) ?? view[key]
   }
-  if (!['commercial', 'pricing', 'operations', 'billing'].includes(report)) view.seller = 'Todos'
+  if (!['commercial', 'visits', 'pricing', 'operations', 'billing'].includes(report)) view.seller = 'Todos'
   if (!['commercial', 'pricing', 'operations'].includes(report)) view.service = 'Todos'
-  if (['pricing', 'operations'].includes(report)) view.currency = 'Todos'
+  if (['pricing', 'operations', 'visits'].includes(report)) view.currency = 'Todos'
   if (!['customer_payments', 'supplier_payments'].includes(report)) view.method = 'Todos'
   if (report !== 'customer_payments') { view.fiscal = 'Todos'; view.pos = 'Todos' }
   if (report === 'supplier_payments') view.status = 'Todos'
@@ -53,6 +64,7 @@ export function reportViewQuery(view: ReportView) {
 }
 
 export function reportDateBasis(report: ReportId, level: ReportView['level']) {
+  if (report === 'visits') return 'Fecha programada de la visita; estado de ejecución actual'
   if (report === 'pricing') return 'Entradas y salidas de Pricing; pendientes al cierre del período'
   if (report === 'operations' && level === 'readiness') return 'Fecha del próximo cutoff'
   if (report === 'commercial' || report === 'operations') return 'Fecha de creación'
