@@ -1,5 +1,57 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-16 - AUTH-RECOVERY-01 - Recuperación interna y administrativa
+
+- Estado: implementado y validado técnicamente; publicación en curso.
+  UAT real de correo/cambio/login pendiente; no se declara completo el flujo.
+- Hallazgo: login interno y Administración no ofrecían recuperación. La del
+  portal usaba PKCE en el navegador solicitante; reutilizarla desde Admin habría
+  ligado el enlace al navegador equivocado. Un formulario con cualquier sesión
+  existente también podía mostrar cambio de contraseña ante un enlace inválido.
+- Archivos:
+  - `src/app/login/page.tsx`, `src/proxy.ts`, `src/app/auth/callback/route.ts`.
+  - `src/app/{forgot-password,reset-password}/page.tsx`.
+  - `src/app/portal/{forgot-password,reset-password}/page.tsx`.
+  - `src/components/auth/{ForgotPasswordPage,ResetPasswordPage}.tsx`.
+  - `src/app/(protected)/admin/users/page.tsx`.
+  - `src/app/api/auth/password-recovery/route.ts`.
+  - `src/app/api/admin/users/password-recovery/route.ts`.
+  - `src/lib/password-recovery.ts`, `src/lib/server/password-recovery.ts`.
+  - `tests/password-recovery.test.mjs`, `docs/password-recovery.md`, `HARDENING.md`.
+- SQL modificado: ninguno; sin cambios de roles, RLS, SMTP, plantillas o allowlist.
+- Cambios:
+  - Enlace en login interno y acción administrativa con confirmación; se
+    reutilizan formularios compartidos con el portal, Sonner y ConfirmDialog.
+  - API pública con respuesta discreta y consulta acotada al tenant. API Admin
+    valida sesión/perfil/empresa antes de crear cliente privilegiado, identifica
+    la cuenta por ID y verifica que el correo de Auth coincida con el perfil.
+  - `readEmailEnvironment` bloquea Demo o ambiente no verificable. Auth conserva
+    el SMTP y callback existentes y su límite de frecuencia; no se envían claves
+    temporales ni enlaces de recuperación al administrador.
+  - Sesión receptora aislada en memoria, validación de empresa, fragmento retirado
+    del URL, confirmación de contraseña, soporte PKCE anterior y destinos exactos.
+    Los enlaces ausentes/vencidos no habilitan el formulario por otra sesión.
+  - Auditoría administrativa sin secretos. Si falla tras el envío, advertencia
+    separada sin convertir la solicitud en un fallo que induzca a reenviar.
+- Validaciones ejecutadas:
+  - Suite final: 335/335; TypeScript, ESLint dirigido y build final 86 páginas: OK.
+  - Supabase Auth/SMTP reales del stack aislado `sarierp_aud01`: cuenta ficticia,
+    correo capturado en buzón local, token consumido desde cliente nuevo sin
+    verificador, cambio de contraseña y login; la contraseña anterior rechazada.
+    Cuenta ficticia eliminada en `finally`. Sin correo/personas/datos Production.
+  - Pruebas dirigidas: aislamiento de tenant, Admin activo/aprobado, Demo, correo
+    Auth/perfil, respuesta no enumerativa, error de auditoría, callback seguro,
+    sesión separada del destinatario y validación de contraseña/enlace.
+  - Chrome local compilado: enlace del login, solicitud/error/reintento, móvil
+    320/390 y escritorio 1440 sin desbordes, enlace vencido seguido de uno nuevo,
+    contraseñas distintas, cambio con sesión separada, confirmación de Admin y
+    petición solo por ID: OK. APIs interceptadas; cero envíos remotos.
+- Pendientes: smoke de publicación y aceptación con correo controlado, interno y
+  Cliente según `docs/password-recovery.md`. No se certifica entrega real del SMTP
+  productivo con mocks ni con el buzón aislado. Soporte de plataforma sin tenant
+  conserva su acceso separado; esta recuperación es para usuarios de empresas.
+- Commit: pendiente.
+
 ### 2026-10-16 - FLOW-VISITS-01 - Planificación e informes de visitas comerciales
 
 - Estado: implementado y validado técnicamente; SQL aplicado en Production y

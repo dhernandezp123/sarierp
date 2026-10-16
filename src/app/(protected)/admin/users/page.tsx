@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Mail, Search, Link2, UserPlus } from 'lucide-react'
+import { Mail, Search, Link2, UserPlus, KeyRound } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
 import { formatDateTime } from '@/src/lib/format'
 import AdminGuard from '@/src/components/auth/AdminGuard'
@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/src/components/ui/dialog'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
+import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 
 type Cliente = { id: string; nombre: string; codigo_cliente: string | null }
 
@@ -76,6 +77,8 @@ export default function AdminUsersPage() {
   const [connectionsError, setConnectionsError] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('Todos')
+  const [recoveryTarget, setRecoveryTarget] = useState<Profile | null>(null)
+  const [sendingRecovery, setSendingRecovery] = useState<string | null>(null)
 
   // Role change dialog
   const [roleDialogOpen, setRoleDialogOpen] = useState(false)
@@ -323,6 +326,25 @@ export default function AdminUsersPage() {
     setClienteSearch('')
     setClienteResults([])
     fetchUsers()
+  }
+
+  const sendRecovery = async (target: Profile) => {
+    if (sendingRecovery) return
+    setSendingRecovery(target.id)
+    try {
+      const response = await fetch('/api/admin/users/password-recovery', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: target.id }),
+      })
+      const body = await response.json() as { error?: string; message?: string; auditWarning?: boolean }
+      if (!response.ok) { toast.error(body.error || 'No se pudo enviar la recuperación'); return }
+      toast.success(body.message || 'Solicitud de recuperación enviada')
+      if (body.auditWarning) toast.warning('La solicitud se envió, pero no se pudo registrar la auditoría. No repitas el envío por este aviso.')
+    } catch {
+      toast.error('No se pudo confirmar el envío. Espera un minuto y revisa el correo antes de reintentar.')
+    } finally {
+      setSendingRecovery(null)
+    }
   }
 
   const sendInvite = async () => {
@@ -605,7 +627,13 @@ export default function AdminUsersPage() {
                         </td>
 
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <button type="button" onClick={() => setRecoveryTarget(user)}
+                              disabled={!user.email || Boolean(sendingRecovery)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-500 transition hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:text-blue-400">
+                              <KeyRound size={12} />
+                              {sendingRecovery === user.id ? 'Enviando...' : 'Enviar recuperación'}
+                            </button>
                             {user.status !== 'Aprobado' && (
                               <button
                                 type="button"
@@ -650,6 +678,12 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Invite dialog */}
+      <ConfirmDialog open={Boolean(recoveryTarget)} onOpenChange={(open) => { if (!open) setRecoveryTarget(null) }}
+        title="Enviar recuperación de contraseña"
+        description={`Se enviará un enlace al correo de la cuenta: ${recoveryTarget?.email || ''}. El usuario elegirá su contraseña. Esta acción no aprueba ni activa su acceso.`}
+        confirmLabel="Enviar enlace"
+        onConfirm={() => { if (recoveryTarget) void sendRecovery(recoveryTarget) }} />
+
       <Dialog open={inviteDialogOpen} onOpenChange={(open) => { setInviteDialogOpen(open); if (!open) { setInviteEmail(''); setInviteRol('Ventas') } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

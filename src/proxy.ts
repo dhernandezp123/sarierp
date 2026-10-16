@@ -23,6 +23,8 @@ const PUBLIC_ROUTES = new Set([
   '/sitemap.xml',
   '/init',
   '/login',
+  '/forgot-password',
+  '/reset-password',
   '/register',
   '/onboarding',
   '/politicas',

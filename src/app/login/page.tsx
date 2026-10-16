@@ -158,6 +158,12 @@ export default function LoginPage() {
                 />
               </div>
 
+              {tenant && <div className="text-right">
+                <Link href="/forgot-password" className="text-sm font-semibold text-yellow-300 hover:underline">
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>}
+
               <button
                 type="submit"
                 disabled={loading}
