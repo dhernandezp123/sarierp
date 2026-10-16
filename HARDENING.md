@@ -46,7 +46,8 @@
 - Riesgos/pendientes: correos anteriores conservan su destino/asunto viejos;
   solicitar uno nuevo. La recepción real corregida y UAT siguen pendientes.
   Nuevas empresas requieren su condición y callback exactos en la plantilla,
-  seguidos del publicador. Commit pendiente de registrar al publicarlo.
+  seguidos del publicador. Commit funcional: `cbb8821`; configuración productiva
+  verificada antes de publicar. El CI certificará aplicación y SQL/RLS.
 
 ### 2026-10-16 - AUTH-BRAND-01 - Correo de recuperación con marca por empresa
 
