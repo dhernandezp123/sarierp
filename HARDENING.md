@@ -41,7 +41,8 @@
   plantilla y no se sincroniza automáticamente al editar Configuración Empresa.
   Remitentes distintos por empresa requieren hook/proveedor y verificación de
   dominios. `git push`/Vercel no aplica la configuración de Auth; ya aplicada
-  por separado en esta entrega. Commit pendiente de registrar al publicarlo.
+  por separado en esta entrega. Commit funcional: `ceda10c`; plantilla productiva
+  verificada contra el contenido de ese commit antes de publicar en Git.
 
 ### 2026-10-16 - AUTH-RECOVERY-01 - Recuperación interna y administrativa
 
