@@ -38,7 +38,7 @@
   alias afecta cálculos futuros explícitos de cobertura, nunca un guardado
   automático de documentos históricos. Sin migración ni cambios de RLS;
   se conserva RPC transaccional y autorización vigente. UAT real pendiente.
-  Commit funcional: pendiente.
+  Commit funcional: `00c7fe6`; despliegue y CI se verifican en la entrega.
 
 ### 2026-10-16 - AUTH-INVITE-NAMES-01 - Nombres desde la invitación y corrección de perfiles
 
