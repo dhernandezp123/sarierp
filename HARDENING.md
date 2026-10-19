@@ -12008,6 +12008,75 @@ Agregar una entrada por fix:
     esta revisión local no certifica el estado de caché de servicios externos.
 - Commit funcional: `80034020c95037bbd6c52a2b9b65152178ad929a`.
 
+### 19/10/2026 - FLOW-037 - Cliente de SI y shipment después de cambiar la cotización
+
+- Estado: implementado y validado localmente; commit y despliegue autorizados por
+  el usuario el 19/10/2026. Pendientes publicación, migraciones y UAT autenticado.
+- Hallazgo y diagnóstico de solo lectura:
+  - `SARIHN-2610-0340-AP` (`9720a5c2-a187-4cca-98ca-439e60095d48`)
+    está Ganada y pertenece a AGROSOLUCIONES INTEGRALES S DE RL DE CV.
+  - La SI y shipment `RT0039` (`3abede6a-c1a0-43b0-a112-5c38c678c483`)
+    conservan el vínculo de BOMOHSA. Shipment abierto y sin bookings.
+  - La pantalla usaba `shipping_instructions.client_id`; el PDF usa el cliente
+    actual de la cotización. La sincronización de Pricing omitía ambos vínculos.
+- Archivos / SQL:
+  - `src/lib/shipping-instruction-state.ts` y
+    `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`.
+  - `tests/shipping-instruction-state.test.mjs`.
+  - `supabase/migrations/20261019200000_shipping_instruction_client_sync.sql`.
+  - `supabase/migrations/20261019201000_repair_rt0039_client.sql`.
+  - `supabase/tests/shipping_instruction_client_sync.sql` y
+    `supabase/tests/shipping_instruction_client_repair.sql`.
+  - `HARDENING.md`.
+- Corrección:
+  - Pantalla y PDF comparten el cliente vigente de la cotización, con fallback
+    al cliente operativo para documentos legacy sin esa relación.
+  - La cadena RPC existente sincroniza SI y shipment en la misma transacción;
+    conserva tarifa seleccionada, exclusiones de bookings y auditoría operativa.
+    Audita cliente anterior y nuevo de ambos vínculos. Exige tenant, cliente y
+    cotización vigentes; bloquea operaciones cerradas/canceladas. No reemplaza
+    partes documentales editadas, snapshots comerciales, facturas ni BL.
+  - Reparación acotada a los UUID verificados, cliente anterior/nuevo esperados,
+    cotización Ganada y RT0039 abierto sin bookings. Idempotente y auditada;
+    se omite si cambió alguna de esas condiciones antes de aplicar la migración.
+  - El aviso de éxito indica que la SI se sincronizó incluso al omitir bookings.
+- Validaciones ejecutadas:
+  - Reproducción SQL antes del fix: falla la aserción del cliente persistido;
+    después del fix, `shipping_instruction_client_sync.sql`: OK con rollback.
+  - Fixtures ficticios en `sarierp_si_client_sync_v2_test`, base aislada dentro
+    del contenedor local. Esquema comercial/Auth y permisos restaurados; sin
+    copiar datos de desarrollo ni Production. Se omitieron pg_cron, triggers
+    administrativos de extensiones y permisos administrativos ajenos al flujo.
+    Migraciones recientes aplicadas; `platform_environment` ya estaba en el
+    esquema exportado y no se recreó.
+  - Casos con/sin bookings, booking confirmado intacto, cambio auditado,
+    repetición, rol no autorizado, otro tenant y operación cerrada: OK.
+  - Portal v2: cliente anterior pierde el shipment y el actual lo recibe.
+    Fallo de auditoría revierte ambos vínculos. Wrapper interno sigue privado.
+  - `shipping_instruction_client_repair.sql`: OK; guardas de cierre/cambio
+    posterior de cliente, reparación de ambos vínculos e idempotencia.
+  - Regresión `won_quotation_pricing_adjustments.sql`: OK con rollback.
+  - `npm.cmd test`: 360/360; TypeScript, ESLint dirigido y build: OK.
+  - Dry-run remoto: el push general detecta además
+    `20261002120000_sari_outlook_intake.sql`, ausente del historial remoto y ajena
+    al fix. No se aplicó ni se marcó como ejecutada.
+  - Preparado directorio local ignorado
+    `.ua/intermediate/si-client-sync-release` con el historial correspondiente,
+    configuración y plantillas, excluyendo únicamente la migración de Outlook.
+    `supabase db push --linked --dry-run --workdir
+    .ua/intermediate/si-client-sync-release`: OK; propone exclusivamente las dos
+    migraciones FLOW-037. Este ensayo no publica cambios de esquema ni datos.
+- Riesgos / trabajo pendiente:
+  - Aplicar ambas migraciones y publicar la UI: autorizado por el usuario.
+    Preflight remoto confirma las condiciones originales de RT0039; se capturan
+    huellas de cotización, SI, shipment, tarifas, cargos, opciones, bookings y
+    facturas para comparar después de la reparación.
+  - Verificar en Production que cotización/SI/shipment apunten a AGROSOLUCIONES;
+    recargar RT0039 y comparar pantalla/PDF con sesión autorizada. Validar
+    “Actualizar desde pricing” y acceso de portal en el ambiente destino.
+    Pruebas locales de RLS no certifican las policies desplegadas ni ese UAT.
+- Commit: pendiente; cambios preparados en el workspace.
+
 ### 2026-10-19 - MKT-LANDING-CONTACT-03 - Formulario y recorrido operativo con recepción segura
 
 - Estado: frontend y ambas migraciones publicados; SQL/RLS, HTTP y navegador

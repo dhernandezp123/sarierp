@@ -37,7 +37,10 @@ import {
 import { formatDate } from '@/src/lib/format'
 import { operationsReturnHref } from '@/src/lib/operations-navigation'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
-import { mergeShippingInstructionMutation } from '@/src/lib/shipping-instruction-state'
+import {
+  getShippingInstructionClient,
+  mergeShippingInstructionMutation,
+} from '@/src/lib/shipping-instruction-state'
 
 type OperationsUser = {
   id: string
@@ -593,7 +596,7 @@ export default function RoutingDetailPage() {
         updatedBookings > 0
           ? `Información sincronizada desde Pricing: ${updatedBookings} booking${updatedBookings === 1 ? '' : 's'} actualizado${updatedBookings === 1 ? '' : 's'}${skippedBookings > 0 ? `, ${skippedBookings} omitido${skippedBookings === 1 ? '' : 's'}` : ''}`
           : skippedBookings > 0
-            ? `No se modificaron bookings confirmados (${skippedBookings} omitido${skippedBookings === 1 ? '' : 's'})`
+            ? `SI sincronizada desde Pricing; ${skippedBookings} booking${skippedBookings === 1 ? '' : 's'} omitido${skippedBookings === 1 ? '' : 's'}`
             : 'Información sincronizada desde Pricing'
       )
 
@@ -1275,7 +1278,7 @@ export default function RoutingDetailPage() {
       <ShippingInstructionOrderPDF
         routing={routing}
         quotation={routing.quotation}
-        cliente={routing.quotation?.cliente || routing.cliente}
+        cliente={getShippingInstructionClient(routing)}
         selectedAgent={selectedAgent}
         company={companyBranding}
       />
@@ -1462,7 +1465,7 @@ export default function RoutingDetailPage() {
                     <ShippingInstructionOrderPDF
                       routing={routing}
                       quotation={routing.quotation}
-                      cliente={routing.quotation?.cliente || routing.cliente}
+                      cliente={getShippingInstructionClient(routing)}
                       selectedAgent={selectedAgent}
                       company={companyBranding}
                     />
@@ -1600,7 +1603,7 @@ export default function RoutingDetailPage() {
           </InfoContent>
           <Info
             label="Cliente"
-            value={routing.cliente?.nombre || routing.client_name || 'N/A'}
+            value={getShippingInstructionClient(routing)?.nombre || routing.client_name || 'N/A'}
           />
           <Info
             label="Incoterm"

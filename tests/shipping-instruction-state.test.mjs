@@ -2,9 +2,24 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import loadTs from './load-ts.mjs'
 
-const { mergeShippingInstructionMutation } = loadTs(
+const { getShippingInstructionClient, mergeShippingInstructionMutation } = loadTs(
   'src/lib/shipping-instruction-state.ts'
 )
+
+test('SI y PDF usan el cliente vigente de la cotización después de cambiar de consignatario', () => {
+  const previous = { id: 'bomohsa', nombre: 'BOMOHSA' }
+  const current = { id: 'agrosoluciones', nombre: 'AGROSOLUCIONES INTEGRALES' }
+  assert.equal(getShippingInstructionClient({
+    cliente: previous, quotation: { cliente: current },
+  }), current)
+})
+
+test('SI sin cliente de cotización conserva el cliente operativo legacy', () => {
+  const cliente = { id: 'legacy', nombre: 'Cliente legacy' }
+  assert.equal(getShippingInstructionClient({ cliente }), cliente)
+  assert.equal(getShippingInstructionClient({ cliente, quotation: { cliente: null } }), cliente)
+  assert.equal(getShippingInstructionClient({}), null)
+})
 
 test('preserva cotizacion y cliente embebidos al aplicar la fila devuelta por un RPC', () => {
   const quotation = {
