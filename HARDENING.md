@@ -11960,8 +11960,8 @@ Agregar una entrada por fix:
 
 ### 2026-10-19 - MKT-LANDING-SHARE-01 - Metadatos sociales y textos de conversión
 
-- Estado: implementado y validado localmente; pendiente publicación y revisión
-  de previsualizaciones en servicios externos.
+- Estado: publicado y comprobado por HTTP en Production; pendiente revisar las
+  previsualizaciones dentro de las aplicaciones de terceros.
 - Hallazgos:
   - `FragmentationProblem` ya contiene `relative overflow-hidden`; el resplandor
     `.problemGlow` está recortado por la sección y no requiere un cambio de CSS.
@@ -12002,16 +12002,16 @@ Agregar una entrada por fix:
   - Evidencias locales ignoradas por Git:
     `.ua/intermediate/landing-20261019/` (logs, PNG y `report.json`).
 - Riesgos / trabajo pendiente:
-  - Pendiente publicar por el flujo habitual; no se han enviado leads ni
-    solicitudes de escritura a producción.
+  - Publicado con `8003402`; HTML e imagen social 1200x630 comprobados en
+    `https://forwarders.app`. No se enviaron leads para validar.
   - Validar las previsualizaciones reales de WhatsApp y LinkedIn tras desplegar;
     esta revisión local no certifica el estado de caché de servicios externos.
-- Commit: pendiente; no se creó un commit en esta tarea.
+- Commit funcional: `80034020c95037bbd6c52a2b9b65152178ad929a`.
 
 ### 2026-10-19 - MKT-LANDING-CONTACT-03 - Formulario y recorrido operativo con recepción segura
 
-- Estado: implementado y validado localmente; despliegue en preparación.
-  SQL de producción pendiente. No se declara cerrada la protección del receptor.
+- Estado: frontend y ambas migraciones publicados; SQL/RLS, HTTP y navegador
+  comprobados en Production. GitHub Actions continúa en cola al registrar el cierre.
 - Hallazgos: confirmación personalizada basada en campos editables y sin trim;
   etiquetas de etapas recortadas; honeypot exclusivamente cliente omitible por
   inserciones directas a `leads`.
@@ -12059,14 +12059,38 @@ Agregar una entrada por fix:
     mediciones sin datos personales y cero excepciones JS. Sonner usa un mismo
     ID para reemplazar el error previo cuando un reintento termina bien.
   - Evidencia ignorada: `.ua/intermediate/landing-20261019/`.
-- Riesgos / pendientes: comprobar CI, SQL/RLS en destino y publicación; no enviar
-  leads ni mensajes reales para validar. La cuota reduce abuso, no sustituye un
-  servicio de protección frente a ataques distribuidos.
-- Commit: pendiente de creación.
+- Publicación y postflight (19/10/2026):
+  - Commit funcional `8003402` en `origin/main`; Vercel Production deployment
+    `7178252140`, estado success. URL inmutable:
+    `https://sarierp-q96rje9o0-claudherhn-5641s-projects.vercel.app`.
+  - Primero se aplicó `20261019180000`, luego se verificó el frontend publicado
+    y por último `20261019181000`; registro de cada migración en la misma
+    transacción de su ejecución. Ambas fuentes coinciden con el SQL local validado.
+    No se ejecutaron otras migraciones pendientes ni Outlook en standby.
+  - Catálogo remoto: RLS activo en leads/contadores; sin INSERT de clientes,
+    incluso por columnas; sin EXECUTE de RPC para anon/authenticated; service_role
+    sí puede ejecutarla; SELECT de Ventas preservado. Conteo de leads: 1 antes y
+    después; ningún lead de prueba se insertó en Production.
+  - Dominio público: portada 200 con nuevo formulario, grid, WhatsApp y chunk
+    `/api/demo-request`; imagen social PNG 1200x630 y captura q=90 responden 200.
+    Receptor rechaza origen externo con 403 y JSON malformado con 400 antes de DB.
+    Login de Sari 200 y Pricing sin sesión redirige 307 al login.
+  - Chrome aislado con red sobre `https://forwarders.app`: diez anchos, ocho
+    etapas, foco, fallos/reintento, cuota, snapshot y honeypot aprobados con los
+    tres POST del formulario interceptados; cero excepciones JavaScript.
+    El navegador bajo restricciones no conectaba por ERR_CONNECTION_RESET;
+    la prueba final se ejecutó con acceso de red, sin omitir validación TLS.
+  - GitHub Quality `39280512986`: trabajos application/database en cola al cierre;
+    no se presenta CI remoto como aprobado. Las comprobaciones locales
+    equivalentes sí se ejecutaron y aprobaron.
+- Riesgos / pendientes: resultado de CI remoto y UAT de una solicitud comercial
+  real por el usuario; las pruebas no generaron leads ni mensajes reales.
+  La cuota reduce abuso, no sustituye protección frente a ataques distribuidos.
+- Commit funcional: `80034020c95037bbd6c52a2b9b65152178ad929a`.
 
 ### 2026-10-19 - MKT-LANDING-TOUR-02 - Tour móvil, capturas compartidas y contacto comercial
 
-- Estado: implementado y validado localmente; pendiente publicación.
+- Estado: implementado, validado localmente y publicado en Production.
 - Hallazgos:
   - Next.js 16.2.6 admite `preload`; se conserva en el hero. Los originales WebP
     ya pesan entre 41.114 y 86.654 bytes.
@@ -12116,7 +12140,8 @@ Agregar una entrada por fix:
     por Git en `.ua/intermediate/landing-20261019/`: `tour-report.json`,
     `tour-*.png`, `tour-tests.log` y `tour-build-final.log`.
 - Riesgos / trabajo pendiente:
-  - Pendiente publicar y verificar la carga en redes reales después del despliegue.
+  - Publicado con `8003402`; enlace WhatsApp y recurso optimizado q=90 verificados
+    en el dominio público. La velocidad en redes móviles reales requiere medición.
   - Las capturas nativas a calidad 90 priorizan legibilidad y reutilización con
     zoom; el tour completo se descarga al aproximarse a la sección.
-- Commit: pendiente; no se creó un commit en esta tarea.
+- Commit funcional: `80034020c95037bbd6c52a2b9b65152178ad929a`.
