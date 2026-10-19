@@ -12010,8 +12010,9 @@ Agregar una entrada por fix:
 
 ### 19/10/2026 - FLOW-037 - Cliente de SI y shipment después de cambiar la cotización
 
-- Estado: implementado y validado localmente; commit y despliegue autorizados por
-  el usuario el 19/10/2026. Pendientes publicación, migraciones y UAT autenticado.
+- Estado: publicado en Production con ambas migraciones aplicadas; datos,
+  función, permisos y RLS comprobados. UAT de pantalla/PDF autenticado pendiente.
+  Commit y despliegue autorizados por el usuario el 19/10/2026.
 - Hallazgo y diagnóstico de solo lectura:
   - `SARIHN-2610-0340-AP` (`9720a5c2-a187-4cca-98ca-439e60095d48`)
     está Ganada y pertenece a AGROSOLUCIONES INTEGRALES S DE RL DE CV.
@@ -12066,16 +12067,36 @@ Agregar una entrada por fix:
     `supabase db push --linked --dry-run --workdir
     .ua/intermediate/si-client-sync-release`: OK; propone exclusivamente las dos
     migraciones FLOW-037. Este ensayo no publica cambios de esquema ni datos.
+- Publicación y postflight (19/10/2026):
+  - Commit funcional `5a82e19206df0e67e95379a15854973595ad2b8e` en `origin/main`.
+    Despliegue Vercel Production `7182873733`, success. URL inmutable:
+    `https://sarierp-d74mhxzc7-claudherhn-5641s-projects.vercel.app`.
+  - Aplicadas únicamente las migraciones `20261019200000` y `20261019201000`
+    mediante el directorio selectivo validado. Dry-run posterior: base remota
+    al día con ese paquete. Outlook continúa pendiente y no fue marcado aplicado.
+  - Preflight confirmó las condiciones originales. Postflight: cotización,
+    SI RT0039 y shipment apuntan al cliente
+    `4e1b8695-aaeb-4e51-9d1c-86d6fa3920d4` (AGROSOLUCIONES); una sola entrada
+    `shipping_instruction_client_backfilled` con los vínculos anterior/nuevo.
+  - Huellas antes/después: cotización, tarifas, cargos, opciones, bookings y
+    facturas intactos; SI/shipment solo cambian `client_id` y `updated_at`.
+  - Esquema remoto leído después del despliegue: cuerpo de la función coincide
+    con la migración versionada; wrapper/core privados para clientes de API,
+    RPC público v2 ejecutable por `authenticated`. RLS activo y policy
+    `tenant_isolation_guard` restrictiva en SI y shipments.
+  - GitHub Quality `39310662968`: application y database completados en success.
+    El TypeScript local final también aprobado.
+  - HTTP del dominio Sari: login 200; SI/cotización sin sesión redirigen 307 al
+    login conservando su ruta de retorno. No se usó una cuenta de usuario para
+    hacer cambios ni se enviaron mensajes/correos de prueba.
+  - Evidencias locales ignoradas en `.ua/intermediate/si-client-sync-release/`:
+    `before.json`, `after.json` y `production-public.sql`.
 - Riesgos / trabajo pendiente:
-  - Aplicar ambas migraciones y publicar la UI: autorizado por el usuario.
-    Preflight remoto confirma las condiciones originales de RT0039; se capturan
-    huellas de cotización, SI, shipment, tarifas, cargos, opciones, bookings y
-    facturas para comparar después de la reparación.
-  - Verificar en Production que cotización/SI/shipment apunten a AGROSOLUCIONES;
-    recargar RT0039 y comparar pantalla/PDF con sesión autorizada. Validar
-    “Actualizar desde pricing” y acceso de portal en el ambiente destino.
-    Pruebas locales de RLS no certifican las policies desplegadas ni ese UAT.
-- Commit: pendiente; cambios preparados en el workspace.
+  - Recargar RT0039 y comparar pantalla/PDF con sesión autorizada; validar
+    “Actualizar desde pricing” y acceso de portal desde cuentas del cliente.
+    La inspección de RLS publicado y las regresiones locales no certifican ese
+    UAT autenticado en Production. El hallazgo conserva ese pendiente.
+- Commit funcional: `5a82e19206df0e67e95379a15854973595ad2b8e`.
 
 ### 2026-10-19 - MKT-LANDING-CONTACT-03 - Formulario y recorrido operativo con recepción segura
 
