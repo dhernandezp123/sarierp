@@ -28,11 +28,11 @@ socket.addEventListener('message', async ({ data }) => {
   } else if (message.method === 'Fetch.requestPaused') {
     const { request, requestId } = message.params
     requests.push({ method: request.method, path: new URL(request.url).pathname })
-    const lead = request.url.includes('/rest/v1/leads') && request.method === 'POST'
-    await send('Fetch.fulfillRequest', { requestId, responseCode: lead && leadOutcome === 'success' ? 201 : lead ? 503 : 200,
+    const lead = request.url.includes('/api/demo-request') && request.method === 'POST'
+    await send('Fetch.fulfillRequest', { requestId, responseCode: lead && leadOutcome === 'success' ? 202 : lead ? 503 : 200,
       responseHeaders: [{ name:'Content-Type', value:'application/json' }, { name:'Access-Control-Allow-Origin', value:'*' },
         { name:'Access-Control-Allow-Headers', value:'*' }, { name:'Access-Control-Allow-Methods', value:'GET,POST,OPTIONS' }],
-      body: Buffer.from(lead && leadOutcome === 'failure' ? JSON.stringify({ message:'Synthetic network failure' }) : '[]').toString('base64') })
+      body: Buffer.from(lead ? JSON.stringify(leadOutcome === 'failure' ? { error:'Synthetic network failure' } : { ok:true }) : '[]').toString('base64') })
   } else if (message.method === 'Page.javascriptDialogOpening') {
     if (message.params.type === 'beforeunload') beforeUnload++
     await send('Page.handleJavaScriptDialog', { accept:false })
@@ -69,7 +69,7 @@ function pass(name) { checks.push(name); console.log('PASS ' + name) }
 
 try {
   await send('Runtime.enable'); await send('Page.enable')
-  await send('Fetch.enable', { patterns:[{ urlPattern:'http://127.0.0.1:59999/*' }] })
+  await send('Fetch.enable', { patterns:[{ urlPattern:'http://127.0.0.1:59999/*' }, { urlPattern:base + '/api/demo-request' }] })
   await send('Page.navigate', { url:base + '/away' })
   await until("location.origin==='http://127.0.0.1:3116' && document.readyState==='complete' && document.querySelector('#away')", 'fixture ready')
   await click('nav a[href="/guard"]'); await until("document.querySelector('#inside')", 'guard hydrated')
@@ -116,7 +116,7 @@ try {
   leadOutcome='success'
   await evaluate("document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))")
   await until("document.body.textContent.includes('Solicitud registrada')",'intercepted confirmed request')
-  assert.equal(requests.filter(request=>request.path==='/rest/v1/leads'&&request.method==='POST').length,2)
+  assert.equal(requests.filter(request=>request.path==='/api/demo-request'&&request.method==='POST').length,2)
   const measurements=await evaluate('window.auditMeasurements')
   assert.ok(measurements.some(row=>row.name==='demo_submit'&&row.stage==='failed'))
   assert.ok(measurements.some(row=>row.name==='demo_submit'&&row.stage==='succeeded'))

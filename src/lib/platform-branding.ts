@@ -13,3 +13,5 @@ export const PLATFORM_ATTRIBUTION =
   'Freight Management Platform by Hernova Systems'
 
 export const PLATFORM_CONTACT_EMAIL = 'contacto@forwarders.app'
+
+export const PLATFORM_CONTACT_WHATSAPP = '+504 9946-7738'

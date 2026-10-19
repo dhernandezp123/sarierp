@@ -182,7 +182,7 @@ export const operationJourney: OperationJourneyStage[] = [
     decision: 'Revisar la facturación y comparar el GP cotizado con el GP real registrado.',
     team: 'Finanzas y Dirección',
     connectedInformation: 'Venta, facturación, costos validados, GP cotizado y GP real.',
-    result: 'Una lectura financiera del cierre sin asumir costos que no estén registrados.',
+    result: 'Visibilidad del margen al cierre para tomar decisiones con los costos registrados.',
     image: '/product/dashboard-financiero.webp',
     alt: 'Dashboard financiero demo con venta, GP cotizado y GP real',
   },
@@ -225,43 +225,43 @@ export const teamRoles: TeamRole[] = [
 export const implementationSteps = [
   {
     number: '01',
-    title: 'Diagnóstico',
-    detail: 'Revisamos modalidades, equipos, documentos y puntos de control de tu operación.',
+    title: 'Diagnóstico operativo',
+    detail: 'Mapeamos tus modalidades (FCL, LCL, aéreo, terrestre o courier), estructura de equipos y puntos de control.',
   },
   {
     number: '02',
-    title: 'Configuración',
-    detail: 'Definimos el alcance y los parámetros que correspondan a la empresa.',
+    title: 'Configuración a medida',
+    detail: 'Parametrizamos el entorno según el flujo comercial, operativo y financiero de tu agencia.',
   },
   {
     number: '03',
-    title: 'Evaluación de datos',
-    detail: 'Revisamos formato y calidad de catálogos, tarifas y datos que deban considerarse.',
+    title: 'Migración de catálogos',
+    detail: 'Estructuramos e importamos tus catálogos de clientes, agentes y tarifarios para que no arranques desde cero.',
   },
   {
     number: '04',
-    title: 'Capacitación',
-    detail: 'Preparamos a los equipos sobre los flujos y responsabilidades incluidos en el alcance.',
+    title: 'Entrenamiento por rol',
+    detail: 'Capacitamos de forma práctica a Ventas, Pricing, Operaciones y Finanzas en sus flujos diarios.',
   },
   {
     number: '05',
-    title: 'Puesta en marcha',
-    detail: 'Se confirma con la empresa cuando configuración, datos y responsables estén preparados.',
+    title: 'Salida en vivo acompañada',
+    detail: 'Acompañamos a tu equipo en las primeras operaciones reales para asegurar una transición ordenada.',
   },
 ]
 
 export const productEvidence = [
   {
-    title: 'Producto real',
-    detail: 'Seis vistas del sistema disponibles para explorar y ampliar.',
+    title: '100% Producto real',
+    detail: 'Seis vistas interactivas del sistema en producción, sin maquetas ni diseños conceptuales.',
   },
   {
-    title: 'Flujo freight completo',
-    detail: 'Cotización, pricing, operación, documentos y finanzas conectados.',
+    title: 'Flujo freight de punta a punta',
+    detail: 'Cotización, pricing, booking, bodega, documentos y finanzas en un mismo expediente.',
   },
   {
-    title: 'Demostración transparente',
-    detail: 'Capturas del ambiente Demo con datos ficticios identificados.',
+    title: 'Rentabilidad bajo control',
+    detail: 'Comparación transparente entre el GP cotizado por ventas y el GP real al cierre operativo.',
   },
 ]
 
@@ -269,31 +269,31 @@ export const landingQuestions = [
   {
     question: '¿Para qué tipo de operación está pensado?',
     answer:
-      'Para freight forwarders y empresas de carga que coordinan servicios marítimos FCL/LCL, aéreos, terrestres o courier. Incluye flujos de cotización y pricing, operaciones, bodega Miami y control financiero.',
+      'Para freight forwarders, NVOCC y agencias de carga que coordinan embarques marítimos (FCL/LCL), aéreos, terrestres o courier. Conecta en un solo flujo a los equipos de ventas, pricing, operaciones, bodega Miami y finanzas.',
   },
   {
-    question: '¿Cómo puedo evaluar la implementación?',
+    question: '¿Cómo funciona el proceso de implementación?',
     answer:
-      'Solicita una demo para revisar los servicios que manejas, los equipos que participan y el recorrido de una operación. La configuración, los datos iniciales y el alcance de la puesta en marcha deben definirse con tu empresa.',
+      'Iniciamos con una sesión de diagnóstico en tu demo para entender las modalidades que operas y el tamaño de tu equipo. Con base en eso, definimos un plan de configuración y puesta en marcha adaptado a tu operación.',
   },
   {
-    question: '¿Qué pasa con mis datos de Excel?',
+    question: '¿Qué pasa con mis datos actuales en Excel?',
     answer:
-      'Antes de definir una migración, hay que revisar el formato y la calidad de tus catálogos, tarifas y datos históricos. Cuéntanos qué información necesitas trasladar al solicitar la demo para evaluar su alcance.',
+      'No tienes que empezar desde cero. Durante la implementación revisamos tus archivos actuales para ayudarte a estructurar y migrar tus catálogos de clientes, proveedores, rutas y tarifas activas.',
   },
   {
-    question: '¿Mis clientes pueden consultar su carga?',
+    question: '¿Mis clientes pueden consultar el estatus de su carga?',
     answer:
-      'Sí. El portal del cliente permite consultar el estado de su carga, movimientos y notificaciones con un acceso separado del ERP interno. La información disponible corresponde a los registros y actualizaciones de la operación.',
+      'Sí. Cuentas con un portal de clientes independiente del ERP interno donde tus clientes consultan hitos, tracking y movimientos autorizados por tu equipo operativo, sin exponer costos ni información sensible.',
   },
   {
-    question: '¿Cómo funciona el soporte?',
+    question: '¿Cómo funciona el soporte técnico y acompañamiento?',
     answer:
-      'El ERP cuenta con una mesa de ayuda para registrar incidencias y dar seguimiento a las respuestas. Los canales, horarios y tiempos de atención se establecen en las condiciones del servicio contratado.',
+      'Incluimos mesa de ayuda integrada para seguimiento de tickets y acompañamiento directo durante tu adopción. Los niveles de servicio (SLA) y canales de atención quedan respaldados desde tu propuesta comercial.',
   },
   {
-    question: '¿Dónde consulto el precio y las condiciones?',
+    question: '¿Cómo se estructura el precio de la plataforma?',
     answer:
-      'Solicita una propuesta para revisar el alcance que necesita tu empresa. Confirma las condiciones comerciales, la puesta en marcha y el soporte antes de contratar.',
+      'El licenciamiento se adapta al volumen y alcance operativo de tu agencia. Agenda una demo para evaluar tu flujo y entregarte una propuesta comercial transparente con costos de implementación y suscripción.',
   },
 ]

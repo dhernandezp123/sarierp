@@ -58,8 +58,8 @@ select pg_temp.assert_true(
   'anon no debe consultar agents'
 );
 select pg_temp.assert_true(
-  has_table_privilege('anon', 'public.leads', 'INSERT'),
-  'anon debe poder insertar leads'
+  not has_table_privilege('anon', 'public.leads', 'INSERT'),
+  'las solicitudes de demo deben pasar por el servidor'
 );
 select pg_temp.assert_true(
   not has_function_privilege('anon', 'public.is_admin()', 'EXECUTE'),
@@ -158,11 +158,13 @@ where id = '00000000-0000-0000-0000-000000000007';
 
 reset role;
 
--- anon solo crea leads y no puede leerlos.
+-- anon no puede crear leads directamente ni leerlos.
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
-insert into public.leads (nombre, empresa, email)
-values ('Lead RLS', 'Empresa RLS', 'lead@test.local');
+select pg_temp.expect_denied(
+  $$insert into public.leads (nombre, empresa, email) values ('Lead RLS', 'Empresa RLS', 'lead@test.local')$$,
+  'anon no debe insertar leads directamente'
+);
 select pg_temp.expect_denied(
   $$select * from public.leads$$,
   'anon no debe leer leads'

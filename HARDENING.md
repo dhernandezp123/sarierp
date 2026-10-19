@@ -11957,3 +11957,166 @@ Agregar una entrada por fix:
   vigente de 26 opciones/versiones se conserva. Nuevas ventas/cambios de tarifa
   continúan requiriendo su elección comercial habitual.
 - Commit funcional: `4796cc7` (`fix: approve won quote pricing adjustments without new client selection`).
+
+### 2026-10-19 - MKT-LANDING-SHARE-01 - Metadatos sociales y textos de conversión
+
+- Estado: implementado y validado localmente; pendiente publicación y revisión
+  de previsualizaciones en servicios externos.
+- Hallazgos:
+  - `FragmentationProblem` ya contiene `relative overflow-hidden`; el resplandor
+    `.problemGlow` está recortado por la sección y no requiere un cambio de CSS.
+  - Existe `src/app/opengraph-image.tsx`, que Next.js incorpora automáticamente
+    como imagen Open Graph PNG de 1200x630. Los objetos `openGraph` y `twitter`
+    de la portada no declaraban explícitamente sus imágenes.
+  - Implementación, evidencia y preguntas frecuentes usaban textos defensivos
+    que se sustituyen por la redacción comercial solicitada.
+- Archivos modificados:
+  - `src/app/page.tsx`.
+  - `src/components/marketing/landing-content.ts`.
+  - `HARDENING.md`.
+  - SQL: ninguno; sin cambios de permisos o RLS.
+- Cambios:
+  - Ambos metadatos reutilizan `/opengraph-image`, sus dimensiones reales y alt;
+    no se duplica el generador ni se atribuye formato 1200x630 a la captura
+    existente de 1920x1080.
+  - Actualizados los cinco pasos de implementación, tres bloques de evidencia
+    y seis preguntas/respuestas con el texto proporcionado. El FAQ visible y
+    su JSON-LD siguen compartiendo `landingQuestions`.
+  - Reformulado el resultado financiero del recorrido para comunicar visibilidad
+    del margen con los costos registrados.
+- Validaciones ejecutadas:
+  - `npm.cmd test`: 353/353 pruebas aprobadas.
+  - `npx.cmd tsc --noEmit`: OK, después del último cambio de código.
+  - ESLint dirigido a los dos archivos TypeScript/TSX modificados: OK.
+  - `npm.cmd run build`: OK sobre la versión final.
+  - HTTP local con Host de plataforma y User Agents de WhatsApp, LinkedIn y
+    Twitter: portada 200, `og:image` y `twitter:image` absolutos en `<head>`,
+    ambos apuntan a `https://forwarders.app/opengraph-image`.
+  - `/opengraph-image`: 200, tipo PNG y dimensiones reales 1200x630; imagen
+    revisada visualmente.
+  - Chrome headless, anchos 320, 360, 390, 430, 768, 1024 y 1440: documento con
+    `scrollWidth = clientWidth`; sección del resplandor con overflow horizontal
+    computado `hidden`. Capturas móviles revisadas visualmente.
+  - Cinco pasos y tres bloques comerciales presentes; seis respuestas del FAQ
+    coinciden con JSON-LD. FAQ operable por teclado; cero excepciones JavaScript.
+  - Evidencias locales ignoradas por Git:
+    `.ua/intermediate/landing-20261019/` (logs, PNG y `report.json`).
+- Riesgos / trabajo pendiente:
+  - Pendiente publicar por el flujo habitual; no se han enviado leads ni
+    solicitudes de escritura a producción.
+  - Validar las previsualizaciones reales de WhatsApp y LinkedIn tras desplegar;
+    esta revisión local no certifica el estado de caché de servicios externos.
+- Commit: pendiente; no se creó un commit en esta tarea.
+
+### 2026-10-19 - MKT-LANDING-CONTACT-03 - Formulario y recorrido operativo con recepción segura
+
+- Estado: implementado y validado localmente; despliegue en preparación.
+  SQL de producción pendiente. No se declara cerrada la protección del receptor.
+- Hallazgos: confirmación personalizada basada en campos editables y sin trim;
+  etiquetas de etapas recortadas; honeypot exclusivamente cliente omitible por
+  inserciones directas a `leads`.
+- Archivos y SQL:
+  - `src/components/marketing/LandingContact.tsx`, `OperationJourney.tsx`.
+  - `src/lib/demo-lead.ts`, `src/app/api/demo-request/route.ts`.
+  - `tests/demo-request.test.mjs`, `scripts/validate-browser-guards.mjs`.
+  - `supabase/tests/demo_request_server.sql`, `supabase/tests/phase1_rls.sql`,
+    `scripts/validate-audit-sql.mjs`, `HARDENING.md`.
+  - Migraciones nuevas: `20261019180000_demo_request_server.sql` y
+    `20261019181000_demo_request_server_only.sql`.
+- Cambios:
+  - Incorporadas las propuestas comerciales, con confirmación que utiliza una
+    copia de los datos normalizados enviados; campos deshabilitados durante el
+    envío, nombre por espacios y vínculo de privacidad canónico preservado.
+  - Ocho etapas en grid 2/4/8 con nombres completos y ajuste de línea.
+  - Receptor de servidor JSON, máximo 4096 bytes, origen/host de plataforma,
+    validación compartida y honeypot en cliente y servidor. Respuestas sin datos
+    privados; fallos y límite de frecuencia conservan el formulario para reintentar.
+  - RPC restringida a service_role: inserción y cuota atómicas, cinco solicitudes
+    por 15 minutos. Clave HMAC rotada diariamente con IP suministrada por Vercel;
+    no se guarda la IP ni se confía en headers reenviados fuera de Vercel.
+  - RLS en contadores y sin permisos de lectura/escritura para clientes. Segunda
+    migración revoca INSERT a anon/authenticated; Ventas conserva SELECT.
+  - Publicación por fases: preparar RPC, desplegar frontend y finalmente cerrar
+    el camino directo, sin interrumpir el formulario anterior durante el build.
+- Validaciones ejecutadas:
+  - Cinco pruebas Node nuevas del receptor: OK (validación, origen, tamaño,
+    honeypot, clave HMAC, cuota y fallo de DB).
+  - Once suites SQL/RLS vigentes aprobadas en PostgreSQL aislado
+    `supabase_db_sarierp_landing19`, creado desde todas las migraciones.
+  - Ocho conexiones concurrentes: cinco aceptadas y tres rechazadas; fixtures
+    ficticios eliminados. Prueba SQL cubre rollback conjunto de cuota e inserción.
+  - El fixture histórico `phase1_rls.sql` falla antes de las comprobaciones de
+    leads por registros comerciales sin tenant_id; sus expectativas de inserción
+    se actualizaron y se verifican también en la nueva suite específica. No se
+    presenta ese fixture histórico como aprobado.
+  - TypeScript, ESLint dirigido y build local: OK; 358/358 pruebas aprobadas.
+    Gate ESLint de 396 archivos: 223 diagnósticos históricos, cero regresiones.
+  - Chrome, diez anchos entre 320 y 1440: etiquetas completas, ocho paneles y
+    teclado; formulario vacío enfoca el primer error; fallos 503/429 permiten
+    reintentar; doble submit produce una solicitud; edición programática durante
+    espera no altera la confirmación, que usa nombre y empresa normalizados.
+  - Honeypot cliente sin solicitud de red; honeypot servidor probado por unidad;
+    mediciones sin datos personales y cero excepciones JS. Sonner usa un mismo
+    ID para reemplazar el error previo cuando un reintento termina bien.
+  - Evidencia ignorada: `.ua/intermediate/landing-20261019/`.
+- Riesgos / pendientes: comprobar CI, SQL/RLS en destino y publicación; no enviar
+  leads ni mensajes reales para validar. La cuota reduce abuso, no sustituye un
+  servicio de protección frente a ataques distribuidos.
+- Commit: pendiente de creación.
+
+### 2026-10-19 - MKT-LANDING-TOUR-02 - Tour móvil, capturas compartidas y contacto comercial
+
+- Estado: implementado y validado localmente; pendiente publicación.
+- Hallazgos:
+  - Next.js 16.2.6 admite `preload`; se conserva en el hero. Los originales WebP
+    ya pesan entre 41.114 y 86.654 bytes.
+  - Los cuatro pasos del hero parecían controles sin acción; el badge comercial
+    estaba oculto en móvil y el tour requería desplazamiento lateral.
+  - Los paneles inactivos se desmontaban y el modal pedía el original sin
+    optimizar, distinto del recurso usado por la vista normal.
+- Archivos modificados:
+  - `src/components/marketing/ConnectedOperationHero.tsx`.
+  - `src/components/marketing/ProductShowcase.tsx`.
+  - `src/components/marketing/DemoConversionPanel.tsx`.
+  - `src/lib/platform-branding.ts`, `next.config.ts`, `HARDENING.md`.
+  - SQL: ninguno; sin cambios en RLS ni dependencias nuevas.
+- Cambios:
+  - Los cuatro pasos enlazan al tour y usan iconos uniformes; el badge se coloca
+    debajo de la tarjeta en móvil y conserva su posición flotante desde `sm`.
+  - Navegación del tour en dos columnas en móvil, tres en tablet y barra lateral
+    desde `lg`. Etiquetas completas con ajuste de línea en pantallas estrechas.
+  - Un IntersectionObserver prepara las seis capturas a 200 px de la sección;
+    sus paneles se mantienen montados y los inactivos llevan `hidden`.
+  - Vista normal y modal comparten dimensiones, `quality=90` y `sizes=1920px`.
+    Next.js permite calidades 75 y 90; conserva el valor predeterminado para las
+    otras imágenes. El enlace al original sigue disponible por separado.
+  - Ajustado el tercer paso de demo con la redacción solicitada. Añadido enlace
+    `https://wa.me/50499467738`, número facilitado por el usuario; abre una pestaña
+    nueva y no envía mensajes automáticamente.
+- Validaciones ejecutadas:
+  - `npx.cmd tsc --noEmit`: OK después del último ajuste de código.
+  - ESLint dirigido a los cinco archivos TS/TSX modificados: OK.
+  - `npm.cmd test`: 353/353 aprobadas; `npm.cmd run build`: OK en versión final.
+  - Chrome headless, DPR 2, anchos 320, 360, 375, 390, 430, 768, 1024 y 1440:
+    documento y menú sin desbordamiento; seis nombres completos; dos columnas
+    en móvil, tres en tablet y una desde `lg`. Badge visible en todos los anchos.
+  - Confirmado `<link rel="preload" as="image">` responsive del hero en `<head>`.
+    Antes de aproximarse al tour sólo está montada la primera captura; después
+    cargan las seis con `q=90`. Sus nodos se conservan al cambiar de pestaña y
+    sólo un panel queda visible/accesible.
+  - Las seis opciones activadas mediante eventos de puntero; navegación por
+    flecha derecha comprobada. Cada modal usa el mismo `currentSrc` que su
+    captura, sin solicitud adicional de imagen al abrirlo.
+  - Zoom a 1920 px contenido dentro del modal, cierre por Escape y botón,
+    devolución de foco al disparador y reinicio del zoom al reabrir: OK.
+  - Enlace WhatsApp y número autorizados coinciden; no se abrió el servicio ni
+    se enviaron mensajes. Sin leads ni escrituras a producción; cero excepciones
+    JavaScript en el recorrido.
+  - Capturas móvil/desktop revisadas visualmente. Evidencias locales ignoradas
+    por Git en `.ua/intermediate/landing-20261019/`: `tour-report.json`,
+    `tour-*.png`, `tour-tests.log` y `tour-build-final.log`.
+- Riesgos / trabajo pendiente:
+  - Pendiente publicar y verificar la carga en redes reales después del despliegue.
+  - Las capturas nativas a calidad 90 priorizan legibilidad y reutilización con
+    zoom; el tour completo se descarga al aproximarse a la sección.
+- Commit: pendiente; no se creó un commit en esta tarea.

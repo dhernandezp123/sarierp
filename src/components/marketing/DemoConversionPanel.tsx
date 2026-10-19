@@ -1,11 +1,11 @@
-import { Mail } from 'lucide-react'
-import { PLATFORM_CONTACT_EMAIL } from '@/src/lib/platform-branding'
+import { Mail, MessageCircle } from 'lucide-react'
+import { PLATFORM_CONTACT_EMAIL, PLATFORM_CONTACT_WHATSAPP } from '@/src/lib/platform-branding'
 import { LandingContact } from './LandingContact'
 
 const demoSteps = [
   { number: '01', title: 'Entendemos tu operación', detail: 'Modalidades, equipos y puntos de control que hoy necesitas coordinar.' },
   { number: '02', title: 'Recorremos el flujo relevante', detail: 'Producto real aplicado a cotización, ejecución y cierre financiero.' },
-  { number: '03', title: 'Aclaramos el alcance', detail: 'Datos iniciales, configuración y condiciones que tu empresa debe evaluar.' },
+  { number: '03', title: 'Aclaramos el alcance', detail: 'Definimos juntos el plan de puesta en marcha, migración de catálogos y propuesta comercial.' },
 ]
 
 export function DemoConversionPanel() {
@@ -34,6 +34,10 @@ export function DemoConversionPanel() {
             <p className="text-sm text-slate-300">¿Prefieres escribirnos?</p>
             <a href={`mailto:${PLATFORM_CONTACT_EMAIL}`} className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#FFB44B] hover:underline">
               <Mail size={16} aria-hidden="true" />{PLATFORM_CONTACT_EMAIL}
+            </a>
+            <a href={`https://wa.me/${PLATFORM_CONTACT_WHATSAPP.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex min-h-11 w-fit items-center gap-2 text-sm font-semibold text-[#FFB44B] hover:underline">
+              <MessageCircle size={16} aria-hidden="true" />WhatsApp {PLATFORM_CONTACT_WHATSAPP}
+              <span className="sr-only"> en una pestaña nueva</span>
             </a>
           </div>
         </div>

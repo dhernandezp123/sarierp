@@ -10,6 +10,12 @@ import {
 const title = 'Forwarders.app | Software para Freight Forwarders'
 const description =
   'Conecta cotizaciones, pricing, operaciones, documentos y rentabilidad en una plataforma moderna para freight forwarders, NVOCC y agencias de carga.'
+const socialImage = {
+  url: '/opengraph-image',
+  width: 1200,
+  height: 630,
+  alt: 'Forwarders.app, plataforma operativa para freight forwarders',
+}
 
 export const metadata: Metadata = {
   metadataBase: new URL(PLATFORM_ORIGIN),
@@ -37,11 +43,13 @@ export const metadata: Metadata = {
     siteName: PLATFORM_MARKETING_NAME,
     title,
     description,
+    images: [socialImage],
   },
   twitter: {
     card: 'summary_large_image',
     title,
     description,
+    images: [socialImage],
   },
   robots: {
     index: true,

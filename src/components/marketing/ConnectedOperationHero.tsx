@@ -60,14 +60,16 @@ export function ConnectedOperationHero() {
               {connectedOperationStages.map((stage, index) => {
                 const Icon = stageIcons[index]
                 return (
-                  <li key={stage.id} className="relative flex min-w-0 items-center gap-2.5 rounded-xl bg-white p-2.5 shadow-sm ring-1 ring-slate-200 sm:rounded-none sm:bg-transparent sm:p-2 sm:shadow-none sm:ring-0">
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${index === 3 ? 'bg-[#07111F] text-white' : 'bg-blue-50 text-[#0038BD]'}`}>
-                      <Icon size={15} aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block font-mono text-[9px] font-semibold text-slate-400">{stage.shortLabel}</span>
-                      <span className="block truncate text-[11px] font-bold text-[#07111F]">{stage.label}</span>
-                    </span>
+                  <li key={stage.id} className="relative min-w-0">
+                    <a href="#producto" aria-label={`Explorar ${stage.label} en el tour del producto`} className="flex items-center gap-2.5 rounded-xl bg-white p-2.5 shadow-sm ring-1 ring-slate-200 transition-colors hover:bg-blue-50 sm:rounded-none sm:bg-transparent sm:p-2 sm:shadow-none sm:ring-0">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#0038BD]">
+                        <Icon size={15} aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-mono text-[9px] font-semibold text-slate-400">{stage.shortLabel}</span>
+                        <span className="block truncate text-[11px] font-bold text-[#07111F]">{stage.label}</span>
+                      </span>
+                    </a>
                   </li>
                 )
               })}
@@ -93,9 +95,9 @@ export function ConnectedOperationHero() {
             </a>
           </div>
 
-          <div className={`${styles.floatingSignal} absolute -bottom-5 left-3 hidden items-center gap-3 rounded-2xl border border-white/80 bg-[#07111F] px-4 py-3 text-white shadow-xl sm:flex lg:-left-6`}>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EF8E01]/15 text-[#FFB44B]"><CircleDollarSign size={18} aria-hidden="true" /></span>
-            <span><span className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400">Control comercial</span><span className="mt-0.5 block text-xs font-bold">Margen visible antes de aprobar</span></span>
+          <div className={`${styles.floatingSignal} relative mt-3 flex w-fit max-w-full items-center gap-3 rounded-2xl border border-white/80 bg-[#07111F] px-4 py-3 text-white shadow-xl sm:absolute sm:-bottom-5 sm:left-3 sm:mt-0 lg:-left-6`}>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#EF8E01]/15 text-[#FFB44B]"><CircleDollarSign size={18} aria-hidden="true" /></span>
+            <span className="min-w-0"><span className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400">Control comercial</span><span className="mt-0.5 block text-xs font-bold">Margen visible antes de aprobar</span></span>
           </div>
         </div>
       </div>
