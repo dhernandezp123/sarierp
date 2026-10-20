@@ -322,6 +322,7 @@ function quoteNumber(q: Pick<QuotationRow, 'quotation_number'>) {
 }
 
 function serviceLabel(quoteType?: string | null, transport?: string | null) {
+  if (quoteType === 'Aduanas') return 'Servicio de Aduanas'
   return [quoteType, transport].filter(Boolean).join(' / ') || 'Sin servicio'
 }
 

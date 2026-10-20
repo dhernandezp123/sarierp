@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { CustomsServicePanel } from '@/src/components/operations/CustomsServicePanel'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { Download, ExternalLink, Plus, Printer, RefreshCw } from 'lucide-react'
@@ -1328,6 +1329,12 @@ export default function RoutingDetailPage() {
 
   if (!canViewRouting) {
     return <p className="text-sm text-red-500">No tienes permisos para ver esta Shipping Instruction.</p>
+  }
+
+  if (routing.quotation?.service_product === 'customs_only') {
+    return <CustomsServicePanel key={routing.id} id={routing.id} number={routing.routing_number}
+      status={routing.operational_status || 'Pendiente Validación'} updatedAt={routing.updated_at}
+      quotation={routing.quotation} canManage={canManageRouting} reload={loadRouting} />
   }
 
   const inputClassName =

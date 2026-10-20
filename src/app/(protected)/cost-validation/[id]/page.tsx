@@ -14,6 +14,7 @@ import { calculateTaxAmount } from '@/src/lib/tax'
 import { formatDate } from '@/src/lib/format'
 import { cardClass, fieldClassSm } from '@/src/lib/ui-classes'
 import { billingReturnHref, operationsAreComplete } from '@/src/lib/billing-readiness'
+import { ownCustomsZeroCostIds } from '@/src/lib/customs-quotation'
 
 const buttonClass = 'rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800'
 const emptyForm = { pricing_item_id: '', supplier: '', invoice_number: '', description: '', quantity: '1', unit_cost: '', currency: 'USD', tax_rate_id: '', invoice_date: '', is_taxable: false, notes: '' }
@@ -122,7 +123,8 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
   if (error || !data) return <section className={cardClass} role="alert"><h1 className="text-xl font-bold">No se pudo cargar la validación</h1><p className="my-3">{error}</p><button className={buttonClass} onClick={() => void refresh()}>Reintentar</button></section>
 
   const financiallyValidated = data.quotation.status === 'Ganada' && data.quotation.financial_validation_status === 'Validado'
-  const groups = analyzeCosts(data.pricing, data.invoices, financiallyValidated)
+  const ownZeroCostIds = ownCustomsZeroCostIds(data.quotation.service_product, data.pricing)
+  const groups = analyzeCosts(data.pricing, data.invoices, financiallyValidated, ownZeroCostIds)
   const operationsComplete = operationsAreComplete(data.shipments)
   const canValidate = operationsComplete && data.quotation.status === 'Ganada' && groups.length > 0 && groups.every(g => g.reconciled)
   const validationReason = data.quotation.status !== 'Ganada' ? 'La cotización debe estar Ganada para validar.'
@@ -164,7 +166,8 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
       <p className="mt-3 text-sm text-slate-500">Costos a nivel de cotización; no están asignados individualmente a bookings, BL o contenedores.</p>
     </section>
 
-    <CostAnalysisPanel pricing={data.pricing} invoices={data.invoices} containers={data.containers} agent={data.agent} validated={financiallyValidated} />
+    {ownZeroCostIds.length > 0 && <p className={cardClass}>Los honorarios propios de aduanas tienen costo externo cero. Finanzas debe confirmar ese costo al validar; la entrega final y los cargos con costo requieren conciliación de proveedor.</p>}
+    <CostAnalysisPanel pricing={data.pricing} invoices={data.invoices} containers={data.containers} agent={data.agent} validated={financiallyValidated} ownZeroCostIds={ownZeroCostIds} />
 
     <section className={cardClass}>
       <h2 className="text-xl font-bold">Registrar factura de proveedor</h2>
@@ -243,7 +246,7 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
         if (result.error || !result.data) throw new Error(result.error?.message || 'No se eliminó el registro.')
       }, 'Costo eliminado')
     }} />
-    <ConfirmDialog open={confirmValidation} onOpenChange={setConfirmValidation} title="Confirmar revisión completa" description="Confirma que recibiste todas las facturas y revisaste cantidades, cargos adicionales e impuestos. La presencia de un registro por cargo no garantiza que la facturación esté completa." confirmLabel="Validar costos" onConfirm={() => {
+    <ConfirmDialog open={confirmValidation} onOpenChange={setConfirmValidation} title="Confirmar revisión completa" description={ownZeroCostIds.length ? 'Confirma costo externo cero de los honorarios propios de aduanas y que todos los demás costos, facturas e impuestos están conciliados.' : 'Confirma que recibiste todas las facturas y revisaste cantidades, cargos adicionales e impuestos. La presencia de un registro por cargo no garantiza que la facturación esté completa.'} confirmLabel="Validar costos" onConfirm={() => {
       if (!canValidate) return
       void mutate(async () => {
         const result = await supabase.rpc('validate_quotation_financial_costs', {

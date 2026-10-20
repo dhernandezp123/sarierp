@@ -442,6 +442,7 @@ function getQuoteTitle(quoteType?: string) {
 }
 
 function getQuoteTitleByProduct(quotation: any) {
+  if (quotation.service_product === 'customs_only') return 'Cotización de Servicio de Aduanas'
   if (quotation.service_product === 'miami_lcl') {
     return 'Cotización Miami Consolidado LCL'
   }
@@ -1003,7 +1004,14 @@ function QuotationPDFPages({
             </View>
           </View>
 
-          <View style={styles.infoBox}>
+          {serviceProduct === 'customs_only' ? <View style={styles.infoBox}>
+            <Text style={styles.boxTitle}>DETALLES DEL SERVICIO</Text>
+            <View style={styles.row}><Text style={styles.label}>Servicio:</Text><Text style={styles.value}>Aduanas</Text></View>
+            <View style={styles.row}><Text style={styles.label}>Dirección:</Text><Text style={styles.value}>{quotation.trade_direction === 'export' ? 'Exportación' : 'Importación'}</Text></View>
+            <View style={styles.row}><Text style={styles.label}>Aduana:</Text><Text style={styles.value}>{quotation.puerto_destino || 'N/A'}</Text></View>
+            <View style={styles.fullRow}><Text style={styles.blockLabel}>Mercancía:</Text><Text style={styles.blockValue}>{quotation.commodity || 'N/A'}</Text></View>
+            <View style={styles.fullRow}><Text style={styles.blockLabel}>Entrega final:</Text><Text style={styles.blockValue}>{pricingItems.some(item => item.rate_code === 'customs_delivery') ? quotation.delivery_address || 'Por definir' : 'No incluida'}</Text></View>
+          </View> : <View style={styles.infoBox}>
             <Text style={styles.boxTitle}>
               DETALLES DEL EMBARQUE
             </Text>
@@ -1159,10 +1167,10 @@ function QuotationPDFPages({
               </View>
 
             </View>
-          </View>
+          </View>}
         </View>
 
-        {cargoLines.length > 0 && !useCargoAnnex && (
+        {serviceProduct !== 'customs_only' && cargoLines.length > 0 && !useCargoAnnex && (
           <CargoDetailsTable
             title="DETALLE DE CARGA"
             cargoLines={cargoLines}

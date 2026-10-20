@@ -12235,3 +12235,94 @@ Agregar una entrada por fix:
   - Las capturas nativas a calidad 90 priorizan legibilidad y reutilización con
     zoom; el tour completo se descarga al aproximarse a la sección.
 - Commit funcional: `80034020c95037bbd6c52a2b9b65152178ad929a`.
+
+### 2026-10-20 - CUS-01 - Servicio de Aduanas sin agente y con entrega final opcional
+
+- Estado: implementado y validado localmente; publicación SQL/frontend autorizada
+  por el usuario el 20/10/2026 y en ejecución. UAT autenticado pendiente.
+- Hallazgo: el catálogo de cotizaciones no permitía cotizar un servicio propio
+  de aduanas; obligaba a simular transporte y tarifas de agente. Las excepciones
+  estaban limitadas a Miami en UI, RPC, RLS de pricing y creación del expediente.
+- Archivos y SQL:
+  - Cotizaciones: `src/app/(protected)/quotations/new/page.tsx`,
+    `[id]/page.tsx`, `[id]/edit/page.tsx`; nuevo
+    `src/components/quotations/CustomsQuotationSection.tsx` y
+    `src/lib/customs-quotation.ts`.
+  - Catálogos/flujo: `src/lib/pricing-catalogs.ts`, `quotation-products.ts`,
+    `quotation-status.ts`, `pricing-validation.ts`; `src/hooks/useMiamiQuotation.ts`;
+    `src/app/(protected)/pricing-comparison/page.tsx`.
+  - Documento comercial: `src/components/pdf/quotation-pdf.tsx`.
+  - Operaciones: `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`,
+    nuevo `src/components/operations/CustomsServicePanel.tsx`,
+    `src/lib/operation-status.ts`.
+  - Finanzas: `src/lib/cost-analysis.ts`, `cost-validation-data.ts`,
+    `src/components/pricing/CostAnalysisPanel.tsx`,
+    `src/app/(protected)/cost-validation/[id]/page.tsx`.
+  - Portal/reportes: `src/app/portal/envios/page.tsx`, `envios/[id]/page.tsx`,
+    `src/app/(protected)/reports/page.tsx`.
+  - Migración nueva `supabase/migrations/20261020120000_customs_only_service.sql`;
+    suite `supabase/tests/customs_only_service.sql`, incorporada a
+    `scripts/validate-audit-sql.mjs`.
+  - Pruebas `tests/customs-quotation.test.mjs`, `customs-quotation-pdf.test.mjs`;
+    aceptación/publicación en `docs/uat/customs-service.md`; este registro.
+- Cambios:
+  - Producto `customs_only`, visible como **Servicio de Aduanas**. Cotiza
+    honorarios propios y entrega opcional, con costo externo, venta, ISV,
+    vigencia, aduana, mercancía y condiciones comerciales. No exige tarifa
+    Miami, agente, Incoterm, contenedores ni medidas ficticias.
+  - Ventas guarda borrador o crea propuesta aprobada en el vocabulario vigente
+    (`Pricing Aprobado`); el editor también aprueba el borrador sin enviarlo al
+    comparativo. Validación compartida y SQL de dirección/precio de entrega,
+    importes finitos y justificación interna de margen inferior al 5%.
+  - Edición/duplicación conservan los cargos propios y sus tasas, incluido cero.
+    El PDF presenta alcance y cargos del servicio; notas internas, proveedor,
+    costos y campos de flete quedan fuera de la propuesta comercial.
+  - Expediente canónico SI/shipment con gestión, liberación, entrega cuando
+    está contratada y cierre; notas/evidencias escritas, usuario, historial,
+    tenant, asignación y control de versión. Bloquea creación de booking,
+    tarifas de agente y líneas ficticias de flete para este producto.
+  - Repricing conserva la transacción, revisiones, auditoría y retorno a Ganada;
+    la sincronización de expedientes abiertos no exige agente. No cambia
+    documentos emitidos, snapshots históricos ni expedientes cerrados.
+  - Finanzas confirma expresamente costo externo cero de honorarios propios,
+    sin factura ficticia; entrega y gastos con costo mantienen conciliación.
+    El cierre canónico alimenta Por facturar sin alterar sus controles fiscales.
+- Validaciones ejecutadas:
+  - `npx.cmd tsc --noEmit`: aprobado después del último ajuste de código.
+  - `npm.cmd test`: 371/371 aprobadas, incluido PDF renderizado real con
+    importes/ISV y comprobación de exclusión de costos y notas internas.
+  - `npm.cmd run lint:ci`: 401 archivos, 223 diagnósticos históricos,
+    cero regresiones. `npm.cmd run build`: aprobado en la versión final.
+  - PostgreSQL aislado `supabase_db_sarierp_customs20`, recreado desde las
+    migraciones canónicas. Outlook en standby excluido expresamente. Suite
+    nueva y once suites SQL/RLS vigentes aprobadas, con fixtures y rollback.
+    Incluye aprobación directa/borrador, costos, repricing ganado sin agente,
+    cierre, entrega obligatoria, control de revisión, permisos y aislamiento.
+    Los productos/rate codes legacy nulos mantienen la conciliación obligatoria;
+    la excepción financiera exige producto y honorario propios explícitos.
+  - Chrome headless sobre componentes reales con proveedor ficticio: validación
+    sin datos de flete, PDF previo de USD 230.00/345.00, entrega, justificación
+    de margen, error/reintento con formulario preservado y payload atómico.
+    Cero excepciones JS durante la interacción; anchos 390 y 1440 revisados.
+    La revisión visual detectó recorte de acciones en móvil; se ajustó el
+    contenedor para apilar y envolver los botones; la repetición visual y
+    funcional confirmó que las tres acciones quedan visibles.
+  - Evidencias locales ignoradas: `.ua/intermediate/customs-db/`,
+    `customs-browser-report.json`, `customs-390.png`, `customs-1440.png`,
+    `customs-node-final.log` y `customs-build-final.log`.
+- Riesgos / pendientes:
+  - Aplicar la migración y publicar el frontend antes de usar el producto;
+    catálogo sembrado para tenants existentes. SQL local no certifica RLS
+    desplegado ni cuentas reales. UAT autenticado pendiente según el documento.
+  - El servicio no liquida impuestos aduaneros. Se documenta su alcance en
+    condiciones comerciales. Los avances requieren referencia escrita;
+    comprobar documentación real y factura emitida durante UAT.
+  - La prueba de navegador utiliza un proveedor simulado, sin correos,
+    cotizaciones ni escrituras a Production. No se instalaron dependencias.
+- Publicación autorizada: aplicar exclusivamente `20261020120000`, mantener la
+  opción del catálogo inactiva durante el despliegue de frontend y habilitarla
+  al confirmar Vercel Production. Preflight remoto: 128 migraciones, última
+  `20261019201000`; RLS activo en las seis tablas revisadas y cero productos
+  `customs_only`. Evidencia ignorada en `.ua/intermediate/customs-release/`.
+- Commit: se registrará el hash funcional y el resultado de publicación al
+  completar el postflight; UAT autenticado conserva su pendiente independiente.

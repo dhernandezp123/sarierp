@@ -2,7 +2,7 @@ type Amount = number | string | null
 export type CostPricingLine = {
   id: string; description: string; item_type: string; supplier: string | null
   currency: string | null; quantity: Amount; cost_amount: Amount; sale_amount: Amount
-  deleted_at?: string | null
+  deleted_at?: string | null; rate_code?: string | null
 }
 export type ProviderCostLine = {
   id: string; pricing_item_id: string | null; description: string; supplier: string | null
@@ -38,7 +38,7 @@ export function containerCount(containers: CostContainer[]) {
 }
 
 /** Explicit IDs only: descriptions are not keys, even for legacy invoices. */
-export function analyzeCosts(pricing: CostPricingLine[], invoices: ProviderCostLine[], validated = false) {
+export function analyzeCosts(pricing: CostPricingLine[], invoices: ProviderCostLine[], validated = false, ownZeroCostIds: string[] = []) {
   const lines = pricing.filter(p => !p.deleted_at), costs = invoices.filter(i => !i.deleted_at)
   const currencies = [...new Set([...lines, ...costs].map(i => costCurrency(i.currency)))]
   return currencies.map(currency => {
@@ -48,26 +48,28 @@ export function analyzeCosts(pricing: CostPricingLine[], invoices: ProviderCostL
       const linked = registered.filter(i => i.pricing_item_id === item.id)
       const quoted = costLineTotal(item.cost_amount, item.quantity)
       const sale = costLineTotal(item.sale_amount, item.quantity)
-      const base = linked.length ? sum(linked.map(i => costNumber(i.total_cost))) : null
-      const tax = linked.length ? sum(linked.map(i => costNumber(i.tax_amount))) : null
+      const ownZeroCost = ownZeroCostIds.includes(item.id) && quoted === 0 && linked.length === 0
+      const base = linked.length ? sum(linked.map(i => costNumber(i.total_cost))) : ownZeroCost ? 0 : null
+      const tax = linked.length ? sum(linked.map(i => costNumber(i.tax_amount))) : ownZeroCost ? 0 : null
       const withTax = base === null || tax === null ? null : base + tax
-      return { item, quoted, sale, profit: subtract(sale, quoted), linked, base, tax, withTax,
+      return { item, quoted, sale, profit: subtract(sale, quoted), linked, base, tax, withTax, ownZeroCost,
         // A partial invoice is never an automatic saving.
         variance: validated && linked.length ? subtract(base, quoted) : null }
     })
     const unmatched = registered.filter(i => !items.some(p => p.id === i.pricing_item_id))
-    const missing = rows.filter(r => !r.linked.length)
+    const missing = rows.filter(r => !r.linked.length && !r.ownZeroCost)
     const quoted = items.length ? sum(rows.map(r => r.quoted)) : null
     const sale = items.length ? sum(rows.map(r => r.sale)) : null
-    const base = registered.length ? sum(registered.map(i => costNumber(i.total_cost))) : null
-    const tax = registered.length ? sum(registered.map(i => costNumber(i.tax_amount))) : null
+    const internalOnly = rows.length > 0 && rows.every(row => row.ownZeroCost)
+    const base = registered.length ? sum(registered.map(i => costNumber(i.total_cost))) : internalOnly ? 0 : null
+    const tax = registered.length ? sum(registered.map(i => costNumber(i.tax_amount))) : internalOnly ? 0 : null
     const invalid = currency === 'Sin moneda' || quoted === null || sale === null ||
       (registered.length > 0 && (base === null || tax === null))
     const reconciled = !invalid && rows.length > 0 && missing.length === 0 && unmatched.length === 0
     const closed = validated && reconciled
     return { currency, rows, unmatched, missing, quoted, sale, base, tax,
       payable: base === null || tax === null ? null : base + tax,
-      quotedProfit: subtract(sale, quoted), registeredProfit: invalid ? null : subtract(sale, base),
+      quotedProfit: subtract(sale, quoted), registeredProfit: invalid || (internalOnly && !validated) ? null : subtract(sale, base),
       variance: closed ? subtract(base, quoted) : null, reconciled, closed, invalid,
       // This is the budget for wholly unregistered lines, not a forecast for partial invoices.
       unregisteredBudget: sum(missing.map(r => r.quoted)) }

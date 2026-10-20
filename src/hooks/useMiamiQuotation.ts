@@ -594,6 +594,7 @@ export function useMiamiQuotation({
   ])
 
   return {
+    supplierName,
     clientRates,
     surchargeRules,
     taxRatePercent,

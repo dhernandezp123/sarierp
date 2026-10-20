@@ -5,11 +5,11 @@ import { cardClass } from '@/src/lib/ui-classes'
 
 export const costMoney = (value: number | null, currency: string) => value === null ? 'Pendiente / sin base' : `${currency} ${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-export function CostAnalysisPanel({ pricing, invoices = [], containers = [], agent = null, validated = false, showRegistered = true }: {
+export function CostAnalysisPanel({ pricing, invoices = [], containers = [], agent = null, validated = false, showRegistered = true, ownZeroCostIds = [] }: {
   pricing: CostPricingLine[]; invoices?: ProviderCostLine[]; containers?: CostContainer[]
-  agent?: FreightSource | null; validated?: boolean; showRegistered?: boolean
+  agent?: FreightSource | null; validated?: boolean; showRegistered?: boolean; ownZeroCostIds?: string[]
 }) {
-  const groups = analyzeCosts(pricing, invoices, validated)
+  const groups = analyzeCosts(pricing, invoices, validated, ownZeroCostIds)
   const count = containerCount(containers)
   const breakdown = freightBreakdown(pricing, containers, agent)
   return <section className="space-y-4" aria-label="Análisis de costos">
@@ -19,7 +19,7 @@ export function CostAnalysisPanel({ pricing, invoices = [], containers = [], age
       <h2 className="text-xl font-bold">Detalle de costos — {group.currency}</h2>
       {showRegistered && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950 dark:text-amber-100">
         {group.closed ? 'Validación financiera registrada. Comparación de importes sin impuestos de proveedor.' : group.base === null ? 'Costos pendientes de registrar. La ausencia de facturas no representa ahorro ni utilidad real.' : 'Resultado provisional: las facturas registradas pueden ser parciales. Confirma los cargos restantes antes de validar.'}
-        {' '}{group.rows.length - group.missing.length} de {group.rows.length} cargos con registros vinculados (no certifica facturación completa).
+        {' '}{group.rows.length - group.missing.length} de {group.rows.length} cargos {ownZeroCostIds.length ? 'con costo conciliable o con honorarios propios de costo externo cero' : 'con registros vinculados'} (no certifica facturación completa).
         {group.unmatched.length > 0 && ` ${group.unmatched.length} registros sin conciliar con un cargo en la misma moneda.`}
         {group.invalid && ' Hay importes o monedas sin base comparable; revisa los datos.'}
       </p>}
@@ -55,7 +55,7 @@ export function CostAnalysisPanel({ pricing, invoices = [], containers = [], age
             {count !== null && <td className="p-3 text-right tabular-nums">{costMoney(row.quoted === null ? null : row.quoted / count, group.currency)}</td>}
             <td className={`p-3 text-right tabular-nums ${row.profit !== null && row.profit < 0 ? 'font-bold text-red-600 dark:text-red-400' : ''}`}>{costMoney(row.profit, group.currency)}{row.profit !== null && row.profit < 0 && <p className="text-xs">Pérdida cotizada</p>}</td>
             {showRegistered && <><td className="p-3 text-right tabular-nums">{costMoney(row.base, group.currency)}</td>
-              <td className="p-3">{!row.linked.length ? 'Sin registro vinculado' : group.closed ? 'Validado' : `${row.linked.length} registro(s); confirmar alcance`}</td>
+              <td className="p-3">{row.ownZeroCost ? group.closed ? 'Honorarios propios: cero validado' : 'Honorarios propios: confirmar costo cero' : !row.linked.length ? 'Sin registro vinculado' : group.closed ? 'Validado' : `${row.linked.length} registro(s); confirmar alcance`}</td>
               <td className="p-3 text-right tabular-nums">{group.closed ? costMoney(row.variance, group.currency) : 'Pendiente de cierre'}</td></>}
           </tr>)}</tbody>
         </table>

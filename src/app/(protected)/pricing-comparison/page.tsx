@@ -3001,7 +3001,8 @@ function PricingComparisonContent() {
     costTotal: totalCost,
   })
 
-  const isMiamiFlow =
+  const isCustomsFlow = selectedQuote?.service_product === 'customs_only'
+  const isMiamiFlow = isCustomsFlow ||
     selectedQuote?.service_product === 'miami_lcl' ||
     selectedQuote?.service_product === 'miami_air'
 
@@ -5333,7 +5334,12 @@ const profitabilityColor =
                       </>
                     )}
 
-                    {isMiamiFlow && (
+                    {isCustomsFlow && <section className={cardClass}>
+                      <h2 className="font-semibold">Servicio de Aduanas</h2>
+                      <p className="mt-2 text-sm text-slate-500">Cargos propios, sin comparativo de agentes. La entrega final se cotiza por separado cuando está incluida.</p>
+                      <a className={secondaryButtonClass} href={`/quotations/${selectedQuote.id}/edit`}>Editar servicio y entrega final</a>
+                    </section>}
+                    {isMiamiFlow && !isCustomsFlow && (
                       <section className={cn(cardClass, 'p-5')}>
                         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700/60 dark:bg-amber-950/20">
                           <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
@@ -5382,7 +5388,7 @@ const profitabilityColor =
                       </section>
                     )}
 
-                    {isMiamiFlow && (
+                    {isMiamiFlow && !isCustomsFlow && (
                       <section className={cn(cardClass, 'p-5')}>
                         <div className="flex items-center justify-between gap-4">
                           <div>

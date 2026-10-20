@@ -32,6 +32,7 @@ type Shipment = {
 }
 
 const SERVICE_LABELS: Record<string, string> = {
+  customs_only: 'Servicio de Aduanas',
   miami_lcl:         'LCL Miami',
   miami_air:         'Aéreo Miami',
   other_origin_fcl:  'FCL',
@@ -67,11 +68,12 @@ function fmt(date: string | null) {
   return new Date(year, month - 1, day).toLocaleDateString('es-HN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-const FILTERS = ['Todos', 'FCL', 'LCL', 'Aéreo', 'Terrestre', 'Courier'] as const
+const FILTERS = ['Todos', 'FCL', 'LCL', 'Aéreo', 'Terrestre', 'Courier', 'Aduanas'] as const
 type Filter = (typeof FILTERS)[number]
 
 function matchesFilter(sp: string | null | undefined, filter: Filter): boolean {
   if (filter === 'Todos') return true
+  if (filter === 'Aduanas') return sp === 'customs_only'
   if (filter === 'FCL') return sp === 'other_origin_fcl'
   if (filter === 'LCL') return sp === 'miami_lcl' || sp === 'other_origin_lcl'
   if (filter === 'Aéreo') return sp === 'miami_air' || sp === 'other_origin_air'

@@ -51,6 +51,12 @@ export const tradeDirections = [
 
 export const defaultServiceProducts: ServiceProductCatalogItem[] = [
   {
+    value: 'customs_only',
+    label: 'Servicio de Aduanas',
+    appliesClientRates: false,
+    sortOrder: 80,
+  },
+  {
     value: 'miami_lcl',
     label: 'Miami Consolidado Marítimo LCL',
     appliesClientRates: true,

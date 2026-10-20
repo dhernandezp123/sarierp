@@ -1,5 +1,9 @@
 'use client'
 
+import { CustomsQuotationSection } from '@/src/components/quotations/CustomsQuotationSection'
+import { buildCustomsPricingItems, hydrateCustomsCharges, newCustomsCharges, validateCustomsQuotation } from '@/src/lib/customs-quotation'
+import { isCustomsOnly, usesOwnPricing } from '@/src/lib/quotation-products'
+
 import {
   type CargoDimensionLine, getCargoVolumeMode, calculateLineCbm,
   calculateLineFt3, getCargoWeightUnit, getLineUnitWeightLbs,
@@ -129,6 +133,7 @@ export default function EditQuotationPage() {
     discarded: 'containers' | 'cargo'
   } | null>(null)
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([])
+  const [customsCharges, setCustomsCharges] = useState(newCustomsCharges)
   const [editingContainerLineIndex, setEditingContainerLineIndex] =
     useState<number | null>(null)
   const [containerLineForm, setContainerLineForm] = useState({
@@ -331,6 +336,7 @@ export default function EditQuotationPage() {
     }
 
     setPricingItems((data || []) as PricingItem[])
+    setCustomsCharges(hydrateCustomsCharges(data || []))
   }
 
   const fetchContainerLines = async (quotationId: string) => {
@@ -615,9 +621,13 @@ export default function EditQuotationPage() {
       return
     }
 
-    if (!formData.commodity.trim()) {
+    if (!formData.commodity.trim() && (!isCustomsOnly(formData.service_product) || formData.status !== 'Borrador' || sendToPricing)) {
       toast.error('Debes ingresar Commodity/Descripción de la carga')
       return
+    }
+    if (isCustomsOnly(formData.service_product)) {
+      const error = validateCustomsQuotation(customsCharges, formData, formData.status === 'Borrador' && !sendToPricing)
+      if (error) { toast.error(error); return }
     }
 
     const saveRequiresContainerLines =
@@ -641,11 +651,9 @@ export default function EditQuotationPage() {
     }
 
     const quotationId = params.id as string
-    const saveIsMiamiFlow =
-      formData.service_product === 'miami_lcl' ||
-      formData.service_product === 'miami_air'
+    const saveIsMiamiFlow = usesOwnPricing(formData.service_product)
 
-    if (saveIsMiamiFlow && !miami.canUseMiamiCalculator) {
+    if (miami.isMiamiFlow && !miami.canUseMiamiCalculator) {
       toast.error('No hay tarifas Miami disponibles para este cliente. Revisa las tarifas antes de guardar.')
       return
     }
@@ -660,7 +668,9 @@ export default function EditQuotationPage() {
       return
     }
 
-    const miamiPricingItems = saveIsMiamiFlow
+    const miamiPricingItems = isCustomsOnly(formData.service_product)
+      ? buildCustomsPricingItems(quotationId, customsCharges, miami.taxRatePercent, miami.supplierName, profile?.id)
+      : saveIsMiamiFlow
       ? miami.buildMiamiPricingItems(quotationId)
       : []
     const miamiTotalCost = miamiPricingItems.reduce(
@@ -740,7 +750,7 @@ export default function EditQuotationPage() {
 
         pricing_notes: formData.pricing_notes || null,
         observaciones: formData.observaciones || null,
-        ...(isMiamiFlow
+        ...(saveIsMiamiFlow
           ? { client_notes: formData.client_notes || null }
           : {}),
         ...(saveIsMiamiFlow
@@ -796,7 +806,7 @@ export default function EditQuotationPage() {
       if (error) throw error
       persisted = true
       if (saveIsMiamiFlow) setPricingItems(miamiPricingItems as PricingItem[])
-      if (sendToPricing) {
+      if (sendToPricing && !isCustomsOnly(formData.service_product)) {
         setFormData(previous => ({ ...previous, status: 'Pendiente de Fijar Precios' }))
         setSendPricingDialogOpen(false)
         try {
@@ -862,7 +872,7 @@ export default function EditQuotationPage() {
         }
       }
 
-      toast.success(sendToPricing ? 'Cambios guardados y cotización enviada a Pricing' : 'Cambios guardados correctamente')
+      toast.success(sendToPricing && isCustomsOnly(formData.service_product) ? 'Cotización de aduanas aprobada' : sendToPricing ? 'Cambios guardados y cotización enviada a Pricing' : 'Cambios guardados correctamente')
 
       if (!sendToPricing && !saveIsMiamiFlow && formData.status === 'Borrador') {
         setSendPricingDialogOpen(true)
@@ -1004,6 +1014,7 @@ export default function EditQuotationPage() {
     formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
 
   const isMiamiFlow = miami.isMiamiFlow
+  const isCustomsFlow = isCustomsOnly(formData.service_product)
 
   const requiresLooseCargo =
     formData.quote_type === 'LCL' ||
@@ -1032,7 +1043,7 @@ export default function EditQuotationPage() {
         </div>
 
         <SectionNav
-          items={editorSections}
+          items={isCustomsFlow ? editorSections.filter(item => ['#quote-general', '#quote-actions'].includes(item.href)) : editorSections}
           label="Secciones del editor de cotización"
         />
 
@@ -1066,9 +1077,10 @@ export default function EditQuotationPage() {
               </div>
 
               <div className={fieldGroupClass}>
-                <label className={formLabelClass}>Transporte</label>
+                <label className={formLabelClass}>{isCustomsFlow ? 'Servicio' : 'Transporte'}</label>
               <select
                 name="tipo_transporte"
+                disabled={isCustomsFlow}
                 value={formData.tipo_transporte || ''}
                 onChange={(e) =>
                   setFormData({
@@ -1080,6 +1092,7 @@ export default function EditQuotationPage() {
                 className={fieldClass}
               >
                 <option value="">Transporte</option>
+                {isCustomsFlow && <option value="Aduanas">Servicio de Aduanas</option>}
                 <option value="Aéreo">Aéreo</option>
                 <option value="Marítima">Marítima</option>
                 <option value="Terrestre">Terrestre</option>
@@ -1092,10 +1105,11 @@ export default function EditQuotationPage() {
                 name="quote_type"
                 value={formData.quote_type || ''}
                 onChange={(e) => requestQuoteTypeChange(e.target.value)}
-                disabled={!formData.tipo_transporte}
+                disabled={isCustomsFlow || !formData.tipo_transporte}
                 className={fieldClass}
               >
                 <option value="">Tipo de cotización</option>
+                {isCustomsFlow && <option value="Aduanas">Aduanas</option>}
 
                 {(quoteTypeOptions[formData.tipo_transporte] || []).map((type) => (
                   <option key={type} value={type}>
@@ -1138,7 +1152,7 @@ export default function EditQuotationPage() {
               />
               </div>
 
-              <div className={fieldGroupClass}>
+              {!isCustomsFlow && <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Incoterm</label>
               <select
                 name="incoterm"
@@ -1155,7 +1169,7 @@ export default function EditQuotationPage() {
                 <option value="DAP">DAP</option>
                 <option value="DDP">DDP</option>
               </select>
-              </div>
+              </div>}
 
               <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Nombre de contacto</label>
@@ -1193,6 +1207,8 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
+          {isCustomsFlow && <CustomsQuotationSection data={formData} onChange={(field, value) => setFormData(previous => ({ ...previous, [field]: value }))} charges={customsCharges} setCharges={setCustomsCharges} taxRate={miami.taxRatePercent} />}
+          {!isCustomsFlow && <>
           <section id="quote-route" className="scroll-mt-28 pt-3">
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
@@ -1858,6 +1874,7 @@ export default function EditQuotationPage() {
             )}
           </div>
 
+          </>}
           <datalist id="countries">
             {countries.map((country) => (
               <option key={country.id} value={country.name} />
@@ -1894,7 +1911,7 @@ export default function EditQuotationPage() {
                 disabled={saving}
                 className={primaryButtonClass}
               >
-                Enviar a Pricing
+                {isCustomsFlow ? 'Aprobar cotización de aduanas' : 'Enviar a Pricing'}
               </button>
             )}
 

@@ -14,6 +14,9 @@ export const operationStatuses = [
 export type OperationStatus = (typeof operationStatuses)[number]
 
 export const shippingInstructionFilterStatuses = [
+  'En gestión aduanera',
+  'Liberado',
+  'Entregado',
   'Pendiente Validaci\u00f3n',
   'Asignado',
   'Listo para Booking',
@@ -43,6 +46,7 @@ export function resolveShippingInstructionStatus({
 }: ShippingInstructionStatusInput) {
   const shipmentStatus = (shipment_status || '').trim()
   const operationalStatus = (operational_status || '').trim()
+  if (['En gestión aduanera', 'Liberado', 'Entregado'].includes(operationalStatus)) return operationalStatus
 
   if (
     shipmentStatus &&

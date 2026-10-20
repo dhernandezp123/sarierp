@@ -1,3 +1,5 @@
+import { usesOwnPricing } from '@/src/lib/quotation-products'
+
 type PricingValidationInput = {
   selectedQuote?: {
     quote_type?: string | null
@@ -42,7 +44,7 @@ export function requiresCarrier(
   const quoteType = normalizeText(quote.quote_type)
   const serviceProduct = quote.service_product || ''
 
-  if (serviceProduct === 'miami_lcl' || serviceProduct === 'miami_air') {
+  if (usesOwnPricing(serviceProduct)) {
     return false
   }
 
@@ -76,9 +78,7 @@ export function validatePricingCompleteness({
 }: PricingValidationInput) {
   const errors: string[] = []
 
-  const isMiamiFlow =
-    selectedQuote?.service_product === 'miami_lcl' ||
-    selectedQuote?.service_product === 'miami_air'
+  const isMiamiFlow = usesOwnPricing(selectedQuote?.service_product)
 
   if (!isMiamiFlow && !selectedAgentQuote?.id) {
     errors.push('Debe seleccionar una tarifa activa de agente.')

@@ -61,6 +61,7 @@ import {
   DEFAULT_TAX_RATE_PERCENT,
   calculateTaxAmount,
   normalizeTaxRatePercent,
+  resolvePersistedTaxAmount,
 } from '@/src/lib/tax'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
 import { formatDate, formatDateTime } from '@/src/lib/format'
@@ -103,6 +104,8 @@ const statusOptions = [
 
 const getServiceProductLabel = (value?: string | null) => {
   switch (value) {
+    case 'customs_only':
+      return 'Servicio de Aduanas'
     case 'miami_lcl':
       return 'Miami Consolidado LCL'
     case 'miami_air':
@@ -786,7 +789,7 @@ function QuotationDetail() {
 
     const oldStatus = quotation.status || 'Borrador'
 
-    if (!canTransition(oldStatus, newStatus)) {
+    if (!canTransition(oldStatus, newStatus, quotation?.service_product)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${newStatus}`)
       return false
     }
@@ -996,7 +999,7 @@ function QuotationDetail() {
     const previousStatus = quotation.status || 'Ganada'
     const newStatus = 'Pendiente de Fijar Precios'
 
-    if (!canTransition(previousStatus, newStatus)) {
+    if (!canTransition(previousStatus, newStatus, quotation?.service_product)) {
       toast.error(`Transicion no permitida: ${previousStatus} a ${newStatus}`)
       return
     }
@@ -1432,7 +1435,9 @@ const pricingTotals = pricingItems.reduce(
 
     const subtotal = qty * sale
     const costTotal = qty * cost
-    const tax = calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
+    const tax = quotation.service_product === 'customs_only'
+      ? resolvePersistedTaxAmount({ taxable: Boolean(item.taxable), subtotal, taxAmount: item.tax_amount, taxRatePercent: item.tax_rate, fallbackTaxRatePercent: defaultTaxRate })
+      : calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
     const total = subtotal + tax
     const profit = subtotal - costTotal
 
@@ -1449,7 +1454,7 @@ const pricingTotals = pricingItems.reduce(
 
 const hasPricingItems = pricingItems.length > 0
 const statusActions = statusOptions.filter((status) =>
-  canTransitionForRole(quotation.status || 'Borrador', status, userRole) &&
+  canTransitionForRole(quotation.status || 'Borrador', status, userRole, quotation.service_product) &&
   !(quotation.status === 'Ganada' && status === 'Pendiente de Fijar Precios')
 )
 const hasStatusActions = canEditQuotation && (statusActions.length > 0 || quotation.status === 'Perdida')
@@ -1621,7 +1626,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         : 'Carrier'
 
   const isMiamiEmailFlow =
-    quotation?.service_product === 'miami_lcl' || quotation?.service_product === 'miami_air'
+    ['miami_lcl', 'miami_air', 'customs_only'].includes(quotation?.service_product)
 
   const commercialTotalLabel =
     commercialTotal > 0
@@ -2029,7 +2034,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     </button>
                   )}
 
-                  {canManagePricing && quotation.status === 'Ganada' && (
+                  {canManagePricing && quotation.status === 'Ganada' && quotation.service_product !== 'customs_only' && (
                     <button
                       type="button"
                       onClick={() => {
@@ -2075,7 +2080,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         <div>
           <p className="font-semibold">Siguiente paso</p>
           <p className="mt-1 text-slate-600 dark:text-slate-300">{
-            quotation.status === 'Borrador' ? 'Completa los datos del embarque y solicita pricing.' :
+            quotation.status === 'Borrador' ? (quotation.service_product === 'customs_only' ? 'Completa los honorarios y el alcance del Servicio de Aduanas para aprobar la propuesta.' : 'Completa los datos del embarque y solicita pricing.') :
             quotation.status === 'Pendiente de Fijar Precios' ? 'Pricing debe revisar costos y preparar las tarifas comerciales.' :
             quotation.status === 'Pricing Aprobado' ? (quotation.repricing_return_status === 'Ganada' ? 'Pricing debe aprobar el ajuste para volver a Ganada. La venta ya está confirmada por el cliente.' : commercialOptions.length ? 'Pricing debe ofrecer las opciones antes de compartirlas con el cliente.' : 'Revisa el PDF y prepara la comunicación al cliente.') :
             quotation.status === 'Enviada al Cliente' ? (commercialOptions.length && !commercialOptions.some((option) => option.status === 'Aceptada') ? 'Registra cuál de las opciones ofrecidas eligió el cliente para confirmar la venta.' : 'Registra la respuesta del cliente desde el estado de la cotización.') :
@@ -2084,7 +2089,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           }</p>
         </div>
         {quotation.status === 'Borrador' && canEditQuotation ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/quotations/' + quotation.id + '/edit'}>Completar cotización</Link> :
-          ['Pendiente de Fijar Precios', 'Pricing Aprobado'].includes(quotation.status) && canManagePricing ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/pricing-comparison?quotation=' + quotation.id}>Revisar pricing</Link> :
+          ['Pendiente de Fijar Precios', 'Pricing Aprobado'].includes(quotation.status) && canManagePricing && quotation.service_product !== 'customs_only' ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/pricing-comparison?quotation=' + quotation.id}>Revisar pricing</Link> :
           quotation.status === 'Pricing Aprobado' && !commercialOptions.length ? <button disabled={emailLoading} onClick={openEmailComposer} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Preparar correo</button> :
           quotation.status === 'Enviada al Cliente' && canGenerateSI && commercialOptions.some((option) => option.status === 'Ofrecida') ? <button onClick={() => { document.getElementById('commercial-options')?.focus(); document.getElementById('commercial-options')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Elegir opción del cliente</button> :
           quotation.status === 'Ganada' && canGenerateSI ? <button disabled={creatingRouting} onClick={createRoutingInstruction} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">{creatingRouting ? 'Abriendo operación…' : 'Abrir / generar operación'}</button> :
@@ -2337,7 +2342,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
-                  Detalles del Embarque
+                  {quotation.service_product === 'customs_only' ? 'Detalles del servicio de Aduanas' : 'Detalles del Embarque'}
                 </CardTitle>
               </CardHeader>
 
@@ -2356,6 +2361,12 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   </p>
                 </div>
 
+                {quotation.service_product === 'customs_only' ? <>
+                  <div><p className="text-xs text-slate-500">Aduana de despacho</p><p className="font-semibold">{quotation.puerto_destino}</p></div>
+                  <div><p className="text-xs text-slate-500">Mercancía</p><p className="font-semibold">{quotation.commodity}</p></div>
+                  <div><p className="text-xs text-slate-500">Entrega final</p><p className="font-semibold">{pricingItems.some(item => item.rate_code === 'customs_delivery') ? quotation.delivery_address : 'No incluida'}</p></div>
+                  <div><p className="text-xs text-slate-500">Válida hasta</p><p className="font-semibold">{formatDisplayDate(quotation.valid_until)}</p></div>
+                </> : <>
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Tipo</p>
                   <p className="font-semibold text-slate-900 dark:text-white">
@@ -2520,6 +2531,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     {quotation.commodity || 'N/A'}
                   </p>
                 </div>
+              </>}
               </CardContent>
             </Card>
 
@@ -2658,12 +2670,12 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           <Card>
             <CardHeader>
               <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
-                Tarifas de Agentes
+                {quotation.service_product === 'customs_only' ? 'Servicio propio' : 'Tarifas de Agentes'}
               </CardTitle>
             </CardHeader>
 
             <CardContent>
-              {agentQuotes.length === 0 ? (
+              {quotation.service_product === 'customs_only' ? <p className="text-sm text-slate-500">Servicio de Aduanas con honorarios propios. Consulta los cargos del servicio y la entrega final en el resumen comercial.</p> : agentQuotes.length === 0 ? (
                 <p className="text-gray-500 dark:text-slate-400">
                   No hay tarifas registradas.
                 </p>

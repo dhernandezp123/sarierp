@@ -103,6 +103,7 @@ type PortalReadiness = {
 }
 
 const SERVICE_LABELS: Record<string, string> = {
+  customs_only: 'Servicio de Aduanas',
   miami_lcl: 'LCL Miami',
   miami_air: 'Aéreo Miami',
   other_origin_fcl: 'Contenedor (FCL)',
@@ -527,7 +528,7 @@ export default function ShipmentDetailPage() {
           </span>
         </div>
         <p className="mt-4 text-sm text-slate-500">
-          {shipment.bookings.length === 0
+          {service === 'customs_only' ? 'Gestión de aduanas y entrega final cuando esté contratada.' : shipment.bookings.length === 0
             ? 'Esta operación aún no tiene bookings.'
             : `${shipment.bookings.length} booking${shipment.bookings.length === 1 ? '' : 's'} relacionado${shipment.bookings.length === 1 ? '' : 's'}.`}
         </p>
@@ -553,9 +554,11 @@ export default function ShipmentDetailPage() {
         </div>
         <div className="divide-y divide-slate-100 px-5 dark:divide-slate-800">
           <InfoRow label="Mercancía" value={shipment.commodity} />
+          {service !== 'customs_only' && <>
           <InfoRow label="Incoterm" value={shipment.incoterm} />
           <InfoRow label="Peso" value={shipment.peso_kg ? `${shipment.peso_kg.toLocaleString('es-HN')} kg` : null} />
           <InfoRow label="Volumen" value={shipment.volumen_cbm ? `${shipment.volumen_cbm.toLocaleString('es-HN')} CBM` : null} />
+          </>}
           <InfoRow label="Origen" value={shipment.origen} />
           <InfoRow label="Destino" value={shipment.destino} />
         </div>
