@@ -12365,4 +12365,4 @@ Agregar una entrada por fix:
 - Riesgos / pendientes: los PDF descargados previamente requieren regenerarse.
   Comprobación del documento del cliente por el usuario pendiente; no se
   modifican cotizaciones, direcciones, importes ni datos de Production.
-- Commit: pendiente de generar al finalizar las validaciones.
+- Commit funcional: `6bae9f9aba3fa135ee3ba4a8f6713f81930878e2`.
