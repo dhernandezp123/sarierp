@@ -1007,10 +1007,10 @@ function QuotationPDFPages({
           {serviceProduct === 'customs_only' ? <View style={styles.infoBox}>
             <Text style={styles.boxTitle}>DETALLES DEL SERVICIO</Text>
             <View style={styles.row}><Text style={styles.label}>Servicio:</Text><Text style={styles.value}>Aduanas</Text></View>
-            <View style={styles.row}><Text style={styles.label}>Dirección:</Text><Text style={styles.value}>{quotation.trade_direction === 'export' ? 'Exportación' : 'Importación'}</Text></View>
+            <View style={styles.row}><Text style={styles.label}>Tipo de operación:</Text><Text style={styles.value}>{quotation.trade_direction === 'export' ? 'Exportación' : 'Importación'}</Text></View>
             <View style={styles.row}><Text style={styles.label}>Aduana:</Text><Text style={styles.value}>{quotation.puerto_destino || 'N/A'}</Text></View>
             <View style={styles.fullRow}><Text style={styles.blockLabel}>Mercancía:</Text><Text style={styles.blockValue}>{quotation.commodity || 'N/A'}</Text></View>
-            <View style={styles.fullRow}><Text style={styles.blockLabel}>Entrega final:</Text><Text style={styles.blockValue}>{pricingItems.some(item => item.rate_code === 'customs_delivery') ? quotation.delivery_address || 'Por definir' : 'No incluida'}</Text></View>
+            <View style={styles.fullRow}><Text style={styles.blockLabel}>Dirección de entrega:</Text><Text style={styles.blockValue}>{pricingItems.some(item => item.rate_code === 'customs_delivery') ? quotation.delivery_address || 'Por definir' : 'No incluida'}</Text></View>
           </View> : <View style={styles.infoBox}>
             <Text style={styles.boxTitle}>
               DETALLES DEL EMBARQUE

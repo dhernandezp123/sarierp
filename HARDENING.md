@@ -12346,3 +12346,23 @@ Agregar una entrada por fix:
 - UAT autenticado conserva su pendiente independiente según
   `docs/uat/customs-service.md`; publicación detallada en
   `docs/release/customs-service-2026-10-20.md`.
+
+### CUS-PDF-02 — Etiquetas de operación y domicilio en PDF de Aduanas (20/10/2026)
+
+- Estado: validado localmente; regeneración del PDF del cliente pendiente.
+- Hallazgo: el PDF titulaba «Dirección» al sentido comercial Importación /
+  Exportación, lo que se confundía con el domicilio de entrega.
+- Archivos: `src/components/pdf/quotation-pdf.tsx`,
+  `tests/customs-quotation-pdf.test.mjs` y este registro. SQL: ninguno.
+- Cambio: «Tipo de operación» identifica `trade_direction`; «Dirección de
+  entrega» identifica `delivery_address` cuando la entrega está incluida.
+  Se conservan «No incluida» y «Por definir» según el alcance contratado.
+- Validación: la prueba del PDF renderizado reprodujo el fallo antes del
+  cambio y ahora comprueba ambas etiquetas junto con sus valores correctos.
+  `npx.cmd tsc --noEmit`, 371/371 pruebas y build aprobados. ESLint dirigido:
+  19 diagnósticos históricos del componente; `npm.cmd run lint:ci` comprueba
+  la ausencia de regresiones contra el baseline vigente.
+- Riesgos / pendientes: los PDF descargados previamente requieren regenerarse.
+  Comprobación del documento del cliente por el usuario pendiente; no se
+  modifican cotizaciones, direcciones, importes ni datos de Production.
+- Commit: pendiente de generar al finalizar las validaciones.
