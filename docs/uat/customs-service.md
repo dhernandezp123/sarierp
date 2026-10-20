@@ -1,5 +1,10 @@
 # Servicio de Aduanas — aceptación
 
+Publicado y habilitado en Production el 20/10/2026. Las comprobaciones
+automáticas y el despliegue están registrados en
+[la publicación](../release/customs-service-2026-10-20.md); el recorrido
+autenticado de este documento permanece pendiente.
+
 ## Comportamiento
 
 El producto `customs_only`, visible como **Servicio de Aduanas**, cotiza honorarios

@@ -12238,8 +12238,8 @@ Agregar una entrada por fix:
 
 ### 2026-10-20 - CUS-01 - Servicio de Aduanas sin agente y con entrega final opcional
 
-- Estado: implementado y validado localmente; publicación SQL/frontend autorizada
-  por el usuario el 20/10/2026 y en ejecución. UAT autenticado pendiente.
+- Estado: SQL y frontend publicados y comprobados en Production el 20/10/2026;
+  Servicio de Aduanas habilitado en el catálogo. UAT autenticado pendiente.
 - Hallazgo: el catálogo de cotizaciones no permitía cotizar un servicio propio
   de aduanas; obligaba a simular transporte y tarifas de agente. Las excepciones
   estaban limitadas a Miami en UI, RPC, RLS de pricing y creación del expediente.
@@ -12311,18 +12311,38 @@ Agregar una entrada por fix:
     `customs-browser-report.json`, `customs-390.png`, `customs-1440.png`,
     `customs-node-final.log` y `customs-build-final.log`.
 - Riesgos / pendientes:
-  - Aplicar la migración y publicar el frontend antes de usar el producto;
-    catálogo sembrado para tenants existentes. SQL local no certifica RLS
-    desplegado ni cuentas reales. UAT autenticado pendiente según el documento.
+  - Migración y frontend publicados; catálogo habilitado para el tenant
+    existente. RLS/permisos desplegados comprobados por catálogo; esa revisión
+    no certifica cuentas reales. UAT autenticado pendiente según el documento.
   - El servicio no liquida impuestos aduaneros. Se documenta su alcance en
     condiciones comerciales. Los avances requieren referencia escrita;
     comprobar documentación real y factura emitida durante UAT.
   - La prueba de navegador utiliza un proveedor simulado, sin correos,
     cotizaciones ni escrituras a Production. No se instalaron dependencias.
-- Publicación autorizada: aplicar exclusivamente `20261020120000`, mantener la
-  opción del catálogo inactiva durante el despliegue de frontend y habilitarla
-  al confirmar Vercel Production. Preflight remoto: 128 migraciones, última
-  `20261019201000`; RLS activo en las seis tablas revisadas y cero productos
-  `customs_only`. Evidencia ignorada en `.ua/intermediate/customs-release/`.
-- Commit: se registrará el hash funcional y el resultado de publicación al
-  completar el postflight; UAT autenticado conserva su pendiente independiente.
+- Publicación autorizada y postflight (20/10/2026):
+  - Commit funcional `196713ec2b3e352ce0b651105a30ee9db0f11b63` en `origin/main`.
+  - Supabase `fwspgdzvlbtbgiupvrzo`: aplicada únicamente `20261020120000`,
+    con fuente exacta registrada en la misma transacción. Historial de 128 a
+    129 migraciones; Outlook `20261002120000` sigue sin aplicar.
+  - Guard transaccional comparó huellas antes/después de catorce tablas de
+    negocio; postflight independiente confirmó que permanecen intactas.
+    Sin cotizaciones, facturas, operaciones ni mensajes de prueba en Production.
+  - RLS activo en las seis tablas revisadas; siete funciones nuevas sin EXECUTE
+    para anon; triggers privados para authenticated. Validación pura y avance
+    operativo son ejecutables por authenticated, con los controles de rol,
+    tenant, estado y versión presentes en los cuerpos publicados.
+  - Opción nueva temporalmente inactiva durante el build para no exponerla al
+    frontend anterior; habilitada tras confirmar Vercel y CI del mismo commit.
+    Producto `customs_only`, etiqueta `Servicio de Aduanas`, activo y sin
+    tarifas Miami en el tenant existente.
+  - GitHub Quality `39469345310`: application/database success.
+  - Vercel Production deployment `7207033956`: success; URL inmutable
+    `https://sarierp-jytbiy22f-claudherhn-5641s-projects.vercel.app`.
+  - Dominio `sari.forwarders.app`: login 200; cotización nueva, pricing y
+    operaciones redirigen 307 a login conservando retorno. Portal de envíos
+    redirige 307 a su login. Sin utilizar cuentas comerciales para el smoke.
+  - Evidencia ignorada: `.ua/intermediate/customs-release/` con manifest,
+    preflight, fuente aplicada, grants/RLS, huellas, activación y HTTP.
+- UAT autenticado conserva su pendiente independiente según
+  `docs/uat/customs-service.md`; publicación detallada en
+  `docs/release/customs-service-2026-10-20.md`.
