@@ -2,8 +2,7 @@
 
 ## Estado y publicación
 
-Commit y SQL publicados en Production el 21/10/2026; frontend pendiente de
-publicación. Migración aplicada:
+Frontend y SQL publicados en Production el 21/10/2026. Migración aplicada:
 `supabase/migrations/20261021120000_agent_quote_internal_notes.sql`.
 No requiere rellenar tarifas históricas:
 `agent_quotes.internal_notes` es nullable. No se modifican permisos ni RLS.

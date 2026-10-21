@@ -31,8 +31,8 @@ de las tarifas del comparativo, su migración, pruebas y documentación.
 
 ## Estado
 
-SQL publicado; frontend pendiente de Vercel. UAT autenticado pendiente de forma
-independiente.
+Frontend y SQL publicados en Production. UAT autenticado pendiente de forma
+independiente según el recorrido documentado.
 
 - Commit funcional `2736ca11203c9daf4ea7e1b3a4889db42a242f2e`, en `origin/main`.
 - Aplicada exclusivamente `20261021120000`: historial de 129 a 130 migraciones.
@@ -44,12 +44,19 @@ independiente.
   funciones de acceso intactos. Outlook sigue sin aplicar.
 - Quality CI: [39622724610](https://github.com/dhernandezp123/sarierp/actions/runs/39622724610).
   Aplicación y base de datos aprobadas.
-- Vercel no registró despliegue automático del commit. CLI sin credenciales;
-  autenticación solicitada al usuario para completar la publicación directa.
-  No se ha confirmado todavía publicación del frontend.
-- Smoke posterior al SQL sobre el frontend existente: login HTTP 200;
-  cotización nueva y pricing HTTP 307 a login; portal de envíos HTTP 307 a su
-  login. Estas respuestas confirman disponibilidad y protección, no el despliegue
-  de la interfaz nueva. Sin registros ni mensajes de prueba en Production.
+- Vercel Production `dpl_C9D4g2v9w2eDvzrjJ86QWBVvWUkz`, estado `READY`,
+  fuente Git del commit funcional `2736ca11203c9daf4ea7e1b3a4889db42a242f2e`.
+  URL inmutable:
+  `https://sarierp-lclnn1llg-claudherhn-5641s-projects.vercel.app`.
+- Dominio `https://sari.forwarders.app`: alias verificado contra ese despliegue.
+  Sesión de Vercel autorizada por el usuario; la API permitió comprobar el commit
+  y la CLI el alias de Production. No fue necesario repetir el despliegue listo.
+- CI del registro posterior `cab237a`:
+  [39623750879](https://github.com/dhernandezp123/sarierp/actions/runs/39623750879),
+  aprobado. Sin cambios adicionales de aplicación después del commit funcional.
+- Smoke final del frontend publicado: login HTTP 200; cotización nueva y pricing
+  HTTP 307 a login; portal de envíos HTTP 307 a su login. Las verificaciones sin
+  sesión no sustituyen UAT autenticado de creación/edición de notas. Sin registros
+  ni mensajes de prueba en Production.
 
 Evidencia local ignorada en `.ua/intermediate/notes-release/`.

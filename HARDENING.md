@@ -12369,8 +12369,8 @@ Agregar una entrada por fix:
 
 ### 2026-10-21 - PNOTE-01 - Notas internas por tarifa FCL y LCL
 
-- Estado: commit y SQL publicados en Production el 21/10/2026; frontend
-  pendiente de publicación en Vercel. UAT autenticado pendiente.
+- Estado: frontend y SQL publicados y comprobados en Production el 21/10/2026.
+  UAT autenticado pendiente.
 - Hallazgo: Pricing Comparison no permitía explicar la elección de una tarifa ni
   conservar comentarios independientes por opción FCL/LCL.
 - Archivos y SQL:
@@ -12419,8 +12419,8 @@ Agregar una entrada por fix:
     Evidencias ignoradas en `.ua/intermediate/notes-*`: informe JSON, capturas,
     logs SQL, pruebas, lint, TypeScript y build. Sin cuentas ni escrituras reales.
 - Riesgos / pendientes:
-  - Publicar el frontend; la migración ya está aplicada. No se crearon datos de
-    negocio de prueba ni se enviaron mensajes a Production.
+  - Frontend y migración publicados. No se crearon datos de negocio de prueba ni
+    se enviaron mensajes a Production.
   - Completar aceptación con cuentas reales según `docs/uat/pricing-rate-notes.md`.
     La nota es un comentario editable por opción, no un historial de comentarios.
 - Commit funcional: `2736ca11203c9daf4ea7e1b3a4889db42a242f2e`, en `origin/main`.
@@ -12437,12 +12437,14 @@ Agregar una entrada por fix:
   postflight independiente. La huella de tarifas excluye únicamente la columna
   nueva; todas sus notas se inicializaron a NULL. Columna TEXT nullable,
   RLS/policies/ACL y funciones de acceso conservados. Outlook sigue sin aplicar.
-- Despliegue frontend: push autorizado publicado; la integración no registró
-  despliegue para este commit. CLI de Vercel sin credenciales; autenticación
-  solicitada para completar la publicación directa. No declarar el frontend
-  publicado hasta obtener y comprobar el despliegue de Production.
+- Despliegue frontend: Vercel Production `dpl_C9D4g2v9w2eDvzrjJ86QWBVvWUkz`,
+  `READY`, fuente Git del commit funcional `2736ca1`. Sesión Vercel autorizada;
+  commit verificado por API y dominio `sari.forwarders.app` comprobado como alias
+  del mismo despliegue. URL inmutable
+  `https://sarierp-lclnn1llg-claudherhn-5641s-projects.vercel.app`.
 - Quality CI `39622724610`: application y database aprobados para el commit
-  funcional publicado. El despliegue frontend conserva su pendiente independiente.
-- Smoke posterior al SQL: login 200; cotización nueva y pricing 307 a login;
-  portal de envíos 307 a su login. Verifica disponibilidad del frontend vigente,
-  sin certificar todavía la interfaz nueva ni el UAT autenticado.
+  funcional publicado. CI `39623750879` del registro documental `cab237a` también
+  aprobado; sin cambios adicionales de aplicación.
+- Smoke final del frontend publicado: login 200; cotización nueva y pricing 307
+  a login; portal de envíos 307 a su login. No certifica UAT autenticado de las
+  notas; se conserva ese pendiente independiente y documentado.
