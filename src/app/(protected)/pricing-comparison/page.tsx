@@ -65,6 +65,7 @@ import {
 import { QuotationOptionsPanel } from '@/src/components/pricing/QuotationOptionsPanel'
 import { InsuranceCalculationDetails } from '@/src/components/pricing/InsuranceCalculationDetails'
 import { AgentContainerRateBreakdown } from '@/src/components/pricing/AgentContainerRateBreakdown'
+import { AgentQuoteNotes } from '@/src/components/pricing/AgentQuoteNotes'
 import {
   getClientVisibleQuotationOptions,
   requiresNewCommercialOptionSelection,
@@ -434,6 +435,7 @@ function PricingComparisonContent() {
     transit_time: '',
     valid_until: '',
     etd: '',
+    internal_notes: '',
   })
   const [airFreightEntryMode, setAirFreightEntryMode] = useState<
     'per_kg' | 'all_in'
@@ -740,7 +742,7 @@ function PricingComparisonContent() {
     selectedQuoteIdRef.current = quote.id
     setSelectedQuote(quote)
     setSelectedQuoteLoading(true)
-    setAgentForm((current) => ({ ...current, mbl_quantity: '1' }))
+    setAgentForm((current) => ({ ...current, mbl_quantity: '1', internal_notes: '' }))
     setClientNotes(quote.client_notes || '')
     setAgentQuotes([])
     setPricingItems([])
@@ -791,7 +793,7 @@ function PricingComparisonContent() {
   }
 
   const handleAgentChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     setAgentForm({
       ...agentForm,
@@ -960,6 +962,7 @@ function PricingComparisonContent() {
       transit_time: quote.transit_time || '',
       valid_until: quote.valid_until || '',
       etd: quote.etd || '',
+      internal_notes: quote.internal_notes || '',
     })
 
     const { data: containerRatesData, error: containerRatesError } =
@@ -1104,6 +1107,9 @@ function PricingComparisonContent() {
       valid_until: agentForm.valid_until || null,
       etd: agentForm.etd || null,
       suggested_sale: suggestedSale,
+      ...(['fcl', 'lcl'].includes(normalizeText(selectedQuote.quote_type))
+        ? { internal_notes: agentForm.internal_notes.trim() || null }
+        : {}),
       rate_per_kg: ratePerKg,
       actual_weight_kg: ratePerKg !== null ? airWeights.actualWeightKg : null,
       volumetric_weight_kg:
@@ -1287,6 +1293,7 @@ function PricingComparisonContent() {
       transit_time: '',
       valid_until: '',
       etd: '',
+      internal_notes: '',
     })
 
     setContainerRateLines([])
@@ -1307,6 +1314,29 @@ function PricingComparisonContent() {
         current === savedAgentQuote.id ? null : current
       )
     }, 1200)
+  }
+
+  const saveAgentQuoteNotes = async (agentQuoteId: string, notes: string | null) => {
+    if (!selectedQuote || selectedQuoteLoading || !ensureAgentQuoteCanBeModified()) {
+      throw new Error('No se pueden editar las notas de esta tarifa en este momento.')
+    }
+    const quotationId = selectedQuote.id
+    const { data, error } = await supabase
+      .from('agent_quotes')
+      .update({ internal_notes: notes })
+      .eq('id', agentQuoteId)
+      .eq('quotation_id', quotationId)
+      .select('id, internal_notes')
+      .single()
+
+    if (error) throw new Error(error.message)
+    if (selectedQuoteIdRef.current !== quotationId) return
+    setAgentQuotes((current) => current.map((quote) =>
+      quote.id === data.id ? { ...quote, internal_notes: data.internal_notes } : quote
+    ))
+    if (editingAgentQuoteId === data.id) {
+      setAgentForm((current) => ({ ...current, internal_notes: data.internal_notes || '' }))
+    }
   }
 
   const selectAgentQuote = async (agentQuoteId: string) => {
@@ -4572,6 +4602,28 @@ const profitabilityColor =
                         </div>
                       )}
 
+                      {['fcl', 'lcl'].includes(normalizeText(selectedQuote.quote_type)) && (
+                        <div className="col-span-full">
+                          <label htmlFor="agent-internal-notes" className={labelClass}>
+                            Notas internas de la tarifa (opcional)
+                          </label>
+                          <textarea
+                            id="agent-internal-notes"
+                            name="internal_notes"
+                            rows={3}
+                            value={agentForm.internal_notes}
+                            onChange={handleAgentChange}
+                            disabled={isAgentQuoteFormActionDisabled}
+                            placeholder="Ej.: Se eligió por salida directa y mayor cantidad de días libres."
+                            aria-describedby="agent-internal-notes-help"
+                            className={cn(fieldClass, 'mt-1 h-auto min-h-24 w-full resize-y py-3')}
+                          />
+                          <p id="agent-internal-notes-help" className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                            Comentarios de esta opción para el equipo. No aparecen en el PDF comercial.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="col-span-full w-full max-w-4xl">
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-slate-900/60">
                           <div className="flex items-center justify-between gap-4">
@@ -4854,6 +4906,8 @@ const profitabilityColor =
                           taxRate={defaultTaxRate}
                           onChargeOverridesChange={setFclTableChargeOverrides}
                           onSaveTable={saveFclTableOverrides}
+                          canEditNotes={!isAgentQuoteFormActionDisabled && selectedQuote.status === 'Pendiente de Fijar Precios'}
+                          onSaveNotes={saveAgentQuoteNotes}
                           onSelectQuote={(quote) => {
                             setSelectedRateForConfirm(quote)
                             setConfirmSelectRateOpen(true)
@@ -5100,6 +5154,18 @@ const profitabilityColor =
                                     </div>
                                     </div>
                                   </div>
+
+                                  {['fcl', 'lcl'].includes(normalizeText(selectedQuote.quote_type)) && (
+                                    <div className="mt-4 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                                      <p className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">Notas internas de la tarifa</p>
+                                      <AgentQuoteNotes
+                                        notes={quote.internal_notes}
+                                        providerName={getAgentQuoteProviderName(quote)}
+                                        canEdit={!isAgentQuoteFormActionDisabled && selectedQuote.status === 'Pendiente de Fijar Precios'}
+                                        onSave={(notes) => saveAgentQuoteNotes(quote.id, notes)}
+                                      />
+                                    </div>
+                                  )}
 
                                   <div className="mt-5 flex items-center justify-between gap-2">
                                     <button

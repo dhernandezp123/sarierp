@@ -6,6 +6,7 @@ import { Printer } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
+import { AgentQuoteNotes } from '@/src/components/pricing/AgentQuoteNotes'
 import { useCarrierCatalog } from '@/src/hooks/useCarrierCatalog'
 import { formatDateTime } from '@/src/lib/format'
 import { getAgentMblTotal, getFclMblTotal, getMblQuantity, getMblSource } from '@/src/lib/agent-mbl-cost'
@@ -34,6 +35,8 @@ type FclAgentComparisonTableProps = {
   ) => void
   onSaveTable: () => void
   onSelectQuote: (quote: AgentQuote) => void
+  canEditNotes: boolean
+  onSaveNotes: (agentQuoteId: string, notes: string | null) => Promise<void>
 }
 
 type Row = {
@@ -115,6 +118,8 @@ export function FclAgentComparisonTable({
   onChargeOverridesChange,
   onSaveTable,
   onSelectQuote,
+  canEditNotes,
+  onSaveNotes,
 }: FclAgentComparisonTableProps) {
   const printableTableRef = useRef<HTMLDivElement>(null)
   const { getCarrier } = useCarrierCatalog()
@@ -482,6 +487,17 @@ export function FclAgentComparisonTable({
       getValue: (quote) => formatDisplayDate(quote.valid_until || quote.validity_date),
     },
     { label: 'ETD', getValue: (quote) => formatDisplayDate(quote.etd) },
+    {
+      label: 'Notas internas de la tarifa',
+      getValue: (quote) => (
+        <AgentQuoteNotes
+          notes={quote.internal_notes}
+          providerName={getAgentQuoteProviderName(quote)}
+          canEdit={canEditNotes}
+          onSave={(notes) => onSaveNotes(quote.id, notes)}
+        />
+      ),
+    },
   ]
 
   const handlePrintAgentCosts = () => {
@@ -494,6 +510,7 @@ export function FclAgentComparisonTable({
     }
 
     const printableTable = printableTableRef.current.cloneNode(true) as HTMLDivElement
+    printableTable.querySelectorAll('[data-agent-notes-action]').forEach((button) => button.remove())
     const sourceInputs = printableTableRef.current.querySelectorAll('input')
     const clonedInputs = printableTable.querySelectorAll('input')
 
@@ -585,6 +602,7 @@ export function FclAgentComparisonTable({
             .print-fastest:not(.print-best-cost) { background: #fff3d6 !important; }
             thead .print-selected { box-shadow: inset 0 0 0 0.6mm #60a5fa; }
             p { margin: 0; }
+            .whitespace-pre-wrap { white-space: pre-wrap; }
             .space-y-1\\.5 > * + *, .space-y-2 > * + * { margin-top: 1mm; }
             .flex { display: flex; }
             .flex-wrap { flex-wrap: wrap; }

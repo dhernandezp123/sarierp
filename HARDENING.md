@@ -12366,3 +12366,67 @@ Agregar una entrada por fix:
   Comprobación del documento del cliente por el usuario pendiente; no se
   modifican cotizaciones, direcciones, importes ni datos de Production.
 - Commit funcional: `6bae9f9aba3fa135ee3ba4a8f6713f81930878e2`.
+
+### 2026-10-21 - PNOTE-01 - Notas internas por tarifa FCL y LCL
+
+- Estado: implementado y validado localmente; commit y despliegue autorizados
+  por el usuario el 21/10/2026. Publicación en curso; UAT autenticado pendiente.
+- Hallazgo: Pricing Comparison no permitía explicar la elección de una tarifa ni
+  conservar comentarios independientes por opción FCL/LCL.
+- Archivos y SQL:
+  - `src/app/(protected)/pricing-comparison/page.tsx`.
+  - Nuevo `src/components/pricing/AgentQuoteNotes.tsx` y modificación de
+    `src/components/pricing/FclAgentComparisonTable.tsx`.
+  - Nueva migración `supabase/migrations/20261021120000_agent_quote_internal_notes.sql`.
+  - Suite `supabase/tests/agent_quote_internal_notes.sql`, integrada en
+    `scripts/validate-audit-sql.mjs`; prueba `tests/agent-quote-notes-pdf.test.mjs`.
+  - `docs/uat/pricing-rate-notes.md` y este registro.
+- Cambios:
+  - Campo opcional `agent_quotes.internal_notes`, separado de notas de Ventas y
+    condiciones comerciales. Se guarda al crear/editar tarifas FCL/LCL.
+  - Notas visibles en tarjetas y tabla FCL; modal reutilizable para editar solo
+    la nota, incluso en la tarifa seleccionada, sin tocar costos, selección,
+    pricing ni estado. Texto multilínea; vaciar guarda NULL; error conserva el
+    borrador y permite reintentar. Etiquetas y controles accesibles.
+  - Respeta permisos y RLS vigentes: Pricing/Admin en Pendiente de Fijar Precios;
+    lectura según acceso existente. Sin RPC nuevas ni ampliación de privilegios.
+  - Impresión interna FCL conserva las notas sin botones de edición. El PDF
+    comercial conserva `client_notes` y excluye comentarios internos de tarifa.
+- Validaciones ejecutadas:
+  - `npx.cmd tsc --noEmit` y `npm.cmd run build`: aprobados.
+  - `npm.cmd test`: 373/373 aprobadas; dos PDF comerciales reales renderizados
+    para FCL/LCL confirman exclusión de notas internas y conservación de las comerciales.
+  - ESLint dirigido: diagnósticos históricos en página/tabla; componente nuevo
+    sin diagnósticos. `npm.cmd run lint:ci`: 403 archivos, 223 diagnósticos
+    históricos, cero regresiones.
+  - Base aislada `supabase_db_sarierp_customs20`, historial hasta 20261020120000,
+    sin cotizaciones previas: migración nueva aplicada únicamente allí. Suites
+    `agent_quote_internal_notes.sql` y `aud01_pricing_write_permissions.sql`
+    aprobadas con rollback de fixtures. Comprueban crear/editar/vaciar FCL/LCL,
+    Admin/Pricing, denegación de escritura de Ventas/Cliente/otra empresa,
+    denegación de lectura a Cliente/otra empresa, bloqueo enviado y preservación
+    de todos los campos ajenos a la nota y de la cotización.
+  - Chrome sobre Pricing Comparison real con proveedor simulado: guardado de
+    notas en tarifa seleccionada con payload limitado a `internal_notes`, filtros
+    de tarifa/cotización y sin RPC/repricing; edición desde tabla; borrado a NULL;
+    independencia entre opciones LCL; precarga/guardado del formulario completo;
+    impresión interna con notas y sin botones. Error de red conserva texto y
+    permite reintentar. Modal contenido en 390 px, cierre por Escape y devolución
+    del foco comprobados. Capturas 1440/390 revisadas visualmente; se corrigió la
+    altura fija heredada de `fieldClass` en ambas áreas de notas.
+  - Recorrido final sin excepciones JavaScript; HMR deshabilitado en el navegador
+    de pruebas para mantener estables las navegaciones del fixture local.
+    Evidencias ignoradas en `.ua/intermediate/notes-*`: informe JSON, capturas,
+    logs SQL, pruebas, lint, TypeScript y build. Sin cuentas ni escrituras reales.
+- Riesgos / pendientes:
+  - Aplicar la migración al ambiente destino antes de publicar el frontend.
+    No se ejecutó SQL ni se escribieron datos en Production.
+  - Completar aceptación con cuentas reales según `docs/uat/pricing-rate-notes.md`.
+    La nota es un comentario editable por opción, no un historial de comentarios.
+- Commit funcional: pendiente; no se creó commit durante esta implementación.
+- Preflight de publicación autorizado (21/10/2026): `main` local y remoto en
+  `6cade0973d9ec2c2d9b9ed50899050e8052a7f50`; Production
+  `fwspgdzvlbtbgiupvrzo` con 129 migraciones, última `20261020120000`.
+  `agent_quotes.internal_notes` ausente y RLS activo. Se publicará únicamente
+  `20261021120000`, con fuente exacta registrada y comparación transaccional de
+  datos/permisos; Outlook en standby permanece fuera de la publicación.
