@@ -2,10 +2,10 @@
 
 ## Estado y publicación
 
-Implementación local validada; commit y despliegue autorizados el 21/10/2026.
-Publicación en curso: aplicar
-`supabase/migrations/20261021120000_agent_quote_internal_notes.sql` al ambiente
-destino antes de publicar el frontend. No requiere rellenar tarifas históricas:
+Commit y SQL publicados en Production el 21/10/2026; frontend pendiente de
+publicación. Migración aplicada:
+`supabase/migrations/20261021120000_agent_quote_internal_notes.sql`.
+No requiere rellenar tarifas históricas:
 `agent_quotes.internal_notes` es nullable. No se modifican permisos ni RLS.
 
 Las notas pertenecen a la tarifa del agente. Son independientes de las notas

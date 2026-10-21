@@ -31,5 +31,25 @@ de las tarifas del comparativo, su migración, pruebas y documentación.
 
 ## Estado
 
-Publicación en curso. UAT autenticado pendiente de forma independiente.
+SQL publicado; frontend pendiente de Vercel. UAT autenticado pendiente de forma
+independiente.
+
+- Commit funcional `2736ca11203c9daf4ea7e1b3a4889db42a242f2e`, en `origin/main`.
+- Aplicada exclusivamente `20261021120000`: historial de 129 a 130 migraciones.
+  Fuente registrada idéntica al archivo del commit; SHA-256
+  `e48538e0ed4bb6c4407814f2bf6c4c70114ca72517da4195b43808d7d1c5f527`.
+- Transacción ensayada en base aislada; guardas de integridad aprobadas en
+  Production y postflight independiente. Catorce tablas de negocio intactas;
+  columna nueva TEXT nullable con notas históricas NULL. RLS, policies, ACL y
+  funciones de acceso intactos. Outlook sigue sin aplicar.
+- Quality CI: [39622724610](https://github.com/dhernandezp123/sarierp/actions/runs/39622724610).
+  Aplicación y base de datos aprobadas.
+- Vercel no registró despliegue automático del commit. CLI sin credenciales;
+  autenticación solicitada al usuario para completar la publicación directa.
+  No se ha confirmado todavía publicación del frontend.
+- Smoke posterior al SQL sobre el frontend existente: login HTTP 200;
+  cotización nueva y pricing HTTP 307 a login; portal de envíos HTTP 307 a su
+  login. Estas respuestas confirman disponibilidad y protección, no el despliegue
+  de la interfaz nueva. Sin registros ni mensajes de prueba en Production.
+
 Evidencia local ignorada en `.ua/intermediate/notes-release/`.
