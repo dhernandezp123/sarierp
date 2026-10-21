@@ -4603,7 +4603,7 @@ const profitabilityColor =
                       )}
 
                       {['fcl', 'lcl'].includes(normalizeText(selectedQuote.quote_type)) && (
-                        <div className="col-span-full">
+                        <div className="col-span-full w-full max-w-2xl">
                           <label htmlFor="agent-internal-notes" className={labelClass}>
                             Notas internas de la tarifa (opcional)
                           </label>
@@ -6125,11 +6125,11 @@ const profitabilityColor =
                   <textarea
                     value={clientNotes}
                     onChange={(e) => setClientNotes(e.target.value)}
-                    className={`${fieldClass} mt-4 min-h-[140px] w-full py-3`}
+                    className={cn(fieldClass, 'mt-4 h-auto min-h-[140px] w-full max-w-2xl resize-y py-3')}
                     placeholder="Ej: Tarifas sujetas a espacio con naviera..."
                   />
 
-                  <div className="mt-4 flex justify-end">
+                  <div className="mt-4 flex max-w-2xl justify-end">
                     <button
                       type="button"
                       className={primaryButtonClass}

@@ -12448,3 +12448,24 @@ Agregar una entrada por fix:
 - Smoke final del frontend publicado: login 200; cotización nueva y pricing 307
   a login; portal de envíos 307 a su login. No certifica UAT autenticado de las
   notas; se conserva ese pendiente independiente y documentado.
+
+### 2026-10-21 - PNOTE-UX02 - Ancho contenido para las áreas de notas
+
+- Estado: validado localmente; publicación en curso.
+- Hallazgo: las notas internas de tarifas y las observaciones del cliente se
+  extendían a todo el ancho de Pricing Comparison en escritorio.
+- Archivos: `src/app/(protected)/pricing-comparison/page.tsx` y este registro.
+  SQL: ninguno.
+- Cambio: ambos campos tienen ancho máximo de 42 rem (672 px con la tipografía
+  base), alineados a la izquierda y adaptables al espacio disponible en móvil.
+  El botón de observaciones conserva la alineación con su campo. Se mantiene
+  altura multilínea y redimensionado vertical.
+- Validaciones: `npx.cmd tsc --noEmit` y `npm.cmd run build` aprobados;
+  `npm.cmd run lint:ci`: 403 archivos, 223 diagnósticos históricos, cero
+  regresiones. Chrome sobre Pricing Comparison real con proveedor simulado:
+  FCL/LCL a 1676, 1440 y 390 px. Ambos campos miden 672 px en escritorio y quedan
+  dentro del viewport móvil; cero excepciones JavaScript. Capturas revisadas
+  visualmente. Evidencia ignorada: `.ua/intermediate/notes-width-*`.
+- Riesgos / pendientes: revisión autenticada de presentación en Production;
+  no cambia guardado, permisos, costos, estados ni estructura de datos.
+- Commit funcional: pendiente de creación.
