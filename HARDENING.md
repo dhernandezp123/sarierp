@@ -12451,7 +12451,8 @@ Agregar una entrada por fix:
 
 ### 2026-10-21 - PNOTE-UX02 - Ancho contenido para las áreas de notas
 
-- Estado: validado localmente; publicación en curso.
+- Estado: validado localmente y publicado en Production; revisión autenticada
+  de presentación pendiente.
 - Hallazgo: las notas internas de tarifas y las observaciones del cliente se
   extendían a todo el ancho de Pricing Comparison en escritorio.
 - Archivos: `src/app/(protected)/pricing-comparison/page.tsx` y este registro.
@@ -12468,4 +12469,9 @@ Agregar una entrada por fix:
   visualmente. Evidencia ignorada: `.ua/intermediate/notes-width-*`.
 - Riesgos / pendientes: revisión autenticada de presentación en Production;
   no cambia guardado, permisos, costos, estados ni estructura de datos.
-- Commit funcional: pendiente de creación.
+- Commit funcional: `4355447ea0079c52c4c32f913434847dfe85ffd5`, en `origin/main`.
+- Publicación: Vercel Production `dpl_3ptLT54fV6DrDwZ38EX12EGxm6GV`, `READY`;
+  URL `https://sarierp-j6rdqc6fq-claudherhn-5641s-projects.vercel.app`.
+  Alias `sari.forwarders.app` verificado contra ese despliegue. Smoke sin sesión:
+  login 200 y pricing 307 a login. No se ejecutó SQL ni se crearon datos de
+  negocio. Quality CI `39635482978` en ejecución al cerrar este registro.
