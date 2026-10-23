@@ -2,8 +2,8 @@
 
 ### 2026-10-23 - MIAMI-INS-02 - Seguro opcional por cotización Miami
 
-- Estado: implementado y validado localmente. UAT autenticado y
-  despliegue pendientes.
+- Estado: implementado, validado localmente y publicado en Production el
+  23/10/2026. UAT autenticado pendiente.
 - Hallazgo: la preferencia `clientes.asegura_carga` se interpretaba como una
   obligación y bloqueaba desmarcar el seguro, aunque el cliente no asegura todas
   sus cargas. Pricing también ignoraba un `requires_insurance = false` explícito.
@@ -28,8 +28,21 @@
   diagnósticos existentes en 403 archivos y cero regresiones.
 - Riesgos/pendientes: verificar en sesión autenticada crear, guardar/reabrir y
   previsualizar una cotización Miami LCL/aérea sin seguro para un cliente que
-  asegura por defecto. Sin cambios de SQL/RLS. Publicación autorizada por el
-  solicitante; commit y evidencia remota se registran al terminar el despliegue.
+  asegura por defecto. Sin cambios de SQL/RLS ni datos de negocio de prueba
+  creados en Production.
+- Commit funcional: `6cdf4bb0ec484b137a4c7e7e7118a72dcc25c616`, en `origin/main`.
+- CI remoto: [Quality 39986870539](https://github.com/dhernandezp123/sarierp/actions/runs/39986870539),
+  jobs `application` y `database` aprobados, incluidas suites SQL/RLS aisladas.
+- Publicación: [Vercel](https://vercel.com/claudherhn-5641s-projects/sarierp/94LADFhy5sFhutG1NNkQkn7ESfNT)
+  reporta éxito; GitHub Deployment `7283365334`, ambiente `Production`, fuente
+  exacta del commit funcional. URL inmutable:
+  `https://sarierp-3flhrvaxw-claudherhn-5641s-projects.vercel.app`.
+- Smoke posterior: `https://sari.forwarders.app/login` responde 200;
+  `/quotations/new` y `/pricing-comparison` responden 307 a login sin sesión.
+  Build ID del HTML del dominio: `zQ7tZiJWhIjXcnbF2bb88`. Su `_buildManifest.js`
+  responde 200 y coincide en SHA-256 entre dominio e instancia inmutable:
+  `9476e0afd3f9da68a64e6ec58631191fd3eaca62c9f5a377e7517fe9a89e59ea`.
+  Esto acredita disponibilidad y versión publicada; no sustituye UAT autenticado.
 
 ### 2026-10-16 - MIAMI-INS-01 - Seguro al crear cotizaciones Miami aprobadas
 
