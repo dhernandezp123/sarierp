@@ -3457,8 +3457,8 @@ const profitabilityColor =
   }
 
   const clientRequiresCargoInsurance =
-    selectedQuote?.clientes?.asegura_carga === true ||
-    selectedQuote?.requires_insurance === true
+    selectedQuote?.requires_insurance ??
+    (selectedQuote?.clientes?.asegura_carga === true)
 
   const showCargoInsuranceButton = Boolean(
     selectedQuote && clientRequiresCargoInsurance

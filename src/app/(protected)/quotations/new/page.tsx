@@ -153,7 +153,8 @@ export default function NewQuotationPage() {
     cantidad_bultos: '',
     commodity: '',
 
-    requires_insurance: false,
+    // null uses the client's Miami default until a choice is made for this quote.
+    requires_insurance: null as boolean | null,
     fob_value: '',
     freight_value: '',
     insurance_markup_percentage: '10',
@@ -561,6 +562,7 @@ export default function NewQuotationPage() {
     const updatedData = {
       ...formData,
       cliente_id: clienteId,
+      requires_insurance: clienteId === formData.cliente_id ? formData.requires_insurance : null,
       contact_name: selectedCliente?.contacto || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
@@ -857,7 +859,9 @@ export default function NewQuotationPage() {
           formData.insurance_markup_percentage
         ),
         insurance_rate: submitIsMiamiFlow && requiresCargoInsurance ? Number(insuranceCliente?.seguro_porcentaje || 0) : Number(formData.insurance_rate),
-        insurance_cost: automaticPricing.insurance?.cost_amount ?? Number(formData.insurance_cost),
+        insurance_cost: submitIsMiamiFlow
+          ? automaticPricing.insurance?.cost_amount ?? 0
+          : Number(formData.insurance_cost),
 
         pricing_notes: formData.pricing_notes || null,
         observaciones: formData.observaciones || null,
@@ -1075,8 +1079,8 @@ export default function NewQuotationPage() {
   const isMiamiFlow = miami.isMiamiFlow
   const isCustomsFlow = isCustomsOnly(formData.service_product)
   const insuranceCliente = clientes.find(cliente => cliente.id === formData.cliente_id)
-  const clientInsuranceRequired = isMiamiFlow && insuranceCliente?.asegura_carga === true
-  const requiresCargoInsurance = formData.requires_insurance || clientInsuranceRequired
+  const clientInsuranceDefault = isMiamiFlow && insuranceCliente?.asegura_carga === true
+  const requiresCargoInsurance = formData.requires_insurance ?? clientInsuranceDefault
   const buildMiamiCreationPricing = (quotationId: string) => withMiamiInsurance({
     quotationId,
     items: miami.buildMiamiPricingItems(quotationId),
@@ -2289,7 +2293,6 @@ export default function NewQuotationPage() {
                 type="checkbox"
                 name="requires_insurance"
                 checked={requiresCargoInsurance}
-                disabled={clientInsuranceRequired}
                 onChange={handleChange}
                 className="h-4 w-4 rounded border-slate-300"
               />
@@ -2322,7 +2325,7 @@ export default function NewQuotationPage() {
             )}
             {isMiamiFlow && requiresCargoInsurance && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900">
-                {clientInsuranceRequired && <p className="mb-2 text-xs text-slate-500">El seguro es obligatorio según la configuración del cliente.</p>}
+                {clientInsuranceDefault && <p className="mb-2 text-xs text-slate-500">El cliente tiene seguro por defecto. Puedes desmarcarlo si esta carga no requiere seguro.</p>}
                 {insurancePreview.error ? <p role="status" className="text-amber-700 dark:text-amber-300">{insurancePreview.error}</p> : insurancePreview.insurance && <>
                   <p>Prima del seguro: USD {formatNumber(insurancePreview.insurance.sale_amount)}</p>
                   <p>ISV ({insurancePreview.insurance.tax_rate}%): USD {formatNumber(insurancePreview.insurance.tax_amount)}</p>

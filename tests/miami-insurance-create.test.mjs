@@ -5,13 +5,14 @@ import loadTs from './load-ts.mjs'
 const products=loadTs('src/lib/quotation-products.ts')
 const settings={default_tax_rate:15,insurance_cost_rate_percent:0.28,insurance_included_service_patterns:['Ocean Freight','Air Freight','origin_charge'],insurance_excluded_service_patterns:[]}
 
-async function form({product='miami_lcl',clientPolicy=false,saleRate=1,company=settings,creationError=false}={}) {
+async function form({product='miami_lcl',clientPolicy=false,saleRate=1,company=settings,creationError=false,sourceQuote=null}={}) {
   const previous=globalThis.window
-  globalThis.window={location:{search:''},open(){}}
+  globalThis.window={location:{search:sourceQuote?'?duplicateFrom=source':''},open(){}}
   const saves=[],previews=[],errors=[]
   const customer={id:'client',nombre:'Cliente de prueba',seguro_porcentaje:saleRate,asegura_carga:clientPolicy}
+  const otherCustomer={...customer,id:'other-client',asegura_carga:false}
   const freight=id=>({quotation_id:id,rate_code:product==='miami_lcl'?'miami_lcl_freight':'miami_air_freight',description:product==='miami_lcl'?'Flete Miami LCL':'Flete Miami Aéreo Consolidado',item_type:'freight',quantity:1,cost_amount:0,sale_amount:500,total_amount:500,taxable:false,tax_amount:0,tax_rate:0})
-  const client={from(table){const q=new Proxy({},{get(_t,key){if(key==='then')return(resolve,reject)=>Promise.resolve({data:table==='clientes'?[customer]:[],error:null}).then(resolve,reject);return()=>q}});return q}}
+  const client={from(table){const q=new Proxy({},{get(_t,key){if(key==='then')return(resolve,reject)=>Promise.resolve({data:table==='clientes'?[customer,otherCustomer]:table==='quotations'?sourceQuote:[],error:null}).then(resolve,reject);return()=>q}});return q}}
   const page=mountPage('src/app/(protected)/quotations/new/page.tsx',{
     '../../../../hooks/useUser':{useUser:()=>({profile:{id:'seller',rol:'Ventas'}})},
     '../../../../lib/supabase/client':{supabase:client},
@@ -30,9 +31,9 @@ async function form({product='miami_lcl',clientPolicy=false,saleRate=1,company=s
   })
   await page.ready()
   const change=(name,value,type='text')=>{const node=page.find(n=>n.props?.name===name);assert.ok(node,name);node.props.onChange({target:{name,value,type,checked:value}});page.render()}
-  page.find(n=>n.type==='ClienteCombobox').props.onChange('client');page.render()
-  change('service_product',product);change('incoterm','FOB','select-one')
-  return {page,saves,previews,errors,change,cleanup:()=>{page.cleanup();globalThis.window=previous}}
+  const selectClient=id=>{page.find(n=>n.type==='ClienteCombobox').props.onChange(id);page.render()}
+  if(!sourceQuote){selectClient('client');change('service_product',product);change('incoterm','FOB','select-one')}
+  return {page,saves,previews,errors,change,selectClient,cleanup:()=>{page.cleanup();globalThis.window=previous}}
 }
 
 test('Miami aprobado y PDF reciben el mismo seguro con FOB visible, para LCL y aéreo',async()=>{
@@ -56,7 +57,7 @@ test('Miami aprobado y PDF reciben el mismo seguro con FOB visible, para LCL y a
   }
 })
 
-test('seguro obligatorio del cliente se aplica sin marcar; faltan datos impide aprobar pero permite borrador',async()=>{
+test('seguro predeterminado del cliente se aplica sin marcar; faltan datos impide aprobar pero permite borrador',async()=>{
   const f=await form({clientPolicy:true})
   try {
     assert.equal(f.page.find(n=>n.props?.name==='requires_insurance').props.checked,true)
@@ -66,6 +67,54 @@ test('seguro obligatorio del cliente se aplica sin marcar; faltan datos impide a
     assert.equal(f.saves[0].quotation.status,'Borrador')
     assert.equal(f.saves[0].quotation.requires_insurance,true)
     assert.ok(!f.saves[0].pricing.some(item=>item.item_type==='Seguro'))
+  } finally {f.cleanup()}
+})
+
+test('cliente que asegura puede desmarcar por cotización: sin FOB, cargo ni seguro en el PDF y guardado',async()=>{
+  for(const product of ['miami_lcl','miami_air']) {
+    const f=await form({product,clientPolicy:true})
+    try {
+      assert.equal(f.page.find(n=>n.props?.name==='requires_insurance').props.checked,true)
+      assert.ok(!f.page.find(n=>n.props?.name==='requires_insurance').props.disabled)
+      f.change('requires_insurance',false,'checkbox')
+      f.change('contact_name','Contacto actualizado')
+      assert.equal(f.page.find(n=>n.props?.name==='requires_insurance').props.checked,false)
+      await f.page.button('Previsualizar PDF').props.onClick()
+      assert.equal(f.previews.length,1)
+      assert.equal(f.previews[0].quotation.requires_insurance,false)
+      assert.ok(!f.previews[0].pricingItems.some(item=>item.item_type==='Seguro'))
+      await f.page.button('Crear cotización aprobada').props.onClick()
+      assert.deepEqual(f.errors,[])
+      assert.equal(f.saves.length,1)
+      assert.equal(f.saves[0].quotation.requires_insurance,false)
+      assert.equal(f.saves[0].quotation.insurance_cost,0)
+      assert.ok(!f.saves[0].pricing.some(item=>item.item_type==='Seguro'))
+    } finally {f.cleanup()}
+  }
+})
+
+test('la decisión de seguro se puede volver a activar y el cambio de cliente usa su propio valor inicial',async()=>{
+  const f=await form({clientPolicy:true})
+  try {
+    f.change('requires_insurance',false,'checkbox')
+    f.change('requires_insurance',true,'checkbox');f.change('commercial_value','1000')
+    await f.page.button('Previsualizar PDF').props.onClick()
+    assert.ok(f.previews.at(-1).pricingItems.some(item=>item.item_type==='Seguro'))
+    f.selectClient('other-client')
+    assert.equal(f.page.find(n=>n.props?.name==='requires_insurance').props.checked,false)
+    f.selectClient('client')
+    assert.equal(f.page.find(n=>n.props?.name==='requires_insurance').props.checked,true)
+  } finally {f.cleanup()}
+})
+
+test('duplicar conserva la decisión de no asegurar aunque el cliente tenga seguro por defecto',async()=>{
+  const f=await form({clientPolicy:true,sourceQuote:{id:'source',quotation_number:'SOURCE',cliente_id:'client',service_product:'miami_lcl',quote_type:'LCL',tipo_transporte:'Marítima',incoterm:'FOB',requires_insurance:false,insurance_cost:123}})
+  try {
+    assert.equal(f.page.find(n=>n.props?.name==='requires_insurance').props.checked,false)
+    await f.page.button('Crear cotización aprobada').props.onClick()
+    assert.deepEqual(f.errors,[])
+    assert.equal(f.saves[0].quotation.requires_insurance,false)
+    assert.equal(f.saves[0].quotation.insurance_cost,0)
   } finally {f.cleanup()}
 })
 

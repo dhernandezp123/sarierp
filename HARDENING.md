@@ -1,5 +1,36 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-23 - MIAMI-INS-02 - Seguro opcional por cotización Miami
+
+- Estado: implementado y validado localmente. UAT autenticado y
+  despliegue pendientes.
+- Hallazgo: la preferencia `clientes.asegura_carga` se interpretaba como una
+  obligación y bloqueaba desmarcar el seguro, aunque el cliente no asegura todas
+  sus cargas. Pricing también ignoraba un `requires_insurance = false` explícito.
+- Archivos: `src/app/(protected)/quotations/new/page.tsx`,
+  `src/app/(protected)/pricing-comparison/page.tsx`,
+  `tests/miami-insurance-create.test.mjs`, `tests/miami-insurance-pdf.test.mjs`,
+  `HARDENING.md`. SQL modificado: ninguno.
+- Cambios: la preferencia del cliente es el valor inicial para Miami LCL/aéreo;
+  marcar o desmarcar decide para esa cotización. Cambiar cliente usa su propia
+  preferencia y duplicar conserva la decisión original. Un `false` guardado
+  prevalece en Pricing; solo se consulta la preferencia si no hay decisión.
+  Sin seguro no se exige FOB ni se genera cargo, ISV o costo de seguro Miami.
+  No cambia la ficha del cliente ni recalcula documentos históricos.
+- Validaciones: antes del fix se reprodujeron tres fallos con el formulario
+  real montado mediante el harness existente (bloqueo, cambio de cliente y
+  duplicación). Luego pasaron las seis regresiones de creación, incluyendo
+  Miami LCL/aéreo sin FOB ni seguro, reactivación del check y costo residual
+  descartado al duplicar. PDF real con y sin seguro respeta la decisión,
+  importes e ISV y no muestra datos internos. Suite Node 376/376,
+  `npx.cmd tsc --noEmit`, build y `git diff --check`: OK. ESLint dirigido
+  conserva 53 diagnósticos históricos; `npm.cmd run lint:ci` confirma 223
+  diagnósticos existentes en 403 archivos y cero regresiones.
+- Riesgos/pendientes: verificar en sesión autenticada crear, guardar/reabrir y
+  previsualizar una cotización Miami LCL/aérea sin seguro para un cliente que
+  asegura por defecto. Sin cambios de SQL/RLS. Publicación autorizada por el
+  solicitante; commit y evidencia remota se registran al terminar el despliegue.
+
 ### 2026-10-16 - MIAMI-INS-01 - Seguro al crear cotizaciones Miami aprobadas
 
 - Estado: implementado y validado localmente; UAT autenticado en Production
