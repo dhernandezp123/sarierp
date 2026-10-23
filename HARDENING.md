@@ -2,8 +2,8 @@
 
 ### 2026-10-23 - MIAMI-INS-03 - ISV opcional en el seguro Miami
 
-- Estado: implementado y validado localmente; publicación en curso como ajuste
-  del despliegue de seguro autorizado. UAT autenticado pendiente.
+- Estado: implementado, validado localmente y publicado en Production el
+  23/10/2026 como ajuste del despliegue de seguro autorizado. UAT autenticado pendiente.
 - Hallazgo: crear una cotización Miami LCL/aérea con seguro añadía ISV sin
   elección del usuario. Pricing empezaba con el check de ISV marcado y podía
   arrastrar esa elección de una cotización a otra.
@@ -32,7 +32,19 @@
   LCL/aérea con y sin ISV, y recalcular explícitamente desde Pricing. Un borrador
   sin datos suficientes para generar la línea de seguro no persiste una prima
   ni su impuesto; al calcularlo después, ISV vuelve a requerir elección.
-  Sin cambios SQL/RLS ni modificaciones a facturas emitidas. Commit pendiente.
+  Sin cambios SQL/RLS ni modificaciones a facturas emitidas.
+- Commit funcional: `18538f469df5c4c038a17476139dd0b6e0f7571c`, en `origin/main`.
+- CI remoto: [Quality 39992878789](https://github.com/dhernandezp123/sarierp/actions/runs/39992878789),
+  jobs `application` y `database` aprobados; incluye SQL/RLS en base desechable.
+- Publicación: [Vercel](https://vercel.com/claudherhn-5641s-projects/sarierp/HyE34iXW3Wn7omGiF7wAVzmGLbLi)
+  y GitHub Deployment `7284252379`, `Production`, `success`, con fuente exacta del
+  commit funcional. URL inmutable:
+  `https://sarierp-95g7tgevh-claudherhn-5641s-projects.vercel.app`.
+- Smoke: login 200 y cotización nueva/Pricing 307 a login sin sesión en
+  `sari.forwarders.app`. Build ID `m46du8gNl3erQAfANPFZO`; su manifiesto responde
+  200 en el dominio y en la instancia inmutable, con el mismo SHA-256:
+  `9476e0afd3f9da68a64e6ec58631191fd3eaca62c9f5a377e7517fe9a89e59ea`.
+  Verifica disponibilidad/versión publicada, no UAT autenticado de negocio.
 
 ### 2026-10-23 - MIAMI-INS-02 - Seguro opcional por cotización Miami
 
