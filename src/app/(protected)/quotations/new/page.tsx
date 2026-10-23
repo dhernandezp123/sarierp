@@ -19,6 +19,7 @@ import { useUser } from '../../../../hooks/useUser'
 import { loadCurrentCompanySettings, type TenantCompanySettings } from '@/src/lib/company-settings'
 import { withMiamiInsurance } from '@/src/lib/miami-insurance'
 import { INSURANCE_SURCHARGE_PERCENT } from '@/src/lib/insurance-calculator'
+import { isInsurancePricingItem } from '@/src/lib/insurance-coverage'
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
@@ -155,6 +156,7 @@ export default function NewQuotationPage() {
 
     // null uses the client's Miami default until a choice is made for this quote.
     requires_insurance: null as boolean | null,
+    insurance_taxable: false,
     fob_value: '',
     freight_value: '',
     insurance_markup_percentage: '10',
@@ -355,10 +357,18 @@ export default function NewQuotationPage() {
         id: sourceQuote.id,
         quotation_number: sourceQuote.quotation_number,
       })
-      if (isCustomsOnly(sourceQuote.service_product)) {
+      let sourceInsuranceTaxable = false
+      if (isCustomsOnly(sourceQuote.service_product) || usesClientRatesFromCatalog(serviceProductOptions, sourceQuote.service_product)) {
         const { data: sourceItems, error: itemsError } = await supabase.from('pricing_items').select('*').eq('quotation_id', quotationId).is('deleted_at', null).order('created_at')
-        if (itemsError) throw itemsError
-        setCustomsCharges(hydrateCustomsCharges(sourceItems || []))
+        if (itemsError) {
+          toast.error(itemsError.message)
+          return
+        }
+        if (isCustomsOnly(sourceQuote.service_product)) {
+          setCustomsCharges(hydrateCustomsCharges(sourceItems || []))
+        } else {
+          sourceInsuranceTaxable = (sourceItems || []).find(isInsurancePricingItem)?.taxable === true
+        }
       }
       setFormData({
         cliente_id: toFormString(sourceQuote.cliente_id),
@@ -395,6 +405,7 @@ export default function NewQuotationPage() {
         cantidad_bultos: toFormString(sourceQuote.cantidad_bultos),
         commodity: sourceQuote.commodity || '',
         requires_insurance: Boolean(sourceQuote.requires_insurance),
+        insurance_taxable: sourceInsuranceTaxable,
         fob_value: toFormString(sourceQuote.fob_value),
         freight_value: toFormString(sourceQuote.freight_value),
         insurance_markup_percentage: toFormString(
@@ -563,6 +574,7 @@ export default function NewQuotationPage() {
       ...formData,
       cliente_id: clienteId,
       requires_insurance: clienteId === formData.cliente_id ? formData.requires_insurance : null,
+      insurance_taxable: clienteId === formData.cliente_id && formData.insurance_taxable,
       contact_name: selectedCliente?.contacto || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
@@ -1085,6 +1097,7 @@ export default function NewQuotationPage() {
     quotationId,
     items: miami.buildMiamiPricingItems(quotationId),
     required: isMiamiFlow && requiresCargoInsurance,
+    taxable: formData.insurance_taxable,
     commercialValue: Number(formData.commercial_value),
     saleRatePercent: Number(insuranceCliente?.seguro_porcentaje || 0),
     settings: companySettings,
@@ -2326,9 +2339,19 @@ export default function NewQuotationPage() {
             {isMiamiFlow && requiresCargoInsurance && (
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900">
                 {clientInsuranceDefault && <p className="mb-2 text-xs text-slate-500">El cliente tiene seguro por defecto. Puedes desmarcarlo si esta carga no requiere seguro.</p>}
+                <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    name="insurance_taxable"
+                    checked={formData.insurance_taxable}
+                    onChange={handleChange}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Aplicar ISV al seguro de carga
+                </label>
                 {insurancePreview.error ? <p role="status" className="text-amber-700 dark:text-amber-300">{insurancePreview.error}</p> : insurancePreview.insurance && <>
                   <p>Prima del seguro: USD {formatNumber(insurancePreview.insurance.sale_amount)}</p>
-                  <p>ISV ({insurancePreview.insurance.tax_rate}%): USD {formatNumber(insurancePreview.insurance.tax_amount)}</p>
+                  <p>{insurancePreview.insurance.taxable ? `ISV (${insurancePreview.insurance.tax_rate}%): USD ${formatNumber(insurancePreview.insurance.tax_amount)}` : 'ISV: no aplicado'}</p>
                   <p className="mt-1 font-semibold">Total del seguro: USD {formatNumber(insurancePreview.insurance.total_amount)}</p>
                   <p className="mt-2 text-xs text-slate-500">Este cargo se guardará junto con los demás cargos de Miami.</p>
                 </>}

@@ -374,7 +374,7 @@ function PricingComparisonContent() {
     useState(serviceProducts)
   const [optionalClientRateConfig, setOptionalClientRateConfig] =
     useState<OptionalClientRateConfig>(fallbackOptionalClientRateConfig)
-  const [insuranceTaxable, setInsuranceTaxable] = useState(true)
+  const [insuranceTaxable, setInsuranceTaxable] = useState(false)
   const [agentRouteRates, setAgentRouteRates] = useState<any[]>([])
   const [isOptionalClientRatesOpen, setIsOptionalClientRatesOpen] = useState(true)
 
@@ -630,6 +630,8 @@ function PricingComparisonContent() {
 
     if (selectedQuoteIdRef.current === quotationId) {
       setPricingItems(data || [])
+      const savedInsurance = (data || []).find(isInsurancePricingItem)
+      if (savedInsurance) setInsuranceTaxable(savedInsurance.taxable === true)
     }
   }
 
@@ -741,6 +743,7 @@ function PricingComparisonContent() {
   const handleSelectQuote = async (quote: any) => {
     selectedQuoteIdRef.current = quote.id
     setSelectedQuote(quote)
+    setInsuranceTaxable(quote.service_product !== 'miami_lcl' && quote.service_product !== 'miami_air')
     setSelectedQuoteLoading(true)
     setAgentForm((current) => ({ ...current, mbl_quantity: '1', internal_notes: '' }))
     setClientNotes(quote.client_notes || '')
@@ -5695,7 +5698,9 @@ const profitabilityColor =
                         <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                           <input
                             type="checkbox"
+                            name="insurance_taxable"
                             checked={insuranceTaxable}
+                            disabled={isPricingActionDisabled}
                             onChange={(event) =>
                               setInsuranceTaxable(event.target.checked)
                             }

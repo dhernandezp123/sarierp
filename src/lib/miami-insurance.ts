@@ -24,6 +24,7 @@ type Input<T> = {
   quotationId: string
   items: T[]
   required: boolean
+  taxable?: boolean
   commercialValue: number
   saleRatePercent: number
   settings: Settings | null
@@ -33,7 +34,7 @@ const money = (amount: number) => amount.toLocaleString('en-US', { minimumFracti
 
 /** Build the requested insurance alongside the automatic Miami charges, before
  * the existing atomic create RPC. Never updates an existing quote or snapshot. */
-export function withMiamiInsurance<T extends ServiceItem>({ quotationId, items, required, commercialValue, saleRatePercent, settings, createdBy }: Input<T>) {
+export function withMiamiInsurance<T extends ServiceItem>({ quotationId, items, required, taxable = false, commercialValue, saleRatePercent, settings, createdBy }: Input<T>) {
   const fail = (error: string) => ({ items, insurance:null, error })
   if (!required) return { items, insurance:null, error:null }
   if (!settings) return fail('No se ha cargado la configuración de seguro de la empresa. Recarga la página o guarda un borrador.')
@@ -50,8 +51,8 @@ export function withMiamiInsurance<T extends ServiceItem>({ quotationId, items, 
   if (!Number.isFinite(sale) || !Number.isFinite(cost) || sale <= 0 || cost < 0) return fail('No se detectaron servicios cubiertos válidos para calcular el seguro Full Cover.')
   const saleCalc = calculateInsuranceDeclaration({invoiceValue:commercialValue,freightValue:sale,saleRatePercent,costRatePercent:costRate})
   const costCalc = calculateInsuranceDeclaration({invoiceValue:commercialValue,freightValue:cost,saleRatePercent,costRatePercent:costRate})
-  const taxRate = normalizeTaxRatePercent(settings.default_tax_rate)
-  const tax = calculateTaxAmount(true,saleCalc.insuranceSale,taxRate)
+  const taxRate = taxable ? normalizeTaxRatePercent(settings.default_tax_rate) : 0
+  const tax = calculateTaxAmount(taxable,saleCalc.insuranceSale,taxRate)
   const insurance = {
     quotation_id:quotationId,
     rate_code:'cargo_insurance',
@@ -62,7 +63,7 @@ export function withMiamiInsurance<T extends ServiceItem>({ quotationId, items, 
     cost_amount:costCalc.insuranceCost,
     sale_amount:saleCalc.insuranceSale,
     currency:'USD',
-    taxable:true,
+    taxable,
     tax_rate:taxRate,
     tax_amount:tax,
     total_amount:saleCalc.insuranceSale + tax,
@@ -78,7 +79,7 @@ export function withMiamiInsurance<T extends ServiceItem>({ quotationId, items, 
       costCalc.insuranceCostMinimumApplied ? `Mínimo de seguro aplicado al costo: USD ${money(INSURANCE_MINIMUM_CHARGE_USD)}` : `Seguro costo final: USD ${money(costCalc.insuranceCost)}`,
       `Seguro venta calculada: USD ${money(saleCalc.insuredValue)} × ${saleRatePercent}% = USD ${money(saleCalc.calculatedInsuranceSale)}`,
       saleCalc.insuranceSaleMinimumApplied ? `Mínimo de seguro aplicado a la venta: USD ${money(INSURANCE_MINIMUM_CHARGE_USD)}` : `Seguro venta final: USD ${money(saleCalc.insuranceSale)}`,
-      `ISV ${taxRate}% aplicado: Sí`,
+      `ISV ${taxRate}% aplicado: ${taxable ? 'Sí' : 'No'}`,
     ].join('\n'),
   }
   return { items:[...services,insurance], insurance, error:null }

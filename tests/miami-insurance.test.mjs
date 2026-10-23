@@ -5,7 +5,7 @@ const {withMiamiInsurance}=loadTs('src/lib/miami-insurance.ts')
 const {partitionInsuranceCoverage}=loadTs('src/lib/insurance-coverage.ts')
 const settings={default_tax_rate:15,insurance_cost_rate_percent:0.28,insurance_included_service_patterns:['Ocean Freight','Air Freight','origin_charge'],insurance_excluded_service_patterns:['DTHC']}
 const freight={rate_code:'miami_lcl_freight',description:'Flete Miami LCL',item_type:'freight',quantity:1,cost_amount:0,sale_amount:500}
-const base={quotationId:'quote',items:[freight],required:true,commercialValue:10000,saleRatePercent:1,settings,createdBy:'seller'}
+const base={quotationId:'quote',items:[freight],required:true,taxable:true,commercialValue:10000,saleRatePercent:1,settings,createdBy:'seller'}
 const close=(a,b)=>assert.ok(Math.abs(a-b)<0.000001,`${a} ≈ ${b}`)
 
 test('Miami LCL y aéreo reconocen la póliza corporativa y crean un único seguro con costo, venta e ISV',()=>{
@@ -35,6 +35,20 @@ test('mínimo USD75 y tasa fiscal cero explícita se conservan; sin solicitud no
   assert.equal(result.insurance.sale_amount,75);assert.equal(result.insurance.cost_amount,75)
   assert.equal(result.insurance.tax_rate,0);assert.equal(result.insurance.tax_amount,0);assert.equal(result.insurance.total_amount,75)
   assert.deepEqual(withMiamiInsurance({...base,required:false,settings:null,commercialValue:0}).items,[freight])
+})
+
+test('seguro Miami sin selección explícita de ISV no cobra impuesto ni altera la prima',()=>{
+  for(const taxable of [undefined,false,true]) {
+    const result=withMiamiInsurance({...base,commercialValue:1000,taxable})
+    assert.equal(result.error,null)
+    assert.equal(result.insurance.sale_amount,75)
+    assert.equal(result.insurance.cost_amount,75)
+    assert.equal(result.insurance.taxable,taxable===true)
+    assert.equal(result.insurance.tax_rate,taxable?15:0)
+    assert.equal(result.insurance.tax_amount,taxable?11.25:0)
+    assert.equal(result.insurance.total_amount,taxable?86.25:75)
+    assert.match(result.insurance.notes,taxable?/aplicado: Sí/:/aplicado: No/)
+  }
 })
 
 test('no se produce una prima estimada con FOB, tasa, configuración o cobertura inválidos',()=>{

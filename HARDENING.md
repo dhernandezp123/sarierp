@@ -1,5 +1,39 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-23 - MIAMI-INS-03 - ISV opcional en el seguro Miami
+
+- Estado: implementado y validado localmente; publicación en curso como ajuste
+  del despliegue de seguro autorizado. UAT autenticado pendiente.
+- Hallazgo: crear una cotización Miami LCL/aérea con seguro añadía ISV sin
+  elección del usuario. Pricing empezaba con el check de ISV marcado y podía
+  arrastrar esa elección de una cotización a otra.
+- Archivos: `src/lib/miami-insurance.ts`,
+  `src/app/(protected)/quotations/new/page.tsx`,
+  `src/app/(protected)/pricing-comparison/page.tsx`,
+  `tests/miami-insurance.test.mjs`, `tests/miami-insurance-create.test.mjs`,
+  `tests/miami-insurance-pricing.test.mjs`, `tests/miami-insurance-pdf.test.mjs`,
+  `tests/page-harness.mjs` y este registro. SQL modificado: ninguno.
+- Cambios: check «Aplicar ISV al seguro de carga», desmarcado por defecto en
+  creación Miami LCL/aérea. Composición de cargos sin ISV salvo elección
+  explícita; usa la tasa corporativa al marcar, incluido 0 válido. Sin marcar,
+  persiste `taxable = false`, `tax_rate = 0` y `tax_amount = 0` en la línea de
+  seguro. PDF, borrador y creación aprobada comparten ese cálculo. Pricing carga
+  la elección del seguro guardado y, sin línea previa, inicia sin ISV en Miami;
+  los demás productos conservan su valor inicial. Duplicar conserva el flag
+  explícito de la línea fuente. No se recalculan documentos históricos ni
+  snapshots ofrecidos/aceptados por cargar una pantalla.
+- Validaciones: se reprodujeron cuatro fallos antes del fix. Regresiones de
+  helper, formulario, borrador, duplicación, Pricing y PDF real: aprobadas.
+  Suite Node 381/381, `npx.cmd tsc --noEmit`, build y `git diff --check`: OK.
+  ESLint dirigido conserva 53 diagnósticos históricos. `npm.cmd run lint:ci`
+  confirma cero regresiones. Se monta el contenido real de Pricing mediante el
+  harness existente, sin conectarse a Supabase ni crear datos de negocio reales.
+- Riesgos/pendientes: UAT autenticado crear/guardar/reabrir una cotización Miami
+  LCL/aérea con y sin ISV, y recalcular explícitamente desde Pricing. Un borrador
+  sin datos suficientes para generar la línea de seguro no persiste una prima
+  ni su impuesto; al calcularlo después, ISV vuelve a requerir elección.
+  Sin cambios SQL/RLS ni modificaciones a facturas emitidas. Commit pendiente.
+
 ### 2026-10-23 - MIAMI-INS-02 - Seguro opcional por cotización Miami
 
 - Estado: implementado, validado localmente y publicado en Production el

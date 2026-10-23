@@ -1,6 +1,6 @@
 import loadTs from './load-ts.mjs'
 
-export function mountPage(entry, mocks = {}, { exported = 'default', props = {} } = {}) {
+export function mountPage(entry, mocks = {}, { exported = 'default', props = {}, unwrap } = {}) {
   const hooks = [], effects = []
   let cursor = 0, tree
   const same = (a, b) => a?.length === b?.length && a.every((value, index) => Object.is(value, b[index]))
@@ -23,7 +23,7 @@ export function mountPage(entry, mocks = {}, { exported = 'default', props = {} 
   }
   const tags = names => Object.fromEntries(names.map(name => [name, name]))
   const router = { push() {}, replace() {} }
-  const component = loadTs(entry, {
+  const entryComponent = loadTs(entry, {
     react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     'next/navigation': { useRouter: () => router, useSearchParams: () => new URLSearchParams(), usePathname: () => '/test' },
     'next/link': 'a', 'next/image': 'img',
@@ -43,6 +43,7 @@ export function mountPage(entry, mocks = {}, { exported = 'default', props = {} 
     sonner: { toast: { success() {}, error() {}, info() {} } },
     ...mocks,
   })[exported]
+  const component = unwrap ? unwrap(entryComponent(props)) : entryComponent
   const render = () => { cursor = 0; tree = component(props); effects.splice(0).forEach(fn => fn()); return tree }
   const nodes = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(nodes) : [node, ...nodes(node.props?.children)]
   const text = node => node == null ? '' : Array.isArray(node) ? node.map(text).join('') : typeof node === 'object' ? text(node.props?.children) : String(node)
