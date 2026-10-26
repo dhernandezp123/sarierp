@@ -2,7 +2,7 @@
 
 ### 2026-10-26 - UX-PDF-02 - Descargas PDF sin regenerar documentos durante la escritura
 
-- Estado: corregido localmente; publicación y UAT autenticado pendientes.
+- Estado: publicado en Production el 26/10/2026; UAT autenticado pendiente.
 - Hallazgo: auditoría de los consumidores de React-PDF encontró 11 controles
   `PDFDownloadLink` en seis pantallas. El renderer instalado actualiza el PDF
   cuando cambia la identidad de `document`; los JSX recreados por el estado del
@@ -42,15 +42,24 @@
   `npx.cmd tsc --noEmit` OK; suite Node 405/405 con concurrencia 2;
   `npm.cmd run lint:ci`: 412 archivos, 223 diagnósticos históricos y cero
   regresiones; build completo OK con `CIRCLE_NODE_TOTAL=2`; `git diff --check` OK.
-- Riesgos/pendientes: publicar y probar descargas reales con sesión autorizada
+- Riesgos/pendientes: probar descargas reales con sesión autorizada
   en las seis pantallas. La generación se inicia al descargar, por lo que la
   espera se muestra entonces con el estado Generando. No se cambia SQL ni RLS.
-- Publicación: commit y despliegue autorizados por el usuario el 26/10/2026;
-  verificación de CI y Production en curso. Commit: pendiente.
+- Commit funcional: `30909006756f6c1de8a2e5102122362632868c6a`, en `origin/main`.
+- Publicación autorizada por el usuario: Vercel Production `7340397399`,
+  success, commit funcional exacto; [deployment](https://vercel.com/claudherhn-5641s-projects/sarierp/SxrpQ48g6NGBZzs6dWodyMFRzA9k).
+  Quality [40379233051](https://github.com/dhernandezp123/sarierp/actions/runs/40379233051):
+  application y database success. Smoke de `https://sari.forwarders.app`:
+  login 200, las seis rutas protegidas redirigen 307 al login y scanner API 401.
+  Build ID `wAZnDlEYJrIquRHEDIZC7`; su manifiesto responde 200 en dominio e
+  instancia `https://sarierp-achfbfpou-claudherhn-5641s-projects.vercel.app`.
+  El login del host técnico devuelve el 404 esperado por tenant no registrado.
+  Evidencia ignorada en `.ua/intermediate/pdf-release-*`; sin migraciones ni
+  escrituras comerciales de prueba. Esto no sustituye UAT autenticado.
 
 ### 2026-10-26 - UX-REPRICE-01 - Escritura del motivo de reapertura sin trabajo PDF por tecla
 
-- Estado: corregido localmente; publicación y UAT autenticado pendientes.
+- Estado: publicado en Production el 26/10/2026; UAT autenticado pendiente.
 - Hallazgo: el textarea de Reabrir para Repricing almacenaba cada pulsación en
   el estado de `QuotationDetail`. Esto volvía a ejecutar el detalle completo y
   creaba una nueva prop `document` para `PDFDownloadLink`. El renderer instalado
@@ -82,8 +91,9 @@
   fuentes de datos simuladas; no escribe cotizaciones, no envía mensajes ni
   ejecuta reaperturas en Production. No se cambian RPC, RLS, estados, snapshots
   comerciales ni contenido/cálculos del PDF.
-- Publicación: commit y despliegue autorizados por el usuario el 26/10/2026;
-  verificación de CI y Production en curso. Commit: pendiente.
+- Commit funcional: `30909006756f6c1de8a2e5102122362632868c6a`, en `origin/main`.
+- Publicación: mismo deployment Production, Quality CI y smoke de UX-PDF-02,
+  autorizados por el usuario el 26/10/2026. Pendiente únicamente UAT autenticado.
 
 ### 2026-10-26 - ACC-01 - Accesos operativos de Contabilidad
 
