@@ -3,7 +3,7 @@
 ### 2026-10-26 - PLAT-02 - Habilitación de la cuenta de plataforma del propietario
 
 - Estado: habilitada en Production por solicitud explícita del propietario y
-  confirmación del correo. Login manual pendiente; consola PLAT-01 sin publicar.
+  confirmación del correo. Consola PLAT-01 publicada; login manual pendiente.
 - Hallazgo: la cuenta solicitada ya existía como Ventas, rechazada e inactiva,
   asociada a Sari. No se creó un duplicado ni se restableció su contraseña.
 - SQL administrativo: transacción con bloqueo del perfil, comprobación del
@@ -22,14 +22,14 @@
 - Archivos: este registro. SQL puntual conservado en `.ua/intermediate/`
   (preflight, provisionamiento y verificación); no requiere migración adicional
   ni modifica código de aplicación, Auth, credenciales o datos comerciales.
-- Pendientes: publicar PLAT-01 y completar UAT autenticado. Actualmente el
-  frontend publicado conserva la mesa de ayuda como destino de plataforma.
-- Commit: pendiente para el registro documental; operación SQL aplicada.
+- Pendientes: completar login y UAT autenticado. El frontend publicado dirige
+  el acceso de superadministrador a `/platform`.
+- Commit del registro: `87017ae7257fed891ada33eacb3d60528498e7fc`; operación SQL aplicada.
 
 ### 2026-10-26 - PLAT-01 - Consola de administración de plataforma
 
-- Estado: implementado y validado localmente. Migración, publicación y UAT
-  autenticado en Production pendientes; no se declara aceptación funcional final.
+- Estado: migración aplicada y frontend publicado en Production el 26/10/2026.
+  Postflight SQL/RLS y smoke HTTP aprobados; UAT autenticado pendiente.
 - Hallazgo: el dominio raíz admitía login de plataforma pero enviaba siempre a
   `/support`; solo existía una consola de tickets, sin administración de empresas
   ni directorio global de accesos. El wildcard del rol Admin corresponde a la
@@ -75,12 +75,22 @@
   Se cerraron los servicios temporales y se liberaron cachés regenerables; el
   build del ERP sí pasó. Escrituras y permisos tienen cobertura API/componentes
   y SQL/RLS, que no sustituye el ensayo autenticado del frontend publicado.
-- Pendientes/riesgos: aplicar la migración antes del frontend; comprobar el
-  acceso con la identidad autorizada de plataforma y completar la matriz UAT.
+- Publicación: commit `87017ae7257fed891ada33eacb3d60528498e7fc`, migración
+  `20261026160000` aplicada antes del frontend con el SQL exacto del commit.
+  Huellas de 25 tablas y sus políticas/ACL sin cambios; auditoría nueva con RLS
+  y sin escritura directa de authenticated. Postflight con claims de la cuenta
+  autorizada: directorios/resumen accesibles y cero clientes comerciales;
+  Admin operativo rechazado por la consola y contexto Sari conservado.
+- Vercel: `dpl_BpuBiwqfmanozJwbFvP1WWmSS5gq`, Production exitoso; build
+  `Kd2AieFGLd15gCz42TsA2` confirmado en los dominios raíz/Sari y despliegue
+  inmutable. Login 200, rutas protegidas 307, API anónima 401, origen ajeno 403
+  y consola global desde Sari 404. Quality CI `40403957842` aprobado:
+  jobs application `121856785173` y database `121856784843` exitosos.
+- Pendientes/riesgos: comprobar login con contraseña y completar la matriz UAT.
   El registro de un subdominio no configura DNS/TLS/alojamiento ni callbacks de
   Auth; el administrador de empresa completa sus datos, catálogos y configuración
   fiscal. No se copian datos privados de Sari al registrar otra empresa.
-- Commit: pendiente; cambio sin publicar.
+- Evidencia de release: `docs/release/platform-console-2026-10-26.md`.
 
 ### 2026-10-26 - UX-PDF-02 - Descargas PDF sin regenerar documentos durante la escritura
 
