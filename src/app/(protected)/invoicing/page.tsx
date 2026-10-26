@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, FileText, CheckCircle2, Clock, XCircle, AlertCircle, DollarSign, BarChart2, BookOpen, Mail, ArrowRight, ClipboardList } from 'lucide-react'
 import { toast } from 'sonner'
-import { PDFDownloadLink } from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -530,21 +530,18 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
 
             <div className="flex gap-2">
               {ecPdfData && ecPdfData.items.length > 0 ? (
-                <PDFDownloadLink
+                <PdfDownloadButton
                   document={<EstadoCuentaPdf data={ecPdfData} />}
                   fileName={`estado-cuenta-${ecPdfData.cliente_nombre.replace(/\s+/g, '-').toLowerCase()}-${ecPdfData.fecha_generacion}.pdf`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
                 >
                   {({ loading: pdfLoading }) => (
-                    <button
-                      type="button"
-                      disabled={pdfLoading}
-                      className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
-                    >
+                    <>
                       <BookOpen className="h-4 w-4" />
                       {pdfLoading ? 'Generando...' : 'Descargar PDF'}
-                    </button>
+                    </>
                   )}
-                </PDFDownloadLink>
+                </PdfDownloadButton>
               ) : (
                 <button
                   type="button"

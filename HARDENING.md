@@ -1,5 +1,90 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-26 - UX-PDF-02 - Descargas PDF sin regenerar documentos durante la escritura
+
+- Estado: corregido localmente; publicación y UAT autenticado pendientes.
+- Hallazgo: auditoría de los consumidores de React-PDF encontró 11 controles
+  `PDFDownloadLink` en seis pantallas. El renderer instalado actualiza el PDF
+  cuando cambia la identidad de `document`; los JSX recreados por el estado del
+  formulario provocaban trabajo PDF al escribir. Afectaba motivo de pérdida en
+  cotizaciones; notas, referencias de pago y reversos en facturas; búsquedas y
+  filtros del estado de cuenta; campos de Shipping Instruction; notas y acciones
+  de Booking; y formularios/anexos de HBL, AWB y Carta Porte. El cuerpo del correo
+  de cotizaciones es de solo lectura, no un campo editable afectado.
+- Cambios: componente compartido `PdfDownloadButton`, que genera el documento
+  únicamente al pulsar Descargar y conserva documento/nombre del mismo clic.
+  Bloquea duplicados mientras genera, informa errores con Sonner y permite
+  reintentar. Descarta finalizaciones tras desmontar y libera URLs temporales.
+  Los cuatro botones que estaban dentro de enlaces ahora son botones únicos,
+  conservando estilos y títulos. Se mantienen documentos, props, permisos,
+  nombres de archivo, cálculos y snapshots comerciales existentes.
+- Alcance: cotización detalle (2 controles), factura detalle (3), facturación /
+  estado de cuenta (1), Shipping Instruction detalle (1), Booking detalle (1)
+  y BL detalle (3). Factura manual, reportes y las demás acciones explícitas
+  `pdf(...).toBlob()` ya generan por solicitud y se conservan.
+- Archivos: `src/components/pdf/PdfDownloadButton.tsx`,
+  `tests/pdf-download-button.test.mjs`,
+  `src/app/(protected)/quotations/[id]/page.tsx`,
+  `src/app/(protected)/invoicing/page.tsx`,
+  `src/app/(protected)/invoicing/[id]/page.tsx`,
+  `src/app/(protected)/operations/shipping-instructions/[id]/page.tsx`,
+  `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/page.tsx`,
+  `src/app/(protected)/operations/shipping-instructions/[id]/bookings/[bookingId]/bl/[blId]/page.tsx`
+  y este registro. SQL: ninguno.
+- Validaciones: cinco regresiones del componente real cubren 40 cambios de
+  documento/nombre sin generación, datos vigentes al pulsar, snapshot consistente
+  durante edición concurrente, doble clic, error/reintento, disabled, desmontaje
+  y liberación de URLs. Chrome local aislado con el botón real y renderer
+  instrumentado: 49 caracteres sin solicitudes PDF, una al descargar; snapshot,
+  nombre, doble clic y error/reintento verificados; cero excepciones y sin
+  desborde a 1440/390 px. Es verificación de llamadas al renderer con datos
+  ficticios, no medición de latencia ni UAT de contenido PDF autenticado.
+  `npx.cmd tsc --noEmit` OK; suite Node 405/405 con concurrencia 2;
+  `npm.cmd run lint:ci`: 412 archivos, 223 diagnósticos históricos y cero
+  regresiones; build completo OK con `CIRCLE_NODE_TOTAL=2`; `git diff --check` OK.
+- Riesgos/pendientes: publicar y probar descargas reales con sesión autorizada
+  en las seis pantallas. La generación se inicia al descargar, por lo que la
+  espera se muestra entonces con el estado Generando. No se cambia SQL ni RLS.
+- Publicación: commit y despliegue autorizados por el usuario el 26/10/2026;
+  verificación de CI y Production en curso. Commit: pendiente.
+
+### 2026-10-26 - UX-REPRICE-01 - Escritura del motivo de reapertura sin trabajo PDF por tecla
+
+- Estado: corregido localmente; publicación y UAT autenticado pendientes.
+- Hallazgo: el textarea de Reabrir para Repricing almacenaba cada pulsación en
+  el estado de `QuotationDetail`. Esto volvía a ejecutar el detalle completo y
+  creaba una nueva prop `document` para `PDFDownloadLink`. El renderer instalado
+  vuelve a llamar `updateInstance(doc)` en un efecto dependiente de esa prop;
+  escribir provocaba trabajo de actualización del PDF ajeno al motivo.
+- Cambios: `QuotationRepricingDialog` conserva el borrador en su propio estado
+  y se monta únicamente mientras está abierto. Entrega el último texto al
+  confirmar; el padre conserva trim, validación, transición atómica, auditoría,
+  actualización de estado e historial. Cerrar/reabrir limpia el borrador; un
+  fallo conserva el texto. Durante la reapertura se bloquean edición y cierre.
+  Se reutiliza el Dialog existente, con etiqueta asociada al textarea.
+- Archivos: `src/app/(protected)/quotations/[id]/page.tsx`,
+  `src/components/quotations/QuotationRepricingDialog.tsx`,
+  `tests/quotation-repricing-dialog.test.mjs` y este registro. SQL: ninguno.
+- Validaciones: reproducción en Chrome local con página real, datos ficticios y
+  `PDFDownloadLink` instrumentado según la dependencia `document` del renderer:
+  32 caracteres causaban 32 actualizaciones del documento antes del fix y cero
+  después; cero lecturas de base de datos durante la escritura en ambos casos.
+  Es una medición de invalidaciones, no de duración de generación de PDFs reales.
+  Modal revisado a 1440/390 px, sin desborde del diálogo. Cuatro regresiones
+  aprobadas: texto completo/multilínea, conservación tras fallo y nueva apertura,
+  bloqueo durante guardado/impacto y callback real de detalle con transición a
+  `Pendiente de Fijar Precios`, motivo recortado y error/reintento.
+  `npx.cmd tsc --noEmit` OK; suite Node 400/400 con concurrencia 2;
+  `npm.cmd run lint:ci`: 410 archivos, 223 diagnósticos históricos y cero
+  regresiones; build completo OK con `CIRCLE_NODE_TOTAL=2`; `git diff --check` OK.
+- Riesgos/pendientes: verificar escritura y guardar/reabrir con usuario de
+  Pricing/Admin en la versión publicada. La prueba local utiliza navegación y
+  fuentes de datos simuladas; no escribe cotizaciones, no envía mensajes ni
+  ejecuta reaperturas en Production. No se cambian RPC, RLS, estados, snapshots
+  comerciales ni contenido/cálculos del PDF.
+- Publicación: commit y despliegue autorizados por el usuario el 26/10/2026;
+  verificación de CI y Production en curso. Commit: pendiente.
+
 ### 2026-10-26 - ACC-01 - Accesos operativos de Contabilidad
 
 - Estado: implementado, validado y publicado en Production el 26/10/2026;

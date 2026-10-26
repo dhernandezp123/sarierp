@@ -5,10 +5,8 @@ import { CustomsServicePanel } from '@/src/components/operations/CustomsServiceP
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { Download, ExternalLink, Plus, Printer, RefreshCw } from 'lucide-react'
-import {
-  PDFDownloadLink,
-  pdf,
-} from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
+import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { createNotification } from '@/src/lib/notifications'
@@ -1467,7 +1465,7 @@ export default function RoutingDetailPage() {
           />
           {canDownloadRoutingPdf && (
             <>
-              <PDFDownloadLink
+              <PdfDownloadButton
                 document={
                     <ShippingInstructionOrderPDF
                       routing={routing}
@@ -1486,7 +1484,7 @@ export default function RoutingDetailPage() {
                     {loading ? 'Generando...' : 'Descargar SI PDF'}
                   </>
                 )}
-              </PDFDownloadLink>
+              </PdfDownloadButton>
 
               <button
                 type="button"

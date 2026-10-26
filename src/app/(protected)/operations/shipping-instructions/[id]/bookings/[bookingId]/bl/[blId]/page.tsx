@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Clock, Download, FileText, History, Mail, Plus, Printer, Send, Trash2, Upload, X } from 'lucide-react'
-import { PDFDownloadLink, pdf } from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
+import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { buildTenantStoragePath, isTenantResourceStoragePath } from '@/src/lib/storage-paths'
@@ -1979,7 +1980,7 @@ export default function BLPage() {
         )}
 
         {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte === 'Aéreo' && (
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={<AWBPdf awb={formToAWBData(form, condicionesAWB)} company={companyBranding} />}
             fileName={`AWB-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
@@ -1990,10 +1991,10 @@ export default function BLPage() {
                 {pdfLoading ? 'Generando...' : 'Descargar AWB PDF'}
               </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
         )}
         {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte === 'Terrestre' && (
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={<CartaPortePdf cp={formToCartaPorteData(form, condicionesCP)} company={companyBranding} />}
             fileName={`CartaPorte-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
@@ -2004,10 +2005,10 @@ export default function BLPage() {
                 {pdfLoading ? 'Generando...' : 'Descargar Carta Porte PDF'}
               </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
         )}
         {!isNew && form.bl_type === 'HBL' && tipoTransporte !== 'Aéreo' && tipoTransporte !== 'Terrestre' && (
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={<HouseBLPdf bl={formToHBLData(form, condicionesBL, containers)} company={companyBranding} />}
             fileName={`HBL-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
@@ -2022,7 +2023,7 @@ export default function BLPage() {
                     : 'Descargar HBL Draft'}
               </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
         )}
       </div>
 

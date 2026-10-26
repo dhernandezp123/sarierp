@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
 import { toast } from 'sonner'
-import { PDFDownloadLink } from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { supabase } from '../../../../lib/supabase/client'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass } from '@/src/lib/ui-classes'
@@ -612,21 +612,18 @@ export default function InvoiceDetailPage() {
               {flow.label}
             </button>
           )}
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={<InvoicePdf data={pdfData} />}
             fileName={`${invoice.invoice_type}-${invoice.invoice_number || id}.pdf`}
+            className={secondaryButtonClass}
           >
             {({ loading: pdfLoading }) => (
-              <button
-                type="button"
-                className={secondaryButtonClass}
-                disabled={pdfLoading}
-              >
+              <>
                 <Download className="h-4 w-4" />
                 {pdfLoading ? 'Generando...' : 'Descargar PDF'}
-              </button>
+              </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
           {invoice.invoice_type === 'Factura'
             && !['Borrador', 'Anulada'].includes(invoice.status) && (
             <>
@@ -786,22 +783,19 @@ export default function InvoiceDetailPage() {
                           <div className="flex items-center">
                             {p.status === 'Aplicado' && (
                               <>
-                                <PDFDownloadLink
+                                <PdfDownloadButton
                                   document={<ReciboPagoPdf data={makeReceiptData(p)} />}
                                   fileName={`recibo-${invoice.invoice_number || 'pago'}-${p.payment_date}.pdf`}
+                                  title="Generar recibo de este pago"
+                                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
                                 >
                                   {({ loading: pdfLoading }) => (
-                                    <button
-                                      type="button"
-                                      title="Generar recibo de este pago"
-                                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
-                                      disabled={pdfLoading}
-                                    >
+                                    <>
                                       <Printer className="h-3.5 w-3.5" />
                                       {pdfLoading ? 'Generando...' : 'Generar recibo'}
-                                    </button>
+                                    </>
                                   )}
-                                </PDFDownloadLink>
+                                </PdfDownloadButton>
                                 <button
                                   type="button"
                                   onClick={() => setPaymentToReverse(p)}
@@ -1199,21 +1193,18 @@ export default function InvoiceDetailPage() {
               >
                 Cerrar
               </button>
-              <PDFDownloadLink
+              <PdfDownloadButton
                 document={<ReciboPagoPdf data={makeReceiptData(receiptPayment)} />}
                 fileName={`recibo-${invoice.invoice_number || 'pago'}-${receiptPayment.payment_date}.pdf`}
+                className={primaryButtonClass}
               >
                 {({ loading: pdfLoading }) => (
-                  <button
-                    type="button"
-                    disabled={pdfLoading}
-                    className={primaryButtonClass}
-                  >
+                  <>
                     <Printer className="h-4 w-4" />
                     {pdfLoading ? 'Generando...' : 'Generar recibo'}
-                  </button>
+                  </>
                 )}
-              </PDFDownloadLink>
+              </PdfDownloadButton>
             </div>
           </div>
         </div>

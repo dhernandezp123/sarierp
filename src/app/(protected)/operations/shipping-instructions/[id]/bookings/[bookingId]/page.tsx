@@ -4,7 +4,7 @@ import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Download, FileText, Lock, Trash2, Upload } from 'lucide-react'
-import { PDFDownloadLink } from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { buildTenantStoragePath } from '@/src/lib/storage-paths'
@@ -1500,7 +1500,7 @@ export default function RoutingBookingChildPage() {
                 </button>
               )}
               {isArrived && (
-                <PDFDownloadLink
+                <PdfDownloadButton
                   document={<ArrivalNoticePdf data={arrivalNoticeData} company={companyBranding} />}
                   fileName={`Aviso-Llegada-${booking.booking_number || bookingId}.pdf`}
                   className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
@@ -1511,7 +1511,7 @@ export default function RoutingBookingChildPage() {
                       {pdfLoading ? 'Generando...' : 'Aviso de Llegada'}
                     </>
                   )}
-                </PDFDownloadLink>
+                </PdfDownloadButton>
               )}
               <button
                 type="button"

@@ -36,16 +36,15 @@ import {
   QUOTATION_LOSS_REASONS,
   type QuotationLossReason,
 } from '@/src/lib/quotation-loss-reasons'
-import {
-  PDFDownloadLink,
-  pdf,
-} from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
+import { pdf } from '@react-pdf/renderer'
 
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
 import { CostAnalysisPanel } from '@/src/components/pricing/CostAnalysisPanel'
 import { canViewQuotationCosts } from '@/src/lib/permissions'
 import { InsuranceCalculationDialog } from '@/src/components/quotations/InsuranceCalculationDialog'
+import { QuotationRepricingDialog } from '@/src/components/quotations/QuotationRepricingDialog'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
   DEFAULT_EMAIL_TEMPLATES,
@@ -454,7 +453,6 @@ function QuotationDetail() {
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [repricingDialogOpen, setRepricingDialogOpen] = useState(false)
   const [insuranceCalculationOpen, setInsuranceCalculationOpen] = useState(false)
-  const [repricingReason, setRepricingReason] = useState('')
   const [reopeningRepricing, setReopeningRepricing] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [plantillaCotizacion, setPlantillaCotizacion] = useState<string | null>(null)
@@ -973,14 +971,12 @@ function QuotationDetail() {
   }
 
   const openRepricingDialog = async () => {
-    setRepricingReason('')
     setRepricingDialogOpen(true)
     await loadRepricingImpact()
   }
 
   const resetRepricingDialog = () => {
     setRepricingDialogOpen(false)
-    setRepricingReason('')
     setRepricingImpact({
       hasShippingInstruction: false,
       bookingsCount: 0,
@@ -988,10 +984,10 @@ function QuotationDetail() {
     })
   }
 
-  const reopenForRepricing = async () => {
+  const reopenForRepricing = async (draftReason: string) => {
     if (!quotation?.id) return
 
-    const reason = repricingReason.trim()
+    const reason = draftReason.trim()
 
     if (!reason) {
       toast.error('Debes ingresar el motivo del repricing.')
@@ -1734,9 +1730,9 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           </div>
 
           <DialogDescription className="mb-4">Descarga el PDF, abre tu aplicación de correo y adjúntalo manualmente antes de enviar. Preparar este mensaje no cambia el estado de la cotización.</DialogDescription>
-          <PDFDownloadLink document={<QuotationPDF quotation={quotation} selectedAgent={selectedAgent} pricingItems={pricingItems} commercialOptions={getClientVisibleQuotationOptions(commercialOptions)} quotationContainers={quotationContainers} cargoLines={cargoLines} company={companyBranding} />} fileName={(quotation.quotation_number || 'cotizacion') + '.pdf'} className="mb-4 inline-flex rounded-lg border px-3 py-2 text-sm font-semibold">
+          <PdfDownloadButton document={<QuotationPDF quotation={quotation} selectedAgent={selectedAgent} pricingItems={pricingItems} commercialOptions={getClientVisibleQuotationOptions(commercialOptions)} quotationContainers={quotationContainers} cargoLines={cargoLines} company={companyBranding} />} fileName={(quotation.quotation_number || 'cotizacion') + '.pdf'} className="mb-4 inline-flex rounded-lg border px-3 py-2 text-sm font-semibold">
             {({ loading: generating }) => generating ? 'Generando PDF…' : '1. Descargar PDF'}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
           {emailTemplates.length > 1 && (
             <div className="mb-3 flex flex-wrap gap-2">
               {emailTemplates.map((template) => (
@@ -1896,7 +1892,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             }}
             suggestedTitle={`Dar seguimiento a ${quotation.quotation_number || 'cotización'}`}
           />
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={
               <QuotationPDF
                 quotation={quotation}
@@ -1920,7 +1916,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 </span>
               </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
 
           <button
             type="button"
@@ -3058,73 +3054,14 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       onConfirm={duplicateQuotation}
     />
 
-    <Dialog
-      open={repricingDialogOpen}
-      onOpenChange={(open) => {
-        if (!open && !reopeningRepricing) {
-          resetRepricingDialog()
-          return
-        }
-
-        setRepricingDialogOpen(open)
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Reabrir para Repricing</DialogTitle>
-          <DialogDescription>
-            Regresa esta cotización a Pendiente de Fijar Precios para corregir tarifa, costos o carrier/naviera. El motivo quedará registrado junto con el cambio de estado.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {(repricingImpact.hasShippingInstruction || repricingImpact.bookingsCount > 0) && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
-              Esta cotización ya tiene operación asociada. Reabrir pricing no actualizará Routing ni Bookings automáticamente en esta fase.
-            </div>
-          )}
-
-          {repricingImpact.loading && (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Revisando impacto operativo...
-            </p>
-          )}
-
-          <div>
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Motivo
-            </label>
-            <textarea
-              value={repricingReason}
-              onChange={(event) => setRepricingReason(event.target.value)}
-              placeholder="Ej: Cambio de naviera / actualización de tarifa al zarpe"
-              rows={4}
-              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={resetRepricingDialog}
-              disabled={reopeningRepricing}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="button"
-              onClick={reopenForRepricing}
-              disabled={reopeningRepricing || repricingImpact.loading}
-              className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50"
-            >
-              {reopeningRepricing ? 'Reabriendo...' : 'Confirmar reapertura'}
-            </button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    {repricingDialogOpen && (
+      <QuotationRepricingDialog
+        busy={reopeningRepricing}
+        impact={repricingImpact}
+        onCancel={resetRepricingDialog}
+        onConfirm={reopenForRepricing}
+      />
+    )}
 
     {quotation && (
       <InsuranceCalculationDialog
