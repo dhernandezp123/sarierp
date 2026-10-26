@@ -12,6 +12,7 @@ import OnboardingTutorial from '@/src/components/onboarding/OnboardingTutorial'
 import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath, getDefaultPathForRole } from '@/src/lib/permissions'
 import { isPlatformSupportPath } from '@/src/lib/tenant-context'
+import { canManagePlatform, isPlatformConsolePath } from '@/src/lib/platform-admin'
 import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
@@ -25,7 +26,7 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
   const hasPathAccess = Boolean(
     profile
     && (isPlatformAdmin
-      ? isPlatformSupportPath(pathname)
+      ? isPlatformSupportPath(pathname) || (canManagePlatform(profile) && isPlatformConsolePath(pathname))
       : canAccessPath(profile.rol, pathname)),
   )
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -41,7 +42,7 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
     if (!profile || hasPathAccess) return
 
     toast.error('No tienes permisos para acceder a esta sección')
-    router.replace(isPlatformAdmin ? '/support' : getDefaultPathForRole(profile.rol))
+    router.replace(isPlatformAdmin ? (canManagePlatform(profile) ? '/platform' : '/support') : getDefaultPathForRole(profile.rol))
   }, [hasPathAccess, isPlatformAdmin, profile, router])
 
   // Cierra el menú móvil al navegar a otra ruta.

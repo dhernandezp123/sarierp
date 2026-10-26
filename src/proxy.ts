@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { isPlatformConsolePath } from '@/src/lib/platform-admin'
 import {
   clearTenantHeaders,
   isPlatformSupportPath,
@@ -111,6 +112,7 @@ export async function proxy(req: NextRequest) {
   if (hostResolution.kind === 'platform') {
     if (
       !PLATFORM_ROUTES.has(pathname)
+      && !isPlatformConsolePath(pathname)
       && !isPlatformSupportPath(pathname)
       && !isPlatformLegalDocumentPath(pathname)
       && !pathname.startsWith('/api/')
@@ -118,6 +120,9 @@ export async function proxy(req: NextRequest) {
       return tenantErrorResponse(req)
     }
   } else {
+    if (pathname === '/platform' || pathname.startsWith('/platform/') || pathname === '/api/platform' || pathname.startsWith('/api/platform/')) {
+      return tenantErrorResponse(req)
+    }
     const { data, error } = await supabase
       .rpc('resolve_tenant_public_context', {
         p_hostname: hostResolution.lookupHostname,

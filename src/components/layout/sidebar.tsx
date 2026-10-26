@@ -7,6 +7,7 @@ import { useEffect, useId, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath } from '@/src/lib/permissions'
+import { canManagePlatform } from '@/src/lib/platform-admin'
 import { isSidebarItemActive, sidebarGroupOrder } from '@/src/lib/sidebar-navigation'
 import { NOTIFICATIONS_READ_EVENT } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
@@ -299,14 +300,14 @@ export default function Sidebar({ role }: { role?: string }) {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,56,189,0.24),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(239,142,1,0.16),transparent_32%)]" />
       <div className="relative shrink-0 border-b border-white/10 px-4 pb-3 pt-3">
         <Link
-          href={isPlatformAdmin ? '/support' : '/dashboard'}
+          href={isPlatformAdmin ? (canManagePlatform(profile) ? '/platform' : '/support') : '/dashboard'}
           className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-lg shadow-slate-950/10 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.09]"
         >
           <span className="min-w-0">
             {isPlatformAdmin ? (
               <span className="block">
                 <span className="block text-base font-bold text-white">Forwarders ERP</span>
-                <span className="block text-xs text-slate-400">Soporte Hernova</span>
+                <span className="block text-xs text-slate-400">Administración Hernova</span>
               </span>
             ) : (
               <TenantBrand compact inverse />
@@ -317,6 +318,12 @@ export default function Sidebar({ role }: { role?: string }) {
 
 
       <nav aria-label="Módulos" className="relative min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3 [scrollbar-width:thin]">
+        {canManagePlatform(profile) && <div className="space-y-1">
+          {renderItem({ label: 'Resumen', href: '/platform', icon: LayoutDashboard, exact: true })}
+          {renderItem({ label: 'Empresas y accesos', href: '/platform/companies', icon: Building2 })}
+          {renderItem({ label: 'Usuarios', href: '/platform/users', icon: Users })}
+          {renderItem({ label: 'Actividad administrativa', href: '/platform/activity', icon: ShieldCheck })}
+        </div>}
         {!isPlatformAdmin && canAccessPath(currentRole, '/quotations/new') && (
           <Link href="/quotations/new" aria-current={pathname === '/quotations/new' ? 'page' : undefined} className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-tenant-primary px-3 py-3 text-sm font-semibold text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400">
             <Plus size={17} aria-hidden="true" /> Nueva cotización

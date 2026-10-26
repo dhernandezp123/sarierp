@@ -15,6 +15,7 @@ import EmailTemplatesDialog from '@/src/components/email/EmailTemplatesDialog'
 import ReferenceInsuranceCalculatorDialog from '@/src/components/quotations/ReferenceInsuranceCalculatorDialog'
 import { useTenant } from '@/src/components/tenant/TenantProvider'
 import { canAccessPath } from '@/src/lib/permissions'
+import { canManagePlatform } from '@/src/lib/platform-admin'
 
 // Acciones rapidas disponibles segun rol; con `href` navegan y con
 // `action` abren un modal sin salir de la pagina actual.
@@ -217,7 +218,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
         )}
 
         <Link
-          href={isPlatformAdmin ? '/support' : '/dashboard'}
+          href={isPlatformAdmin ? (canManagePlatform(profile) ? '/platform' : '/support') : '/dashboard'}
           title="Ir al inicio"
           className="rounded-xl p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
         >
@@ -229,7 +230,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
             {tenant?.tradeName || 'Forwarders ERP'}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {isPlatformAdmin ? 'Consola de soporte Hernova' : 'Plataforma logistica interna'}
+            {isPlatformAdmin ? 'Administración de plataforma' : 'Plataforma logistica interna'}
           </p>
         </div>
       </div>

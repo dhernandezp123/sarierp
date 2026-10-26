@@ -1,5 +1,87 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-26 - PLAT-02 - Habilitación de la cuenta de plataforma del propietario
+
+- Estado: habilitada en Production por solicitud explícita del propietario y
+  confirmación del correo. Login manual pendiente; consola PLAT-01 sin publicar.
+- Hallazgo: la cuenta solicitada ya existía como Ventas, rechazada e inactiva,
+  asociada a Sari. No se creó un duplicado ni se restableció su contraseña.
+- SQL administrativo: transacción con bloqueo del perfil, comprobación del
+  estado esperado, ambiente Production verificado, correo confirmado y contraseña
+  existente. Se comprobaron todas las columnas UUID de tablas públicas: solo
+  había dos referencias de auditoría de rechazo/desactivación como entidad,
+  sin referencias comerciales ni como actor. Esos eventos se conservaron.
+- Cambio: perfil `b82c31ac-1bc7-4829-88b2-91f24867400b` con rol Admin, aprobado,
+  activo, `is_platform_admin=true` y `tenant_id=NULL`. La autorización se registró
+  en `activity_logs` con estado anterior/posterior, actor SQL confiable sin
+  atribuir una sesión ficticia y confirmación de credenciales sin cambios.
+- Validación: lectura posterior confirmó el perfil; transacción de solo lectura
+  con rol authenticated y claims del usuario verificó `is_platform_admin()=true`,
+  perfil propio visible, contexto operativo nulo y cero clientes comerciales
+  visibles. Esto comprueba autorización/RLS, no un login con contraseña.
+- Archivos: este registro. SQL puntual conservado en `.ua/intermediate/`
+  (preflight, provisionamiento y verificación); no requiere migración adicional
+  ni modifica código de aplicación, Auth, credenciales o datos comerciales.
+- Pendientes: publicar PLAT-01 y completar UAT autenticado. Actualmente el
+  frontend publicado conserva la mesa de ayuda como destino de plataforma.
+- Commit: pendiente para el registro documental; operación SQL aplicada.
+
+### 2026-10-26 - PLAT-01 - Consola de administración de plataforma
+
+- Estado: implementado y validado localmente. Migración, publicación y UAT
+  autenticado en Production pendientes; no se declara aceptación funcional final.
+- Hallazgo: el dominio raíz admitía login de plataforma pero enviaba siempre a
+  `/support`; solo existía una consola de tickets, sin administración de empresas
+  ni directorio global de accesos. El wildcard del rol Admin corresponde a la
+  empresa y no debe habilitar administración global.
+- Cambios: `/platform` con resumen y rutas de empresas, usuarios y actividad;
+  navegación y login de superadmin integrados con el shell existente. Registro
+  atómico de empresa/configuración/dominio, cambios de nombre y estado, gestión
+  de accesos operativos y auditoría de actor/motivo/antes/después. Se reutiliza
+  soporte, Dialog, Sonner y formato de fechas. Listados paginados, búsqueda por
+  acción, estados de carga/error/reintento, respuestas antiguas descartadas,
+  borradores conservados ante fallos y bloqueo de doble envío.
+- Autorización: host raíz, sesión verificada y perfil Admin, aprobado, activo,
+  `is_platform_admin=true`, sin tenant; controles en layout, API y RPC. API usa
+  el cliente con sesión y valida Origin en mutaciones. Los administradores
+  operativos no acceden a `/platform` ni a su API y las cuentas de plataforma
+  no se editan desde esta consola. No se conceden escrituras directas de tenants
+  o auditoría a authenticated, ni acceso comercial transversal.
+- Integridad: control de versión para empresas y estado esperado para usuarios;
+  cambios de acceso serializados por empresa, conservando un Admin activo;
+  altas y auditoría comparten transacción. Suspender/archivar retira la resolución
+  pública y el contexto `current_tenant_id()` de sesiones operativas existentes.
+  No se crean superadministradores ni se cambian empresas existentes al migrar.
+- Archivos: `src/app/(protected)/platform/`, `src/app/api/platform/route.ts`,
+  `src/components/platform/`, `src/lib/platform-admin.ts`,
+  `src/lib/server/platform-admin.ts`, login, Proxy, permisos, destinos de login,
+  shell/sidebar/topbar; `tests/platform-admin.test.mjs`,
+  `scripts/validate-audit-sql.mjs`, `docs/uat/platform-admin-console.md` y este registro.
+- SQL: `supabase/migrations/20261026160000_platform_admin_console.sql` y
+  `supabase/tests/platform_admin_console.sql`.
+- Validación: `npx.cmd tsc --noEmit`, 417/417 pruebas Node (12 específicas de
+  plataforma), `npm.cmd run lint:ci` (423 archivos, 223 diagnósticos históricos,
+  cero regresiones) y build de producción aprobados. Veinte suites SQL/RLS
+  aprobadas en copia Docker local con red `none` y sin puertos. Dos degradaciones
+  concurrentes de Admin: exactamente una aprobada, otra rechazada, un
+  administrador activo y un evento de auditoría. Las pruebas de componentes
+  comprueban búsqueda sin consulta por tecla, respuestas obsoletas descartadas,
+  doble envío bloqueado, borrador conservado, reintento y errores no JSON legibles.
+- Navegador: fixture con identidad y Host/Origin simulados y componentes/API/RPC
+  reales contra la copia local. Comprobados login hacia `/platform`, resumen en
+  1440/390 px, navegación móvil y listado de empresas; el buscador móvil se ajustó
+  tras revisar la captura. El recorrido completo de formularios no quedó
+  certificado por fallos del HMR del fixture y falta de espacio al compilarlo.
+  Se cerraron los servicios temporales y se liberaron cachés regenerables; el
+  build del ERP sí pasó. Escrituras y permisos tienen cobertura API/componentes
+  y SQL/RLS, que no sustituye el ensayo autenticado del frontend publicado.
+- Pendientes/riesgos: aplicar la migración antes del frontend; comprobar el
+  acceso con la identidad autorizada de plataforma y completar la matriz UAT.
+  El registro de un subdominio no configura DNS/TLS/alojamiento ni callbacks de
+  Auth; el administrador de empresa completa sus datos, catálogos y configuración
+  fiscal. No se copian datos privados de Sari al registrar otra empresa.
+- Commit: pendiente; cambio sin publicar.
+
 ### 2026-10-26 - UX-PDF-02 - Descargas PDF sin regenerar documentos durante la escritura
 
 - Estado: publicado en Production el 26/10/2026; UAT autenticado pendiente.

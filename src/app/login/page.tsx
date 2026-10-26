@@ -10,7 +10,7 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
-import { getLoginDestination } from '@/src/lib/auth-redirect'
+import { getLoginDestination, getPlatformLoginDestination } from '@/src/lib/auth-redirect'
 import { TenantBrand } from '@/src/components/tenant/TenantBrand'
 import { useTenant } from '@/src/components/tenant/TenantProvider'
 import { profileMatchesAccessContext } from '@/src/lib/tenant-context'
@@ -66,7 +66,7 @@ export default function LoginPage() {
         toast.error(
           tenant
             ? 'Esta cuenta pertenece a otra empresa. Revisa el enlace de acceso.'
-            : 'Este acceso es exclusivo para soporte autorizado de la plataforma.',
+            : 'Este acceso es exclusivo para administradores autorizados de la plataforma.',
         )
         return
       }
@@ -85,7 +85,7 @@ export default function LoginPage() {
 
       const requestedPath = new URLSearchParams(window.location.search).get('next')
       const safePath = profile.is_platform_admin
-        ? '/support'
+        ? getPlatformLoginDestination(profile, requestedPath)
         : getLoginDestination(profile.rol, requestedPath)
       router.push(safePath)
       router.refresh()
@@ -108,8 +108,8 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.15),transparent_35%)]" />
 
       <div className="relative min-h-screen bg-gradient-to-r from-[#020617]/95 via-[#020617]/80 to-[#020617]/20">
-        <div className="flex min-h-screen items-center px-10 py-20">
-          <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
+        <div className="flex min-h-screen items-center px-4 py-20 sm:px-10">
+          <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-6 shadow-2xl shadow-black/40 backdrop-blur-2xl sm:p-10">
             <div className="mb-10 text-center">
               <div className="mb-10">
                 {tenant ? (
@@ -117,7 +117,8 @@ export default function LoginPage() {
                 ) : (
                   <div>
                     <p className="text-2xl font-bold text-white">{PLATFORM_NAME}</p>
-                    <p className="mt-2 text-sm text-slate-300">Acceso de soporte autorizado</p>
+                    <h1 className="mt-2 text-lg font-semibold text-slate-200">Administración de plataforma</h1>
+                    <p className="mt-2 text-sm text-slate-300">Acceso exclusivo para superadministradores.</p>
                   </div>
                 )}
               </div>
@@ -129,10 +130,11 @@ export default function LoginPage() {
 
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
-                <label className="mb-1 block text-sm font-medium text-white">
+                <label htmlFor="login-email" className="mb-1 block text-sm font-medium text-white">
                   Correo electronico
                 </label>
                 <input
+                  id="login-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -144,10 +146,11 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-white">
+                <label htmlFor="login-password" className="mb-1 block text-sm font-medium text-white">
                   Contraseña
                 </label>
                 <input
+                  id="login-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

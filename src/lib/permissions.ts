@@ -124,6 +124,8 @@ export function getDefaultPathForRole(role: string | null | undefined) {
 
 export function canAccessPath(role: string | null | undefined, path: string) {
   if (!role) return false
+  // The tenant Admin wildcard never grants access to the platform console.
+  if (matchesPath(path, '/platform')) return false
 
   if (role === 'Contabilidad') {
     if (matchesPath(path, '/clientes/nuevo')) return false
