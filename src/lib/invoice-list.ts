@@ -7,6 +7,7 @@ export type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de
 export type Invoice = {
   id: string
   invoice_number: string | null
+  point_of_sale?: string | null
   invoice_type: InvoiceType
   status: string
   cliente_id: string | null
@@ -46,7 +47,7 @@ export type ReceivableSummary = {
 export async function loadInvoiceList(client: Pick<SupabaseClient, 'from' | 'rpc'>, isCurrent = () => true) {
   const [invoiceRows, receivables, queue] = await Promise.all([
     readAllReportRows((from, to) => client.from('invoices')
-      .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, payment_condition, credit_days, total, currency, quotation_id, parent_invoice_id')
+      .select('id, invoice_number, point_of_sale, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, payment_condition, credit_days, total, currency, quotation_id, parent_invoice_id')
       .is('deleted_at', null).order('created_at', { ascending: false }).order('id').range(from, to),
     { label: 'facturas', isCurrent }) as Promise<Omit<Invoice, 'invoice_payments'>[]>,
     readAllReportRows<ReceivableSummary>((from, to) => client.from('invoice_receivables')

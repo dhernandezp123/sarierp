@@ -13,6 +13,15 @@ const authorizedServer = (profile = goodProfile, user = { id: 'user-1' }) => {
   return { auth: { getUser: async () => ({ data: { user }, error: null }) }, from: () => ({ select }) }
 }
 
+test('Scanner / Factura manual autoriza Contabilidad de Sari en el servidor', async () => {
+  const server = authorizedServer({ ...goodProfile, rol: 'Contabilidad' })
+  const { authorizeManualInvoices } = loadTs('src/lib/server/manual-invoices.ts', {
+    '@/src/lib/supabase/server': { createClient: async () => server },
+  })
+  const result = await authorizeManualInvoices(new Request('https://sari.forwarders.app/api/manual-invoices', { headers: headers() }))
+  assert.equal(result.tenant.id, tenant.id)
+})
+
 test('server authorization checks approval, activity, role, tenant, host and platform-only accounts', async () => {
   for (const profile of [goodProfile, { ...goodProfile, rol: 'Ventas' }, { ...goodProfile, status: 'Pendiente' },
     { ...goodProfile, is_active: false }, { ...goodProfile, is_platform_admin: true }, { ...goodProfile, tenant_id: 'other-tenant' }, null]) {

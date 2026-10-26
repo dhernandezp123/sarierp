@@ -17,6 +17,7 @@ import {
 } from '@/src/lib/ui-classes'
 import { billingReturnHref } from '@/src/lib/billing-readiness'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { loadBillingPointsOfSale } from '@/src/lib/billing-points-of-sale'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -72,6 +73,7 @@ type CaiRange = {
   rango_hasta: string
   fecha_limite_emision: string
   lugar_emision: string | null
+  point_of_sale: string
   document_type: Exclude<InvoiceType, 'Proforma'>
 }
 
@@ -87,6 +89,7 @@ type ParentInvoice = {
   total: number
   currency: string
   balance: number
+  point_of_sale: string | null
 }
 
 function quotationHasActiveInvoice(quotation: Quotation) {
@@ -185,7 +188,10 @@ export default function NewInvoicePage() {
   const [loadingQuotation, setLoadingQuotation] = useState(false)
 
   // SAR fields
-  const [activeCai, setActiveCai] = useState<CaiRange | null>(null)
+  const [loadedActiveCai, setActiveCai] = useState<CaiRange | null>(null)
+  const [pointsOfSale, setPointsOfSale] = useState<string[]>([])
+  const [pointOfSale, setPointOfSale] = useState('')
+  const activeCai = loadedActiveCai?.point_of_sale === pointOfSale && loadedActiveCai.document_type === invoiceType ? loadedActiveCai : null
   const [esExonerado, setEsExonerado] = useState(false)
   const [ordenCompraExenta, setOrdenCompraExenta] = useState('')
   const [noConstanciaExonerado, setNoConstanciaExonerado] = useState('')
@@ -293,12 +299,16 @@ export default function NewInvoicePage() {
 
   useEffect(() => {
     const init = async () => {
-      const [clientesRes, settingsRes] = await Promise.all([
+      const [clientesRes, settingsRes, pointsRes] = await Promise.all([
         supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito').order('nombre'),
         loadCurrentCompanySettings(supabase),
+        loadBillingPointsOfSale(supabase),
       ])
 
       setClientes((clientesRes.data || []) as Cliente[])
+      setPointsOfSale(pointsRes.data)
+      setPointOfSale(pointsRes.data[0] || '')
+      if (pointsRes.error) toast.error('No se pudieron cargar los puntos de venta')
       if (settingsRes.data?.exchange_rate_usd_hnl) {
         setExchangeRate(String(settingsRes.data.exchange_rate_usd_hnl))
       }
@@ -337,7 +347,7 @@ export default function NewInvoicePage() {
         const [parentResult, receivableResult] = await Promise.all([
           supabase
             .from('invoices')
-            .select('id, invoice_number, invoice_type, cliente_id, cliente_nombre, cliente_rtn, cliente_direccion, cliente_email, total, currency')
+            .select('id, invoice_number, invoice_type, cliente_id, cliente_nombre, cliente_rtn, cliente_direccion, cliente_email, total, currency, point_of_sale, cai, rango_desde')
             .eq('id', parentId)
             .single(),
           supabase
@@ -349,6 +359,13 @@ export default function NewInvoicePage() {
         const parent = parentResult.data
 
         if (parent) {
+          let parentPoint = parent.point_of_sale
+          if (!parentPoint && parent.cai) {
+            const { data: range } = await supabase.from('cai_ranges').select('point_of_sale')
+              .eq('cai', parent.cai).eq('rango_desde', parent.rango_desde).limit(1).maybeSingle()
+            parentPoint = range?.point_of_sale
+          }
+          setPointOfSale(parentPoint || pointsRes.data[0] || '')
           setParentInvoice({
             ...parent,
             balance: Number(receivableResult.data?.balance ?? parent.total),
@@ -387,8 +404,9 @@ export default function NewInvoicePage() {
   }, [parentId, docType, requestedQuotationId, applyQuotation])
 
   useEffect(() => {
+    let cancelled = false
     const timeout = window.setTimeout(async () => {
-      if (!IS_FISCAL[invoiceType]) {
+      if (!IS_FISCAL[invoiceType] || !pointOfSale) {
         setActiveCai(null)
         return
       }
@@ -397,17 +415,19 @@ export default function NewInvoicePage() {
         .from('cai_ranges')
         .select('*')
         .eq('document_type', invoiceType)
+        .eq('point_of_sale', pointOfSale)
         .eq('is_active', true)
         .maybeSingle()
 
+      if (cancelled) return
       if (error) {
         toast.error('Error al cargar el rango CAI', { description: error.message })
       }
       setActiveCai((data as CaiRange | null) ?? null)
     }, 0)
 
-    return () => window.clearTimeout(timeout)
-  }, [invoiceType])
+    return () => { cancelled = true; window.clearTimeout(timeout) }
+  }, [invoiceType, pointOfSale])
 
   useEffect(() => {
     if (!clienteId || parentId || invoiceType !== 'Factura') {
@@ -522,6 +542,7 @@ export default function NewInvoicePage() {
       setSaving(false)
       return
     }
+    if (!pointOfSale) { toast.error('Selecciona un punto de venta'); return }
     if (isFiscal && !activeCai) {
       toast.error(`No hay un rango CAI activo para ${invoiceType}.`)
       return
@@ -548,6 +569,7 @@ export default function NewInvoicePage() {
     setSaving(true)
 
     const invoicePayload = {
+      point_of_sale: pointOfSale,
       invoice_type: invoiceType,
       cliente_id: clienteId,
       issue_date: issueDate,
@@ -631,7 +653,7 @@ export default function NewInvoicePage() {
       {isFiscal && !activeCai && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>No hay un rango CAI activo para {invoiceType}. No se puede emitir este documento. <a href="/settings/cai" className="underline font-semibold">Registrar rango CAI →</a></span>
+          <span>No hay un rango CAI activo para {invoiceType} en {pointOfSale || 'la oficina seleccionada'}. No se puede emitir este documento. <a href="/settings/cai" className="underline font-semibold">Registrar rango CAI →</a></span>
         </div>
       )}
 
@@ -681,6 +703,15 @@ export default function NewInvoicePage() {
                 </select>
               </div>
 
+              {/* Punto de venta de la emisión fiscal */}
+              <div>
+                <label htmlFor="invoice-point-of-sale" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">Punto de venta <span className="text-red-500">*</span></label>
+                <select id="invoice-point-of-sale" value={pointOfSale} disabled={!!parentInvoice || saving}
+                  onChange={(event) => setPointOfSale(event.target.value)} className={fieldClass}>
+                  {pointsOfSale.map(point => <option key={point} value={point}>{point}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">El CAI y correlativo se asignan de esta oficina al guardar.</p>
+              </div>
               {/* Cliente (bloqueado si viene de parent) */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">

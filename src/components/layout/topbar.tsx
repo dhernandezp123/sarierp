@@ -35,7 +35,7 @@ const QUICK_ACTIONS = [
     label: 'Ver / Editar Cliente',
     action: 'client-profile',
     icon: Contact,
-    roles: ['Admin', 'Ventas'],
+    roles: ['Admin', 'Ventas', 'Contabilidad'],
   },
   {
     label: 'Agregar Agente',

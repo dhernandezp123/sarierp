@@ -10,6 +10,7 @@ import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { filterSelectClass } from '@/src/lib/ui-classes'
 import { Users } from 'lucide-react'
+import { useUser } from '@/src/hooks/useUser'
 
 const getTipoBadgeClass = (tipo?: string | null) => {
   if (tipo === 'Corporativo') {
@@ -44,6 +45,8 @@ const getCondicionBadgeClass = (condicion?: string | null) => {
 
 export default function ClientesPage() {
   const router = useRouter()
+  const { profile } = useUser()
+  const canCreateClient = profile?.rol !== 'Contabilidad'
 
   const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -159,13 +162,13 @@ export default function ClientesPage() {
               className="h-11 min-w-[280px] flex-1 rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-950"
             />
 
-              <button
+              {canCreateClient && <button
                 type="button"
                 onClick={() => router.push('/clientes/nuevo')}
                 className="ml-auto inline-flex h-11 items-center justify-center rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
               >
                 Nuevo Cliente
-              </button>
+              </button>}
             </div>
           </div>
 
@@ -176,8 +179,8 @@ export default function ClientesPage() {
               <EmptyState
                 icon={<Users className="h-6 w-6" />}
                 title="Sin clientes registrados"
-                description="Agrega tu primer cliente para comenzar."
-                action={{ label: 'Nuevo Cliente', href: '/clientes/nuevo' }}
+                description={canCreateClient ? 'Agrega tu primer cliente para comenzar.' : 'Todavía no hay clientes para consultar.'}
+                action={canCreateClient ? { label: 'Nuevo Cliente', href: '/clientes/nuevo' } : undefined}
               />
             ) : (
               <EmptyState

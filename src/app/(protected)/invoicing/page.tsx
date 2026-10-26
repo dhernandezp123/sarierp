@@ -803,6 +803,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                     >
                       <td className="py-3 pr-4 font-semibold text-blue-600 dark:text-blue-400">
                         {inv.invoice_number || <span className="text-slate-400 italic">Sin número</span>}
+                        {inv.point_of_sale && <span className="mt-1 block text-xs font-normal text-slate-500">{inv.point_of_sale}</span>}
                       </td>
                       <td className="pr-4">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${

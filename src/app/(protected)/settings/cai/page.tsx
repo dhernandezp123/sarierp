@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 import { Plus, CheckCircle2, AlertTriangle, Trash2, ShieldCheck } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { canManageCaiRanges } from '@/src/lib/permissions'
+import { loadBillingPointsOfSale } from '@/src/lib/billing-points-of-sale'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
@@ -18,6 +20,7 @@ type CaiRange = {
   rango_hasta: string
   fecha_limite_emision: string
   lugar_emision: string | null
+  point_of_sale: string
   document_type: FiscalDocumentType
   range_start: number
   range_end: number
@@ -55,14 +58,18 @@ const emptyForm = {
   fecha_limite_emision: '',
   lugar_emision: '',
   document_type: 'Factura' as FiscalDocumentType,
+  next_number: '',
 }
 
 export default function CaiSettingsPage() {
   const { profile } = useUser()
   const isAdmin = profile?.rol === 'Admin'
+  const canManageRanges = canManageCaiRanges(profile?.rol)
 
   const [loading, setLoading] = useState(true)
   const [ranges, setRanges] = useState<CaiRange[]>([])
+  const [pointsOfSale, setPointsOfSale] = useState<string[]>([])
+  const [pointOfSale, setPointOfSale] = useState('')
   const [selectedStatusType, setSelectedStatusType] = useState<FiscalDocumentType>('Factura')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -87,12 +94,14 @@ export default function CaiSettingsPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-    const rangesRes = await supabase
+    const [rangesRes, pointsRes] = await Promise.all([supabase
       .from('cai_ranges')
       .select('*')
-      .order('created_at', { ascending: false })
-    setLoadError(!!rangesRes.error)
-    if (rangesRes.error) toast.error('Error al cargar rangos CAI')
+      .order('created_at', { ascending: false }), loadBillingPointsOfSale(supabase)])
+    setLoadError(!!rangesRes.error || !!pointsRes.error || !pointsRes.data.length)
+    if (rangesRes.error || pointsRes.error) toast.error('Error al cargar rangos CAI o puntos de venta')
+    setPointsOfSale(pointsRes.data)
+    setPointOfSale(current => pointsRes.data.includes(current) ? current : pointsRes.data[0] || '')
     setRanges((rangesRes.data || []) as CaiRange[])
     } catch {
       setLoadError(true)
@@ -106,6 +115,8 @@ export default function CaiSettingsPage() {
   }, [fetchAll])
 
   const handleSave = async () => {
+    if (!canManageRanges) { toast.error('No tienes permiso para registrar rangos CAI'); return }
+    if (!pointOfSale || !pointsOfSale.includes(pointOfSale)) { toast.error('Selecciona un punto de venta'); return }
     if (saveInFlight.current) return
     const validation = validateCaiRange(form)
     if (validation) { toast.error(validation); return }
@@ -119,6 +130,8 @@ export default function CaiSettingsPage() {
       fecha_limite_emision: form.fecha_limite_emision,
       lugar_emision: form.lugar_emision.trim() || null,
       document_type: form.document_type,
+      point_of_sale: pointOfSale,
+      next_number: form.next_number.trim() || null,
       is_active: false,
     })
     setSaving(false)
@@ -136,6 +149,7 @@ export default function CaiSettingsPage() {
   }
 
   const activateRange = async (id: string) => {
+    if (!canManageRanges) { toast.error('No tienes permiso para activar rangos CAI'); return }
     setActivating(id)
     const { error } = await supabase.rpc('activate_cai_range', { p_range_id: id })
     setActivating(null)
@@ -145,6 +159,7 @@ export default function CaiSettingsPage() {
   }
 
   const deleteRange = async (id: string, isActive: boolean) => {
+    if (!isAdmin) { toast.error('Solo Admin puede eliminar rangos CAI'); return }
     if (isActive) { toast.error('No puedes eliminar el rango activo'); return }
     const { error } = await supabase.from('cai_ranges').delete().eq('id', id)
     if (error) { toast.error(error.message); return }
@@ -154,7 +169,8 @@ export default function CaiSettingsPage() {
 
   const [rangePendingDelete, setRangePendingDelete] = useState<CaiRange | null>(null)
 
-  const activeRange = ranges.find(
+  const officeRanges = ranges.filter(range => range.point_of_sale === pointOfSale)
+  const activeRange = officeRanges.find(
     (range) => range.is_active && range.document_type === selectedStatusType
   )
   const usedCount = activeRange
@@ -180,7 +196,7 @@ export default function CaiSettingsPage() {
             Gestión de Códigos de Autorización de Impresión para facturas.
           </p>
         </div>
-        {isAdmin && (
+        {canManageRanges && (
           <button
             type="button"
             onClick={openForm}
@@ -192,6 +208,15 @@ export default function CaiSettingsPage() {
             Registrar rango CAI
           </button>
         )}
+      </div>
+
+      <div className="max-w-sm">
+        <label htmlFor="cai-point-of-sale" className="mb-1.5 block text-sm font-semibold">Punto de venta</label>
+        <select id="cai-point-of-sale" value={pointOfSale} disabled={showForm || saving} className={fieldClass}
+          onChange={(event) => setPointOfSale(event.target.value)}>
+          {pointsOfSale.map(point => <option key={point} value={point}>{point}</option>)}
+        </select>
+        <p className="mt-2 text-xs text-slate-500">El CAI y el siguiente número corresponden únicamente a esta oficina.</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -298,7 +323,7 @@ export default function CaiSettingsPage() {
       )}
 
       {/* Form nuevo rango */}
-      {showForm && isAdmin && (
+      {showForm && canManageRanges && (
         <section ref={formRef} id="new-cai-range" className={`${cardClass} scroll-mt-24`}>
           <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Nuevo rango CAI</h2>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -374,6 +399,15 @@ export default function CaiSettingsPage() {
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Siguiente correlativo (opcional)
+              </label>
+              <input aria-label="Siguiente correlativo" inputMode="numeric" value={form.next_number}
+                onChange={(event) => setForm(previous => ({ ...previous, next_number: event.target.value }))}
+                placeholder="Inicio del rango si se deja vacío" className={fieldClass} />
+              <p className="mt-1 text-xs text-slate-500">Si la oficina ya utilizó parte del rango, indica el próximo número disponible.</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Lugar de emisión
               </label>
               <input
@@ -401,7 +435,7 @@ export default function CaiSettingsPage() {
         <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">
           Historial de rangos CAI
         </h2>
-        {ranges.length === 0 ? (
+        {officeRanges.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-400">No hay rangos registrados.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -414,11 +448,11 @@ export default function CaiSettingsPage() {
                   <th className="pb-3 pr-4">Fecha límite</th>
                   <th className="pb-3 pr-4">Lugar</th>
                   <th className="pb-3 pr-4 text-center">Estado</th>
-                  {isAdmin && <th className="pb-3" />}
+                  {canManageRanges && <th className="pb-3" />}
                 </tr>
               </thead>
               <tbody>
-                {ranges.map((r) => {
+                {officeRanges.map((r) => {
                   const exp = isExpired(r.fecha_limite_emision)
                   return (
                     <tr key={r.id} className="border-b border-slate-100 dark:border-slate-800">
@@ -448,7 +482,7 @@ export default function CaiSettingsPage() {
                           </span>
                         )}
                       </td>
-                      {isAdmin && (
+                      {canManageRanges && (
                         <td>
                           <div className="flex gap-1 justify-end">
                             {!r.is_active && !exp && (
@@ -461,7 +495,7 @@ export default function CaiSettingsPage() {
                                 {activating === r.id ? '...' : 'Activar'}
                               </button>
                             )}
-                            {!r.is_active && (
+                            {isAdmin && !r.is_active && (
                               <button
                                 type="button"
                                 onClick={() => setRangePendingDelete(r)}

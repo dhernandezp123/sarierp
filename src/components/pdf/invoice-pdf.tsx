@@ -67,6 +67,7 @@ export type InvoicePdfData = {
   rango_hasta: string | null
   fecha_limite_emision: string | null
   lugar_emision: string | null
+  point_of_sale?: string | null
 
   // Company settings
   company_legal_name: string
@@ -429,6 +430,12 @@ export function InvoicePdf({ data }: { data: InvoicePdfData }) {
                 <Text style={s.caiLabel}>Fecha límite emisión:</Text>
                 <Text style={s.caiValue}>{fmtDate(data.fecha_limite_emision)}</Text>
               </View>
+              {data.point_of_sale && (
+                <View style={s.caiRow}>
+                  <Text style={s.caiLabel}>Punto de venta:</Text>
+                  <Text style={s.caiValue}>{data.point_of_sale}</Text>
+                </View>
+              )}
               {data.lugar_emision && (
                 <View style={{ flexDirection: 'row' }}>
                   <Text style={s.caiLabel}>Lugar de emisión:</Text>

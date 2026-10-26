@@ -1,5 +1,108 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-26 - ACC-01 - Accesos operativos de Contabilidad
+
+- Estado: implementado y validado localmente; pendiente aplicar migraciones,
+  publicar frontend y ejecutar UAT autenticado en Production.
+- Hallazgo: Contabilidad no tenía acceso a perfiles de clientes ni al detalle
+  de cotizaciones. Empresa y CAI mostraban controles exclusivos de Admin;
+  RLS limitaba clientes/cotizaciones a ganadas o con operación, y rechazaba
+  editar clientes y configuración corporativa.
+- Cambios: consulta/edición de clientes activos del tenant e historial;
+  creación/edición de empresa y configuración de facturación; registro y
+  activación de CAI; consulta de todos los estados de cotización, costos,
+  utilidades y reporte comercial con CSV/PDF. Scanner/Factura manual ya
+  autorizaba Contabilidad en servidor y RLS y se añadió su regresión.
+  Se habilita también la acción rápida Ver / Editar Cliente. La tasa ISV cero
+  se conserva al guardar configuración. No se conceden crear/eliminar clientes,
+  crear/editar cotizaciones, cambiar pricing/tarifas ni enviar cotizaciones.
+  Se conservan los permisos financieros previos para cotizaciones ganadas.
+- Archivos: `src/lib/permissions.ts`, `src/components/layout/topbar.tsx`,
+  páginas `clientes`, `clientes/[id]`, `quotations/[id]`, `reports`,
+  `settings/company` y `settings/cai` bajo `src/app/(protected)`;
+  `tests/accounting-access.test.mjs`, `tests/manual-invoice-routes.test.mjs`,
+  `tests/pricing-write-permissions.test.mjs`, `scripts/validate-audit-sql.mjs`,
+  `docs/uat/accounting-and-billing-points.md` y este registro.
+- SQL: `supabase/migrations/20261026120000_accounting_access.sql`;
+  regresión `supabase/tests/accounting_access.sql`. Helpers/policies conservan
+  aprobación, actividad y tenant; Bunker se habilita exclusivamente por su código
+  corporativo para que guardar Empresa no deje un error parcial de permisos.
+- Validaciones: bloqueo reproducido antes del fix en Node y SQL; regresiones de
+  pantallas reales mediante el harness existente, autorización del scanner,
+  edición/historial y negativos de RLS (otra empresa, inactivo, pendiente,
+  Cliente, creación/borrado y escritura de precios) aprobados. Dieciocho suites
+  SQL/RLS aprobadas en una copia Docker local sin red ni puertos.
+- Pendientes/riesgos: aplicar ambos SQL de esta fecha antes del frontend; ejecutar
+  la matriz UAT del documento adjunto. Las pruebas de componentes no sustituyen
+  sesión de navegador. Validación general de cierre registrada en BILL-POS-01.
+- Commit: pendiente; no se ha creado commit ni publicado este cambio.
+- Publicación autorizada por el usuario el 26/10/2026; preflight confirmado y
+  ejecución documentada en `docs/release/accounting-billing-2026-10-26.md`.
+
+### 2026-10-26 - BILL-POS-01 - CAI y correlativos por punto de venta
+
+- Estado: implementado y validado localmente; publicación, datos fiscales reales
+  de Tegucigalpa y UAT autenticado pendientes.
+- Hallazgo: la unicidad y activación del CAI eran por tenant/tipo documental.
+  Activar el rango de otra oficina desactivaba el anterior. La emisión no
+  recibía oficina y seleccionaba el único CAI activo. El entrypoint público de
+  activación tampoco delegaba en el helper tenant-aware vigente.
+- Cambios: empresa administra puntos de venta; para Sari se inicializan
+  San Pedro Sula (predeterminado) y Tegucigalpa, y los rangos existentes se
+  identifican como SPS. Cada oficina/tipo mantiene su CAI activo y next_number.
+  Registro permite indicar el próximo correlativo si parte del rango ya se
+  utilizó fuera del ERP; vacío conserva el inicio autorizado. Activación y
+  emisión comparten bloqueo transaccional por tenant/oficina/tipo. No hay
+  fallback de CAI entre oficinas. NC/ND heredan la oficina de su factura,
+  incluidas facturas antiguas cuyo rango permite resolverla. El documento nuevo
+  conserva un snapshot de oficina que no puede cambiarse después de numerarlo;
+  se muestra en listado, detalle, PDF y reporte de facturación con filtro/export.
+  Se bloquea quitar/renombrar oficinas con rangos registrados.
+- Archivos: `src/lib/billing-points-of-sale.ts`, `src/lib/cai-validation.ts`,
+  `src/lib/company-settings.ts`, `src/lib/invoice-list.ts`,
+  `src/lib/report-view.ts`, `src/components/pdf/invoice-pdf.tsx`, páginas
+  `settings/company`, `settings/cai`, `invoicing`, `invoicing/new`,
+  `invoicing/[id]` y `reports` bajo `src/app/(protected)`;
+  `tests/billing-points-of-sale.test.mjs`, `tests/accounting-access.test.mjs`,
+  `tests/invoice-point-of-sale-pdf.test.mjs`,
+  `scripts/validate-audit-sql.mjs`, `docs/uat/accounting-and-billing-points.md`
+  y este registro.
+- SQL: `supabase/migrations/20261026130000_billing_points_of_sale.sql`;
+  regresión `supabase/tests/billing_points_of_sale.sql`. No se actualizan
+  facturas existentes, sus números, CAI, impuestos o importes, ni se reinician
+  next_number existentes. Los otros tenants reciben su punto Principal.
+- Validaciones: dieciocho suites SQL/RLS aprobadas en copia aislada; ambas
+  migraciones completas aplicadas desde una copia limpia, más validación final
+  del ajuste de metadatos del correlativo inicial. Prueba con seis conexiones:
+  veinte emisiones concurrentes (diez SPS/diez TGU), veinte números distintos,
+  siguiente correlativo 11 en cada oficina. SQL cubre rotación por oficina,
+  agotamiento independiente, oficina ajena, snapshot, NC, herencia, ISV y
+  correlativo inicial ya utilizado. El harness monta la pantalla de factura y
+  comprueba filtrado por oficina y descarte de respuestas CAI obsoletas.
+- Validación general: `npx.cmd tsc --noEmit` aprobado; suite Node 396/396
+  (`node --test --test-concurrency=2 tests/*.test.mjs`); `npm.cmd run lint:ci`
+  con 408 archivos, 223 diagnósticos históricos y cero regresiones. Build
+  completo aprobado con `CIRCLE_NODE_TOTAL=2` para un worker de prerender.
+  El intento inicial agotó la memoria local con Docker abierto; se cerró el
+  entorno de prueba y se repitió sin modificar la configuración del proyecto.
+  PDF fiscal real renderizado para SPS, TGU y legacy: CAI/importe/oficina
+  correctos. `git diff --check` aprobado.
+- Deuda previa comprobada: la suite adicional
+  `phase3_commercial_tenant_isolation.sql` falla en `guard_quotation_transition`
+  por actualizar estados directamente. Se reprodujo el mismo fallo en la copia
+  previa a estas migraciones; no pertenece a la selección de suites de CI ni
+  se modificó su fixture para eludir el guard.
+- Pendientes/riesgos: aplicar SQL y publicar frontend; cargar CAI/rango/vigencia
+  y próximo correlativo real de TGU. Confirmar el inventario previo de CAI SPS
+  antes de migrar. Los reportes históricos conservan el lugar de emisión
+  guardado cuando no existe snapshot de oficina. Scanner/Factura manual mantiene
+  su circuito SARI USA independiente de la facturación fiscal hondureña.
+- Commit: pendiente; no se ha creado commit ni publicado este cambio.
+- Publicación autorizada por el usuario el 26/10/2026. Production tiene cero
+  rangos CAI y cero facturas fiscales: falta registrar datos reales de ambas
+  oficinas para emitir. Dry-run selectivo y baseline de helpers confirmados;
+  ver `docs/release/accounting-billing-2026-10-26.md`.
+
 ### 2026-10-23 - MIAMI-INS-03 - ISV opcional en el seguro Miami
 
 - Estado: implementado, validado localmente y publicado en Production el

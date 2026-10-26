@@ -44,6 +44,7 @@ import {
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
 import { CostAnalysisPanel } from '@/src/components/pricing/CostAnalysisPanel'
+import { canViewQuotationCosts } from '@/src/lib/permissions'
 import { InsuranceCalculationDialog } from '@/src/components/quotations/InsuranceCalculationDialog'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
@@ -401,9 +402,10 @@ function QuotationDetail() {
   const emailTriggerRef = useRef<HTMLButtonElement>(null)
   const userRole = profile?.rol
   const canManagePricing = ['Admin', 'Pricing'].includes(userRole || '')
-  const canPrintCostDetail = canManagePricing
+  const canPrintCostDetail = canViewQuotationCosts(userRole)
   const canGenerateSI = ['Admin', 'Ventas'].includes(userRole || '')
   const canEditQuotation = ['Admin', 'Ventas', 'Operaciones'].includes(userRole || '')
+  const canPrepareEmail = canManagePricing || canEditQuotation
   const canGenerateCxP = ['Admin', 'Finanzas', 'Contabilidad'].includes(userRole || '')
 
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
@@ -1345,6 +1347,7 @@ function QuotationDetail() {
   }
 
   const openEmailComposer = async () => {
+    if (!canPrepareEmail) return
     setEmailLoading(true)
     try {
               if (!plantillaCotizacion) {
@@ -1929,7 +1932,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             <span className="sr-only">Imprimir cotización</span>
           </button>
 
-          <button
+          {canPrepareEmail && <button
             type="button"
             title="Preparar correo"
             ref={emailTriggerRef}
@@ -1939,9 +1942,9 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           >
             <Mail className="h-4 w-4" />
             <span className="sr-only">{emailLoading ? 'Cargando correo…' : 'Preparar correo'}</span>
-          </button>
+          </button>}
 
-          {(canManagePricing ||
+          {(canPrintCostDetail || canManagePricing ||
             canEditQuotation ||
             (canGenerateSI && quotation.status === 'Ganada') ||
             (canGenerateCxP && quotation.status === 'Ganada')) && (
@@ -2090,7 +2093,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         </div>
         {quotation.status === 'Borrador' && canEditQuotation ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/quotations/' + quotation.id + '/edit'}>Completar cotización</Link> :
           ['Pendiente de Fijar Precios', 'Pricing Aprobado'].includes(quotation.status) && canManagePricing && quotation.service_product !== 'customs_only' ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/pricing-comparison?quotation=' + quotation.id}>Revisar pricing</Link> :
-          quotation.status === 'Pricing Aprobado' && !commercialOptions.length ? <button disabled={emailLoading} onClick={openEmailComposer} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Preparar correo</button> :
+          canPrepareEmail && quotation.status === 'Pricing Aprobado' && !commercialOptions.length ? <button disabled={emailLoading} onClick={openEmailComposer} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Preparar correo</button> :
           quotation.status === 'Enviada al Cliente' && canGenerateSI && commercialOptions.some((option) => option.status === 'Ofrecida') ? <button onClick={() => { document.getElementById('commercial-options')?.focus(); document.getElementById('commercial-options')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Elegir opción del cliente</button> :
           quotation.status === 'Ganada' && canGenerateSI ? <button disabled={creatingRouting} onClick={createRoutingInstruction} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">{creatingRouting ? 'Abriendo operación…' : 'Abrir / generar operación'}</button> :
           quotation.status === 'Perdida' && canEditQuotation ? <button disabled={duplicating} onClick={requestDuplicateQuotation} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Reactivar cotización</button> : null}

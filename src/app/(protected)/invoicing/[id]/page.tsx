@@ -53,6 +53,7 @@ type Invoice = {
   rango_hasta: string | null
   fecha_limite_emision: string | null
   lugar_emision: string | null
+  point_of_sale: string | null
   es_exonerado: boolean
   orden_compra_exenta: string | null
   no_constancia_exonerado: string | null
@@ -549,6 +550,7 @@ export default function InvoiceDetailPage() {
     rango_hasta: invoice.rango_hasta,
     fecha_limite_emision: invoice.fecha_limite_emision,
     lugar_emision: invoice.lugar_emision,
+    point_of_sale: invoice.point_of_sale,
     company_legal_name: companyDisplayName,
     company_trade_name: companySetting?.trade_name || null,
     company_rtn: companySetting?.rtn || null,
@@ -843,6 +845,7 @@ export default function InvoiceDetailPage() {
           <section className={cardClass}>
             <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">Datos del documento</h3>
             <InfoRow label="Número" value={invoice.invoice_number} />
+            {invoice.point_of_sale && <InfoRow label="Punto de venta" value={invoice.point_of_sale} />}
             <InfoRow label="Tipo" value={invoice.invoice_type} />
             <InfoRow label="Estado" value={invoice.status} />
             <InfoRow label="Emisión" value={formatDate(invoice.issue_date)} />

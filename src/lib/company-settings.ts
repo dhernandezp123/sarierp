@@ -20,6 +20,7 @@ export type TenantCompanySettings = CompanyBranding & {
   insurance_excluded_service_patterns: string[] | null
   invoice_footer_note: string | null
   lugar_emision_defecto: string | null
+  billing_points_of_sale: string[]
   exchange_rate_usd_hnl: number | null
   condiciones_bl: string | null
   condiciones_awb: string | null

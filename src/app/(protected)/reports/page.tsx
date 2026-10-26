@@ -156,6 +156,8 @@ type BookingReadinessReportRow = {
 type InvoiceRow = {
   id: string
   invoice_number: string | null
+  point_of_sale: string | null
+  lugar_emision: string | null
   invoice_type: string
   status: string
   cliente_id: string | null
@@ -257,7 +259,7 @@ type ReportRow = ReportPdfRow & {
 
 const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[] = [
   { id: 'visits', label: 'Visitas', scope: 'Visitas a clientes y prospectos por fecha programada y estado actual. Las visitas históricas sin estado aparecen como Sin clasificar.', roles: ['Admin', 'Ventas'] },
-  { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones por estado actual, venta cotizada y utilidad; no equivale a facturación', roles: ['Admin', 'Ventas', 'Pricing'] },
+  { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones por estado actual, venta cotizada y utilidad; no equivale a facturación', roles: ['Admin', 'Ventas', 'Pricing', 'Contabilidad'] },
   { id: 'pricing', label: 'Pricing', scope: 'Entradas, aprobaciones, pendientes al cierre y tiempos de respuesta', roles: ['Admin', 'Pricing'] },
   { id: 'operations', label: 'Operaciones', scope: 'Shipping instructions, bookings, carrier y ETA', roles: ['Admin', 'Operaciones'] },
   { id: 'billing', label: 'Facturación', scope: 'Documentos, condiciones de pago, ajustes, cobros y saldos', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
@@ -599,7 +601,7 @@ function ReportsContent() {
         readAllReportRows((from, to) => supabase
           .from('invoices')
           .select(`
-            id, invoice_number, invoice_type, status,
+            id, invoice_number, point_of_sale, lugar_emision, invoice_type, status,
             cliente_id, cliente_nombre,
             issue_date, due_date, payment_condition, credit_days, total, currency,
             clientes!invoices_cliente_id_fkey(
@@ -1027,6 +1029,8 @@ function ReportsContent() {
         const netAmount = isIssued ? sign * Number(invoice.total || 0) : 0
         return {
           __key: invoice.id,
+          __pointOfSale: invoice.point_of_sale || invoice.lugar_emision || '-',
+          punto_venta: invoice.point_of_sale || invoice.lugar_emision || '-',
           __href: '/invoicing/' + invoice.id,
           __date: invoice.issue_date || '',
           __client: invoice.cliente_nombre || 'Sin cliente',
@@ -1327,12 +1331,13 @@ function ReportsContent() {
       return [
         { key: 'numero', label: 'Documento', width: '8%' },
         { key: 'tipo', label: 'Tipo', width: '7%' },
-        { key: 'cliente', label: 'Cliente', width: '13%' },
-        { key: 'condicion', label: 'Condición', width: '9%' },
+        { key: 'cliente', label: 'Cliente', width: '11%' },
+        { key: 'punto_venta', label: 'Punto venta', width: '8%' },
+        { key: 'condicion', label: 'Condición', width: '7%' },
         { key: 'emision', label: 'Emisión', width: '7%' },
         { key: 'vencimiento', label: 'Vence', width: '7%' },
-        { key: 'metodo', label: 'Forma(s)', width: '9%' },
-        { key: 'fiscal', label: 'Fiscal', width: '7%' },
+        { key: 'metodo', label: 'Forma(s)', width: '7%' },
+        { key: 'fiscal', label: 'Fiscal', width: '5%' },
         { key: 'estado', label: 'Estado', width: '8%' },
         { key: 'neto', label: 'Impacto neto', width: '9%', align: 'right' },
         { key: 'pagado', label: 'Pagado', width: '8%', align: 'right' },
@@ -1746,8 +1751,8 @@ function ReportsContent() {
           {showPaymentMethod && <div className="min-w-0"><label htmlFor="report-method" className="mb-1 block text-xs font-medium text-slate-500">Forma de pago</label><select id="report-method" value={paymentMethodFilter} onChange={(event) => updateView({ method: event.target.value })} className={`${fieldClass} w-full`}>{options.paymentMethods.map((option) => <option key={option}>{option}</option>)}</select></div>}
           {activeReport === 'customer_payments' && <>
             <div className="min-w-0"><label htmlFor="report-fiscal" className="mb-1 block text-xs font-medium text-slate-500">Tipo fiscal</label><select id="report-fiscal" value={fiscalTypeFilter} onChange={(event) => updateView({ fiscal: event.target.value })} className={`${fieldClass} w-full`}>{options.fiscalTypes.map((option) => <option key={option}>{option}</option>)}</select></div>
-            <div className="min-w-0"><label htmlFor="report-pos" className="mb-1 block text-xs font-medium text-slate-500">Punto de venta</label><select id="report-pos" value={pointOfSaleFilter} onChange={(event) => updateView({ pos: event.target.value })} className={`${fieldClass} w-full`}>{options.pointsOfSale.map((option) => <option key={option}>{option}</option>)}</select></div>
           </>}
+          {['billing', 'customer_payments'].includes(activeReport) && <div className="min-w-0"><label htmlFor="report-pos" className="mb-1 block text-xs font-medium text-slate-500">Punto de venta</label><select id="report-pos" value={pointOfSaleFilter} onChange={(event) => updateView({ pos: event.target.value })} className={`${fieldClass} w-full`}>{options.pointsOfSale.map((option) => <option key={option}>{option}</option>)}</select></div>}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {(activeReport === 'visits'

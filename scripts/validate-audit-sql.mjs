@@ -7,6 +7,8 @@ if (!process.env.CI && !process.argv.includes('--isolated')) {
   throw new Error('Outside CI use --isolated; the normal development database is never a test target.')
 }
 const files = [
+  'accounting_access.sql',
+  'billing_points_of_sale.sql',
   'agent_quote_internal_notes.sql',
   'customs_only_service.sql',
   'demo_request_server.sql',

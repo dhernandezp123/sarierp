@@ -45,7 +45,8 @@ export function readReportView(params: Pick<URLSearchParams, 'get'>, allowed: Re
   if (!['commercial', 'pricing', 'operations'].includes(report)) view.service = 'Todos'
   if (['pricing', 'operations', 'visits'].includes(report)) view.currency = 'Todos'
   if (!['customer_payments', 'supplier_payments'].includes(report)) view.method = 'Todos'
-  if (report !== 'customer_payments') { view.fiscal = 'Todos'; view.pos = 'Todos' }
+  if (report !== 'customer_payments') view.fiscal = 'Todos'
+  if (!['customer_payments', 'billing'].includes(report)) view.pos = 'Todos'
   if (report === 'supplier_payments') view.status = 'Todos'
   for (const key of ['from', 'to'] as const) {
     const value = params.get(key)

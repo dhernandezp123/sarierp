@@ -15,6 +15,8 @@ import {
   normalizeInsuranceExclusionPatterns,
 } from '@/src/lib/insurance-coverage'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { canManageCompanySettings } from '@/src/lib/permissions'
+import { validateBillingPointsOfSale } from '@/src/lib/billing-points-of-sale'
 
 type CompanySettings = {
   id: string
@@ -40,6 +42,7 @@ type CompanySettings = {
   insurance_excluded_service_patterns: string[]
   invoice_footer_note: string | null
   lugar_emision_defecto: string | null
+  billing_points_of_sale: string[]
   exchange_rate_usd_hnl: number | null
   condiciones_bl: string | null
   condiciones_awb: string | null
@@ -104,6 +107,7 @@ export default function CompanySettingsPage() {
     insurance_excluded_service_patterns: [],
     invoice_footer_note: '',
     lugar_emision_defecto: '',
+    billing_points_of_sale: ['Principal'],
     exchange_rate_usd_hnl: 25.30,
     condiciones_bl: '',
     condiciones_awb: '',
@@ -135,7 +139,7 @@ export default function CompanySettingsPage() {
     pattern: string
   } | null>(null)
 
-  const isAdmin = profile?.rol === 'Admin'
+  const canEditSettings = canManageCompanySettings(profile?.rol)
 
   const fetchSettings = useCallback(async () => {
     const { data, error } = await loadCurrentCompanySettings<CompanySettings>(supabase)
@@ -179,6 +183,7 @@ export default function CompanySettingsPage() {
           ),
         invoice_footer_note: data.invoice_footer_note ?? '',
         lugar_emision_defecto: data.lugar_emision_defecto ?? '',
+        billing_points_of_sale: data.billing_points_of_sale ?? ['Principal'],
         exchange_rate_usd_hnl: data.exchange_rate_usd_hnl ?? 25.30,
         condiciones_bl: data.condiciones_bl ?? '',
         condiciones_awb: data.condiciones_awb ?? '',
@@ -312,7 +317,9 @@ export default function CompanySettingsPage() {
       toast.error('Tu perfil no está vinculado a una empresa.')
       return
     }
-    if (!isAdmin) { toast.error('Solo el Admin puede modificar esta configuración'); return }
+    if (!canEditSettings) { toast.error('Solo Admin o Contabilidad puede modificar esta configuración'); return }
+    const pointsError = validateBillingPointsOfSale(form.billing_points_of_sale)
+    if (pointsError) { toast.error(pointsError); return }
     if (!bunkerLoaded) {
       toast.error('No se puede guardar hasta cargar la configuracion del Bunker')
       return
@@ -330,8 +337,9 @@ export default function CompanySettingsPage() {
 
     const payload = {
       ...form,
+      billing_points_of_sale: form.billing_points_of_sale.map(point => point.trim()),
       tenant_id: profile.tenant_id,
-      default_tax_rate: Number(form.default_tax_rate) || 15,
+      default_tax_rate: Number(form.default_tax_rate ?? 15),
       insurance_cost_rate_percent: insuranceCostRatePercent,
       insurance_included_service_patterns:
         normalizeInsuranceCoveragePatterns(
@@ -421,7 +429,7 @@ export default function CompanySettingsPage() {
             Datos legales y de contacto usados en documentos y PDFs.
           </p>
         </div>
-        {isAdmin && (
+        {canEditSettings && (
           <button
             type="button"
             onClick={handleSave}
@@ -434,9 +442,9 @@ export default function CompanySettingsPage() {
         )}
       </div>
 
-      {!isAdmin && (
+      {!canEditSettings && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
-          Solo el administrador puede modificar estos datos. Estás viendo la configuración en modo lectura.
+          Solo Admin o Contabilidad puede modificar estos datos. Estás viendo la configuración en modo lectura.
         </div>
       )}
 
@@ -452,7 +460,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.legal_name ?? ''}
                 onChange={(e) => set('legal_name', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. SARI EXPRESS S DE R.L. DE C.V."
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -461,7 +469,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.trade_name ?? ''}
                 onChange={(e) => set('trade_name', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. Sari Express"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -470,7 +478,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.rtn ?? ''}
                 onChange={(e) => set('rtn', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. 08019003239182"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -486,7 +494,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.address ?? ''}
                 onChange={(e) => set('address', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Calle, número, colonia..."
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -496,7 +504,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.city ?? ''}
                   onChange={(e) => set('city', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="Ej. San Pedro Sula"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -505,7 +513,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.zip_code ?? ''}
                   onChange={(e) => set('zip_code', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="Ej. 21101"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -515,7 +523,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.country ?? ''}
                 onChange={(e) => set('country', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Honduras"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -532,7 +540,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.phone ?? ''}
                   onChange={(e) => set('phone', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="+504 2553-0000"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -541,7 +549,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.phone_2 ?? ''}
                   onChange={(e) => set('phone_2', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="+504 ..."
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -552,7 +560,7 @@ export default function CompanySettingsPage() {
                 type="email"
                 value={form.email ?? ''}
                 onChange={(e) => set('email', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="operaciones@sariexpress.com"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -561,7 +569,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.website ?? ''}
                 onChange={(e) => set('website', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="https://sariexpress.com"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -570,7 +578,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.logo_url ?? ''}
                 onChange={(e) => set('logo_url', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="/logo/sari-logo.png"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -581,7 +589,7 @@ export default function CompanySettingsPage() {
                   type="color"
                   value={form.primary_color ?? '#0038BD'}
                   onChange={(e) => set('primary_color', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   className={`${fieldClass} h-11 p-1 disabled:opacity-60`}
                 />
               </Field>
@@ -590,7 +598,7 @@ export default function CompanySettingsPage() {
                   type="color"
                   value={form.secondary_color ?? '#07111F'}
                   onChange={(e) => set('secondary_color', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   className={`${fieldClass} h-11 p-1 disabled:opacity-60`}
                 />
               </Field>
@@ -607,7 +615,7 @@ export default function CompanySettingsPage() {
                 <select
                   value={form.default_currency ?? 'USD'}
                   onChange={(e) => set('default_currency', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   className={`${fieldClass} disabled:opacity-60`}
                 >
                   <option value="USD">USD</option>
@@ -619,7 +627,7 @@ export default function CompanySettingsPage() {
                   type="number"
                   value={form.default_tax_rate ?? 15}
                   onChange={(e) => set('default_tax_rate', Number(e.target.value))}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   min="0"
                   max="100"
                   step="0.01"
@@ -632,7 +640,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.lugar_emision_defecto ?? ''}
                   onChange={(e) => set('lugar_emision_defecto', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="Ej. San Pedro Sula, Honduras"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -642,7 +650,7 @@ export default function CompanySettingsPage() {
                   type="number"
                   value={form.exchange_rate_usd_hnl ?? 25.30}
                   onChange={(e) => set('exchange_rate_usd_hnl', Number(e.target.value))}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   min="1"
                   step="0.0001"
                   placeholder="25.3000"
@@ -650,11 +658,29 @@ export default function CompanySettingsPage() {
                 />
               </Field>
             </div>
+            <Field label="Puntos de venta de facturación">
+              <div className="space-y-2">
+                {form.billing_points_of_sale.map((point, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input aria-label={`Punto de venta ${index + 1}`} value={point} maxLength={120}
+                      disabled={!canEditSettings} className={`${fieldClass} min-w-0 flex-1 disabled:opacity-60`}
+                      onChange={(event) => set('billing_points_of_sale', form.billing_points_of_sale.map((value, i) => i === index ? event.target.value : value))} />
+                    {canEditSettings && <button type="button" aria-label={`Quitar punto de venta ${index + 1}`}
+                      disabled={form.billing_points_of_sale.length === 1}
+                      onClick={() => set('billing_points_of_sale', form.billing_points_of_sale.filter((_, i) => i !== index))}
+                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"><X size={16} /></button>}
+                  </div>
+                ))}
+                {canEditSettings && <button type="button" className="text-sm font-semibold text-blue-600 dark:text-blue-400"
+                  onClick={() => set('billing_points_of_sale', [...form.billing_points_of_sale, ''])}>Agregar punto de venta</button>}
+                <p className="text-xs text-slate-500">El primero es el predeterminado. Cada oficina utiliza su propio CAI y correlativo. Los nombres con rangos registrados se conservan.</p>
+              </div>
+            </Field>
             <Field label="Nota de pie de factura">
               <textarea
                 value={form.invoice_footer_note ?? ''}
                 onChange={(e) => set('invoice_footer_note', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 rows={3}
                 placeholder="Ej. Gracias por su preferencia. Pagos en cuenta Bancatlán #0001234..."
                 className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -687,7 +713,7 @@ export default function CompanySettingsPage() {
               onChange={(e) =>
                 set('insurance_cost_rate_percent', Number(e.target.value))
               }
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               min="0.0001"
               max="5"
               step="0.0001"
@@ -709,14 +735,14 @@ export default function CompanySettingsPage() {
                     addInsuranceInclusion()
                   }
                 }}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. Ocean Freight"
                 className={`${fieldClass} disabled:opacity-60`}
               />
               <button
                 type="button"
                 onClick={addInsuranceInclusion}
-                disabled={!isAdmin || !insuranceInclusionInput.trim()}
+                disabled={!canEditSettings || !insuranceInclusionInput.trim()}
                 className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
               >
                 <Plus className="h-4 w-4" />
@@ -732,7 +758,7 @@ export default function CompanySettingsPage() {
                 className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
               >
                 {pattern}
-                {isAdmin && (
+                {canEditSettings && (
                   <button
                     type="button"
                     onClick={() => setInsurancePatternPendingRemoval({ kind: 'inclusion', pattern })}
@@ -765,14 +791,14 @@ export default function CompanySettingsPage() {
                     addInsuranceExclusion()
                   }
                 }}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. DTHC"
                 className={`${fieldClass} disabled:opacity-60`}
               />
               <button
                 type="button"
                 onClick={addInsuranceExclusion}
-                disabled={!isAdmin || !insuranceExclusionInput.trim()}
+                disabled={!canEditSettings || !insuranceExclusionInput.trim()}
                 className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
               >
                 <Plus className="h-4 w-4" />
@@ -789,7 +815,7 @@ export default function CompanySettingsPage() {
                   className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
                 >
                   {pattern}
-                  {isAdmin && (
+                  {canEditSettings && (
                     <button
                       type="button"
                       onClick={() => setInsurancePatternPendingRemoval({ kind: 'exclusion', pattern })}
@@ -833,7 +859,7 @@ export default function CompanySettingsPage() {
             <input
               value={form.miami_consignee ?? ''}
               onChange={(e) => set('miami_consignee', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               placeholder="Ej. SARI EXPRESS"
               className={`${fieldClass} disabled:opacity-60`}
             />
@@ -842,7 +868,7 @@ export default function CompanySettingsPage() {
             <input
               value={form.miami_address_line ?? ''}
               onChange={(e) => set('miami_address_line', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               placeholder="Ej. 5000 NW 74th Ave"
               className={`${fieldClass} disabled:opacity-60`}
             />
@@ -852,7 +878,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_suite_prefix ?? ''}
                 onChange={(e) => set('miami_suite_prefix', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. Suite  ó  Ste.  ó  #"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -861,7 +887,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_phone ?? ''}
                 onChange={(e) => set('miami_phone', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="+1 (305) 000-0000"
                 type="tel"
                 className={`${fieldClass} disabled:opacity-60`}
@@ -873,7 +899,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_city ?? ''}
                 onChange={(e) => set('miami_city', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Miami"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -882,7 +908,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_state ?? ''}
                 onChange={(e) => set('miami_state', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="FL"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -891,7 +917,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_zip ?? ''}
                 onChange={(e) => set('miami_zip', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="33166"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -901,7 +927,7 @@ export default function CompanySettingsPage() {
             <input
               value={form.miami_country ?? ''}
               onChange={(e) => set('miami_country', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               placeholder="USA"
               className={`${fieldClass} disabled:opacity-60`}
             />
@@ -940,7 +966,7 @@ export default function CompanySettingsPage() {
               <input
                 value={bunker.label}
                 onChange={(e) => setBunkerField('label', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Bunker Emergency Surcharge"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -951,7 +977,7 @@ export default function CompanySettingsPage() {
                   type="checkbox"
                   checked={bunker.is_active}
                   onChange={(e) => setBunkerField('is_active', e.target.checked)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-60"
                 />
                 Recargo activo (si se desactiva, no se agrega a nuevas cotizaciones)
@@ -964,7 +990,7 @@ export default function CompanySettingsPage() {
                 type="number"
                 value={bunker.rate_per_lbs}
                 onChange={(e) => setBunkerField('rate_per_lbs', Number(e.target.value))}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 min="0"
                 step="0.0001"
                 className={`${fieldClass} disabled:opacity-60`}
@@ -975,7 +1001,7 @@ export default function CompanySettingsPage() {
                 type="number"
                 value={bunker.rate_per_ft3}
                 onChange={(e) => setBunkerField('rate_per_ft3', Number(e.target.value))}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 min="0"
                 step="0.0001"
                 className={`${fieldClass} disabled:opacity-60`}
@@ -986,7 +1012,7 @@ export default function CompanySettingsPage() {
                 type="number"
                 value={bunker.minimum_amount}
                 onChange={(e) => setBunkerField('minimum_amount', Number(e.target.value))}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 min="0"
                 step="0.01"
                 className={`${fieldClass} disabled:opacity-60`}
@@ -1019,7 +1045,7 @@ export default function CompanySettingsPage() {
           <textarea
             value={form.plantilla_cotizacion ?? ''}
             onChange={(e) => set('plantilla_cotizacion', e.target.value)}
-            disabled={!isAdmin}
+            disabled={!canEditSettings}
             rows={4}
             placeholder={'Saludos cordiales,\nSari Express — Equipo Comercial\noperaciones@sariexpress.com'}
             className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -1040,7 +1066,7 @@ export default function CompanySettingsPage() {
             <textarea
               value={form.condiciones_bl ?? ''}
               onChange={(e) => set('condiciones_bl', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               rows={4}
               placeholder="Texto de términos y condiciones para el HBL marítimo..."
               className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -1050,7 +1076,7 @@ export default function CompanySettingsPage() {
             <textarea
               value={form.condiciones_awb ?? ''}
               onChange={(e) => set('condiciones_awb', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               rows={4}
               placeholder="Texto de términos y condiciones para el AWB aéreo..."
               className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -1060,7 +1086,7 @@ export default function CompanySettingsPage() {
             <textarea
               value={form.condiciones_carta_porte ?? ''}
               onChange={(e) => set('condiciones_carta_porte', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               rows={4}
               placeholder="Texto de términos y condiciones para la Carta Porte terrestre..."
               className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -1069,7 +1095,7 @@ export default function CompanySettingsPage() {
         </div>
       </section>
 
-      {isAdmin && (
+      {canEditSettings && (
         <div className="flex justify-end">
           <button
             type="button"

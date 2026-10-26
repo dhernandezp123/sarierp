@@ -7,7 +7,7 @@ const { canManageClientRates, canAccessPath } = loadTs('src/lib/permissions.ts')
 test('consultar clientes no permite modificar sus tarifas por defecto', () => {
   for (const role of ['Admin', 'Pricing', 'Ventas']) assert.equal(canManageClientRates(role), true)
   for (const role of ['Operaciones', 'Contabilidad', 'Finanzas']) {
-    assert.equal(canAccessPath(role, '/clientes'), role === 'Operaciones')
+    assert.equal(canAccessPath(role, '/clientes'), ['Operaciones', 'Contabilidad'].includes(role))
     assert.equal(canManageClientRates(role), false)
   }
   for (const role of ['Cliente', 'Desconocido', '', null, undefined]) {

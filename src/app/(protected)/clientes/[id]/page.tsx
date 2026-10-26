@@ -259,6 +259,7 @@ export default function ClienteProfilePage() {
   }
 
   const archiveClient = async () => {
+    if (profile?.rol === 'Contabilidad') return
     if (!cliente?.id) return
 
     const {
@@ -379,14 +380,14 @@ export default function ClienteProfilePage() {
             Editar Cliente
           </button>
 
-          <button
+          {profile?.rol !== 'Contabilidad' && <button
             type="button"
             onClick={() => setArchiveDialogOpen(true)}
             className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
           >
             <Trash2 className="h-4 w-4" />
             Enviar a papelera
-          </button>
+          </button>}
         </div>
 
         <div>
