@@ -2,8 +2,8 @@
 
 ### 2026-10-26 - ACC-01 - Accesos operativos de Contabilidad
 
-- Estado: implementado y validado localmente; pendiente aplicar migraciones,
-  publicar frontend y ejecutar UAT autenticado en Production.
+- Estado: implementado, validado y publicado en Production el 26/10/2026;
+  UAT de escritura/guardado con sesión de Contabilidad pendiente.
 - Hallazgo: Contabilidad no tenía acceso a perfiles de clientes ni al detalle
   de cotizaciones. Empresa y CAI mostraban controles exclusivos de Admin;
   RLS limitaba clientes/cotizaciones a ganadas o con operación, y rechazaba
@@ -32,17 +32,19 @@
   edición/historial y negativos de RLS (otra empresa, inactivo, pendiente,
   Cliente, creación/borrado y escritura de precios) aprobados. Dieciocho suites
   SQL/RLS aprobadas en una copia Docker local sin red ni puertos.
-- Pendientes/riesgos: aplicar ambos SQL de esta fecha antes del frontend; ejecutar
-  la matriz UAT del documento adjunto. Las pruebas de componentes no sustituyen
-  sesión de navegador. Validación general de cierre registrada en BILL-POS-01.
-- Commit: pendiente; no se ha creado commit ni publicado este cambio.
+- Pendientes/riesgos: ejecutar la matriz UAT del documento adjunto. Se verificó
+  RLS de solo lectura en Production con una identidad Contabilidad aprobada y
+  activa: todos los clientes/cotizaciones, edición de cliente autorizada,
+  costos/scanner disponibles, sin crear clientes ni modificar tarifas/precios.
+  Esto no sustituye guardar/reabrir en una sesión de navegador.
+- Commit funcional: `af2758a4808d1b955b0f525a34c06c6c7d2bb07b`, en `origin/main`.
 - Publicación autorizada por el usuario el 26/10/2026; preflight confirmado y
   ejecución documentada en `docs/release/accounting-billing-2026-10-26.md`.
 
 ### 2026-10-26 - BILL-POS-01 - CAI y correlativos por punto de venta
 
-- Estado: implementado y validado localmente; publicación, datos fiscales reales
-  de Tegucigalpa y UAT autenticado pendientes.
+- Estado: implementado, validado y publicado en Production el 26/10/2026;
+  datos fiscales reales de ambas oficinas y UAT autenticado pendientes.
 - Hallazgo: la unicidad y activación del CAI eran por tenant/tipo documental.
   Activar el rango de otra oficina desactivaba el anterior. La emisión no
   recibía oficina y seleccionaba el único CAI activo. El entrypoint público de
@@ -92,16 +94,31 @@
   por actualizar estados directamente. Se reprodujo el mismo fallo en la copia
   previa a estas migraciones; no pertenece a la selección de suites de CI ni
   se modificó su fixture para eludir el guard.
-- Pendientes/riesgos: aplicar SQL y publicar frontend; cargar CAI/rango/vigencia
-  y próximo correlativo real de TGU. Confirmar el inventario previo de CAI SPS
-  antes de migrar. Los reportes históricos conservan el lugar de emisión
+- Pendientes/riesgos: cargar CAI/rango/vigencia y próximo correlativo real de
+  ambas oficinas: Production no tenía rangos CAI ni facturas fiscales durante
+  el preflight. Los reportes históricos conservan el lugar de emisión
   guardado cuando no existe snapshot de oficina. Scanner/Factura manual mantiene
   su circuito SARI USA independiente de la facturación fiscal hondureña.
-- Commit: pendiente; no se ha creado commit ni publicado este cambio.
+- Commit funcional: `af2758a4808d1b955b0f525a34c06c6c7d2bb07b`, en `origin/main`.
 - Publicación autorizada por el usuario el 26/10/2026. Production tiene cero
   rangos CAI y cero facturas fiscales: falta registrar datos reales de ambas
   oficinas para emitir. Dry-run selectivo y baseline de helpers confirmados;
   ver `docs/release/accounting-billing-2026-10-26.md`.
+- SQL aplicado: historial de 130 a 132 migraciones, exclusivamente las dos
+  autorizadas; fuente registrada idéntica a los archivos del commit. Guardas
+  transaccionales verificaron huellas de 21 tablas, RLS/ACL y policies ajenas al
+  cambio. Postflight independiente: 17 tablas sin diferencias y actividad
+  concurrente de Pricing en cotizaciones/tarifas/cargos y dos activity_logs
+  `agent_quote_selected`; los datos no cambiaron dentro de la migración.
+  Helpers publicados coinciden con el commit y Outlook continúa sin aplicar.
+- Vercel: Production `7339152349`, success, fuente del commit funcional;
+  instancia `https://sarierp-apcouhg6b-claudherhn-5641s-projects.vercel.app`.
+  Dominio `sari.forwarders.app` comprobado con build ID `MiY8oaazeY5lXJ11tf7hF`;
+  manifiesto HTTP 200 e idéntico en dominio/instancia. Login 200, módulos
+  protegidos 307 y API del scanner 401 sin sesión. Sin documentos, usuarios ni
+  mensajes de prueba creados en Production.
+- CI remoto del commit funcional: [Quality 40370636848](https://github.com/dhernandezp123/sarierp/actions/runs/40370636848),
+  `application` y `database` aprobados.
 
 ### 2026-10-23 - MIAMI-INS-03 - ISV opcional en el seguro Miami
 

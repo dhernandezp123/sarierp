@@ -34,7 +34,32 @@ y `20261026130000_billing_points_of_sale.sql`, el frontend y sus pruebas.
 
 ## Estado
 
-Publicación en proceso. Registrar aquí el commit, migraciones, CI, instancia,
-dominio y postflight al finalizar. La aceptación con Contabilidad y el registro
-de CAI/rango/vigencia/próximo número real de cada oficina quedan separados del
-despliegue; ver [UAT](../uat/accounting-and-billing-points.md).
+SQL y frontend publicados en Production. La aceptación con Contabilidad y el
+registro de CAI/rango/vigencia/próximo número real de cada oficina quedan
+separados del despliegue; ver [UAT](../uat/accounting-and-billing-points.md).
+
+| Comprobación | Resultado |
+| --- | --- |
+| Commit funcional | `af2758a4808d1b955b0f525a34c06c6c7d2bb07b`, en `origin/main` |
+| Migraciones | Exclusivamente `20261026120000` y `20261026130000`; historial 130 → 132 |
+| Fuentes | Registradas idénticas a los archivos del commit funcional |
+| Integridad transaccional | Huellas de 21 tablas de negocio conservadas; no se reiniciaron correlativos ni se alteraron documentos |
+| Postflight independiente | 17 tablas idénticas; cuatro con actividad concurrente de Pricing respaldada por dos eventos `agent_quote_selected` |
+| Acceso | RLS/ACL existentes y policies ajenas conservados; helpers nuevos coinciden con el commit; sin EXECUTE anónimo del RPC de oficinas |
+| Contabilidad en Production | Lectura de clientes/cotizaciones/costos y scanner confirmada; edición de clientes autorizada; sin creación de clientes ni escritura de tarifas/precios |
+| Vercel | [Production 7339152349](https://vercel.com/claudherhn-5641s-projects/sarierp/C9X6SdeU2HLuaDBttQSp6mAdsqE7), success, SHA funcional exacto |
+| Instancia | `https://sarierp-apcouhg6b-claudherhn-5641s-projects.vercel.app` |
+| Dominio | `https://sari.forwarders.app`, build ID `MiY8oaazeY5lXJ11tf7hF`, manifiesto idéntico al de la instancia |
+| Quality CI | [40370636848](https://github.com/dhernandezp123/sarierp/actions/runs/40370636848), application y database success |
+
+SHA-256 de las fuentes canónicas registradas:
+
+- `20261026120000`: `5b491fca9ba0942824f8e238424bc97271f5124df8357a31bf93c53aa330c625`.
+- `20261026130000`: `c9451df38409329a36c75b033220fa023f36289d2057be04cff72a77097d497a`.
+
+El smoke verificó login 200; Clientes, Empresa, CAI, nueva factura, scanner,
+Reportes y cotización nueva redirigen 307 al login sin sesión; API del scanner
+responde 401. El manifiesto del build responde 200 en dominio e instancia, con
+SHA-256 `9476e0afd3f9da68a64e6ec58631191fd3eaca62c9f5a377e7517fe9a89e59ea`.
+Outlook sigue sin aplicar. No se crearon registros ni mensajes de prueba en
+Production. Las comprobaciones SQL y sin sesión no sustituyen UAT autenticado.

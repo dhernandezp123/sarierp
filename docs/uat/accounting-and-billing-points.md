@@ -1,7 +1,9 @@
 # Contabilidad y facturación por oficina — ACC-01 / BILL-POS-01
 
-Implementación local del 26/10/2026. Falta desplegar SQL/frontend y probar con
-sesiones autenticadas. No se han registrado datos fiscales reales de Tegucigalpa.
+SQL y frontend publicados el 26/10/2026. RLS de Contabilidad comprobado en sesión
+SQL de solo lectura; falta guardar/reabrir con sesión de navegador. Production
+no tenía rangos CAI ni facturas fiscales en el preflight: hay que registrar los
+datos reales de San Pedro Sula y Tegucigalpa antes de emitir.
 
 ## Publicación
 
@@ -18,7 +20,7 @@ sesiones autenticadas. No se han registrado datos fiscales reales de Tegucigalpa
 4. Publicar el frontend correspondiente después de ambas migraciones. Verificar
    la actualización del esquema de PostgREST (la migración incluye NOTIFY).
 5. Contabilidad registra el CAI, rango completo, fecha límite y próximo número
-   disponible de Tegucigalpa en Configuración → Rangos CAI, seleccionando esa
+   disponible de cada oficina en Configuración → Rangos CAI, seleccionando esa
    oficina. Si deja correlativo vacío se toma el inicio del rango autorizado.
    Activar el rango correspondiente a cada tipo documental que vaya a utilizar.
 
