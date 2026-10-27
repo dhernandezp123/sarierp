@@ -49,14 +49,15 @@ No ejecutar pruebas que emitan documentos fiscales reales.
 - Suite Node final: 436/436, incluyendo render real de boleta/retención multipágina,
   encabezado histórico, total en letras y estructura OOXML de Excel.
 - TypeScript final y build Next.js 16.2.6 pasan; lint sin regresiones respecto
-  al baseline (223 diagnósticos históricos). Sin cambios publicados.
+  al baseline (223 diagnósticos históricos). Publicación del 27/10/2026 registrada
+  en `docs/release/accounting-fiscal-2026-10-27.md`.
 - Suite SQL: 24 archivos pasan en una segunda copia Docker sin red, después de
   aplicar las migraciones canónicas. Incluye RLS, emisión/anulación, proforma
   pagada/exonerada con remanente, diferencias de cambio y redondeo de cuotas.
 - Dos sesiones SQL simultáneas: reintento de recibo genera un solo cobro; dos
   aplicaciones que superan el saldo permiten una y rechazan la otra, con diario
   balanceado. No certifica todas las combinaciones de concurrencia.
-- No se ha aplicado SQL remoto ni publicado frontend. No hay apertura, fecha
+- Trece migraciones y frontend publicados en Production. No hay apertura, fecha
   inicial, catálogo inventado ni activación automática de la contabilidad.
 - UAT pendiente con Contabilidad: configurar SPS/TGU y clientes; emitir factura
   mixta y exonerada; convertir proforma pagada; aplicar recibo a factura/ND;

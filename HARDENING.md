@@ -1,8 +1,33 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-27 - FIN-REL-01 - Publicación fiscal y contable autorizada
+
+- Estado: SQL y frontend publicados en Production; configuración operativa/UAT pendientes.
+- Commit funcional: `9394d9bd3083658a948fb911d3827af88159a36f` (87 archivos).
+  Informe: `docs/release/accounting-fiscal-2026-10-27.md`.
+- SQL: trece migraciones `20261027100000`–`20261027220000` aplicadas antes del
+  frontend en una transacción al proyecto verificado `fwspgdzvlbtbgiupvrzo`.
+  Fuentes exactas del commit registradas; hashes, huellas de datos previos,
+  políticas/ACL ajenas al cambio y helper de tenant comprobados. RLS nueva activa.
+  Sin asientos de apertura ni contabilidad automática habilitada.
+- Autorización remota: lecturas con claims de Contabilidad aprobadas; plataforma
+  conserva contexto nulo y cero datos de empresas. No equivale a UAT de navegador.
+- Vercel Production funcional: `96BBSkByJyaybU8Fqz9BhgUztAb4`, exitoso;
+  build `6ebUERu81fq5QgNYHY4iL`. Smoke de 19 rutas/recursos y manifiesto idéntico
+  en Forwarders/Sari/instancia. Quality CI `40575004853`: aplicación y base exitosas.
+- Validación local: 436/436 Node; 24 suites SQL/RLS; TypeScript/build aprobados;
+  lint 461 archivos, 223 diagnósticos históricos, cero regresiones.
+- Publicación revisada: originales PDF/muestras/credenciales fuera del commit;
+  código, migraciones, pruebas ficticias y documentación técnica únicamente.
+- Los pendientes de SQL/publicación descritos en FIN-00..06 y FIN-PDF-02 quedan
+  resueltos por este registro. Faltan fichas de oficinas, asignación de clientes,
+  CAI/correlativos reales, catálogo/períodos/inicio contable y UAT; ver informe.
+  Retención/Entrega pendientes de sus formatos reales. La baja de activos
+  implementada es sin venta; no se agregaron revaluaciones ni apertura automática.
+
 ### 2026-10-27 - FIN-PDF-02 - Conexión fiscal de plantillas Sari y descuentos
 
-- Estado: implementación conectada y validada localmente; release autorizado en curso.
+- Estado: publicado en Production; aceptación operativa pendiente, ver FIN-REL-01.
 - Archivos: `FiscalDocumentLayout.tsx`, `invoice-pdf.tsx`, `purchase-fiscal-pdf.tsx`,
   nueva/detalle de factura, compras, helper `invoice-fiscal.ts`, tipos de compra;
   migraciones `20261027210000_fiscal_discounts_and_references.sql` y
