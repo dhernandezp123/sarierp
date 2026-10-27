@@ -1051,7 +1051,7 @@ export default function NewInvoicePage() {
                     </button>
                   )}
                   <label className="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">Descuento de esta línea {conversionNeeded?sourceCurrency:currency}
-                    <input aria-label="Descuento de línea" type="number" min="0" step="0.01" value={it.discount_amount||'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
+                    <input aria-label="Descuento de línea" type="number" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
                     <span>Se aplica antes del ISV.</span>
                   </label>
                   <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} readonlyService={Boolean(it.source_pricing_item_id)} onService={service => {

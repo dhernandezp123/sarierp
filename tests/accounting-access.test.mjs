@@ -99,6 +99,42 @@ test('pantalla real permite a Contabilidad crear y actualizar empresa/facturacio
   } finally { restore() }
 })
 
+test('configuración valida TC e impuestos antes de escribir y conserva una TC decimal', async () => {
+  const restore = withWindow()
+  try {
+    for (const [tax, exchange, allowed] of [[15, 0, false], [15, -1, false], [101, 25.3, false], [0, 26.75, true]]) {
+      const writes = [], errors = []
+      const client = { from() {
+        const query = {
+          select: () => query, eq: () => query, order: () => query,
+          maybeSingle: async () => ({ data: null, error: null }),
+          update: value => { writes.push(value); return query },
+          then: resolve => Promise.resolve({ error: null }).then(resolve),
+        }
+        return query
+      } }
+      const app = mountPage('src/app/(protected)/settings/company/page.tsx', {
+        ...userMocks, '../../../../lib/supabase/client': { supabase: client },
+        '@/src/lib/supabase/client': { supabase: client },
+        '@/src/lib/company-settings': { loadCurrentCompanySettings: async () => ({
+          data: { id: 'settings', default_tax_rate: tax, exchange_rate_usd_hnl: exchange }, error: null,
+        }) },
+        sonner: { toast: { error: value => errors.push(value), success() {} } },
+      })
+      try {
+        await app.ready()
+        await button(app, 'Guardar cambios').props.onClick()
+        assert.equal(writes.length, allowed ? 1 : 0)
+        assert.equal(errors.length, allowed ? 0 : 1)
+        if (allowed) {
+          assert.equal(writes[0].exchange_rate_usd_hnl, 26.75)
+          assert.equal(writes[0].default_tax_rate, 0)
+        }
+      } finally { app.cleanup() }
+    }
+  } finally { restore() }
+})
+
 test('pantalla CAI registra y activa con Contabilidad sin ofrecer borrado', async () => {
   const restore = withWindow(), writes = [], errors = []
   const range = { id: 'range', point_of_sale: 'San Pedro Sula', document_type: 'Factura', cai: 'CAI-TEST', rango_desde: '000-001-01-00000001',

@@ -1,5 +1,7 @@
 'use client'
 
+import { NumberInput } from '@/src/components/ui/NumberInput'
+
 import { toDateInputValue } from '@/src/lib/format'
 
 import { useCallback, useEffect, useState } from 'react'
@@ -310,12 +312,12 @@ export default function AgentDetailPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             <AgentField label="Profit / Cont." editing={editing}>
               {editing ? (
-                <input type="number" value={formData?.profit_per_container ?? ''} onChange={(e) => setField('profit_per_container', Number(e.target.value))} className={fieldClass} />
+                <NumberInput type="number" value={formData?.profit_per_container ?? ''} onChange={(e) => setField('profit_per_container', Number(e.target.value))} className={fieldClass} />
               ) : <span>{agent.currency} {Number(agent.profit_per_container || 0).toFixed(2)}</span>}
             </AgentField>
             <AgentField label="MBL Fee" editing={editing}>
               {editing ? (
-                <input type="number" value={formData?.mbl_fee ?? ''} onChange={(e) => setField('mbl_fee', Number(e.target.value))} className={fieldClass} />
+                <NumberInput type="number" value={formData?.mbl_fee ?? ''} onChange={(e) => setField('mbl_fee', Number(e.target.value))} className={fieldClass} />
               ) : <span>{agent.currency} {Number(agent.mbl_fee || 0).toFixed(2)}</span>}
             </AgentField>
             <AgentField label="Moneda" editing={editing}>
@@ -411,7 +413,7 @@ export default function AgentDetailPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">Tarifa base</label>
-                <input
+                <NumberInput
                   type="number"
                   min="0"
                   step="0.01"
@@ -561,7 +563,7 @@ export default function AgentDetailPage() {
                         </td>
                         <td className="pr-3">
                           <div className="flex gap-1">
-                            <input
+                            <NumberInput
                               type="number"
                               value={editingRateData.base_rate}
                               onChange={(e) => setEditingRateData((p) => p ? { ...p, base_rate: Number(e.target.value) } : p)}

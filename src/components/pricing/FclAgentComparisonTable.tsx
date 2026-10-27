@@ -1,5 +1,7 @@
 'use client'
 
+import { NumberInput } from '@/src/components/ui/NumberInput'
+
 import { useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { Printer } from 'lucide-react'
@@ -344,7 +346,7 @@ export function FclAgentComparisonTable({
       <div className="space-y-1.5">
         <label className="flex items-center rounded-lg border border-slate-200 bg-white px-2 py-1.5 focus-within:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:focus-within:border-slate-500">
           <span className="mr-1.5 text-xs font-semibold text-slate-400">USD</span>
-          <input
+          <NumberInput
             type="number"
             min="0"
             step="0.01"

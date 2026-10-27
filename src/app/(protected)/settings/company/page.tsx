@@ -1,5 +1,7 @@
 'use client'
 
+import { NumberInput } from '@/src/components/ui/NumberInput'
+
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Building2, Fuel, MapPin, Plus, Save, ShieldCheck, X } from 'lucide-react'
@@ -337,6 +339,20 @@ export default function CompanySettingsPage() {
       toast.error('No se puede guardar hasta cargar la configuracion del Bunker')
       return
     }
+    const taxRate = Number(form.default_tax_rate)
+    const exchangeRate = Number(form.exchange_rate_usd_hnl)
+    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) {
+      toast.error('El impuesto debe estar entre 0% y 100%.')
+      return
+    }
+    if (!Number.isFinite(exchangeRate) || exchangeRate <= 0 || exchangeRate > 1000000) {
+      toast.error('Ingresa un tipo de cambio mayor que cero y no superior a 1,000,000.')
+      return
+    }
+    if ([bunker.rate_per_lbs, bunker.rate_per_ft3, bunker.minimum_amount].some(value => !Number.isFinite(Number(value)) || Number(value) < 0)) {
+      toast.error('Las tarifas y el mínimo del Bunker deben ser números mayores o iguales a cero.')
+      return
+    }
     const insuranceCostRatePercent = Number(form.insurance_cost_rate_percent)
     if (!Number.isFinite(insuranceCostRatePercent) || insuranceCostRatePercent <= 0 || insuranceCostRatePercent > 5) {
       toast.error('El costo del seguro debe ser mayor que 0% y no superar 5%.')
@@ -347,7 +363,8 @@ export default function CompanySettingsPage() {
     const payload = {
       ...Object.fromEntries(Object.entries(form).filter(([key]) => key !== 'billing_points_of_sale')),
       tenant_id: profile.tenant_id,
-      default_tax_rate: Number(form.default_tax_rate ?? 15),
+      default_tax_rate: taxRate,
+      exchange_rate_usd_hnl: exchangeRate,
       insurance_cost_rate_percent: insuranceCostRatePercent,
       insurance_included_service_patterns:
         normalizeInsuranceCoveragePatterns(
@@ -631,7 +648,7 @@ export default function CompanySettingsPage() {
                 </select>
               </Field>
               <Field label="ISV / Impuesto (%)">
-                <input
+                <NumberInput
                   type="number"
                   value={form.default_tax_rate ?? 15}
                   onChange={(e) => set('default_tax_rate', Number(e.target.value))}
@@ -654,7 +671,7 @@ export default function CompanySettingsPage() {
                 />
               </Field>
               <Field label="Tipo de cambio USD → HNL">
-                <input
+                <NumberInput
                   type="number"
                   value={form.exchange_rate_usd_hnl ?? 25.30}
                   onChange={(e) => set('exchange_rate_usd_hnl', Number(e.target.value))}
@@ -700,7 +717,7 @@ export default function CompanySettingsPage() {
         </p>
         <div className="max-w-xs">
           <Field label="Costo de seguro (%)">
-            <input
+            <NumberInput
               type="number"
               value={
                 form.insurance_cost_rate_percent ??
@@ -982,7 +999,7 @@ export default function CompanySettingsPage() {
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Field label="Tarifa por LBS (USD)">
-              <input
+              <NumberInput
                 type="number"
                 value={bunker.rate_per_lbs}
                 onChange={(e) => setBunkerField('rate_per_lbs', Number(e.target.value))}
@@ -993,7 +1010,7 @@ export default function CompanySettingsPage() {
               />
             </Field>
             <Field label="Tarifa por FT3 (USD)">
-              <input
+              <NumberInput
                 type="number"
                 value={bunker.rate_per_ft3}
                 onChange={(e) => setBunkerField('rate_per_ft3', Number(e.target.value))}
@@ -1004,7 +1021,7 @@ export default function CompanySettingsPage() {
               />
             </Field>
             <Field label="Mínimo (USD)">
-              <input
+              <NumberInput
                 type="number"
                 value={bunker.minimum_amount}
                 onChange={(e) => setBunkerField('minimum_amount', Number(e.target.value))}

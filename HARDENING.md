@@ -1,5 +1,37 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-27 - UX-NUM-01 - Edición de cero y decimales en campos numéricos
+
+- Estado: corregido y validado localmente; publicación autorizada por el usuario
+  el 27/10/2026, verificación de Production y aceptación operativa pendientes.
+- Causa: conversiones inmediatas `Number('')` y un respaldo con `|| '0'`
+  reinsertaban el cero al borrar; el MBL también mostraba un total recalculado.
+- Archivos: componente compartido `src/components/ui/NumberInput.tsx` integrado
+  en empresa/facturación (6 campos), detalle de agente (4), catálogos (2),
+  retiro Miami (1) y costos de la comparación FCL (1); descuento de factura
+  nueva usa respaldo nulo. `tests/number-input.test.mjs`,
+  `tests/accounting-access.test.mjs`, `tests/invoice-discount-flow.test.mjs`
+  y `tests/page-harness.mjs`.
+- Auditoría: 127 controles numéricos en 35 archivos; se conservan los que ya
+  admiten texto vacío y los controles de solo lectura. El nuevo componente
+  conserva el texto mientras se edita y normaliza al perder el foco; los
+  cálculos continúan recibiendo números. Respeta cambios externos y atributos
+  nativos. ISV, descuentos y recargos permiten cero según su regla existente.
+  Guardar empresa rechaza TC no positiva/no finita, impuesto fuera de 0–100%
+  y recargos negativos/no finitos antes de escribir. SQL: ninguno.
+- Validaciones: 441/441 pruebas Node; 13/13 dirigidas a edición, guardado,
+  permisos de Contabilidad y descuentos. Chrome real con datos ficticios
+  verifica borrar cero, escribir decimales/ceros finales, normalizar al salir,
+  cero explícito y edición en viewport móvil, sin excepciones de ejecución.
+  El equipo inyecta atributos `wfd-id` ajenos al código y produce una advertencia
+  de hidratación en la prueba aislada; no impide las comprobaciones.
+- TypeScript y build aprobados (100 páginas); lint: 463 archivos, 223
+  diagnósticos históricos, cero regresiones; `git diff --check` aprobado.
+  La prueba de descuento se amplió después de la suite completa para comprobar
+  vacío y recálculo sin descuento, y pasó nuevamente (1/1).
+- Pendiente: publicación y UAT en la empresa; sin migraciones ni cambios de
+  permisos o contabilidad automática. Commit: pendiente.
+
 ### 2026-10-27 - FIN-REL-01 - Publicación fiscal y contable autorizada
 
 - Estado: SQL y frontend publicados en Production; configuración operativa/UAT pendientes.

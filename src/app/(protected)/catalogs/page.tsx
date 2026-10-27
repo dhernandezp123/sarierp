@@ -1,5 +1,7 @@
 'use client'
 
+import { NumberInput } from '@/src/components/ui/NumberInput'
+
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Edit3, PackagePlus, Plus, RotateCcw, Search } from 'lucide-react'
 import { toast } from 'sonner'
@@ -832,7 +834,7 @@ export default function CatalogsPage() {
                 className={fieldClass}
                 placeholder="Nombre visible"
               />
-              <input
+              <NumberInput
                 type="number"
                 value={serviceProductForm.sort_order}
                 onChange={(event) =>
@@ -999,7 +1001,7 @@ export default function CatalogsPage() {
                   placeholder="Unidad"
                 />
               </div>
-              <input
+              <NumberInput
                 type="number"
                 value={clientRateForm.sort_order}
                 onChange={(event) =>
