@@ -1,8 +1,9 @@
 # Anulaciones aprobadas y proformas — 27/10/2026
 
 Registro del hallazgo `FIN-VOID-01`. Publicación autorizada por el usuario.
-Commit, migración aplicada y verificación de Production: por registrar al cerrar
-la publicación. La implementación está validada localmente.
+Commit funcional: `0dff3abf39cc4557087c8cfbbd02be7d6c011632` (24 archivos).
+La migración y el frontend están publicados y verificados en Production.
+CI de aplicación y pruebas SQL/RLS desde el historial completo están aprobados.
 
 ## Comportamiento
 
@@ -74,3 +75,38 @@ SQL nuevo: `supabase/migrations/20261027230000_fiscal_void_approval.sql`.
 Evidencia local ignorada por Git: `.ua/intermediate/fiscal-void-validation/`
 y `.ua/intermediate/fiscal-void-release-20261027/`. Los PDF originales y las
 capturas/fixtures de navegador no se publican.
+
+## Migración y postflight
+
+Se aplicó únicamente `20261027230000` antes del frontend al proyecto verificado
+`fwspgdzvlbtbgiupvrzo`, en Production, mediante una transacción que registra la
+fuente exacta del commit y comprueba las huellas de 39 tablas antes/después.
+No se cambiaron datos de negocio, autorización previa o configuración contable
+como efecto de la migración. La tabla nueva tiene RLS; las tres guardas están
+activas; no hay escritura directa de solicitudes desde cliente ni ejecución
+anónima de la decisión o ejecución pública del helper interno.
+
+Entre el preflight de las 21:59 UTC y el postflight de las 22:02 UTC hubo una
+actualización de cliente por Admin, registrada a las 21:59:24 UTC. Explica la
+diferencia de huellas de clientes/historial; las otras 37 tablas coincidieron.
+La comprobación transaccional no detectó cambios producidos por la migración y
+se preservó esa actividad del usuario. No se sobrescribió ni revirtió esa edición.
+
+SQL de solo lectura con claims existentes confirmó Contabilidad autorizada,
+Admin sin aprobación y plataforma sin aprobación/tenant/datos de empresas.
+Es una verificación de autorización; no es una sesión autenticada de navegador.
+
+## Frontend y comprobaciones públicas
+
+Vercel funcional `D6YV1dNZ1ttbpHAgoM3GevV7iZZH`, exitoso, asociado al SHA
+funcional exacto; GitHub Deployment `7371595468`. Instancia:
+`https://sarierp-jl6xzkk66-claudherhn-5641s-projects.vercel.app`.
+Build `i1faWhB4fmzV_3rUJiCB7`.
+
+Smoke HTTP sin sesión: 21 rutas/recursos aprobados, incluidas las rutas de
+Anulaciones y Nueva proforma, login, protección financiera y rechazo de
+plataforma desde el dominio Sari. Mismo manifiesto en `forwarders.app`,
+`sari.forwarders.app` y la instancia inmutable.
+
+[Quality CI 40592010935](https://github.com/dhernandezp123/sarierp/actions/runs/40592010935):
+aplicación y suites SQL/RLS aprobadas desde el historial completo de migraciones.

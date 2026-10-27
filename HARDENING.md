@@ -2,8 +2,10 @@
 
 ### 2026-10-27 - FIN-VOID-01 - Anulación aprobada por Contabilidad y acceso a proformas
 
-- Estado: implementado y validado localmente; migración y publicación autorizadas,
-  pendientes del cierre de release. UAT con sesión real de Contabilidad pendiente.
+- Estado: SQL y frontend publicados y verificados en Production; validaciones
+  de aplicación y SQL/RLS aprobadas en CI.
+  UAT con sesión real de Contabilidad pendiente.
+- Commit funcional: `0dff3abf39cc4557087c8cfbbd02be7d6c011632` (24 archivos).
 - Antes: el detalle de factura cambiaba directamente a Anulada, sin motivo ni
   aprobación; una boleta/retención podía anularse al cancelar la AP o reversar
   su movimiento. Ahora Admin/Finanzas/Contabilidad solicitan y únicamente el rol
@@ -43,8 +45,18 @@
   visibles; sin excepciones. Lint: 467 archivos, 223 históricos, cero regresiones.
 - TypeScript y build finales aprobados (101 páginas); preflight remoto de solo
   lectura preparado sobre el proyecto vinculado verificado.
-- Pendiente: postflight, SQL remoto, CI y smoke de publicación; commit por
-  registrar. No se simulan autorizaciones para anulados
+- SQL remoto: una sola migración, aplicada antes del frontend con fuente exacta
+  del commit, bloqueo y verificación transaccional de 39 tablas. Permisos/RLS y
+  helpers previos conservados; nueva tabla con RLS, tres guardas y sin DML directo.
+  Pre/postflight: 37 tablas idénticas; clientes/historial cambiaron por una
+  actualización de Admin a las 21:59:24 UTC, anterior al SQL de las 22:02 UTC,
+  confirmada mediante auditoría. Esa actividad se preservó; no se atribuye al SQL.
+  Claims de solo lectura: Contabilidad aprueba, Admin/plataforma no; no es UAT.
+- Frontend: Vercel `D6YV1dNZ1ttbpHAgoM3GevV7iZZH`, exitoso; build
+  `i1faWhB4fmzV_3rUJiCB7`. Smoke de 21 rutas/recursos aprobado, incluidas
+  Anulaciones/Nueva proforma; manifiesto idéntico en Forwarders/Sari/instancia.
+  CI `40592010935`: aplicación y suites SQL/RLS aprobadas desde el historial completo.
+- Pendiente: aceptación operativa. No se simulan autorizaciones para anulados
   anteriores al flujo. Los PDF/fixtures/capturas locales no se publican.
 
 ### 2026-10-27 - UX-NUM-01 - Edición de cero y decimales en campos numéricos
