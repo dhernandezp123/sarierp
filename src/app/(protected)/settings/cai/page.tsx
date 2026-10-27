@@ -1,5 +1,7 @@
 'use client'
 
+import { fiscalDocumentCodes } from '@/src/lib/fiscal-offices'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatDate, calendarDaysUntil, toDateInputValue } from '@/src/lib/format'
 import { isValidCaiDate, validateCaiRange } from '@/src/lib/cai-validation'
@@ -37,13 +39,9 @@ function isExpired(fecha: string | null): boolean {
   return !fecha || !isValidCaiDate(fecha) || fecha < toDateInputValue()
 }
 
-type FiscalDocumentType = 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
+type FiscalDocumentType = keyof typeof fiscalDocumentCodes
 
-const FISCAL_DOCUMENT_TYPES: FiscalDocumentType[] = [
-  'Factura',
-  'Nota de Crédito',
-  'Nota de Débito',
-]
+const FISCAL_DOCUMENT_TYPES = Object.keys(fiscalDocumentCodes) as FiscalDocumentType[]
 
 function getRangeUsedPct(active: CaiRange): number {
   const total = active.range_end - active.range_start + 1

@@ -14,7 +14,7 @@ test('el detalle de factura resuelve la factura original sin embed recursivo', (
   )
   assert.match(
     invoiceDetailPage,
-    /\.select\('invoice_number'\)[\s\S]*?\.eq\('id', invRes\.data\.parent_invoice_id\)[\s\S]*?\.maybeSingle\(\)/
+    /\.select\('invoice_number,cai,issue_date'\)[\s\S]*?\.eq\('id', invRes\.data\.parent_invoice_id\)[\s\S]*?\.maybeSingle\(\)/
   )
   assert.doesNotMatch(
     invoiceDetailPage,

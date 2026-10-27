@@ -1,5 +1,7 @@
 'use client'
 
+import { BillingOfficeSelect } from '@/src/components/invoicing/BillingOfficeSelect'
+
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Contact, LoaderCircle } from 'lucide-react'
@@ -55,6 +57,7 @@ const initialForm = {
   email_3: '',
   observaciones: '',
   tipo_persona: 'Corporativo',
+  billing_office_id: '',
   condicion_pago: 'Contado',
   dias_credito: '',
   limite_credito: '',
@@ -100,6 +103,7 @@ function mapClientToForm(client: Record<string, unknown>): ClientForm {
     email_3: textValue(client.email_3),
     observaciones: textValue(client.observaciones),
     tipo_persona: textValue(client.tipo_persona, 'Corporativo'),
+    billing_office_id: textValue(client.billing_office_id),
     condicion_pago: textValue(client.condicion_pago, 'Contado'),
     dias_credito: client.dias_credito == null ? '' : String(client.dias_credito),
     limite_credito: client.limite_credito == null ? '' : String(client.limite_credito),
@@ -325,6 +329,7 @@ export default function ClientProfileDialog({
         email_3: form.email_3,
         observaciones: form.observaciones,
         tipo_persona: form.tipo_persona,
+        billing_office_id: form.billing_office_id || null,
         condicion_pago: form.condicion_pago,
         dias_credito: isCreditPayment(form.condicion_pago)
           ? Number(form.dias_credito || 0)
@@ -510,7 +515,8 @@ export default function ClientProfileDialog({
                       {TIPOS_EMPRESA.map((type) => <option key={type} value={type}>{type}</option>)}
                     </select>
                   </Field>
-                  <Field label="Condición de pago">
+                  <BillingOfficeSelect value={form.billing_office_id} onChange={id => setForm(previous => ({ ...previous, billing_office_id: id }))} />
+            <Field label="Condición de pago">
                     <select name="condicion_pago" value={form.condicion_pago} onChange={handleChange} className={fieldClass}>
                       {CONDICIONES_PAGO.map((condition) => <option key={condition} value={condition}>{condition}</option>)}
                     </select>

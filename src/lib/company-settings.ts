@@ -8,6 +8,11 @@ type CompanySettingsResult<T> = {
 }
 
 export type TenantCompanySettings = CompanyBranding & {
+  usa_legal_name: string | null
+  usa_address: string | null
+  usa_phone: string | null
+  usa_email: string | null
+  usa_website: string | null
   id: string
   tenant_id: string
   zip_code: string | null

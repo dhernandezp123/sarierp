@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { Plus, AlertCircle, Clock, Upload, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { useAccounting } from '@/src/hooks/useAccounting'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -54,6 +55,7 @@ export default function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { user, profile } = useUser()
+  const { data: accounting } = useAccounting()
   const context = `${profile?.tenant_id || ''}:${user?.id || ''}:${id}`
   const loadVersion = useRef(0)
   const activeContext = useRef<string | null>(context)
@@ -78,6 +80,8 @@ export default function SupplierDetailPage() {
     numero_factura_proveedor: '',
     monto: '',
     moneda: 'USD',
+    tipo_cambio: '',
+    expense_account_id: '',
     fecha_factura: '',
     fecha_vencimiento: '',
     quotation_id: '',
@@ -165,8 +169,13 @@ export default function SupplierDetailPage() {
 
   const createCP = async () => {
     const amount = Number.parseFloat(cpForm.monto)
-    if (!cpForm.descripcion.trim() || Number.isNaN(amount) || amount <= 0) {
+    if (!cpForm.descripcion.trim() || !Number.isFinite(amount) || amount <= 0) {
       toast.error('Descripcion y monto valido son requeridos')
+      return
+    }
+    const rate = cpForm.moneda === 'HNL' ? 1 : Number(cpForm.tipo_cambio)
+    if (!Number.isFinite(rate) || rate <= 0 || rate > 1000000) {
+      toast.error('Indica una tasa de cambio válida a lempiras.')
       return
     }
 
@@ -183,6 +192,8 @@ export default function SupplierDetailPage() {
       numero_factura_proveedor: cpForm.numero_factura_proveedor.trim() || null,
       monto: amount,
       moneda: cpForm.moneda,
+      tipo_cambio: rate,
+      expense_account_id: cpForm.expense_account_id || null,
       fecha_factura: cpForm.fecha_factura || null,
       fecha_vencimiento: vencimiento,
       notas: cpForm.notas.trim() || null,
@@ -202,6 +213,8 @@ export default function SupplierDetailPage() {
       numero_factura_proveedor: '',
       monto: '',
       moneda: proveedor?.moneda || 'USD',
+      tipo_cambio: '',
+      expense_account_id: '',
       fecha_factura: '',
       fecha_vencimiento: '',
       quotation_id: '',
@@ -459,6 +472,9 @@ export default function SupplierDetailPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-500">Fecha factura</label>
                 <input type="date" value={cpForm.fecha_factura} onChange={setCP('fecha_factura')} className={fieldClass} />
               </div>
+              {cpForm.moneda !== 'HNL' && <label className="text-sm">HNL por {cpForm.moneda}<input type="number" min="0.000001" max="1000000" step="0.000001" value={cpForm.tipo_cambio} onChange={setCP('tipo_cambio')} className={fieldClass}/></label>}
+              <label className="text-sm">Cuenta de gasto / activo<select value={cpForm.expense_account_id} onChange={setCP('expense_account_id')} className={fieldClass}><option value="">Cuenta de compras configurada</option>{accounting?.accounts.filter(a=>a.active&&a.postable&&['Activo','Gasto'].includes(a.kind)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>
+              <p className="text-sm md:col-span-2">Para varias cuentas por línea, ISV acreditable o boleta fiscal, usa <Link className="text-blue-700 underline" href="/accounting/purchases">Compras y documentos</Link>.</p>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">
                   Vencimiento <span className="text-slate-400">(se calcula si queda vacio)</span>

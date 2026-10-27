@@ -57,7 +57,9 @@ test('historial manual real carga mas versiones y busca fuera de las primeras100
     const data = source.slice(offset, offset + 25)
     return Response.json({ documents: data, total: source.length, nextOffset: offset + data.length, hasMore: offset + data.length < source.length })
   }
-  const app = mountPage('src/components/invoicing/ManualInvoiceEditor.tsx', {}, { exported: 'ManualInvoiceEditor' })
+  const app = mountPage('src/components/invoicing/ManualInvoiceEditor.tsx', {
+    '@/src/lib/supabase/client': { supabase: {} },
+  }, { exported: 'ManualInvoiceEditor' })
   try {
     await app.ready()
     assert.match(app.text(), /Mostrando 25 de 131/)

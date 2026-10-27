@@ -16,9 +16,14 @@ import {
 } from '@/src/lib/insurance-coverage'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import { canManageCompanySettings } from '@/src/lib/permissions'
-import { validateBillingPointsOfSale } from '@/src/lib/billing-points-of-sale'
+import { BillingOfficesSettings } from '@/src/components/invoicing/BillingOfficesSettings'
 
 type CompanySettings = {
+  usa_legal_name: string
+  usa_address: string
+  usa_phone: string
+  usa_email: string
+  usa_website: string
   id: string
   tenant_id: string
   legal_name: string | null
@@ -88,6 +93,11 @@ export default function CompanySettingsPage() {
     legal_name: '',
     trade_name: '',
     rtn: '',
+    usa_legal_name: '',
+    usa_address: '',
+    usa_phone: '',
+    usa_email: '',
+    usa_website: '',
     address: '',
     city: '',
     country: 'Honduras',
@@ -156,6 +166,11 @@ export default function CompanySettingsPage() {
         legal_name: data.legal_name ?? '',
         trade_name: data.trade_name ?? '',
         rtn: data.rtn ?? '',
+        usa_legal_name: data.usa_legal_name ?? '',
+        usa_address: data.usa_address ?? '',
+        usa_phone: data.usa_phone ?? '',
+        usa_email: data.usa_email ?? '',
+        usa_website: data.usa_website ?? '',
         address: data.address ?? '',
         city: data.city ?? '',
         country: data.country ?? 'Honduras',
@@ -318,26 +333,19 @@ export default function CompanySettingsPage() {
       return
     }
     if (!canEditSettings) { toast.error('Solo Admin o Contabilidad puede modificar esta configuración'); return }
-    const pointsError = validateBillingPointsOfSale(form.billing_points_of_sale)
-    if (pointsError) { toast.error(pointsError); return }
     if (!bunkerLoaded) {
       toast.error('No se puede guardar hasta cargar la configuracion del Bunker')
       return
     }
     const insuranceCostRatePercent = Number(form.insurance_cost_rate_percent)
-    if (
-      !Number.isFinite(insuranceCostRatePercent) ||
-      insuranceCostRatePercent <= 0 ||
-      insuranceCostRatePercent > 5
-    ) {
+    if (!Number.isFinite(insuranceCostRatePercent) || insuranceCostRatePercent <= 0 || insuranceCostRatePercent > 5) {
       toast.error('El costo del seguro debe ser mayor que 0% y no superar 5%.')
       return
     }
     setSaving(true)
 
     const payload = {
-      ...form,
-      billing_points_of_sale: form.billing_points_of_sale.map(point => point.trim()),
+      ...Object.fromEntries(Object.entries(form).filter(([key]) => key !== 'billing_points_of_sale')),
       tenant_id: profile.tenant_id,
       default_tax_rate: Number(form.default_tax_rate ?? 15),
       insurance_cost_rate_percent: insuranceCostRatePercent,
@@ -658,24 +666,12 @@ export default function CompanySettingsPage() {
                 />
               </Field>
             </div>
-            <Field label="Puntos de venta de facturación">
-              <div className="space-y-2">
-                {form.billing_points_of_sale.map((point, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input aria-label={`Punto de venta ${index + 1}`} value={point} maxLength={120}
-                      disabled={!canEditSettings} className={`${fieldClass} min-w-0 flex-1 disabled:opacity-60`}
-                      onChange={(event) => set('billing_points_of_sale', form.billing_points_of_sale.map((value, i) => i === index ? event.target.value : value))} />
-                    {canEditSettings && <button type="button" aria-label={`Quitar punto de venta ${index + 1}`}
-                      disabled={form.billing_points_of_sale.length === 1}
-                      onClick={() => set('billing_points_of_sale', form.billing_points_of_sale.filter((_, i) => i !== index))}
-                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-800"><X size={16} /></button>}
-                  </div>
-                ))}
-                {canEditSettings && <button type="button" className="text-sm font-semibold text-blue-600 dark:text-blue-400"
-                  onClick={() => set('billing_points_of_sale', [...form.billing_points_of_sale, ''])}>Agregar punto de venta</button>}
-                <p className="text-xs text-slate-500">El primero es el predeterminado. Cada oficina utiliza su propio CAI y correlativo. Los nombres con rangos registrados se conservan.</p>
-              </div>
-            </Field>
+            <BillingOfficesSettings />
+            <section className="space-y-4"><h3 className="font-semibold">Emisor de factura manual SARI USA</h3><p className="text-sm text-slate-500">Datos propios del emisor estadounidense. Los documentos guardados conservan su encabezado.</p><div className="grid gap-4 md:grid-cols-2"><Field label="Razón social SARI USA"><input className={fieldClass} value={form.usa_legal_name} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_legal_name', e.target.value)} /></Field>
+<Field label="Dirección SARI USA"><input className={fieldClass} value={form.usa_address} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_address', e.target.value)} /></Field>
+<Field label="Teléfono principal SARI USA"><input className={fieldClass} value={form.usa_phone} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_phone', e.target.value)} /></Field>
+<Field label="Correo SARI USA"><input className={fieldClass} value={form.usa_email} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_email', e.target.value)} /></Field>
+<Field label="Sitio web SARI USA"><input className={fieldClass} value={form.usa_website} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_website', e.target.value)} /></Field></div></section>
             <Field label="Nota de pie de factura">
               <textarea
                 value={form.invoice_footer_note ?? ''}

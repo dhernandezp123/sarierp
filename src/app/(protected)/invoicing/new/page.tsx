@@ -1,5 +1,9 @@
 'use client'
 
+import { InvoiceFiscalOptions, blankFiscalOptions, fiscalOptionsPayload } from '@/src/components/invoicing/InvoiceFiscalOptions'
+import { InvoiceLineSettings, InvoiceLineSettingsProvider } from '@/src/components/invoicing/InvoiceLineSettings'
+import { calculateInvoiceFiscal, convertMoney, invoiceLineAmounts, type TaxTreatment } from '@/src/lib/invoice-fiscal'
+
 import { toDateInputValue } from '@/src/lib/format'
 
 import { useCallback, useEffect, useState } from 'react'
@@ -22,6 +26,9 @@ import { loadBillingPointsOfSale } from '@/src/lib/billing-points-of-sale'
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
 type InvoiceItem = {
+  discount_amount?: string
+  income_account_id?: string
+  tax_treatment?: TaxTreatment
   id: string
   source_pricing_item_id?: string
   description: string
@@ -32,6 +39,7 @@ type InvoiceItem = {
 }
 
 type Cliente = {
+  billing_office?: { name: string; is_active: boolean } | null
   id: string
   nombre: string
   rtn: string | null
@@ -114,6 +122,7 @@ function newItem(): InvoiceItem {
     description: '',
     quantity: '1',
     unit_price: '0',
+    discount_amount: '0',
     amount: 0,
     isv_rate: 15,
   }
@@ -189,13 +198,12 @@ export default function NewInvoicePage() {
 
   // SAR fields
   const [loadedActiveCai, setActiveCai] = useState<CaiRange | null>(null)
-  const [pointsOfSale, setPointsOfSale] = useState<string[]>([])
-  const [pointOfSale, setPointOfSale] = useState('')
-  const activeCai = loadedActiveCai?.point_of_sale === pointOfSale && loadedActiveCai.document_type === invoiceType ? loadedActiveCai : null
-  const [esExonerado, setEsExonerado] = useState(false)
-  const [ordenCompraExenta, setOrdenCompraExenta] = useState('')
-  const [noConstanciaExonerado, setNoConstanciaExonerado] = useState('')
-  const [noRegistroSag, setNoRegistroSag] = useState('')
+
+  const [parentPointOfSale, setParentPointOfSale] = useState('')
+  const [fiscalOptions, setFiscalOptions] = useState(blankFiscalOptions)
+  const [sourceCurrency, setSourceCurrency] = useState('')
+  const esExonerado = fiscalOptions.mode === 'Exonerada'
+  const ordenCompraExenta = fiscalOptions.order
 
   // Parent invoice (for NC/ND)
   const [parentInvoice, setParentInvoice] = useState<ParentInvoice | null>(null)
@@ -219,6 +227,9 @@ export default function NewInvoicePage() {
         email: parentInvoice.cliente_email,
       }
     : clientes.find((client) => client.id === clienteId) || null
+
+  const pointOfSale = parentInvoice ? parentPointOfSale : (selectedCliente?.billing_office?.is_active ? selectedCliente.billing_office.name : '')
+  const activeCai = loadedActiveCai?.point_of_sale === pointOfSale && loadedActiveCai.document_type === invoiceType ? loadedActiveCai : null
 
   const applyQuotation = useCallback(async (quotation: Quotation) => {
     if (quotation.status !== 'Ganada') {
@@ -280,6 +291,8 @@ export default function NewInvoicePage() {
 
     setQuotationId(quotation.id)
     setCurrency(currencies[0])
+    setSourceCurrency(currencies[0])
+    setFiscalOptions(previous => ({ ...previous, conversionEnabled: false }))
     setItems(pricingItems.map((item) => {
       const quantity = Number(item.quantity || 0)
       const unitPrice = Number(item.sale_amount || 0)
@@ -300,15 +313,16 @@ export default function NewInvoicePage() {
   useEffect(() => {
     const init = async () => {
       const [clientesRes, settingsRes, pointsRes] = await Promise.all([
-        supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito').order('nombre'),
+        supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito, billing_office:billing_offices!clientes_billing_office_fk(name,is_active)').order('nombre'),
         loadCurrentCompanySettings(supabase),
         loadBillingPointsOfSale(supabase),
       ])
 
-      setClientes((clientesRes.data || []) as Cliente[])
-      setPointsOfSale(pointsRes.data)
-      setPointOfSale(pointsRes.data[0] || '')
+      setClientes((clientesRes.data || []).map(client => ({ ...client,
+        billing_office: Array.isArray(client.billing_office) ? client.billing_office[0] || null : client.billing_office,
+      })) as Cliente[])
       if (pointsRes.error) toast.error('No se pudieron cargar los puntos de venta')
+      if (!requestedQuotationId && !parentId) setCurrency(settingsRes.data?.default_currency === 'HNL' ? 'HNL' : 'USD')
       if (settingsRes.data?.exchange_rate_usd_hnl) {
         setExchangeRate(String(settingsRes.data.exchange_rate_usd_hnl))
       }
@@ -365,7 +379,7 @@ export default function NewInvoicePage() {
               .eq('cai', parent.cai).eq('rango_desde', parent.rango_desde).limit(1).maybeSingle()
             parentPoint = range?.point_of_sale
           }
-          setPointOfSale(parentPoint || pointsRes.data[0] || '')
+          setParentPointOfSale(parentPoint || '')
           setParentInvoice({
             ...parent,
             balance: Number(receivableResult.data?.balance ?? parent.total),
@@ -378,7 +392,7 @@ export default function NewInvoicePage() {
           // Pre-fill items from parent
           const { data: parentItems } = await supabase
             .from('invoice_items')
-            .select('description, quantity, unit_price, amount, sort_order, isv_rate')
+            .select('description, quantity, unit_price, amount, discount_amount, sort_order, isv_rate')
             .eq('invoice_id', parentId)
             .order('sort_order')
 
@@ -388,6 +402,7 @@ export default function NewInvoicePage() {
               description: it.description,
               quantity: String(it.quantity),
               unit_price: String(it.unit_price),
+              discount_amount: String(it.discount_amount||0),
               amount: it.amount,
               isv_rate: Number(it.isv_rate || 0) as 0 | 15 | 18,
             })))
@@ -473,9 +488,10 @@ export default function NewInvoicePage() {
       prev.map((it) => {
         if (it.id !== id) return it
         const updated = { ...it, [field]: value }
+        if (field === 'isv_rate') updated.tax_treatment = Number(value) > 0 ? 'Gravada' : 'Exenta'
         const qty = parseFloat(String(updated.quantity)) || 0
         const price = parseFloat(String(updated.unit_price)) || 0
-        updated.amount = qty * price
+        updated.amount = Math.round(qty * price * 100) / 100 - Number(updated.discount_amount || 0)
         return updated
       })
     )
@@ -498,19 +514,35 @@ export default function NewInvoicePage() {
 
   // Totals
   const isFiscal = IS_FISCAL[invoiceType]
-  const importeExento = items.filter((i) => i.isv_rate === 0).reduce((s, i) => s + i.amount, 0)
-  const importeGravado15 = items.filter((i) => i.isv_rate === 15).reduce((s, i) => s + i.amount, 0)
-  const importeGravado18 = items.filter((i) => i.isv_rate === 18).reduce((s, i) => s + i.amount, 0)
-  const isv15Amount = importeGravado15 * 0.15
-  const isv18Amount = importeGravado18 * 0.18
-  const subtotal = importeExento + importeGravado15 + importeGravado18
-  const taxAmount = isv15Amount + isv18Amount
-  const total = subtotal + taxAmount
+  const conversionNeeded = Boolean(quotationId && sourceCurrency && sourceCurrency !== currency)
+  const conversionValid = !conversionNeeded || (fiscalOptions.conversionEnabled && Number.isFinite(Number(fiscalOptions.conversionRate)) && Number(fiscalOptions.conversionRate) > 0 && Number(fiscalOptions.conversionRate) <= 1000000)
+  let fiscalError = ''
+  let discountTotal = 0
+  let amounts = calculateInvoiceFiscal([], fiscalOptions.mode)
+  try {
+    const prepared = items.map(item => ({item,line:invoiceLineAmounts(Number(item.quantity),Number(item.unit_price),Number(item.discount_amount||0),conversionNeeded&&conversionValid?{currency,rate:Number(fiscalOptions.conversionRate),operation:fiscalOptions.conversionOperation}:undefined)}))
+    discountTotal=prepared.reduce((sum,{line})=>sum+line.discount,0)
+    const displayItems=prepared.map(({item,line})=>({...item,amount:line.net}))
+    amounts = calculateInvoiceFiscal(displayItems, fiscalOptions.mode)
+  }
+  catch (error) { fiscalError = error instanceof Error ? error.message : 'Revisa los importes de las líneas.' }
+  const importeExento = amounts.exempt
+  const importeGravado15 = amounts.taxable15
+  const importeGravado18 = amounts.taxable18
+  const isv15Amount = amounts.tax15
+  const isv18Amount = amounts.tax18
+  const subtotal = amounts.subtotal
+  const taxAmount = amounts.tax
+  const total = amounts.total
   const totalLps = currency === 'USD' ? total * (parseFloat(exchangeRate) || 1) : total
   const paymentTerms = getClientPaymentTerms(selectedCliente)
 
   const handleSave = async () => {
     setSubmitted(true)
+    if (fiscalError) { toast.error(fiscalError); return }
+    if (!conversionValid) { toast.error('Confirma la conversión y su tasa antes de facturar en otra moneda'); return }
+    if (fiscalOptions.referenceEnabled && (!Number.isFinite(Number(fiscalOptions.referenceRate)) || !(Number(fiscalOptions.referenceRate) > 0) || Number(fiscalOptions.referenceRate) > 1000000 || fiscalOptions.referenceCurrency === currency)) { toast.error('Revisa moneda y tasa de equivalencia'); return }
+    if (fiscalOptions.mode === 'Gravada' && amounts.classification !== 'Gravada') { toast.error('Todas las líneas deben ser gravables para este tipo fiscal.'); return }
     if (!clienteId || !issueDate || items.length === 0) {
       toast.error('Completa los campos requeridos')
       return
@@ -542,7 +574,7 @@ export default function NewInvoicePage() {
       setSaving(false)
       return
     }
-    if (!pointOfSale) { toast.error('Selecciona un punto de venta'); return }
+    if (!pointOfSale) { toast.error('Asigna una oficina activa en el perfil del cliente antes de facturar'); return }
     if (isFiscal && !activeCai) {
       toast.error(`No hay un rango CAI activo para ${invoiceType}.`)
       return
@@ -569,6 +601,8 @@ export default function NewInvoicePage() {
     setSaving(true)
 
     const invoicePayload = {
+      line_discounts: Object.fromEntries(items.filter(item=>item.source_pricing_item_id).map(item=>[item.source_pricing_item_id!,Number(item.discount_amount||0)])),
+      line_accounts: Object.fromEntries(items.filter(item => item.source_pricing_item_id && item.income_account_id).map(item => [item.source_pricing_item_id!, item.income_account_id])),
       point_of_sale: pointOfSale,
       invoice_type: invoiceType,
       cliente_id: clienteId,
@@ -579,16 +613,16 @@ export default function NewInvoicePage() {
       notes: notes || null,
       motivo: IS_NOTE[invoiceType] ? motivo : null,
       parent_invoice_id: parentId || null,
-      es_exonerado: esExonerado,
-      orden_compra_exenta: esExonerado ? ordenCompraExenta || null : null,
-      no_constancia_exonerado: esExonerado ? noConstanciaExonerado || null : null,
-      no_registro_sag: esExonerado ? noRegistroSag || null : null,
+      ...fiscalOptionsPayload({ ...fiscalOptions, conversionEnabled: conversionNeeded && fiscalOptions.conversionEnabled }, sourceCurrency),
     }
     const itemPayload = items.map((item, index) => ({
         description: item.description.trim(),
         quantity: parseFloat(item.quantity) || 0,
         unit_price: parseFloat(item.unit_price) || 0,
+        discount_amount: Number(item.discount_amount||0),
         isv_rate: item.isv_rate,
+        tax_treatment: item.tax_treatment,
+        income_account_id: item.income_account_id || null,
         sort_order: index,
       }))
     const { data, error } = quotationId
@@ -706,11 +740,8 @@ export default function NewInvoicePage() {
               {/* Punto de venta de la emisión fiscal */}
               <div>
                 <label htmlFor="invoice-point-of-sale" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">Punto de venta <span className="text-red-500">*</span></label>
-                <select id="invoice-point-of-sale" value={pointOfSale} disabled={!!parentInvoice || saving}
-                  onChange={(event) => setPointOfSale(event.target.value)} className={fieldClass}>
-                  {pointsOfSale.map(point => <option key={point} value={point}>{point}</option>)}
-                </select>
-                <p className="mt-1 text-xs text-slate-500">El CAI y correlativo se asignan de esta oficina al guardar.</p>
+                <input id="invoice-point-of-sale" value={pointOfSale || 'Sin oficina asignada'} readOnly className={fieldClass} />
+                <p className="mt-1 text-xs text-slate-500">La oficina corresponde al perfil del cliente; las notas conservan la oficina de su factura original.</p>
               </div>
               {/* Cliente (bloqueado si viene de parent) */}
               <div>
@@ -826,8 +857,8 @@ export default function NewInvoicePage() {
                 </label>
                 <select
                   value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  disabled={clienteLocked || Boolean(quotationId)}
+                  onChange={(e) => { setCurrency(e.target.value); setFiscalOptions(prev => ({ ...prev, referenceCurrency: e.target.value === prev.referenceCurrency ? (e.target.value === 'USD' ? 'HNL' : 'USD') : prev.referenceCurrency })) }}
+                  disabled={!!parentInvoice}
                   className={`${fieldClass} disabled:opacity-60`}
                 >
                   <option value="USD">USD</option>
@@ -913,59 +944,7 @@ export default function NewInvoicePage() {
             </section>
           )}
 
-          {/* Exoneración (solo documentos fiscales) */}
-          {isFiscal && (
-            <section className={cardClass}>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-900 dark:text-white">Exoneración</h2>
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={esExonerado}
-                    onChange={(e) => setEsExonerado(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600 dark:border-slate-600"
-                  />
-                  Cliente exonerado
-                </label>
-              </div>
-
-              {esExonerado && (
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      N° Orden de Compra Exenta <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      value={ordenCompraExenta}
-                      onChange={(e) => setOrdenCompraExenta(e.target.value)}
-                      placeholder="OCE-..."
-                      className={`${fieldClass} ${reqClass(submitted, ordenCompraExenta)}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      N° Constancia exoneración
-                    </label>
-                    <input
-                      value={noConstanciaExonerado}
-                      onChange={(e) => setNoConstanciaExonerado(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      N° Registro SAG
-                    </label>
-                    <input
-                      value={noRegistroSag}
-                      onChange={(e) => setNoRegistroSag(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
+          <InvoiceFiscalOptions value={fiscalOptions} onChange={setFiscalOptions} currency={currency} sourceCurrency={quotationId ? sourceCurrency : undefined} disabled={saving} />
 
           {selectedQuotation && (
             <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/20">
@@ -1003,19 +982,20 @@ export default function NewInvoicePage() {
             </div>
 
             <div className="space-y-2">
-              <div className={`grid gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 ${isFiscal ? 'grid-cols-[1fr_72px_110px_90px_110px_36px]' : 'grid-cols-[1fr_72px_110px_110px_36px]'}`}>
+              <div className={`grid gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 grid-cols-[1fr_72px_110px_150px_110px_36px]`}>
                 <span>Descripción</span>
                 <span className="text-right">Qty</span>
-                <span className="text-right">Precio unit.</span>
-                {isFiscal && <span className="text-center">ISV</span>}
-                <span className="text-right">Importe</span>
+                <span className="text-right">Precio unit. {conversionNeeded ? sourceCurrency : currency}</span>
+                <span className="text-center">ISV</span>
+                <span className="text-right">Importe {conversionNeeded ? sourceCurrency : currency}</span>
                 <span />
               </div>
 
+              <InvoiceLineSettingsProvider>
               {items.map((it) => (
                 <div
                   key={it.id}
-                  className={`grid items-center gap-2 ${isFiscal ? 'grid-cols-[1fr_72px_110px_90px_110px_36px]' : 'grid-cols-[1fr_72px_110px_110px_36px]'}`}
+                  className={`grid items-center gap-2 grid-cols-[1fr_72px_110px_150px_110px_36px]`}
                 >
                   <input
                     type="text"
@@ -1043,18 +1023,13 @@ export default function NewInvoicePage() {
                     readOnly={Boolean(it.source_pricing_item_id)}
                     className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
                   />
-                  {isFiscal && (
-                    <select
-                      value={it.isv_rate}
-                      onChange={(e) => updateItem(it.id, 'isv_rate', Number(e.target.value) as 0 | 15 | 18)}
-                      disabled={Boolean(it.source_pricing_item_id)}
-                      className={`${fieldClass} text-center text-sm disabled:bg-slate-50 disabled:text-slate-600 dark:disabled:bg-slate-800`}
-                    >
-                      <option value={15}>15%</option>
-                      <option value={18}>18%</option>
-                      <option value={0}>Exento</option>
+                  <div className="space-y-1">
+                    <label className="flex gap-1 text-xs"><input type="checkbox" aria-label="Línea gravable" checked={it.isv_rate > 0 && fiscalOptions.mode !== 'Exonerada' && fiscalOptions.mode !== 'Exenta'} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} onChange={e => { updateItem(it.id, 'isv_rate', e.target.checked ? 15 : 0); updateItem(it.id, 'tax_treatment', e.target.checked ? 'Gravada' : 'Exenta') }} />Gravable</label>
+                    <select aria-label="Tasa ISV de línea" value={it.isv_rate} onChange={e => updateItem(it.id, 'isv_rate', Number(e.target.value))} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} className={fieldClass}>
+                      <option value={15}>15%</option><option value={18}>18%</option><option value={0}>Sin ISV</option>
                     </select>
-                  )}
+                    {it.isv_rate === 0 && <select aria-label="Motivo sin ISV" className={fieldClass} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} value={it.tax_treatment || 'Exenta'} onChange={e=>updateItem(it.id,'tax_treatment',e.target.value)}><option value="Exenta">Exenta</option><option value="Exonerada">Exonerada</option></select>}
+                  </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-sm font-medium dark:border-slate-700 dark:bg-slate-800 dark:text-white">
                     {it.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </div>
@@ -1075,8 +1050,16 @@ export default function NewInvoicePage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
+                  <label className="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">Descuento de esta línea {conversionNeeded?sourceCurrency:currency}
+                    <input aria-label="Descuento de línea" type="number" min="0" step="0.01" value={it.discount_amount||'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
+                    <span>Se aplica antes del ISV.</span>
+                  </label>
+                  <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} readonlyService={Boolean(it.source_pricing_item_id)} onService={service => {
+                    updateItem(it.id,'description',service.label); updateItem(it.id,'isv_rate',service.taxable ? 15 : 0)
+                  }}/>
                 </div>
               ))}
+              </InvoiceLineSettingsProvider>
             </div>
           </section>
         </div>
@@ -1084,8 +1067,10 @@ export default function NewInvoicePage() {
         {/* Right col */}
         <div className="space-y-4">
           <section className={cardClass}>
-            <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Resumen</h2>
+            <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Resumen {currency}</h2>
+            {fiscalError && <p role="alert" className="text-sm text-red-600">{fiscalError}</p>}
             <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span>Descuentos y rebajas</span><span>{currency} {discountTotal.toFixed(2)}</span></div>
               {isFiscal ? (
                 <>
                   {importeExento > 0 && (
@@ -1126,11 +1111,13 @@ export default function NewInvoicePage() {
                     <span>{currency} {subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">ISV (15%)</span>
+                    <span className="text-slate-500 dark:text-slate-400">ISV</span>
                     <span>{currency} {taxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </>
               )}
+              {amounts.exonerated > 0 && <div className="flex justify-between"><span>Importe exonerado</span><span>{currency} {amounts.exonerated.toFixed(2)}</span></div>}
+              {fiscalOptions.referenceEnabled && Number.isFinite(Number(fiscalOptions.referenceRate)) && Number(fiscalOptions.referenceRate)>0 && Number(fiscalOptions.referenceRate)<=1000000 && <p className="text-xs text-slate-500">Equivalencia informativa: {fiscalOptions.referenceCurrency} {convertMoney(total,{currency:fiscalOptions.referenceCurrency,rate:Number(fiscalOptions.referenceRate),operation:fiscalOptions.referenceOperation}).toFixed(2)}</p>}
               <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
                 <div className="flex justify-between">
                   <span className="font-semibold text-slate-900 dark:text-white">Total</span>

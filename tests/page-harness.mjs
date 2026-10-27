@@ -1,10 +1,12 @@
 import loadTs from './load-ts.mjs'
+import { createContext } from 'react'
 
 export function mountPage(entry, mocks = {}, { exported = 'default', props = {}, unwrap } = {}) {
   const hooks = [], effects = []
   let cursor = 0, tree
   const same = (a, b) => a?.length === b?.length && a.every((value, index) => Object.is(value, b[index]))
   const react = {
+    createContext,
     useState(initial) {
       const index = cursor++
       hooks[index] ||= { value: typeof initial === 'function' ? initial() : initial }

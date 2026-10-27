@@ -36,7 +36,10 @@ export function ManualInvoicePdf({ data, logo }: { data: ManualInvoiceData; logo
   return <Document title={`SARI USA Invoice ${data.invoice_number}`} author="SARI EXPRESS FORWARDERS, INC">
     {pages.map((rows, index) => <Page key={index} size="LETTER" style={s.page} wrap={false}>
       <PdfImage src={logo} style={s.logo} />
-      <Text style={s.company}>{'SARI EXPRESS FORWARDERS, INC\n11200 NW 107th Street, Suite 13\nMIAMI, FL 33178 - USA\nT (305) 827-5453 / F (305) 827-3234\nwww.sariexp.com'}</Text>
+      <Text style={s.company}>{data.issuer
+        ? [data.issuer.name, data.issuer.address, `Tel: ${data.issuer.phone}`, data.issuer.email, data.issuer.website].filter(Boolean).join('\n')
+        // Preserva el formato de documentos históricos, anteriores al snapshot.
+        : 'SARI EXPRESS FORWARDERS, INC\n11200 NW 107th Street, Suite 13\nMIAMI, FL 33178 - USA\nT (305) 827-5453 / F (305) 827-3234\nwww.sariexp.com'}</Text>
       <View style={s.pageNumber}>
         <Svg width={6} height={6} viewBox="0 0 6 6"><Polygon points="6,0 0,3 6,6" fill="#111" /></Svg>
         <Text>PAGE {index + 1} OF {pages.length}</Text>

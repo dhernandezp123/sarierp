@@ -167,6 +167,9 @@ export default function Sidebar({ role }: { role?: string }) {
       href: '/invoicing',
       icon: Receipt,
     },
+    { label: 'Cobranza y recibos', href: '/invoicing/collections', icon: CreditCard },
+    { label: 'Estados de cuenta', href: '/invoicing/statements', icon: FileText },
+    { label: 'Contabilidad', href: '/accounting/accounts', icon: Database },
   ]
 
   const purchaseItems = [

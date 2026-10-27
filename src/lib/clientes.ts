@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export type ClientePayload = {
+  billing_office_id?: string | null
   nombre: string
   contacto?: string
   nit?: string

@@ -25,7 +25,7 @@ test('reportes de facturación conservan el filtro de oficina al exportar o nave
   assert.equal(readReportView(new URLSearchParams('report=commercial&pos=Tegucigalpa'), ['commercial']).pos, 'Todos')
 })
 
-test('factura real consulta exclusivamente el CAI de la oficina elegida y descarta respuestas antiguas', async () => {
+test('factura real deriva CAI de la oficina del cliente y descarta respuestas antiguas', async () => {
   const previous = globalThis.window
   globalThis.window = { setTimeout, clearTimeout }
   const reads = [], pending = []
@@ -35,7 +35,10 @@ test('factura real consulta exclusivamente el CAI de la oficina elegida y descar
       const query = {
         select: () => query, order: () => query, is: () => query,
         eq: (name, value) => { filters[name] = value; return query },
-        then: resolve => Promise.resolve({ data: [], error: null }).then(resolve),
+        then: resolve => Promise.resolve({ data: table === 'clientes' ? [
+          { id: 'sps', nombre: 'Cliente SPS', billing_office: { name: 'San Pedro Sula', is_active: true } },
+          { id: 'tgu', nombre: 'Cliente TGU', billing_office: { name: 'Tegucigalpa', is_active: true } },
+        ] : [], error: null }).then(resolve),
         maybeSingle: async () => {
           reads.push({ ...filters })
           return new Promise(resolve => pending.push({ filters, resolve }))
@@ -48,6 +51,7 @@ test('factura real consulta exclusivamente el CAI de la oficina elegida y descar
   }
   const app = mountPage('src/app/(protected)/invoicing/new/page.tsx', {
     '../../../../lib/supabase/client': { supabase: client },
+    '@/src/lib/supabase/client': { supabase: client },
     '@/src/lib/company-settings': { loadCurrentCompanySettings: async () => ({ data: null, error: null }) },
     '@/src/components/ui/UnsavedChangesGuard': { UnsavedChangesGuard: 'Guard', requestFormNavigation() {}, markFormSaved() {} },
   })
@@ -56,8 +60,12 @@ test('factura real consulta exclusivamente el CAI de la oficina elegida y descar
     fecha_limite_emision: '2099-12-31' }, error: null })
   try {
     await app.ready(); await app.tick(); app.render()
+    assert.equal(reads.length, 0, 'Sin cliente no se elige una oficina arbitraria')
+    const chooseClient = value => app.find(node => node.type === 'select' && app.text(node).includes('Cliente SPS')).props.onChange({ target: { value } })
+    chooseClient('sps'); app.render(); await app.tick(); app.render()
     assert.equal(reads[0].point_of_sale, 'San Pedro Sula')
-    app.find(node => node.type === 'select' && node.props.id === 'invoice-point-of-sale').props.onChange({ target: { value: 'Tegucigalpa' } })
+    assert.equal(app.find(node => node.type === 'select' && node.props.id === 'invoice-point-of-sale'), undefined)
+    chooseClient('tgu')
     app.render(); await app.tick(); app.render()
     assert.equal(reads[1].point_of_sale, 'Tegucigalpa')
     reply(pending[1], 'CAI-TGU'); await app.tick(); app.render()

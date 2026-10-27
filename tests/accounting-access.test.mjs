@@ -66,7 +66,7 @@ test('pantalla real permite a Contabilidad crear y actualizar empresa/facturacio
       const writes = [], errors = []
       const client = { from(table) {
         const query = {
-          select: () => query, eq: () => query,
+          select: () => query, eq: () => query, order: () => query,
           maybeSingle: async () => ({ data: null, error: null }),
           single: async () => ({ data: { id: 'settings' }, error: null }),
           insert: value => { writes.push({ table, action: 'insert', value }); return query },
@@ -77,6 +77,7 @@ test('pantalla real permite a Contabilidad crear y actualizar empresa/facturacio
       } }
       const app = mountPage('src/app/(protected)/settings/company/page.tsx', {
         ...userMocks, '../../../../lib/supabase/client': { supabase: client },
+        '@/src/lib/supabase/client': { supabase: client },
         '@/src/lib/company-settings': { loadCurrentCompanySettings: async () => ({
           data: existing ? { id: 'settings', legal_name: 'Empresa A', default_tax_rate: 0 } : null, error: null,
         }) },

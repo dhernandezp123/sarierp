@@ -21,9 +21,23 @@ export type ManualInvoiceField = typeof manualInvoiceFields[number][0]
 export type ManualInvoiceDateOrder = 'mdy' | 'dmy'
 export type ManualInvoiceItem = { description: string; amount: string }
 export type ManualInvoiceData = Record<ManualInvoiceField, string> & {
+  issuer?: ManualInvoiceIssuer
   date_format: ManualInvoiceDateOrder
   items: ManualInvoiceItem[]
   warehouse_receipts: string[]
+}
+export type ManualInvoiceIssuer = { name: string; address: string; phone: string; email: string; website: string }
+
+export function validateManualInvoiceIssuer(value: unknown): ManualInvoiceIssuer {
+  if (!value || typeof value !== 'object') throw new Error('Completa el emisor SARI USA en Configuración de empresa.')
+  const source = value as Record<string, unknown>
+  const result = {} as ManualInvoiceIssuer
+  for (const key of ['name','address','phone','email','website'] as const) {
+    if (typeof source[key] !== 'string' || source[key].length > 500 || /[\u0000-\u001f\u007f]/.test(source[key])) throw new Error('Revisa los datos del emisor SARI USA.')
+    result[key] = source[key].trim()
+    if (key !== 'website' && !result[key]) throw new Error('Completa el emisor SARI USA en Configuración de empresa.')
+  }
+  return result
 }
 export type SavedManualInvoice = {
   id: string; invoice_number: string; client_name: string; total: number; created_at: string; data: ManualInvoiceData
@@ -93,7 +107,9 @@ export function validateManualInvoice(value: unknown, requireComplete = true): M
     || source.warehouse_receipts.some((wr) => typeof wr !== 'string' || wr.length > 40 || /[\u0000-\u001f\u007f]/.test(wr))) {
     throw new Error('Revisa los WR: hasta 200 referencias de 40 caracteres.')
   }
-  return { ...fields, date_format, items, warehouse_receipts: source.warehouse_receipts.map((wr: string) => wr.trim()).filter(Boolean) }
+  return { ...fields, date_format, items, warehouse_receipts: source.warehouse_receipts.map((wr: string) => wr.trim()).filter(Boolean),
+    ...(source.issuer ? { issuer: validateManualInvoiceIssuer(source.issuer) } : {}),
+  }
 }
 
 export type ManualInvoicePrintRow = { description: string; amount: string; wr?: boolean }

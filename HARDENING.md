@@ -1,5 +1,209 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-27 - FIN-PDF-02 - Conexión fiscal de plantillas Sari y descuentos
+
+- Estado: implementación conectada y validada localmente; release autorizado en curso.
+- Archivos: `FiscalDocumentLayout.tsx`, `invoice-pdf.tsx`, `purchase-fiscal-pdf.tsx`,
+  nueva/detalle de factura, compras, helper `invoice-fiscal.ts`, tipos de compra;
+  migraciones `20261027210000_fiscal_discounts_and_references.sql` y
+  `20261027220000_positive_fiscal_total.sql`, pruebas de helper/formulario/PDF/SQL.
+- Plantilla Carta compartida: logo/rojo Sari, cliente/proveedor, precios y
+  descuentos por línea, tratamiento ISV, resumen, equivalencia antes del total,
+  autorizaciones, firma/huella y pie con impresión/páginas. Se repite el
+  encabezado en documentos extensos. Se corrigió el cálculo de altura del pie
+  dinámico del renderer; se valida su posición dentro de la hoja.
+- NC/ND congelan número, CAI y fecha del original por tenant, preservando su CAI
+  propio. Descuentos de importe por línea reducen bases/ISV y llegan al diario;
+  precio bruto y descuento siguen visibles. Conversión transforma ambos una vez;
+  proforma y compra conservan el descuento. Cotización conserva precio/moneda.
+  Total cero después de descuento se rechaza atómicamente sin consumir correlativo.
+- Validaciones: 436/436 pruebas Node y 24 archivos SQL/RLS; descuentos en factura, NC, proforma, compra,
+  desde cotización con operación finalizada y costo respaldado; referencias
+  inmutables. PDF real Carta con logo, 1/7/40 líneas, pie visible y sin solapamientos;
+  formulario real envía descuento y total neto. TypeScript pasa; build Next.js
+  16.2.6 completado con 100 páginas generadas; lint pertinente sin diagnósticos nuevos.
+- Release: producción verificada en `fwspgdzvlbtbgiupvrzo`, baseline
+  `20261026160000`; paquete transaccional de trece migraciones pendiente de aplicar
+  antes del frontend, con huellas de datos previos y RLS. Autorizado expresamente
+  por el usuario; no se cargan CAI/correlativos ni datos de clientes desde los PDF.
+- Pendientes: completar fichas de oficinas y asignarlas a los clientes, cargar
+  autorizaciones reales, catálogo/cuentas/períodos y definir inicio contable.
+  Contabilización automática sigue desactivada. UAT autenticado y contraste
+  específico de Retención/Comprobante de Entrega pendientes. Commit: pendiente.
+
+### 2026-10-27 - FIN-PDF-01 - Contraste de los cuatro formatos fiscales de Sari
+
+- Estado: revisión y propuesta visual local; sin reemplazar plantillas ni desplegar.
+- Archivos: `docs/sari-fiscal-format-review.md`, seguimiento de las seis etapas.
+  Sin SQL ni cambios de datos comerciales. Originales fuera del repositorio.
+- Se verificaron visualmente Factura/NC/ND/Boleta (Carta, una página). Se crearon
+  cuatro muestras ficticias en `.ua/intermediate/sari-fiscal-format-review`, con
+  logo y rojo Sari, tipografía incrustada y marca «Sin validez fiscal».
+- Hallazgos: plantillas ERP A4; compra con azul de plataforma; falta logo de factura;
+  referencia NC/ND incompleta (CAI/fecha original); descuentos sin campo funcional;
+  RTN vacío en boleta recibida; condición de crédito mezclada con método de pago.
+  No se cargaron CAI, contactos ni correlativos inferidos de los ejemplos.
+- Validación: extracción textual y render PNG de los cuatro originales; render
+  real de cuatro propuestas Carta con datos ficticios y revisión visual. Son
+  muestras de diseño; no certifican emisión ni aceptación funcional del sistema.
+- Pendientes: integración y validación funcional de plantillas, formatos de
+  Retención/Entrega y UAT. Commit: pendiente.
+
+### 2026-10-27 - FIN-00 - Integración de las seis etapas autorizadas
+
+- Estado: desarrollo y validación local; no desplegado, sin apertura ni UAT.
+- Alcance y matriz de aceptación: `docs/accounting-six-stage-plan.md`. Se mantienen
+  las seis etapas; los ajustes de integridad posteriores pertenecen a ellas.
+- SQL canónico: trece migraciones `20261027100000` a `20261027220000`. Se aplicaron
+  en orden en una segunda copia Docker desechable, sin red ni puertos publicados,
+  partiendo de la base de pruebas anterior a estos cambios. No se tocó Production
+  ni la base habitual de desarrollo. No se emitieron documentos fiscales reales.
+- Validación: 436/436 pruebas Node; 24 archivos SQL/RLS pasan con rollback.
+  Dos sesiones concurrentes comprueban recibo idempotente y rechazo de una
+  aplicación que excedería el saldo; caja 185 / CxC 45 sobre facturas 230,
+  sin partidas desbalanceadas. Incluye render PDF real multipágina y Excel OOXML.
+- Lint de baseline: 458 archivos, 223 diagnósticos históricos, cero regresiones.
+  TypeScript final sin errores; build Next.js 16.2.6 completado, 100 rutas
+  generadas. `git diff --check` sin errores de espacios.
+- Pendientes de salida: SQL remoto antes del frontend, publicación, UAT autenticado
+  de las seis etapas y aceptación de los formatos fiscales reales. La clasificación
+  de Comprobante de Entrega permanece pendiente del PDF; no se inventó su flujo.
+  No importar Zafra ni crear saldos/fecha inicial; la contabilización automática
+  permanece desactivada hasta configurar fecha, cuentas y períodos.
+- Límites: no incluye declaración tributaria, certificación SAR, deducibilidad
+  automática, venta/revaluación/deterioro de activos ni reconstrucción de eventos
+  históricos que nunca se conservaron. La concurrencia probada no cubre todas las
+  combinaciones de edición/anulación simultánea.
+- Commit: pendiente; sin push ni publicación de este alcance.
+
+### 2026-10-27 - FIN-06 - Activos, depreciaciones y bajas
+
+- Estado: implementado y probado localmente; publicación/UAT pendientes.
+- Archivos: `accounting/assets/page.tsx`, `fixed-assets.ts`, `AccountingNav`,
+  migración `20261027160000_fixed_assets.sql` y ajustes `20261027170000` /
+  `20261027190000`; pruebas `fixed_assets.sql` y `fixed-assets.test.mjs`.
+- Alta en preparación o vinculada a adquisición existente. Valida suma de costos
+  asignados contra el débito de adquisición. Impide revertir la adquisición usada.
+  Línea recta mensual secuencial, idempotente, sin exceder vida útil/residual.
+  Bases/cuentas/fechas congeladas al tener historial. Reverso del último mes,
+  períodos abiertos incluso en cuotas cero y baja sin venta con partida balanceada.
+- Criterio fiscal separado, con referencia obligatoria si se registra vida fiscal.
+  La baja conserva el historial y deja el valor en libros en cero. Auxiliar e
+  historial exportables a PDF/Excel, con acceso a la partida generada.
+- Validaciones: SQL ejecutó siete meses, redondeo, duplicado, salto de mes, reverso,
+  doble baja, cuenta patrimonial conciliada y RLS entre empresas; Node prueba
+  residual/centavos/bases inválidas. UAT de navegador y criterios fiscales pendientes.
+- Commit: pendiente.
+
+### 2026-10-27 - FIN-05 - Compras, documentos fiscales y diario consolidado
+
+- Estado: implementado y probado localmente; formatos fiscales finales/UAT pendientes.
+- Archivos: migraciones `20261027140000_accounting_financial_sources.sql`,
+  `20261027150000_purchases_and_fiscal_documents.sql`, integridad `20261027170000`,
+  requisitos fiscales `20261027180000`, redondeos `20261027190000` / `20261027200000`;
+  rutas `accounting/purchases` / `accounting/books`, `InvoiceLineSettings`,
+  `purchase-fiscal-pdf`, `purchase-documents`, `accounting-books`, `amount-in-words`,
+  nueva factura, ficha de proveedor y exportador financiero compartido.
+- Compras por cuenta/servicio, ISV acreditable explícito en factura de proveedor;
+  boleta con numeración CAI propia y crédito fiscal ISV bloqueado. Snapshot de
+  identidad/domicilio/teléfono del proveedor, importe literal, firma y huella.
+  Retención usa su propio CAI, conserva documento de origen y reduce CxP mediante
+  un movimiento no monetario que acredita retenciones por pagar, sin salida de caja.
+- Adaptadores conectan factura/NC/ND, compra, cobro, anticipo, asignación, pago,
+  retención y reverso con el diario. Ingresos y gastos se seleccionan por línea.
+  Ficha anterior de proveedor admite cuenta y tasa HNL por moneda. Última cuota
+  concilia centavos leyendo el diario inmutable; no modifica el pago original.
+- Diario consolidado, mayor por cuenta, comprobación, balance y resultados con
+  calendario y PDF/Excel numérico. Anticipos/reclasificación de proforma no duplican
+  caja; tipos de cambio distintos generan diferencia cambiaria en cobros.
+- Validaciones: `accounting_financial_sources.sql`, `accounting_currency.sql`,
+  pruebas de libros y PDF real; boleta rechaza crédito ISV, factura de proveedor
+  sí admite crédito explícito, compra duplicada rechazada, USD parcial concilia,
+  proforma exonerada pagada deja anticipo/reverso correctos. SQL completo 23/23.
+- Fuente: reglamento consolidado SAR enlazado en el plan; códigos reformados
+  05/06/07/08/11. La base original 481-2017 no debe usarse sin sus reformas.
+  Tasas/procedencia de retenciones y límites de deducción requieren Contabilidad.
+- Pendientes: contraste de los PDF de la empresa, Comprobante de Entrega, UAT,
+  SQL remoto y despliegue. Sin apertura, declaraciones SAR ni saldos inventados.
+- Commit: pendiente.
+
+### 2026-10-27 - FIN-04 - Etapa 4: catálogo y motor contable
+
+- Estado: implementación local en validación; sin activación ni fecha de inicio.
+- Archivos: `20261027130000_accounting_engine.sql`, rutas `accounting/accounts`,
+  `accounting/settings`, `accounting/journal`, componentes `AccountingNav`,
+  `JournalDetail`, `InvoiceJournal`, helper/hook contables, permisos y Sidebar.
+- Catálogo manual e importación CSV atómica sin saldos; jerarquía, cuentas de
+  movimiento, asignaciones por función, períodos sin solapamiento y cierre.
+- Motor: partidas HNL balanceadas e idempotentes, inmutabilidad, reversos en
+  período abierto, factura/NC/ND con vínculo de origen. No revierte un asiento
+  automático sin corregir su documento. Los adaptadores de cobros/compras/pagos
+  se integran con el diario consolidado en la etapa 5.
+- Validaciones: TypeScript; lint de archivos nuevos limpio; 9 pruebas Node de
+  catálogo, balance y permisos pasan. Suite SQL completa de 20 archivos pasó en
+  copia aislada, incluyendo cuentas, importación atómica, NaN/desbalance,
+  idempotencia, período cerrado, emisión/anulación fiscal y restricciones.
+- Integración de etapa 5 y regresión global local verificadas en FIN-00/FIN-05.
+  Pendientes: navegador, SQL remoto y publicación. Sin catálogo ficticio ni apertura automática.
+- Commit: pendiente.
+
+### 2026-10-27 - FIN-03 - Etapa 3: cobranza y estados de cuenta
+
+- Estado: implementación local; validación funcional y SQL aislado en curso.
+- Archivos: `20261027120000_customer_collections.sql`, rutas
+  `invoicing/collections` y `invoicing/statements`, Sidebar, `customer-statement.ts`,
+  `FinancialReportExport.tsx`, escritor OOXML `xlsx.ts` sin dependencias nuevas.
+- Recibos atómicos con varias facturas/ND, aplicaciones parciales, anticipos,
+  reverso completo, bloqueo concurrente e idempotencia. NC descuenta el saldo;
+  factura y ND se desglosan sin duplicar la deuda agregada existente.
+- Proforma exonerada pagada: exceso queda como anticipo, conserva el cobro original
+  y reclasifica aplicaciones con trazabilidad; no genera un ingreso adicional.
+- Movimientos persistidos para fechas históricas, moneda separada, filtros de tipo
+  sin alterar saldo inicial/final. Reconstrucción previa identificada expresamente.
+- Validaciones: TypeScript; prueba SQL `customer_collections.sql` con rollback en
+  copia Docker aislada (dos facturas + ND, anticipo, NC, reverso, proforma pagada,
+  RLS entre empresas). Pruebas Node de conciliación histórica y paquete Excel ZIP/
+  OOXML con checksum, números y texto que no ejecuta fórmulas: 2/2.
+- Regresión completa y build verificados en FIN-00. Pendientes: navegador
+  autenticado, aceptación de PDF y publicación. No se importaron saldos iniciales ni movimientos de Zafra.
+- Commit: pendiente.
+
+### 2026-10-27 - FIN-02 - Etapa 2: impuestos, monedas y proformas
+
+- Estado: implementación local en validación; no aplicado en Production.
+- Cambios: `20261027110000_invoice_tax_conversion_proforma.sql`, helper
+  `invoice-fiscal.ts`, componentes `InvoiceFiscalOptions`/`ConvertProforma`,
+  creación/detalle/PDF de facturas. Exenta y Exonerada separadas de Gravada,
+  evidencia privada, conversión de precios explícita sin escribir cotizaciones,
+  equivalencia calculada en servidor, proforma vinculada e idempotente.
+- Anticipos: se conservan los pagos y su proforma de origen. La etapa 3 integra
+  los excesos como remanente de recibo mediante reclasificación trazable;
+  no se descarta dinero ni se registra un segundo cobro.
+- Validaciones: TypeScript; 3 pruebas de cálculo; SQL `fiscal_invoice_workflow.sql`
+  pasó en copia Docker aislada con rollback, incluyendo exoneración, equivalencia,
+  conversión, anticipos, doble conversión y bloqueo de alteración directa.
+- Suite completa y render PDF verificados en FIN-00. Pendientes: navegador,
+  revisión de documentos reales y publicación.
+- Commit: pendiente.
+
+### 2026-10-27 - FIN-01 - Etapa 1: oficinas y encabezados fiscales
+
+- Estado: implementación local en validación; SQL remoto, publicación y UAT pendientes.
+- Alcance: ficha de oficinas con contacto/dirección/códigos, asignación explícita de
+  cliente, selección fiscal obligatoria por oficina, snapshot inmutable del emisor,
+  ampliación de tipos CAI y validación de códigos SAR. Emisor SARI USA configurable.
+- Archivos: migración `20261027100000_fiscal_offices.sql`, `src/lib/fiscal-offices.ts`,
+  componentes `BillingOfficeSelect`/`BillingOfficesSettings`, configuración de
+  empresa/CAI, formularios de clientes, creación/detalle/PDF de factura y factura manual.
+- Validaciones: TypeScript sin errores; `supabase/tests/fiscal_offices.sql` pasó
+  en `supabase_db_sarierp_platform26` con rollback (oficina ajena, sin asignación,
+  selección incorrecta, snapshot histórico, NC y permisos).
+- Suite completa y build verificados en FIN-00. Pendientes: navegador y contraste de formatos reales.
+  No se asignaron clientes existentes por inferencia ni se cargaron datos fiscales.
+  Se conserva el momento actual de reserva del correlativo al crear documento:
+  cambiarlo requiere integrar el ciclo de emisión, sin reciclar números existentes.
+- Commit: pendiente. Seguimiento de las seis etapas en `docs/accounting-six-stage-plan.md`.
+
 ### 2026-10-26 - PLAT-02 - Habilitación de la cuenta de plataforma del propietario
 
 - Estado: habilitada en Production por solicitud explícita del propietario y

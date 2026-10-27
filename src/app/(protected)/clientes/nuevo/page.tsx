@@ -1,5 +1,7 @@
 'use client'
 
+import { BillingOfficeSelect } from '@/src/components/invoicing/BillingOfficeSelect'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -34,6 +36,7 @@ const initialFormData = {
   email_3: '',
   observaciones: '',
   tipo_persona: 'Corporativo',
+  billing_office_id: '',
   condicion_pago: 'Contado',
   dias_credito: '',
   tipo_cliente: '',
@@ -183,6 +186,7 @@ export default function NuevoClientePage() {
         email_3: formData.email_3,
         observaciones: formData.observaciones,
         tipo_persona: formData.tipo_persona,
+        billing_office_id: formData.billing_office_id || null,
         condicion_pago: formData.condicion_pago,
         dias_credito: isCreditPayment(formData.condicion_pago)
           ? Number(formData.dias_credito || 0)
@@ -458,6 +462,7 @@ export default function NuevoClientePage() {
               </select>
             </Field>
 
+            <BillingOfficeSelect value={formData.billing_office_id} onChange={id => setFormData(previous => ({ ...previous, billing_office_id: id }))} />
             <Field label="Condicion de pago">
               <select
                 name="condicion_pago"

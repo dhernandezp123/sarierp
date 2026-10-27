@@ -5,6 +5,7 @@ const privatePaths = [
   '/api/',
   '/auth/',
   '/accounts-payable',
+  '/accounting',
   '/admin/',
   '/agents',
   '/alerts',

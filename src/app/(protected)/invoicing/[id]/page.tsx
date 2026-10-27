@@ -1,9 +1,14 @@
 'use client'
 
+import { ConvertProforma } from '@/src/components/invoicing/ConvertProforma'
+import { InvoiceJournal } from '@/src/components/accounting/InvoiceJournal'
+import type { IssuerSnapshot } from '@/src/lib/fiscal-offices'
+
 import { toDateInputValue } from '@/src/lib/format'
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
@@ -22,6 +27,14 @@ import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTas
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 type Invoice = {
+  discount_amount?: number
+  parent_fiscal_snapshot?: InvoicePdfData['parent_fiscal_snapshot']
+  issuer_snapshot?: IssuerSnapshot | null
+  converted_invoice_id?: string | null
+  source_proforma_id?: string | null
+  reference_equivalence?: InvoicePdfData['reference_equivalence']
+  fiscal_mode?: 'Gravada' | 'Mixta' | 'Exenta' | 'Exonerada'
+  exoneration_documents?: {name:string;path:string}[]
   id: string
   invoice_number: string | null
   invoice_type: 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
@@ -64,7 +77,7 @@ type Invoice = {
   // NC/ND fields
   parent_invoice_id: string | null
   motivo: string | null
-  parent_invoice?: { invoice_number: string | null } | null
+  parent_invoice?: { invoice_number: string | null; cai?:string|null; issue_date?:string|null } | null
 }
 
 type LinkedNote = {
@@ -91,6 +104,7 @@ type CompanySettings = {
 }
 
 type InvoiceItem = {
+  discount_amount?: number
   id: string
   description: string
   quantity: number
@@ -98,9 +112,11 @@ type InvoiceItem = {
   amount: number
   sort_order: number
   isv_rate: number
+  tax_treatment?: 'Gravada' | 'Exenta' | 'Exonerada'
 }
 
 type Payment = {
+  receipt_id?: string | null
   id: string
   amount: number
   currency: string
@@ -278,7 +294,7 @@ export default function InvoiceDetailPage() {
     if (invRes.data.parent_invoice_id) {
       const parentInvoiceRes = await supabase
         .from('invoices')
-        .select('invoice_number')
+        .select('invoice_number,cai,issue_date')
         .eq('id', invRes.data.parent_invoice_id)
         .maybeSingle()
 
@@ -492,7 +508,7 @@ export default function InvoiceDetailPage() {
   })
 
   const isAdjustmentNote = ['Nota de Crédito', 'Nota de Débito'].includes(invoice.invoice_type)
-  const flow = isAdjustmentNote && invoice.status === 'Aprobada'
+  const flow = invoice.converted_invoice_id ? null : isAdjustmentNote && invoice.status === 'Aprobada'
     ? null
     : STATUS_FLOW[invoice.status]
   const activePayments = payments.filter((payment) => payment.status === 'Aplicado')
@@ -518,6 +534,10 @@ export default function InvoiceDetailPage() {
     currency: invoice.currency,
     exchange_rate: invoice.exchange_rate,
     notes: invoice.notes,
+    discount_amount: Number(invoice.discount_amount||0),
+    parent_fiscal_snapshot: invoice.parent_fiscal_snapshot || invoice.parent_invoice,
+    reference_equivalence: invoice.reference_equivalence,
+    payment_method: invoice.payment_method,
     cliente_nombre: invoice.cliente_nombre,
     cliente_rtn: invoice.cliente_rtn,
     cliente_direccion: invoice.cliente_direccion,
@@ -526,8 +546,10 @@ export default function InvoiceDetailPage() {
       description: it.description,
       quantity: it.quantity,
       unit_price: it.unit_price,
+      discount_amount: Number(it.discount_amount||0),
       amount: it.amount,
       isv_rate: Number(it.isv_rate || 0) as 0 | 15 | 18,
+      tax_treatment: it.tax_treatment,
     })),
     subtotal: invoice.subtotal,
     tax_amount: invoice.tax_amount,
@@ -551,13 +573,14 @@ export default function InvoiceDetailPage() {
     fecha_limite_emision: invoice.fecha_limite_emision,
     lugar_emision: invoice.lugar_emision,
     point_of_sale: invoice.point_of_sale,
-    company_legal_name: companyDisplayName,
-    company_trade_name: companySetting?.trade_name || null,
-    company_rtn: companySetting?.rtn || null,
-    company_address: companySetting?.address || null,
-    company_phone: companySetting?.phone || null,
-    company_email: companySetting?.email || null,
-    company_invoice_footer: companySetting?.invoice_footer_note || null,
+    company_legal_name: invoice.issuer_snapshot?.legal_name ?? companyDisplayName,
+    company_fiscal_address: invoice.issuer_snapshot?.fiscal_address ?? null,
+    company_trade_name: invoice.issuer_snapshot ? invoice.issuer_snapshot.trade_name : companySetting?.trade_name || null,
+    company_rtn: invoice.issuer_snapshot ? invoice.issuer_snapshot.rtn : companySetting?.rtn || null,
+    company_address: invoice.issuer_snapshot ? invoice.issuer_snapshot.address : companySetting?.address || null,
+    company_phone: invoice.issuer_snapshot ? invoice.issuer_snapshot.phone : companySetting?.phone || null,
+    company_email: invoice.issuer_snapshot ? invoice.issuer_snapshot.email : companySetting?.email || null,
+    company_invoice_footer: invoice.issuer_snapshot ? invoice.issuer_snapshot.invoice_footer_note : companySetting?.invoice_footer_note || null,
   }
 
   return (
@@ -591,6 +614,9 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {invoice.invoice_type !== 'Proforma' && <InvoiceJournal invoiceId={invoice.id} />}
+          {invoice.invoice_type === 'Proforma' && invoice.status !== 'Anulada' && <ConvertProforma key={invoice.id} id={invoice.id} currency={invoice.currency} convertedInvoiceId={invoice.converted_invoice_id}
+            initialOptions={{mode:invoice.fiscal_mode||'Mixta',order:invoice.orden_compra_exenta||'',registry:invoice.no_constancia_exonerado||'',sag:invoice.no_registro_sag||'',documents:invoice.exoneration_documents||[]}} />}
           <CreateContextTaskDialog
             context={{
               entityType: 'invoice',
@@ -680,7 +706,7 @@ export default function InvoiceDetailPage() {
                 <tbody>
                   {items.map((it) => (
                     <tr key={it.id} className="border-b border-slate-100 dark:border-slate-800">
-                      <td className="py-2.5 pr-4 text-slate-700 dark:text-slate-300">{it.description}</td>
+                      <td className="py-2.5 pr-4 text-slate-700 dark:text-slate-300">{it.description}{Number(it.discount_amount)>0&&<p className="text-xs text-slate-500">Descuento antes de ISV: {invoice.currency} {Number(it.discount_amount).toFixed(2)}</p>}</td>
                       <td className="pr-4 text-right">{it.quantity}</td>
                       <td className="pr-4 text-right">{invoice.currency} {it.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                       <td className="text-right font-medium">{invoice.currency} {it.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
@@ -720,7 +746,7 @@ export default function InvoiceDetailPage() {
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">Pagos registrados</h2>
               {['Aprobada', 'Parcialmente Pagada', 'Vencida'].includes(invoice.status)
-                && ['Factura', 'Proforma'].includes(invoice.invoice_type) && (
+                && !invoice.converted_invoice_id && ['Factura', 'Proforma'].includes(invoice.invoice_type) && (
                 <button
                   type="button"
                   onClick={openPaymentModal}
@@ -781,7 +807,8 @@ export default function InvoiceDetailPage() {
                         </td>
                         <td>
                           <div className="flex items-center">
-                            {p.status === 'Aplicado' && (
+                            {p.receipt_id && <Link className="px-2 text-xs text-blue-700 underline" href="/invoicing/collections">Ver recibo en Cobranza</Link>}
+                            {p.status === 'Aplicado' && !p.receipt_id && (
                               <>
                                 <PdfDownloadButton
                                   document={<ReciboPagoPdf data={makeReceiptData(p)} />}

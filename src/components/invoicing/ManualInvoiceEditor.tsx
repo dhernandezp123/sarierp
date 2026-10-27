@@ -1,5 +1,9 @@
 'use client'
 
+import { supabase } from '@/src/lib/supabase/client'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { validateManualInvoiceIssuer } from '@/src/lib/manual-invoice'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useUser } from '@/src/hooks/useUser'
@@ -143,7 +147,8 @@ export function ManualInvoiceEditor() {
       const checked = validateManualInvoice(data)
       const body = await readResponse(await fetch('/api/manual-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(checked) }))
       if (!body.document?.id) throw new Error('No se pudo confirmar el documento guardado.')
-      setSavedSnapshot(snapshot); setDirty(false)
+      const savedData = validateManualInvoice(body.document.data)
+      setData(savedData); setSavedSnapshot(JSON.stringify(savedData)); setDirty(false)
       toast.success('Factura guardada como documento independiente.')
       await reloadHistory()
     } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar la factura.') }
@@ -158,6 +163,13 @@ export function ManualInvoiceEditor() {
     setBusy('pdf')
     try {
       const checked = validateManualInvoice(data)
+      if (!checked.issuer && savedSnapshot !== JSON.stringify(checked)) {
+        const { data: settings, error } = await loadCurrentCompanySettings(supabase)
+        if (error) throw new Error('No se pudo cargar el emisor SARI USA.')
+        checked.issuer = validateManualInvoiceIssuer({ name: settings?.usa_legal_name, address: settings?.usa_address,
+          phone: settings?.usa_phone, email: settings?.usa_email, website: settings?.usa_website || '' })
+        setData(checked)
+      }
       let url = previewCurrent && preview ? preview.url : ''
       if (!url) {
         const blob = await measureOperation('manual_invoice_pdf', async () => {
@@ -165,7 +177,7 @@ export function ManualInvoiceEditor() {
           return createManualInvoiceBlob(checked)
         })
         url = URL.createObjectURL(blob)
-        setPreview({ url, snapshot })
+        setPreview({ url, snapshot: JSON.stringify(checked) })
       }
       if (pdfWindow && !pdfWindow.closed) pdfWindow.location.replace(url)
       if (download) {
