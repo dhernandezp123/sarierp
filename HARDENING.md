@@ -2,8 +2,9 @@
 
 ### 2026-10-27 - UX-NUM-01 - Edición de cero y decimales en campos numéricos
 
-- Estado: corregido y validado localmente; publicación autorizada por el usuario
-  el 27/10/2026, verificación de Production y aceptación operativa pendientes.
+- Estado: publicado en Production por autorización del usuario el 27/10/2026;
+  aceptación operativa con sesión real pendiente.
+- Commit funcional: `032cbbbe7e8677f367b507ca9d8a5f18af567e00` (12 archivos).
 - Causa: conversiones inmediatas `Number('')` y un respaldo con `|| '0'`
   reinsertaban el cero al borrar; el MBL también mostraba un total recalculado.
 - Archivos: componente compartido `src/components/ui/NumberInput.tsx` integrado
@@ -29,8 +30,16 @@
   diagnósticos históricos, cero regresiones; `git diff --check` aprobado.
   La prueba de descuento se amplió después de la suite completa para comprobar
   vacío y recálculo sin descuento, y pasó nuevamente (1/1).
-- Pendiente: publicación y UAT en la empresa; sin migraciones ni cambios de
-  permisos o contabilidad automática. Commit: pendiente.
+- Production: Vercel `3gvK52wnojZrQx4n1xdNY7cnYw8b`, exitoso, build
+  `MKCGB6ICAVYeXe5rb19ry`. Smoke de 19 rutas/recursos aprobado; mismo
+  manifiesto en Forwarders/Sari/instancia inmutable. Informe:
+  `docs/release/number-inputs-2026-10-27.md`.
+- CI `40583866907`: aplicación aprobada; el primer intento de base desechable
+  no ejecutó SQL/RLS por límites de descarga de imágenes (`toomanyrequests`).
+  Se reintentó solo ese trabajo y las suites SQL/RLS quedaron aprobadas en
+  el intento 2, sin cambios de código ni uso de la base de Production.
+- Pendiente: UAT en la empresa; sin migraciones ni cambios de permisos o
+  contabilidad automática. Originales PDF y artefactos locales fuera del commit.
 
 ### 2026-10-27 - FIN-REL-01 - Publicación fiscal y contable autorizada
 
