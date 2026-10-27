@@ -1,6 +1,7 @@
 'use client'
 
 import { ConvertProforma } from '@/src/components/invoicing/ConvertProforma'
+import { FiscalVoidControl } from '@/src/components/invoicing/FiscalVoidControl'
 import { InvoiceJournal } from '@/src/components/accounting/InvoiceJournal'
 import type { IssuerSnapshot } from '@/src/lib/fiscal-offices'
 
@@ -9,7 +10,7 @@ import { toDateInputValue } from '@/src/lib/format'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, CheckCircle2, Send, DollarSign, XCircle, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
+import { ChevronLeft, CheckCircle2, Send, DollarSign, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { supabase } from '../../../../lib/supabase/client'
@@ -27,6 +28,8 @@ import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTas
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 type Invoice = {
+  cancellation_reason?: string | null
+  cancelled_at?: string | null
   discount_amount?: number
   parent_fiscal_snapshot?: InvoicePdfData['parent_fiscal_snapshot']
   issuer_snapshot?: IssuerSnapshot | null
@@ -258,7 +261,6 @@ export default function InvoiceDetailPage() {
   const [companySetting, setCompanySetting] = useState<CompanySettings | null>(null)
   const [receivable, setReceivable] = useState<ReceivableSummary | null>(null)
   const [advancing, setAdvancing] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
 
   // Payment modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false)
@@ -347,16 +349,6 @@ export default function InvoiceDetailPage() {
     toast.success(`Estado actualizado: ${flow.next}`)
     fetchAll()
     setAdvancing(false)
-  }
-
-  const cancelInvoice = async () => {
-    if (!invoice) return
-    setCancelling(true)
-    const { error } = await supabase.from('invoices').update({ status: 'Anulada' }).eq('id', invoice.id)
-    if (error) { toast.error(error.message); setCancelling(false); return }
-    toast.success('Factura anulada')
-    fetchAll()
-    setCancelling(false)
   }
 
   const savePayment = async () => {
@@ -527,6 +519,8 @@ export default function InvoiceDetailPage() {
     invoice_number: invoice.invoice_number || '',
     invoice_type: invoice.invoice_type as 'Factura' | 'Proforma' | 'Nota de Crédito' | 'Nota de Débito',
     status: invoice.status,
+    cancellation_reason: invoice.cancellation_reason,
+    cancelled_at: invoice.cancelled_at,
     issue_date: invoice.issue_date || '',
     due_date: invoice.due_date,
     payment_condition: invoice.payment_condition === 'Credito' ? 'Crédito' : invoice.payment_condition,
@@ -673,19 +667,10 @@ export default function InvoiceDetailPage() {
               </button>
             </>
           )}
-          {!['Pagada', 'Anulada'].includes(invoice.status) && (
-            <button
-              type="button"
-              onClick={cancelInvoice}
-              disabled={cancelling}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-400 dark:hover:bg-slate-800"
-            >
-              <XCircle className="h-4 w-4" />
-              Anular
-            </button>
-          )}
         </div>
       </div>
+
+      <FiscalVoidControl table="invoices" documentId={invoice.id} status={invoice.status} requestDisabled={Boolean(invoice.converted_invoice_id)} onChanged={() => void fetchAll()} />
 
       <div className="grid gap-6 xl:grid-cols-3">
         {/* Left: items + payments */}

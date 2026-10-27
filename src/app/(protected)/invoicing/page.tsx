@@ -374,7 +374,9 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
             Facturas, proformas, notas de crédito y débito.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => router.push('/invoicing/voids')} className="rounded-xl border px-4 py-2 text-sm font-semibold">Anulaciones</button>
+          <button type="button" onClick={() => router.push('/invoicing/new?doc_type=proforma')} className="rounded-xl border px-4 py-2 text-sm font-semibold">Nueva proforma</button>
           {['Admin', 'Finanzas', 'Contabilidad'].includes(profile?.rol || '') && (
             <button
               type="button"

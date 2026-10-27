@@ -6,6 +6,7 @@ export function PurchaseFiscalPdf({data,logo}:{data:PurchaseFiscalDocument;logo?
  const layout:FiscalLayoutData={
   title:retained?'COMPROBANTE DE RETENCIÓN':data.document_type==='Factura de proveedor'?'REGISTRO DE COMPRA':'BOLETA DE COMPRA',
   number:data.document_number,status:data.status,issue_date:data.issue_date,due_date:data.due_date,
+  cancellation:{reason:data.cancellation_reason,date:data.cancelled_at},
   issuer:issuer||{legal_name:'Registro de compra'},party_label:retained?'SUJETO RETENIDO':'PROVEEDOR',
   party:{name:data.supplier_snapshot.name,identity:data.supplier_snapshot.rtn,address:data.supplier_snapshot.address,phone:data.supplier_snapshot.phone,email:data.supplier_snapshot.email},
   currency:data.currency,retention:retained,lines:data.items.map(item=>'base' in item?{description:item.description,unit_price:Number(item.base),tax:item.rate+'%',amount:Number(item.amount)}:{description:item.description,quantity:Number(item.quantity),unit_price:Number(item.unit_price),discount:Number(item.discount_amount||0),tax:item.tax_rate?item.tax_rate+'%':'Sin ISV',amount:Number(item.amount)+Number(item.tax)}),

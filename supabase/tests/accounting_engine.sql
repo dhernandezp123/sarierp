@@ -77,7 +77,8 @@ select pg_temp.assert_true((select count(*)=1 from public.journal_entries where 
 select public.post_invoice_journal((select invoice_id from invoice));
 select pg_temp.assert_true((select sum(l.debit)=115 and sum(l.credit)=115 from public.journal_lines l join public.journal_entries e on e.id=l.entry_id where e.source_id=(select invoice_id from invoice)),'Factura: cuenta cliente, ingreso e ISV');
 select pg_temp.expect_error($c$select public.reverse_journal((select id from public.journal_entries where source_id=(select invoice_id from invoice)),current_date,'Inconsistente')$c$,'documento de origen');
-update public.invoices set status='Anulada' where id=(select invoice_id from invoice);
+select pg_temp.expect_error($c$update public.invoices set status='Anulada' where id=(select invoice_id from invoice)$c$,'aprobada por Contabilidad');
+select public.review_fiscal_void(public.request_fiscal_void('invoices',(select invoice_id from invoice),gen_random_uuid(),'Error de emisión de prueba'),true,'Corrección aprobada de prueba',true);
 select pg_temp.assert_true((select sum(l.debit-l.credit)=0 from public.journal_lines l join public.accounting_accounts a on a.id=l.account_id where a.code='1102'),'Anular revierte cuenta por cobrar');
 select pg_temp.expect_error($c$update public.journal_lines set debit=1$c$,'permission denied');
 select pg_temp.expect_error($c$select public.save_accounting_account(jsonb_build_object('id',(select id from public.accounting_accounts where code='1101'),'code','NEW','name','Cambiar','kind','Activo'))$c$,'conserva código');

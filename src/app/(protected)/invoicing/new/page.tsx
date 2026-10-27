@@ -182,7 +182,7 @@ export default function NewInvoicePage() {
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  const [invoiceType, setInvoiceType] = useState<InvoiceType>('Factura')
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>(() => searchParams.get('doc_type') === 'proforma' ? 'Proforma' : 'Factura')
   const [clienteId, setClienteId] = useState('')
   const [quotationId, setQuotationId] = useState('')
   const [issueDate, setIssueDate] = useState(toDateInputValue())

@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useCallback,useEffect,useRef,useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
@@ -8,6 +9,7 @@ import { readAllReportRows } from '@/src/lib/report-query'
 import { AccountingNav } from '@/src/components/accounting/AccountingNav'
 import { BillingOfficeSelect } from '@/src/components/invoicing/BillingOfficeSelect'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
+import { FiscalVoidControl } from '@/src/components/invoicing/FiscalVoidControl'
 import { PurchaseFiscalPdf } from '@/src/components/pdf/purchase-fiscal-pdf'
 import { invoiceLineAmounts } from '@/src/lib/invoice-fiscal'
 import type { PurchaseFiscalDocument } from '@/src/lib/purchase-documents'
@@ -19,13 +21,15 @@ type Payable={id:string;proveedor_id:string;descripcion:string;numero_factura_pr
 type Row={id:string;document_type?:string;document_number:string;issue_date:string;currency:string;total:number;status:string;payable_id:string;supplier_snapshot:{name:string};table:'purchase_documents'|'withholding_documents'}
 const blankLine=()=>({id:crypto.randomUUID(),description:'',quantity:'1',unit_price:'',discount_amount:'0',tax_rate:'0',tax_credit:false,account_id:'',base:'',rate:''})
 export default function PurchasesPage(){
+ const params=useSearchParams(),requestedDocument=params.get('document'),requestedTable=params.get('table')
+ const documentVersion=useRef(0)
  const {context,data,error,loading,isCurrent}=useAccounting(),lock=useRef(false),request=useRef({signature:'',id:''}),version=useRef(0)
  const [resources,setResources]=useState<{context:string;suppliers:Supplier[];payables:Payable[]}|null>(null),[readError,setReadError]=useState('')
  const [history,setHistory]=useState<{key:string;rows:Row[]}|null>(null),[from,setFrom]=useState(()=>toDateInputValue().slice(0,7)+'-01'),[to,setTo]=useState(toDateInputValue),[page,setPage]=useState(0)
  const [editor,setEditor]=useState(''),[kind,setKind]=useState('Factura de proveedor'),[supplier,setSupplier]=useState(''),[office,setOffice]=useState<string|null>(null),[payable,setPayable]=useState('')
  const [date,setDate]=useState(toDateInputValue),[due,setDue]=useState(''),[currency,setCurrency]=useState('HNL'),[rate,setRate]=useState(''),[number,setNumber]=useState(''),[notes,setNotes]=useState('')
  const [identity,setIdentity]=useState(''),[address,setAddress]=useState(''),[phone,setPhone]=useState(''),[sourceCai,setSourceCai]=useState('')
- const [lines,setLines]=useState<ReturnType<typeof blankLine>[]>([]),[busy,setBusy]=useState(false),[selected,setSelected]=useState<{context:string;document:PurchaseFiscalDocument}|null>(null)
+ const [lines,setLines]=useState<ReturnType<typeof blankLine>[]>([]),[busy,setBusy]=useState(false),[selected,setSelected]=useState<{context:string;document:PurchaseFiscalDocument;table:Row['table']}|null>(null)
  const key=`${context}:${from}:${to}`,current=resources?.context===context?resources:null,rows=history?.key===key?history.rows:null,retention=kind==='Comprobante de Retención'
  const load=useCallback(async()=>{
   const run=++version.current;setReadError('')
@@ -42,11 +46,19 @@ export default function PurchasesPage(){
  useEffect(()=>{const timer=setTimeout(()=>{setPage(0);void load()},0);return()=>clearTimeout(timer)},[load])
  function newDocument(){setEditor(context);setLines([blankLine()]);setSupplier('');setOffice(null);setPayable('');setDate(toDateInputValue());setDue('');setNumber('');setNotes('');setIdentity('');setAddress('');setPhone('');setSourceCai('')}
  const change=(id:string,field:string,value:string|boolean)=>setLines(prev=>prev.map(l=>l.id===id?{...l,[field]:value}:l))
- async function openDocument(table:Row['table'],id:string){
+ const openDocument=useCallback(async(table:Row['table'],id:string,active:()=>boolean=()=>true)=>{
+  const run=++documentVersion.current
   const {data:document,error}=await supabase.from(table).select('*').eq('id',id).single()
-  if(!isCurrent())return
-  if(error){toast.error('No se pudo abrir el documento.');return}setSelected({context,document:document as PurchaseFiscalDocument})
- }
+  if(!active()||!isCurrent()||run!==documentVersion.current)return
+  if(error){toast.error('No se pudo abrir el documento.');return}setSelected({context,document:document as PurchaseFiscalDocument,table})
+ },[context,isCurrent,setSelected])
+ const canOpen=Boolean(data)
+ useEffect(()=>{
+  if(!canOpen||!requestedDocument||!['purchase_documents','withholding_documents'].includes(requestedTable||''))return
+  let active=true
+  const timer=setTimeout(()=>void openDocument(requestedTable as Row['table'],requestedDocument,()=>active),0)
+  return()=>{active=false;clearTimeout(timer)}
+ },[canOpen,openDocument,requestedDocument,requestedTable])
  async function save(){
   if(lock.current||!current||editor!==context)return
   if(previewError){toast.error(previewError);return}
@@ -89,6 +101,6 @@ export default function PurchasesPage(){
  <section className={`${cardClass} space-y-3`}><div className="flex flex-wrap gap-3"><label>Desde<input type="date" className={fieldClass} value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Hasta<input type="date" className={fieldClass} value={to} onChange={e=>setTo(e.target.value)}/></label></div>
  <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>Fecha / documento</th><th>Proveedor</th><th>Tipo</th><th>Total</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{rows?.slice(page*50,page*50+50).map(r=><tr className="border-t" key={r.id}><td className="p-2">{formatDate(r.issue_date)}<p>{r.document_number}</p></td><td>{r.supplier_snapshot.name}</td><td>{r.document_type||'Retención'}</td><td className="p-2 text-right">{formatMoney(Number(r.total),r.currency)}</td><td>{r.status}</td><td><div className="flex gap-2"><button className="text-blue-700 underline" onClick={()=>void openDocument(r.table,r.id)}>Ver / PDF</button><Link className="text-blue-700 underline" href={`/accounts-payable/${r.payable_id}`}>Saldo y pagos</Link></div></td></tr>)}</tbody></table></div>
  {rows&&!rows.length&&<p>No hay documentos en este período.</p>}<div className="flex gap-3"><button disabled={page===0} onClick={()=>setPage(p=>p-1)}>Anterior</button><span>{page+1} / {Math.max(1,Math.ceil((rows?.length||0)/50))}</span><button disabled={(page+1)*50>=(rows?.length||0)} onClick={()=>setPage(p=>p+1)}>Siguiente</button></div></section></>}
- <Dialog open={selected?.context===context} onOpenChange={open=>{if(!open)setSelected(null)}}><DialogContent><DialogHeader><DialogTitle>{selected?.document.document_number}</DialogTitle><DialogDescription>Documento guardado con su emisor, detalle fiscal y cuenta por pagar.</DialogDescription></DialogHeader>{selected?.context===context&&<div className="space-y-3"><p>{selected.document.supplier_snapshot.name} · {selected.document.status}</p><p>Total: {formatMoney(Number(selected.document.total),selected.document.currency)}</p><PdfDownloadButton document={<PurchaseFiscalPdf data={selected.document}/>} fileName={`${selected.document.document_number}.pdf`} className={primaryButtonClass}>Descargar PDF</PdfDownloadButton><Link className="block text-blue-700 underline" href={`/accounts-payable/${selected.document.payable_id}`}>Ver saldo, pagos y anulaciones</Link></div>}</DialogContent></Dialog>
+ <Dialog open={selected?.context===context} onOpenChange={open=>{if(!open){documentVersion.current++;setSelected(null)}}}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>{selected?.document.document_number}</DialogTitle><DialogDescription>Documento guardado con su emisor, detalle fiscal y cuenta por pagar.</DialogDescription></DialogHeader>{selected?.context===context&&<div className="space-y-3"><p>{selected.document.supplier_snapshot.name} · {selected.document.status}</p><p>Total: {formatMoney(Number(selected.document.total),selected.document.currency)}</p><PdfDownloadButton document={<PurchaseFiscalPdf data={selected.document}/>} fileName={`${selected.document.document_number}.pdf`} className={primaryButtonClass}>Descargar PDF</PdfDownloadButton><FiscalVoidControl table={selected.table} documentId={selected.document.id} status={selected.document.status} onChanged={()=>{void openDocument(selected.table,selected.document.id);void load()}}/><Link className="block text-blue-700 underline" href={`/accounts-payable/${selected.document.payable_id}`}>Ver saldo y pagos</Link></div>}</DialogContent></Dialog>
  </div>
 }

@@ -1,5 +1,52 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-27 - FIN-VOID-01 - Anulación aprobada por Contabilidad y acceso a proformas
+
+- Estado: implementado y validado localmente; migración y publicación autorizadas,
+  pendientes del cierre de release. UAT con sesión real de Contabilidad pendiente.
+- Antes: el detalle de factura cambiaba directamente a Anulada, sin motivo ni
+  aprobación; una boleta/retención podía anularse al cancelar la AP o reversar
+  su movimiento. Ahora Admin/Finanzas/Contabilidad solicitan y únicamente el rol
+  Contabilidad aprobado, activo y del mismo tenant puede aprobar o rechazar.
+- SQL: `20261027230000_fiscal_void_approval.sql`, nueva tabla con RLS, solicitud
+  idempotente y decisión transaccional, snapshots, motivos, actores, fechas,
+  custodia de originales y vínculos de asiento/reverso. Bloquea anulación directa,
+  eliminación, ocultación, alteración de anulados y las vías antiguas AP/retención.
+  Conserva los límites de pagos, notas activas, períodos y proformas convertidas.
+  No borra ni reutiliza números; no cambia documentos o aprobaciones históricas.
+- Registro fiscal siempre disponible. Si existe partida se revierte aunque
+  automatic_posting esté apagado; si no existía se indica Sin asiento previo
+  sin inventar un asiento de importe cero. Un error de reverso revierte toda
+  la aprobación. No se habilita contabilidad automática ni se crean aperturas.
+- Pantallas: nuevo `FiscalVoidControl`/revisión, registro `/invoicing/voids`
+  con fechas/estados/búsqueda, paginación completa y PDF/Excel; integrado en
+  detalle de factura, compras/retenciones, AP y navegación contable/facturación.
+  PDFs preservan contenido/CAI y muestran ANULADA, fecha y motivo.
+- Proformas ya tenían creación, secuencia propia, anticipos y conversión
+  idempotente a factura. Se agregó Nueva proforma y acceso directo al formulario;
+  se prueba crear sin CAI y el PDF distingue que no es documento fiscal.
+- Referencia: SAR, Reglamento 481-2017 consolidado, artículo 41 (leyenda y
+  custodia de original/copia) y definición de nota de crédito, artículo 4.32.
+  No se interpreta que cada anulación sin partida previa requiera un asiento nuevo;
+  los ajustes posteriores a una venta deben evaluarse mediante nota de crédito.
+  Fuente y criterios en el informe de release; no hay envío automático al SAR.
+- Archivos: migración, `src/lib/fiscal-void.ts`, componentes/páginas anteriores,
+  `FiscalDocumentLayout`, `invoice-pdf`, `purchase-fiscal-pdf`, tipos de compra;
+  `fiscal_void_approval.sql`, cuatro regresiones SQL contables actualizadas,
+  `fiscal-void-flow.test.mjs`, pruebas de PDF y registro de suites de CI.
+- Validación: 450/450 Node y 25 suites SQL/RLS; 19 pruebas de flujos repetidas
+  tras ajustar limpieza de efectos. Migración canónica recreada y probada en
+  transacción revertida; solicitudes/aprobaciones simultáneas producen una sola
+  decisión y un solo reverso. Chrome real con servicios locales ficticios:
+  Finance solicita sin anular, Admin no aprueba, Contabilidad confirma motivo y
+  custodia, modal móvil dentro del viewport, historial filtrable y exportaciones
+  visibles; sin excepciones. Lint: 467 archivos, 223 históricos, cero regresiones.
+- TypeScript y build finales aprobados (101 páginas); preflight remoto de solo
+  lectura preparado sobre el proyecto vinculado verificado.
+- Pendiente: postflight, SQL remoto, CI y smoke de publicación; commit por
+  registrar. No se simulan autorizaciones para anulados
+  anteriores al flujo. Los PDF/fixtures/capturas locales no se publican.
+
 ### 2026-10-27 - UX-NUM-01 - Edición de cero y decimales en campos numéricos
 
 - Estado: publicado en Production por autorización del usuario el 27/10/2026;

@@ -98,7 +98,8 @@ select pg_temp.assert_true((select sum(debit-credit)=0 from public.journal_lines
 select public.reverse_customer_receipt((select id from receipt),'Corrección prueba');
 select pg_temp.assert_true((select sum(credit-debit)=0 from public.journal_lines where account_code='2102'),'Reverso elimina anticipo');
 select pg_temp.assert_true((select sum(debit-credit)=115 from public.journal_lines where account_code='1102'),'Reverso restaura CxC');
-select public.reverse_supplier_payment((select id from public.pagos_proveedor where withholding_document_id=(select id from retention)),'Corrección retención');
+select pg_temp.expect_error($c$select public.reverse_supplier_payment((select id from public.pagos_proveedor where withholding_document_id=(select id from retention)),'Corrección retención')$c$,'aprobada por Contabilidad');
+select public.review_fiscal_void(public.request_fiscal_void('withholding_documents',(select id from retention),gen_random_uuid(),'Corrección retención'),true,'Corrección aprobada de prueba',true);
 select pg_temp.assert_true((select status='Anulada' from public.withholding_documents where id=(select id from retention)),'Revertir retención conserva documento anulado');
 select pg_temp.assert_true((select sum(credit-debit)=0 from public.journal_lines where account_code='2104'),'Retención reversada en diario');
 

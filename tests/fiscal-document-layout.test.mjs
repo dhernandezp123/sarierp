@@ -16,6 +16,13 @@ test('plantilla Sari real usa Carta, logo, rojo y descuento neto, con equivalenc
  for(const value of ['HNL 200.00','HNL 10.00','HNL 190.00','HNL 218.50','Generado con Forwarders','Domicilio fiscal de la casa matriz','facturacion@example.invalid'])assert.ok(text.includes(value),value)
  assert.ok(text.indexOf('Equivalencia informativa')<text.indexOf('TOTAL'))
 })
+test('anulación se imprime con leyenda, motivo y fecha sin perder el CAI ni el importe original',async()=>{
+ const {text}=await render({...base,status:'Anulada',cancellation_reason:'Error de identificación confirmado',cancelled_at:'2026-10-27T18:00:00Z'})
+ for(const value of ['ANULADA','Error de identificación confirmado','27/10/2026','CAI-PROPIO-TEST','HNL 218.50'])assert.ok(text.includes(value),value)
+ const proforma=await render({...base,invoice_type:'Proforma'})
+ assert.match(proforma.text,/sin validez fiscal/)
+})
+
 test('nota conserva ambos CAI, motivo y fecha original sin usar el CAI de la nota como referencia',async()=>{
  const {text}=await render({...base,invoice_type:'Nota de Débito',invoice_number:'001-001-07-00000001',parent_fiscal_snapshot:{invoice_number:'001-001-01-00000099',cai:'CAI-ORIGEN-TEST',issue_date:'2026-10-20'},motivo:'Almacenaje adicional'})
  for(const value of ['NOTA DE DÉBITO','CAI-PROPIO-TEST','CAI-ORIGEN-TEST','001-001-01-00000099','20/10/2026','Almacenaje adicional'])assert.ok(text.includes(value),value)

@@ -18,6 +18,7 @@ export type FiscalLayoutData = {
   reference?: { number?: string | null; cai?: string | null; issue_date?: string | null; reason?: string | null } | null
   fiscal?: { cai?: string | null; from?: string | null; to?: string | null; deadline?: string | null; office?: string | null; location?: string | null } | null
   signature?: boolean; retention?: boolean; invoice_legend?: boolean; footer_note?: string | null
+  cancellation?: { reason?: string | null; date?: string | null }
 }
 
 export const SARI_FISCAL_RED = '#B3282D'
@@ -79,6 +80,7 @@ export function FiscalDocumentLayout({ data, logo }: { data: FiscalLayoutData; l
           {['Borrador', 'Anulada', 'Proforma'].includes(data.status) && <Text style={styles.status}>{data.status.toUpperCase()}</Text>}
         </View>
       </View>
+      {data.status === 'Anulada' && data.cancellation?.reason && <View style={{ marginBottom: 10, padding: 8, borderWidth: 1, borderColor: SARI_FISCAL_RED }}><Text style={styles.status}>ANULADA · {formatDate(data.cancellation.date)}</Text><Text style={styles.small}>Motivo: {data.cancellation.reason}</Text></View>}
       <View wrap={false} style={styles.party}>
         <Text style={styles.sectionTitle}>DATOS DEL {data.party_label}</Text><Text style={styles.partyName}>{data.party.name}</Text>
         <Text style={styles.small}>{partyIdentity}: {data.party.identity || '—'}</Text>

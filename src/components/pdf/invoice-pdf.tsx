@@ -11,6 +11,8 @@ export type InvoicePdfItem = {
 }
 
 export type InvoicePdfData = {
+  cancellation_reason?: string | null
+  cancelled_at?: string | null
   discount_amount?: number
   parent_fiscal_snapshot?: { invoice_number?: string | null; cai?: string | null; issue_date?: string | null } | null
   // Document
@@ -90,7 +92,9 @@ export function InvoicePdf({data,logo}:{data:InvoicePdfData;logo?:string|null}) 
   totals:[{label:'Subtotal antes de descuentos',value:Number(data.subtotal)+discounts},{label:'Descuentos y rebajas',value:discounts},
    ...(fiscal?[{label:'Importe exonerado',value:data.importe_exonerado},{label:'Importe exento',value:data.importe_exento},{label:'Importe gravado 15%',value:data.gravado_15},{label:'Importe gravado 18%',value:data.gravado_18},{label:'ISV 15%',value:data.isv_15_amount},{label:'ISV 18%',value:data.isv_18_amount}]:[{label:'ISV',value:data.tax_amount}])],
   total:converted?Number(data.total_lps):Number(data.total),total_currency:converted?'HNL':data.currency,
+  cancellation:{reason:data.cancellation_reason,date:data.cancelled_at},
   notes:data.notes,conditions:[
+   ...(!fiscal?['PROFORMA: documento comercial sin validez fiscal. No sustituye la factura final.']:[]),
    'Condición de pago: '+(data.payment_condition||'—')+(data.credit_days?' · '+data.credit_days+' días':''),
    'Método registrado: '+(data.payment_method||'Pendiente de pago'),
    'N.º O/C Exenta: '+(data.orden_compra_exenta||'No aplica'),

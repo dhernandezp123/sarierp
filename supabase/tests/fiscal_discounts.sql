@@ -98,7 +98,8 @@ select pg_temp.assert_true((select sum(debit-credit)=0 from public.journal_lines
 select public.reverse_customer_receipt((select id from receipt),'Corrección prueba');
 select pg_temp.assert_true((select sum(credit-debit)=0 from public.journal_lines where account_code='2102'),'Reverso elimina anticipo');
 select pg_temp.assert_true((select sum(debit-credit)=115 from public.journal_lines where account_code='1102'),'Reverso restaura CxC');
-select public.reverse_supplier_payment((select id from public.pagos_proveedor where withholding_document_id=(select id from retention)),'Corrección retención');
+select pg_temp.expect_error($c$select public.reverse_supplier_payment((select id from public.pagos_proveedor where withholding_document_id=(select id from retention)),'Corrección retención')$c$,'aprobada por Contabilidad');
+select public.review_fiscal_void(public.request_fiscal_void('withholding_documents',(select id from retention),gen_random_uuid(),'Corrección retención'),true,'Corrección aprobada de prueba',true);
 select pg_temp.assert_true((select status='Anulada' from public.withholding_documents where id=(select id from retention)),'Revertir retención conserva documento anulado');
 select pg_temp.assert_true((select sum(credit-debit)=0 from public.journal_lines where account_code='2104'),'Retención reversada en diario');
 select pg_temp.expect_error($c$select public.create_purchase_document(gen_random_uuid(),jsonb_build_object('document_type','Boleta de Compra','supplier_id','be270600-0000-4000-8000-000000000001','currency','HNL','issue_date',current_date),jsonb_build_array(jsonb_build_object('description','ISV indebido','quantity',1,'unit_price',100,'tax_rate',15,'tax_credit',true,'account_id',(select id from public.accounting_accounts where code='5101'))))$c$,'no respalda crédito fiscal');

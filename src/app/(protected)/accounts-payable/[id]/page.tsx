@@ -15,7 +15,7 @@ import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from 
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/src/components/ui/dialog'
 
-type CuentaPagar = SupplierPayable
+type CuentaPagar = SupplierPayable & { purchase_document_id?: string | null }
 
 type Ajuste = {
   id: string
@@ -31,6 +31,7 @@ type Ajuste = {
 }
 
 type Pago = {
+  withholding_document_id?: string | null
   id: string
   monto: number
   moneda: string
@@ -94,7 +95,7 @@ export default function APDetailPage() {
     try {
       const [account, balance, paymentRows, adjustmentRows] = await Promise.all([
         supabase.from('cuentas_pagar')
-          .select('id, tipo, parent_ap_id')
+          .select('id, tipo, parent_ap_id, purchase_document_id')
           .eq('id', id).single(),
         supabase.from('supplier_payable_balances').select('*').eq('id', id).maybeSingle(),
         readAllReportRows<Pago>((from, to) => supabase.from('pagos_proveedor').select('*')
@@ -112,7 +113,7 @@ export default function APDetailPage() {
         return
       }
       if (balance.error || !balance.data) throw new Error('No se pudo cargar el saldo conciliado. Reintenta la consulta.')
-      setCuenta(balance.data as unknown as CuentaPagar)
+      setCuenta({ ...balance.data, purchase_document_id: account.data.purchase_document_id } as unknown as CuentaPagar)
       setPagos(paymentRows)
       setAjustes(adjustmentRows)
       setLoadedContext(context)
@@ -415,7 +416,8 @@ export default function APDetailPage() {
                   <p className="text-xs font-semibold text-slate-500">{p.status}</p>
                   {p.notas && <p className="text-xs text-slate-400">{p.notas}</p>}
                   {p.reversal_reason && <p className="text-xs text-slate-500">{p.reversal_reason} / {formatDateTime(p.reversed_at)}</p>}
-                  {p.status === 'Aplicado' && <button type="button" disabled={busy} className={secondaryButtonClass}
+                  {p.status === 'Aplicado' && p.withholding_document_id && <Link className={secondaryButtonClass} href={`/accounting/purchases?document=${p.withholding_document_id}&table=withholding_documents`}>Solicitar anulación de retención</Link>}
+                  {p.status === 'Aplicado' && !p.withholding_document_id && <button type="button" disabled={busy} className={secondaryButtonClass}
                     onClick={() => openReason('reverse', p.id, 'Reversar pago')}>Reversar</button>}
                 </div>
               </div>
@@ -453,10 +455,10 @@ export default function APDetailPage() {
       {cuenta.status !== 'Pagada' && cuenta.status !== 'Anulada' && (
         <section className={cardClass}>
           <h2 className="mb-3 text-sm font-semibold text-red-600 dark:text-red-400">Zona de riesgo</h2>
-          <button type="button" onClick={() => openReason('cancel', cuenta.id, 'Anular cuenta por pagar')}
+          {cuenta.purchase_document_id ? <Link className={secondaryButtonClass} href={`/accounting/purchases?document=${cuenta.purchase_document_id}&table=purchase_documents`}>Solicitar anulación del documento</Link> : <button type="button" onClick={() => openReason('cancel', cuenta.id, 'Anular cuenta por pagar')}
             className="rounded-xl border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30">
             Anular cuenta por pagar
-          </button>
+          </button>}
         </section>
       )}
 
