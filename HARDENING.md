@@ -2,9 +2,10 @@
 
 ### 2026-10-27 - REP-OPCLI-01 - Operaciones aprobadas y activas para el cliente
 
-- Estado: implementado y validado localmente; publicación autorizada el
-  27/10/2026 en curso. UAT autenticado pendiente. Commit: pendiente.
-  SQL: ninguno; no modifica datos operativos.
+- Estado: publicado y verificado en Production el 27/10/2026; CI de aplicación
+  y SQL/RLS aprobado. UAT autenticado pendiente.
+- Commit funcional: `107fa14d31f9f65322a81909842905cf08d7925a` (18 archivos,
+  junto con UX-COL-01). SQL: ninguno; no modifica datos operativos.
 - Nueva vista `/reports/client-operations`, con accesos desde Reportes y Shipping
   Instructions. Selector de cliente por nombre/código/RTN, alcance y modalidad;
   PDF/Excel exportan todo el resultado filtrado, independientemente de la página.
@@ -44,12 +45,18 @@
 - Pendiente: validar con sesión real los datos/permisos disponibles de cada rol.
   No se probaron RLS ni flujos reales
   mediante los mocks, ni se publicaron capturas o datos de clientes.
+- Production: Vercel `B3ZCEYwonjxPVdtYNQEq2yJvAkoy`, exitoso, build
+  `mcfM8c0kAmUmhZ204eZHm`. Smoke de 24 rutas/recursos aprobado y manifiesto
+  idéntico en Forwarders/Sari/instancia. Quality `40599973352`: aplicación y
+  suites SQL/RLS existentes aprobadas en base desechable. Informe:
+  `docs/release/client-operations-collections-2026-10-27.md`.
 
 ### 2026-10-27 - UX-COL-01 - Cobranza y estados de cuenta con búsqueda de clientes
 
-- Estado: implementado y validado localmente; publicación autorizada el
-  27/10/2026 en curso. UAT con sesión real pendiente. Commit: pendiente.
-  SQL: ninguno.
+- Estado: publicado y verificado en Production el 27/10/2026; CI de aplicación
+  y SQL/RLS aprobado. UAT con sesión real pendiente. SQL: ninguno.
+- Commit funcional: `107fa14d31f9f65322a81909842905cf08d7925a`, junto con
+  REP-OPCLI-01. Evidencia y publicación en el informe de release anterior.
 - Reemplaza el selector nativo de clientes en Cobranza y Estado de cuenta por
   `ClienteCombobox`, reutilizable y compatible con su modalidad inline existente.
   Busca nombre, código y RTN con o sin guiones; admite acentos y palabras
@@ -81,6 +88,9 @@
   y 440 px). Cinco grupos aprobados, sin excepciones ni desborde horizontal.
   Capturas/resultados locales en `.ua/intermediate/collections-ux-validation/`.
   Esto no constituye prueba de RLS ni aceptación autenticada en Production.
+- Release conjunto validado con 467/467 Node, TypeScript, build de 102 páginas
+  y lint sin regresiones. CI `40599973352` de aplicación/base aprobado;
+  Vercel y smoke remotos anteriores incluyen Cobranza y Estado de cuenta.
 
 ### 2026-10-27 - FIN-VOID-01 - Anulación aprobada por Contabilidad y acceso a proformas
 
