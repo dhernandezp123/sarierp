@@ -28,6 +28,7 @@ export type ReportPdfMetric = {
 export type ReportPdfRow = Record<string, string | number>
 
 export type ReportPdfData = {
+  audience?: 'client'
   title: string
   subtitle: string
   dateRange?: string
@@ -221,7 +222,10 @@ export function ReportPdf({
   data: ReportPdfData
   company?: Partial<CompanyBranding> | null
 }) {
-  const rows = data.rows.slice(0, 500)
+  const rows = data.audience === 'client' ? data.rows : data.rows.slice(0, 500)
+  const clientReport = data.audience === 'client'
+  const primary = clientReport ? '#B3282D' : BRAND_BLUE
+  const accent = clientReport ? '#B3282D' : BRAND_ORANGE
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
   const companyAddress = getCompanyAddressLines(companyBranding).join(' · ')
@@ -235,14 +239,14 @@ export function ReportPdf({
       <Page size="LETTER" orientation="landscape" style={styles.page}>
 
         {/* ── Header ── */}
-        <View style={styles.headerRow} fixed>
+        <View style={[styles.headerRow, { borderBottomColor: primary }]} fixed>
           <View style={styles.brandBlock}>
-            <Text style={styles.brandName}>{companyName}</Text>
+            <Text style={[styles.brandName, { color: primary }]}>{companyName}</Text>
             {companySub && <Text style={styles.brandSub}>{companySub}</Text>}
-            <View style={styles.brandAccent} />
+            <View style={[styles.brandAccent, { backgroundColor: accent }]} />
           </View>
           <View style={styles.reportBlock}>
-            <Text style={styles.eyebrow}>ERP Logístico · Reporte</Text>
+            <Text style={[styles.eyebrow, { color: accent }]}>{clientReport ? 'Seguimiento de operaciones' : 'ERP Logístico · Reporte'}</Text>
             <Text style={styles.title}>{data.title}</Text>
             <Text style={styles.subtitle}>{data.subtitle}</Text>
             <Text style={styles.generated}>Generado: {data.generatedAt}</Text>

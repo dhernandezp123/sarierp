@@ -7,6 +7,7 @@ export function mountPage(entry, mocks = {}, { exported = 'default', props = {},
   const same = (a, b) => a?.length === b?.length && a.every((value, index) => Object.is(value, b[index]))
   const react = {
     createContext,
+    useId() { const index = cursor++; hooks[index] ||= { value: `test-id-${index}` }; return hooks[index].value },
     useState(initial) {
       const index = cursor++
       hooks[index] ||= { value: typeof initial === 'function' ? initial() : initial }
@@ -54,6 +55,7 @@ export function mountPage(entry, mocks = {}, { exported = 'default', props = {},
   return {
     render, tick, ready: async () => { render(); await tick(); render() },
     find: predicate => nodes(tree).find(predicate),
+    findAll: predicate => nodes(tree).filter(predicate),
     button: label => nodes(tree).find(node => node.type === 'button' && text(node) === label),
     text: (node = tree) => text(node),
     cleanup: () => hooks.forEach(hook => hook?.cleanup?.()),

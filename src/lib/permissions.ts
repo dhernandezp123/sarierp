@@ -103,6 +103,10 @@ function matchesPath(path: string, allowedPath: string) {
   return path === allowedPath || path.startsWith(`${allowedPath}/`)
 }
 
+export function canViewClientOperationsReport(role: string | null | undefined) {
+  return ['Admin', 'Operaciones', 'Ventas'].includes(role || '')
+}
+
 export function canManageCompanySettings(role: string | null | undefined) {
   return ['Admin', 'Contabilidad'].includes(role || '')
 }
@@ -128,6 +132,7 @@ export function canAccessPath(role: string | null | undefined, path: string) {
   if (!role) return false
   // The tenant Admin wildcard never grants access to the platform console.
   if (matchesPath(path, '/platform')) return false
+  if (matchesPath(path, '/reports/client-operations')) return canViewClientOperationsReport(role)
 
   if (role === 'Contabilidad') {
     if (matchesPath(path, '/clientes/nuevo')) return false

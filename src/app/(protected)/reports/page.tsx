@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDate, formatDateTime, toDateInputValue } from '@/src/lib/format'
-import { canAccessPath } from '@/src/lib/permissions'
+import { canAccessPath, canViewClientOperationsReport } from '@/src/lib/permissions'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { readAllReportRows } from '@/src/lib/report-query'
 import { SALES_VISIT_SELECT, VISIT_REPORT_COLUMNS, visitReportRows, type SalesVisit } from '@/src/lib/sales-visits'
@@ -1692,6 +1692,7 @@ function ReportsContent() {
           {loadedAt && !busy && !loadError && <p className="mt-2 text-xs text-slate-500">Última consulta: {formatDateTime(loadedAt)}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
+          {canViewClientOperationsReport(role) && <Link href="/reports/client-operations" className={actionIconButtonClass}><FileDown aria-hidden="true" className="h-4 w-4" />Operaciones por cliente</Link>}
           <button type="button" onClick={() => void loadReports()} disabled={loading} className={actionIconButtonClass}><RefreshCcw aria-hidden="true" className="h-4 w-4" />Actualizar</button>
           <button type="button" onClick={() => exportCSV(rows, columns, exportFilename + '.csv')} disabled={!canExport} className={actionIconButtonClass}><Download aria-hidden="true" className="h-4 w-4" />Exportar CSV</button>
           <button type="button" onClick={() => void handlePdf(false)} disabled={!canExport || generatingPdf} className={actionIconButtonClass}><FileDown aria-hidden="true" className="h-4 w-4" />{generatingPdf ? 'Generando PDF…' : 'Descargar PDF'}</button>

@@ -1,5 +1,87 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-27 - REP-OPCLI-01 - Operaciones aprobadas y activas para el cliente
+
+- Estado: implementado y validado localmente; publicación autorizada el
+  27/10/2026 en curso. UAT autenticado pendiente. Commit: pendiente.
+  SQL: ninguno; no modifica datos operativos.
+- Nueva vista `/reports/client-operations`, con accesos desde Reportes y Shipping
+  Instructions. Selector de cliente por nombre/código/RTN, alcance y modalidad;
+  PDF/Excel exportan todo el resultado filtrado, independientemente de la página.
+- Criterio confirmado por el usuario, explícito y ajustable: cotizaciones Ganadas sin
+  shipment vinculado y operaciones en curso. No trata Pricing Aprobado como una
+  venta aceptada. Excluye cerradas, canceladas, finalizadas, entregadas y eliminadas;
+  una cotización ya operada no reaparece como pendiente al cerrar su operación.
+- Fuentes: shipments por client_id, cotizaciones del cliente y bookings ACTIVE,
+  con paginación completa y lotes de IDs. Una fila por operación, sin duplicarla
+  por varios bookings; no incorpora bookings reemplazados/cancelados al agregado.
+  Una operación activa en repricing conserva su presencia en el reporte.
+- Detalle: cotización, operación, lugar de origen, consignatario real de SI,
+  modalidad FCL/LCL/otras y estado. No confunde cliente con consignatario ni
+  inventa datos ausentes: se muestran pendientes de confirmar.
+- Exportación con proyección explícita de seis campos, sin costos, márgenes,
+  notas internas, proveedores o UUIDs. Encabezado de empresa y acentos Sari.
+  `ReportPdf` admite audiencia cliente sin el recorte interno de 500 filas;
+  los reportes anteriores conservan su comportamiento y estilos.
+- Acceso visual/ruta: Admin, Operaciones y Ventas; lecturas mantienen RLS y
+  ownership existentes. Resultados, carga y errores se aíslan por usuario/empresa,
+  cliente y revisión; una fuente fallida impide exportar un reporte incompleto.
+- Archivos: `reports/client-operations/page.tsx`, `client-operations-report.ts`,
+  `permissions.ts`, `reports/page.tsx`, `operations/shipping-instructions/page.tsx`,
+  `report-pdf.tsx`, `tests/client-operations-report.test.mjs` y este registro.
+  Reutiliza el selector/directorio y el exportador existentes.
+- Validación: 467/467 Node, incluidas ocho nuevas regresiones de fuentes,
+  exclusiones, consignatario, filtros, privacidad, paginación, errores y carreras.
+  PDF real de 501 filas conserva la última; Excel contiene todas las columnas.
+  TypeScript y build aprobados (102 páginas). Lint: 475 archivos, 223 diagnósticos
+  históricos, cero regresiones; ESLint dirigido sin diagnósticos.
+- Chrome con páginas reales y servicios locales ficticios: seis grupos aprobados,
+  sin excepciones, paginación 25+3, cambio de cliente, fallo/reintento, filtros
+  locales, descargas reales PDF/Excel y móvil de 390 px sin desborde de página.
+  PDF descargado de dos páginas inspeccionado visualmente y con última cotización
+  verificada mediante extracción de texto. Artefactos únicamente locales en
+  `.ua/intermediate/client-operations-validation/`.
+- Pendiente: validar con sesión real los datos/permisos disponibles de cada rol.
+  No se probaron RLS ni flujos reales
+  mediante los mocks, ni se publicaron capturas o datos de clientes.
+
+### 2026-10-27 - UX-COL-01 - Cobranza y estados de cuenta con búsqueda de clientes
+
+- Estado: implementado y validado localmente; publicación autorizada el
+  27/10/2026 en curso. UAT con sesión real pendiente. Commit: pendiente.
+  SQL: ninguno.
+- Reemplaza el selector nativo de clientes en Cobranza y Estado de cuenta por
+  `ClienteCombobox`, reutilizable y compatible con su modalidad inline existente.
+  Busca nombre, código y RTN con o sin guiones; admite acentos y palabras
+  separadas. Escribir solo filtra localmente y no consulta saldos por carácter.
+- Navegación con flechas/Enter, Escape/Tab, foco restaurado, opciones identificadas,
+  resultados vacíos y carga deshabilitada. El portal se ajusta al viewport visible,
+  cambia de dirección cuando corresponde y muestra nombres largos completos.
+- `useBillingClients` carga todo el directorio paginado con código/RTN, separa
+  resultados por contexto de usuario/empresa y permite reintentar errores.
+  No expone una lista parcial al fallar la carga.
+- Cobranza incorpora resumen real por cliente/moneda, documentos seleccionables,
+  importes parciales, desglose de aplicación/remanente y panel de pago junto al
+  historial. Estado de cuenta comparte encabezados, métricas, filtros y estilos.
+  Acentos rojos de Sari, estados legibles y distribución adaptable a móvil.
+- Conserva RPCs, permisos, registro/reverso de recibos, anticipos y reportes.
+  Los filtros del estado de cuenta siguen mostrando saldos calculados con todos
+  los movimientos. No se modifican documentos, asientos o configuraciones reales.
+- Archivos: `invoicing/collections/page.tsx`, `invoicing/statements/page.tsx`,
+  `ClienteCombobox.tsx`, `useComboboxPortal.ts`, `FinanceWorkspace.tsx`,
+  `useBillingClients.ts`, `client-search.ts`, `tests/page-harness.mjs`,
+  `client-combobox.test.mjs` y `collections-workspace.test.mjs`.
+- Validación: 459/459 pruebas Node; 9/9 dirigidas repetidas después del ajuste
+  final de distribución. Lint CI: 472 archivos, 223 diagnósticos históricos,
+  cero regresiones; ESLint de los 10 archivos de código/pruebas sin diagnósticos.
+  Build aprobado (101 páginas), `npx tsc --noEmit` y `git diff --check` aprobados.
+- Chrome con páginas/componentes reales y servicios locales ficticios: búsqueda
+  sin consultas por carácter, Enter/Tab/Escape, importes parciales, filtros sin
+  alterar saldos, compatibilidad inline de 48 px y móvil de 390 px (alturas 844
+  y 440 px). Cinco grupos aprobados, sin excepciones ni desborde horizontal.
+  Capturas/resultados locales en `.ua/intermediate/collections-ux-validation/`.
+  Esto no constituye prueba de RLS ni aceptación autenticada en Production.
+
 ### 2026-10-27 - FIN-VOID-01 - Anulación aprobada por Contabilidad y acceso a proformas
 
 - Estado: SQL y frontend publicados y verificados en Production; validaciones

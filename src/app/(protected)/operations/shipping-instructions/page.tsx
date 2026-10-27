@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink, RefreshCw, Route } from 'lucide-react'
+import { ExternalLink, FileText, RefreshCw, Route } from 'lucide-react'
 
 import { useUser } from '@/src/hooks/useUser'
+import { canViewClientOperationsReport } from '@/src/lib/permissions'
 import { supabase } from '@/src/lib/supabase/client'
 import {
   fieldClass,
@@ -115,7 +116,7 @@ function formatContainer(item: RoutingItem): string {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function RoutingInboxPage() {
-  const { user, loading: userLoading } = useUser()
+  const { user, profile, loading: userLoading } = useUser()
 
   const [routingList, setRoutingList] = useState<RoutingItem[]>([])
   const [loading,      setLoading]      = useState(true)
@@ -215,6 +216,8 @@ export default function RoutingInboxPage() {
             Instrucciones operativas enviadas por Ventas antes del booking.
           </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+        {canViewClientOperationsReport(profile?.rol) && <Link href="/reports/client-operations" className={`${secondaryButtonClass} inline-flex items-center gap-2`}><FileText className="h-4 w-4" />Reporte por cliente</Link>}
         <button
           type="button"
           onClick={() => void loadRouting()}
@@ -227,6 +230,7 @@ export default function RoutingInboxPage() {
           />
           Actualizar
         </button>
+        </div>
       </div>
 
       {/* Métricas */}
