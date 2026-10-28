@@ -1,10 +1,61 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-28 - DEMO-PARITY-002 - Alinear Prueba con Producción sin mezclar entornos
+
+- Estado: SQL y frontend publicados y verificados en ambos entornos; CI de
+  aplicación y SQL/RLS aprobados. UAT autenticado pendiente.
+- Commits funcionales: Production `8bf64c3`; Demo `b46aec4` (sincronización)
+  y `62ea8e2` (marcas de impresión). Cierre documental en commit posterior.
+- Inventario inicial real: Production del 27/10, 147 migraciones/110 tablas;
+  Demo del 01/10, 88 migraciones/91 tablas, con 98 commits de main ausentes.
+  Resultado: 148 migraciones compartidas, más 11 exclusivas de Demo. Todas las
+  tablas públicas tienen RLS: 113/113 Production y 116/116 Demo.
+- SQL: una migración nueva en Production y 71 ausentes en Demo, incluidas cinco
+  adaptaciones exclusivas (`20260731190100`, `20261014152900`, `20261014153100`,
+  `20261020115900`, `20261028110000`). Aplicadas antes de cada frontend;
+  hashes 71/71 verificados contra SQL confirmado. Sin repair ni reset remoto.
+- Preservación atómica: 110 tablas existentes/autorización en Production; en
+  Demo, 89 tablas/columnas originales, incluidos documentos, importes, clientes,
+  perfiles y cotizaciones. Se comparan por clave los catálogos originales, con
+  adiciones previstas; se permite logo ficticio y timestamps. Contadores nuevos
+  inicializados sin emitir documentos. Auth e identidades de Demo preservados.
+- Conserva separación de bases/usuarios/claves, Atlas, JWT/grants temporales,
+  términos, caducidad, noindex, Storage privado/bloqueado, correo e invitaciones
+  bloqueados. Configuración fiscal/contable editable en el tenant ficticio y
+  flujo Factura/Proforma compartido. Master real designada solo en Production.
+  HBL/cotización conservan prefijo Demo con contadores por tenant. El
+  aprovisionador asigna/verifica tenant; no se aprovisionaron usuarios nuevos.
+- Reset legacy retirado: su allowlist/seed no cubría multiempresa/contabilidad.
+  Se preservó el dataset remoto; falta diseñar/probar un sustituto antes de
+  ejecutar un reset futuro con autorización explícita. Outlook sigue en espera.
+- Funciones comparadas en vivo: ninguna compartida ausente, 363 idénticas y
+  nueve variantes revisadas de prefijos/protecciones Demo. Código: 513 archivos
+  compartidos, 26 variantes con hashes revisados, cero diferencias inesperadas.
+- PDF/HTML: marca real en cada página y en ventanas independientes de cierre,
+  embarques, seguro y FCL mediante `withDemoPrintWatermark`; impresión idempotente.
+- Validación: 474 pruebas Node y 26 suites SQL/RLS Production (CI `40715647354`);
+  480 pruebas Node y dos suites SQL/RLS Demo (CI `40722799987`). Demo ensayada
+  desde esquema real con dataset ficticio, sobre la base remota con rollback y
+  desde instalación limpia de 160 migraciones en CI. TypeScript/lint/build
+  aprobados; 223 diagnósticos históricos, cero regresiones. Smoke sin sesión:
+  24 rutas Production/plataforma y 24 Demo, más comprobación de borradores y
+  bloqueo de correo; manifest coincidente con los deployments inmutables.
+- Archivos: cinco migraciones Demo, suite/runner SQL, workflow Quality Demo,
+  gates/layouts, proxy, branding, tipos, componentes PDF/HTML, aprovisionador,
+  pruebas y `docs/quality/environment-parity.md`. `Environment parity` compara
+  ambas ramas en cada push, sin secretos ni acceso a bases; manifiesto y script
+  rechazan diferencias no revisadas. No se publican huellas privadas ni PDFs reales.
+- Pendientes: UAT con usuarios reales, acceso temporal Demo vigente cuando se
+  requiera y nuevo procedimiento de reset. Pruebas locales/CI y HTTP sin sesión
+  no sustituyen aceptación funcional autenticada.
+
 ### 2026-10-28 - FIN-DRAFT-01 - Borrador previo a emisión y corrección aprobada por master
 
-- Estado: implementado y validado localmente; migración de Production, designación
-  de la cuenta master solicitada, commit/despliegue y UAT autenticado pendientes.
-  Commit: pendiente. No se han modificado documentos ni permisos en Production.
+- Estado: publicado en Production el 28/10/2026; migración y designación master
+  aplicadas con auditoría. UAT autenticado pendiente.
+- Commit funcional: `8bf64c3ca3e129069a61afbd496db5f648d5004c`.
+  CI: `40715647354`, aplicación y SQL/RLS aprobados. Vercel Production Ready;
+  smoke de 24 rutas y manifest idéntico en plataforma, Sari y URL inmutable.
 - Antes: generar una factura creaba un registro Borrador que ya consumía CAI y
   correlativo. Ahora Guardar borrador conserva datos incompletos en una tabla
   preparatoria; no crea factura, cuenta por cobrar ni asiento. La emisión exige
@@ -19,7 +70,7 @@
   no se concede el permiso a todos los integrantes del rol. Administración puede
   designar/revocar desde Configuración contable y queda auditoría. Identidad
   solicitada comprobada en modo de solo lectura: única, Contabilidad, activa,
-  aprobada y de Sari; no se cambió su acceso ni se creó una cuenta duplicada.
+  aprobada y de Sari; no se cambió su rol ni se creó una cuenta duplicada.
 - Aprovisionamiento administrativo: la designación inicial autorizada permite
   registrar el origen `Despliegue autorizado`, sin suplantar una sesión humana.
   Solo el propietario de base puede escribir ese registro; authenticated conserva
@@ -50,8 +101,8 @@
   páginas `invoicing/new`, `invoicing/drafts`, `invoicing/[id]`, `invoicing`,
   `accounting/settings`, `invoice-pdf`, `ConfirmDialog`, pruebas de borradores,
   descuentos, plantilla PDF y anulación. Guía: `docs/uat/invoice-drafts-and-corrections.md`.
-- Validaciones: 473/473 Node en suite completa; una nueva regresión de PDF de
-  sustitución añadida después y aprobada al repetir los cinco casos de plantilla.
+- Validaciones: 474/474 Node en suite completa, incluida la regresión de PDF de
+  sustitución; 26/26 suites SQL/RLS locales y en CI.
   Seis nuevas pruebas de flujo comprueban datos incompletos, valores vacíos,
   reintentos/doble clic, descarte por cambio de identidad y revisión exacta.
   Las 26 suites SQL/RLS pasan con migración canónica dentro de transacción revertida
@@ -63,8 +114,10 @@
   Móvil real de navegador de 390 px, sin desbordar página/modal. Capturas y resultados
   en `.ua/intermediate/invoice-drafts-validation/`; no certifican UAT autenticado.
 - TypeScript y build aprobados (103 páginas). Lint: 482 archivos, 223 diagnósticos
-  históricos, cero regresiones. Falta publicar SQL antes del frontend, designar al
-  master con auditoría administrativa y probar con usuarios reales. Los artefactos
+  históricos, cero regresiones. SQL publicado antes del frontend; las 110 tablas
+  existentes y su autorización preservadas en la transacción. La cuenta solicitada
+  quedó como única master, con evento de despliegue y sin suplantar usuario humano.
+  Falta probar con usuarios reales. Los artefactos
   de identidad/capturas y el correo de la cuenta no se agregan al código público.
 
 ### 2026-10-27 - REP-OPCLI-01 - Operaciones aprobadas y activas para el cliente

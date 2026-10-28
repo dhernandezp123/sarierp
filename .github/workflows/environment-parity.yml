@@ -1,0 +1,30 @@
+name: Environment parity
+on:
+  push:
+    branches: [main, demo]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: environment-parity
+  cancel-in-progress: true
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          ref: demo
+          path: trial
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Compare shared code and migration files
+        run: node scripts/check-environment-parity.mjs origin/main trial
