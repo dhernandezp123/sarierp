@@ -10,6 +10,9 @@ import Link from 'next/link'
 import { CheckCircle2, Plus, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { useTreasuryAccounts } from '@/src/hooks/useTreasuryAccounts'
+import { TreasuryAccountField } from '@/src/components/accounting/TreasuryAccountField'
+import { NumberInput } from '@/src/components/ui/NumberInput'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -72,6 +75,7 @@ export default function APDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showPagoForm, setShowPagoForm] = useState(false)
+  const treasury=useTreasuryAccounts(),[bankAccount,setBankAccount]=useState(''),[bankRate,setBankRate]=useState('')
   const [reasonAction, setReasonAction] = useState<{ kind: 'reverse' | 'cancel'; id: string; label: string } | null>(null)
   const [reason, setReason] = useState('')
   const [reasonSaving, setReasonSaving] = useState(false)
@@ -174,7 +178,8 @@ export default function APDetailPage() {
     try {
       const scope = context + ':payment'
       const key = supplierActionKey(scope)
-      const { data, error } = await supabase.rpc('register_supplier_payment', {
+      if(treasury.loading||treasury.error||(treasury.accounts.length&&(!treasury.accounts.some(a=>a.id===bankAccount&&a.currency===cuenta.moneda)||(cuenta.moneda==='USD'&&!(Number(bankRate)>0)))))throw new Error('Selecciona la cuenta bancaria/caja y la tasa del pago.')
+      const { data, error } = treasury.accounts.length?await supabase.rpc('treasury_register_source',{p_kind:'Pago realizado',p_account_id:bankAccount,p_rate:cuenta.moneda==='HNL'?1:Number(bankRate),p_payload:{request_id:key,payable_id:cuenta.id,amount:monto,currency:cuenta.moneda,date:pagoForm.fecha_pago,method:pagoForm.metodo_pago,reference:pagoForm.referencia.trim()||null,notes:pagoForm.notas.trim()||null}}):await supabase.rpc('register_supplier_payment', {
         p_account_id: cuenta.id, p_request_key: key, p_amount: monto, p_currency: cuenta.moneda,
         p_payment_date: pagoForm.fecha_pago, p_payment_method: pagoForm.metodo_pago,
         p_reference: pagoForm.referencia.trim() || null, p_notes: pagoForm.notas.trim() || null,
@@ -365,6 +370,8 @@ export default function APDetailPage() {
 
         {showPagoForm && (
           <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
+            <TreasuryAccountField {...treasury} currency={cuenta.moneda} value={bankAccount} onChange={setBankAccount}/>
+            {!!treasury.accounts.length&&cuenta.moneda==='USD'&&<label className="my-3 block text-xs font-semibold">Tasa HNL por USD del pago<NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>

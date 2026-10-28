@@ -23,7 +23,8 @@ test('Contabilidad consulta y edita clientes y consulta cotizaciones sin crear n
 test('permisos corporativos y de costos conservan los otros roles', () => {
   for (const role of ['Admin', 'Ventas', 'Pricing', 'Operaciones', 'Contabilidad', 'Finanzas', 'Cliente', '', null]) {
     assert.equal(permissions.canManageCompanySettings(role), ['Admin', 'Contabilidad'].includes(role))
-    assert.equal(permissions.canManageCaiRanges(role), ['Admin', 'Contabilidad'].includes(role))
+    assert.equal(permissions.canManageCaiRanges(role), false)
+    assert.equal(permissions.canManageCaiRanges(role, true), ['Admin', 'Contabilidad'].includes(role))
     assert.equal(permissions.canViewQuotationCosts(role), ['Admin', 'Pricing', 'Contabilidad'].includes(role))
   }
 })
@@ -51,7 +52,7 @@ const userMocks = {
   '../../../../hooks/useUser': { useUser: () => identity },
   '@/src/hooks/useUser': { useUser: () => identity },
 }
-const button = (app, label) => app.find(node => node.type === 'button' && app.text(node).trim() === label)
+const button = (app, label) => app.find(node => node.type === 'button' && (app.text(node).trim() === label || node.props['aria-label'] === label))
 
 function withWindow() {
   const previous = globalThis.window
@@ -135,13 +136,13 @@ test('configuración valida TC e impuestos antes de escribir y conserva una TC d
   } finally { restore() }
 })
 
-test('pantalla CAI registra y activa con Contabilidad sin ofrecer borrado', async () => {
+test('pantalla CAI permite al master registrar y activar con motivo; valida oficina antes de escribir', async () => {
   const restore = withWindow(), writes = [], errors = []
-  const range = { id: 'range', point_of_sale: 'San Pedro Sula', document_type: 'Factura', cai: 'CAI-TEST', rango_desde: '000-001-01-00000001',
-    rango_hasta: '000-001-01-00000100', range_start: 1, range_end: 100, next_number: 1,
-    fecha_limite_emision: '2099-12-31', is_active: false }
+  const range = { id: 'range', point_of_sale: 'San Pedro Sula', document_type: 'Factura', cai: 'CAI-TEST', rango_desde: '001-001-01-00000001',
+    rango_hasta: '001-001-01-00000100', range_start: 1, range_end: 100, next_number: 1,
+    fecha_limite_emision: '2099-12-31', is_active: false, revision: 1, ever_used: false, archived_at: null }
   const client = {
-    from: () => ({ select: () => ({ order: async () => ({ data: [range], error: null }) }),
+    from: table => ({ select: () => ({ order: async () => ({ data: table==='billing_offices'?[{name:'San Pedro Sula',establishment_code:'001',emission_point_code:'001'},{name:'Tegucigalpa',establishment_code:'000',emission_point_code:'001'}]:[range], error: null }) }),
       insert: async value => { writes.push(['insert', value]); return { error: null } } }),
     rpc: async (...args) => {
       if (args[0] === 'get_billing_points_of_sale') return { data: ['San Pedro Sula', 'Tegucigalpa'], error: null }
@@ -150,13 +151,17 @@ test('pantalla CAI registra y activa con Contabilidad sin ofrecer borrado', asyn
   }
   const app = mountPage('src/app/(protected)/settings/cai/page.tsx', {
     ...userMocks, '../../../../lib/supabase/client': { supabase: client },
+    '@/src/hooks/useInvoiceMaster': { useInvoiceMaster: () => ({ isMaster: true }) },
+    '@/src/components/ui/toggle-switch': { ToggleSwitch: 'ToggleSwitch' },
     sonner: { toast: { error: value => errors.push(value), success() {} } },
   })
   try {
     await app.ready()
-    assert.equal(app.find(node => node.type === 'button' && node.props.onClick?.toString().includes('setRangePendingDelete')), undefined)
-    await button(app, 'Activar').props.onClick()
-    app.find(node => node.type === 'select' && node.props.id === 'cai-point-of-sale').props.onChange({ target: { value: 'Tegucigalpa' } })
+    app.find(node => node.type === 'ToggleSwitch').props.onChange();app.render()
+    app.find(node=>node.type==='textarea'&&node.props['aria-label']==='Motivo de acción CAI').props.onChange({target:{value:'Habilitar autorización ficticia'}});app.render()
+    button(app,'Confirmar cambio CAI').props.onClick();app.render()
+    await app.find(node=>node.type==='ConfirmDialog').props.onConfirm();await app.tick();app.render()
+    app.find(node => node.type === 'CompactSelect' && node.props.id === 'cai-point-of-sale').props.onValueChange('Tegucigalpa')
     app.render()
     button(app, 'Registrar rango CAI').props.onClick(); app.render()
     for (const [label, value] of Object.entries({ CAI: 'CAI-NUEVO', 'Rango desde': range.rango_desde,
@@ -164,14 +169,20 @@ test('pantalla CAI registra y activa con Contabilidad sin ofrecer borrado', asyn
       app.find(node => node.type === 'input' && node.props['aria-label'] === label).props.onChange({ target: { value } })
       app.render()
     }
+    app.find(node=>node.type==='textarea'&&node.props['aria-label']==='Motivo del cambio CAI').props.onChange({target:{value:'Captura de autorización ficticia'}});app.render()
+    await button(app, 'Guardar rango').props.onClick()
+    assert.match(errors.at(-1),/prefijo SAR/)
+    assert.equal(writes.length,1,'El prefijo de SPS no se registra para TGU')
+    errors.length=0
+    for(const[label,value]of [['Rango desde','000-001-01-00000001'],['Rango hasta','000-001-01-00000100']]){app.find(node=>node.type==='input'&&node.props['aria-label']===label).props.onChange({target:{value}});app.render()}
     await button(app, 'Guardar rango').props.onClick()
     assert.deepEqual(errors, [])
-    assert.deepEqual(writes[0], ['activate_cai_range', { p_range_id: 'range' }])
-    assert.equal(writes[1][0], 'insert')
-    assert.equal(writes[1][1].cai, 'CAI-NUEVO')
-    assert.equal(writes[1][1].is_active, false)
-    assert.equal(writes[1][1].point_of_sale, 'Tegucigalpa')
-    assert.equal(writes[1][1].next_number, '60')
+    assert.deepEqual(writes[0], ['set_cai_range_active', { p_id: 'range', p_revision: 1, p_active: true, p_reason: 'Habilitar autorización ficticia' }])
+    assert.equal(writes[1][0], 'save_cai_range')
+    assert.equal(writes[1][1].p_revision, 0)
+    assert.equal(writes[1][1].p_values.cai, 'CAI-NUEVO')
+    assert.equal(writes[1][1].p_values.point_of_sale, 'Tegucigalpa')
+    assert.equal(writes[1][1].p_values.next_number, '60')
   } finally { app.cleanup(); restore() }
 })
 

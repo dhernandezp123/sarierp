@@ -27,6 +27,8 @@ insert into public.billing_offices(id,tenant_id,name,address,phone,email,establi
 insert into public.clientes(id,nombre,rtn,condicion_pago,tenant_id,billing_office_id) values
 ('be270200-0000-4000-8000-000000000001','Cliente TGU','08019999123456','Contado','be270000-0000-4000-8000-000000000100','be270100-0000-4000-8000-000000000002'),
 ('be270200-0000-4000-8000-000000000002','Sin oficina','08019999123456','Contado','be270000-0000-4000-8000-000000000100',null);
+-- The CAI setup persona is explicitly designated; financial roles alone cannot configure CAI.
+insert into public.invoice_master_settings(tenant_id,profile_id,assignment_source) select tenant_id,id,'Despliegue autorizado' from public.profiles where id='be270000-0000-4000-8000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"be270000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select pg_temp.assert_true((select count(*)=2 from public.billing_offices),'Solo oficinas propias');

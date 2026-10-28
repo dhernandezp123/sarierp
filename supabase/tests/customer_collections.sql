@@ -27,6 +27,8 @@ insert into public.billing_offices(id,tenant_id,name,address,phone,email,establi
 insert into public.clientes(id,nombre,rtn,condicion_pago,tenant_id,billing_office_id) values
 ('be270200-0000-4000-8000-000000000001','Cliente TGU','08019999123456','Contado','be270000-0000-4000-8000-000000000100','be270100-0000-4000-8000-000000000002'),
 ('be270200-0000-4000-8000-000000000002','Sin oficina','08019999123456','Contado','be270000-0000-4000-8000-000000000100',null);
+-- The CAI setup persona is explicitly designated; financial roles alone cannot configure CAI.
+insert into public.invoice_master_settings(tenant_id,profile_id,assignment_source) select tenant_id,id,'Despliegue autorizado' from public.profiles where id='be270000-0000-4000-8000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"be270000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select pg_temp.assert_true((select count(*)=2 from public.billing_offices),'Solo oficinas propias');
@@ -79,6 +81,8 @@ update public.invoices set status='Aprobada' where id=(select invoice_id from cr
 select pg_temp.assert_true((select balance=0 from public.customer_document_balances where id=(select invoice_id from first_invoice)),'NC reduce factura');
 select pg_temp.assert_true((select balance=10 from public.customer_document_balances where id=(select invoice_id from debit_note)),'NC excedente reduce ND sin perder su pago');
 select pg_temp.assert_true((select sum(balance)=20 from public.customer_document_balances),'Saldos conciliados');
+select pg_temp.assert_true((select sum(balance)=20 from public.finance_documents_at('receivable',current_date)),'Corte financiero no duplica ND y conserva pagos dirigidos');
+select pg_temp.assert_true((select balance=10 from public.finance_documents_at('receivable',current_date) where id=(select invoice_id from debit_note)),'NC excedente respeta el abono reservado a la ND');
 select pg_temp.assert_true((select sum(debit-credit)=20 from public.customer_movements),'NC incluida en estado');
 select pg_temp.expect_error($c$select * from public.reverse_invoice_payment((select id from public.invoice_payments where receipt_id=(select id from receipt) limit 1),'Prueba')$c$,'recibo completo');
 select public.reverse_customer_receipt((select id from receipt),'Reverso de prueba');

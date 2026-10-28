@@ -198,6 +198,7 @@ export default function NewInvoicePage() {
   const [draftLoading, setDraftLoading] = useState(false), [draftError, setDraftError] = useState('')
   const [loadedContext, setLoadedContext] = useState('')
   const [issueConfirmation, setIssueConfirmation] = useState(false)
+  const [officeAccess, setOfficeAccess] = useState<{name:string;allowed:boolean}[]>([])
   const requestedDraft = searchParams.get('draft'), correctionSource = searchParams.get('correct')
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(() => searchParams.get('doc_type') === 'proforma' ? 'Proforma' : 'Factura')
@@ -247,6 +248,7 @@ export default function NewInvoicePage() {
     : clientes.find((client) => client.id === clienteId) || null
 
   const pointOfSale = parentInvoice ? parentPointOfSale : (selectedCliente?.billing_office?.is_active ? selectedCliente.billing_office.name : '')
+  const canIssueFromOffice = officeAccess.some(office=>office.name===pointOfSale&&office.allowed)
   const activeCai = loadedActiveCai?.point_of_sale === pointOfSale && loadedActiveCai.document_type === invoiceType ? loadedActiveCai : null
 
   const restoreDraft = useCallback((state: DraftEditorState) => {
@@ -344,13 +346,16 @@ export default function NewInvoicePage() {
       setFiscalOptions(blankFiscalOptions()); setSourceCurrency(''); setIssueDate(toDateInputValue()); setDueDate('')
       setInvoiceType(docType === 'proforma' ? 'Proforma' : 'Factura'); setParentInvoice(null)
       setDraftLoading(Boolean(requestedDraft || correctionSource)); setDraftError('')
-      const [clientesRes, settingsRes, pointsRes] = await Promise.all([
+      const [clientesRes, settingsRes, pointsRes, accessRes] = await Promise.all([
         supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito, billing_office:billing_offices!clientes_billing_office_fk(name,is_active)').order('nombre'),
         loadCurrentCompanySettings(supabase),
         loadBillingPointsOfSale(supabase),
+        supabase.rpc('get_my_billing_office_access'),
       ])
 
       if (!active) return
+      setOfficeAccess(!accessRes.error&&Array.isArray(accessRes.data)?accessRes.data:[])
+      if(accessRes.error)toast.error('No se pudieron verificar tus oficinas autorizadas. Recarga antes de emitir.')
 
       setClientes((clientesRes.data || []).map(client => ({ ...client,
         billing_office: Array.isArray(client.billing_office) ? client.billing_office[0] || null : client.billing_office,
@@ -662,6 +667,7 @@ export default function NewInvoicePage() {
       return
     }
     if (!pointOfSale) { toast.error('Asigna una oficina activa en el perfil del cliente antes de facturar'); return }
+    if (isFiscal && !canIssueFromOffice) { toast.error('Solicita al usuario máster autorización para emitir desde la oficina del cliente.'); return }
     if (isFiscal && !activeCai) {
       toast.error(`No hay un rango CAI activo para ${invoiceType}.`)
       return
@@ -792,6 +798,7 @@ export default function NewInvoicePage() {
       {draft?.source_invoice_id && <InvoiceCorrectionReview draft={draft} dirty={draftDirty} onChanged={setDraft} />}
 
       {/* Alert: no CAI activo para documentos fiscales */}
+      {isFiscal&&pointOfSale&&!canIssueFromOffice&&<p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">No tienes autorización de emisión para {pointOfSale}. El usuario máster puede habilitar esta oficina en Configuración contable. Puedes guardar el documento como borrador mientras se confirma el permiso.</p>}
       {isFiscal && !activeCai && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1276,7 +1283,7 @@ export default function NewInvoicePage() {
           <button
             type="button"
             onClick={() => invoiceType === 'Factura' ? setIssueConfirmation(true) : void handleSave()}
-            disabled={saving || loadingQuotation || Boolean(sourceInvoiceId && (!isMaster || draftDirty || draft?.status !== 'Aprobada'))}
+            disabled={saving || loadingQuotation || (isFiscal&&!canIssueFromOffice) || Boolean(sourceInvoiceId && (!isMaster || draftDirty || draft?.status !== 'Aprobada'))}
             className={`w-full ${primaryButtonClass}`}
           >
             {saving ? 'Guardando…' : invoiceType === 'Factura' ? sourceInvoiceId ? 'Emitir corrección aprobada' : 'Emitir factura' : `Generar ${docLabel}`}

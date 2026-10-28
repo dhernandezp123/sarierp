@@ -78,8 +78,8 @@
     },
     "src/components/pdf/report-pdf.tsx": {
       "reason": "Sandbox watermark on every PDF page",
-      "source_sha256": "cbd118155cf11a64eb7d46c9a1a3f75ad56459f7518ec3b84bd34b60076300be",
-      "trial_sha256": "a8be2e2f322dcc4b0792a0d8a511fcce6b7569e5315cb466104330aad46d6e07"
+      "source_sha256": "b8e44c3c2384d09000651fc42119bd041d096ef5d6efdb97d914ef0b96478045",
+      "trial_sha256": "573d9d6d9bc88bfbe47ac48d360ab2375e29bb0937d8635318b0ea53d1a05d8d"
     },
     "src/components/pdf/shipping-instruction-order-pdf.tsx": {
       "reason": "Sandbox watermark on every PDF page",
@@ -123,8 +123,8 @@
     },
     "src/app/(protected)/invoicing/page.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",
-      "source_sha256": "36a635469f963df3ec52eff3eaee0b662552da67a3026610f1caa2a60ffdfc3a",
-      "trial_sha256": "1bf317e67818efeb5c2ece6fed7abec55005c8263fa6d62d8bec15ea8957f0bc"
+      "source_sha256": "c1e73c8f90597ca8aab5254ca0d6948d24adf39974d7ade953ea87d21da054e5",
+      "trial_sha256": "7a20a422745d74787208c923928cebf5619af1ab4a0a9d7007b20d6124638e60"
     },
     "src/app/(protected)/miami/embarques/page.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",

@@ -111,8 +111,8 @@ export function canManageCompanySettings(role: string | null | undefined) {
   return ['Admin', 'Contabilidad'].includes(role || '')
 }
 
-export function canManageCaiRanges(role: string | null | undefined) {
-  return ['Admin', 'Contabilidad'].includes(role || '')
+export function canManageCaiRanges(role: string | null | undefined, isMaster = false) {
+  return isMaster && ['Admin', 'Contabilidad'].includes(role || '')
 }
 
 export function canViewQuotationCosts(role: string | null | undefined) {

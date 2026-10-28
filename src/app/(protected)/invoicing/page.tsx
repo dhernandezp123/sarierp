@@ -485,13 +485,14 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         </div>
       )}
 
+      <button type="button" className="text-sm font-semibold text-[#B3282D] underline" onClick={()=>router.push('/accounting/receivables')}>Estado de cuenta completo · filtros, antigüedad, PDF / Excel / CSV</button>
       {/* Modal: Estado de cuenta */}
       {showEC && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0b1220]">
             <h3 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">Estado de cuenta</h3>
             <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-              Genera el PDF con las facturas pendientes del cliente seleccionado.
+              Genera el resumen actual de facturas pendientes. Para fechas de corte, antigüedad, notas y Excel, utiliza el reporte completo.
             </p>
 
             <div className="mb-4">

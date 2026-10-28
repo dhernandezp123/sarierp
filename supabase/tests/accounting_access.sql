@@ -71,6 +71,8 @@ values ('ac260000-0000-4000-8000-000000000200', 'Empresa B');
 insert into public.service_products(tenant_id, value, label)
 values ('ac260000-0000-4000-8000-000000000100', 'miami_lcl', 'Miami LCL');
 
+-- The CAI setup persona is explicitly designated; financial roles alone cannot configure CAI.
+insert into public.invoice_master_settings(tenant_id,profile_id,assignment_source) select tenant_id,id,'Despliegue autorizado' from public.profiles where id='ac260000-0000-4000-8000-000000000001';
 set local role authenticated;
 select pg_temp.as_user(1);
 select pg_temp.assert_true((select count(*) = 2 from public.clientes where id::text like 'ac261000-%'), 'Contabilidad ve todos los clientes activos del tenant, incluso sin cotizaciones');
@@ -109,6 +111,7 @@ select pg_temp.assert_true((select rate_per_lbs = 0.2 from public.surcharge_rule
 select pg_temp.expect_write_denied($cmd$insert into public.surcharge_rules(code, label, service_product, calculation_type, currency) values ('otra_regla', 'No', 'miami_lcl', 'max_formula', 'USD')$cmd$, 'No amplía otros cargos');
 select pg_temp.expect_write_denied($cmd$update public.surcharge_rules set code = 'otra_regla' where code = 'bunker_emergency_surcharge'$cmd$, 'No puede renombrar Bunker para escapar la restricción');
 
+insert into public.billing_offices(name,establishment_code,emission_point_code) values('Principal','000','001');
 insert into public.cai_ranges(id, cai, document_type, rango_desde, rango_hasta, fecha_limite_emision, is_active)
 values ('ac264000-0000-4000-8000-000000000001', 'CAI-CONTABILIDAD', 'Factura', '000-001-01-00000001', '000-001-01-00000100', current_date + 30, false);
 select public.activate_cai_range('ac264000-0000-4000-8000-000000000001');

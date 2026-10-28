@@ -20,12 +20,15 @@ select pg_temp.expect_error($c$insert into public.invoice_workflow_events(tenant
 delete from public.invoice_master_settings where tenant_id='dd280000-0000-4000-8000-000000000100';
 insert into public.company_settings(tenant_id,legal_name,rtn,address,billing_points_of_sale) values('dd280000-0000-4000-8000-000000000100','Empresa ficticia','08019999123456','Domicilio de prueba',array['SPS']);
 insert into public.billing_offices(id,tenant_id,name,address,phone,email,establishment_code,emission_point_code) values('dd280100-0000-4000-8000-000000000001','dd280000-0000-4000-8000-000000000100','SPS','Oficina ficticia','00000000','office@test.local','001','001');
+-- Finance can issue from this explicitly authorized office without becoming master.
+insert into public.billing_user_office_access(tenant_id,profile_id,office_ids,revision,updated_by) values('dd280000-0000-4000-8000-000000000100','dd280000-0000-4000-8000-000000000003',array['dd280100-0000-4000-8000-000000000001']::uuid[],1,'dd280000-0000-4000-8000-000000000002');
 insert into public.clientes(id,nombre,rtn,condicion_pago,tenant_id,billing_office_id) values('dd280200-0000-4000-8000-000000000001','Cliente ficticio','08019999123456','Contado','dd280000-0000-4000-8000-000000000100','dd280100-0000-4000-8000-000000000001');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"dd280000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select pg_temp.assert_true(not public.is_invoice_master(),'Admin no es master por defecto');
 select pg_temp.expect_error($c$select public.set_invoice_master('dd280000-0000-4000-8000-000000000004','Ajeno')$c$,'esta empresa');
 select public.set_invoice_master('dd280000-0000-4000-8000-000000000002','Designación de prueba');
+select set_config('request.jwt.claims','{"sub":"dd280000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 insert into public.cai_ranges(id,cai,point_of_sale,document_type,rango_desde,rango_hasta,fecha_limite_emision,is_active,next_number) values('dd280300-0000-4000-8000-000000000001','TEST-DRAFT-CAI','SPS','Factura','001-001-01-00000001','001-001-01-00000100',current_date+30,false,null);
 select public.activate_cai_range('dd280300-0000-4000-8000-000000000001');
 create temp table before_counter as select next_number from public.cai_ranges where id='dd280300-0000-4000-8000-000000000001';

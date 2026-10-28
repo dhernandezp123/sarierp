@@ -292,7 +292,7 @@ export function CotizacionCombobox({
   )
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full min-w-0 max-w-lg">
       <button
         ref={triggerRef}
         type="button"

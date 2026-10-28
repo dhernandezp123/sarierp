@@ -8,7 +8,10 @@ import type { IssuerSnapshot } from '@/src/lib/fiscal-offices'
 
 import { toDateInputValue } from '@/src/lib/format'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTreasuryAccounts } from '@/src/hooks/useTreasuryAccounts'
+import { TreasuryAccountField } from '@/src/components/accounting/TreasuryAccountField'
+import { NumberInput } from '@/src/components/ui/NumberInput'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, CheckCircle2, Send, DollarSign, Plus, RotateCcw, Download, MinusCircle, PlusCircle, Link as LinkIcon, Printer } from 'lucide-react'
@@ -274,6 +277,7 @@ export default function InvoiceDetailPage() {
   const [paySplits, setPaySplits] = useState<Record<SplitMethod, PaymentSplitInput>>(emptyPaymentSplits)
   const [payRef, setPayRef] = useState('')
   const [payNotes, setPayNotes] = useState('')
+  const treasury=useTreasuryAccounts(),[bankAccount,setBankAccount]=useState(''),[bankRate,setBankRate]=useState(''),bankRequest=useRef({signature:'',id:''})
   const [savingPayment, setSavingPayment] = useState(false)
   const [paymentToReverse, setPaymentToReverse] = useState<Payment | null>(null)
   const [reversalReason, setReversalReason] = useState('')
@@ -400,8 +404,12 @@ export default function InvoiceDetailPage() {
       return
     }
 
+    if(treasury.loading||treasury.error||(treasury.accounts.length&&(!treasury.accounts.some(a=>a.id===bankAccount&&a.currency===invoice.currency)||(invoice.currency==='USD'&&!(Number(bankRate)>0))))){toast.error('Selecciona la cuenta bancaria/caja y la tasa del pago.');return}
+    const payload={invoice_id:invoice.id,amount,currency:invoice.currency,date:payDate,fiscal_type:payFiscalType,point_of_sale:payPointOfSale,method:payMethod,reference:payRef||null,notes:payNotes||null,splits:payMethod==='Mixto'?selectedSplits:[]}
+    const signature=JSON.stringify({payload,bankAccount,bankRate})
+    if(bankRequest.current.signature!==signature)bankRequest.current={signature,id:crypto.randomUUID()}
     setSavingPayment(true)
-    const { data, error } = await supabase.rpc('register_invoice_payment_v2', {
+    const { data, error } = treasury.accounts.length?await supabase.rpc('treasury_register_source',{p_kind:'Pago recibido',p_account_id:bankAccount,p_rate:invoice.currency==='HNL'?1:Number(bankRate),p_payload:{...payload,request_id:bankRequest.current.id}}):await supabase.rpc('register_invoice_payment_v2', {
       p_invoice_id: invoice.id,
       p_amount: amount,
       p_currency: invoice.currency,
@@ -418,7 +426,8 @@ export default function InvoiceDetailPage() {
     toast.success('Pago registrado')
     setShowPaymentModal(false)
     setPayAmount(''); setPayMethod(''); setPaySplits(emptyPaymentSplits()); setPayRef(''); setPayNotes('')
-    const paymentId = (data as { payment_id: string }[] | null)?.[0]?.payment_id
+    const paymentId = treasury.accounts.length?(data as {payment_id:string}|null)?.payment_id:(data as { payment_id: string }[] | null)?.[0]?.payment_id
+    bankRequest.current={signature:'',id:''}
     if (invoice.payment_condition === 'Contado' && paymentId) {
       const { data: paymentData } = await supabase
         .from('invoice_payments')
@@ -987,6 +996,8 @@ export default function InvoiceDetailPage() {
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Registrar pago</h2>
             </div>
             <div className="space-y-4 p-5">
+              <TreasuryAccountField {...treasury} currency={invoice.currency} value={bankAccount} onChange={setBankAccount}/>
+              {!!treasury.accounts.length&&invoice.currency==='USD'&&<label className="block text-xs font-semibold">Tasa HNL por USD del cobro<NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                   Monto ({invoice.currency}) <span className="text-red-500">*</span>
