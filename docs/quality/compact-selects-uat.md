@@ -50,9 +50,9 @@ y 26 variantes revisadas, sin diferencias inesperadas. Diff check aprobado.
 
 ## Publicación y UAT pendientes
 
-Este ajuste visual no agrega migraciones. Las migraciones financieras y de CAI
-preparadas anteriormente mantienen sus propios pasos de publicación pendientes.
-Los cambios visuales están preparados localmente para ambos ambientes.
+Este ajuste visual no agrega SQL adicional. Las migraciones financieras/CAI y
+los frontends ya están publicados en ambos ambientes; fuentes, RLS, CI y smoke
+verificados en `docs/release/accounting-finance-cai-2026-10-28.md`.
 
 Después del despliegue: revisar CAI nuevo/edición, consulta sin permiso máster,
 selección de usuario, opciones fiscales y hoja del extracto en el navegador de

@@ -100,10 +100,10 @@ Sin autorización puede consultar/preparar borradores conforme a su rol, pero la
 base rechaza la emisión, revirtiendo también el consumo de correlativos.
 Boletas y retenciones también verifican la oficina fiscal seleccionada.
 
-**Paso requerido al publicar:** aplicar `20261028160000` y `20261028170000`
-después de las migraciones previas, y configurar permisos de los usuarios
+**Publicación:** `20261028160000` y `20261028170000` ya se aplicaron en ambos
+ambientes después de las migraciones previas. Configurar permisos de los usuarios
 existentes antes de reanudar su emisión. No se inventan asignaciones ni se
-habilitan ambas oficinas automáticamente. No se han aplicado estas migraciones.
+habilitan ambas oficinas automáticamente.
 Verificar la designación del máster en cada ambiente: conservar la cuenta
 autorizada en Producción y utilizar una cuenta ficticia propia en Pruebas.
 
@@ -120,4 +120,6 @@ aprobados en ambos árboles. Seis verificaciones de navegador con datos ficticio
 incluyen edición del vencido de 2017, toggle, retiro/historial, consulta sin máster,
 autorización de ambas oficinas y ancho móvil de 390 px. Paridad: 538 archivos
 compartidos y 26 variantes revisadas, sin diferencias inesperadas. Esta evidencia
-local no sustituye la aplicación remota ni el UAT con las cuentas de Contabilidad.
+local no sustituye el UAT con las cuentas de Contabilidad. La aplicación remota,
+fuentes SQL, CI y smoke están verificados en el registro de publicación
+`docs/release/accounting-finance-cai-2026-10-28.md`.
