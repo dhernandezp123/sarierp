@@ -1,5 +1,39 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-28 - CAI-CONFIRM-02 - Confirmación posterior de prefijos por oficina
+
+- Estado: corrección preparada y validada localmente; sin cambios en Producción.
+- La confirmación vigente del propietario es TGU `000-000` y SPS `001-001`.
+  Sustituye la confirmación anterior que motivó `20261028150000`, cuyo SQL ya
+  aplicado e historial de publicación se conservan sin reescribir.
+- Consulta remota de solo lectura: oficinas SPS `001-001`, TGU `000-001`;
+  siete rangos con esos prefijos, seis con siguiente número superior al inicio
+  y `ever_used=true`. No hay documentos fiscales en invoices, compras o
+  retenciones vinculados a esos rangos; esto no descarta uso en el sistema anterior.
+- `20261028180000_tgu_confirmed_fiscal_prefix.sql` prepara únicamente TGU:
+  desactiva sus rangos incompatibles conservando CAI, prefijos y correlativos,
+  corrige la ficha a `000-000` y registra ambos efectos sin suplantar un usuario.
+  SPS permanece intacta. No crea autorizaciones ni cambia numeración utilizada.
+- La protección de códigos se omite solo para esa fila durante la transacción,
+  con bloqueo de tabla, y se restaura antes de terminar. El ajuste aborta si
+  aparecen documentos fiscales TGU, códigos desconocidos o un prefijo duplicado.
+  Es idempotente; Trial sin rangos propios no recibe configuración real.
+- Archivos: `HARDENING.md`, `docs/quality/cai-office-numbering.md` y
+  `docs/release/accounting-finance-cai-2026-10-28.md`, en main y Demo.
+  SQL nuevo: `supabase/migrations/20261028180000_tgu_confirmed_fiscal_prefix.sql`.
+  Regresión: `supabase/tests/tgu_confirmed_fiscal_prefix.sql`, integrada en
+  `scripts/validate-audit-sql.mjs` y el runner propio de Demo.
+- Validación: consulta remota de solo lectura; migración real con fixtures y
+  rollback en ambas bases locales; 31 suites SQL/RLS principales y siete Trial
+  aprobadas. Verifica invariantes de CAI/SPS, auditoría,
+  idempotencia, bloqueo por factura existente, código desconocido y reactivación
+  de prefijo incompatible. TypeScript en ambos árboles y lint de los runners
+  aprobados; paridad de 540 fuentes compartidas, 26 variantes, sin desvíos.
+  El propietario autorizó expresamente aplicar y conservar el historial,
+  incluyendo la desactivación de los tres rangos TGU incompatibles.
+  Pendiente: aplicar SQL, registrar autorización SAR `000-000` y validar
+  con Contabilidad. Hash: pendiente de commit; SQL remoto sin aplicar.
+
 ### 2026-10-28 - RELEASE-FIN-20261028 - Publicación coordinada de finanzas, CAI y UX
 
 - Estado: SQL y frontend publicados en Producción y Pruebas; CI y smoke aprobados.

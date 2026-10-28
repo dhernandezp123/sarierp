@@ -1,5 +1,12 @@
 # Cartera, Caja/Bancos, CAI y selectores — 28/10/2026
 
+> Confirmación posterior del propietario: TGU `000-000`, SPS `001-001`.
+> La publicación descrita abajo utilizó la confirmación anterior. La corrección
+> `20261028180000` está preparada, validada y autorizada, pendiente de aplicar la
+> desactivación de los tres rangos TGU `000-001` y registrar su autorización real
+> `000-000`. Conserva CAI/correlativos y SPS; no reescribe SQL ya aplicado.
+> Véase `CAI-CONFIRM-02` en `HARDENING.md`.
+
 Publicación coordinada autorizada por el propietario. Incluye el plan financiero
 preparado, control fiscal por oficina/tipo, administración auditada de CAI por
 máster, autorización individual de emisión por oficina y formularios compactos.
