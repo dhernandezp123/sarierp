@@ -2,10 +2,18 @@
 
 > Confirmación posterior del propietario: TGU `000-000`, SPS `001-001`.
 > La publicación descrita abajo utilizó la confirmación anterior. La corrección
-> `20261028180000` está preparada, validada y autorizada, pendiente de aplicar la
-> desactivación de los tres rangos TGU `000-001` y registrar su autorización real
-> `000-000`. Conserva CAI/correlativos y SPS; no reescribe SQL ya aplicado.
+> `20261028180000` ya fue aplicada y verificada en ambos ambientes. TGU queda
+> `000-000` y sus tres rangos antiguos `000-001` desactivados con historial.
+> Conserva CAI/correlativos y SPS; no reescribe SQL anterior. Pendiente registrar
+> la autorización SAR real `000-000` de TGU y UAT con Contabilidad.
 > Véase `CAI-CONFIRM-02` en `HARDENING.md`.
+
+Rectificación autorizada: fuentes main `0280ca6`, Demo `a5bd22a`; 31 suites SQL
+principales y siete Trial aprobadas con rollback, TypeScript y lint sin errores.
+Ensayos remotos revertidos y aplicación atómica: datos de 131/134 tablas, usuarios,
+funciones y seguridad preservados salvo la modificación explícita de oficina y
+tres estados de CAI con sus revisiones/auditorías. Fuentes SQL aplicadas verificadas
+por hash. En Trial no cambió ningún dato fiscal ni se copiaron usuarios.
 
 Publicación coordinada autorizada por el propietario. Incluye el plan financiero
 preparado, control fiscal por oficina/tipo, administración auditada de CAI por

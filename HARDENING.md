@@ -2,7 +2,8 @@
 
 ### 2026-10-28 - CAI-CONFIRM-02 - Confirmación posterior de prefijos por oficina
 
-- Estado: corrección preparada y validada localmente; sin cambios en Producción.
+- Estado: SQL aplicado y verificado en Producción y Pruebas. Nueva autorización
+  fiscal TGU y aceptación autenticada con Contabilidad pendientes.
 - La confirmación vigente del propietario es TGU `000-000` y SPS `001-001`.
   Sustituye la confirmación anterior que motivó `20261028150000`, cuyo SQL ya
   aplicado e historial de publicación se conservan sin reescribir.
@@ -10,7 +11,7 @@
   siete rangos con esos prefijos, seis con siguiente número superior al inicio
   y `ever_used=true`. No hay documentos fiscales en invoices, compras o
   retenciones vinculados a esos rangos; esto no descarta uso en el sistema anterior.
-- `20261028180000_tgu_confirmed_fiscal_prefix.sql` prepara únicamente TGU:
+- `20261028180000_tgu_confirmed_fiscal_prefix.sql` corrigió únicamente TGU:
   desactiva sus rangos incompatibles conservando CAI, prefijos y correlativos,
   corrige la ficha a `000-000` y registra ambos efectos sin suplantar un usuario.
   SPS permanece intacta. No crea autorizaciones ni cambia numeración utilizada.
@@ -31,8 +32,17 @@
   aprobados; paridad de 540 fuentes compartidas, 26 variantes, sin desvíos.
   El propietario autorizó expresamente aplicar y conservar el historial,
   incluyendo la desactivación de los tres rangos TGU incompatibles.
-  Pendiente: aplicar SQL, registrar autorización SAR `000-000` y validar
-  con Contabilidad. Hash: pendiente de commit; SQL remoto sin aplicar.
+  Ensayos remotos con rollback y aplicación atómica en ambos ambientes:
+  131/134 tablas verificadas, todas con RLS; usuarios, permisos, funciones,
+  documentos e historial de migraciones anteriores conservados. Fuente aplicada
+  idéntica a la confirmada en Git. Producción conserva siete CAI y sus números:
+  solo desactiva tres TGU, registra tres eventos y una rectificación de oficina.
+  Pruebas conserva cero CAI y toda su configuración propia, sin datos copiados.
+- Commits funcionales: main `0280ca6`, Demo `a5bd22a`. La aplicación SQL está
+  terminada; no se modificó código de interfaz. La CI Quality versionada ejecuta
+  estas regresiones en bases desechables. Pendiente operativo: registrar la
+  autorización SAR TGU `000-000` y realizar UAT con Contabilidad; no se inventan
+  nuevos CAI, rangos, fechas ni siguientes números para reactivar la emisión.
 
 ### 2026-10-28 - RELEASE-FIN-20261028 - Publicación coordinada de finanzas, CAI y UX
 
