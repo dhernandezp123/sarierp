@@ -1,8 +1,9 @@
 -- CAI-OFFICE-01: each tenant / office / document retains its own CAI counter.
--- The owner confirmed the two Sari prefixes on 28/10/2026. Only complete empty
--- office codes when the existing registered ranges still agree with them.
+-- The owner confirmed the two Sari prefixes on 28/10/2026. Complete empty
+-- office codes and the verified TGU 000-000 typo only when registered ranges
+-- agree with the confirmed prefix. Record the configuration repair.
 -- Never change a CAI, authorized range, next serial or issued document here.
-do $$declare expected record;office public.billing_offices;begin
+do $$declare expected record;office public.billing_offices;confirmed_tgu_typo boolean;begin
  for expected in select * from (values('San Pedro Sula','001','001'),('Tegucigalpa','000','001')) v(name,establishment,point) loop
   select * into office from public.billing_offices where tenant_id='00000000-0000-4000-8000-000000000001' and name=expected.name for update;
   if not found then continue;end if;
@@ -11,9 +12,17 @@ do $$declare expected record;office public.billing_offices;begin
     (left(rango_desde,7)<>expected.establishment||'-'||expected.point or left(rango_hasta,7)<>expected.establishment||'-'||expected.point)) then
    raise exception 'La configuración CAI de % cambió; revisa los prefijos confirmados antes de completar la oficina',office.name;
   end if;
-  if office.establishment_code not in ('',expected.establishment) or office.emission_point_code not in ('',expected.point) then raise exception 'Los códigos SAR de % cambiaron; requiere revisión',office.name;end if;
-  if office.establishment_code='' or office.emission_point_code='' then
+  confirmed_tgu_typo:=office.name='Tegucigalpa' and office.establishment_code='000' and office.emission_point_code='000';
+  if not confirmed_tgu_typo and (office.establishment_code not in ('',expected.establishment) or office.emission_point_code not in ('',expected.point)) then raise exception 'Los códigos SAR de % cambiaron; requiere revisión',office.name;end if;
+  if office.establishment_code='' or office.emission_point_code='' or confirmed_tgu_typo then
+   if exists(select 1 from public.billing_offices o where o.tenant_id=office.tenant_id and o.id<>office.id and o.establishment_code=expected.establishment and o.emission_point_code=expected.point) then raise exception 'El prefijo confirmado de % pertenece a otra oficina',office.name;end if;
+   if exists(select 1 from public.invoices i where i.tenant_id=office.tenant_id and (i.billing_office_id=office.id or i.point_of_sale=office.name) and i.cai is not null and left(i.invoice_number,7) is distinct from expected.establishment||'-'||expected.point)
+    or exists(select 1 from public.purchase_documents p where p.tenant_id=office.tenant_id and p.office_id=office.id and p.fiscal_snapshot is not null and left(p.document_number,7) is distinct from expected.establishment||'-'||expected.point)
+    or exists(select 1 from public.withholding_documents w where w.tenant_id=office.tenant_id and w.office_id=office.id and left(w.document_number,7) is distinct from expected.establishment||'-'||expected.point) then raise exception 'El prefijo confirmado de % no coincide con documentos emitidos; requiere revisión',office.name;end if;
    update public.billing_offices set establishment_code=expected.establishment,emission_point_code=expected.point where id=office.id and tenant_id=office.tenant_id;
+   insert into public.activity_logs(tenant_id,user_id,module,action,entity_type,entity_id,description,metadata)
+    values(office.tenant_id,null,'Facturación','Códigos SAR confirmados','billing_office',office.id,'Configuración corregida según prefijos confirmados por el propietario',
+     jsonb_build_object('source_migration','20261028150000','actor_source','Despliegue autorizado','database_role',current_user,'before',jsonb_build_object('establishment_code',office.establishment_code,'emission_point_code',office.emission_point_code),'after',jsonb_build_object('establishment_code',expected.establishment,'emission_point_code',expected.point)));
   end if;
  end loop;
 end $$;

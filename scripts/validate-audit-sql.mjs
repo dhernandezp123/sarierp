@@ -11,6 +11,7 @@ const files = [
   'accounting_access.sql',
   'billing_points_of_sale.sql',
   'cai_office_numbering.sql',
+  'cai_office_backfill.sql',
   'cai_master_lifecycle.sql',
   'fiscal_offices.sql', 'fiscal_invoice_workflow.sql', 'customer_collections.sql',
   'accounting_engine.sql',
@@ -30,7 +31,7 @@ const files = [
   'aud06_miami_assignment.sql', 'aud07_verified_environment.sql', 'aud08_email_delivery.sql', 'aud11_portal_incidents.sql',
 ]
 for (const file of files) {
-  const sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8')
+  const sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8').replaceAll('-- APPLY_CONFIRMED_OFFICE_BINDING_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028150000_cai_office_binding.sql', import.meta.url), 'utf8'))
   const result = spawnSync('docker', ['exec', '-i', container, 'psql', '-X', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], {
     input: sql, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
   })

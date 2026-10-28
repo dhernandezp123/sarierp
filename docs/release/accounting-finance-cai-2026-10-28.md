@@ -34,7 +34,10 @@ máster, autorización individual de emisión por oficina y formularios compacto
 
 Las huellas se comparan dentro de la transacción para permitir el trabajo humano
 posterior. El único cambio previsto sobre campos originales son los códigos SAR
-vacíos de las oficinas Sari confirmadas por el propietario; no se alteran sus
+vacíos y la discrepancia TGU `000-000` → `000-001` detectada en el preflight,
+conforme al prefijo confirmado por el propietario y registrado en todos sus
+rangos. La migración solo acepta ese caso conocido, verifica documentos y deja
+auditoría administrativa en `activity_logs`, sin suplantar usuarios. No se alteran sus
 documentos, CAI, saldos ni correlativos. No se crean bancos ni saldos de apertura,
 no se activa contabilidad automática y no se copian secretos o datos entre bases.
 
@@ -49,7 +52,7 @@ esa autorización, pueden consultar/preparar borradores según su rol, sin emiti
 ## Validación y evidencia
 
 Local: TypeScript, compilaciones de ambos árboles, 504 pruebas Node principales,
-510 de Pruebas, 29 suites SQL/RLS principales y cinco de Pruebas con rollback;
+510 de Pruebas, 30 suites SQL/RLS principales y seis de Pruebas con rollback;
 selectores con ocho comprobaciones de navegador y lint dirigido sin regresiones.
 Paridad: 539 archivos compartidos, 26 variantes revisadas, sin diferencias
 inesperadas. La configuración Trial permanece separada.
