@@ -9,14 +9,18 @@ la evidencia y la confirmación anterior utilizadas para la publicación.
 La revisión remota posterior todavía encuentra SPS `001-001`, TGU `000-001` y
 siete rangos asociados a esos prefijos; seis tienen correlativo superior al inicio.
 No hay documentos fiscales vinculados en este ERP, pero puede existir numeración
-previa en otro sistema. El ajuste `20261028180000` está preparado: corrige solo
+previa en otro sistema. El ajuste `20261028180000` ya está aplicado: corrigió solo
 la ficha TGU, desactiva sus tres rangos incompatibles y conserva su identidad,
 fechas y correlativos. Registra auditoría y rechaza cambios si aparecen documentos
 fiscales TGU. No modifica SPS ni reescribe la migración aplicada. El propietario
 autorizó expresamente aplicar y conservar el historial, incluyendo la desactivación:
-TGU quedaría sin rangos activos hasta registrar su autorización SAR `000-000`.
-La fuente real pasó pruebas con rollback en ambas bases locales; su aplicación
-remota se verificará por separado.
+TGU queda sin rangos activos hasta registrar su autorización SAR `000-000`.
+La fuente real pasó 31 suites principales y siete Trial con rollback local,
+además de TypeScript y lint. Ensayos remotos revertidos y aplicación atómica en
+ambos ambientes verificaron 131/134 tablas con RLS; usuarios, seguridad y
+numeración conservados. Producción registra tres desactivaciones y una auditoría
+de oficina. Trial no recibió cambios de datos fiscales. Fuentes confirmadas:
+main `0280ca6`, Demo `a5bd22a`. UAT con Contabilidad pendiente.
 
 ## Verificación de solo lectura
 
