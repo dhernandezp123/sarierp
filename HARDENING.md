@@ -1,5 +1,54 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-28 - DEMO-PARITY-002 - Alinear Prueba con Producción sin mezclar entornos
+
+- Estado: SQL y frontend publicados y verificados en ambos entornos; CI de
+  aplicación y SQL/RLS aprobados. UAT autenticado pendiente.
+- Commits funcionales: Production `8bf64c3`; Demo `b46aec4` (sincronización)
+  y `62ea8e2` (marcas de impresión). Cierre documental en commit posterior.
+- Inventario inicial real: Production del 27/10, 147 migraciones/110 tablas;
+  Demo del 01/10, 88 migraciones/91 tablas, con 98 commits de main ausentes.
+  Resultado: 148 migraciones compartidas, más 11 exclusivas de Demo. Todas las
+  tablas públicas tienen RLS: 113/113 Production y 116/116 Demo.
+- SQL: una migración nueva en Production y 71 ausentes en Demo, incluidas cinco
+  adaptaciones exclusivas (`20260731190100`, `20261014152900`, `20261014153100`,
+  `20261020115900`, `20261028110000`). Aplicadas antes de cada frontend;
+  hashes 71/71 verificados contra SQL confirmado. Sin repair ni reset remoto.
+- Preservación atómica: 110 tablas existentes/autorización en Production; en
+  Demo, 89 tablas/columnas originales, incluidos documentos, importes, clientes,
+  perfiles y cotizaciones. Se comparan por clave los catálogos originales, con
+  adiciones previstas; se permite logo ficticio y timestamps. Contadores nuevos
+  inicializados sin emitir documentos. Auth e identidades de Demo preservados.
+- Conserva separación de bases/usuarios/claves, Atlas, JWT/grants temporales,
+  términos, caducidad, noindex, Storage privado/bloqueado, correo e invitaciones
+  bloqueados. Configuración fiscal/contable editable en el tenant ficticio y
+  flujo Factura/Proforma compartido. Master real designada solo en Production.
+  HBL/cotización conservan prefijo Demo con contadores por tenant. El
+  aprovisionador asigna/verifica tenant; no se aprovisionaron usuarios nuevos.
+- Reset legacy retirado: su allowlist/seed no cubría multiempresa/contabilidad.
+  Se preservó el dataset remoto; falta diseñar/probar un sustituto antes de
+  ejecutar un reset futuro con autorización explícita. Outlook sigue en espera.
+- Funciones comparadas en vivo: ninguna compartida ausente, 363 idénticas y
+  nueve variantes revisadas de prefijos/protecciones Demo. Código: 513 archivos
+  compartidos, 26 variantes con hashes revisados, cero diferencias inesperadas.
+- PDF/HTML: marca real en cada página y en ventanas independientes de cierre,
+  embarques, seguro y FCL mediante `withDemoPrintWatermark`; impresión idempotente.
+- Validación: 474 pruebas Node y 26 suites SQL/RLS Production (CI `40715647354`);
+  480 pruebas Node y dos suites SQL/RLS Demo (CI `40722799987`). Demo ensayada
+  desde esquema real con dataset ficticio, sobre la base remota con rollback y
+  desde instalación limpia de 160 migraciones en CI. TypeScript/lint/build
+  aprobados; 223 diagnósticos históricos, cero regresiones. Smoke sin sesión:
+  24 rutas Production/plataforma y 24 Demo, más comprobación de borradores y
+  bloqueo de correo; manifest coincidente con los deployments inmutables.
+- Archivos: cinco migraciones Demo, suite/runner SQL, workflow Quality Demo,
+  gates/layouts, proxy, branding, tipos, componentes PDF/HTML, aprovisionador,
+  pruebas y `docs/quality/environment-parity.md`. `Environment parity` compara
+  ambas ramas en cada push, sin secretos ni acceso a bases; manifiesto y script
+  rechazan diferencias no revisadas. No se publican huellas privadas ni PDFs reales.
+- Pendientes: UAT con usuarios reales, acceso temporal Demo vigente cuando se
+  requiera y nuevo procedimiento de reset. Pruebas locales/CI y HTTP sin sesión
+  no sustituyen aceptación funcional autenticada.
+
 ### 2026-10-01 - DEMO-SYNC-001 - Sincronización funcional de main al Demo
 
 - Estado: integrado, migrado y publicado en Demo; UAT autenticado/visual pendiente.
@@ -66,49 +115,6 @@
     desglose de seguro y pantallas de agentes/booking reconciliadas: OK.
   - No se reinició el dataset, no se rotaron cuentas y no se enviaron correos.
 - Commit: `ada18dd` (`feat(demo): sync ERP workflows and preserve sandbox guards`).
-
-### 2026-10-28 - DEMO-PARITY-002 - Alinear Prueba con Producción sin mezclar entornos
-
-- Estado: implementación, validación local y ensayo remoto revertido aprobados;
-  SQL/Preview de Prueba y UAT autenticado pendientes. Commit Demo: pendiente.
-- Inventario real: Production `86d542a`, 147 migraciones/110 tablas, frente a Demo
-  `8408d09` del 01/10, 88 migraciones/91 tablas; 98 commits de main ausentes.
-  Se fusiona el cambio funcional actual `8bf64c3` y se conservan límites Demo.
-- SQL: 66 migraciones compartidas ausentes y cinco puentes exclusivos de Demo
-  (`20260731190100`, `20261014152900`, `20261014153100`, `20261020115900`,
-  `20261028110000`). Sentinel antiguo preservado, normalización de una función
-  CRLF antes de Aduanas, tenant/hostname ficticios y funciones operativas actuales.
-  No se edita historial aplicado, no se ejecuta repair, reset ni copia de datos.
-- Conserva JWT/grant/caducidad, términos, Storage cerrado, bloqueo de correo e
-  invitaciones, noindex y marcas por página PDF/impresión. Configuración fiscal
-  y contable habilitada en el tenant ficticio; mismo flujo Factura/Proforma.
-  Contadores HBL/cotización por tenant conservan prefijos Demo. El aprovisionador
-  asigna/verifica tenant. El reset legacy se retira hasta contar con sustituto
-  compatible; sigue pendiente diseñar/probar ese mantenimiento, sin borrar datos.
-- Validación: ensayo desde esquema Demo y dataset ficticio; dos suites SQL/RLS
-  con emisión/corrección y vencimiento/grant. Instalación limpia ensayada aparte.
-  Ensayo remoto revertido: 89 tablas/columnas originales preservadas, con catálogo
-  original comparado por clave; se permiten adiciones previstas, logo Demo,
-  timestamps y contadores nuevos. Documento/factura existente permanece íntegro.
-  Pruebas de PDF real comprueban marca en todas las páginas. TypeScript y lint
-  aprobados, 223 diagnósticos históricos y cero regresiones. CI/Preview pendientes.
-- Archivos: ramas, cinco migraciones Demo, suite `demo_production_parity.sql`,
-  `validate-demo-sql.mjs`, workflow Quality Demo, gates/layouts, proxy, branding,
-  tipos, componentes PDF, aprovisionador y pruebas de correo/marca. Comparación
-  compartida: `scripts/check-environment-parity.mjs`, manifiesto de hashes y guía
-  `docs/quality/environment-parity.md`. 513 archivos compartidos comparados;
-  26 variantes revisadas y cero diferencias inesperadas. Resto idéntico a main.
-- Riesgos/pendientes: UAT autenticado, acceso temporal Demo vigente y nuevo reset
-  de mantenimiento. Outlook permanece en espera en ambos entornos. No se publican
-  huellas privadas, usuarios, credenciales ni PDFs reales.
-- Postflight SQL: 71/71 migraciones registradas con hash exacto; 148 compartidas
-  con Production, más 11 exclusivas. 116 tablas con RLS; ninguna función compartida
-  ausente, 363 idénticas y nueve variantes de límites/prefijos Demo. Auth preservado.
-  Preview de `b46aec4` Ready; aplicación CI aprobada, suite de base aún en curso.
-- Revisión de impresión: `withDemoPrintWatermark` reutiliza la marca existente en
-  ventanas HTML independientes de cierre, embarques, seguro y comparación FCL.
-  Prueba real de PDF multipágina y HTML idempotente aprobadas; TypeScript aprobado.
-  Estos cambios y el manifiesto actualizado se publican juntos, sin SQL adicional.
 
 ### 2026-10-28 - FIN-DRAFT-01 - Borrador previo a emisión y corrección aprobada por master
 
