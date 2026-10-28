@@ -134,6 +134,11 @@
   section[id] {
     scroll-margin-top: 88px;
   }
+  /* Single-value selectors stay readable even inside full-page forms. */
+  select:not([multiple]):not([size]) {
+    max-inline-size: min(100%, 28rem);
+    min-inline-size: 0;
+  }
 }
 
 @media print {

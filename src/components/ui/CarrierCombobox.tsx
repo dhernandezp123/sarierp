@@ -155,7 +155,7 @@ export function CarrierCombobox({
         position: "absolute",
         top:      pos.top,
         left:     pos.left,
-        width:    Math.max(pos.width, 320),
+        width:    pos.width,
         zIndex:   9999,
       }}
       className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
@@ -240,7 +240,7 @@ export function CarrierCombobox({
   )
 
   return (
-    <div className={cn("relative w-full", className)}>
+    <div className={cn("relative w-full min-w-0 max-w-md", className)}>
       <button
         ref={triggerRef}
         type="button"

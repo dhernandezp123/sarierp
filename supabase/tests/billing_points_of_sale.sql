@@ -30,6 +30,7 @@ insert into public.company_settings(tenant_id, legal_name, billing_points_of_sal
 values
   ('be260000-0000-4000-8000-000000000100', 'Empresa prueba', array['San Pedro Sula', 'Tegucigalpa']),
   ('be260000-0000-4000-8000-000000000200', 'Otra empresa', array['Otra empresa']);
+insert into public.billing_offices(tenant_id,name,establishment_code,emission_point_code) values('be260000-0000-4000-8000-000000000200','Otra empresa','099','001');
 insert into public.cai_ranges(id, tenant_id, cai, point_of_sale, rango_desde, rango_hasta, fecha_limite_emision, is_active)
 values ('be262000-0000-4000-8000-000000000099', 'be260000-0000-4000-8000-000000000200', 'CAI-OTRA', 'Otra empresa', '099-001-01-00000001', '099-001-01-00000100', current_date + 30, false);
 insert into public.clientes(id, nombre, rtn, condicion_pago, tenant_id)
@@ -39,6 +40,8 @@ insert into public.billing_offices(id,tenant_id,name,address,phone,email,establi
 ('be263000-0000-4000-8000-000000000001','be260000-0000-4000-8000-000000000100','San Pedro Sula','Dirección SPS','11111111','sps@test.local','001','001'),
 ('be263000-0000-4000-8000-000000000002','be260000-0000-4000-8000-000000000100','Tegucigalpa','Dirección TGU','22222222','tgu@test.local','002','001');
 update public.clientes set billing_office_id='be263000-0000-4000-8000-000000000001' where id='be261000-0000-4000-8000-000000000001';
+-- The CAI setup persona is explicitly designated; financial roles alone cannot configure CAI.
+insert into public.invoice_master_settings(tenant_id,profile_id,assignment_source) select tenant_id,id,'Despliegue autorizado' from public.profiles where id='be260000-0000-4000-8000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"be260000-0000-4000-8000-000000000001","role":"authenticated"}', true);
 select pg_temp.assert_true(public.get_billing_points_of_sale() = array['San Pedro Sula', 'Tegucigalpa'], 'Lee oficinas del tenant');
@@ -91,7 +94,10 @@ select pg_temp.assert_true((select next_number = 2 from public.cai_ranges where 
 select pg_temp.assert_true((select not is_active and next_number = 3 from public.cai_ranges where id = 'be262000-0000-4000-8000-000000000001'), 'CAI SPS anterior conserva consumo');
 
 update public.clientes set billing_office_id='be263000-0000-4000-8000-000000000002' where id='be261000-0000-4000-8000-000000000001';
+-- Exhaustion is a fixture state, not an application permission to edit counters.
+reset role;
 update public.cai_ranges set next_number = range_end + 1 where id = 'be262000-0000-4000-8000-000000000002';
+set local role authenticated;
 select pg_temp.expect_error($cmd$select * from public.create_manual_invoice_with_items(
   '{"invoice_type":"Factura","cliente_id":"be261000-0000-4000-8000-000000000001","point_of_sale":"Tegucigalpa"}',
   '[{"description":"Prueba","quantity":1,"unit_price":10,"isv_rate":0}]')$cmd$, 'agotado');

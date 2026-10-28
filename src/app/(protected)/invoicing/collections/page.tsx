@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { useBillingClients } from '@/src/hooks/useBillingClients'
+import { useTreasuryAccounts } from '@/src/hooks/useTreasuryAccounts'
+import { TreasuryAccountField } from '@/src/components/accounting/TreasuryAccountField'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { FinanceEmptyState, FinanceMetric, FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
 import { readAllReportRows } from '@/src/lib/report-query'
@@ -29,6 +31,7 @@ export default function CollectionsPage() {
   const [snapshot,setSnapshot]=useState<{key:string;debts:Debt[];receipts:Receipt[]}|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState('')
   const [allocations,setAllocations]=useState<Record<string,string>>({}),[amount,setAmount]=useState(''),[date,setDate]=useState(toDateInputValue)
   const [exchangeRate,setExchangeRate]=useState('')
+  const treasury=useTreasuryAccounts(),[bankAccount,setBankAccount]=useState('')
   const [method,setMethod]=useState('Transferencia'),[reference,setReference]=useState(''),[notes,setNotes]=useState(''),[busy,setBusy]=useState(false)
   const [advance,setAdvance]=useState<Receipt|null>(null),[reversal,setReversal]=useState<Receipt|null>(null),[reason,setReason]=useState(''),[page,setPage]=useState(0)
   const key=`${context}:${client}:${currency}`,keyRef=useRef(key)
@@ -71,13 +74,14 @@ export default function CollectionsPage() {
     if(advance&&!allocationRows.length){toast.error('Selecciona al menos un documento.');return}
     if(!advance&&(!date||date>toDateInputValue()||(!reference.trim()&&method!=='Efectivo'))){toast.error('Revisa fecha y referencia del pago.');return}
     if(!advance&&currency==='USD'&&(!Number.isFinite(Number(exchangeRate))||Number(exchangeRate)<=0||Number(exchangeRate)>1000000)){toast.error('Indica la tasa HNL por USD del recibo.');return}
-    const signature=JSON.stringify({key,advance:advance?.id,received,date,method,reference,notes,allocationRows,exchangeRate})
+    if(!advance&&(treasury.loading||treasury.error||(treasury.accounts.length&&!treasury.accounts.some(a=>a.id===bankAccount&&a.currency===currency)))){toast.error('Selecciona la cuenta bancaria/caja del recibo.');return}
+    const signature=JSON.stringify({key,advance:advance?.id,received,date,method,reference,notes,allocationRows,exchangeRate,bankAccount})
     if(retry.current.signature!==signature)retry.current={signature,id:crypto.randomUUID()}
     const owner=context,request=retry.current.id
     busyRef.current=true;setBusy(true)
     try {
       const result=advance?await supabase.rpc('allocate_customer_receipt',{p_receipt_id:advance.id,p_request_id:request,p_allocations:allocationRows}):
-        await supabase.rpc('register_customer_receipt',{p_request_id:request,p_cliente_id:client,p_amount:received,p_currency:currency,p_payment_date:date,p_payment_method:method,p_reference:reference,p_notes:notes,p_allocations:allocationRows,p_exchange_rate:currency==='HNL'?1:Number(exchangeRate)})
+        treasury.accounts.length?await supabase.rpc('treasury_register_source',{p_kind:'Recibo',p_account_id:bankAccount,p_rate:currency==='HNL'?1:Number(exchangeRate),p_payload:{request_id:request,cliente_id:client,amount:received,currency,date,method,reference,notes,allocations:allocationRows}}):await supabase.rpc('register_customer_receipt',{p_request_id:request,p_cliente_id:client,p_amount:received,p_currency:currency,p_payment_date:date,p_payment_method:method,p_reference:reference,p_notes:notes,p_allocations:allocationRows,p_exchange_rate:currency==='HNL'?1:Number(exchangeRate)})
       if(result.error)throw result.error
       if(identity.current!==owner)return
       toast.success(advance?'Anticipo aplicado.':'Recibo registrado.');retry.current={signature:'',id:''};setAllocations({});setAdvance(null);setAmount('');setReference('');setNotes('');await refresh()
@@ -150,6 +154,7 @@ export default function CollectionsPage() {
 
         <fieldset disabled={busy||loading} className={`${cardClass} min-w-0 space-y-5 !p-5 xl:col-start-2 xl:row-start-1 xl:row-span-2 xl:sticky xl:top-6`}>
           <legend className="sr-only">{advance?'Aplicar anticipo':'Registrar pago recibido'}</legend>
+          {!advance&&<TreasuryAccountField {...treasury} currency={currency} value={bankAccount} onChange={setBankAccount}/>}
           <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-[#B3282D] dark:bg-rose-950/40 dark:text-rose-300"><ArrowDownLeft className="h-5 w-5" /></span><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{advance?'Anticipo del cliente':'Nuevo ingreso'}</p><h2 className="mt-0.5 text-sm font-bold text-slate-900 dark:text-white">{advance?'Distribuir anticipo':'Registrar pago recibido'}</h2></div></div>
           {advance?<div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/20"><p className="text-xs font-semibold text-amber-800 dark:text-amber-200">{advance.receipt_number}</p><p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">{formatMoney(Number(advance.unapplied_amount),currency)}</p><p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">Selecciona los documentos a cubrir con el saldo disponible de este recibo.</p><button type="button" className="text-xs font-semibold text-amber-800 underline dark:text-amber-200" onClick={()=>{setAdvance(null);setAllocations({})}}>Cancelar aplicación</button></div>:<div className="space-y-4">
             <div><label htmlFor="receipt-amount" className="mb-2 block text-xs font-semibold text-slate-600 dark:text-slate-300">Importe recibido</label><div className="relative"><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">{currency}</span><input id="receipt-amount" aria-label={`Importe recibido ${currency}`} className={`${fieldClass} h-14 pl-14 text-lg font-semibold tabular-nums`} type="number" min="0.01" step="0.01" placeholder="0.00" required value={amount} onChange={e=>setAmount(e.target.value)}/></div></div>

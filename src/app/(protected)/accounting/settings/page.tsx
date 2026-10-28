@@ -1,5 +1,6 @@
 'use client'
 import { InvoiceMasterSettings } from '@/src/components/invoicing/InvoiceMasterSettings'
+import { BillingOfficeAccessSettings } from '@/src/components/invoicing/BillingOfficeAccessSettings'
 import { useRef,useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
@@ -30,7 +31,7 @@ export default function AccountingSettingsPage(){
   }catch(e){if(isCurrent())toast.error((e as {message?:string}).message||'No se pudo guardar el período.')}
   finally{lock.current=false;setBusy(false)}
  }
- return <div className="space-y-5 p-4 sm:p-6"><h1 className="text-2xl font-bold">Configuración contable</h1><AccountingNav/><InvoiceMasterSettings/>
+ return <div className="space-y-5 p-4 sm:p-6"><h1 className="text-2xl font-bold">Configuración contable</h1><AccountingNav/><InvoiceMasterSettings/><BillingOfficeAccessSettings/>
  {error&&<p role="alert" className="text-red-600">{error} <button onClick={()=>void reload()}>Reintentar</button></p>}{loading&&<p>Cargando…</p>}
  {data&&form&&<><form className={`${cardClass} space-y-4`} onSubmit={e=>{e.preventDefault();void save()}}><fieldset disabled={busy} className="space-y-4"><legend className="font-semibold">Cuentas operativas y activación</legend>
  <p className="text-sm">La contabilidad se prepara sin saldos iniciales. Define las cuentas, los períodos y la fecha de inicio cuando Contabilidad la apruebe. La moneda de los libros es HNL; los documentos conservan su moneda original.</p>

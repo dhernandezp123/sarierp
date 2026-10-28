@@ -13,6 +13,14 @@ test('registro CAI acepta el próximo correlativo utilizado por la oficina y rec
   for (const next_number of ['0', '101', '1.5', '-1', 'abc']) assert.ok(validateCaiRange({ ...range, next_number }))
 })
 
+test('validación CAI respeta prefijo de oficina, tipo fiscal y ceros iniciales',()=>{
+ const form={cai:'TEST',rango_desde:'000-001-06-00000001',rango_hasta:'000-001-06-00000100',fecha_limite_emision:'2099-12-31'}
+ assert.equal(validateCaiRange(form,'000-001-06-'),null)
+ assert.match(validateCaiRange(form,'001-001-06-'),/prefijo SAR/)
+ assert.match(validateCaiRange(form,'000-001-01-'),/prefijo SAR/)
+ assert.match(validateCaiRange({...form,rango_desde:'000-001-06-001',rango_hasta:'000-001-06-100'},'000-001-06-'),/ocho dígitos/)
+})
+
 test('puntos de venta requieren nombres válidos y únicos', () => {
   assert.equal(validateBillingPointsOfSale(['San Pedro Sula', 'Tegucigalpa']), null)
   for (const points of [[], [''], [' '], ['SPS', ' sps '], ['a'.repeat(121)]]) {

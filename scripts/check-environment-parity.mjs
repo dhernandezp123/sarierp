@@ -6,13 +6,14 @@ import { createHash } from 'node:crypto'
 // Read-only comparison: never reads env files, credentials or remote datasets.
 const [source = 'main', target = '.demo-sync'] = process.argv.slice(2)
 const manifest = JSON.parse(fs.readFileSync(new URL('../docs/quality/environment-parity.json', import.meta.url), 'utf8'))
-const files = execFileSync('git', ['ls-tree', '-r', '--name-only', source, '--', 'src', 'supabase/migrations'], { encoding:'utf8' }).trim().split('\n')
+const workingTree = source === 'WORKTREE'
+const files = [...new Set(execFileSync('git', workingTree ? ['ls-files','--cached','--others','--exclude-standard','--','src','supabase/migrations'] : ['ls-tree', '-r', '--name-only', source, '--', 'src', 'supabase/migrations'], { encoding:'utf8' }).trim().split('\n'))]
 const hash = text => createHash('sha256').update(text.replace(/\r\n/g,'\n')).digest('hex')
 const differences = [], expected = []
 for (const file of files) {
   const destination = path.join(target, file)
   if (!fs.existsSync(destination)) { differences.push({ file, reason:'Missing shared file' }); continue }
-  const a = hash(execFileSync('git', ['show', `${source}:${file}`], {encoding:'utf8',maxBuffer:8*1024*1024}))
+  const a = hash(workingTree ? fs.readFileSync(file,'utf8') : execFileSync('git', ['show', `${source}:${file}`], {encoding:'utf8',maxBuffer:8*1024*1024}))
   const b = hash(fs.readFileSync(destination,'utf8'))
   if (a === b) continue
   const variant = manifest.variants[file]

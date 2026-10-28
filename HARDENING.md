@@ -1,5 +1,192 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-28 - RELEASE-FIN-20261028 - Publicación coordinada de finanzas, CAI y UX
+
+- Estado: commit/despliegue autorizados; preparación y preflight completados.
+  Registro: `docs/release/accounting-finance-cai-2026-10-28.md`.
+- Alcance: FIN-REP-01, FIN-BANK-01/02, CAI-OFFICE-01, CAI-MASTER-01,
+  CAI-ACCESS-01 y UX-SELECT-01. Seis migraciones nuevas, SQL antes del frontend.
+- Baseline remoto renovado: Producción 113 tablas con RLS y siete rangos fiscales;
+  máster individual preexistente elegible. Pruebas 116 tablas con RLS, sin CAI ni
+  máster; configuración propia, sin copiar usuarios reales. Ambas ramas coinciden
+  con sus referencias remotas y la paridad compartida está aprobada.
+- Validaciones locales conservadas: 504/510 Node, 29/5 SQL/RLS con rollback,
+  TypeScript, compilaciones, lint sin regresiones y navegador. Pendientes:
+  ensayo/aplicación remotos, commit/push, CI, Ready y smoke de ambos dominios.
+- Emisión: conservar máster actual; las oficinas de los demás usuarios se
+  habilitan individualmente desde Configuración. Sin asignaciones inferidas.
+  UAT con Contabilidad y configuración operativa quedan explícitos. Hash: en curso.
+
+### 2026-10-28 - UX-SELECT-01 - Selectores y paneles de configuración compactos
+
+- Estado: corrección visual local para main y Pruebas; commit, publicación y
+  UAT remoto pendientes. No modifica SQL, permisos ni cálculos financieros.
+- Hallazgo: el formulario CAI se extendía al ancho disponible; el tipo ocupaba
+  ambas columnas y su menú nativo producía un panel blanco desproporcionado.
+  Inventario estático posterior: 222 selectores nativos restantes en 70 archivos.
+- `CompactSelect.tsx` reutiliza `useDropdownPosition`: trigger/panel hasta 448 px,
+  menú hasta 280 px con desplazamiento y opciones legibles, búsqueda por nombre
+  y datos secundarios, teclado/foco y estado deshabilitado. Dentro de diálogos
+  se mantiene en el árbol del modal para conservar la interacción y Escape.
+- Nueve controles migrados: oficina/tipo CAI, máster, usuario autorizado, tipo
+  fiscal y monedas/operaciones de equivalencia/conversión, hoja del extracto.
+  `settings/cai/page.tsx`, `InvoiceMasterSettings.tsx`, `BillingOfficeAccessSettings.tsx`,
+  `InvoiceFiscalOptions.tsx`, `BankReconciliationWorkspace.tsx`.
+- `globals.css`: selectores simples nativos limitados a 448 px, conservando
+  formularios/validación nativa y ajuste al contenedor. Listas múltiples/size
+  explícito se conservan. Buscadores compartidos de clientes/agentes/cotizaciones
+  hasta 512 px; navieras hasta 448 px, sin mínimo de popup que desborde en móvil.
+- CAI: panel de edición hasta 768 px, fondo suave, cabecera/acento Sari, campos
+  en dos columnas y una en móvil. Avisos y panel de acciones también acotados.
+  Configuración de máster/oficinas y tratamiento fiscal usan paneles compactos.
+- Validación: TypeScript y cinco pruebas del componente (teclado, búsqueda con
+  acentos/datos secundarios, diálogo, bloqueo y Escape capturado antes del cierre
+  del modal) aprobados. Suites completas: 504 Node main y 510 Pruebas. Lint dirigido
+  de 14 archivos sin regresiones y build aprobados en ambos árboles. Navegador:
+  ocho verificaciones locales con datos ficticios; CAI en 1676/1440/390 px, menú
+  fiscal de 355 × 254 px en escritorio y 324 × 254 px en móvil, selección/foco,
+  búsqueda, validación nativa requerida, usuarios y diálogo real de proforma;
+  sin excepciones JavaScript. Los controles y menús caben en el ancho solicitado.
+  Paridad: 539 archivos compartidos, 26 variantes revisadas, cero diferencias
+  inesperadas. Diff check aprobado. Guía: `docs/quality/compact-selects-uat.md`.
+- Pendientes: publicación y revisión con usuario en su navegador. Hash: sin commit.
+
+### 2026-10-28 - CAI-MASTER-01 / CAI-ACCESS-01 - Correcciones, retiro y autorización individual por oficina
+
+- Estado: implementación local; migraciones, commit, publicación y UAT remotos
+  pendientes. No se corrige por inferencia ninguna fecha real del SAR.
+- `20261028160000_cai_master_lifecycle.sql`: solo el máster individual designado
+  puede registrar, corregir, activar, desactivar o eliminar CAI de su empresa.
+  RLS mantiene la política restrictiva de aislamiento por tenant; Admin y
+  Contabilidad sin designación no reciben escritura. Las RPC compatibles de
+  activación también exigen máster; funciones internas sin acceso autenticado.
+- Edición con motivo/revisión: fecha y rango corregibles, siguiente correlativo
+  conservado cuando hay uso, identidad/prefijo/inicio y números utilizados protegidos.
+  Una fecha corregida a vencida deja el CAI inactivo. Una renovación con otro
+  CAI se registra aparte. No se recalculan snapshots de documentos emitidos.
+- Eliminación lógica: requiere desactivar, conserva la fila y su consumo como
+  historial de solo lectura; DELETE físico bloqueado. `cai_range_events` registra
+  actor, motivo, fecha/hora, valores anteriores/nuevos y consumo. Sin escrituras
+  autenticadas al historial. Pantalla muestra los últimos 100 movimientos.
+- `20261028170000_user_fiscal_office_access.sql`: autorización por usuario y
+  oficina mediante RPC exclusiva del máster, revisión y auditoría. El máster
+  administra todas las oficinas activas; los demás requieren selección explícita.
+  **Antes de habilitar emisión en el despliegue, autorizar oficinas a los usuarios
+  existentes.** No se infiere su sede ni se otorgan ambas oficinas por defecto.
+- Control de emisión en almacenamiento para Factura/NC/ND, boleta y retención:
+  conserva resolución fiscal existente (cliente/documento original) y valida
+  permiso del actor. Denegación revierte documento y consumo atómicamente.
+  Borradores/consulta mantienen permisos del módulo; no amplía roles financieros.
+- UI: `settings/cai/page.tsx`, `toggle-switch.tsx`, `permissions.ts`,
+  `InvoiceMasterSettings.tsx`, `BillingOfficeAccessSettings.tsx`, configuración
+  contable y formulario de nueva factura. Iconos con nombres accesibles, toggle
+  de estado, motivo/confirmación, edición de vencidos y advertencia recuperable
+  ante historial fallido; factura sin oficina autorizada puede guardarse borrador.
+- Pruebas: `cai_master_lifecycle.sql`, fixtures financieros con máster explícito,
+  `cai-lifecycle.test.mjs`, permisos y flujos de factura/borrador. 29 suites SQL/RLS
+  principales y cinco Trial aprobadas con rollback (incluida desactivación de un
+  CAI histórico activo/vencido). 499 pruebas Node main, 505 Trial y seis dirigidas
+  posteriores aprobadas. TypeScript, lint sin regresiones y build en ambos árboles
+  aprobados. Navegador local con datos ficticios: seis flujos de edición, estado,
+  retiro/historial, consulta sin máster y autorización individual; escritorio y
+  390 px sin desbordamiento ni errores de ejecución. Paridad local: 538 archivos
+  compartidos, 26 variantes revisadas, sin diferencias inesperadas. Git diff check
+  aprobado. Las bases desechables quedaron sin tablas nuevas tras rollback.
+- Pendientes: aplicar SQL compartido en ambos ambientes, configurar autorizaciones
+  reales y probar con Contabilidad (corregir fecha contra autorización, activar,
+  apoyar ambas oficinas y verificar PDF). Guía en `docs/quality/cai-office-numbering.md`.
+  Sin datos fiscales reales modificados. Hash: sin commit.
+
+### 2026-10-28 - CAI-OFFICE-01 - Prefijos y series fiscales por oficina/tipo
+
+- Estado: corrección preparada y validada localmente; migración, commit y
+  publicación remotos pendientes. Consultas remotas de este ajuste: solo lectura.
+- Verificado en Producción y Prueba: asignación fiscal y activación filtran por
+  tenant, oficina y tipo; índice único activo por esa combinación. Factura,
+  NC/ND, boleta y retención no comparten contador entre oficinas. Guía de Remisión
+  tiene su serie configurable; su emisión no tiene interfaz propia todavía.
+- Hallazgo reproducido: registrar un rango con prefijo de SPS para TGU era
+  aceptado, aunque fallaba al emitir. También podían repetirse códigos SAR en
+  oficinas distintas o cambiarse los códigos dejando rangos incompatibles.
+- Producción: dos oficinas, códigos vacíos y solo rangos de Factura registrados
+  (SPS inactivo/TGU activo). El propietario confirmó SPS `001-001` y TGU `000-001`.
+  La migración completa únicamente esos campos vacíos si todos los rangos
+  existentes siguen coincidiendo. No modifica CAI, rangos, correlativos, estado
+  activo ni documentos emitidos. Las autorizaciones de los demás tipos requieren
+  captura real; no se crean ni se deducen a partir del CAI de Factura.
+- SQL nuevo `20261028150000_cai_office_binding.sql`: valida prefijos en registro,
+  activación e incremento; impide duplicar códigos de oficina y alterar códigos
+  incompatibles con CAI/documentos. Cambios de oficina serializados por tenant;
+  emisión conserva sus RPC atómicas originales y sus bloqueos por oficina/tipo.
+- UI/helper: `settings/cai/page.tsx`, `cai-validation.ts`; prefijo/placeholder según
+  oficina y tipo, comprobación antes de escribir y descarte de cargas obsoletas.
+  Pruebas: `cai_office_numbering.sql`, fixtures de acceso/puntos de venta y pruebas
+  Node; runners SQL de main/Prueba. Cambios compartidos preparados en ambas ramas.
+- Validación: fallo original demostrado y suite nueva aprobada con diez emisiones
+  ficticias (cinco tipos × dos oficinas), doce series activas, rotación aislada,
+  NC de factura original y bloqueos de prefijo/códigos; 28 suites main y cuatro
+  Prueba con rollback. Ensayo real de migración sobre configuración ficticia con
+  códigos vacíos: comparación íntegra de CAI/contadores sin cambios. TypeScript,
+  lint sin regresiones y build aprobados en main y Prueba; 492 pruebas Node main,
+  13 dirigidas posteriores y 498 en Prueba aprobadas. Navegador con datos ficticios: prefijo cruzado
+  bloqueado antes de guardar, oficina/tipo correctos y formulario móvil sin
+  desbordamiento; sin errores de ejecución. Paridad local: 534 archivos
+  compartidos y 26 variantes revisadas, sin diferencias inesperadas.
+- Pendientes: aplicar la migración en ambos ambientes y probar con Contabilidad;
+  registrar las autorizaciones SAR faltantes por oficina/tipo y revisar activación
+  de rangos válidos. Sin emisión real ni cambios de numeración. Hash: sin commit.
+
+### 2026-10-28 - FIN-REP-01 / FIN-BANK-01 / FIN-BANK-02 - Plan de cartera, Caja/Bancos y conciliación
+
+- Estado: implementación local de etapas 1–5; controles locales de etapa 6 aprobados. SQL remoto,
+  commit, despliegue y UAT autenticado pendientes. No se declara cierre operativo.
+- Plan y decisiones: `docs/plans/contabilidad-caja-bancos-20261028.md`; mora por
+  vencimiento (Actual no vencido), Excel con bloques en una hoja y únicamente
+  firmas físicas. Guía de UAT/publicación en `docs/quality/finance-reporting-banks-uat.md`.
+- SQL canónico nuevo: `20261028120000_finance_reporting_history.sql`,
+  `20261028130000_treasury_accounts_and_cash.sql`,
+  `20261028140000_bank_reconciliation.sql`. No se cambia SQL aplicado.
+  Historial/operaciones protegidos por tenant y rol financiero activo/aprobado;
+  tablas de solo lectura autenticada, escrituras por RPC atómicas, fuentes con
+  idempotencia y reversos auditados. Funciones internas sin grants públicos.
+- Reportes compartidos en `finance-report`, `financial-export`, `treasury-report`,
+  `report-layout`, `xlsx`, hooks y workspaces de Contabilidad. CxC/CxP al corte,
+  NC/ND y retenciones, pagos alcanzables en filtros, saldos corridos e históricos,
+  monedas separadas, XLSX/PDF/CSV completos. Consolidado incluye recibos/anticipos
+  una vez; Documentos solo descuenta pagos aplicados. Filtros de tipos conservan
+  el saldo completo. Se conserva el resumen rápido actual de Facturación, con
+  acceso explícito al reporte completo para corte/antigüedad/exportaciones.
+- Caja/Bancos: apertura fechada sin semillas reales, tasas compra/venta y aplicada
+  congeladas, banco/caja en recibos y pagos, retenciones sin efectivo, transferencias
+  propias fuera del flujo externo, contabilización/reversos sobre el motor existente.
+  Cobro reversado antes de contabilizar registra original y reverso atómicamente.
+  No se activa contabilidad automática ni se altera moneda de cotizaciones.
+- Conciliación: extractos manual/CSV/XLSX con vista previa, archivo limitado y
+  parseo sin fórmulas/macros/vínculos; integridad ZIP, privacidad de API/tenant,
+  detección de repetición/solapamiento con motivo para coincidencias aceptadas.
+  Vínculos parciales/grupales no vuelven a contabilizar. Reportes versionados con
+  cheques, depósitos, otras salidas, diferencia visible, nombres/líneas de firma;
+  resumen general de conciliaciones. No existe flujo de aprobación bancaria.
+- UX: componentes/combobox reutilizados, errores recuperables, exportación con
+  encabezado/colores Sari, ancho PDF dentro de página, navegación móvil compacta.
+  El ensayo de navegador usa exclusivamente datos ficticios y exportaciones locales.
+- Validación final: 491 pruebas Node main y 497 Prueba (APP_ENV demo), 27 suites
+  SQL/RLS main y tres Prueba con rollback. TypeScript, lint (223 diagnósticos
+  históricos, cero regresiones) y build aprobados en ambas ramas. Build local
+  Prueba con claves ficticias inutilizables y guardas de proyecto/dominio vigentes;
+  no acredita autenticación remota. Paridad: 533 archivos compartidos, 26 variantes
+  revisadas, cero diferencias inesperadas. Sin cambios persistentes en los ensayos.
+  Navegador con compilación estable y datos ficticios: siete comprobaciones,
+  escritorio 1500×1000/móvil 390×844, descargas PDF/XLSX y cero errores. Renderer
+  financiero real: fila 505, columnas dentro de página y firmas en la última;
+  XLSX de 650 filas, una hoja, subtotales, números, filtros y títulos de impresión.
+  Se puede completar una contrapartida inicial omitida; se bloquea otra cuenta
+  bancaria como contrapartida para evitar saldos contables sin movimiento nativo.
+- Riesgos/pendientes: definir saldos, cuentas y fecha reales; revisar cuentas con
+  movimientos previos antes de vincularlas; cobertura anterior reconstruida no
+  certifica cortes más antiguos. Abrir Excel/firmar PDF, extractos representativos,
+  UAT real y aplicación coordinada en ambos ambientes. Hash: sin commit todavía.
+
 ### 2026-10-28 - DEMO-PARITY-002 - Alinear Prueba con Producción sin mezclar entornos
 
 - Estado: SQL y frontend publicados y verificados en ambos entornos; CI de

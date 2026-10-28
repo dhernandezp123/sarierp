@@ -6,7 +6,7 @@ import { mountPage } from './page-harness.mjs'
 const { draftEditorSignature, draftItemPayload, draftEditorFromInvoice } = loadTs('src/lib/invoice-drafts.ts')
 const { blankFiscalOptions } = loadTs('src/components/invoicing/InvoiceFiscalOptions.tsx', { '@/src/hooks/useUser': { useUser: () => ({}) }, '@/src/lib/supabase/client': { supabase: {} } })
 const clientRow = { id: 'client', nombre: 'Cliente ficticio', rtn: '00000000000000', condicion_pago: 'Contado', dias_credito: 0, billing_office: { name: 'SPS', is_active: true } }
-function fixture({ query = '', saved = null, failSave = false, deferSave, master = false } = {}) {
+function fixture({ query = '', saved = null, failSave = false, deferSave, master = false, officeAllowed = true } = {}) {
   const before = globalThis.window; globalThis.window = { setTimeout, clearTimeout }
   const writes = [], messages = [], routes = [], drafts = new Map(saved ? [[saved.id, saved]] : [])
   let current = { user: { id: 'finance' }, profile: { id: 'finance', tenant_id: 'tenant', rol: 'Contabilidad', status: 'Aprobado', is_active: true } }, fail = failSave, issued = false
@@ -18,6 +18,7 @@ function fixture({ query = '', saved = null, failSave = false, deferSave, master
   }; return q }, async rpc(name,args) {
     if (name === 'is_invoice_master') return { data: master, error: null }
     if (name === 'get_billing_points_of_sale') return { data: ['SPS'], error: null }
+    if (name === 'get_my_billing_office_access') return { data: [{ name: 'SPS', allowed: officeAllowed }], error: null }
     writes.push({ name,args })
     if (name === 'save_invoice_draft') {
       if (deferSave) await deferSave
@@ -52,6 +53,18 @@ test('borrador real guarda información incompleta, preserva texto vacío y no i
     assert.equal(f.writes.length,1); assert.equal(f.writes[0].name,'save_invoice_draft')
     assert.equal(f.writes[0].args.p_invoice.cliente_id,null); assert.equal(f.writes[0].args.p_editor_state.items[0].quantity,'')
     assert.equal(f.issued(),false); assert.match(f.routes[0],/new\?draft=/)
+  } finally { f.cleanup() }
+})
+
+test('sin autorización de oficina el formulario permite guardar borrador y bloquea emisión fiscal', async () => {
+  const f = fixture({ officeAllowed: false })
+  try {
+    await f.ready()
+    f.app.find(node=>node.type==='select'&&f.app.text(node).includes('Cliente ficticio')).props.onChange({target:{value:'client'}});f.app.render();await f.app.tick();f.app.render()
+    assert.equal(f.app.button('Emitir factura').props.disabled,true)
+    assert.match(f.app.text(),/No tienes autorización de emisión para SPS/)
+    f.app.button('Guardar borrador').props.onClick();await f.app.tick();f.app.render()
+    assert.equal(f.writes[0].name,'save_invoice_draft');assert.equal(f.issued(),false)
   } finally { f.cleanup() }
 })
 

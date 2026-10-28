@@ -1,6 +1,7 @@
 import {
   Document,
   Font,
+  Image as PdfImage,
   Page,
   StyleSheet,
   Text,
@@ -12,12 +13,15 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { reportColumnWidths } from '@/src/lib/report-layout'
+import { SARI_FISCAL_RED } from './FiscalDocumentLayout'
 
 export type ReportPdfColumn = {
   key: string
   label: string
   width?: string
   align?: 'left' | 'right' | 'center'
+  format?: 'money' | 'integer'
 }
 
 export type ReportPdfMetric = {
@@ -28,6 +32,8 @@ export type ReportPdfMetric = {
 export type ReportPdfRow = Record<string, string | number>
 
 export type ReportPdfData = {
+  signatures?: {label:string;name:string;role:string}[]
+  complete?: boolean
   audience?: 'client'
   title: string
   subtitle: string
@@ -222,12 +228,15 @@ export function ReportPdf({
   data: ReportPdfData
   company?: Partial<CompanyBranding> | null
 }) {
-  const rows = data.audience === 'client' ? data.rows : data.rows.slice(0, 500)
+  const rows = data.complete || data.audience === 'client' ? data.rows : data.rows.slice(0, 500)
+  const columnWidths = reportColumnWidths(data.columns)
   const clientReport = data.audience === 'client'
-  const primary = clientReport ? '#B3282D' : BRAND_BLUE
-  const accent = clientReport ? '#B3282D' : BRAND_ORANGE
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
+  const sariFinancial = data.complete && /sari/i.test(companyName)
+  const primary = sariFinancial || clientReport ? SARI_FISCAL_RED : data.complete ? companyBranding.primary_color || BRAND_BLUE : BRAND_BLUE
+  const accent = sariFinancial || clientReport ? SARI_FISCAL_RED : data.complete ? companyBranding.secondary_color || primary : BRAND_ORANGE
+  const logo = data.complete ? sariFinancial ? '/logo/sari-logo.png' : company?.logo_url : null
   const companyAddress = getCompanyAddressLines(companyBranding).join(' · ')
   const companySub = [
     companyAddress,
@@ -241,8 +250,10 @@ export function ReportPdf({
         {/* ── Header ── */}
         <View style={[styles.headerRow, { borderBottomColor: primary }]} fixed>
           <View style={styles.brandBlock}>
+            {logo&&<PdfImage src={logo} style={{width:64,height:34,objectFit:'contain',marginBottom:4}}/>}
             <Text style={[styles.brandName, { color: primary }]}>{companyName}</Text>
             {companySub && <Text style={styles.brandSub}>{companySub}</Text>}
+            {data.complete&&(companyBranding.phone||companyBranding.email)&&<Text style={styles.brandSub}>{[companyBranding.phone,companyBranding.email].filter(Boolean).join(' · ')}</Text>}
             <View style={[styles.brandAccent, { backgroundColor: accent }]} />
           </View>
           <View style={styles.reportBlock}>
@@ -279,13 +290,13 @@ export function ReportPdf({
           <View style={styles.table}>
             {/* Header row */}
             <View style={styles.row} fixed>
-              {data.columns.map((column) => (
+              {data.columns.map((column, columnIndex) => (
                 <Text
                   key={column.key}
                   style={[
                     styles.headerCell,
                     {
-                      width: column.width || `${100 / data.columns.length}%`,
+                      width: columnWidths[columnIndex],
                       textAlign: column.align || 'left',
                     },
                   ]}
@@ -298,19 +309,20 @@ export function ReportPdf({
             {/* Data rows */}
             {rows.map((row, rowIndex) => (
               <View key={`${rowIndex}-${row.__key || ''}`} style={styles.row} wrap={false}>
-                {data.columns.map((column) => (
+                {data.columns.map((column, columnIndex) => (
                   <Text
                     key={column.key}
                     style={[
                       styles.cell,
                       {
-                        width: column.width || `${100 / data.columns.length}%`,
+                        width: columnWidths[columnIndex],
                         textAlign: column.align || 'left',
-                        backgroundColor: rowIndex % 2 === 0 ? '#ffffff' : '#f8fafc',
+                        backgroundColor: row.__rowType ? '#E9EDF2' : rowIndex % 2 === 0 ? '#ffffff' : '#f8fafc',
+                        fontWeight: row.__rowType ? 700 : 400,
                       },
                     ]}
                   >
-                    {String(row[column.key] ?? '')}
+                    {typeof row[column.key] === 'number' && column.format === 'money' ? Number(row[column.key]).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : String(row[column.key] ?? '')}
                   </Text>
                 ))}
               </View>
@@ -319,13 +331,13 @@ export function ReportPdf({
             {/* Totals row */}
             {data.totals && (
               <View style={styles.totalsRow}>
-                {data.columns.map((column) => (
+                {data.columns.map((column, columnIndex) => (
                   <Text
                     key={column.key}
                     style={[
                       styles.totalsCell,
                       {
-                        width: column.width || `${100 / data.columns.length}%`,
+                        width: columnWidths[columnIndex],
                         textAlign: column.align || 'left',
                       },
                     ]}
@@ -337,6 +349,8 @@ export function ReportPdf({
             )}
           </View>
         )}
+
+        {data.signatures&&<View wrap={false} style={{flexDirection:'row',marginTop:44,gap:40}}>{data.signatures.map(s=><View key={s.label} style={{flex:1,borderTopWidth:1,borderTopColor:'#64748b',paddingTop:8,gap:4}}><Text>{s.label}: {s.name}</Text><Text>{s.role}</Text></View>)}</View>}
 
         {/* ── Footer ── */}
         <View style={styles.footer} fixed>

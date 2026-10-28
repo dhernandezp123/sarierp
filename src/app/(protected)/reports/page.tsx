@@ -1,6 +1,7 @@
 'use client'
 
 import { loadSupplierPayables, supplierAmount, supplierPayableReportRow, type SupplierPayable } from '@/src/lib/supplier-payables'
+import { FinanceReportWorkspace } from '@/src/components/accounting/FinanceReportWorkspace'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -372,6 +373,9 @@ function resolveDatePreset(dateFrom: string, dateTo: string, report: ReportId): 
 
 export default function ReportsPage() {
   const { user, profile } = useUser()
+  const params = useSearchParams()
+  const financial = ['Admin','Contabilidad','Finanzas'].includes(profile?.rol || '')
+  if (financial && ['receivable','payable'].includes(params.get('report') || '')) return <FinanceReportWorkspace key={`${user?.id}:${profile?.tenant_id}:${params.get('report')}`} side={params.get('report')==='payable'?'payable':'receivable'}/>
   return <ReportsContent key={(user?.id || '') + ':' + profile?.rol} />
 }
 
