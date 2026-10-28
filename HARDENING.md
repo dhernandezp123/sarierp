@@ -97,10 +97,18 @@
   tipos, componentes PDF, aprovisionador y pruebas de correo/marca. Comparación
   compartida: `scripts/check-environment-parity.mjs`, manifiesto de hashes y guía
   `docs/quality/environment-parity.md`. 513 archivos compartidos comparados;
-  22 variantes revisadas y cero diferencias inesperadas. Resto idéntico a main.
+  26 variantes revisadas y cero diferencias inesperadas. Resto idéntico a main.
 - Riesgos/pendientes: UAT autenticado, acceso temporal Demo vigente y nuevo reset
   de mantenimiento. Outlook permanece en espera en ambos entornos. No se publican
   huellas privadas, usuarios, credenciales ni PDFs reales.
+- Postflight SQL: 71/71 migraciones registradas con hash exacto; 148 compartidas
+  con Production, más 11 exclusivas. 116 tablas con RLS; ninguna función compartida
+  ausente, 363 idénticas y nueve variantes de límites/prefijos Demo. Auth preservado.
+  Preview de `b46aec4` Ready; aplicación CI aprobada, suite de base aún en curso.
+- Revisión de impresión: `withDemoPrintWatermark` reutiliza la marca existente en
+  ventanas HTML independientes de cierre, embarques, seguro y comparación FCL.
+  Prueba real de PDF multipágina y HTML idempotente aprobadas; TypeScript aprobado.
+  Estos cambios y el manifiesto actualizado se publican juntos, sin SQL adicional.
 
 ### 2026-10-28 - FIN-DRAFT-01 - Borrador previo a emisión y corrección aprobada por master
 

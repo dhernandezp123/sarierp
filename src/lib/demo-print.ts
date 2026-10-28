@@ -13,3 +13,10 @@ export function getDemoHtmlWatermark() {
     markup: `<div class="demo-watermark"><div class="demo-watermark-inner"><div class="demo-watermark-title">AMBIENTE DEMO</div><div class="demo-watermark-subtitle">${DEMO_DOCUMENT_NOTICE}</div></div></div>`,
   }
 }
+
+export function withDemoPrintWatermark(html: string) {
+  const { styles, markup } = getDemoHtmlWatermark()
+  if (!markup || html.includes('class="demo-watermark"')) return html
+  return html.replace(/<\/head>/i, `<style>${styles}</style></head>`)
+    .replace(/<body\b[^>]*>/i, body => body + markup)
+}

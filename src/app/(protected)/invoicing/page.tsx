@@ -1,5 +1,7 @@
 'use client'
 
+import { withDemoPrintWatermark } from '@/src/lib/demo-print'
+
 import { loadInvoiceList, type Invoice, type InvoiceType, type ReceivableSummary } from '@/src/lib/invoice-list'
 
 import { toDateInputValue } from '@/src/lib/format'
@@ -254,7 +256,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
 <div class="footer">${PLATFORM_NAME}<br>${PLATFORM_ATTRIBUTION} &middot; ${new Date().toLocaleDateString('es-HN')}</div>
 <script>window.onload=()=>window.print()</script></body></html>`
     const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    if (w) { w.document.write(withDemoPrintWatermark(html)); w.document.close() }
   }
 
   // Clientes únicos para el selector del estado de cuenta

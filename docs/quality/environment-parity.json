@@ -110,6 +110,26 @@
       "reason": "Preserve already-applied historical Demo source; current functions compared separately",
       "source_sha256": "3bf75fbfb34f25cf2af09c5945d7a40ef0b2f16b530831238c50e2c6d475088e",
       "trial_sha256": "5e4c0f6ff5a1987f12dd89a3bd74446dd5080180ed6ac177ad8585be86e347f5"
+    },
+    "src/components/quotations/InsuranceCalculationDialog.tsx": {
+      "reason": "Sandbox watermark in independent HTML print windows",
+      "source_sha256": "152274bc83634935ff32751867320fb224bbe8307ca642a126f024e36936532a",
+      "trial_sha256": "bf14d49252474e4912af6f7191c467968fdf7b83b70cd6b771f481944d9a5778"
+    },
+    "src/components/pricing/FclAgentComparisonTable.tsx": {
+      "reason": "Sandbox watermark in independent HTML print windows",
+      "source_sha256": "e0acb15a0f33bc0f88b2b267a021b7e2c2beb007d66781121e72e26f68485284",
+      "trial_sha256": "f3b5c2fa982b68e51cc8e47c7e1add18f98ed2cc8312a82c1fbb05646fb3550f"
+    },
+    "src/app/(protected)/invoicing/page.tsx": {
+      "reason": "Sandbox watermark in independent HTML print windows",
+      "source_sha256": "36a635469f963df3ec52eff3eaee0b662552da67a3026610f1caa2a60ffdfc3a",
+      "trial_sha256": "1bf317e67818efeb5c2ece6fed7abec55005c8263fa6d62d8bec15ea8957f0bc"
+    },
+    "src/app/(protected)/miami/embarques/page.tsx": {
+      "reason": "Sandbox watermark in independent HTML print windows",
+      "source_sha256": "fa41b9ccc37bd4eb222306998fac6f6374669d142ece02fada611790ff30f846",
+      "trial_sha256": "75e0e23896128bc946dc2d785b11c9755d8f5f6a762563ab86942661425ea186"
     }
   },
   "trial_only_source": [

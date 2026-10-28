@@ -1,5 +1,7 @@
 'use client'
 
+import { withDemoPrintWatermark } from '@/src/lib/demo-print'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Plane, Ship, CheckSquare, Square, SendHorizonal, PackageCheck } from 'lucide-react'
@@ -176,7 +178,7 @@ export default function EmbarquesPage() {
 
     const win = window.open('', '_blank')
     if (!win) { toast.error('Permite ventanas emergentes para imprimir'); return }
-    win.document.write(html)
+    win.document.write(withDemoPrintWatermark(html))
     win.document.close()
     win.print()
   }

@@ -1,5 +1,7 @@
 'use client'
 
+import { withDemoPrintWatermark } from '@/src/lib/demo-print'
+
 import { useEffect, useMemo, useState } from 'react'
 import { FileText, Printer } from 'lucide-react'
 import { toast } from 'sonner'
@@ -163,7 +165,7 @@ export function InsuranceCalculationDialog({
     }
 
     printWindow.document.open()
-    printWindow.document.write(`<!doctype html>
+    printWindow.document.write(withDemoPrintWatermark(`<!doctype html>
       <html lang="es">
         <head>
           <meta charset="utf-8" />
@@ -276,7 +278,7 @@ export function InsuranceCalculationDialog({
           </section>
           <div class="notice">Documento de apoyo para completar la solicitud de la aseguradora. Verifique el FOB, los servicios incluidos y las exclusiones aplicadas por la política de empresa. El seguro y el ISV no forman parte de la base.</div>
         </body>
-      </html>`)
+      </html>`))
     printWindow.document.close()
 
     const setText = (id: string, value: string) => {

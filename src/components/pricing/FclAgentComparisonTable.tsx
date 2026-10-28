@@ -1,5 +1,7 @@
 'use client'
 
+import { withDemoPrintWatermark } from '@/src/lib/demo-print'
+
 import { NumberInput } from '@/src/components/ui/NumberInput'
 
 import { useMemo, useRef } from 'react'
@@ -580,7 +582,7 @@ export function FclAgentComparisonTable({
       : 'Costos de agentes'
 
     printWindow.document.open()
-    printWindow.document.write(`<!doctype html>
+    printWindow.document.write(withDemoPrintWatermark(`<!doctype html>
       <html lang="es">
         <head>
           <meta charset="utf-8" />
@@ -638,7 +640,7 @@ export function FclAgentComparisonTable({
           <p class="meta">Comparativo interno de costos FCL</p>
           <main></main>
         </body>
-      </html>`)
+      </html>`))
     printWindow.document.close()
     printWindow.document.title = title
     printWindow.document.querySelector('h1')!.textContent = title

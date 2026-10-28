@@ -28,3 +28,17 @@ test('expired Demo profiles and missing expiry remain blocked by the shared Demo
   assert.equal(isDemoAccessExpired({is_demo_user:true,demo_expires_at:'2020-01-01'}),true)
   assert.equal(isDemoAccessExpired({is_demo_user:true,demo_expires_at:'2099-01-01'}),false)
 })
+
+test('HTML print windows carry a sandbox watermark once and preserve the document', () => {
+  const { withDemoPrintWatermark } = loadTs('src/lib/demo-print.ts', {
+    '@/src/lib/demo-environment': { IS_DEMO_ENVIRONMENT:true, DEMO_DOCUMENT_NOTICE:notice },
+  })
+  const html = '<html><head><title>Reporte</title></head><body class="report"><p>HNL 100.00</p></body></html>'
+  const marked = withDemoPrintWatermark(html)
+  assert.ok(marked.includes(notice))
+  assert.match(marked,/<body class="report"><div class="demo-watermark">/)
+  assert.ok(marked.includes('HNL 100.00'))
+  assert.equal(withDemoPrintWatermark(marked),marked)
+  const production = loadTs('src/lib/demo-print.ts', { '@/src/lib/demo-environment': { IS_DEMO_ENVIRONMENT:false } })
+  assert.equal(production.withDemoPrintWatermark(html),html)
+})
