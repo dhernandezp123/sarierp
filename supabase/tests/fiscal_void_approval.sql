@@ -132,10 +132,12 @@ reset role;
 select pg_temp.expect_error($c$delete from public.invoices where id=(select id from docs where name='stale')$c$,'conservan');
 set local role authenticated;
 insert into requests values('stale',public.request_fiscal_void('invoices',(select id from docs where name='stale'),gen_random_uuid(),'Revisar documento'));
-update public.invoices set notes='Datos actualizados después de la solicitud' where id=(select id from docs where name='stale');
+select pg_temp.expect_error($c$update public.invoices set notes='Datos actualizados después de la solicitud' where id=(select id from docs where name='stale')$c$,'corrección aprobada');
+-- Un cambio de estado permitido también invalida el snapshot de una solicitud.
+update public.invoices set status='Vencida' where id=(select id from docs where name='stale');
 select pg_temp.expect_error($c$select public.review_fiscal_void((select id from requests where name='stale'),true,'Autorizar',true)$c$,'cambió desde la solicitud');
 select public.review_fiscal_void((select id from requests where name='stale'),false,'Datos cambiaron; solicitar de nuevo',false);
-select pg_temp.assert_true((select status='Aprobada' from public.invoices where id=(select id from docs where name='stale')),'Rechazo no cambia documento');
+select pg_temp.assert_true((select status='Vencida' from public.invoices where id=(select id from docs where name='stale')),'Rechazo conserva el estado vigente del documento');
 select public.review_fiscal_void(public.request_fiscal_void('invoices',(select id from docs where name='stale'),gen_random_uuid(),'Nueva revisión'),true,'Autorizar actual',true);
 -- Documento sin asiento: registro fiscal explícito, nunca un asiento de importe cero.
 insert into docs select 'unposted',invoice_id from public.create_manual_invoice_with_items('{"invoice_type":"Factura","cliente_id":"be270200-0000-4000-8000-000000000001","currency":"HNL"}','[{"description":"Flete sin partida","quantity":1,"unit_price":20,"isv_rate":0}]');

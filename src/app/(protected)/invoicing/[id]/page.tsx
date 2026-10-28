@@ -2,6 +2,7 @@
 
 import { ConvertProforma } from '@/src/components/invoicing/ConvertProforma'
 import { FiscalVoidControl } from '@/src/components/invoicing/FiscalVoidControl'
+import { InvoiceCorrectionLinks } from '@/src/components/invoicing/InvoiceCorrectionLinks'
 import { InvoiceJournal } from '@/src/components/accounting/InvoiceJournal'
 import type { IssuerSnapshot } from '@/src/lib/fiscal-offices'
 
@@ -28,6 +29,7 @@ import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTas
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 type Invoice = {
+  correction_reference?: InvoicePdfData['correction_reference']
   cancellation_reason?: string | null
   cancelled_at?: string | null
   discount_amount?: number
@@ -516,6 +518,7 @@ export default function InvoiceDetailPage() {
   const companyDisplayName = getCompanyDisplayName(companyBranding)
 
   const pdfData: InvoicePdfData = {
+    correction_reference: invoice.correction_reference,
     invoice_number: invoice.invoice_number || '',
     invoice_type: invoice.invoice_type as 'Factura' | 'Proforma' | 'Nota de Crédito' | 'Nota de Débito',
     status: invoice.status,
@@ -671,6 +674,7 @@ export default function InvoiceDetailPage() {
       </div>
 
       <FiscalVoidControl table="invoices" documentId={invoice.id} status={invoice.status} requestDisabled={Boolean(invoice.converted_invoice_id)} onChanged={() => void fetchAll()} />
+      {invoice.invoice_type === 'Factura' && invoice.cai && <InvoiceCorrectionLinks invoiceId={invoice.id} original={invoice.correction_reference} />}
 
       <div className="grid gap-6 xl:grid-cols-3">
         {/* Left: items + payments */}

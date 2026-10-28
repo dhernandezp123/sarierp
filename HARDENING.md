@@ -1,5 +1,72 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-28 - FIN-DRAFT-01 - Borrador previo a emisión y corrección aprobada por master
+
+- Estado: implementado y validado localmente; migración de Production, designación
+  de la cuenta master solicitada, commit/despliegue y UAT autenticado pendientes.
+  Commit: pendiente. No se han modificado documentos ni permisos en Production.
+- Antes: generar una factura creaba un registro Borrador que ya consumía CAI y
+  correlativo. Ahora Guardar borrador conserva datos incompletos en una tabla
+  preparatoria; no crea factura, cuenta por cobrar ni asiento. La emisión exige
+  confirmación, valida el documento y asigna numeración/saldo en una transacción.
+  Los documentos numerados históricos no se renumeran ni se convierten en borrador.
+- `20261028100000_invoice_drafts_and_master_review.sql`: nuevas tablas con RLS
+  para borradores, designación individual master y eventos inmutables. RPC de
+  guardado con revisión/clave idempotente, solicitud/decisión y emisión bloqueada
+  por versión. Reintentos no duplican documentos ni consumen otro correlativo;
+  un fallo conserva el borrador y revierte emisión, saldo, CAI y contabilidad.
+- Master: una cuenta Admin o Contabilidad aprobada, activa y del mismo tenant;
+  no se concede el permiso a todos los integrantes del rol. Administración puede
+  designar/revocar desde Configuración contable y queda auditoría. Identidad
+  solicitada comprobada en modo de solo lectura: única, Contabilidad, activa,
+  aprobada y de Sari; no se cambió su acceso ni se creó una cuenta duplicada.
+- Aprovisionamiento administrativo: la designación inicial autorizada permite
+  registrar el origen `Despliegue autorizado`, sin suplantar una sesión humana.
+  Solo el propietario de base puede escribir ese registro; authenticated conserva
+  únicamente la RPC Admin. La auditoría distingue el rol técnico y el motivo.
+- Correcciones de todos los datos: propuesta editable con cliente, servicios,
+  importes, ISV y moneda; nombre/RTN/domicilio se validan desde el perfil del
+  cliente. Solo el master designado puede aprobar y emitir la sustituta. Editar
+  invalida la aprobación; cambios en datos fiscales del cliente/emisor, designación
+  master o líneas de cotización exigen nueva revisión/recarga antes de emitir.
+- Conserva original y sustituta vinculados, con motivo, versión, solicitante,
+  decisor y eventos. El PDF imprime correlativo/CAI propios y la referencia del
+  documento anulado. El contenido de facturas numeradas queda protegido también
+  contra modificaciones directas de comentarios o metadatos de pago; los estados
+  y pagos conservan sus RPC/flujo habitual.
+- Criterio fiscal: SAR indica anular y custodiar original/copia en errores de
+  llenado (art. 41 del Acuerdo 481-2017). La corrección no sobrescribe el documento;
+  requiere anulación del original aprobada por Contabilidad antes de emitir un
+  nuevo número. Pagos/notas activos y períodos cerrados conservan sus bloqueos.
+  No se cambia quién aprueba anulaciones ni se activa contabilidad automática.
+  Fuente: `https://www.sar.gob.hn/helpie_faq/que-hacer-en-caso-de-emitir-un-documento-fiscal-con-errores-en-el-llenado/`.
+- UI: bandeja `/invoicing/drafts`, continuar borrador desde Facturación, guardar
+  sin datos fiscales completos, confirmación de emisión y panel de revisión/historial.
+  Nuevo vínculo de trazabilidad en detalle de factura. Formulario de líneas
+  adaptable en móvil y confirmaciones dentro del viewport, sin introducir librerías.
+- Archivos: migración y suite `invoice_drafts_and_master_review.sql`,
+  `scripts/validate-audit-sql.mjs`, `invoice-drafts.ts`, `useInvoiceMaster.ts`,
+  `InvoiceMasterSettings`, `InvoiceCorrectionReview`, `InvoiceCorrectionLinks`,
+  páginas `invoicing/new`, `invoicing/drafts`, `invoicing/[id]`, `invoicing`,
+  `accounting/settings`, `invoice-pdf`, `ConfirmDialog`, pruebas de borradores,
+  descuentos, plantilla PDF y anulación. Guía: `docs/uat/invoice-drafts-and-corrections.md`.
+- Validaciones: 473/473 Node en suite completa; una nueva regresión de PDF de
+  sustitución añadida después y aprobada al repetir los cinco casos de plantilla.
+  Seis nuevas pruebas de flujo comprueban datos incompletos, valores vacíos,
+  reintentos/doble clic, descarte por cambio de identidad y revisión exacta.
+  Las 26 suites SQL/RLS pasan con migración canónica dentro de transacción revertida
+  y savepoints por suite en base desechable. Cubren permisos/tenant, numeración,
+  saldo, rechazo de edición directa, anulación, cambio de RTN y tarifa obsoleta.
+- Chrome con páginas/componentes reales y servicios ficticios: seis grupos de
+  guardado/reapertura, emisión confirmada, propuesta de Finanzas, revisión master,
+  invalidez tras editar, sustitución y configuración individual; sin excepciones.
+  Móvil real de navegador de 390 px, sin desbordar página/modal. Capturas y resultados
+  en `.ua/intermediate/invoice-drafts-validation/`; no certifican UAT autenticado.
+- TypeScript y build aprobados (103 páginas). Lint: 482 archivos, 223 diagnósticos
+  históricos, cero regresiones. Falta publicar SQL antes del frontend, designar al
+  master con auditoría administrativa y probar con usuarios reales. Los artefactos
+  de identidad/capturas y el correo de la cuenta no se agregan al código público.
+
 ### 2026-10-27 - REP-OPCLI-01 - Operaciones aprobadas y activas para el cliente
 
 - Estado: publicado y verificado en Production el 27/10/2026; CI de aplicación

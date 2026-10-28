@@ -27,6 +27,12 @@ test('nota conserva ambos CAI, motivo y fecha original sin usar el CAI de la not
  const {text}=await render({...base,invoice_type:'Nota de Débito',invoice_number:'001-001-07-00000001',parent_fiscal_snapshot:{invoice_number:'001-001-01-00000099',cai:'CAI-ORIGEN-TEST',issue_date:'2026-10-20'},motivo:'Almacenaje adicional'})
  for(const value of ['NOTA DE DÉBITO','CAI-PROPIO-TEST','CAI-ORIGEN-TEST','001-001-01-00000099','20/10/2026','Almacenaje adicional'])assert.ok(text.includes(value),value)
 })
+
+test('factura sustituta imprime número y CAI propios y la referencia íntegra del original anulado',async()=>{
+ const {text}=await render({...base,correction_reference:{invoice_id:'source-id',invoice_number:'001-001-01-00000098',cai:'CAI-ORIGINAL-CORREGIDO',issue_date:'2026-10-20',reason:'Cliente e importe confirmados'}})
+ for(const value of ['001-001-01-00000001','CAI-PROPIO-TEST','001-001-01-00000098','CAI-ORIGINAL-CORREGIDO','20/10/2026','Sustituye factura anulada','Cliente e importe confirmados'])assert.ok(text.includes(value),value)
+ assert.doesNotMatch(text,/source-id/)
+})
 test('cuarenta líneas y descripción larga se imprimen completas, con encabezado/footer sin superponer filas',async()=>{
  const rows=Array.from({length:40},(_,i)=>({...base.items[0],description:`CONCEPTO-${String(i).padStart(2,'0')} `+'Servicio de prueba '.repeat(i===20?25:1)}))
  const {layout,text}=await render({...base,items:rows})

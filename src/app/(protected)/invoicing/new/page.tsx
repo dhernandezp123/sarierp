@@ -6,8 +6,9 @@ import { calculateInvoiceFiscal, convertMoney, invoiceLineAmounts, type TaxTreat
 
 import { toDateInputValue } from '@/src/lib/format'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon, LockKeyhole } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
@@ -22,6 +23,10 @@ import {
 import { billingReturnHref } from '@/src/lib/billing-readiness'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import { loadBillingPointsOfSale } from '@/src/lib/billing-points-of-sale'
+import { useUser } from '@/src/hooks/useUser'
+import { draftEditorFromInvoice, draftEditorSignature, draftInvoicePayload, draftItemPayload, draftLabel, type DraftEditorState, type InvoiceDraft } from '@/src/lib/invoice-drafts'
+import { InvoiceCorrectionReview } from '@/src/components/invoicing/InvoiceCorrectionReview'
+import { useInvoiceMaster } from '@/src/hooks/useInvoiceMaster'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
@@ -177,10 +182,23 @@ const IS_NOTE: Record<InvoiceType, boolean> = {
 }
 
 export default function NewInvoicePage() {
+  const { user, profile } = useUser()
+  const { isMaster } = useInvoiceMaster()
   const router = useRouter()
+  const navigation = useRef(router)
+  useEffect(() => { navigation.current = router }, [router])
   const searchParams = useSearchParams()
+  const context = `${user?.id}:${profile?.tenant_id}:${searchParams.get('draft')}:${searchParams.get('correct')}:${searchParams.get('parent')}:${searchParams.get('quotation')}:${searchParams.get('doc_type')}`
+  const owner = useRef(context), saveLock = useRef('')
+  useEffect(() => { owner.current = context; return () => { owner.current = '' } }, [context])
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState<InvoiceDraft | null>(null)
+  const draftIdentity = useRef(crypto.randomUUID()), draftAttempt = useRef({ signature: '', key: '' })
+  const [draftLoading, setDraftLoading] = useState(false), [draftError, setDraftError] = useState('')
+  const [loadedContext, setLoadedContext] = useState('')
+  const [issueConfirmation, setIssueConfirmation] = useState(false)
+  const requestedDraft = searchParams.get('draft'), correctionSource = searchParams.get('correct')
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(() => searchParams.get('doc_type') === 'proforma' ? 'Proforma' : 'Factura')
   const [clienteId, setClienteId] = useState('')
@@ -230,6 +248,14 @@ export default function NewInvoicePage() {
 
   const pointOfSale = parentInvoice ? parentPointOfSale : (selectedCliente?.billing_office?.is_active ? selectedCliente.billing_office.name : '')
   const activeCai = loadedActiveCai?.point_of_sale === pointOfSale && loadedActiveCai.document_type === invoiceType ? loadedActiveCai : null
+
+  const restoreDraft = useCallback((state: DraftEditorState) => {
+    setInvoiceType('Factura'); setClienteId(state.clienteId || ''); setQuotationId(state.quotationId || '')
+    setIssueDate(state.issueDate || toDateInputValue()); setDueDate(state.dueDate || '')
+    setCurrency(state.currency || 'HNL'); setExchangeRate(state.exchangeRate || '')
+    setNotes(state.notes || ''); setMotivo(state.motivo || ''); setItems(state.items?.length ? state.items : [newItem()])
+    setFiscalOptions(state.fiscalOptions || blankFiscalOptions()); setSourceCurrency(state.sourceCurrency || '')
+  }, [])
 
   const applyQuotation = useCallback(async (quotation: Quotation) => {
     if (quotation.status !== 'Ganada') {
@@ -311,20 +337,47 @@ export default function NewInvoicePage() {
   }, [])
 
   useEffect(() => {
+    let active = true
     const init = async () => {
+      draftIdentity.current = crypto.randomUUID(); draftAttempt.current = { signature: '', key: '' }
+      setSaving(false); setDraft(null); setItems([newItem()]); setClienteId(''); setQuotationId(''); setNotes(''); setMotivo('')
+      setFiscalOptions(blankFiscalOptions()); setSourceCurrency(''); setIssueDate(toDateInputValue()); setDueDate('')
+      setInvoiceType(docType === 'proforma' ? 'Proforma' : 'Factura'); setParentInvoice(null)
+      setDraftLoading(Boolean(requestedDraft || correctionSource)); setDraftError('')
       const [clientesRes, settingsRes, pointsRes] = await Promise.all([
         supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito, billing_office:billing_offices!clientes_billing_office_fk(name,is_active)').order('nombre'),
         loadCurrentCompanySettings(supabase),
         loadBillingPointsOfSale(supabase),
       ])
 
+      if (!active) return
+
       setClientes((clientesRes.data || []).map(client => ({ ...client,
         billing_office: Array.isArray(client.billing_office) ? client.billing_office[0] || null : client.billing_office,
       })) as Cliente[])
       if (pointsRes.error) toast.error('No se pudieron cargar los puntos de venta')
-      if (!requestedQuotationId && !parentId) setCurrency(settingsRes.data?.default_currency === 'HNL' ? 'HNL' : 'USD')
+      if (!requestedQuotationId && !parentId && !requestedDraft && !correctionSource) setCurrency(settingsRes.data?.default_currency === 'HNL' ? 'HNL' : 'USD')
       if (settingsRes.data?.exchange_rate_usd_hnl) {
         setExchangeRate(String(settingsRes.data.exchange_rate_usd_hnl))
+      }
+
+      if (requestedDraft) {
+        const result = await supabase.from('invoice_drafts').select('*').eq('id', requestedDraft).single()
+        if (!active) return
+        if (result.error || !result.data) { setDraftError('No se pudo abrir el borrador. Vuelve al listado y reintenta.'); setDraftLoading(false); return }
+        const saved = result.data as InvoiceDraft
+        if (saved.status === 'Emitida' && saved.invoice_id) { markFormSaved(); navigation.current.replace(`/invoicing/${saved.invoice_id}`); return }
+        draftIdentity.current = saved.id; setDraft(saved); restoreDraft(saved.editor_state); setDraftLoading(false); setLoadedContext(context); return
+      }
+      if (correctionSource) {
+        const [source, lines] = await Promise.all([
+          supabase.from('invoices').select('*').eq('id', correctionSource).single(),
+          supabase.from('invoice_items').select('*').eq('invoice_id', correctionSource).order('sort_order').order('id'),
+        ])
+        if (!active) return
+        if (source.error || lines.error || !source.data || source.data.invoice_type !== 'Factura' || !source.data.cai) { setDraftError('No se pudo cargar la factura original para corregir.'); setDraftLoading(false); return }
+        restoreDraft(draftEditorFromInvoice(source.data, lines.data || [], blankFiscalOptions(), toDateInputValue()))
+        setDraftLoading(false); setLoadedContext(context); return
       }
 
       if (requestedQuotationId && !parentId) {
@@ -413,10 +466,12 @@ export default function NewInvoicePage() {
         if (docType === 'nc') setInvoiceType('Nota de Crédito')
         else if (docType === 'nd') setInvoiceType('Nota de Débito')
       }
+      if (active) setLoadedContext(context)
     }
 
-    init()
-  }, [parentId, docType, requestedQuotationId, applyQuotation])
+    void init().catch(() => { if (active) { setDraftError('No se pudo cargar el formulario. Recarga para reintentar.'); setDraftLoading(false) } })
+    return () => { active = false }
+  }, [parentId, docType, requestedQuotationId, requestedDraft, correctionSource, restoreDraft, applyQuotation, context])
 
   useEffect(() => {
     let cancelled = false
@@ -537,7 +592,39 @@ export default function NewInvoicePage() {
   const totalLps = currency === 'USD' ? total * (parseFloat(exchangeRate) || 1) : total
   const paymentTerms = getClientPaymentTerms(selectedCliente)
 
+  const formReady = loadedContext === context && !draftLoading && !draftError
+  const editorState: DraftEditorState = { invoiceType: 'Factura', clienteId, quotationId, issueDate, dueDate, currency, exchangeRate, notes, motivo, items, fiscalOptions, sourceCurrency }
+  const draftDirty = !draft || draftEditorSignature(draft.editor_state) !== draftEditorSignature(editorState)
+  const sourceInvoiceId = draft?.source_invoice_id || correctionSource || null
+  async function persistDraft() {
+    if (draft && !draftDirty) return draft
+    const invoice = draftInvoicePayload(editorState, fiscalOptionsPayload({ ...fiscalOptions, conversionEnabled: conversionNeeded && fiscalOptions.conversionEnabled }, sourceCurrency), pointOfSale)
+    const args = { p_id: draft?.id || draftIdentity.current, p_revision: draft?.revision || 0, p_invoice: invoice,
+      p_items: draftItemPayload(items), p_editor_state: editorState, p_quotation_id: quotationId || null, p_source_invoice_id: sourceInvoiceId }
+    const signature = draftEditorSignature(args)
+    if (draftAttempt.current.signature !== signature) draftAttempt.current = { signature, key: crypto.randomUUID() }
+    const result = await supabase.rpc('save_invoice_draft', { ...args, p_request_key: draftAttempt.current.key })
+    if (result.error || !result.data) throw new Error(result.error?.message || 'No se pudo confirmar el guardado. Reintenta sin cambiar el borrador.')
+    if (owner.current !== context) return null
+    const saved = result.data as InvoiceDraft
+    draftIdentity.current = saved.id; setDraft(saved)
+    return saved
+  }
+  async function handleSaveDraft() {
+    if (!formReady || saving || saveLock.current === context || invoiceType !== 'Factura') return
+    saveLock.current = context; setSaving(true)
+    try {
+      const saved = await persistDraft()
+      if (saved && owner.current === context) {
+        markFormSaved(); toast.success('Borrador guardado. Todavía no se ha asignado número fiscal.')
+        router.replace(`/invoicing/new?draft=${saved.id}`)
+      }
+    } catch (error) { if (owner.current === context) toast.error((error as Error).message) }
+    finally { if (saveLock.current === context) saveLock.current = ''; if (owner.current === context) setSaving(false) }
+  }
+
   const handleSave = async () => {
+    if (saveLock.current === context || saving || !formReady) return
     setSubmitted(true)
     if (fiscalError) { toast.error(fiscalError); return }
     if (!conversionValid) { toast.error('Confirma la conversión y su tasa antes de facturar en otra moneda'); return }
@@ -625,6 +712,21 @@ export default function NewInvoicePage() {
         income_account_id: item.income_account_id || null,
         sort_order: index,
       }))
+    if (invoiceType === 'Factura') {
+      saveLock.current = context
+      try {
+        if (sourceInvoiceId && (draftDirty || draft?.status !== 'Aprobada')) throw new Error('Guarda la propuesta y solicita aprobación del master antes de emitir la corrección.')
+        const prepared = sourceInvoiceId ? draft : await persistDraft()
+        if (!prepared || owner.current !== context) return
+        const result = await supabase.rpc('issue_invoice_draft', { p_id: prepared.id, p_revision: prepared.revision })
+        if (result.error) throw result.error
+        const issued = (result.data as { invoice_id: string; invoice_number: string }[] | null)?.[0]
+        if (!issued) throw new Error('No se pudo confirmar la emisión. El borrador se conserva para reintentar.')
+        if (owner.current === context) { markFormSaved(); toast.success(`Factura ${issued.invoice_number} emitida`); router.push(`/invoicing/${issued.invoice_id}`) }
+      } catch (error) { if (owner.current === context) toast.error((error as Error).message || 'No se pudo emitir; el borrador se conserva.') }
+      finally { if (saveLock.current === context) saveLock.current = ''; if (owner.current === context) setSaving(false) }
+      return
+    }
     const { data, error } = quotationId
       ? await supabase.rpc('create_invoice_from_quotation', {
           p_invoice: invoicePayload,
@@ -660,11 +762,13 @@ export default function NewInvoicePage() {
     : invoiceType === 'Proforma' ? 'Proforma'
     : 'Factura'
 
+  if (!formReady) return <div className="space-y-4 p-4">{draftError ? <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-800">{draftError}</p> : <p role="status">Cargando formulario y borrador…</p>}<Link className={secondaryButtonClass} href="/invoicing/drafts">Volver a borradores</Link></div>
+
   return (
     <div className="space-y-6">
       <UnsavedChangesGuard />
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
         <button
           type="button"
           onClick={() => requestFormNavigation(() => router.push(parentId ? `/invoicing/${parentId}` : returnHref))}
@@ -678,10 +782,14 @@ export default function NewInvoicePage() {
             Facturación
           </p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
-            {parentInvoice ? `Nueva ${docLabel}` : 'Nuevo documento'}
+            {draft ? `${draftLabel(draft.id)} · ${draft.status}` : sourceInvoiceId ? 'Preparar corrección de factura' : parentInvoice ? `Nueva ${docLabel}` : 'Nuevo documento'}
           </h1>
         </div>
       </div>
+      {draftLoading && <p role="status">Cargando borrador y configuración…</p>}
+      {draftError && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-800">{draftError}</p>}
+      {invoiceType === 'Factura' && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-100 bg-rose-50/60 p-4 text-sm text-slate-700 dark:border-rose-900 dark:bg-rose-950/20 dark:text-slate-300"><div><p className="font-semibold">Prepara y confirma antes de emitir</p><p className="mt-1 text-xs">Puedes guardar información incompleta como borrador. El CAI, el correlativo y el saldo se asignan al emitir.</p></div><Link href="/invoicing/drafts" className="font-semibold text-[#B3282D] underline dark:text-rose-300">Ver borradores y correcciones</Link>{quotationId && selectedQuotation && <button type="button" disabled={saving || loadingQuotation} className={secondaryButtonClass} onClick={() => void applyQuotation(selectedQuotation)}>Volver a cargar líneas de cotización</button>}</div>}
+      {draft?.source_invoice_id && <InvoiceCorrectionReview draft={draft} dirty={draftDirty} onChanged={setDraft} />}
 
       {/* Alert: no CAI activo para documentos fiscales */}
       {isFiscal && !activeCai && (
@@ -710,8 +818,8 @@ export default function NewInvoicePage() {
       )}
 
       {/* Main form */}
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+      <fieldset disabled={!formReady || saving} className="grid min-w-0 gap-6 xl:grid-cols-3">
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <section className={cardClass}>
             <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Datos generales</h2>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -727,7 +835,7 @@ export default function NewInvoicePage() {
                     setInvoiceType(nextType)
                     setDueDate(calculateDueDate(issueDate, selectedCliente, nextType))
                   }}
-                  disabled={!!parentInvoice || Boolean(quotationId)}
+                  disabled={!!parentInvoice || Boolean(quotationId) || Boolean(draft) || Boolean(sourceInvoiceId)}
                   className={`${fieldClass} ${reqClass(submitted, invoiceType)} disabled:opacity-60`}
                 >
                   <option value="Factura">Factura</option>
@@ -962,7 +1070,7 @@ export default function NewInvoicePage() {
 
           {/* Line items */}
           <section className={cardClass}>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">Líneas del documento</h2>
               {quotationId ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
@@ -982,7 +1090,7 @@ export default function NewInvoicePage() {
             </div>
 
             <div className="space-y-2">
-              <div className={`grid gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 grid-cols-[1fr_72px_110px_150px_110px_36px]`}>
+              <div className="hidden grid-cols-[minmax(0,1fr)_72px_110px_150px_110px_36px] gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 lg:grid">
                 <span>Descripción</span>
                 <span className="text-right">Qty</span>
                 <span className="text-right">Precio unit. {conversionNeeded ? sourceCurrency : currency}</span>
@@ -995,8 +1103,9 @@ export default function NewInvoicePage() {
               {items.map((it) => (
                 <div
                   key={it.id}
-                  className={`grid items-center gap-2 grid-cols-[1fr_72px_110px_150px_110px_36px]`}
+                  className="grid min-w-0 grid-cols-2 items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700 lg:grid-cols-[minmax(0,1fr)_72px_110px_150px_110px_36px] lg:items-center lg:gap-2 lg:border-0 lg:p-0"
                 >
+                  <label className="col-span-2 min-w-0 space-y-1 text-xs lg:col-span-1"><span className="lg:hidden">Descripción</span>
                   <input
                     type="text"
                     placeholder="Descripción del servicio..."
@@ -1005,6 +1114,8 @@ export default function NewInvoicePage() {
                     readOnly={Boolean(it.source_pricing_item_id)}
                     className={`${fieldClass} text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800 ${submitted && !it.description ? 'border-red-400' : ''}`}
                   />
+                  </label>
+                  <label className="min-w-0 space-y-1 text-xs"><span className="lg:hidden">Cantidad</span>
                   <input
                     type="number"
                     value={it.quantity}
@@ -1014,6 +1125,8 @@ export default function NewInvoicePage() {
                     readOnly={Boolean(it.source_pricing_item_id)}
                     className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
                   />
+                  </label>
+                  <label className="min-w-0 space-y-1 text-xs"><span className="lg:hidden">Precio unitario {currency}</span>
                   <input
                     type="number"
                     value={it.unit_price}
@@ -1023,6 +1136,7 @@ export default function NewInvoicePage() {
                     readOnly={Boolean(it.source_pricing_item_id)}
                     className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
                   />
+                  </label>
                   <div className="space-y-1">
                     <label className="flex gap-1 text-xs"><input type="checkbox" aria-label="Línea gravable" checked={it.isv_rate > 0 && fiscalOptions.mode !== 'Exonerada' && fiscalOptions.mode !== 'Exenta'} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} onChange={e => { updateItem(it.id, 'isv_rate', e.target.checked ? 15 : 0); updateItem(it.id, 'tax_treatment', e.target.checked ? 'Gravada' : 'Exenta') }} />Gravable</label>
                     <select aria-label="Tasa ISV de línea" value={it.isv_rate} onChange={e => updateItem(it.id, 'isv_rate', Number(e.target.value))} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} className={fieldClass}>
@@ -1031,12 +1145,13 @@ export default function NewInvoicePage() {
                     {it.isv_rate === 0 && <select aria-label="Motivo sin ISV" className={fieldClass} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} value={it.tax_treatment || 'Exenta'} onChange={e=>updateItem(it.id,'tax_treatment',e.target.value)}><option value="Exenta">Exenta</option><option value="Exonerada">Exonerada</option></select>}
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-sm font-medium dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    <span className="mb-1 block text-[10px] font-normal text-slate-500 lg:hidden">Importe neto</span>
                     {it.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </div>
                   {it.source_pricing_item_id ? (
                     <span
                       title="Línea vinculada a la cotización"
-                      className="flex h-9 w-9 items-center justify-center text-emerald-600 dark:text-emerald-400"
+                      className="col-span-2 flex h-9 w-9 items-center justify-center justify-self-end text-emerald-600 dark:text-emerald-400 lg:col-span-1"
                     >
                       <LockKeyhole className="h-4 w-4" />
                     </span>
@@ -1045,7 +1160,7 @@ export default function NewInvoicePage() {
                       type="button"
                       onClick={() => requestItemRemoval(it)}
                       disabled={items.length === 1}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-30 dark:hover:bg-rose-950/30"
+                      className="col-span-2 flex h-9 w-9 items-center justify-center justify-self-end rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-30 dark:hover:bg-rose-950/30 lg:col-span-1"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -1154,17 +1269,19 @@ export default function NewInvoicePage() {
               }
               {selectedCliente.direccion && <p className="mt-1 text-xs text-slate-500">{selectedCliente.direccion}</p>}
               {selectedCliente.email && <p className="text-xs text-slate-500">{selectedCliente.email}</p>}
+              <Link href={`/clientes/${selectedCliente.id}/edit`} className="mt-2 inline-block text-xs font-semibold text-blue-700 underline dark:text-blue-300">Revisar nombre, RTN y domicilio en el perfil del cliente</Link>
             </section>
           )}
 
           <button
             type="button"
-            onClick={handleSave}
-            disabled={saving || loadingQuotation}
+            onClick={() => invoiceType === 'Factura' ? setIssueConfirmation(true) : void handleSave()}
+            disabled={saving || loadingQuotation || Boolean(sourceInvoiceId && (!isMaster || draftDirty || draft?.status !== 'Aprobada'))}
             className={`w-full ${primaryButtonClass}`}
           >
-            {saving ? 'Generando...' : `Generar ${docLabel}`}
+            {saving ? 'Guardando…' : invoiceType === 'Factura' ? sourceInvoiceId ? 'Emitir corrección aprobada' : 'Emitir factura' : `Generar ${docLabel}`}
           </button>
+          {invoiceType === 'Factura' && <button type="button" onClick={() => void handleSaveDraft()} disabled={saving || loadingQuotation} className={`w-full ${secondaryButtonClass}`}>Guardar borrador</button>}
           <button
             type="button"
             onClick={() => requestFormNavigation(() => router.push(parentId ? `/invoicing/${parentId}` : returnHref))}
@@ -1173,7 +1290,8 @@ export default function NewInvoicePage() {
             Cancelar
           </button>
         </div>
-      </div>
+      </fieldset>
+      <ConfirmDialog open={issueConfirmation} onOpenChange={setIssueConfirmation} title={sourceInvoiceId ? 'Emitir factura sustituta' : 'Emitir factura'} description="Se validará toda la información y se asignará un número fiscal. El documento emitido conservará su historial y generará su saldo por cobrar." confirmLabel="Confirmar emisión" onConfirm={() => { setIssueConfirmation(false); void handleSave() }} />
       <ConfirmDialog
         open={quotationChangePending !== null}
         onOpenChange={(open) => { if (!open) setQuotationChangePending(null) }}

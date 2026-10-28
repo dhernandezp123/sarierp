@@ -17,6 +17,7 @@ const files = [
   'accounting_currency.sql',
   'fiscal_discounts.sql',
   'fiscal_void_approval.sql',
+  'invoice_drafts_and_master_review.sql',
   'agent_quote_internal_notes.sql',
   'customs_only_service.sql',
   'demo_request_server.sql',

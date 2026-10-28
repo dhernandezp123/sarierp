@@ -11,6 +11,7 @@ export type InvoicePdfItem = {
 }
 
 export type InvoicePdfData = {
+  correction_reference?: { invoice_id?: string | null; invoice_number?: string | null; cai?: string | null; issue_date?: string | null; reason?: string | null } | null
   cancellation_reason?: string | null
   cancelled_at?: string | null
   discount_amount?: number
@@ -102,7 +103,7 @@ export function InvoicePdf({data,logo}:{data:InvoicePdfData;logo?:string|null}) 
    'N.º Registro SAG: '+(data.no_registro_sag||'No aplica')],
   equivalence:data.reference_equivalence?'Equivalencia informativa: '+formatMoney(Number(data.reference_equivalence.amount),data.reference_equivalence.currency)+' · T/C '+data.reference_equivalence.rate+' · '+(data.reference_equivalence.operation==='multiply'?'multiplicar':'dividir'):null,
   original_amount:converted?'Importe original: '+formatMoney(Number(data.total),data.currency)+' · T/C HNL por USD: '+data.exchange_rate:null,
-  reference:reference||data.parent_invoice_number?{number:reference?.invoice_number||data.parent_invoice_number,cai:reference?.cai,issue_date:reference?.issue_date,reason:data.motivo}:null,
+  reference:data.correction_reference?{number:data.correction_reference.invoice_number,cai:data.correction_reference.cai,issue_date:data.correction_reference.issue_date,reason:'Sustituye factura anulada: '+(data.correction_reference.reason||'Corrección aprobada')}:reference||data.parent_invoice_number?{number:reference?.invoice_number||data.parent_invoice_number,cai:reference?.cai,issue_date:reference?.issue_date,reason:data.motivo}:null,
   fiscal:fiscal?{cai:data.cai,from:data.rango_desde,to:data.rango_hasta,deadline:data.fecha_limite_emision,office:data.point_of_sale,location:data.lugar_emision}:null,
   invoice_legend:data.invoice_type==='Factura',footer_note:data.company_invoice_footer,
  }
