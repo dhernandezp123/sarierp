@@ -17,6 +17,25 @@
   habilitan individualmente desde Configuración. Sin asignaciones inferidas.
   UAT con Contabilidad y configuración operativa quedan explícitos. Hash: en curso.
 
+### 2026-10-28 - CAI-RELEASE-01 - Discrepancia de punto SAR detectada antes de publicar
+
+- Estado: corregida en SQL aún no aplicado; ensayo/publicación remotos pendientes.
+- El preflight actual encontró TGU `000-000`, mientras todos sus rangos tienen
+  `000-001`, confirmado previamente por el propietario. `20261028150000` estaba
+  pendiente en ambos ambientes; se refuerza antes de su primera aplicación.
+- Solo se admite ese error conocido en la oficina Sari indicada, con rangos y
+  documentos compatibles y sin otro dueño del prefijo. Los códigos no confirmados
+  siguen rechazados. Reparación auditada en `activity_logs`, actor administrativo
+  sin identidad humana; no altera CAI, fechas, estados ni siguientes números.
+- `cai_office_backfill.sql` reproduce la migración canónica real en base desechable,
+  verifica datos CAI completos y auditoría, y rechaza un código no confirmado.
+  Runners main/Demo incorporan la fuente conservando sus delimitadores SQL.
+  Casos de códigos vacíos/error confirmado/rechazo y 30/6 suites SQL con rollback.
+  Fuente frontend sin cambios; no repite cambios de diseño o cálculos.
+- Pendientes: ensayo y aplicación en cada base; CI, smoke y UAT con Contabilidad.
+  El release compara todas las filas originales y admite solo la auditoría nueva
+  de la reparación esperada. Hash: en curso.
+
 ### 2026-10-28 - UX-SELECT-01 - Selectores y paneles de configuración compactos
 
 - Estado: corrección visual local para main y Pruebas; commit, publicación y

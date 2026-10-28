@@ -21,8 +21,11 @@ se capturan con datos ficticios propios; no se copia configuración real de Sari
 ## Corrección preparada
 
 `20261028150000_cai_office_binding.sql` completa los códigos vacíos confirmados
-de Sari únicamente si los rangos registrados todavía coinciden. Si cambiaron,
-aborta para revisión. No actualiza la tabla de CAI ni documentos emitidos.
+de Sari únicamente si los rangos registrados todavía coinciden. El preflight de
+publicación detectó además TGU `000-000`, frente a rangos `000-001` confirmados:
+ese caso conocido se corrige con comprobación de documentos y auditoría en
+`activity_logs`. Cualquier otro código no confirmado aborta para revisión. No
+actualiza la tabla de CAI ni documentos emitidos.
 
 También rechaza registrar/activar/utilizar rangos de otra oficina, duplicar los
 códigos de una oficina y cambiar códigos incompatibles con su historial fiscal.
