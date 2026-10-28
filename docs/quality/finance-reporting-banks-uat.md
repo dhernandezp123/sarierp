@@ -1,7 +1,9 @@
 # Validación operativa: cartera, Caja/Bancos y conciliación
 
 Plan: [seis etapas aprobadas](../plans/contabilidad-caja-bancos-20261028.md).
-Implementación: 28/10/2026. Este documento no certifica publicación ni aceptación.
+Implementación/publicación: 28/10/2026. La evidencia de publicación está en
+`docs/release/accounting-finance-cai-2026-10-28.md`; este documento define UAT,
+sin certificar aceptación autenticada.
 
 ## Evidencia local del 28/10/2026
 
@@ -28,8 +30,9 @@ subtotales por cliente/moneda, números, autofiltro y títulos de impresión.
 La plantilla bancaria original solo se usa como referencia; no se importaron
 sus cuentas, nombres de personas o saldos reales.
 
-Estos controles no reemplazan los casos de aceptación de abajo. Continúan
-pendientes el commit, las migraciones remotas, la publicación y el UAT real.
+Estos controles iniciales no reemplazan los casos de aceptación de abajo. El
+release posterior está publicado: 504/510 Node, 30/6 SQL/RLS, CI y smoke aprobados.
+El UAT real y la configuración operativa siguen pendientes.
 
 ## Antes de usar datos reales
 
@@ -88,6 +91,6 @@ La emulación de navegador no acredita un dispositivo físico ni sesión real.
   prueba en cada página. No transferir secretos, cuentas bancarias ni saldos reales.
 - Verificar SQL/RLS y versión publicada por ambiente, después una sesión real de
   Contabilidad. Un build o HTTP sin sesión no acredita el flujo autenticado.
-- Commit, aplicación remota, publicación y aceptación siguen pendientes hasta
-  que se registren sus evidencias. No hay aprobación electrónica de conciliación:
+- Commit, aplicación remota y publicación están verificados en el registro de
+  release; la aceptación sigue pendiente. No hay aprobación electrónica de conciliación:
   los nombres son los que se imprimirán para firma externa.

@@ -57,6 +57,30 @@ selectores con ocho comprobaciones de navegador y lint dirigido sin regresiones.
 Paridad: 539 archivos compartidos, 26 variantes revisadas, sin diferencias
 inesperadas. La configuración Trial permanece separada.
 
-Estado inicial de este registro: confirmación, SQL remoto, CI y publicación en
-curso. La evidencia final se registrará aquí y en HARDENING.md. El smoke HTTP
-sin sesión no sustituye la aceptación autenticada con Contabilidad.
+## Publicación verificada
+
+Commits funcionales: main `fdf54c5` (incluye `62b5954`) y Demo `0d74b67`
+(incluye `d2ddf96`). Fuentes de las seis migraciones aplicadas verificadas por
+hash en ambos historiales. Preservadas las filas originales de 113/116 tablas,
+usuarios y máster; únicamente se corrigió el punto TGU y se añadió su auditoría.
+Los siete CAI de Producción conservan íntegros rangos, fechas, estado y siguiente
+número. Pruebas conserva cero CAI y su propia configuración.
+
+Postflight: 131/134 tablas públicas con RLS; 412 funciones compartidas, ninguna
+ausente y las 40 nuevas idénticas. Las diferencias previas de sandbox/formato no
+aumentan. No se activó contabilidad ni se crearon bancos, aperturas o permisos.
+
+| Ambiente | CI Quality | Deployment funcional Ready | Smoke |
+| --- | --- | --- | --- |
+| [Producción](https://sari.forwarders.app) | [40780475897](https://github.com/dhernandezp123/sarierp/actions/runs/40780475897) | [rhpfu450u](https://sarierp-rhpfu450u-claudherhn-5641s-projects.vercel.app) | 22 rutas |
+| [Pruebas](https://demo.forwarders.app) | [40780480535](https://github.com/dhernandezp123/sarierp/actions/runs/40780480535) | [pcio35kj1](https://sarierp-pcio35kj1-claudherhn-5641s-projects.vercel.app) | 28 rutas |
+
+[Paridad continua 40780480542](https://github.com/dhernandezp123/sarierp/actions/runs/40780480542)
+aprobada. Los dominios sirven el mismo manifest que su deployment inmutable.
+Las nuevas rutas exigen sesión; la API de extractos rechaza anónimos con 401.
+Demo mantiene noindex, marca ficticia, logos reales bloqueados e invitaciones
+rechazadas antes de contactar Auth/correo.
+
+Pendiente con Contabilidad: autorizar oficinas a los usuarios de Producción,
+designar un máster ficticio en Pruebas, completar parámetros contables/fiscales
+reales y ejecutar UAT. El smoke HTTP sin sesión no certifica aceptación autenticada.

@@ -2,7 +2,8 @@
 
 ### 2026-10-28 - RELEASE-FIN-20261028 - Publicación coordinada de finanzas, CAI y UX
 
-- Estado: commit/despliegue autorizados; preparación y preflight completados.
+- Estado: SQL y frontend publicados en Producción y Pruebas; CI y smoke aprobados.
+  Aceptación autenticada con Contabilidad y configuración operativa pendientes.
   Registro: `docs/release/accounting-finance-cai-2026-10-28.md`.
 - Alcance: FIN-REP-01, FIN-BANK-01/02, CAI-OFFICE-01, CAI-MASTER-01,
   CAI-ACCESS-01 y UX-SELECT-01. Seis migraciones nuevas, SQL antes del frontend.
@@ -10,16 +11,24 @@
   máster individual preexistente elegible. Pruebas 116 tablas con RLS, sin CAI ni
   máster; configuración propia, sin copiar usuarios reales. Ambas ramas coinciden
   con sus referencias remotas y la paridad compartida está aprobada.
-- Validaciones locales conservadas: 504/510 Node, 29/5 SQL/RLS con rollback,
-  TypeScript, compilaciones, lint sin regresiones y navegador. Pendientes:
-  ensayo/aplicación remotos, commit/push, CI, Ready y smoke de ambos dominios.
+- Validaciones: 504/510 Node, 30/6 SQL/RLS con rollback, TypeScript, compilaciones,
+  lint y navegador. Ensayos remotos con rollback y aplicación atómica por ambiente:
+  seis fuentes SQL verificadas contra los commits; 113/116 tablas originales
+  preservadas, usuarios/máster/CAI íntegros, solo reparación TGU y su auditoría.
+  Postflight: 131/134 tablas públicas con RLS; ninguna función compartida ausente,
+  40 funciones nuevas idénticas. Sin bancos, saldos o permisos de oficina sembrados.
+  CI main `40780475897`, Demo `40780480535` y paridad `40780480542` aprobados.
+  Vercel Ready en ambos; smoke de 22/28 rutas, noindex/bloqueos Demo, API bancaria
+  anónima 401 y manifest de dominio idéntico al deployment inmutable.
 - Emisión: conservar máster actual; las oficinas de los demás usuarios se
   habilitan individualmente desde Configuración. Sin asignaciones inferidas.
-  UAT con Contabilidad y configuración operativa quedan explícitos. Hash: en curso.
+  UAT con Contabilidad y configuración operativa quedan explícitos. Commits
+  funcionales: main `fdf54c5`, Demo `0d74b67` (incluyen `62b5954` / `d2ddf96`).
 
 ### 2026-10-28 - CAI-RELEASE-01 - Discrepancia de punto SAR detectada antes de publicar
 
-- Estado: corregida en SQL aún no aplicado; ensayo/publicación remotos pendientes.
+- Estado: SQL aplicado y verificado en ambos ambientes; reparación TGU auditada
+  únicamente en Producción. Ningún CAI, rango o correlativo fue modificado.
 - El preflight actual encontró TGU `000-000`, mientras todos sus rangos tienen
   `000-001`, confirmado previamente por el propietario. `20261028150000` estaba
   pendiente en ambos ambientes; se refuerza antes de su primera aplicación.
@@ -32,14 +41,14 @@
   Runners main/Demo incorporan la fuente conservando sus delimitadores SQL.
   Casos de códigos vacíos/error confirmado/rechazo y 30/6 suites SQL con rollback.
   Fuente frontend sin cambios; no repite cambios de diseño o cálculos.
-- Pendientes: ensayo y aplicación en cada base; CI, smoke y UAT con Contabilidad.
-  El release compara todas las filas originales y admite solo la auditoría nueva
-  de la reparación esperada. Hash: en curso.
+- El release comparó todas las filas originales y admitió solo la auditoría nueva
+  de la reparación esperada. CI y smoke aprobados; UAT con Contabilidad pendiente.
+  Hashes funcionales: `fdf54c5` / `0d74b67`.
 
 ### 2026-10-28 - UX-SELECT-01 - Selectores y paneles de configuración compactos
 
-- Estado: corrección visual local para main y Pruebas; commit, publicación y
-  UAT remoto pendientes. No modifica SQL, permisos ni cálculos financieros.
+- Estado: publicado en main y Pruebas, build/CI/smoke aprobados; revisión con
+  usuario pendiente. Este ajuste no modifica SQL, permisos ni cálculos financieros.
 - Hallazgo: el formulario CAI se extendía al ancho disponible; el tipo ocupaba
   ambas columnas y su menú nativo producía un panel blanco desproporcionado.
   Inventario estático posterior: 222 selectores nativos restantes en 70 archivos.
@@ -68,12 +77,14 @@
   sin excepciones JavaScript. Los controles y menús caben en el ancho solicitado.
   Paridad: 539 archivos compartidos, 26 variantes revisadas, cero diferencias
   inesperadas. Diff check aprobado. Guía: `docs/quality/compact-selects-uat.md`.
-- Pendientes: publicación y revisión con usuario en su navegador. Hash: sin commit.
+- Pendiente: revisión con usuario en su navegador. Hashes funcionales:
+  `fdf54c5` / `0d74b67`; fuente UX incluida en `62b5954` / `d2ddf96`.
 
 ### 2026-10-28 - CAI-MASTER-01 / CAI-ACCESS-01 - Correcciones, retiro y autorización individual por oficina
 
-- Estado: implementación local; migraciones, commit, publicación y UAT remotos
-  pendientes. No se corrige por inferencia ninguna fecha real del SAR.
+- Estado: migraciones y frontend publicados en ambos ambientes; RLS, CI y smoke
+  aprobados. Configurar autorizaciones por usuario y UAT real pendientes.
+  No se corrigió por inferencia ninguna fecha real del SAR.
 - `20261028160000_cai_master_lifecycle.sql`: solo el máster individual designado
   puede registrar, corregir, activar, desactivar o eliminar CAI de su empresa.
   RLS mantiene la política restrictiva de aislamiento por tenant; Admin y
@@ -111,15 +122,15 @@
   390 px sin desbordamiento ni errores de ejecución. Paridad local: 538 archivos
   compartidos, 26 variantes revisadas, sin diferencias inesperadas. Git diff check
   aprobado. Las bases desechables quedaron sin tablas nuevas tras rollback.
-- Pendientes: aplicar SQL compartido en ambos ambientes, configurar autorizaciones
-  reales y probar con Contabilidad (corregir fecha contra autorización, activar,
+- Pendientes: configurar autorizaciones reales y probar con Contabilidad
+  (corregir fecha contra autorización, activar,
   apoyar ambas oficinas y verificar PDF). Guía en `docs/quality/cai-office-numbering.md`.
-  Sin datos fiscales reales modificados. Hash: sin commit.
+  Sin datos de documentos fiscales modificados. Hashes: `fdf54c5` / `0d74b67`.
 
 ### 2026-10-28 - CAI-OFFICE-01 - Prefijos y series fiscales por oficina/tipo
 
-- Estado: corrección preparada y validada localmente; migración, commit y
-  publicación remotos pendientes. Consultas remotas de este ajuste: solo lectura.
+- Estado: migración y frontend publicados en ambos ambientes; conservación de
+  numeración verificada. UAT con Contabilidad pendiente. Véase CAI-RELEASE-01.
 - Verificado en Producción y Prueba: asignación fiscal y activación filtran por
   tenant, oficina y tipo; índice único activo por esa combinación. Factura,
   NC/ND, boleta y retención no comparten contador entre oficinas. Guía de Remisión
@@ -127,9 +138,10 @@
 - Hallazgo reproducido: registrar un rango con prefijo de SPS para TGU era
   aceptado, aunque fallaba al emitir. También podían repetirse códigos SAR en
   oficinas distintas o cambiarse los códigos dejando rangos incompatibles.
-- Producción: dos oficinas, códigos vacíos y solo rangos de Factura registrados
+- Verificación inicial: dos oficinas, códigos vacíos y solo Factura registrada
   (SPS inactivo/TGU activo). El propietario confirmó SPS `001-001` y TGU `000-001`.
-  La migración completa únicamente esos campos vacíos si todos los rangos
+  Al publicar ya había siete rangos; se preservaron. La migración completa campos
+  vacíos y la discrepancia TGU documentada en CAI-RELEASE-01 si todos los rangos
   existentes siguen coincidiendo. No modifica CAI, rangos, correlativos, estado
   activo ni documentos emitidos. Las autorizaciones de los demás tipos requieren
   captura real; no se crean ni se deducen a partir del CAI de Factura.
@@ -151,14 +163,16 @@
   bloqueado antes de guardar, oficina/tipo correctos y formulario móvil sin
   desbordamiento; sin errores de ejecución. Paridad local: 534 archivos
   compartidos y 26 variantes revisadas, sin diferencias inesperadas.
-- Pendientes: aplicar la migración en ambos ambientes y probar con Contabilidad;
+- Pendiente: probar con Contabilidad;
   registrar las autorizaciones SAR faltantes por oficina/tipo y revisar activación
-  de rangos válidos. Sin emisión real ni cambios de numeración. Hash: sin commit.
+  de rangos válidos. Sin emisión real ni cambios de numeración.
+  Hashes funcionales: `fdf54c5` / `0d74b67`.
 
 ### 2026-10-28 - FIN-REP-01 / FIN-BANK-01 / FIN-BANK-02 - Plan de cartera, Caja/Bancos y conciliación
 
-- Estado: implementación local de etapas 1–5; controles locales de etapa 6 aprobados. SQL remoto,
-  commit, despliegue y UAT autenticado pendientes. No se declara cierre operativo.
+- Estado: etapas 1–5 publicadas en ambos ambientes; controles automatizados de
+  etapa 6 y SQL/CI/smoke aprobados. UAT autenticado y configuración de saldos/cuentas
+  pendientes; no se declara cierre operativo.
 - Plan y decisiones: `docs/plans/contabilidad-caja-bancos-20261028.md`; mora por
   vencimiento (Actual no vencido), Excel con bloques en una hoja y únicamente
   firmas físicas. Guía de UAT/publicación en `docs/quality/finance-reporting-banks-uat.md`.
@@ -204,7 +218,8 @@
 - Riesgos/pendientes: definir saldos, cuentas y fecha reales; revisar cuentas con
   movimientos previos antes de vincularlas; cobertura anterior reconstruida no
   certifica cortes más antiguos. Abrir Excel/firmar PDF, extractos representativos,
-  UAT real y aplicación coordinada en ambos ambientes. Hash: sin commit todavía.
+  UAT real. Publicación coordinada verificada; hashes funcionales:
+  `fdf54c5` / `0d74b67` (incluyen `62b5954` / `d2ddf96`).
 
 ### 2026-10-28 - DEMO-PARITY-002 - Alinear Prueba con Producción sin mezclar entornos
 
