@@ -1,6 +1,6 @@
 'use client'
 
-import { DemoPrintWatermark } from '@/src/components/demo/DemoPrintWatermark'
+import { loadSupplierPayables, supplierAmount, supplierPayableReportRow, type SupplierPayable } from '@/src/lib/supplier-payables'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -15,10 +15,11 @@ import {
   RefreshCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { calendarDaysUntil, formatDate, formatDateTime, toDateInputValue } from '@/src/lib/format'
-import { canAccessPath } from '@/src/lib/permissions'
+import { formatDate, formatDateTime, toDateInputValue } from '@/src/lib/format'
+import { canAccessPath, canViewClientOperationsReport } from '@/src/lib/permissions'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { readAllReportRows } from '@/src/lib/report-query'
+import { SALES_VISIT_SELECT, VISIT_REPORT_COLUMNS, visitReportRows, type SalesVisit } from '@/src/lib/sales-visits'
 import { defaultReportView, readReportView, reportCsvCell, reportDateBasis, reportDateMatches, reportDateRange, reportRangeLabel, reportSortValue, reportViewQuery, type ReportView, type ReportId, type DatePreset } from '@/src/lib/report-view'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
@@ -27,10 +28,10 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { ReportPdf, type ReportPdfColumn, type ReportPdfData, type ReportPdfRow } from '@/src/components/pdf/report-pdf'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import { aggregateBookingStatus } from '@/src/lib/booking-status'
 import {
   resolveBookingDocumentSummary,
@@ -155,6 +156,8 @@ type BookingReadinessReportRow = {
 type InvoiceRow = {
   id: string
   invoice_number: string | null
+  point_of_sale: string | null
+  lugar_emision: string | null
   invoice_type: string
   status: string
   cliente_id: string | null
@@ -229,19 +232,7 @@ type ProveedorPaymentRow = {
   }>
 }
 
-type PayableRow = {
-  id: string
-  descripcion: string
-  numero_factura_proveedor: string | null
-  monto: number | string
-  moneda: string
-  fecha_factura: string | null
-  fecha_vencimiento: string | null
-  status: string
-  pagos_proveedor?: { monto: number | string; fecha_pago: string | null }[]
-  proveedores: Join<{ id: string; nombre: string; tipo: string }>
-  quotations: Join<{ quotation_number: string | null }>
-}
+type PayableRow = SupplierPayable
 
 type ReportRow = ReportPdfRow & {
   __href?: string
@@ -261,17 +252,20 @@ type ReportRow = ReportPdfRow & {
   __approvedInPeriod?: number
   __lostInPeriod?: number
   __pendingAtClose?: number
+  __overpayment?: number
+  __reconciliation?: number
   __responseHours?: number
 }
 
 const REPORTS: { id: ReportId; label: string; scope: string; roles: string[] }[] = [
-  { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones por estado actual, venta cotizada y utilidad; no equivale a facturación', roles: ['Admin', 'Ventas', 'Pricing'] },
+  { id: 'visits', label: 'Visitas', scope: 'Visitas a clientes y prospectos por fecha programada y estado actual. Las visitas históricas sin estado aparecen como Sin clasificar.', roles: ['Admin', 'Ventas'] },
+  { id: 'commercial', label: 'Comercial', scope: 'Cotizaciones por estado actual, venta cotizada y utilidad; no equivale a facturación', roles: ['Admin', 'Ventas', 'Pricing', 'Contabilidad'] },
   { id: 'pricing', label: 'Pricing', scope: 'Entradas, aprobaciones, pendientes al cierre y tiempos de respuesta', roles: ['Admin', 'Pricing'] },
   { id: 'operations', label: 'Operaciones', scope: 'Shipping instructions, bookings, carrier y ETA', roles: ['Admin', 'Operaciones'] },
   { id: 'billing', label: 'Facturación', scope: 'Documentos, condiciones de pago, ajustes, cobros y saldos', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'customer_payments', label: 'Pagos de clientes', scope: 'Cobros por forma de pago, referencia, tipo fiscal y punto de venta', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'receivable', label: 'Cuentas por cobrar', scope: 'Facturas enviadas/aprobadas/vencidas pendientes', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
-  { id: 'payable', label: 'Cuentas por pagar', scope: 'Proveedores, saldos, pagos y vencimientos', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
+  { id: 'payable', label: 'Cuentas por pagar', scope: 'Obligaciones principales con NC/ND y pagos aplicados. Por pagar excluye anuladas, importes inconsistentes y obligaciones negativas; sobrepagos separados.', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'overdue', label: 'Vencidas', scope: 'Facturas y cuentas por pagar vencidas con días', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
   { id: 'supplier_payments', label: 'Pagos a Proveedores', scope: 'Pagos por proveedor/tipo: mensual, trimestral, anual', roles: ['Admin', 'Finanzas', 'Contabilidad'] },
 ]
@@ -315,10 +309,6 @@ function guatemalaDateKey(value: string) {
   return `${values.year}-${values.month}-${values.day}`
 }
 
-function daysOverdue(value?: string | null) {
-  return Math.max(0, -(calendarDaysUntil(value) ?? 0))
-}
-
 function clientName(value: Join<ClientJoin> | undefined) {
   return resolveJoin(value)?.nombre || 'Sin cliente'
 }
@@ -334,6 +324,7 @@ function quoteNumber(q: Pick<QuotationRow, 'quotation_number'>) {
 }
 
 function serviceLabel(quoteType?: string | null, transport?: string | null) {
+  if (quoteType === 'Aduanas') return 'Servicio de Aduanas'
   return [quoteType, transport].filter(Boolean).join(' / ') || 'Sin servicio'
 }
 
@@ -341,11 +332,6 @@ function formatResponseTime(hours?: number) {
   if (hours === undefined || !Number.isFinite(hours)) return '-'
   if (hours < 24) return `${hours.toFixed(1)} h`
   return `${(hours / 24).toFixed(1)} días`
-}
-
-function payableBalance(row: PayableRow) {
-  const paid = (row.pagos_proveedor || []).reduce((sum, p) => sum + Number(p.monto || 0), 0)
-  return Math.max(0, Number(row.monto || 0) - paid)
 }
 
 function exportCSV(rows: ReportRow[], columns: ReportPdfColumn[], filename: string) {
@@ -372,8 +358,10 @@ function exportCSV(rows: ReportRow[], columns: ReportPdfColumn[], filename: stri
 
 const presetRange = reportDateRange
 
-function resolveDatePreset(dateFrom: string, dateTo: string): DatePreset {
-  const presets: Exclude<DatePreset, 'custom'>[] = ['month', 'quarter', 'year', 'all']
+function resolveDatePreset(dateFrom: string, dateTo: string, report: ReportId): DatePreset {
+  const presets: Exclude<DatePreset, 'custom'>[] = report === 'visits'
+    ? ['day', 'week', 'visit-month', 'all']
+    : ['month', 'quarter', 'year', 'all']
   const match = presets.find((preset) => {
     const range = presetRange(preset)
     return range.from === dateFrom && range.to === dateTo
@@ -422,6 +410,7 @@ function ReportsContent() {
   const invalidRange = Boolean(dateFrom && dateTo && dateFrom > dateTo)
 
   const [quotations, setQuotations] = useState<QuotationRow[]>([])
+  const [visits, setVisits] = useState<SalesVisit[]>([])
   const [pricingHistory, setPricingHistory] = useState<PricingHistoryRow[]>([])
   const [shipments, setShipments] = useState<ShipmentRow[]>([])
   const [bookings, setBookings] = useState<BookingRow[]>([])
@@ -443,7 +432,17 @@ function ReportsContent() {
     setLoadError(null)
     try {
       const tasks: PromiseLike<void>[] = []
-      tasks.push(supabase.from('company_settings').select(COMPANY_BRANDING_SELECT).limit(1).maybeSingle().then(({ data, error }) => {
+      if (activeReport === 'visits') tasks.push(
+        readAllReportRows((from, to) => supabase
+          .from('sales_activities')
+          .select(SALES_VISIT_SELECT)
+          .eq('tipo_actividad', 'Visita')
+          .is('deleted_at', null)
+          .order('fecha_actividad', { ascending: true }).order('id').range(from, to),
+        { label: 'visitas comerciales', key: 'id', isCurrent })
+          .then((data) => { if (isCurrent()) setVisits(data as unknown as SalesVisit[]) })
+      )
+      tasks.push(loadCurrentCompanySettings(supabase).then(({ data, error }) => {
         if (error) throw new Error('No se pudo cargar la configuración del reporte. Reintenta la consulta.')
         if (isCurrent()) setCompanyBranding(normalizeCompanyBranding(data))
       }))
@@ -602,13 +601,13 @@ function ReportsContent() {
         readAllReportRows((from, to) => supabase
           .from('invoices')
           .select(`
-            id, invoice_number, invoice_type, status,
+            id, invoice_number, point_of_sale, lugar_emision, invoice_type, status,
             cliente_id, cliente_nombre,
             issue_date, due_date, payment_condition, credit_days, total, currency,
-            clientes!cliente_id(
+            clientes!invoices_cliente_id_fkey(
               ciudad,
               tipo_cliente,
-              vendedor_profile:profiles!vendedor_asignado(nombre, apellido)
+              vendedor_profile:profiles!clientes_vendedor_asignado_fkey(nombre, apellido)
             )
           `)
           .is('deleted_at', null)
@@ -631,11 +630,8 @@ function ReportsContent() {
           .then((data) => { if (isCurrent()) setCustomerPayments(data as unknown as CustomerPaymentRow[]) })
       )
       if (['payable', 'overdue'].includes(activeReport)) tasks.push(
-        readAllReportRows((from, to) => supabase
-          .from('cuentas_pagar')
-          .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, pagos_proveedor(monto, fecha_pago), proveedores(id, nombre, tipo), quotations(quotation_number)')
-          .order('fecha_vencimiento', { ascending: true }).order('id').range(from, to), { label: 'cuentas por pagar', key: 'id', isCurrent })
-          .then((data) => { if (isCurrent()) setPayables(data as unknown as PayableRow[]) })
+        loadSupplierPayables(supabase, { isCurrent })
+          .then(data => { if (isCurrent()) setPayables(data) })
       )
       if (activeReport === 'supplier_payments') tasks.push(
         readAllReportRows((from, to) => supabase
@@ -647,7 +643,7 @@ function ReportsContent() {
               proveedores(nombre, tipo)
             )
           `)
-          .order('fecha_pago', { ascending: false }).order('id').range(from, to), { label: 'pagos a proveedores', key: 'id', isCurrent })
+          .eq('status', 'Aplicado').order('fecha_pago', { ascending: false }).order('id').range(from, to), { label: 'pagos a proveedores', key: 'id', isCurrent })
           .then((data) => { if (isCurrent()) setProveedorPayments(data as unknown as ProveedorPaymentRow[]) })
       )
       await Promise.all(tasks)
@@ -686,6 +682,7 @@ function ReportsContent() {
     : reportConfig.label
 
   const baseRows = useMemo<ReportRow[]>(() => {
+    if (activeReport === 'visits') return visitReportRows(visits)
     if (activeReport === 'pricing') {
       type PricingCycle = {
         entry: PricingHistoryRow
@@ -1032,6 +1029,8 @@ function ReportsContent() {
         const netAmount = isIssued ? sign * Number(invoice.total || 0) : 0
         return {
           __key: invoice.id,
+          __pointOfSale: invoice.point_of_sale || invoice.lugar_emision || '-',
+          punto_venta: invoice.point_of_sale || invoice.lugar_emision || '-',
           __href: '/invoicing/' + invoice.id,
           __date: invoice.issue_date || '',
           __client: invoice.cliente_nombre || 'Sin cliente',
@@ -1138,30 +1137,7 @@ function ReportsContent() {
         })
     }
 
-    if (activeReport === 'payable') {
-      return payables.map((payable) => {
-        const supplier = resolveJoin(payable.proveedores)
-        const quotation = resolveJoin(payable.quotations)
-        const balance = payableBalance(payable)
-        return {
-          __key: payable.id,
-          __href: '/accounts-payable/' + payable.id,
-          __date: payable.fecha_vencimiento || payable.fecha_factura || '',
-          __client: supplier?.nombre || 'Sin proveedor',
-          __status: payable.status,
-          __currency: payable.moneda,
-          __amount: balance,
-          proveedor: supplier?.nombre || 'Sin proveedor',
-          tipo: supplier?.tipo || '-',
-          factura: payable.numero_factura_proveedor || '-',
-          cotizacion: quotation?.quotation_number || '-',
-          descripcion: payable.descripcion,
-          vencimiento: fmtDate(payable.fecha_vencimiento),
-          estado: payable.status,
-          saldo: fmtMoney(balance, payable.moneda),
-        }
-      })
-    }
+    if (activeReport === 'payable') return payables.map(supplierPayableReportRow)
 
     if (activeReport === 'overdue') {
       return [
@@ -1188,10 +1164,10 @@ function ReportsContent() {
           monto: fmtMoney(Number(receivable.balance), receivable.currency),
         })),
       ...payables
-        .filter((payable) => ['Pendiente', 'Parcialmente Pagada', 'Vencida'].includes(payable.status) && daysOverdue(payable.fecha_vencimiento) > 0)
+        .filter(payable => payable.days_overdue > 0)
         .map((payable) => {
           const supplier = resolveJoin(payable.proveedores)
-          const balance = payableBalance(payable)
+          const balance = supplierAmount(payable.pending_balance) ?? 0
           return {
             __key: `ap-${payable.id}`,
             __href: '/accounts-payable/' + payable.id,
@@ -1204,7 +1180,7 @@ function ReportsContent() {
             tercero: supplier?.nombre || 'Sin proveedor',
             documento: payable.numero_factura_proveedor || payable.descripcion,
             vencimiento: fmtDate(payable.fecha_vencimiento),
-            dias: `${daysOverdue(payable.fecha_vencimiento)} días`,
+            dias: `${payable.days_overdue} días`,
             estado: payable.status,
             monto: fmtMoney(balance, payable.moneda),
           }
@@ -1240,7 +1216,7 @@ function ReportsContent() {
     }
 
     return []
-  }, [role, activeReport, bookingReadiness, bookings, customerPayments, dateFrom, dateTo, shipments, invoices, operationsGranularity, payables, pricingHistory, proveedorPayments, quotations, receivables])
+  }, [role, activeReport, bookingReadiness, bookings, customerPayments, dateFrom, dateTo, shipments, invoices, operationsGranularity, payables, pricingHistory, proveedorPayments, quotations, receivables, visits])
 
   const rows = useMemo(() => {
     return baseRows.filter((row) => {
@@ -1265,6 +1241,7 @@ function ReportsContent() {
   }, [activeReport, view.search, view.sort, view.direction, baseRows, clientFilter, currencyFilter, dateFrom, dateTo, fiscalTypeFilter, paymentMethodFilter, pointOfSaleFilter, sellerFilter, serviceFilter, statusFilter])
 
   const columns = useMemo<ReportPdfColumn[]>(() => {
+    if (activeReport === 'visits') return VISIT_REPORT_COLUMNS
     if (activeReport === 'pricing') {
       return [
         { key: 'numero', label: 'Cotización', width: '9%' },
@@ -1354,12 +1331,13 @@ function ReportsContent() {
       return [
         { key: 'numero', label: 'Documento', width: '8%' },
         { key: 'tipo', label: 'Tipo', width: '7%' },
-        { key: 'cliente', label: 'Cliente', width: '13%' },
-        { key: 'condicion', label: 'Condición', width: '9%' },
+        { key: 'cliente', label: 'Cliente', width: '11%' },
+        { key: 'punto_venta', label: 'Punto venta', width: '8%' },
+        { key: 'condicion', label: 'Condición', width: '7%' },
         { key: 'emision', label: 'Emisión', width: '7%' },
         { key: 'vencimiento', label: 'Vence', width: '7%' },
-        { key: 'metodo', label: 'Forma(s)', width: '9%' },
-        { key: 'fiscal', label: 'Fiscal', width: '7%' },
+        { key: 'metodo', label: 'Forma(s)', width: '7%' },
+        { key: 'fiscal', label: 'Fiscal', width: '5%' },
         { key: 'estado', label: 'Estado', width: '8%' },
         { key: 'neto', label: 'Impacto neto', width: '9%', align: 'right' },
         { key: 'pagado', label: 'Pagado', width: '8%', align: 'right' },
@@ -1396,14 +1374,19 @@ function ReportsContent() {
     }
     if (activeReport === 'payable') {
       return [
-        { key: 'proveedor', label: 'Proveedor', width: '20%' },
-        { key: 'tipo', label: 'Tipo', width: '10%' },
-        { key: 'factura', label: 'Factura', width: '13%' },
-        { key: 'cotizacion', label: 'Cotizacion', width: '12%' },
-        { key: 'descripcion', label: 'Descripcion', width: '19%' },
-        { key: 'vencimiento', label: 'Vence', width: '10%' },
-        { key: 'estado', label: 'Estado', width: '9%' },
-        { key: 'saldo', label: 'Saldo', width: '7%', align: 'right' },
+        { key: 'proveedor', label: 'Proveedor', width: '10%' },
+        { key: 'tipo', label: 'Tipo', width: '5%' },
+        { key: 'factura', label: 'Factura', width: '7%' },
+        { key: 'cotizacion', label: 'Cotizacion', width: '6%' },
+        { key: 'descripcion', label: 'Descripcion', width: '9%' },
+        { key: 'vencimiento', label: 'Vence', width: '7%' },
+        { key: 'estado', label: 'Estado', width: '8%' },
+        { key: 'base', label: 'Base', width: '8%', align: 'right' },
+        { key: 'notas', label: 'NC / ND', width: '9%', align: 'right' },
+        { key: 'ajustado', label: 'Ajustado', width: '8%', align: 'right' },
+        { key: 'pagado', label: 'Pagado', width: '7%', align: 'right' },
+        { key: 'saldo', label: 'Saldo', width: '8%', align: 'right' },
+        { key: 'revision', label: 'Conciliacion', width: '8%' },
       ]
     }
     if (activeReport === 'overdue') {
@@ -1437,29 +1420,32 @@ function ReportsContent() {
       clients: unique(baseRows.map((row) => row.__client)),
       sellers: unique(baseRows.map((row) => row.__seller)),
       services: unique(baseRows.map((row) => row.__service)),
-      statuses: unique(baseRows.map((row) => row.__status)),
+      statuses: activeReport === 'visits'
+        ? [ALL, 'Pendiente', 'Realizada', 'Cancelada', 'Sin clasificar']
+        : unique(baseRows.map((row) => row.__status)),
       currencies: unique(baseRows.map((row) => row.__currency)),
       paymentMethods: unique(baseRows.flatMap((row) => row.__paymentMethod?.split('|') || [])),
       fiscalTypes: unique(baseRows.map((row) => row.__fiscalType)),
       pointsOfSale: unique(baseRows.map((row) => row.__pointOfSale)),
     }
-  }, [baseRows])
+  }, [baseRows, activeReport])
 
   // REP-001: los totales se agrupan por moneda; nunca sumar USD y HNL juntos.
   const totalsByCurrency = useMemo(() => {
-    const acc = new Map<string, { amount: number; cost: number; gp: number }>()
+    const acc = new Map<string, { amount: number; cost: number; gp: number; overpayment: number }>()
     rows.forEach((row) => {
       const currency = row.__currency || 'USD'
-      const entry = acc.get(currency) ?? { amount: 0, cost: 0, gp: 0 }
+      const entry = acc.get(currency) ?? { amount: 0, cost: 0, gp: 0, overpayment: 0 }
       entry.amount += Number(row.__amount || 0)
       entry.cost += Number(row.__cost || 0)
       entry.gp += Number(row.__gp || 0)
+      entry.overpayment += Number(row.__overpayment || 0)
       acc.set(currency, entry)
     })
     return acc
   }, [rows])
 
-  const fmtTotalsByCurrency = (key: 'amount' | 'cost' | 'gp') => {
+  const fmtTotalsByCurrency = (key: 'amount' | 'cost' | 'gp' | 'overpayment') => {
     if (totalsByCurrency.size === 0) {
       return fmtMoney(0, currencyFilter === ALL ? 'USD' : currencyFilter)
     }
@@ -1475,7 +1461,7 @@ function ReportsContent() {
   const avgMargen = singleCurrencyTotals && singleCurrencyTotals.amount > 0
     ? (singleCurrencyTotals.gp / singleCurrencyTotals.amount) * 100
     : null
-  const activeDatePreset = resolveDatePreset(dateFrom, dateTo)
+  const activeDatePreset = resolveDatePreset(dateFrom, dateTo, activeReport)
   const activeFilterCount = [
     clientFilter,
     sellerFilter,
@@ -1495,6 +1481,7 @@ function ReportsContent() {
 
   // Which columns show totals per report
   const totalColumnsConfig: Record<ReportId, string[]> = {
+    visits: [],
     commercial: ['costo', 'venta', 'gp', 'margen'],
     pricing: [],
     operations: [],
@@ -1520,7 +1507,7 @@ function ReportsContent() {
       } else if (activeTotalColumns.includes(col.key)) {
         pdfTotals[col.key] = fmtTotalsByCurrency('amount')
       } else if (idx === 0) {
-        pdfTotals[col.key] = `${rows.length} registros`
+        pdfTotals[col.key] = activeReport === 'payable' ? `Por pagar (${rows.length} AP)` : `${rows.length} registros`
       } else {
         pdfTotals[col.key] = ''
       }
@@ -1567,7 +1554,23 @@ function ReportsContent() {
       fiscalTypeFilter !== ALL ? `Tipo fiscal: ${fiscalTypeFilter}` : '',
       pointOfSaleFilter !== ALL ? `Punto de venta: ${pointOfSaleFilter}` : '',
     ].filter(Boolean),
-    metrics: activeReport === 'pricing' && pricingMetrics
+    metrics: activeReport === 'visits'
+      ? [
+          { label: 'Visitas', value: String(rows.length) },
+          { label: 'Por ejecutar', value: String(rows.filter((row) => row.__status === 'Pendiente').length) },
+          { label: 'Pendientes vencidas', value: String(rows.filter((row) => row.vencida === 'Sí').length) },
+          { label: 'Realizadas', value: String(rows.filter((row) => row.__status === 'Realizada').length) },
+          { label: 'Canceladas', value: String(rows.filter((row) => row.__status === 'Cancelada').length) },
+          { label: 'Sin clasificar', value: String(rows.filter((row) => row.__status === 'Sin clasificar').length) },
+        ]
+      : activeReport === 'payable'
+      ? [
+          { label: 'Obligaciones', value: String(rows.length) },
+          { label: 'Por pagar sin compensar sobrepagos', value: fmtTotalsByCurrency('amount') },
+          { label: 'Sobrepagos separados', value: fmtTotalsByCurrency('overpayment') },
+          { label: 'Por conciliar', value: String(rows.reduce((sum, row) => sum + (row.__reconciliation || 0), 0)) },
+        ]
+      : activeReport === 'pricing' && pricingMetrics
       ? [
           { label: 'Cotizaciones recibidas', value: String(pricingMetrics.received) },
           { label: 'Aprobadas Pricing', value: String(pricingMetrics.approved) },
@@ -1636,9 +1639,9 @@ function ReportsContent() {
   }
   const page = Math.min(view.page, Math.max(1, Math.ceil(rows.length / view.pageSize)))
   const visibleRows = rows.slice((page - 1) * view.pageSize, page * view.pageSize)
-  const showSeller = ['commercial', 'pricing', 'operations', 'billing'].includes(activeReport)
+  const showSeller = ['commercial', 'visits', 'pricing', 'operations', 'billing'].includes(activeReport)
   const showService = ['commercial', 'pricing', 'operations'].includes(activeReport)
-  const showCurrency = !['operations', 'pricing'].includes(activeReport)
+  const showCurrency = !['operations', 'pricing', 'visits'].includes(activeReport)
   const showStatus = activeReport !== 'supplier_payments'
   const showPaymentMethod = ['customer_payments', 'supplier_payments'].includes(activeReport)
 
@@ -1656,7 +1659,6 @@ function ReportsContent() {
 
   return (
     <div className="report-print-root space-y-5">
-      <DemoPrintWatermark />
       <style>{`
         @media print {
           aside, header, footer, .report-print-hidden {
@@ -1690,6 +1692,7 @@ function ReportsContent() {
           {loadedAt && !busy && !loadError && <p className="mt-2 text-xs text-slate-500">Última consulta: {formatDateTime(loadedAt)}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
+          {canViewClientOperationsReport(role) && <Link href="/reports/client-operations" className={actionIconButtonClass}><FileDown aria-hidden="true" className="h-4 w-4" />Operaciones por cliente</Link>}
           <button type="button" onClick={() => void loadReports()} disabled={loading} className={actionIconButtonClass}><RefreshCcw aria-hidden="true" className="h-4 w-4" />Actualizar</button>
           <button type="button" onClick={() => exportCSV(rows, columns, exportFilename + '.csv')} disabled={!canExport} className={actionIconButtonClass}><Download aria-hidden="true" className="h-4 w-4" />Exportar CSV</button>
           <button type="button" onClick={() => void handlePdf(false)} disabled={!canExport || generatingPdf} className={actionIconButtonClass}><FileDown aria-hidden="true" className="h-4 w-4" />{generatingPdf ? 'Generando PDF…' : 'Descargar PDF'}</button>
@@ -1702,7 +1705,7 @@ function ReportsContent() {
           <label htmlFor="report-mobile" className="mb-1 block text-sm font-semibold">Reporte</label>
           <select id="report-mobile" value={activeReport} onChange={(event) => selectReport(event.target.value as ReportId)} className={`${fieldClass} w-full`}>
             {[
-              { label: 'Comercial y Pricing', ids: ['commercial', 'pricing'] },
+              { label: 'Comercial y Pricing', ids: ['commercial', 'visits', 'pricing'] },
               { label: 'Operaciones', ids: ['operations'] },
               { label: 'Finanzas', ids: ['billing', 'customer_payments', 'receivable', 'payable', 'overdue', 'supplier_payments'] },
             ].map((group) => availableReports.some((report) => group.ids.includes(report.id)) && <optgroup key={group.label} label={group.label}>{availableReports.filter((report) => group.ids.includes(report.id)).map((report) => <option key={report.id} value={report.id}>{report.label}</option>)}</optgroup>)}
@@ -1710,7 +1713,7 @@ function ReportsContent() {
         </div>
         <div className="hidden flex-wrap gap-x-6 gap-y-3 sm:flex">
           {[
-            { label: 'Comercial y Pricing', ids: ['commercial', 'pricing'] },
+            { label: 'Comercial y Pricing', ids: ['commercial', 'visits', 'pricing'] },
             { label: 'Operaciones', ids: ['operations'] },
             { label: 'Finanzas', ids: ['billing', 'customer_payments', 'receivable', 'payable', 'overdue', 'supplier_payments'] },
           ].map((group) => availableReports.some((report) => group.ids.includes(report.id)) && (
@@ -1749,11 +1752,14 @@ function ReportsContent() {
           {showPaymentMethod && <div className="min-w-0"><label htmlFor="report-method" className="mb-1 block text-xs font-medium text-slate-500">Forma de pago</label><select id="report-method" value={paymentMethodFilter} onChange={(event) => updateView({ method: event.target.value })} className={`${fieldClass} w-full`}>{options.paymentMethods.map((option) => <option key={option}>{option}</option>)}</select></div>}
           {activeReport === 'customer_payments' && <>
             <div className="min-w-0"><label htmlFor="report-fiscal" className="mb-1 block text-xs font-medium text-slate-500">Tipo fiscal</label><select id="report-fiscal" value={fiscalTypeFilter} onChange={(event) => updateView({ fiscal: event.target.value })} className={`${fieldClass} w-full`}>{options.fiscalTypes.map((option) => <option key={option}>{option}</option>)}</select></div>
-            <div className="min-w-0"><label htmlFor="report-pos" className="mb-1 block text-xs font-medium text-slate-500">Punto de venta</label><select id="report-pos" value={pointOfSaleFilter} onChange={(event) => updateView({ pos: event.target.value })} className={`${fieldClass} w-full`}>{options.pointsOfSale.map((option) => <option key={option}>{option}</option>)}</select></div>
           </>}
+          {['billing', 'customer_payments'].includes(activeReport) && <div className="min-w-0"><label htmlFor="report-pos" className="mb-1 block text-xs font-medium text-slate-500">Punto de venta</label><select id="report-pos" value={pointOfSaleFilter} onChange={(event) => updateView({ pos: event.target.value })} className={`${fieldClass} w-full`}>{options.pointsOfSale.map((option) => <option key={option}>{option}</option>)}</select></div>}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {([['month', 'Este mes'], ['quarter', 'Trimestre actual'], ['year', 'Este año'], ['all', 'Todas las fechas']] as const).map(([preset, label]) => <button key={preset} type="button" onClick={() => updateView(presetRange(preset))} aria-pressed={activeDatePreset === preset} className={presetButtonClass(preset)}>{label}</button>)}
+          {(activeReport === 'visits'
+            ? ([['day', 'Hoy'], ['week', 'Esta semana'], ['visit-month', 'Este mes completo'], ['all', 'Todas las fechas']] as const)
+            : ([['month', 'Este mes'], ['quarter', 'Trimestre actual'], ['year', 'Este año'], ['all', 'Todas las fechas']] as const)
+          ).map(([preset, label]) => <button key={preset} type="button" onClick={() => updateView(presetRange(preset))} aria-pressed={activeDatePreset === preset} className={presetButtonClass(preset)}>{label}</button>)}
           {activeDatePreset === 'custom' && <span className="self-center text-xs text-amber-700 dark:text-amber-300">Período personalizado</span>}
         </div>
         </div>

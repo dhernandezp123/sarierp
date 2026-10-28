@@ -16,6 +16,7 @@ import { useUser } from '@/src/hooks/useUser'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { fieldClass } from '@/src/lib/ui-classes'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { ACTIVITY_EXECUTION_STATUSES, activityExecutionLabel, type ActivityExecutionStatus } from '@/src/lib/sales-visits'
 import {
   buildSalesWorkQueue,
   type LeadWorkSource,
@@ -46,6 +47,7 @@ type SalesActivity = {
   etapa_captacion:      EtapaCaptacion | null
   comentarios:          string | null
   resultado:            string | null
+  estado_ejecucion:     ActivityExecutionStatus | null
   proxima_accion:       string | null
   fecha_proxima_accion: string | null
   created_by:           string | null
@@ -95,6 +97,12 @@ function initialSalesWorkState() {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const TIPOS_ACTIVIDAD: TipoActividad[] = ['Visita', 'Llamada', 'Reunión']
+
+const SALES_ACTIVITY_SELECT = `
+  *,
+  clientes!sales_activities_tenant_cliente_fkey(nombre),
+  profiles!sales_activities_tenant_created_by_fkey(nombre, apellido)
+`
 
 const ETAPAS: { value: EtapaCaptacion; color: string; bg: string }[] = [
   { value: 'Primer Contacto',      color: 'text-slate-600 dark:text-slate-300',     bg: 'bg-slate-100 dark:bg-slate-700/60' },
@@ -174,6 +182,7 @@ const blankForm = (date?: string) => ({
   etapa_captacion:      '' as EtapaCaptacion | '',
   comentarios:          '',
   resultado:            '',
+  estado_ejecucion:     'Pendiente' as ActivityExecutionStatus | '',
   proxima_accion:       '',
   fecha_proxima_accion: '',
 })
@@ -186,12 +195,13 @@ export default function VentasPage() {
   const [workActivities, setWorkActivities] = useState<SalesActivity[]>([])
   const [workQuotations, setWorkQuotations] = useState<SalesQuotationRow[]>([])
   const [workLeads, setWorkLeads] = useState<LeadWorkSource[]>([])
-  const [clientes, setClientes]         = useState<Array<{ id: string; nombre: string }>>([])
+  const [clientes, setClientes]         = useState<Array<{ id: string; nombre: string; codigo_cliente: string | null }>>([])
   const [loading, setLoading]           = useState(true)
   const [workLoading, setWorkLoading]   = useState(true)
   const [workError, setWorkError]       = useState('')
   const [showModal, setShowModal]       = useState(false)
   const [editingId, setEditingId]       = useState<string | null>(null)
+  const [editingOwner, setEditingOwner] = useState<string | null>(null)
   const [form, setForm]                 = useState(blankForm())
   const [saving, setSaving]             = useState(false)
   const [search, setSearch]             = useState('')
@@ -208,6 +218,7 @@ export default function VentasPage() {
   const [workUrlReady, setWorkUrlReady] = useState(false)
 
   const today = toDateInputValue()
+  const canEditActivity = !editingId || profile?.rol === 'Admin' || editingOwner === profile?.id
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -217,7 +228,7 @@ export default function VentasPage() {
 
     let query = supabase
       .from('sales_activities')
-      .select('*, clientes(nombre), profiles(nombre, apellido)')
+      .select(SALES_ACTIVITY_SELECT)
       .is('deleted_at', null)
       .order('fecha_actividad', { ascending: false })
       .order('created_at',      { ascending: false })
@@ -261,7 +272,7 @@ export default function VentasPage() {
     const [activitiesResult, quotationsResult, leadsResult] = await Promise.all([
       supabase
         .from('sales_activities')
-        .select('*, clientes(nombre), profiles(nombre, apellido)')
+        .select(SALES_ACTIVITY_SELECT)
         .is('deleted_at', null)
         .order('fecha_actividad', { ascending: false })
         .order('created_at', { ascending: false }),
@@ -344,7 +355,7 @@ export default function VentasPage() {
 
   useEffect(() => {
     supabase.from('clientes')
-      .select('id, nombre')
+      .select('id, codigo_cliente, nombre')
       .is('deleted_at', null)
       .order('nombre', { ascending: true })
       .then(({ data }) => setClientes(data || []))
@@ -355,10 +366,11 @@ export default function VentasPage() {
   const openNew = (date?: string) => {
     setForm(blankForm(date))
     setEditingId(null)
+    setEditingOwner(null)
     setShowModal(true)
   }
 
-  const openEdit = (a: SalesActivity) => {
+  const openEdit = useCallback((a: SalesActivity) => {
     setForm({
       tipo_actividad:       a.tipo_actividad,
       tipo_cliente:         a.tipo_cliente,
@@ -371,22 +383,43 @@ export default function VentasPage() {
       etapa_captacion:      a.etapa_captacion || '',
       comentarios:          a.comentarios || '',
       resultado:            a.resultado || '',
+      estado_ejecucion:     a.estado_ejecucion || '',
       proxima_accion:       a.proxima_accion || '',
       fecha_proxima_accion: a.fecha_proxima_accion || '',
     })
     setEditingId(a.id)
+    setEditingOwner(a.created_by)
     setShowModal(true)
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    const id = new URLSearchParams(window.location.search).get('activity')
+    if (!id) return
+    let active = true
+    void supabase.from('sales_activities').select(SALES_ACTIVITY_SELECT)
+      .eq('id', id).is('deleted_at', null).maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return
+        if (error || !data) { toast.error('No se pudo abrir la actividad'); return }
+        openEdit(data as SalesActivity)
+      })
+    return () => { active = false }
+  }, [profile?.id, openEdit])
 
   // ── Save ───────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
+    if (!canEditActivity || saving) return
     if (!form.fecha_actividad) { toast.error('La fecha es obligatoria'); return }
     if (form.tipo_cliente === 'Mantenimiento' && !form.cliente_id) {
       toast.error('Selecciona el cliente'); return
     }
     if (form.tipo_cliente === 'Nuevo' && !form.empresa_prospecto && !form.nombre_prospecto) {
       toast.error('Ingresa el nombre o empresa del prospecto'); return
+    }
+    if (form.hora_inicio && form.hora_fin && form.hora_fin <= form.hora_inicio) {
+      toast.error('La hora final debe ser posterior a la hora inicial'); return
     }
     setSaving(true)
     const payload: Record<string, unknown> = {
@@ -401,15 +434,17 @@ export default function VentasPage() {
       etapa_captacion:      form.etapa_captacion || null,
       comentarios:          form.comentarios   || null,
       resultado:            form.resultado     || null,
+      estado_ejecucion:     form.estado_ejecucion || null,
       proxima_accion:       form.proxima_accion || null,
       fecha_proxima_accion: form.fecha_proxima_accion || null,
       updated_at:           new Date().toISOString(),
     }
-    const { error } = editingId
-      ? await supabase.from('sales_activities').update(payload).eq('id', editingId)
-      : await supabase.from('sales_activities').insert([{ ...payload, created_by: profile?.id }])
+    const { data, error } = editingId
+      ? await supabase.from('sales_activities').update(payload).eq('id', editingId).select('id').maybeSingle()
+      : await supabase.from('sales_activities').insert([{ ...payload, created_by: profile?.id }]).select('id').single()
     setSaving(false)
     if (error) { toast.error(error.message); return }
+    if (!data) { toast.error('La actividad no se guardó. Comprueba tus permisos y actualiza la página.'); return }
     toast.success(editingId ? 'Actividad actualizada' : 'Actividad registrada')
     setShowModal(false)
     fetchActivities()
@@ -525,6 +560,7 @@ export default function VentasPage() {
 
   const renderCard = (a: SalesActivity) => {
     const etapa     = a.etapa_captacion ? etapaMap[a.etapa_captacion] : null
+    const canManage = profile?.rol === 'Admin' || a.created_by === profile?.id
     const isOverdue = a.fecha_proxima_accion && a.fecha_proxima_accion < today
     return (
       <div
@@ -556,6 +592,7 @@ export default function VentasPage() {
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
                 <span>{a.tipo_actividad}</span>
+                <span>{activityExecutionLabel(a.estado_ejecucion)}</span>
                 {(a.hora_inicio || a.hora_fin) && (
                   <span className="flex items-center gap-1">
                     <Clock size={11} />
@@ -602,10 +639,10 @@ export default function VentasPage() {
               className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200">
               <Pencil size={14} />
             </button>
-            <button type="button" onClick={() => setActivityPendingDelete(a)}
+            {canManage && <button type="button" onClick={() => setActivityPendingDelete(a)}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400">
               <Trash2 size={14} />
-            </button>
+            </button>}
           </div>
         </div>
       </div>
@@ -623,7 +660,7 @@ export default function VentasPage() {
           <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-[#0b1220]">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-800">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                {editingId ? 'Editar Actividad' : 'Nueva Actividad'}
+                {editingId ? canEditActivity ? 'Editar Actividad' : 'Consultar Actividad' : 'Nueva Actividad'}
               </h2>
               <button type="button" onClick={() => setShowModal(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
@@ -631,7 +668,8 @@ export default function VentasPage() {
               </button>
             </div>
 
-            <div className="space-y-6 p-6">
+            {!canEditActivity && <p className="px-6 pt-4 text-sm text-slate-500">Solo el vendedor que registró la actividad o un administrador puede modificarla.</p>}
+            <fieldset disabled={!canEditActivity || saving} className="min-w-0 space-y-6 p-6">
 
               {/* Tipo + fecha + hora */}
               <div>
@@ -671,6 +709,15 @@ export default function VentasPage() {
               </div>
 
               {/* Cliente / Prospecto */}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="activity-execution-status" className="text-xs font-medium text-slate-500 dark:text-slate-400">Estado de ejecución</label>
+                <select id="activity-execution-status" className={fieldClass} value={form.estado_ejecucion}
+                  onChange={(event) => setForm((current) => ({ ...current, estado_ejecucion: event.target.value as ActivityExecutionStatus | '' }))}>
+                  {editingId && <option value="">Sin clasificar</option>}
+                  {ACTIVITY_EXECUTION_STATUSES.map((status) => <option key={status}>{status}</option>)}
+                </select>
+              </div>
+
               <div>
                 <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Cliente / Prospecto
@@ -695,6 +742,7 @@ export default function VentasPage() {
                       Cuenta <span className="text-red-400">*</span>
                     </label>
                     <ClienteCombobox clientes={clientes} value={form.cliente_id}
+                      disabled={!canEditActivity || saving}
                       onChange={(id) => setForm((f) => ({ ...f, cliente_id: id }))}
                       placeholder="Buscar cliente..." className={fieldClass} />
                   </div>
@@ -780,24 +828,24 @@ export default function VentasPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </fieldset>
 
             <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
               <button type="button" onClick={() => setShowModal(false)}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
                 Cancelar
               </button>
-              <button type="button" onClick={handleSave} disabled={saving}
+              {canEditActivity && <button type="button" onClick={handleSave} disabled={saving}
                 className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
                 {saving ? 'Guardando...' : editingId ? 'Actualizar' : 'Registrar'}
-              </button>
+              </button>}
             </div>
           </div>
         </div>
       )}
 
       {/* ── Page header ──────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             Mi día
@@ -806,11 +854,16 @@ export default function VentasPage() {
             Prioridades comerciales, seguimientos y handoffs que requieren acción.
           </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <Link href="/reports?report=visits" className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+          <LayoutList size={16} /> Reporte de visitas
+        </Link>
         <button type="button" onClick={() => openNew()}
           className="flex shrink-0 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100">
           <Plus size={16} />
           Nueva Actividad
         </button>
+        </div>
       </div>
 
       <SalesWorkQueuePanel

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Package, Globe, Shield, Clock } from 'lucide-react'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
 
 const VALUES = [
   { icon: Package, title: 'Logística sin complicaciones', desc: 'Nos encargamos de todo el proceso desde Miami hasta tu puerta, con visibilidad en tiempo real de tus paquetes.' },
@@ -13,6 +14,7 @@ const VALUES = [
 
 export default function NosotrosPage() {
   const router = useRouter()
+  const tenant = useTenant()
 
   return (
     <div className="space-y-5">
@@ -65,7 +67,7 @@ export default function NosotrosPage() {
         ))}
       </div>
 
-      <p className="text-sm text-slate-500">Mi Carga es el portal de clientes de Sari Express, disponible en Forwarders ERP.</p><Link href="/portal/contacto" className="inline-block rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white">Contactar al equipo</Link>
+      <p className="text-sm text-slate-500">Mi Carga es el portal de clientes de {tenant?.tradeName || 'tu empresa'}, disponible en Forwarders ERP.</p><Link href="/portal/contacto" className="inline-block rounded-xl bg-tenant-primary px-4 py-3 text-sm font-semibold text-white">Contactar al equipo</Link>
     </div>
   )
 }

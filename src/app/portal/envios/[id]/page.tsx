@@ -25,8 +25,6 @@ import {
   resolveBookingDocumentSummary,
   type StructuredBillOfLading,
 } from '@/src/lib/booking-document-summary'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
-import { normalizeExternalHttpUrl } from '@/src/lib/external-url'
 
 type PortalBooking = {
   id: string
@@ -105,6 +103,7 @@ type PortalReadiness = {
 }
 
 const SERVICE_LABELS: Record<string, string> = {
+  customs_only: 'Servicio de Aduanas',
   miami_lcl: 'LCL Miami',
   miami_air: 'Aéreo Miami',
   other_origin_fcl: 'Contenedor (FCL)',
@@ -238,9 +237,6 @@ function BookingCard({
     booking.bills_of_lading
   )
   const bookingLabel = booking.booking_number || booking.carrier_booking || `Booking ${index + 1}`
-  const safeTrackingUrl = IS_DEMO_ENVIRONMENT
-    ? null
-    : normalizeExternalHttpUrl(booking.tracking_url)
 
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -411,12 +407,11 @@ function BookingCard({
         </div>
 
         </details>
-        {safeTrackingUrl && (
+        {booking.tracking_url && (
           <a
-            href={safeTrackingUrl}
+            href={booking.tracking_url}
             target="_blank"
             rel="noopener noreferrer"
-            referrerPolicy="no-referrer"
             className="flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300"
           >
             <ExternalLink className="h-4 w-4" />
@@ -533,7 +528,7 @@ export default function ShipmentDetailPage() {
           </span>
         </div>
         <p className="mt-4 text-sm text-slate-500">
-          {shipment.bookings.length === 0
+          {service === 'customs_only' ? 'Gestión de aduanas y entrega final cuando esté contratada.' : shipment.bookings.length === 0
             ? 'Esta operación aún no tiene bookings.'
             : `${shipment.bookings.length} booking${shipment.bookings.length === 1 ? '' : 's'} relacionado${shipment.bookings.length === 1 ? '' : 's'}.`}
         </p>
@@ -559,9 +554,11 @@ export default function ShipmentDetailPage() {
         </div>
         <div className="divide-y divide-slate-100 px-5 dark:divide-slate-800">
           <InfoRow label="Mercancía" value={shipment.commodity} />
+          {service !== 'customs_only' && <>
           <InfoRow label="Incoterm" value={shipment.incoterm} />
           <InfoRow label="Peso" value={shipment.peso_kg ? `${shipment.peso_kg.toLocaleString('es-HN')} kg` : null} />
           <InfoRow label="Volumen" value={shipment.volumen_cbm ? `${shipment.volumen_cbm.toLocaleString('es-HN')} CBM` : null} />
+          </>}
           <InfoRow label="Origen" value={shipment.origen} />
           <InfoRow label="Destino" value={shipment.destino} />
         </div>

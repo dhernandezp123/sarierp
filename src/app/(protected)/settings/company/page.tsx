@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { NumberInput } from '@/src/components/ui/NumberInput'
+
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Building2, Fuel, MapPin, Plus, Save, ShieldCheck, X } from 'lucide-react'
 import { supabase } from '../../../../lib/supabase/client'
@@ -9,19 +11,23 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
-import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
-import {
-  IS_DEMO_ENVIRONMENT,
-  canManageSensitiveSettings,
-} from '@/src/lib/demo-environment'
 import {
   DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS,
   normalizeInsuranceCoveragePatterns,
   normalizeInsuranceExclusionPatterns,
 } from '@/src/lib/insurance-coverage'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { canManageCompanySettings } from '@/src/lib/permissions'
+import { BillingOfficesSettings } from '@/src/components/invoicing/BillingOfficesSettings'
 
 type CompanySettings = {
+  usa_legal_name: string
+  usa_address: string
+  usa_phone: string
+  usa_email: string
+  usa_website: string
   id: string
+  tenant_id: string
   legal_name: string | null
   trade_name: string | null
   rtn: string | null
@@ -34,6 +40,8 @@ type CompanySettings = {
   email: string | null
   website: string | null
   logo_url: string | null
+  primary_color: string | null
+  secondary_color: string | null
   default_currency: string | null
   default_tax_rate: number | null
   insurance_cost_rate_percent: number | null
@@ -41,6 +49,7 @@ type CompanySettings = {
   insurance_excluded_service_patterns: string[]
   invoice_footer_note: string | null
   lugar_emision_defecto: string | null
+  billing_points_of_sale: string[]
   exchange_rate_usd_hnl: number | null
   condiciones_bl: string | null
   condiciones_awb: string | null
@@ -82,10 +91,15 @@ export default function CompanySettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [settingsId, setSettingsId] = useState<string | null>(null)
-  const [form, setForm] = useState<Omit<CompanySettings, 'id'>>({
+  const [form, setForm] = useState<Omit<CompanySettings, 'id' | 'tenant_id'>>({
     legal_name: '',
     trade_name: '',
     rtn: '',
+    usa_legal_name: '',
+    usa_address: '',
+    usa_phone: '',
+    usa_email: '',
+    usa_website: '',
     address: '',
     city: '',
     country: 'Honduras',
@@ -95,6 +109,8 @@ export default function CompanySettingsPage() {
     email: '',
     website: '',
     logo_url: '',
+    primary_color: '#0038BD',
+    secondary_color: '#07111F',
     default_currency: 'USD',
     default_tax_rate: 15,
     insurance_cost_rate_percent: DEFAULT_INSURANCE_COST_RATE_PERCENT,
@@ -103,6 +119,7 @@ export default function CompanySettingsPage() {
     insurance_excluded_service_patterns: [],
     invoice_footer_note: '',
     lugar_emision_defecto: '',
+    billing_points_of_sale: ['Principal'],
     exchange_rate_usd_hnl: 25.30,
     condiciones_bl: '',
     condiciones_awb: '',
@@ -134,16 +151,10 @@ export default function CompanySettingsPage() {
     pattern: string
   } | null>(null)
 
-  const isAdmin = canManageSensitiveSettings(profile)
+  const canEditSettings = canManageCompanySettings(profile?.rol)
 
-  useEffect(() => { fetchSettings() }, [])
-
-  const fetchSettings = async () => {
-    const { data, error } = await supabase
-      .from('company_settings')
-      .select('*')
-      .limit(1)
-      .single()
+  const fetchSettings = useCallback(async () => {
+    const { data, error } = await loadCurrentCompanySettings<CompanySettings>(supabase)
 
     if (error && error.code !== 'PGRST116') {
       toast.error('Error al cargar configuración')
@@ -157,6 +168,11 @@ export default function CompanySettingsPage() {
         legal_name: data.legal_name ?? '',
         trade_name: data.trade_name ?? '',
         rtn: data.rtn ?? '',
+        usa_legal_name: data.usa_legal_name ?? '',
+        usa_address: data.usa_address ?? '',
+        usa_phone: data.usa_phone ?? '',
+        usa_email: data.usa_email ?? '',
+        usa_website: data.usa_website ?? '',
         address: data.address ?? '',
         city: data.city ?? '',
         country: data.country ?? 'Honduras',
@@ -166,35 +182,38 @@ export default function CompanySettingsPage() {
         email: data.email ?? '',
         website: data.website ?? '',
         logo_url: data.logo_url ?? '',
+        primary_color: data.primary_color ?? '#0038BD',
+        secondary_color: data.secondary_color ?? '#07111F',
         default_currency: data.default_currency ?? 'USD',
         default_tax_rate: data.default_tax_rate ?? 15,
         insurance_cost_rate_percent:
-          (data as any).insurance_cost_rate_percent ??
+          data.insurance_cost_rate_percent ??
           DEFAULT_INSURANCE_COST_RATE_PERCENT,
         insurance_included_service_patterns:
           normalizeInsuranceCoveragePatterns(
-            (data as any).insurance_included_service_patterns ??
+            data.insurance_included_service_patterns ??
               DEFAULT_INSURANCE_INCLUDED_SERVICE_PATTERNS
           ),
         insurance_excluded_service_patterns:
           normalizeInsuranceExclusionPatterns(
-            (data as any).insurance_excluded_service_patterns
+            data.insurance_excluded_service_patterns
           ),
         invoice_footer_note: data.invoice_footer_note ?? '',
         lugar_emision_defecto: data.lugar_emision_defecto ?? '',
+        billing_points_of_sale: data.billing_points_of_sale ?? ['Principal'],
         exchange_rate_usd_hnl: data.exchange_rate_usd_hnl ?? 25.30,
-        condiciones_bl: (data as any).condiciones_bl ?? '',
-        condiciones_awb: (data as any).condiciones_awb ?? '',
-        condiciones_carta_porte: (data as any).condiciones_carta_porte ?? '',
-        plantilla_cotizacion: (data as any).plantilla_cotizacion ?? '',
-        miami_consignee: (data as any).miami_consignee ?? '',
-        miami_address_line: (data as any).miami_address_line ?? '',
-        miami_suite_prefix: (data as any).miami_suite_prefix ?? '',
-        miami_city: (data as any).miami_city ?? 'Miami',
-        miami_state: (data as any).miami_state ?? 'FL',
-        miami_zip: (data as any).miami_zip ?? '',
-        miami_country: (data as any).miami_country ?? 'USA',
-        miami_phone: (data as any).miami_phone ?? '',
+        condiciones_bl: data.condiciones_bl ?? '',
+        condiciones_awb: data.condiciones_awb ?? '',
+        condiciones_carta_porte: data.condiciones_carta_porte ?? '',
+        plantilla_cotizacion: data.plantilla_cotizacion ?? '',
+        miami_consignee: data.miami_consignee ?? '',
+        miami_address_line: data.miami_address_line ?? '',
+        miami_suite_prefix: data.miami_suite_prefix ?? '',
+        miami_city: data.miami_city ?? 'Miami',
+        miami_state: data.miami_state ?? 'FL',
+        miami_zip: data.miami_zip ?? '',
+        miami_country: data.miami_country ?? 'USA',
+        miami_phone: data.miami_phone ?? '',
       })
     }
 
@@ -224,7 +243,22 @@ export default function CompanySettingsPage() {
     }
 
     setLoading(false)
-  }
+  }, [])
+
+  const hasProfile = Boolean(profile)
+  const tenantId = profile?.tenant_id
+
+  useEffect(() => {
+    if (!hasProfile) return
+    if (!tenantId) {
+      const timeoutId = window.setTimeout(() => {
+        setLoading(false)
+        toast.error('Tu perfil no está vinculado a una empresa.')
+      }, 0)
+      return () => window.clearTimeout(timeoutId)
+    }
+    void fetchSettings()
+  }, [fetchSettings, hasProfile, tenantId])
 
   const set = (
     key: keyof typeof form,
@@ -296,25 +330,41 @@ export default function CompanySettingsPage() {
   }
 
   const handleSave = async () => {
-    if (!isAdmin) { toast.error('Solo el Admin puede modificar esta configuración'); return }
+    if (!profile?.tenant_id) {
+      toast.error('Tu perfil no está vinculado a una empresa.')
+      return
+    }
+    if (!canEditSettings) { toast.error('Solo Admin o Contabilidad puede modificar esta configuración'); return }
     if (!bunkerLoaded) {
       toast.error('No se puede guardar hasta cargar la configuracion del Bunker')
       return
     }
+    const taxRate = Number(form.default_tax_rate)
+    const exchangeRate = Number(form.exchange_rate_usd_hnl)
+    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) {
+      toast.error('El impuesto debe estar entre 0% y 100%.')
+      return
+    }
+    if (!Number.isFinite(exchangeRate) || exchangeRate <= 0 || exchangeRate > 1000000) {
+      toast.error('Ingresa un tipo de cambio mayor que cero y no superior a 1,000,000.')
+      return
+    }
+    if ([bunker.rate_per_lbs, bunker.rate_per_ft3, bunker.minimum_amount].some(value => !Number.isFinite(Number(value)) || Number(value) < 0)) {
+      toast.error('Las tarifas y el mínimo del Bunker deben ser números mayores o iguales a cero.')
+      return
+    }
     const insuranceCostRatePercent = Number(form.insurance_cost_rate_percent)
-    if (
-      !Number.isFinite(insuranceCostRatePercent) ||
-      insuranceCostRatePercent <= 0 ||
-      insuranceCostRatePercent > 5
-    ) {
+    if (!Number.isFinite(insuranceCostRatePercent) || insuranceCostRatePercent <= 0 || insuranceCostRatePercent > 5) {
       toast.error('El costo del seguro debe ser mayor que 0% y no superar 5%.')
       return
     }
     setSaving(true)
 
     const payload = {
-      ...form,
-      default_tax_rate: Number(form.default_tax_rate) || 15,
+      ...Object.fromEntries(Object.entries(form).filter(([key]) => key !== 'billing_points_of_sale')),
+      tenant_id: profile.tenant_id,
+      default_tax_rate: taxRate,
+      exchange_rate_usd_hnl: exchangeRate,
       insurance_cost_rate_percent: insuranceCostRatePercent,
       insurance_included_service_patterns:
         normalizeInsuranceCoveragePatterns(
@@ -342,7 +392,11 @@ export default function CompanySettingsPage() {
 
     let error
     if (settingsId) {
-      const res = await supabase.from('company_settings').update(payload).eq('id', settingsId)
+      const res = await supabase
+        .from('company_settings')
+        .update(payload)
+        .eq('id', settingsId)
+        .eq('tenant_id', profile.tenant_id)
       error = res.error
     } else {
       const res = await supabase.from('company_settings').insert(payload).select('id').single()
@@ -368,7 +422,7 @@ export default function CompanySettingsPage() {
             is_active: bunker.is_active,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: 'code' }
+          { onConflict: 'tenant_id,code' }
         )
 
       if (bunkerError) {
@@ -400,7 +454,7 @@ export default function CompanySettingsPage() {
             Datos legales y de contacto usados en documentos y PDFs.
           </p>
         </div>
-        {isAdmin && (
+        {canEditSettings && (
           <button
             type="button"
             onClick={handleSave}
@@ -413,11 +467,9 @@ export default function CompanySettingsPage() {
         )}
       </div>
 
-      <DemoReadOnlyNotice />
-
-      {!IS_DEMO_ENVIRONMENT && !isAdmin && (
+      {!canEditSettings && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
-          Solo el administrador puede modificar estos datos. Estás viendo la configuración en modo lectura.
+          Solo Admin o Contabilidad puede modificar estos datos. Estás viendo la configuración en modo lectura.
         </div>
       )}
 
@@ -433,8 +485,8 @@ export default function CompanySettingsPage() {
               <input
                 value={form.legal_name ?? ''}
                 onChange={(e) => set('legal_name', e.target.value)}
-                disabled={!isAdmin}
-                placeholder="Ej. Atlas Forwarding Demo"
+                disabled={!canEditSettings}
+                placeholder="Ej. SARI EXPRESS S DE R.L. DE C.V."
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -442,8 +494,8 @@ export default function CompanySettingsPage() {
               <input
                 value={form.trade_name ?? ''}
                 onChange={(e) => set('trade_name', e.target.value)}
-                disabled={!isAdmin}
-                placeholder="Ej. Atlas Forwarding"
+                disabled={!canEditSettings}
+                placeholder="Ej. Sari Express"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -451,8 +503,8 @@ export default function CompanySettingsPage() {
               <input
                 value={form.rtn ?? ''}
                 onChange={(e) => set('rtn', e.target.value)}
-                disabled={!isAdmin}
-                placeholder="Ej. DEMO-SIN-VALIDEZ"
+                disabled={!canEditSettings}
+                placeholder="Ej. 08019003239182"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -467,7 +519,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.address ?? ''}
                 onChange={(e) => set('address', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Calle, número, colonia..."
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -477,7 +529,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.city ?? ''}
                   onChange={(e) => set('city', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="Ej. San Pedro Sula"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -486,7 +538,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.zip_code ?? ''}
                   onChange={(e) => set('zip_code', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="Ej. 21101"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -496,7 +548,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.country ?? ''}
                 onChange={(e) => set('country', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Honduras"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -513,7 +565,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.phone ?? ''}
                   onChange={(e) => set('phone', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="+504 2553-0000"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -522,7 +574,7 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.phone_2 ?? ''}
                   onChange={(e) => set('phone_2', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="+504 ..."
                   className={`${fieldClass} disabled:opacity-60`}
                 />
@@ -533,8 +585,8 @@ export default function CompanySettingsPage() {
                 type="email"
                 value={form.email ?? ''}
                 onChange={(e) => set('email', e.target.value)}
-                disabled={!isAdmin}
-                placeholder="operaciones@empresa.com"
+                disabled={!canEditSettings}
+                placeholder="operaciones@sariexpress.com"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -542,8 +594,8 @@ export default function CompanySettingsPage() {
               <input
                 value={form.website ?? ''}
                 onChange={(e) => set('website', e.target.value)}
-                disabled={!isAdmin}
-                placeholder="https://empresa.com"
+                disabled={!canEditSettings}
+                placeholder="https://sariexpress.com"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
@@ -551,11 +603,31 @@ export default function CompanySettingsPage() {
               <input
                 value={form.logo_url ?? ''}
                 onChange={(e) => set('logo_url', e.target.value)}
-                disabled={!isAdmin}
-                placeholder="https://empresa.com/logo.png"
+                disabled={!canEditSettings}
+                placeholder="/logo/sari-logo.png"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Color principal">
+                <input
+                  type="color"
+                  value={form.primary_color ?? '#0038BD'}
+                  onChange={(e) => set('primary_color', e.target.value)}
+                  disabled={!canEditSettings}
+                  className={`${fieldClass} h-11 p-1 disabled:opacity-60`}
+                />
+              </Field>
+              <Field label="Color secundario">
+                <input
+                  type="color"
+                  value={form.secondary_color ?? '#07111F'}
+                  onChange={(e) => set('secondary_color', e.target.value)}
+                  disabled={!canEditSettings}
+                  className={`${fieldClass} h-11 p-1 disabled:opacity-60`}
+                />
+              </Field>
+            </div>
           </div>
         </section>
 
@@ -568,7 +640,7 @@ export default function CompanySettingsPage() {
                 <select
                   value={form.default_currency ?? 'USD'}
                   onChange={(e) => set('default_currency', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   className={`${fieldClass} disabled:opacity-60`}
                 >
                   <option value="USD">USD</option>
@@ -576,11 +648,11 @@ export default function CompanySettingsPage() {
                 </select>
               </Field>
               <Field label="ISV / Impuesto (%)">
-                <input
+                <NumberInput
                   type="number"
                   value={form.default_tax_rate ?? 15}
                   onChange={(e) => set('default_tax_rate', Number(e.target.value))}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   min="0"
                   max="100"
                   step="0.01"
@@ -593,17 +665,17 @@ export default function CompanySettingsPage() {
                 <input
                   value={form.lugar_emision_defecto ?? ''}
                   onChange={(e) => set('lugar_emision_defecto', e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   placeholder="Ej. San Pedro Sula, Honduras"
                   className={`${fieldClass} disabled:opacity-60`}
                 />
               </Field>
               <Field label="Tipo de cambio USD → HNL">
-                <input
+                <NumberInput
                   type="number"
                   value={form.exchange_rate_usd_hnl ?? 25.30}
                   onChange={(e) => set('exchange_rate_usd_hnl', Number(e.target.value))}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   min="1"
                   step="0.0001"
                   placeholder="25.3000"
@@ -611,11 +683,17 @@ export default function CompanySettingsPage() {
                 />
               </Field>
             </div>
+            <BillingOfficesSettings />
+            <section className="space-y-4"><h3 className="font-semibold">Emisor de factura manual SARI USA</h3><p className="text-sm text-slate-500">Datos propios del emisor estadounidense. Los documentos guardados conservan su encabezado.</p><div className="grid gap-4 md:grid-cols-2"><Field label="Razón social SARI USA"><input className={fieldClass} value={form.usa_legal_name} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_legal_name', e.target.value)} /></Field>
+<Field label="Dirección SARI USA"><input className={fieldClass} value={form.usa_address} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_address', e.target.value)} /></Field>
+<Field label="Teléfono principal SARI USA"><input className={fieldClass} value={form.usa_phone} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_phone', e.target.value)} /></Field>
+<Field label="Correo SARI USA"><input className={fieldClass} value={form.usa_email} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_email', e.target.value)} /></Field>
+<Field label="Sitio web SARI USA"><input className={fieldClass} value={form.usa_website} disabled={!canEditSettings} maxLength={500} onChange={e => set('usa_website', e.target.value)} /></Field></div></section>
             <Field label="Nota de pie de factura">
               <textarea
                 value={form.invoice_footer_note ?? ''}
                 onChange={(e) => set('invoice_footer_note', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 rows={3}
                 placeholder="Ej. Gracias por su preferencia. Pagos en cuenta Bancatlán #0001234..."
                 className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -639,7 +717,7 @@ export default function CompanySettingsPage() {
         </p>
         <div className="max-w-xs">
           <Field label="Costo de seguro (%)">
-            <input
+            <NumberInput
               type="number"
               value={
                 form.insurance_cost_rate_percent ??
@@ -648,7 +726,7 @@ export default function CompanySettingsPage() {
               onChange={(e) =>
                 set('insurance_cost_rate_percent', Number(e.target.value))
               }
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               min="0.0001"
               max="5"
               step="0.0001"
@@ -670,14 +748,14 @@ export default function CompanySettingsPage() {
                     addInsuranceInclusion()
                   }
                 }}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. Ocean Freight"
                 className={`${fieldClass} disabled:opacity-60`}
               />
               <button
                 type="button"
                 onClick={addInsuranceInclusion}
-                disabled={!isAdmin || !insuranceInclusionInput.trim()}
+                disabled={!canEditSettings || !insuranceInclusionInput.trim()}
                 className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
               >
                 <Plus className="h-4 w-4" />
@@ -693,7 +771,7 @@ export default function CompanySettingsPage() {
                 className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
               >
                 {pattern}
-                {isAdmin && (
+                {canEditSettings && (
                   <button
                     type="button"
                     onClick={() => setInsurancePatternPendingRemoval({ kind: 'inclusion', pattern })}
@@ -726,14 +804,14 @@ export default function CompanySettingsPage() {
                     addInsuranceExclusion()
                   }
                 }}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. DTHC"
                 className={`${fieldClass} disabled:opacity-60`}
               />
               <button
                 type="button"
                 onClick={addInsuranceExclusion}
-                disabled={!isAdmin || !insuranceExclusionInput.trim()}
+                disabled={!canEditSettings || !insuranceExclusionInput.trim()}
                 className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-950"
               >
                 <Plus className="h-4 w-4" />
@@ -750,7 +828,7 @@ export default function CompanySettingsPage() {
                   className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
                 >
                   {pattern}
-                  {isAdmin && (
+                  {canEditSettings && (
                     <button
                       type="button"
                       onClick={() => setInsurancePatternPendingRemoval({ kind: 'exclusion', pattern })}
@@ -794,8 +872,8 @@ export default function CompanySettingsPage() {
             <input
               value={form.miami_consignee ?? ''}
               onChange={(e) => set('miami_consignee', e.target.value)}
-              disabled={!isAdmin}
-              placeholder="Ej. ATLAS FORWARDING"
+              disabled={!canEditSettings}
+              placeholder="Ej. SARI EXPRESS"
               className={`${fieldClass} disabled:opacity-60`}
             />
           </Field>
@@ -803,7 +881,7 @@ export default function CompanySettingsPage() {
             <input
               value={form.miami_address_line ?? ''}
               onChange={(e) => set('miami_address_line', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               placeholder="Ej. 5000 NW 74th Ave"
               className={`${fieldClass} disabled:opacity-60`}
             />
@@ -813,7 +891,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_suite_prefix ?? ''}
                 onChange={(e) => set('miami_suite_prefix', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Ej. Suite  ó  Ste.  ó  #"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -822,7 +900,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_phone ?? ''}
                 onChange={(e) => set('miami_phone', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="+1 (305) 000-0000"
                 type="tel"
                 className={`${fieldClass} disabled:opacity-60`}
@@ -834,7 +912,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_city ?? ''}
                 onChange={(e) => set('miami_city', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Miami"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -843,7 +921,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_state ?? ''}
                 onChange={(e) => set('miami_state', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="FL"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -852,7 +930,7 @@ export default function CompanySettingsPage() {
               <input
                 value={form.miami_zip ?? ''}
                 onChange={(e) => set('miami_zip', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="33166"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -862,7 +940,7 @@ export default function CompanySettingsPage() {
             <input
               value={form.miami_country ?? ''}
               onChange={(e) => set('miami_country', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               placeholder="USA"
               className={`${fieldClass} disabled:opacity-60`}
             />
@@ -901,7 +979,7 @@ export default function CompanySettingsPage() {
               <input
                 value={bunker.label}
                 onChange={(e) => setBunkerField('label', e.target.value)}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 placeholder="Bunker Emergency Surcharge"
                 className={`${fieldClass} disabled:opacity-60`}
               />
@@ -912,7 +990,7 @@ export default function CompanySettingsPage() {
                   type="checkbox"
                   checked={bunker.is_active}
                   onChange={(e) => setBunkerField('is_active', e.target.checked)}
-                  disabled={!isAdmin}
+                  disabled={!canEditSettings}
                   className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-60"
                 />
                 Recargo activo (si se desactiva, no se agrega a nuevas cotizaciones)
@@ -921,33 +999,33 @@ export default function CompanySettingsPage() {
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Field label="Tarifa por LBS (USD)">
-              <input
+              <NumberInput
                 type="number"
                 value={bunker.rate_per_lbs}
                 onChange={(e) => setBunkerField('rate_per_lbs', Number(e.target.value))}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 min="0"
                 step="0.0001"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
             <Field label="Tarifa por FT3 (USD)">
-              <input
+              <NumberInput
                 type="number"
                 value={bunker.rate_per_ft3}
                 onChange={(e) => setBunkerField('rate_per_ft3', Number(e.target.value))}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 min="0"
                 step="0.0001"
                 className={`${fieldClass} disabled:opacity-60`}
               />
             </Field>
             <Field label="Mínimo (USD)">
-              <input
+              <NumberInput
                 type="number"
                 value={bunker.minimum_amount}
                 onChange={(e) => setBunkerField('minimum_amount', Number(e.target.value))}
-                disabled={!isAdmin}
+                disabled={!canEditSettings}
                 min="0"
                 step="0.01"
                 className={`${fieldClass} disabled:opacity-60`}
@@ -980,9 +1058,9 @@ export default function CompanySettingsPage() {
           <textarea
             value={form.plantilla_cotizacion ?? ''}
             onChange={(e) => set('plantilla_cotizacion', e.target.value)}
-            disabled={!isAdmin}
+            disabled={!canEditSettings}
             rows={4}
-            placeholder={'Saludos cordiales,\nEquipo Comercial\noperaciones@empresa.com'}
+            placeholder={'Saludos cordiales,\nSari Express — Equipo Comercial\noperaciones@sariexpress.com'}
             className={`${fieldClass} resize-none disabled:opacity-60`}
           />
         </Field>
@@ -1001,7 +1079,7 @@ export default function CompanySettingsPage() {
             <textarea
               value={form.condiciones_bl ?? ''}
               onChange={(e) => set('condiciones_bl', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               rows={4}
               placeholder="Texto de términos y condiciones para el HBL marítimo..."
               className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -1011,7 +1089,7 @@ export default function CompanySettingsPage() {
             <textarea
               value={form.condiciones_awb ?? ''}
               onChange={(e) => set('condiciones_awb', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               rows={4}
               placeholder="Texto de términos y condiciones para el AWB aéreo..."
               className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -1021,7 +1099,7 @@ export default function CompanySettingsPage() {
             <textarea
               value={form.condiciones_carta_porte ?? ''}
               onChange={(e) => set('condiciones_carta_porte', e.target.value)}
-              disabled={!isAdmin}
+              disabled={!canEditSettings}
               rows={4}
               placeholder="Texto de términos y condiciones para la Carta Porte terrestre..."
               className={`${fieldClass} resize-none disabled:opacity-60`}
@@ -1030,7 +1108,7 @@ export default function CompanySettingsPage() {
         </div>
       </section>
 
-      {isAdmin && (
+      {canEditSettings && (
         <div className="flex justify-end">
           <button
             type="button"

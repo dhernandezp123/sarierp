@@ -1,8 +1,7 @@
 'use client'
 
 import type React from 'react'
-import Image from 'next/image'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
@@ -11,10 +10,13 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
-import { AUTH_BACKGROUND_IMAGE } from '@/src/lib/demo-environment'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { profileMatchesTenant } from '@/src/lib/tenant-context'
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const tenant = useTenant()
   const [authUser, setAuthUser] = useState<User | null>(null)
   const [checking, setChecking] = useState(true)
   const [nombre, setNombre] = useState('')
@@ -22,41 +24,62 @@ export default function OnboardingPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [saving, setSaving] = useState(false)
+  const loadedNameUser = useRef<string | null>(null)
 
   useEffect(() => {
-    // Supabase JS picks up the invite token from the URL fragment automatically.
-    // We subscribe to the onAuthStateChange event to catch the SIGNED_IN event.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        if (session?.user) {
-          // Check if profile already completed
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('nombre, apellido, status, rol')
-            .eq('id', session.user.id)
-            .single()
-
-          if (profile?.nombre && profile?.apellido && profile?.status === 'Aprobado') {
-            router.push(profile.rol === 'Cliente' ? '/portal' : '/dashboard')
-            return
-          }
-
-          setAuthUser(session.user)
-          setChecking(false)
-          return
-        }
+    let active = true
+    let revision = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const loadProfile = async (user: User, current: number) => {
+      const { data: profile, error } = await supabase.from('profiles')
+        .select('nombre, apellido, status, rol, tenant_id').eq('id', user.id).single()
+      if (!active || current !== revision) return
+      if (error) throw error
+      if (!profileMatchesTenant(profile?.tenant_id, tenant)) {
+        setAuthUser(null)
+        await supabase.auth.signOut()
+        toast.error('La invitación pertenece a otra empresa.')
+        router.push('/login')
+        return
       }
-      if (event === 'INITIAL_SESSION') {
-        if (!session?.user) {
-          // No active session — redirect to login
+
+      // A name supplied by Admin does not mean the invitee has set a password.
+      // Only initialize once per user, so USER_UPDATED cannot erase edited names.
+      if (loadedNameUser.current !== user.id) {
+        setNombre(profile?.nombre || '')
+        setApellido(profile?.apellido || '')
+        loadedNameUser.current = user.id
+      }
+      setAuthUser(user)
+      setChecking(false)
+    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!['SIGNED_IN', 'USER_UPDATED', 'INITIAL_SESSION', 'SIGNED_OUT'].includes(event)) return
+      const current = ++revision
+      clearTimeout(timer)
+      if (!session?.user) {
+        loadedNameUser.current = null
+        setAuthUser(null)
+        setChecking(false)
+        router.push('/login')
+        return
+      }
+      const user = session.user
+      // Run SDK requests after Auth releases its event callback lock.
+      timer = setTimeout(() => {
+        if (!active || current !== revision) return
+        void loadProfile(user, current).catch(() => {
+          if (!active || current !== revision) return
+          setAuthUser(null)
           setChecking(false)
+          toast.error('No se pudo validar la invitación. Abre el enlace nuevamente.')
           router.push('/login')
-        }
-      }
+        })
+      }, 0)
     })
 
-    return () => subscription.unsubscribe()
-  }, [router])
+    return () => { active = false; revision++; clearTimeout(timer); subscription.unsubscribe() }
+  }, [router, tenant])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -140,7 +163,7 @@ export default function OnboardingPage() {
   return (
     <div
       className="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: AUTH_BACKGROUND_IMAGE, backgroundSize: 'cover', backgroundPosition: 'center' }}
+      style={{ backgroundImage: "url('/login-bg.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.15),transparent_35%)]" />
 
@@ -148,14 +171,7 @@ export default function OnboardingPage() {
         <div className="flex min-h-screen items-center justify-center px-6 py-20">
           <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             <div className="mb-8 text-center">
-              <Image
-                src="/brand/lockup-h-blanco.png"
-                alt="Forwarders ERP"
-                width={256}
-                height={140}
-                priority
-                className="mx-auto mb-8 h-auto w-56 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]"
-              />
+              <div className="mb-8"><TenantBrand inverse /></div>
               <h1 className="text-2xl font-bold text-white">Completa tu perfil</h1>
               <p className="mt-2 text-sm text-slate-400">
                 Fuiste invitado como <span className="font-semibold text-yellow-300">{authUser.user_metadata?.rol || 'Usuario'}</span>

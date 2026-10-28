@@ -1,17 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { formatSupplierAmount, loadSupplierPayables, supplierPayableIssue, supplierPayableSummary, type SupplierPayable } from '@/src/lib/supplier-payables'
+import { formatDate as fmtDate, formatMoney as fmtMoney } from '@/src/lib/format'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Plus, AlertCircle, Clock, Upload, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { useAccounting } from '@/src/hooks/useAccounting'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
-import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { buildTenantStoragePath } from '@/src/lib/storage-paths'
 
 type Proveedor = {
   id: string
@@ -30,19 +33,7 @@ type Proveedor = {
   agents: { id: string; name: string } | null
 }
 
-type CuentaPagar = {
-  id: string
-  descripcion: string
-  numero_factura_proveedor: string | null
-  monto: number
-  moneda: string
-  fecha_factura: string | null
-  fecha_vencimiento: string | null
-  status: string
-  documento_url: string | null
-  quotations: { quotation_number: string | null } | null
-  pagos_proveedor?: { monto: number }[]
-}
+type CuentaPagar = SupplierPayable
 
 type ApprovedQuotation = {
   id: string
@@ -58,40 +49,18 @@ const STATUS_COLOR: Record<string, string> = {
   Anulada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 }
 
-const SUPPLIER_TEXT_FIELDS = ['rtn', 'email', 'telefono', 'contacto', 'pais'] as const
-
-const fmtMoney = (n: number, cur: string) =>
-  `${cur} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-
-const fmtDate = (d: string | null) =>
-  d ? new Date(d + 'T00:00:00').toLocaleDateString('es-HN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'
-
-const isOverdue = (d: string | null) => d ? new Date(d + 'T00:00:00') < new Date() : false
-
-const saldoCuenta = (c: CuentaPagar) => {
-  const pagado = (c.pagos_proveedor || []).reduce((sum, p) => sum + Number(p.monto || 0), 0)
-  return Math.max(0, Number(c.monto || 0) - pagado)
-}
-
-async function querySupplierDetail(supplierId: string) {
-  return Promise.all([
-    supabase.from('proveedores').select('*, agents(id, name)').eq('id', supplierId).single(),
-    supabase.from('cuentas_pagar')
-      .select('id, descripcion, numero_factura_proveedor, monto, moneda, fecha_factura, fecha_vencimiento, status, documento_url, quotations(quotation_number), pagos_proveedor(monto)')
-      .eq('proveedor_id', supplierId)
-      .order('created_at', { ascending: false }),
-    supabase.from('quotations')
-      .select('id, quotation_number, clientes(nombre)')
-      .eq('status', 'Ganada')
-      .order('created_at', { ascending: false })
-      .limit(80),
-  ])
-}
+const editableTextFields = ['rtn', 'email', 'telefono', 'contacto', 'pais'] as const
 
 export default function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { user } = useUser()
+  const { user, profile } = useUser()
+  const { data: accounting } = useAccounting()
+  const context = `${profile?.tenant_id || ''}:${user?.id || ''}:${id}`
+  const loadVersion = useRef(0)
+  const activeContext = useRef<string | null>(context)
+  const [loadedContext, setLoadedContext] = useState('')
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const [proveedor, setProveedor] = useState<Proveedor | null>(null)
   const [cuentas, setCuentas] = useState<CuentaPagar[]>([])
@@ -111,6 +80,8 @@ export default function SupplierDetailPage() {
     numero_factura_proveedor: '',
     monto: '',
     moneda: 'USD',
+    tipo_cambio: '',
+    expense_account_id: '',
     fecha_factura: '',
     fecha_vencimiento: '',
     quotation_id: '',
@@ -121,40 +92,41 @@ export default function SupplierDetailPage() {
   const [editForm, setEditForm] = useState<Partial<Proveedor>>({})
 
   const load = useCallback(async () => {
-    const [{ data: prov }, { data: cp }, { data: quotations }] = await querySupplierDetail(id)
+    if (activeContext.current !== context) return
+    const version = ++loadVersion.current
+    const isCurrent = () => version === loadVersion.current
+    setLoading(true)
+    setLoadError(null)
+    try {
+      const [providerResult, cp, quotationResult] = await Promise.all([
+        supabase.from('proveedores').select('*, agents(id, name)').eq('id', id).single(),
+        loadSupplierPayables(supabase, { supplierId: id, isCurrent }),
+        supabase.from('quotations')
+          .select('id, quotation_number, clientes(nombre)')
+          .eq('status', 'Ganada')
+          .order('created_at', { ascending: false })
+          .limit(80),
+      ])
 
-    if (!prov) {
-      toast.error('Proveedor no encontrado')
-      router.push('/suppliers')
-      return
-    }
+      if (!isCurrent()) return
+      if (providerResult.error || !providerResult.data || quotationResult.error) throw new Error('No se pudo cargar el proveedor y sus datos. Reintenta la consulta.')
+      const prov = providerResult.data
 
-    setProveedor(prov as unknown as Proveedor)
-    setEditForm(prov as unknown as Proveedor)
-    setCuentas((cp || []) as unknown as CuentaPagar[])
-    setApprovedQuotations((quotations || []) as unknown as ApprovedQuotation[])
-    setLoading(false)
-  }, [id, router])
-
-  useEffect(() => {
-    let active = true
-    void querySupplierDetail(id).then(([{ data: prov }, { data: cp }, { data: quotations }]) => {
-      if (!active) return
-      if (!prov) {
-        toast.error('Proveedor no encontrado')
-        router.push('/suppliers')
-        return
-      }
       setProveedor(prov as unknown as Proveedor)
       setEditForm(prov as unknown as Proveedor)
-      setCuentas((cp || []) as unknown as CuentaPagar[])
-      setApprovedQuotations((quotations || []) as unknown as ApprovedQuotation[])
-      setLoading(false)
-    })
-    return () => {
-      active = false
-    }
-  }, [id, router])
+      setCuentas(cp.sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)))
+      setApprovedQuotations((quotationResult.data || []) as unknown as ApprovedQuotation[])
+      setLoadedContext(context)
+    } catch (error) {
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'No se pudieron cargar los saldos')
+    } finally { if (isCurrent()) setLoading(false) }
+  }, [id, context])
+
+  useEffect(() => {
+    activeContext.current = context
+    const timeout = window.setTimeout(() => void load(), 0)
+    return () => { window.clearTimeout(timeout); activeContext.current = null; loadVersion.current += 1 }
+  }, [load, context])
 
   const saveEdit = async () => {
     if (!editForm.nombre?.trim()) {
@@ -197,8 +169,13 @@ export default function SupplierDetailPage() {
 
   const createCP = async () => {
     const amount = Number.parseFloat(cpForm.monto)
-    if (!cpForm.descripcion.trim() || Number.isNaN(amount) || amount <= 0) {
+    if (!cpForm.descripcion.trim() || !Number.isFinite(amount) || amount <= 0) {
       toast.error('Descripcion y monto valido son requeridos')
+      return
+    }
+    const rate = cpForm.moneda === 'HNL' ? 1 : Number(cpForm.tipo_cambio)
+    if (!Number.isFinite(rate) || rate <= 0 || rate > 1000000) {
+      toast.error('Indica una tasa de cambio válida a lempiras.')
       return
     }
 
@@ -215,6 +192,8 @@ export default function SupplierDetailPage() {
       numero_factura_proveedor: cpForm.numero_factura_proveedor.trim() || null,
       monto: amount,
       moneda: cpForm.moneda,
+      tipo_cambio: rate,
+      expense_account_id: cpForm.expense_account_id || null,
       fecha_factura: cpForm.fecha_factura || null,
       fecha_vencimiento: vencimiento,
       notas: cpForm.notas.trim() || null,
@@ -234,6 +213,8 @@ export default function SupplierDetailPage() {
       numero_factura_proveedor: '',
       monto: '',
       moneda: proveedor?.moneda || 'USD',
+      tipo_cambio: '',
+      expense_account_id: '',
       fecha_factura: '',
       fecha_vencimiento: '',
       quotation_id: '',
@@ -243,8 +224,10 @@ export default function SupplierDetailPage() {
   }
 
   const uploadDocumento = async (cuentaId: string, file: File) => {
-    if (IS_DEMO_ENVIRONMENT) return
-
+    if (!profile?.tenant_id) {
+      toast.error('Tu perfil no tiene una empresa asignada')
+      return
+    }
     if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
       toast.error('Solo se permiten archivos PDF')
       return
@@ -256,7 +239,12 @@ export default function SupplierDetailPage() {
 
     setUploadingDocId(cuentaId)
     const currentDocument = cuentas.find((cuenta) => cuenta.id === cuentaId)?.documento_url || null
-    const path = `${id}/${cuentaId}/${crypto.randomUUID()}.pdf`
+    const path = buildTenantStoragePath(
+      profile.tenant_id,
+      id,
+      cuentaId,
+      `${crypto.randomUUID()}.pdf`,
+    )
     const { error: upErr } = await supabase.storage
       .from('proveedor-docs')
       .upload(path, file, { contentType: 'application/pdf', upsert: false })
@@ -306,11 +294,11 @@ export default function SupplierDetailPage() {
     window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
   }
 
-  if (loading) return <PageSkeleton cards={2} rows={4} />
+  if (loadError) return <div className={cardClass}><p role="alert">{loadError}</p><button type="button" onClick={() => void load()} className={secondaryButtonClass}>Reintentar</button></div>
+  if (loading || loadedContext !== context) return <PageSkeleton cards={2} rows={4} />
   if (!proveedor) return null
 
-  const totalPendiente = cuentas.filter((c) => ['Pendiente', 'Parcialmente Pagada', 'Vencida'].includes(c.status)).reduce((s, c) => s + saldoCuenta(c), 0)
-  const totalVencido = cuentas.filter((c) => c.status === 'Vencida' || (['Pendiente', 'Parcialmente Pagada'].includes(c.status) && isOverdue(c.fecha_vencimiento))).reduce((s, c) => s + saldoCuenta(c), 0)
+  const currencies = Array.from(new Set([proveedor.moneda, ...cuentas.map(row => row.moneda)]))
 
   const setCP = (f: keyof typeof cpForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setCpForm((p) => ({ ...p, [f]: e.target.value }))
@@ -319,7 +307,7 @@ export default function SupplierDetailPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{proveedor.nombre}</h1>
           <div className="mt-1 flex items-center gap-2">
@@ -328,27 +316,35 @@ export default function SupplierDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {!IS_DEMO_ENVIRONMENT && <button type="button" onClick={() => setEditMode(!editMode)} className={secondaryButtonClass}>
+          <button type="button" onClick={() => void load()} className={secondaryButtonClass}>Actualizar saldos</button>
+          <button type="button" onClick={() => setEditMode(!editMode)} className={secondaryButtonClass}>
             {editMode ? 'Cancelar' : 'Editar'}
-          </button>}
+          </button>
           <button type="button" onClick={() => router.push('/suppliers')} className={secondaryButtonClass}>
             Volver
           </button>
         </div>
       </div>
 
-      <DemoReadOnlyNotice label="La ficha maestra del proveedor es de solo lectura. Puedes continuar el recorrido con sus cuentas por pagar ficticias." />
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
-          <p className="text-xs text-amber-600 dark:text-amber-400">Por pagar ({proveedor.moneda})</p>
-          <p className="mt-1 text-2xl font-bold text-amber-700 dark:text-amber-300">{fmtMoney(totalPendiente, proveedor.moneda)}</p>
+      {currencies.map(currency => {
+        const totals = supplierPayableSummary(cuentas, currency)
+        return <div key={currency} className="space-y-2">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <p className="text-xs text-amber-600 dark:text-amber-400">Por pagar ({currency})</p>
+              <p className="mt-1 text-2xl font-bold text-amber-700 dark:text-amber-300">{fmtMoney(totals.pending, currency)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+              <p className="text-xs text-slate-500">Vencido ({currency})</p>
+              <p className="mt-1 text-2xl font-bold text-red-600 dark:text-red-300">{fmtMoney(totals.overdue, currency)}</p>
+            </div>
+          </div>
+          {totals.reconciliationCount > 0 && <p role="status" className="text-sm text-amber-700 dark:text-amber-300">
+            {totals.reconciliationCount} cuenta(s) requieren conciliacion. Sobrepagos: {fmtMoney(totals.overpaid, currency)}.
+            {' '}Los totales excluyen saldos inconsistentes y obligaciones negativas; los sobrepagos se muestran separados.
+          </p>}
         </div>
-        <div className={`rounded-2xl border p-4 ${totalVencido > 0 ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20' : 'border-slate-200 bg-white dark:border-slate-700/60 dark:bg-[#0b1220]'}`}>
-          <p className={`text-xs ${totalVencido > 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>Vencido ({proveedor.moneda})</p>
-          <p className={`mt-1 text-2xl font-bold ${totalVencido > 0 ? 'text-red-700 dark:text-red-300' : 'text-slate-500'}`}>{fmtMoney(totalVencido, proveedor.moneda)}</p>
-        </div>
-      </div>
+      })}
 
       <section className={cardClass}>
         {editMode ? (
@@ -359,7 +355,7 @@ export default function SupplierDetailPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-500">Nombre</label>
                 <input value={editForm.nombre || ''} onChange={setEF('nombre')} className={fieldClass} />
               </div>
-              {SUPPLIER_TEXT_FIELDS.map((f) => (
+              {editableTextFields.map((f) => (
                 <div key={f}>
                   <label className="mb-1 block text-xs font-medium text-slate-500 capitalize">{f}</label>
                   <input value={editForm[f] || ''} onChange={setEF(f)} className={fieldClass} />
@@ -476,6 +472,9 @@ export default function SupplierDetailPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-500">Fecha factura</label>
                 <input type="date" value={cpForm.fecha_factura} onChange={setCP('fecha_factura')} className={fieldClass} />
               </div>
+              {cpForm.moneda !== 'HNL' && <label className="text-sm">HNL por {cpForm.moneda}<input type="number" min="0.000001" max="1000000" step="0.000001" value={cpForm.tipo_cambio} onChange={setCP('tipo_cambio')} className={fieldClass}/></label>}
+              <label className="text-sm">Cuenta de gasto / activo<select value={cpForm.expense_account_id} onChange={setCP('expense_account_id')} className={fieldClass}><option value="">Cuenta de compras configurada</option>{accounting?.accounts.filter(a=>a.active&&a.postable&&['Activo','Gasto'].includes(a.kind)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>
+              <p className="text-sm md:col-span-2">Para varias cuentas por línea, ISV acreditable o boleta fiscal, usa <Link className="text-blue-700 underline" href="/accounting/purchases">Compras y documentos</Link>.</p>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">
                   Vencimiento <span className="text-slate-400">(se calcula si queda vacio)</span>
@@ -503,22 +502,29 @@ export default function SupplierDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700">
-                  {['Descripcion', 'Factura', 'Monto', 'Vencimiento', 'Estado', 'Doc.', ''].map((h) => (
+                  {['Descripcion', 'Factura', 'Total ajustado / Saldo', 'Vencimiento', 'Estado', 'Doc.', ''].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {cuentas.map((c) => {
-                  const overdue = (c.status === 'Pendiente' || c.status === 'Parcialmente Pagada') && isOverdue(c.fecha_vencimiento)
+                  const overdue = c.days_overdue > 0
                   return (
                     <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/20">
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-slate-800 dark:text-slate-200">{c.descripcion}</div>
-                        {c.quotations && <div className="text-xs text-slate-400">Cot. {c.quotations.quotation_number}</div>}
+                        {c.quotations && (
+                          <div className="text-xs text-slate-400">
+                            Cot. {(Array.isArray(c.quotations) ? c.quotations[0] : c.quotations)?.quotation_number}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-slate-600 dark:text-slate-400">{c.numero_factura_proveedor || '-'}</td>
-                      <td className="px-3 py-2.5 font-semibold text-slate-800 dark:text-slate-200">{fmtMoney(Number(c.monto), c.moneda)}</td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-800 dark:text-slate-200">{formatSupplierAmount(c.total_adjusted, c.moneda)}
+                        <p className="text-xs font-normal">Saldo: {formatSupplierAmount(c.pending_balance, c.moneda)}</p>
+                        <p className="text-xs font-normal">Pagado: {formatSupplierAmount(c.paid_total, c.moneda)}</p>
+                        {c.needs_reconciliation && <p className="text-xs text-amber-700 dark:text-amber-300">{supplierPayableIssue(c)}</p>}</td>
                       <td className="px-3 py-2.5">
                         <div className={`flex items-center gap-1 text-xs ${overdue ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>
                           {overdue ? <AlertCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
@@ -526,8 +532,8 @@ export default function SupplierDetailPage() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_COLOR[overdue && c.status === 'Pendiente' ? 'Vencida' : c.status] ?? ''}`}>
-                          {overdue && c.status === 'Pendiente' ? 'Vencida' : c.status}
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_COLOR[c.status] ?? ''}`}>
+                          {c.status}
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
@@ -542,7 +548,7 @@ export default function SupplierDetailPage() {
                               <ExternalLink className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {!IS_DEMO_ENVIRONMENT && <label
+                          <label
                             className={`cursor-pointer ${uploadingDocId === c.id ? 'opacity-40' : ''}`}
                             title={c.documento_url ? 'Reemplazar documento' : 'Subir documento'}
                           >
@@ -570,7 +576,7 @@ export default function SupplierDetailPage() {
                                 void uploadDocumento(c.id, file)
                               }}
                             />
-                          </label>}
+                          </label>
                         </div>
                       </td>
                       <td className="px-3 py-2.5">

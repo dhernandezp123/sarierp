@@ -1,26 +1,23 @@
 'use client'
 
 import type React from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
-import { DemoEnvironmentBanner } from '@/src/components/demo/DemoEnvironmentBanner'
-import {
-  AUTH_BACKGROUND_IMAGE,
-  IS_DEMO_ENVIRONMENT,
-  isDemoAccessExpired,
-} from '@/src/lib/demo-environment'
 import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
-import { getLoginDestination } from '@/src/lib/auth-redirect'
+import { getLoginDestination, getPlatformLoginDestination } from '@/src/lib/auth-redirect'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { profileMatchesAccessContext } from '@/src/lib/tenant-context'
 
 export default function LoginPage() {
   const router = useRouter()
+  const tenant = useTenant()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -64,6 +61,16 @@ export default function LoginPage() {
         return
       }
 
+      if (!profileMatchesAccessContext(profile, tenant)) {
+        await supabase.auth.signOut()
+        toast.error(
+          tenant
+            ? 'Esta cuenta pertenece a otra empresa. Revisa el enlace de acceso.'
+            : 'Este acceso es exclusivo para administradores autorizados de la plataforma.',
+        )
+        return
+      }
+
       if (profile.status !== 'Aprobado') {
         await supabase.auth.signOut()
         toast.info('Tu usuario esta pendiente de aprobacion por un administrador.')
@@ -76,26 +83,10 @@ export default function LoginPage() {
         return
       }
 
-      if (
-        IS_DEMO_ENVIRONMENT
-        && (
-          profile.is_demo_user !== true
-          || !profile.demo_access_grant_id
-        )
-      ) {
-        await supabase.auth.signOut()
-        toast.error('Esta cuenta no está habilitada para el ambiente demo.')
-        return
-      }
-
-      if (isDemoAccessExpired(profile)) {
-        await supabase.auth.signOut()
-        toast.error('El acceso temporal de esta cuenta demo ha vencido.')
-        return
-      }
-
       const requestedPath = new URLSearchParams(window.location.search).get('next')
-      const safePath = getLoginDestination(profile.rol, requestedPath)
+      const safePath = profile.is_platform_admin
+        ? getPlatformLoginDestination(profile, requestedPath)
+        : getLoginDestination(profile.rol, requestedPath)
       router.push(safePath)
       router.refresh()
     } catch {
@@ -109,7 +100,7 @@ export default function LoginPage() {
     <div
       className="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat"
       style={{
-        backgroundImage: AUTH_BACKGROUND_IMAGE,
+        backgroundImage: "url('/login-bg.png')",
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
@@ -117,18 +108,20 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.15),transparent_35%)]" />
 
       <div className="relative min-h-screen bg-gradient-to-r from-[#020617]/95 via-[#020617]/80 to-[#020617]/20">
-        <div className="flex min-h-screen items-center px-10 py-20">
-          <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
-            <DemoEnvironmentBanner className="-mx-4 mb-7 rounded-xl border" />
+        <div className="flex min-h-screen items-center px-4 py-20 sm:px-10">
+          <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-6 shadow-2xl shadow-black/40 backdrop-blur-2xl sm:p-10">
             <div className="mb-10 text-center">
-              <Image
-                src="/brand/lockup-h-blanco.png"
-                alt="Forwarders ERP"
-                width={256}
-                height={140}
-                priority
-                className="mx-auto mb-10 h-auto w-64 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]"
-              />
+              <div className="mb-10">
+                {tenant ? (
+                  <TenantBrand inverse />
+                ) : (
+                  <div>
+                    <p className="text-2xl font-bold text-white">{PLATFORM_NAME}</p>
+                    <h1 className="mt-2 text-lg font-semibold text-slate-200">Administración de plataforma</h1>
+                    <p className="mt-2 text-sm text-slate-300">Acceso exclusivo para superadministradores.</p>
+                  </div>
+                )}
+              </div>
 
               <p className="text-sm tracking-wide text-slate-400">
                 ERP Logístico-Comercial Versión 1.0
@@ -137,10 +130,11 @@ export default function LoginPage() {
 
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
-                <label className="mb-1 block text-sm font-medium text-white">
+                <label htmlFor="login-email" className="mb-1 block text-sm font-medium text-white">
                   Correo electronico
                 </label>
                 <input
+                  id="login-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -152,10 +146,11 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-white">
+                <label htmlFor="login-password" className="mb-1 block text-sm font-medium text-white">
                   Contraseña
                 </label>
                 <input
+                  id="login-password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -166,6 +161,12 @@ export default function LoginPage() {
                 />
               </div>
 
+              {tenant && <div className="text-right">
+                <Link href="/forgot-password" className="text-sm font-semibold text-yellow-300 hover:underline">
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>}
+
               <button
                 type="submit"
                 disabled={loading}
@@ -175,7 +176,7 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {!IS_DEMO_ENVIRONMENT && (
+            {tenant && (
               <p className="mt-6 text-center text-sm text-slate-300">
                 Necesitas acceso?{' '}
                 <Link

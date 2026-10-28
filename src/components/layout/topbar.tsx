@@ -8,13 +8,14 @@ import { useTheme } from 'next-themes'
 import { useUser } from '@/src/hooks/useUser'
 import { getSystemAlerts, type SystemAlert } from '@/src/lib/alerts'
 import { supabase } from '@/src/lib/supabase/client'
-import { PLATFORM_NAME } from '@/src/lib/platform-branding'
 import NewAgentDialog from '@/src/components/agents/NewAgentDialog'
 import NewClientDialog from '@/src/components/clientes/NewClientDialog'
 import ClientProfileDialog from '@/src/components/clientes/ClientProfileDialog'
 import EmailTemplatesDialog from '@/src/components/email/EmailTemplatesDialog'
 import ReferenceInsuranceCalculatorDialog from '@/src/components/quotations/ReferenceInsuranceCalculatorDialog'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { canAccessPath } from '@/src/lib/permissions'
+import { canManagePlatform } from '@/src/lib/platform-admin'
 
 // Acciones rapidas disponibles segun rol; con `href` navegan y con
 // `action` abren un modal sin salir de la pagina actual.
@@ -35,7 +36,7 @@ const QUICK_ACTIONS = [
     label: 'Ver / Editar Cliente',
     action: 'client-profile',
     icon: Contact,
-    roles: ['Admin', 'Ventas'],
+    roles: ['Admin', 'Ventas', 'Contabilidad'],
   },
   {
     label: 'Agregar Agente',
@@ -88,8 +89,18 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
   const { theme, setTheme } = useTheme()
   const { user, profile, loading: userLoading } = useUser()
   const pathname = usePathname()
+  const tenant = useTenant()
+  const isPlatformAdmin = profile?.is_platform_admin === true
+  const canReadAlerts = !userLoading && !!user && profile?.id === user.id && !!profile.tenant_id
+    && profile.status === 'Aprobado' && profile.is_active === true && canAccessPath(profile.rol, '/alerts') && !isPlatformAdmin
+  const alertsContext = `${user?.id || ''}:${profile?.tenant_id || ''}:${profile?.rol || ''}:${profile?.status || ''}:${profile?.is_active}:${isPlatformAdmin}`
 
-  const [alerts, setAlerts] = useState<SystemAlert[]>([])
+  const [storedAlerts, setAlerts] = useState<SystemAlert[]>([])
+  const [loadedAlertsContext, setLoadedAlertsContext] = useState('')
+  const [alertsRequestContext, setAlertsRequestContext] = useState('')
+  const [alertsLoading, setAlertsLoading] = useState(true)
+  const [alertsError, setAlertsError] = useState(false)
+  const [alertsRevision, setAlertsRevision] = useState(0)
   const [seenHighAlertIds, setSeenHighAlertIds] = useState<Set<string>>(new Set())
   const [alertsOpen, setAlertsOpen] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
@@ -101,19 +112,30 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
 
   const quickRef = useRef<HTMLDivElement>(null)
   const alertsRef = useRef<HTMLDivElement>(null)
+  const hasAlertsSnapshot = canReadAlerts && loadedAlertsContext === alertsContext
+  const alerts = hasAlertsSnapshot ? storedAlerts : []
+  const alertsUpdating = canReadAlerts && (alertsRequestContext !== alertsContext || alertsLoading)
+  const alertsReadError = canReadAlerts && alertsRequestContext === alertsContext && alertsError
 
   useEffect(() => {
+    let active = true
     const fetchAlerts = async () => {
       if (userLoading) return
+      setAlertsRequestContext(alertsContext)
+      setAlertsLoading(true)
+      setAlertsError(false)
 
-      if (!user) {
+      if (!canReadAlerts) {
         setAlerts([])
+        setLoadedAlertsContext('')
         setSeenHighAlertIds(new Set())
+        setAlertsLoading(false)
         return
       }
 
       try {
-        const data = await getSystemAlerts(supabase, profile, user)
+        const data = await getSystemAlerts(supabase, profile, user, () => active)
+        if (!active) return
         const activeHighAlertIds = new Set(
           data.filter((alert) => alert.severity === 'Alta').map((alert) => alert.id)
         )
@@ -122,15 +144,17 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
         )
 
         setAlerts(data)
+        setLoadedAlertsContext(alertsContext)
         setSeenHighAlertIds(retainedSeenIds)
         saveSeenAlertIds(user.id, retainedSeenIds)
       } catch {
-        setAlerts([])
-      }
+        if (active) setAlertsError(true)
+      } finally { if (active) setAlertsLoading(false) }
     }
 
-    fetchAlerts()
-  }, [pathname, profile, user, userLoading])
+    const timer = setTimeout(() => { void fetchAlerts() }, 0)
+    return () => { active = false; clearTimeout(timer) }
+  }, [alertsContext, canReadAlerts, pathname, profile, user, userLoading, alertsRevision])
 
   // Cierra dropdowns al clic fuera
   useEffect(() => {
@@ -159,7 +183,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
   const toggleAlerts = () => {
     const willOpen = !alertsOpen
     setAlertsOpen(willOpen)
-    if (!willOpen || !user) return
+    if (!willOpen || !user || alertsUpdating || alertsReadError || !hasAlertsSnapshot) return
 
     const nextSeenIds = new Set(seenHighAlertIds)
     alerts.forEach((alert) => {
@@ -169,14 +193,11 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
     saveSeenAlertIds(user.id, nextSeenIds)
   }
 
-  const visibleActions = QUICK_ACTIONS.filter((action) => {
-    const roleCanUseAction = !profile?.rol || action.roles.includes(profile.rol)
-    const isBlockedDemoMasterAction = IS_DEMO_ENVIRONMENT && (
-      action.action === 'new-agent'
-      || action.action === 'email-templates'
-    )
-    return roleCanUseAction && !isBlockedDemoMasterAction
-  })
+  const visibleActions = isPlatformAdmin
+    ? []
+    : QUICK_ACTIONS.filter((action) =>
+        !profile?.rol || action.roles.includes(profile.rol)
+      )
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6 dark:border-slate-700/60 dark:bg-[#081120]/90">
@@ -197,7 +218,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
         )}
 
         <Link
-          href="/dashboard"
+          href={isPlatformAdmin ? (canManagePlatform(profile) ? '/platform' : '/support') : '/dashboard'}
           title="Ir al inicio"
           className="rounded-xl p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
         >
@@ -206,10 +227,10 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
 
         <div className="hidden sm:block">
           <p className="text-sm font-semibold text-slate-900 dark:text-white">
-            {PLATFORM_NAME}
+            {tenant?.tradeName || 'Forwarders ERP'}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Plataforma logistica interna
+            {isPlatformAdmin ? 'Administración de plataforma' : 'Plataforma logistica interna'}
           </p>
         </div>
       </div>
@@ -301,20 +322,23 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
           )}
         </button>
 
-        <div ref={alertsRef} className="relative">
+        {!isPlatformAdmin && <div ref={alertsRef} className="relative">
           <button
             type="button"
             onClick={toggleAlerts}
-            title={newHighAlertCount > 0 ? `${newHighAlertCount} alertas nuevas` : 'Alertas'}
+            disabled={!canReadAlerts}
+            aria-label="Abrir alertas"
+            title={alertsReadError ? 'Alertas sin actualizar' : alertsUpdating ? 'Actualizando alertas' : newHighAlertCount > 0 ? `${newHighAlertCount} alertas nuevas` : 'Alertas'}
             className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
           >
             <Bell className="h-4 w-4" />
 
             {newHighAlertCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+              <span aria-label={`${newHighAlertCount} alertas nuevas en la última consulta`} className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
                 {newHighAlertCount > 9 ? '9+' : newHighAlertCount}
               </span>
             )}
+            {alertsReadError && <span aria-label="Alertas sin actualizar" className="absolute -bottom-1 -right-1 rounded-full bg-amber-300 px-1 text-[10px] font-bold text-slate-950">!</span>}
           </button>
 
           {alertsOpen && (
@@ -323,11 +347,20 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">
                   Alertas activas
                 </p>
+                <button type="button" disabled={alertsUpdating || !canReadAlerts} onClick={() => setAlertsRevision(value => value + 1)} className="mt-1 text-xs text-blue-600 disabled:opacity-50">Actualizar alertas</button>
               </div>
 
-              {alerts.length === 0 ? (
+              {(alertsUpdating || alertsReadError) && (
+                <div role={alertsReadError ? "alert" : "status"} className="p-4 text-sm text-slate-500">
+                  <p>{alertsReadError ? "No se pudieron cargar todas las alertas." : "Cargando alertas..."}</p>
+                  {hasAlertsSnapshot && <p>Mostrando la última consulta completa; las alertas pueden estar desactualizadas.</p>}
+                  {alertsReadError && <button type="button" onClick={() => setAlertsRevision(value => value + 1)} className="mt-2 rounded-lg border px-3 py-1">Reintentar</button>}
+                  <Link href="/alerts" className="mt-2 block text-blue-600">Abrir alertas</Link>
+                </div>
+              )}
+              {hasAlertsSnapshot && (alerts.length === 0 ? (
                 <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-                  Sin alertas activas.
+                  {alertsUpdating || alertsReadError ? 'La última consulta no tenía alertas.' : 'Sin alertas activas.'}
                 </p>
               ) : (
                 <ul className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
@@ -345,7 +378,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
                     </li>
                   ))}
                 </ul>
-              )}
+              ))}
 
               {alerts.length > 0 && (
                 <div className="border-t border-slate-100 px-4 py-2 dark:border-slate-800">
@@ -360,9 +393,9 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
               )}
             </div>
           )}
-        </div>
+        </div>}
 
-        <Link
+        {!isPlatformAdmin && <Link
           href="/profile"
           className="ml-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-transparent dark:hover:bg-slate-800"
         >
@@ -378,7 +411,7 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
               {profile?.rol || 'Ventas'}
             </p>
           </div>
-        </Link>
+        </Link>}
       </div>
 
       <NewAgentDialog open={agentDialogOpen} onOpenChange={setAgentDialogOpen} />

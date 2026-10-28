@@ -50,7 +50,11 @@ export function getInsuranceExclusionMatch(
   item: InsuranceCoverageItem,
   patterns: string[]
 ) {
-  const searchableValues = [item.rate_code, item.description, item.item_type]
+  // Miami's catalog uses its own labels for the same freight services covered
+  // by the corporate Ocean Freight / Air Freight policies.
+  const freightAlias = item.rate_code === 'miami_lcl_freight' ? 'Ocean Freight'
+    : item.rate_code === 'miami_air_freight' ? 'Air Freight' : null
+  const searchableValues = [item.rate_code, item.description, item.item_type, freightAlias]
     .map(normalizeCoverageText)
     .filter(Boolean)
 

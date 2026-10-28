@@ -1,3 +1,5 @@
+import { canAccessPath } from './permissions'
+
 export type BillingReadinessCode =
   | 'READY_TO_INVOICE'
   | 'COSTS_PENDING'
@@ -71,4 +73,19 @@ export function billingQueueActionHref(row: BillingQueueRow, returnTo: string) {
     default:
       return null
   }
+}
+
+export function billingQueueHandoff(row: BillingQueueRow, role: string | null | undefined, returnTo: string) {
+  const owner = {
+    READY_TO_INVOICE: 'Finanzas', COSTS_PENDING: 'Finanzas', OPERATIONS_PENDING: 'Operaciones',
+    CLIENT_DATA_MISSING: 'Ventas / Administración', PRICING_INVALID: 'Pricing',
+  }[row.readiness_code]
+  let href = billingQueueActionHref(row, returnTo)
+  if (row.readiness_code === 'CLIENT_DATA_MISSING' && role === 'Admin' && row.client_id) {
+    href = `/clientes/${encodeURIComponent(row.client_id)}/edit`
+  }
+  if (row.readiness_code === 'PRICING_INVALID' && ['Admin', 'Pricing'].includes(role || '')) {
+    href = `/pricing-comparison?quotation=${encodeURIComponent(row.quotation_id)}`
+  }
+  return { owner, href: href && canAccessPath(role, href.split('?')[0]) ? href : null }
 }

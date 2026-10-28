@@ -1,0 +1,35 @@
+\set ON_ERROR_STOP on
+begin;
+create function pg_temp.assert_true(v boolean,m text) returns void language plpgsql as $$ begin if not coalesce(v,false) then raise exception 'ASSERTION FAILED: %',m;end if;end $$;
+select pg_temp.assert_true(public.is_demo_environment(),'Sandbox remains Demo');
+select pg_temp.assert_true((select environment='demo' and project_ref='wlssekvxpfxhwedsjhpz' and not reset_enabled from public.platform_environment where singleton),'Sentinel and reset retained');
+select pg_temp.assert_true(exists(select 1 from public.tenant_domains where hostname='demo.forwarders.app' and is_primary and is_active),'Demo resolves its own tenant');
+select pg_temp.assert_true(not exists(select 1 from public.tenant_domains where hostname='sari.forwarders.app'),'Production hostname absent');
+select pg_temp.assert_true(not exists(select 1 from storage.buckets where public),'No public storage buckets');
+select pg_temp.assert_true(exists(select 1 from pg_policies where schemaname='storage' and tablename='objects' and policyname='demo_parity_storage_block' and permissive='RESTRICTIVE'),'All sandbox uploads blocked');
+insert into auth.users(id,email,raw_user_meta_data) values('de280000-0000-4000-8000-000000000010','parity-admin@test.invalid','{}');
+update public.profiles set rol='Admin',status='Aprobado',is_active=true,tenant_id='00000000-0000-4000-8000-000000000001',is_demo_user=true,demo_expires_at=now()+interval '1 day',demo_access_grant_id='de280000-0000-4000-8000-000000000099' where id='de280000-0000-4000-8000-000000000010';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"de280000-0000-4000-8000-000000000010","role":"authenticated","app_metadata":{"demo_access_grant_id":"de280000-0000-4000-8000-000000000099"}}',true);
+select pg_temp.assert_true(public.is_demo_access_active() and public.can_manage_finance() and public.current_tenant_id() is not null,'Active Demo finance access');
+reset role;
+select pg_temp.assert_true(public.allocate_internal_hbl_number(current_date) like 'DEMO-HBL-%','Tenant-aware HBL allocation keeps the Demo prefix');
+set local role authenticated;
+select public.set_invoice_master('de280000-0000-4000-8000-000000000010','Individual sandbox master for local regression');
+select pg_temp.assert_true(public.is_invoice_master(),'Sandbox supports individual master designation');
+select public.save_invoice_draft('de280000-0000-4000-8000-000000000020',0,'de280000-0000-4000-8000-000000000021','{"invoice_type":"Factura"}','[]','{}');
+select pg_temp.assert_true((select count(*)=1 from public.invoice_drafts where id='de280000-0000-4000-8000-000000000020'),'Sandbox supports incomplete drafts');
+reset role;
+select set_config('request.jwt.claims','{}',true);
+update public.profiles set demo_expires_at=now()-interval '1 hour' where id='de280000-0000-4000-8000-000000000010';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"de280000-0000-4000-8000-000000000010","role":"authenticated","app_metadata":{"demo_access_grant_id":"de280000-0000-4000-8000-000000000099"}}',true);
+select pg_temp.assert_true(not public.is_demo_access_active() and public.current_tenant_id() is null and not public.is_invoice_master(),'Expired access cannot approve or resolve tenant');
+select pg_temp.assert_true((select count(*)=0 from public.invoice_drafts),'Expired access cannot read drafts');
+reset role;
+select set_config('request.jwt.claims','{}',true);
+do $$ begin
+ begin perform public.arm_demo_reset('RESET Y SEMBRAR DEMO wlssekvxpfxhwedsjhpz');raise exception 'Unsafe legacy reset was allowed';exception when sqlstate '55000' then null;end;
+end $$;
+rollback;
+select 'PASS Demo parity: tenant, sentinel, storage, drafts, individual master and expired access';

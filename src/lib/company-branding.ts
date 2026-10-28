@@ -1,5 +1,3 @@
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
-
 export type CompanyBranding = {
   legal_name: string | null
   trade_name: string | null
@@ -10,6 +8,8 @@ export type CompanyBranding = {
   phone: string | null
   email: string | null
   logo_url: string | null
+  primary_color: string | null
+  secondary_color: string | null
   miami_consignee: string | null
   miami_address_line: string | null
   miami_suite_prefix: string | null
@@ -30,6 +30,8 @@ export const COMPANY_BRANDING_SELECT = `
   phone,
   email,
   logo_url,
+  primary_color,
+  secondary_color,
   miami_consignee,
   miami_address_line,
   miami_suite_prefix,
@@ -40,16 +42,19 @@ export const COMPANY_BRANDING_SELECT = `
   miami_phone
 `
 
-const DEMO_COMPANY_BRANDING: CompanyBranding = {
+export const DEFAULT_COMPANY_BRANDING: CompanyBranding = {
   legal_name: 'ATLAS FORWARDING DEMO',
   trade_name: 'Atlas Forwarding Demo',
   rtn: 'DEMO-SIN-VALIDEZ',
-  address: 'Dirección ficticia para demostración',
+  address:
+    'Dirección ficticia para demostración',
   city: 'San Pedro Sula',
   country: 'Honduras',
   phone: null,
   email: null,
   logo_url: '/brand/lockup-h-color.png',
+  primary_color: '#0038BD',
+  secondary_color: '#07111F',
   miami_consignee: null,
   miami_address_line: null,
   miami_suite_prefix: null,
@@ -59,30 +64,6 @@ const DEMO_COMPANY_BRANDING: CompanyBranding = {
   miami_country: 'USA',
   miami_phone: null,
 }
-
-const UNCONFIGURED_COMPANY_BRANDING: CompanyBranding = {
-  legal_name: 'EMPRESA NO CONFIGURADA',
-  trade_name: 'Forwarders ERP',
-  rtn: null,
-  address: null,
-  city: null,
-  country: 'Honduras',
-  phone: null,
-  email: null,
-  logo_url: '/brand/lockup-h-color.png',
-  miami_consignee: null,
-  miami_address_line: null,
-  miami_suite_prefix: null,
-  miami_city: 'Miami',
-  miami_state: 'FL',
-  miami_zip: null,
-  miami_country: 'USA',
-  miami_phone: null,
-}
-
-export const DEFAULT_COMPANY_BRANDING = IS_DEMO_ENVIRONMENT
-  ? DEMO_COMPANY_BRANDING
-  : UNCONFIGURED_COMPANY_BRANDING
 
 const clean = (value: unknown) => {
   if (typeof value !== 'string') return null
@@ -105,6 +86,10 @@ export function normalizeCompanyBranding(
     phone: clean(data.phone),
     email: clean(data.email),
     logo_url: clean(data.logo_url) || DEFAULT_COMPANY_BRANDING.logo_url,
+    primary_color:
+      clean(data.primary_color) || DEFAULT_COMPANY_BRANDING.primary_color,
+    secondary_color:
+      clean(data.secondary_color) || DEFAULT_COMPANY_BRANDING.secondary_color,
     miami_consignee: clean(data.miami_consignee),
     miami_address_line: clean(data.miami_address_line),
     miami_suite_prefix: clean(data.miami_suite_prefix),
@@ -119,12 +104,12 @@ export function normalizeCompanyBranding(
 
 export function getCompanyDisplayName(company?: CompanyBranding | null) {
   const normalized = normalizeCompanyBranding(company)
-  return normalized.legal_name || normalized.trade_name || 'Forwarders ERP'
+  return normalized.legal_name || normalized.trade_name || 'Sari Express'
 }
 
 export function getCompanyTradeName(company?: CompanyBranding | null) {
   const normalized = normalizeCompanyBranding(company)
-  return normalized.trade_name || normalized.legal_name || 'Forwarders ERP'
+  return normalized.trade_name || normalized.legal_name || 'Sari Express'
 }
 
 export function getCompanyAddressLines(company?: CompanyBranding | null) {

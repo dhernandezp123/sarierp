@@ -7,9 +7,13 @@ import { useEffect, useId, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath } from '@/src/lib/permissions'
+import { canManagePlatform } from '@/src/lib/platform-admin'
 import { isSidebarItemActive, sidebarGroupOrder } from '@/src/lib/sidebar-navigation'
 import { NOTIFICATIONS_READ_EVENT } from '@/src/lib/notifications'
 import { supabase } from '@/src/lib/supabase/client'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { OUTLOOK_INTAKE_STANDBY } from '@/src/lib/mail-intake'
 import {
   LayoutDashboard, LogOut, Users, FileText, ActivitySquare, CalendarClock,
   Scale, DollarSign, BarChart3, Building2, Database, Route, Bell, Receipt,
@@ -38,7 +42,9 @@ export default function Sidebar({ role }: { role?: string }) {
   const pathname = usePathname()
   const router = useRouter()
   const { profile, user } = useUser()
+  const tenant = useTenant()
   const currentRole = profile?.rol ?? role
+  const isPlatformAdmin = profile?.is_platform_admin === true
   const navId = useId()
   const [unread, setUnread] = useState({ userId: '', count: 0 })
   const unreadCount = unread.userId === user?.id ? unread.count : 0
@@ -64,7 +70,7 @@ export default function Sidebar({ role }: { role?: string }) {
 
   useEffect(() => {
     const userId = user?.id
-    if (!userId) return
+    if (!userId || isPlatformAdmin) return
     let cancelled = false
     let readVersion = 0
     const refresh = async () => {
@@ -77,7 +83,7 @@ export default function Sidebar({ role }: { role?: string }) {
     const onRead = () => { readVersion += 1; setUnread({ userId, count: 0 }) }
     window.addEventListener(NOTIFICATIONS_READ_EVENT, onRead)
     return () => { cancelled = true; window.removeEventListener(NOTIFICATIONS_READ_EVENT, onRead) }
-  }, [pathname, user?.id])
+  }, [isPlatformAdmin, pathname, user?.id])
 
   const navItems = [
     {
@@ -141,6 +147,11 @@ export default function Sidebar({ role }: { role?: string }) {
   ]
 
   const financialItems = [
+    ...(tenant?.hostname === 'sari.forwarders.app' ? [{
+      label: 'Scanner / Factura manual',
+      href: '/manual-invoices',
+      icon: Receipt,
+    }] : []),
     {
       label: 'Dashboard Financiero',
       href: '/financial-dashboard',
@@ -156,6 +167,9 @@ export default function Sidebar({ role }: { role?: string }) {
       href: '/invoicing',
       icon: Receipt,
     },
+    { label: 'Cobranza y recibos', href: '/invoicing/collections', icon: CreditCard },
+    { label: 'Estados de cuenta', href: '/invoicing/statements', icon: FileText },
+    { label: 'Contabilidad', href: '/accounting/accounts', icon: Database },
   ]
 
   const purchaseItems = [
@@ -249,6 +263,11 @@ export default function Sidebar({ role }: { role?: string }) {
       href: '/settings/email-templates',
       icon: Mail,
     },
+    ...(!OUTLOOK_INTAKE_STANDBY && tenant?.hostname === 'sari.forwarders.app' ? [{
+      label: 'Solicitudes por Outlook',
+      href: '/settings/mail-intake',
+      icon: Mail,
+    }] : []),
   ]
 
 
@@ -280,43 +299,43 @@ export default function Sidebar({ role }: { role?: string }) {
   }
 
   return (
-    <aside aria-label="Navegación principal" className="relative flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#07111F] text-white shadow-2xl">
+    <aside aria-label="Navegación principal" className="relative flex h-full min-h-0 w-64 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-tenant-secondary text-white shadow-2xl" style={{ backgroundColor: tenant?.secondaryColor }}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,56,189,0.24),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(239,142,1,0.16),transparent_32%)]" />
       <div className="relative shrink-0 border-b border-white/10 px-4 pb-3 pt-3">
         <Link
-          href="/dashboard"
+          href={isPlatformAdmin ? (canManagePlatform(profile) ? '/platform' : '/support') : '/dashboard'}
           className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-lg shadow-slate-950/10 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.09]"
         >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl overflow-hidden">
-            <Image
-              src="/brand/isotipo-blanco.png"
-              alt="Forwarders ERP"
-              width={44}
-              height={44}
-              className="h-11 w-11 object-contain"
-            />
-          </span>
-
           <span className="min-w-0">
-            <span className="block truncate text-base font-bold leading-tight tracking-tight text-white">
-              Forwarders ERP
-            </span>
-            <span className="mt-1 block truncate text-[11px] text-slate-400">
-              ERP Log&iacute;stico
-            </span>
+            {isPlatformAdmin ? (
+              <span className="block">
+                <span className="block text-base font-bold text-white">Forwarders ERP</span>
+                <span className="block text-xs text-slate-400">Administración Hernova</span>
+              </span>
+            ) : (
+              <TenantBrand compact inverse />
+            )}
           </span>
         </Link>
       </div>
 
 
       <nav aria-label="Módulos" className="relative min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3 [scrollbar-width:thin]">
-        {canAccessPath(currentRole, '/quotations/new') && (
-          <Link href="/quotations/new" aria-current={pathname === '/quotations/new' ? 'page' : undefined} className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-[#0038BD] px-3 py-3 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400">
+        {canManagePlatform(profile) && <div className="space-y-1">
+          {renderItem({ label: 'Resumen', href: '/platform', icon: LayoutDashboard, exact: true })}
+          {renderItem({ label: 'Empresas y accesos', href: '/platform/companies', icon: Building2 })}
+          {renderItem({ label: 'Usuarios', href: '/platform/users', icon: Users })}
+          {renderItem({ label: 'Actividad administrativa', href: '/platform/activity', icon: ShieldCheck })}
+        </div>}
+        {!isPlatformAdmin && canAccessPath(currentRole, '/quotations/new') && (
+          <Link href="/quotations/new" aria-current={pathname === '/quotations/new' ? 'page' : undefined} className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-tenant-primary px-3 py-3 text-sm font-semibold text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400">
             <Plus size={17} aria-hidden="true" /> Nueva cotización
           </Link>
         )}
-        <div className="space-y-1">{navItems.filter((item) => generalPaths.includes(item.href) && canAccessPath(currentRole, item.href)).map(renderItem)}</div>
-        {groups.map((group, index) => {
+        {!isPlatformAdmin && (
+          <div className="space-y-1">{navItems.filter((item) => generalPaths.includes(item.href) && canAccessPath(currentRole, item.href)).map(renderItem)}</div>
+        )}
+        {!isPlatformAdmin && groups.map((group, index) => {
           const active = group.items.some((item: NavItem) => isSidebarItemActive(pathname, item.href, item.exact))
           const open = active ? collapsedActivePath !== pathname : !(collapsed[group.id] ?? index > 0)
           const id = navId + '-' + group.id
@@ -334,9 +353,9 @@ export default function Sidebar({ role }: { role?: string }) {
           </div>
         })}
       </nav>
-      <div className="relative shrink-0 border-t border-white/10 bg-[#07111F]/65 p-3 backdrop-blur-xl">
+      <div className="relative shrink-0 border-t border-white/10 bg-black/10 p-3 backdrop-blur-xl">
         {canAccessPath(currentRole, '/support') && renderItem({ label: 'Mesa de ayuda', href: '/support', icon: LifeBuoy })}
-        <Link
+        {!isPlatformAdmin && <Link
           href="/profile"
           aria-current={pathname === '/profile' ? 'page' : undefined}
           className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] p-3 shadow-sm shadow-slate-950/10 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.085] hover:shadow-lg hover:shadow-[#0038BD]/10"
@@ -364,7 +383,7 @@ export default function Sidebar({ role }: { role?: string }) {
               {currentRole || 'Usuario'}
             </p>
           </div>
-        </Link>
+        </Link>}
 
         <button
           onClick={handleLogout}

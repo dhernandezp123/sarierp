@@ -130,13 +130,15 @@ export default function SupportPage() {
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             Actualizar
           </button>
-          <Link
-            href="/support/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-          >
-            <Plus className="h-4 w-4" />
-            Nuevo ticket
-          </Link>
+          {!profile?.is_platform_admin && (
+            <Link
+              href="/support/new"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              Nuevo ticket
+            </Link>
+          )}
         </div>
       </div>
 
@@ -191,7 +193,9 @@ export default function SupportPage() {
             description={tickets.length === 0
               ? 'Cuando necesites ayuda, registra aquí tu primera solicitud.'
               : 'No encontramos tickets que coincidan con los filtros.'}
-            action={tickets.length === 0 ? { label: 'Crear ticket', href: '/support/new' } : undefined}
+            action={tickets.length === 0 && !profile?.is_platform_admin
+              ? { label: 'Crear ticket', href: '/support/new' }
+              : undefined}
           />
         ) : (
           <div className="overflow-x-auto">

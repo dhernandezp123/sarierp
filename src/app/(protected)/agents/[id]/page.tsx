@@ -1,5 +1,7 @@
 'use client'
 
+import { NumberInput } from '@/src/components/ui/NumberInput'
+
 import { toDateInputValue } from '@/src/lib/format'
 
 import { useCallback, useEffect, useState } from 'react'
@@ -12,8 +14,6 @@ import { Agent360Panel } from '@/src/components/agents/Agent360Panel'
 import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
-import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -89,24 +89,13 @@ function isExpired(d: string | null) {
   return d < toDateInputValue()
 }
 
-async function queryAgentDetail(agentId: string) {
-  return Promise.all([
-    supabase.from('agents').select('*').eq('id', agentId).single(),
-    supabase
-      .from('agent_route_rates')
-      .select('*')
-      .eq('agent_id', agentId)
-      .order('created_at', { ascending: false }),
-  ])
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AgentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const { profile } = useUser()
-  const canManageCatalog = !IS_DEMO_ENVIRONMENT && (profile?.rol === 'Admin' || profile?.rol === 'Pricing')
+  const canManageCatalog = profile?.rol === 'Admin' || profile?.rol === 'Pricing'
 
   const [agent, setAgent] = useState<Agent | null>(null)
   const [formData, setFormData] = useState<Agent | null>(null)
@@ -123,7 +112,10 @@ export default function AgentDetailPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [agentRes, ratesRes] = await queryAgentDetail(id)
+    const [agentRes, ratesRes] = await Promise.all([
+      supabase.from('agents').select('*').eq('id', id).single(),
+      supabase.from('agent_route_rates').select('*').eq('agent_id', id).order('created_at', { ascending: false }),
+    ])
     if (agentRes.error) { toast.error('Agente no encontrado'); router.push('/agents'); return }
     setAgent(agentRes.data as Agent)
     setFormData(agentRes.data as Agent)
@@ -276,8 +268,6 @@ export default function AgentDetailPage() {
         </div>
       </div>
 
-      <DemoReadOnlyNotice label="La ficha del agente y sus tarifas por ruta son datos maestros compartidos; puedes consultarlos durante la demo." />
-
       {/* Agent info */}
       <section className={cardClass}>
         <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Información general</h2>
@@ -322,12 +312,12 @@ export default function AgentDetailPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             <AgentField label="Profit / Cont." editing={editing}>
               {editing ? (
-                <input type="number" value={formData?.profit_per_container ?? ''} onChange={(e) => setField('profit_per_container', Number(e.target.value))} className={fieldClass} />
+                <NumberInput type="number" value={formData?.profit_per_container ?? ''} onChange={(e) => setField('profit_per_container', Number(e.target.value))} className={fieldClass} />
               ) : <span>{agent.currency} {Number(agent.profit_per_container || 0).toFixed(2)}</span>}
             </AgentField>
             <AgentField label="MBL Fee" editing={editing}>
               {editing ? (
-                <input type="number" value={formData?.mbl_fee ?? ''} onChange={(e) => setField('mbl_fee', Number(e.target.value))} className={fieldClass} />
+                <NumberInput type="number" value={formData?.mbl_fee ?? ''} onChange={(e) => setField('mbl_fee', Number(e.target.value))} className={fieldClass} />
               ) : <span>{agent.currency} {Number(agent.mbl_fee || 0).toFixed(2)}</span>}
             </AgentField>
             <AgentField label="Moneda" editing={editing}>
@@ -423,7 +413,7 @@ export default function AgentDetailPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-400">Tarifa base</label>
-                <input
+                <NumberInput
                   type="number"
                   min="0"
                   step="0.01"
@@ -535,7 +525,7 @@ export default function AgentDetailPage() {
               <tbody>
                 {rates.map((rate) => {
                   const expired = isExpired(rate.valid_until)
-                  if (!IS_DEMO_ENVIRONMENT && editingRateId === rate.id && editingRateData) {
+                  if (editingRateId === rate.id && editingRateData) {
                     return (
                       <tr key={rate.id} className="border-b border-blue-100 bg-blue-50/50 dark:border-blue-900/30 dark:bg-blue-950/10">
                         <td className="py-2 pr-3">
@@ -573,7 +563,7 @@ export default function AgentDetailPage() {
                         </td>
                         <td className="pr-3">
                           <div className="flex gap-1">
-                            <input
+                            <NumberInput
                               type="number"
                               value={editingRateData.base_rate}
                               onChange={(e) => setEditingRateData((p) => p ? { ...p, base_rate: Number(e.target.value) } : p)}

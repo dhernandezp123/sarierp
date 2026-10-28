@@ -68,14 +68,15 @@ export function formatDateTime(value: string | Date | null | undefined, fallback
 /** Fecha y hora del instante en la zona horaria de la bodega de Miami. */
 export function formatMiamiDateTime(
   value: string | Date | null | undefined,
-  fallback = '-'
+  fallback = '-',
+  options: { numericDate?: boolean } = {}
 ): string {
   const date = parseDateValue(value)
   if (!date) return fallback
 
   const dateLabel = date.toLocaleDateString('es-HN', {
     day: '2-digit',
-    month: 'long',
+    month: options.numericDate ? '2-digit' : 'long',
     year: 'numeric',
     timeZone: MIAMI_TIME_ZONE,
   })
@@ -110,6 +111,34 @@ export function toMiamiDateInputValue(
   const day = part('day')
 
   return year && month && day ? `${year}-${month}-${day}` : fallback
+}
+
+/** Límites UTC [inicio, siguiente medianoche) del día de Miami, incluso con DST. */
+export function miamiDayRange(now = new Date()): { start: string; end: string } {
+  const day = toMiamiDateInputValue(now)
+  if (!day) throw new Error('No se pudo determinar el día de Miami.')
+  // Este UTC representa un día de calendario, no la medianoche real de Miami.
+  const nominalDay = Date.parse(`${day}T00:00:00Z`)
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: MIAMI_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  })
+  const midnight = (target: number) => {
+    let instant = target
+    // New York cambia de hora a las 02:00; su medianoche existe y es única.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const parts = formatter.formatToParts(new Date(instant))
+      const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(item => item.type === type)?.value)
+      const rendered = new Date(0)
+      rendered.setUTCFullYear(part('year'), part('month') - 1, part('day'))
+      rendered.setUTCHours(part('hour'), part('minute'), part('second'), 0)
+      const correction = target - rendered.getTime()
+      if (correction === 0) return new Date(instant).toISOString()
+      instant += correction
+    }
+    throw new Error('No se pudieron calcular los límites del día de Miami.')
+  }
+  return { start: midnight(nominalDay), end: midnight(nominalDay + 86_400_000) }
 }
 
 /**

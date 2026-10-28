@@ -1,6 +1,6 @@
 # Operación de privacidad y publicación de términos
 
-Edición de trabajo: 07/09/2026. No es un contrato firmado ni prueba de ejecución.
+Edición de trabajo: 24/09/2026. No es un contrato firmado ni prueba de ejecución.
 
 ## Identidad y separación de servicios
 
@@ -21,7 +21,9 @@ transporte ni como asegurador.
 | --- | --- | --- |
 | Supabase | Cliente, autenticación, BD y almacenamiento en código | Proyecto/ambiente, región, contrato de tratamiento, responsables de acceso y backups |
 | Resend | APIs de notificaciones de soporte y paquetes | Activación por ambiente, dominios/remitentes, datos enviados, retención y acuerdo |
-| Hosting | Aplicación Next.js; las políticas permiten Vercel u otro contratado | Proveedor real, regiones, logs, integraciones y contrato |
+| Vercel | Alojamiento y despliegue de la aplicación Next.js | Regiones, logs, integraciones y condiciones contratadas |
+| GitHub Actions | Ejecución de tareas operativas automatizadas, incluidos respaldos programados | Accesos, secretos, retención de logs y responsables |
+| Backblaze B2 | Almacenamiento de copias de respaldo cifradas antes de su carga | Región, ciclo de vida, restauración, acceso y condiciones contratadas |
 | Correo de contacto | contacto@forwarders.app confirmado por titular | Responsable y suplente que atienden solicitudes; prueba autorizada de recepción |
 | Logística | Paquetes, documentos, envíos y contactos de clientes | Transportistas, agentes, bodegas y autoridades destinatarias según operación |
 
@@ -63,17 +65,19 @@ siguen pendientes. Esta guía prepara el proceso, no acredita su operación.
 
 ## Versiones y aceptación técnica
 
-- `/politicas` usa `public/legal/platform-2026-09-07.json`.
+- `/politicas` usa `public/legal/platform-2026-09-24.json`.
 - `/terminos-logisticos` y la página autenticada del portal comparten
-  `public/legal/logistics-2026-09-07.json`.
+  `public/legal/logistics-2026-09-24.json`.
 - Se conservan los textos de las secciones anteriores en archivos separados;
   el archivo anterior no equivale a una nueva condición ni a una aceptación.
 - `.gitattributes` mantiene LF para que los hashes SHA-256 sean iguales en Windows
   y Linux. Los tests comparan bytes del documento con el hash de la migración.
 - Los registros presentan casilla no premarcada, enlace en pestaña nueva y
   distinción entre aceptación de uso y lectura del aviso; no hay opt-in publicitario.
-- La migración `20260907160000_signup_legal_acceptance.sql` registra una declaración
-  al insertar `auth.users`, con versión del catálogo y fecha del servidor. Se
+- La migración `20260907160000_signup_legal_acceptance.sql` creó el registro de
+  declaraciones y `20260924100000_legal_documents_2026_09_24.sql` incorpora las
+  ediciones vigentes al catálogo. Al insertar `auth.users` se registra la versión
+  presentada y la fecha del servidor. Se
   rechazan declaraciones presentes pero inválidas. No cambia el trigger de perfiles.
 - El registro es una declaración en el alta, no una firma avanzada, verificación
   de correo ni prueba de facultades para representar a una empresa. No copiarlo

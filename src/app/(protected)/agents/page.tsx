@@ -7,9 +7,6 @@ import { supabase } from '../../../lib/supabase/client'
 import { cardClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import AgentForm from '@/src/components/agents/AgentForm'
-import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
-
 import { useUser } from '@/src/hooks/useUser'
 import { canAccessPath } from '@/src/lib/permissions'
 
@@ -27,8 +24,6 @@ type AgentListRow = {
   profit_per_container: number | null
   mbl_fee: number | null
 }
-
-const queryAgents = () => supabase.from('agents').select('*').order('created_at', { ascending: false })
 
 function getTipoBadge(tipo?: string | null) {
   switch (tipo) {
@@ -49,7 +44,7 @@ export default function AgentsPage() {
   const [agents,  setAgents]  = useState<AgentListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
-  const canManageCatalog = !IS_DEMO_ENVIRONMENT && (profile?.rol === 'Admin' || profile?.rol === 'Pricing')
+  const canManageCatalog = profile?.rol === 'Admin' || profile?.rol === 'Pricing'
   const canOpenSuppliers = canAccessPath(profile?.rol, '/suppliers')
 
   const fetchAgents = useCallback(async () => {
@@ -66,19 +61,6 @@ export default function AgentsPage() {
     const timer = window.setTimeout(() => { void fetchAgents() }, 0)
     return () => window.clearTimeout(timer)
   }, [fetchAgents])
-
-  useEffect(() => {
-    let active = true
-    void queryAgents().then(({ data, error }) => {
-      if (!active) return
-      if (error) toast.error('Error al cargar agentes')
-      setAgents((data || []) as AgentListRow[])
-      setLoading(false)
-    })
-    return () => {
-      active = false
-    }
-  }, [])
 
   const filtered = agents.filter((a) => {
     const q = search.toLowerCase()
@@ -115,7 +97,6 @@ export default function AgentsPage() {
         </p>
       </div>
 
-      <DemoReadOnlyNotice label="Datos maestros compartidos: solo lectura durante la demo." />
       <div className={`grid gap-6 ${canManageCatalog ? 'lg:grid-cols-[340px_1fr]' : ''}`}>
 
         {/* ── Formulario nuevo agente ── */}

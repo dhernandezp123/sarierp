@@ -1,7 +1,6 @@
 'use client'
 
 import type React from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useRef, useState } from 'react'
@@ -13,10 +12,12 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
-import { AUTH_BACKGROUND_IMAGE } from '@/src/lib/demo-environment'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
 
 export default function RegisterPage() {
   const router = useRouter()
+  const tenant = useTenant()
 
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
@@ -49,6 +50,11 @@ export default function RegisterPage() {
     submittingRef.current = true
     try {
 
+      if (!tenant) {
+        toast.error('No se pudo validar la empresa de este enlace.')
+        return
+      }
+
       const normalizedNombre = nombre.trim()
       const normalizedApellido = apellido.trim()
       const normalizedEmail = email.trim().toLowerCase()
@@ -61,6 +67,7 @@ export default function RegisterPage() {
             nombre: normalizedNombre,
             apellido: normalizedApellido,
             email: normalizedEmail,
+            tenant_hostname: tenant.hostname,
             legal_acceptance: signupLegalAcceptance('erp', termsAccepted),
           },
         },
@@ -114,7 +121,7 @@ export default function RegisterPage() {
     <div
       className="relative min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat"
       style={{
-        backgroundImage: AUTH_BACKGROUND_IMAGE,
+        backgroundImage: "url('/login-bg.png')",
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
@@ -125,14 +132,7 @@ export default function RegisterPage() {
         <div className="flex min-h-screen items-center justify-center px-6 py-20">
           <div className="w-full max-w-md rounded-[32px] border border-white/10 bg-slate-950/45 p-10 shadow-2xl shadow-black/40 backdrop-blur-2xl">
             <div className="mb-10 text-center">
-              <Image
-                src="/brand/lockup-h-blanco.png"
-                alt="Forwarders ERP"
-                width={256}
-                height={140}
-                priority
-                className="mx-auto mb-10 h-auto w-64 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]"
-              />
+              <div className="mb-10"><TenantBrand inverse /></div>
 
               <h1 className="text-2xl font-bold text-white">
                 Solicitar acceso

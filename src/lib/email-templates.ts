@@ -14,7 +14,7 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<string, EmailTemplate> = {
   cotizacion_cliente: {
     template_key: 'cotizacion_cliente',
     nombre: 'Cotización al cliente',
-    asunto: 'Cotización {{numero_cotizacion}} - Forwarders ERP',
+    asunto: 'Cotización {{numero_cotizacion}} - Sari Express',
     cuerpo: [
       'Buen día {{cliente}},',
       '',
@@ -45,7 +45,7 @@ export const DEFAULT_EMAIL_TEMPLATES: Record<string, EmailTemplate> = {
   seguimiento_cotizacion: {
     template_key: 'seguimiento_cotizacion',
     nombre: 'Seguimiento de cotización',
-    asunto: 'Seguimiento Cotización {{numero_cotizacion}} - Forwarders ERP',
+    asunto: 'Seguimiento Cotización {{numero_cotizacion}} - Sari Express',
     cuerpo: [
       'Buen día {{cliente}},',
       '',

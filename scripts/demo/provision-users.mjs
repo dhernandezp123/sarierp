@@ -382,6 +382,7 @@ async function upsertProfile(
 ) {
   const profile = {
     id: userId,
+    tenant_id: '00000000-0000-4000-8000-000000000001',
     nombre: 'Evaluador',
     apellido: account.slot,
     email: account.email,
@@ -401,7 +402,7 @@ async function upsertProfile(
     .from('profiles')
     .upsert(profile, { onConflict: 'id' })
     .select(
-      'id, nombre, apellido, email, rol, status, is_active, cliente_id, is_demo_user, demo_expires_at, demo_access_grant_id, is_platform_admin'
+      'id, tenant_id, nombre, apellido, email, rol, status, is_active, cliente_id, is_demo_user, demo_expires_at, demo_access_grant_id, is_platform_admin'
     )
     .single()
 
@@ -414,6 +415,7 @@ async function upsertProfile(
     Date.parse(data.demo_expires_at) === Date.parse(expiresAt)
   const isExpectedProfile =
     data.id === userId
+    && data.tenant_id === '00000000-0000-4000-8000-000000000001'
     && data.nombre === 'Evaluador'
     && data.apellido === account.slot
     && data.email === account.email

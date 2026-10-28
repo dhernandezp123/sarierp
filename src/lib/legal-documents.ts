@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = '2026-09-07'
+export const LEGAL_VERSION = '2026-09-24'
 export type LegalAudience = 'erp' | 'portal'
 
 export function signupLegalAcceptance(audience: LegalAudience, accepted: boolean) {

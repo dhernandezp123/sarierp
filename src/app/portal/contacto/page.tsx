@@ -14,12 +14,11 @@ import {
 import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   getCompanyAddressLines,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+import { loadCurrentCompanyBranding } from '@/src/lib/company-settings'
 
 type Office = {
   city: string
@@ -104,11 +103,7 @@ export default function ContactoPage() {
     setLoading(true)
     setLoadError(false)
     try {
-    const { data, error } = await supabase
-      .from('company_settings')
-      .select(COMPANY_BRANDING_SELECT)
-      .limit(1)
-      .maybeSingle()
+    const { data, error } = await loadCurrentCompanyBranding(supabase)
 
     if (error) throw error
     setOffices(buildOffices(normalizeCompanyBranding(data)))
@@ -256,7 +251,7 @@ export default function ContactoPage() {
                       {office.phone}
                     </a>
                   )}
-                  {office.email && !IS_DEMO_ENVIRONMENT && (
+                  {office.email && (
                     <a
                       href={`mailto:${office.email}`}
                       className="flex items-center gap-3 text-sm text-slate-700 hover:text-blue-600 dark:text-slate-300 dark:hover:text-blue-400"

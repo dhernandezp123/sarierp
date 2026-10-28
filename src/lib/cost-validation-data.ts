@@ -1,10 +1,9 @@
-import { IS_DEMO_ENVIRONMENT } from './demo-environment'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { readAllReportRows } from './report-query'
 import type { CostContainer, CostPricingLine, FreightSource, ProviderCostLine } from './cost-analysis'
 
 export type CostValidationData = {
-  quotation: { id: string; quotation_number: string; status: string; quote_type: string; financial_validation_status: string; clientName: string }
+  quotation: { id: string; quotation_number: string; status: string; quote_type: string; service_product?: string | null; financial_validation_status: string; clientName: string }
   pricing: CostPricingLine[]; invoices: ProviderCostLine[]; containers: CostContainer[]; agent: FreightSource | null
   options: { id: string; option_code: string; label: string; currency: string; cost_total: number; sale_subtotal: number; accepted_at: string | null }[]
   shipments: { id: string; shipment_number: string; operational_status: string; closed_at: string | null; bookings: { id: string; booking_number: string | null; carrier_booking: string | null; carrier: string | null; shipment_status: string | null; etd: string | null; eta: string | null; booking_containers: { container_type: string; quantity: number }[] }[] }[]
@@ -14,7 +13,7 @@ export type CostValidationData = {
 
 export async function loadCostValidationData(client: Pick<SupabaseClient, 'from' | 'rpc'>, id: string, isCurrent = () => true): Promise<CostValidationData> {
   const { data: quotation, error } = await client.from('quotations')
-    .select('id,quotation_number,status,quote_type,financial_validation_status,clientes(nombre)').eq('id', id).is('deleted_at', null).single()
+    .select('id,quotation_number,status,quote_type,service_product,financial_validation_status,clientes(nombre)').eq('id', id).is('deleted_at', null).single()
   if (error || !quotation) throw new Error('No se pudo cargar la cotización.')
   const permission = await client.rpc('can_select_provider_invoice_item', { p_quotation_id: id })
   if (permission.error) throw new Error('No se pudo verificar el acceso a las facturas de proveedor.')
@@ -27,14 +26,14 @@ export async function loadCostValidationData(client: Pick<SupabaseClient, 'from'
     return query as unknown as PromiseLike<{ data: T[] | null; error: { message: string } | null }>
   }, { label: table, isCurrent })
   const [pricing, invoices, containers, agents, optionsResult, shipmentsResult, taxesResult, customerInvoiceResult] = await Promise.all([
-    read<CostPricingLine>('pricing_items', 'id,item_type,description,supplier,currency,quantity,cost_amount,sale_amount', 'quotation_id', true),
+    read<CostPricingLine>('pricing_items', 'id,item_type,description,supplier,currency,quantity,cost_amount,sale_amount,rate_code', 'quotation_id', true),
     read<ProviderCostLine>('provider_invoice_items', 'id,pricing_item_id,description,supplier,currency,quantity,unit_cost,total_cost,tax_amount,invoice_number,invoice_date', 'quotation_id', true),
     read<CostContainer>('quotation_containers', 'id,container_type_name,quantity'),
     client.from('agent_quotes').select('carrier,ocean_freight,profit_per_container,mbl_fee,mbl_quantity,moneda').eq('quotation_id', id).eq('is_selected', true).is('deleted_at', null).maybeSingle(),
     client.from('quotation_options').select('id,option_code,label,currency,cost_total,sale_subtotal,accepted_at').eq('quotation_id', id).eq('status', 'Aceptada'),
     client.from('shipments').select('id,shipment_number,operational_status,closed_at,shipping_instruction:shipping_instructions!inner(deleted_at),bookings(id,booking_number,carrier_booking,carrier,shipment_status,etd,eta,booking_containers(container_type,quantity))').eq('quotation_id', id).is('shipping_instruction.deleted_at', null),
     client.from('tax_rates').select('id,country,tax_name,percentage').eq('is_active', true).order('country'),
-    client.from('invoices').select('id,invoice_number').eq('quotation_id', id).eq('invoice_type', IS_DEMO_ENVIRONMENT ? 'Proforma' : 'Factura').neq('status', 'Anulada').is('deleted_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    client.from('invoices').select('id,invoice_number').eq('quotation_id', id).eq('invoice_type', 'Factura').neq('status', 'Anulada').is('deleted_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
   ])
   if (!isCurrent()) throw new Error('Carga reemplazada')
   if ([agents, optionsResult, shipmentsResult, taxesResult, customerInvoiceResult].some(r => r.error)) throw new Error('No se pudo cargar todo el contexto de costos. Reintenta la consulta.')

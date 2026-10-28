@@ -7,16 +7,69 @@
   scroll-margin-top: 100px;
 }
 
-.landing section:is([id='workflow'], [id='demo']) :is(a, button, input):focus-visible {
+.landing section[id='demo'] :is(a, button, input):focus-visible {
   outline-color: #ffb44b;
 }
 
 .hero {
-  background: radial-gradient(ellipse at 85% 10%, #dce7ff 0, transparent 52%), linear-gradient(180deg, #f8faff, #fff);
+  background:
+    radial-gradient(ellipse at 88% 8%, rgb(205 220 255 / 82%) 0, transparent 46%),
+    radial-gradient(ellipse at 8% 92%, rgb(239 142 1 / 8%) 0, transparent 34%),
+    linear-gradient(180deg, #f8faff, #fff);
+}
+
+.heroGrid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.34;
+  background-image:
+    linear-gradient(rgb(0 56 189 / 8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0 56 189 / 8%) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
+}
+
+.heroGlow {
+  position: absolute;
+  inset: 7% -3% -5% 8%;
+  border-radius: 2.5rem;
+  background: linear-gradient(135deg, rgb(0 56 189 / 16%), rgb(239 142 1 / 10%));
+  filter: blur(28px);
+}
+
+.stageTrack > li:not(:last-child)::after {
+  content: '';
+  display: none;
+}
+
+.problemGlow {
+  position: absolute;
+  right: -12rem;
+  top: -14rem;
+  width: 36rem;
+  height: 36rem;
+  border-radius: 9999px;
+  background: rgb(0 56 189 / 28%);
+  filter: blur(90px);
+}
+
+.lifecycleTrack > li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -0.5rem;
+  top: 2.05rem;
+  z-index: 0;
+  width: 1rem;
+  height: 1px;
+  background: #cbd5e1;
 }
 
 .heroPreview {
   animation: appear 500ms ease-out both;
+}
+
+.floatingSignal {
+  animation: appear 650ms 120ms ease-out both;
 }
 
 @keyframes appear {
@@ -31,5 +84,18 @@
   }
   :global(html):has(.landing) {
     scroll-behavior: auto;
+  }
+}
+
+@media (min-width: 640px) {
+  .stageTrack > li:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: -2px;
+    top: 50%;
+    display: block;
+    width: 10px;
+    height: 1px;
+    background: #cbd5e1;
   }
 }

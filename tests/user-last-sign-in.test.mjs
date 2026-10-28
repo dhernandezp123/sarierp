@@ -5,10 +5,11 @@ import loadTs from './load-ts.mjs'
 async function requestConnections({
   user = { id: 'admin' },
   authError = null,
-  profile = { rol: 'Admin', status: 'Aprobado', is_active: true },
+  profile = { rol: 'Admin', status: 'Aprobado', is_active: true, tenant_id: 'tenant-sari', is_platform_admin: false },
   profileError = null,
   pages = [{ data: { users: [], nextPage: null }, error: null }],
   serviceKey = 'mock-server-key',
+  tenantProfileIds,
 } = {}) {
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (serviceKey) process.env.SUPABASE_SERVICE_ROLE_KEY = serviceKey
@@ -41,7 +42,19 @@ async function requestConnections({
               assert.ok(result, 'No debe consultar páginas inexistentes')
               return result
             },
-          } } }
+          } }, from(table) {
+            assert.equal(table, 'profiles')
+            const ids = tenantProfileIds ?? pages.flatMap((page) => page?.data?.users?.map(({ id }) => id) ?? [])
+            const tenantQuery = {
+              select() { return tenantQuery },
+              async eq(column, value) {
+                assert.equal(column, 'tenant_id')
+                assert.equal(value, profile.tenant_id)
+                return { data: ids.map((id) => ({ id })), error: null }
+              },
+            }
+            return tenantQuery
+          } }
         },
       },
     })
@@ -91,6 +104,18 @@ test('Conexiones: recorre páginas, conserva fechas históricas y excluye metada
   assert.deepEqual(result.calls, [{ page: 1, perPage: 1000 }, { page: 2, perPage: 1000 }])
   assert.deepEqual(result.body, { users: [{ id: 'first', last_sign_in_at: timestamp }, { id: 'invited', last_sign_in_at: null }] })
   assert.equal(result.headers.get('cache-control'), 'private, no-store')
+})
+
+test('Conexiones: excluye usuarios Auth que pertenecen a otro tenant', async () => {
+  const result = await requestConnections({
+    tenantProfileIds: ['same-tenant'],
+    pages: [{ data: { users: [
+      { id: 'same-tenant', last_sign_in_at: '2026-09-08T16:34:00Z' },
+      { id: 'other-tenant', last_sign_in_at: '2026-09-09T16:34:00Z' },
+    ], nextPage: null }, error: null }],
+  })
+  assert.equal(result.status, 200)
+  assert.deepEqual(result.body.users.map(({ id }) => id), ['same-tenant'])
 })
 
 test('Conexiones: los fallos no se confunden con usuarios sin inicio de sesión', async () => {

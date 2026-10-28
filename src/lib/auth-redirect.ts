@@ -1,4 +1,19 @@
 import { canAccessPath, getDefaultPathForRole } from './permissions'
+import { canManagePlatform, isPlatformConsolePath } from './platform-admin'
+import { isPlatformSupportPath } from './tenant-context'
+
+export function getPlatformLoginDestination(profile: Parameters<typeof canManagePlatform>[0], requested: string | null) {
+  const canManage = canManagePlatform(profile)
+  const fallback = canManage ? '/platform' : '/support'
+  if (!requested?.startsWith('/') || requested.startsWith('//') || /[\\\u0000-\u0020\u007f]/.test(requested)) return fallback
+  try {
+    const url = new URL(requested, 'https://erp.invalid')
+    if (url.origin === 'https://erp.invalid' && (isPlatformSupportPath(url.pathname) || (canManage && isPlatformConsolePath(url.pathname)))) {
+      return `${url.pathname}${url.search}${url.hash}`
+    }
+  } catch { /* Use the authorized landing page. */ }
+  return fallback
+}
 
 /** Normaliza el destino antes de comprobar permisos; conserva filtros y fragmentos. */
 export function getLoginDestination(role: string | null | undefined, requested: string | null): string {

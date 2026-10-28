@@ -1,13 +1,12 @@
 'use client'
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { CustomsServicePanel } from '@/src/components/operations/CustomsServicePanel'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { Download, ExternalLink, Plus, Printer, RefreshCw } from 'lucide-react'
-import {
-  PDFDownloadLink,
-  pdf,
-} from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
+import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { createNotification } from '@/src/lib/notifications'
@@ -24,7 +23,6 @@ import { SectionNav } from '@/src/components/ui/SectionNav'
 import { CarrierBadge } from '@/src/components/ui/CarrierBadge'
 import ShippingInstructionOrderPDF from '@/src/components/pdf/shipping-instruction-order-pdf'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
@@ -35,9 +33,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
-import { mergeShippingInstructionMutation } from '@/src/lib/shipping-instruction-state'
 import { formatDate } from '@/src/lib/format'
 import { operationsReturnHref } from '@/src/lib/operations-navigation'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import {
+  getShippingInstructionClient,
+  mergeShippingInstructionMutation,
+} from '@/src/lib/shipping-instruction-state'
 
 type OperationsUser = {
   id: string
@@ -515,11 +517,7 @@ export default function RoutingDetailPage() {
         setShipmentContext(null)
       }
 
-      const { data: companyData } = await supabase
-        .from('company_settings')
-        .select(COMPANY_BRANDING_SELECT)
-        .limit(1)
-        .maybeSingle()
+      const { data: companyData } = await loadCurrentCompanySettings(supabase)
 
       setCompanyBranding(normalizeCompanyBranding(companyData))
 
@@ -597,7 +595,7 @@ export default function RoutingDetailPage() {
         updatedBookings > 0
           ? `Información sincronizada desde Pricing: ${updatedBookings} booking${updatedBookings === 1 ? '' : 's'} actualizado${updatedBookings === 1 ? '' : 's'}${skippedBookings > 0 ? `, ${skippedBookings} omitido${skippedBookings === 1 ? '' : 's'}` : ''}`
           : skippedBookings > 0
-            ? `No se modificaron bookings confirmados (${skippedBookings} omitido${skippedBookings === 1 ? '' : 's'})`
+            ? `SI sincronizada desde Pricing; ${skippedBookings} booking${skippedBookings === 1 ? '' : 's'} omitido${skippedBookings === 1 ? '' : 's'}`
             : 'Información sincronizada desde Pricing'
       )
 
@@ -849,7 +847,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -900,7 +900,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -975,7 +977,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1010,7 +1014,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1059,7 +1065,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1108,7 +1116,9 @@ export default function RoutingDetailPage() {
     } | null
 
     if (result?.shipping_instruction) {
-      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1173,7 +1183,9 @@ export default function RoutingDetailPage() {
     const updatedRouting = result?.shipping_instruction || routing
 
     if (result?.shipping_instruction) {
-      setRouting((current) => mergeShippingInstructionMutation(current, result.shipping_instruction!))
+      setRouting((current) =>
+        mergeShippingInstructionMutation(current, result.shipping_instruction!)
+      )
     } else {
       await loadRouting()
     }
@@ -1265,7 +1277,7 @@ export default function RoutingDetailPage() {
       <ShippingInstructionOrderPDF
         routing={routing}
         quotation={routing.quotation}
-        cliente={routing.quotation?.cliente || routing.cliente}
+        cliente={getShippingInstructionClient(routing)}
         selectedAgent={selectedAgent}
         company={companyBranding}
       />
@@ -1315,6 +1327,12 @@ export default function RoutingDetailPage() {
 
   if (!canViewRouting) {
     return <p className="text-sm text-red-500">No tienes permisos para ver esta Shipping Instruction.</p>
+  }
+
+  if (routing.quotation?.service_product === 'customs_only') {
+    return <CustomsServicePanel key={routing.id} id={routing.id} number={routing.routing_number}
+      status={routing.operational_status || 'Pendiente Validación'} updatedAt={routing.updated_at}
+      quotation={routing.quotation} canManage={canManageRouting} reload={loadRouting} />
   }
 
   const inputClassName =
@@ -1447,12 +1465,12 @@ export default function RoutingDetailPage() {
           />
           {canDownloadRoutingPdf && (
             <>
-              <PDFDownloadLink
+              <PdfDownloadButton
                 document={
                     <ShippingInstructionOrderPDF
                       routing={routing}
                       quotation={routing.quotation}
-                      cliente={routing.quotation?.cliente || routing.cliente}
+                      cliente={getShippingInstructionClient(routing)}
                       selectedAgent={selectedAgent}
                       company={companyBranding}
                     />
@@ -1466,7 +1484,7 @@ export default function RoutingDetailPage() {
                     {loading ? 'Generando...' : 'Descargar SI PDF'}
                   </>
                 )}
-              </PDFDownloadLink>
+              </PdfDownloadButton>
 
               <button
                 type="button"
@@ -1590,7 +1608,7 @@ export default function RoutingDetailPage() {
           </InfoContent>
           <Info
             label="Cliente"
-            value={routing.cliente?.nombre || routing.client_name || 'N/A'}
+            value={getShippingInstructionClient(routing)?.nombre || routing.client_name || 'N/A'}
           />
           <Info
             label="Incoterm"

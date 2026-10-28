@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
-import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
-import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+import { UnsavedChangesGuard, requestFormNavigation, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 
 type Agente = { id: string; name: string }
 
@@ -38,27 +36,10 @@ export default function NewSupplierPage() {
     setForm((prev) => ({ ...prev, [field]: e.target.value }))
 
   useEffect(() => {
-    if (IS_DEMO_ENVIRONMENT) return
     supabase.from('agents').select('id, name').order('name').then(({ data }) => {
       setAgentes((data || []) as Agente[])
     })
   }, [])
-
-  if (IS_DEMO_ENVIRONMENT) {
-    return (
-      <div className="mx-auto max-w-2xl space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Proveedores
-          </h1>
-          <button type="button" onClick={() => router.push('/suppliers')} className={secondaryButtonClass}>
-            Volver
-          </button>
-        </div>
-        <DemoReadOnlyNotice label="La creación de proveedores está bloqueada porque este catálogo es compartido por todos los evaluadores." />
-      </div>
-    )
-  }
 
   const handleSave = async () => {
     if (!form.nombre.trim()) {
@@ -99,6 +80,7 @@ export default function NewSupplierPage() {
     }
 
     toast.success('Proveedor creado')
+    markFormSaved()
     router.push(`/suppliers/${data.id}`)
   }
 
@@ -107,7 +89,7 @@ export default function NewSupplierPage() {
       <UnsavedChangesGuard />
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Nuevo proveedor</h1>
-        <button type="button" onClick={() => router.push('/suppliers')} className={secondaryButtonClass}>
+        <button type="button" onClick={() => requestFormNavigation(() => router.push('/suppliers'))} className={secondaryButtonClass}>
           Volver
         </button>
       </div>

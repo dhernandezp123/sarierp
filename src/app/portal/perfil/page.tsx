@@ -10,7 +10,6 @@ import {
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 
 export default function PortalPerfilPage() {
@@ -23,7 +22,6 @@ export default function PortalPerfilPage() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (IS_DEMO_ENVIRONMENT) return
     if (pwd.new !== pwd.confirm) { toast.error('Las contraseñas no coinciden'); return }
     if (pwd.new.length < 8) { toast.error('Mínimo 8 caracteres'); return }
     setSaving(true)
@@ -95,7 +93,7 @@ export default function PortalPerfilPage() {
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium text-slate-900 dark:text-white">Contraseña</p>
-            {!IS_DEMO_ENVIRONMENT && !changingPwd && (
+            {!changingPwd && (
               <button
                 type="button"
                 onClick={() => setChangingPwd(true)}
@@ -105,11 +103,7 @@ export default function PortalPerfilPage() {
               </button>
             )}
           </div>
-          {IS_DEMO_ENVIRONMENT ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              La contraseña pertenece a este acceso temporal y no se puede modificar durante la demo.
-            </p>
-          ) : changingPwd ? (
+          {changingPwd ? (
             <form onSubmit={handleChangePassword} className="space-y-3"><p className="text-xs text-slate-500">Usa al menos 8 caracteres.</p>
               <div>
                 <label htmlFor="account-password" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Nueva contraseña</label>

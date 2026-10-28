@@ -4,9 +4,10 @@ import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Download, FileText, Lock, Trash2, Upload } from 'lucide-react'
-import { PDFDownloadLink } from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { buildTenantStoragePath } from '@/src/lib/storage-paths'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
 import ArrivalNoticePdf, { type ArrivalNoticeData } from '@/src/components/pdf/arrival-notice-pdf'
@@ -39,12 +40,9 @@ import {
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
-import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
-import { normalizeExternalHttpUrl } from '@/src/lib/external-url'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
@@ -133,6 +131,7 @@ type RoutingData = {
 
 type BookingData = {
   id: string
+  tenant_id: string
   shipping_instruction_id: string
   shipment_id: string | null
   booking_number: string | null
@@ -412,7 +411,7 @@ export default function RoutingBookingChildPage() {
         new URLSearchParams(window.location.search).get('returnTo')
       )
   const canManageBookingDocuments =
-    !IS_DEMO_ENVIRONMENT && (profile?.rol === 'Admin' || profile?.rol === 'Operaciones')
+    profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
 
   const [routing, setRouting] = useState<RoutingData | null>(null)
   const [booking, setBooking] = useState<BookingData | null>(null)
@@ -604,11 +603,7 @@ export default function RoutingBookingChildPage() {
       return
     }
 
-    const { data: companyData } = await supabase
-      .from('company_settings')
-      .select(COMPANY_BRANDING_SELECT)
-      .limit(1)
-      .maybeSingle()
+    const { data: companyData } = await loadCurrentCompanySettings(supabase)
 
     setCompanyBranding(normalizeCompanyBranding(companyData))
 
@@ -761,39 +756,26 @@ export default function RoutingBookingChildPage() {
   const saveBooking = async () => {
     if (!booking) return
 
-    const rawTrackingUrl = booking.tracking_url?.trim() || ''
-    const normalizedTrackingUrl = normalizeExternalHttpUrl(rawTrackingUrl)
-
-    if (!IS_DEMO_ENVIRONMENT && rawTrackingUrl && !normalizedTrackingUrl) {
-      toast.error('La URL de tracking debe comenzar con http:// o https:// y no puede incluir credenciales.')
-      return
-    }
-
     setSaving(true)
-
-    const bookingChanges: Record<string, unknown> = {
-      master_bl: booking.master_bl,
-      house_bl: booking.house_bl,
-      estimated_transit_days: booking.estimated_transit_days,
-      real_transit_days: booking.real_transit_days,
-      free_days: booking.free_days,
-      remaining_free_days: booking.remaining_free_days,
-      freight_terms: booking.freight_terms,
-      release_type: booking.release_type,
-      hbl_freight_visibility: booking.hbl_freight_visibility,
-      printed_at_destination: booking.printed_at_destination,
-      operational_comments: booking.operational_comments,
-    }
-
-    if (!IS_DEMO_ENVIRONMENT) {
-      bookingChanges.tracking_url = normalizedTrackingUrl
-    }
 
     const { data, error } = await supabase.rpc('update_booking_canonical', {
       p_booking_id: booking.id,
       p_shipping_instruction_id: id,
       p_expected_updated_at: booking.updated_at,
-      p_changes: bookingChanges,
+      p_changes: {
+        master_bl: booking.master_bl,
+        house_bl: booking.house_bl,
+        tracking_url: booking.tracking_url,
+        estimated_transit_days: booking.estimated_transit_days,
+        real_transit_days: booking.real_transit_days,
+        free_days: booking.free_days,
+        remaining_free_days: booking.remaining_free_days,
+        freight_terms: booking.freight_terms,
+        release_type: booking.release_type,
+        hbl_freight_visibility: booking.hbl_freight_visibility,
+        printed_at_destination: booking.printed_at_destination,
+        operational_comments: booking.operational_comments,
+      },
     })
 
     setSaving(false)
@@ -1162,7 +1144,11 @@ export default function RoutingBookingChildPage() {
       return
     }
 
-    const filePath = `${booking.id}/${Date.now()}-${sanitizeFileName(file.name)}`
+    const filePath = buildTenantStoragePath(
+      booking.tenant_id,
+      booking.id,
+      `${Date.now()}-${sanitizeFileName(file.name)}`,
+    )
 
     const { error: uploadError } = await supabase.storage
       .from(BOOKING_DOCUMENT_BUCKET)
@@ -1514,7 +1500,7 @@ export default function RoutingBookingChildPage() {
                 </button>
               )}
               {isArrived && (
-                <PDFDownloadLink
+                <PdfDownloadButton
                   document={<ArrivalNoticePdf data={arrivalNoticeData} company={companyBranding} />}
                   fileName={`Aviso-Llegada-${booking.booking_number || bookingId}.pdf`}
                   className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
@@ -1525,7 +1511,7 @@ export default function RoutingBookingChildPage() {
                       {pdfLoading ? 'Generando...' : 'Aviso de Llegada'}
                     </>
                   )}
-                </PDFDownloadLink>
+                </PdfDownloadButton>
               )}
               <button
                 type="button"
@@ -2007,8 +1993,7 @@ export default function RoutingBookingChildPage() {
             </div>
           </div>
 
-          {IS_DEMO_ENVIRONMENT && <DemoReadOnlyNotice label="Documentos de consulta: cargas y reemplazos bloqueados en Demo." />}
-          {!IS_DEMO_ENVIRONMENT && canManageBookingDocuments && (
+          {canManageBookingDocuments && (
             <form
               onSubmit={uploadBookingDocument}
               className="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/70 md:grid-cols-2 lg:grid-cols-4"
@@ -2119,7 +2104,7 @@ export default function RoutingBookingChildPage() {
                             <Download className="h-3.5 w-3.5" />
                             Descargar
                           </button>
-                          {!IS_DEMO_ENVIRONMENT && canManageBookingDocuments && (
+                          {canManageBookingDocuments && (
                             <button
                               type="button"
                               onClick={() => setDocumentPendingDelete(document)}
@@ -2143,20 +2128,11 @@ export default function RoutingBookingChildPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <SectionCard title="Tracking y Control">
             <Field label="Tracking URL">
-              {IS_DEMO_ENVIRONMENT ? (
-                <div className="flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                  Los enlaces externos están deshabilitados en el sandbox compartido.
-                </div>
-              ) : (
-                <input
-                  type="url"
-                  inputMode="url"
-                  value={booking.tracking_url || ''}
-                  onChange={(e) => setBooking({ ...booking, tracking_url: e.target.value })}
-                  placeholder="https://tracking.transportista.com/..."
-                  className={fieldClass}
-                />
-              )}
+              <input
+                value={booking.tracking_url || ''}
+                onChange={(e) => setBooking({ ...booking, tracking_url: e.target.value })}
+                className={fieldClass}
+              />
             </Field>
 
             <Field label="Free Days">

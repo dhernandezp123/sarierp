@@ -7,6 +7,7 @@ import {
   SUPPORT_ATTACHMENT_MAX_BYTES,
   SUPPORT_ATTACHMENT_MIME_TYPES,
 } from '@/src/lib/support'
+import { buildTenantStoragePath } from '@/src/lib/storage-paths'
 
 export const SUPPORT_ATTACHMENT_MAX_FILES = 5
 
@@ -34,18 +35,25 @@ export async function uploadSupportAttachments({
   ticketId,
   messageId,
   userId,
+  tenantId,
   files,
 }: {
   ticketId: string
   messageId: string
   userId: string
+  tenantId: string
   files: File[]
 }) {
   const failedFileNames: string[] = []
 
   for (const file of files) {
     const safeName = sanitizeSupportFileName(file.name)
-    const filePath = `${ticketId}/${userId}/${crypto.randomUUID()}-${safeName}`
+    const filePath = buildTenantStoragePath(
+      tenantId,
+      ticketId,
+      userId,
+      `${crypto.randomUUID()}-${safeName}`,
+    )
     const { error: uploadError } = await supabase.storage
       .from(SUPPORT_ATTACHMENT_BUCKET)
       .upload(filePath, file, { contentType: file.type, upsert: false })

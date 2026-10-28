@@ -23,3 +23,26 @@ export async function readAllReportRows<T>(
   }
   throw new Error('Carga reemplazada')
 }
+
+/** Bounded ID filters keep URLs small; each batch still reads every result page. */
+export async function readReportRowsByIds<T>(
+  ids: string[],
+  readPage: (ids: string[], from: number, to: number) => PromiseLike<PageResult<T>>,
+  options: { label: string; key?: string; isCurrent?: () => boolean },
+): Promise<T[]> {
+  const unique = [...new Set(ids)]
+  const rows: T[] = []
+  const seen = new Set<unknown>()
+  for (let offset = 0; offset < unique.length; offset += 100) {
+    const batch = unique.slice(offset, offset + 100)
+    const result = await readAllReportRows((from, to) => readPage(batch, from, to), options)
+    for (const row of result) {
+      const id = (row as Record<string, unknown>)[options.key || 'id']
+      if (seen.has(id)) throw new Error(`Los datos de ${options.label} cambiaron durante la carga. Reintenta la consulta.`)
+      seen.add(id)
+    }
+    rows.push(...result)
+  }
+  if (options.isCurrent && !options.isCurrent()) throw new Error('Carga reemplazada')
+  return rows
+}

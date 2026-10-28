@@ -1,15 +1,19 @@
 'use client'
 
+import { InvoiceFiscalOptions, blankFiscalOptions, fiscalOptionsPayload } from '@/src/components/invoicing/InvoiceFiscalOptions'
+import { InvoiceLineSettings, InvoiceLineSettingsProvider } from '@/src/components/invoicing/InvoiceLineSettings'
+import { calculateInvoiceFiscal, convertMoney, invoiceLineAmounts, type TaxTreatment } from '@/src/lib/invoice-fiscal'
+
 import { toDateInputValue } from '@/src/lib/format'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Plus, Trash2, ChevronLeft, ShieldCheck, AlertTriangle, Link as LinkIcon, LockKeyhole } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../../../lib/supabase/client'
-import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { UnsavedChangesGuard, requestFormNavigation, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -17,10 +21,19 @@ import {
   fieldClass,
 } from '@/src/lib/ui-classes'
 import { billingReturnHref } from '@/src/lib/billing-readiness'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { loadBillingPointsOfSale } from '@/src/lib/billing-points-of-sale'
+import { useUser } from '@/src/hooks/useUser'
+import { draftEditorFromInvoice, draftEditorSignature, draftInvoicePayload, draftItemPayload, draftLabel, type DraftEditorState, type InvoiceDraft } from '@/src/lib/invoice-drafts'
+import { InvoiceCorrectionReview } from '@/src/components/invoicing/InvoiceCorrectionReview'
+import { useInvoiceMaster } from '@/src/hooks/useInvoiceMaster'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
 type InvoiceItem = {
+  discount_amount?: string
+  income_account_id?: string
+  tax_treatment?: TaxTreatment
   id: string
   source_pricing_item_id?: string
   description: string
@@ -31,6 +44,7 @@ type InvoiceItem = {
 }
 
 type Cliente = {
+  billing_office?: { name: string; is_active: boolean } | null
   id: string
   nombre: string
   rtn: string | null
@@ -72,6 +86,7 @@ type CaiRange = {
   rango_hasta: string
   fecha_limite_emision: string
   lugar_emision: string | null
+  point_of_sale: string
   document_type: Exclude<InvoiceType, 'Proforma'>
 }
 
@@ -87,15 +102,12 @@ type ParentInvoice = {
   total: number
   currency: string
   balance: number
+  point_of_sale: string | null
 }
-
-const QUOTATION_DOCUMENT_TYPE: InvoiceType = IS_DEMO_ENVIRONMENT
-  ? 'Proforma'
-  : 'Factura'
 
 function quotationHasActiveInvoice(quotation: Quotation) {
   return Boolean(quotation.invoices?.some((invoice) => (
-    invoice.invoice_type === QUOTATION_DOCUMENT_TYPE && invoice.status !== 'Anulada'
+    invoice.invoice_type === 'Factura' && invoice.status !== 'Anulada'
   )))
 }
 
@@ -115,6 +127,7 @@ function newItem(): InvoiceItem {
     description: '',
     quantity: '1',
     unit_price: '0',
+    discount_amount: '0',
     amount: 0,
     isv_rate: 15,
   }
@@ -169,12 +182,25 @@ const IS_NOTE: Record<InvoiceType, boolean> = {
 }
 
 export default function NewInvoicePage() {
+  const { user, profile } = useUser()
+  const { isMaster } = useInvoiceMaster()
   const router = useRouter()
+  const navigation = useRef(router)
+  useEffect(() => { navigation.current = router }, [router])
   const searchParams = useSearchParams()
+  const context = `${user?.id}:${profile?.tenant_id}:${searchParams.get('draft')}:${searchParams.get('correct')}:${searchParams.get('parent')}:${searchParams.get('quotation')}:${searchParams.get('doc_type')}`
+  const owner = useRef(context), saveLock = useRef('')
+  useEffect(() => { owner.current = context; return () => { owner.current = '' } }, [context])
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState<InvoiceDraft | null>(null)
+  const draftIdentity = useRef(crypto.randomUUID()), draftAttempt = useRef({ signature: '', key: '' })
+  const [draftLoading, setDraftLoading] = useState(false), [draftError, setDraftError] = useState('')
+  const [loadedContext, setLoadedContext] = useState('')
+  const [issueConfirmation, setIssueConfirmation] = useState(false)
+  const requestedDraft = searchParams.get('draft'), correctionSource = searchParams.get('correct')
 
-  const [invoiceType, setInvoiceType] = useState<InvoiceType>(QUOTATION_DOCUMENT_TYPE)
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>(() => searchParams.get('doc_type') === 'proforma' ? 'Proforma' : 'Factura')
   const [clienteId, setClienteId] = useState('')
   const [quotationId, setQuotationId] = useState('')
   const [issueDate, setIssueDate] = useState(toDateInputValue())
@@ -189,11 +215,13 @@ export default function NewInvoicePage() {
   const [loadingQuotation, setLoadingQuotation] = useState(false)
 
   // SAR fields
-  const [activeCai, setActiveCai] = useState<CaiRange | null>(null)
-  const [esExonerado, setEsExonerado] = useState(false)
-  const [ordenCompraExenta, setOrdenCompraExenta] = useState('')
-  const [noConstanciaExonerado, setNoConstanciaExonerado] = useState('')
-  const [noRegistroSag, setNoRegistroSag] = useState('')
+  const [loadedActiveCai, setActiveCai] = useState<CaiRange | null>(null)
+
+  const [parentPointOfSale, setParentPointOfSale] = useState('')
+  const [fiscalOptions, setFiscalOptions] = useState(blankFiscalOptions)
+  const [sourceCurrency, setSourceCurrency] = useState('')
+  const esExonerado = fiscalOptions.mode === 'Exonerada'
+  const ordenCompraExenta = fiscalOptions.order
 
   // Parent invoice (for NC/ND)
   const [parentInvoice, setParentInvoice] = useState<ParentInvoice | null>(null)
@@ -217,6 +245,17 @@ export default function NewInvoicePage() {
         email: parentInvoice.cliente_email,
       }
     : clientes.find((client) => client.id === clienteId) || null
+
+  const pointOfSale = parentInvoice ? parentPointOfSale : (selectedCliente?.billing_office?.is_active ? selectedCliente.billing_office.name : '')
+  const activeCai = loadedActiveCai?.point_of_sale === pointOfSale && loadedActiveCai.document_type === invoiceType ? loadedActiveCai : null
+
+  const restoreDraft = useCallback((state: DraftEditorState) => {
+    setInvoiceType('Factura'); setClienteId(state.clienteId || ''); setQuotationId(state.quotationId || '')
+    setIssueDate(state.issueDate || toDateInputValue()); setDueDate(state.dueDate || '')
+    setCurrency(state.currency || 'HNL'); setExchangeRate(state.exchangeRate || '')
+    setNotes(state.notes || ''); setMotivo(state.motivo || ''); setItems(state.items?.length ? state.items : [newItem()])
+    setFiscalOptions(state.fiscalOptions || blankFiscalOptions()); setSourceCurrency(state.sourceCurrency || '')
+  }, [])
 
   const applyQuotation = useCallback(async (quotation: Quotation) => {
     if (quotation.status !== 'Ganada') {
@@ -278,6 +317,8 @@ export default function NewInvoicePage() {
 
     setQuotationId(quotation.id)
     setCurrency(currencies[0])
+    setSourceCurrency(currencies[0])
+    setFiscalOptions(previous => ({ ...previous, conversionEnabled: false }))
     setItems(pricingItems.map((item) => {
       const quantity = Number(item.quantity || 0)
       const unitPrice = Number(item.sale_amount || 0)
@@ -296,15 +337,47 @@ export default function NewInvoicePage() {
   }, [])
 
   useEffect(() => {
+    let active = true
     const init = async () => {
-      const [clientesRes, settingsRes] = await Promise.all([
-        supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito').order('nombre'),
-        supabase.from('company_settings').select('exchange_rate_usd_hnl').limit(1).single(),
+      draftIdentity.current = crypto.randomUUID(); draftAttempt.current = { signature: '', key: '' }
+      setSaving(false); setDraft(null); setItems([newItem()]); setClienteId(''); setQuotationId(''); setNotes(''); setMotivo('')
+      setFiscalOptions(blankFiscalOptions()); setSourceCurrency(''); setIssueDate(toDateInputValue()); setDueDate('')
+      setInvoiceType(docType === 'proforma' ? 'Proforma' : 'Factura'); setParentInvoice(null)
+      setDraftLoading(Boolean(requestedDraft || correctionSource)); setDraftError('')
+      const [clientesRes, settingsRes, pointsRes] = await Promise.all([
+        supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito, billing_office:billing_offices!clientes_billing_office_fk(name,is_active)').order('nombre'),
+        loadCurrentCompanySettings(supabase),
+        loadBillingPointsOfSale(supabase),
       ])
 
-      setClientes((clientesRes.data || []) as Cliente[])
+      if (!active) return
+
+      setClientes((clientesRes.data || []).map(client => ({ ...client,
+        billing_office: Array.isArray(client.billing_office) ? client.billing_office[0] || null : client.billing_office,
+      })) as Cliente[])
+      if (pointsRes.error) toast.error('No se pudieron cargar los puntos de venta')
+      if (!requestedQuotationId && !parentId && !requestedDraft && !correctionSource) setCurrency(settingsRes.data?.default_currency === 'HNL' ? 'HNL' : 'USD')
       if (settingsRes.data?.exchange_rate_usd_hnl) {
         setExchangeRate(String(settingsRes.data.exchange_rate_usd_hnl))
+      }
+
+      if (requestedDraft) {
+        const result = await supabase.from('invoice_drafts').select('*').eq('id', requestedDraft).single()
+        if (!active) return
+        if (result.error || !result.data) { setDraftError('No se pudo abrir el borrador. Vuelve al listado y reintenta.'); setDraftLoading(false); return }
+        const saved = result.data as InvoiceDraft
+        if (saved.status === 'Emitida' && saved.invoice_id) { markFormSaved(); navigation.current.replace(`/invoicing/${saved.invoice_id}`); return }
+        draftIdentity.current = saved.id; setDraft(saved); restoreDraft(saved.editor_state); setDraftLoading(false); setLoadedContext(context); return
+      }
+      if (correctionSource) {
+        const [source, lines] = await Promise.all([
+          supabase.from('invoices').select('*').eq('id', correctionSource).single(),
+          supabase.from('invoice_items').select('*').eq('invoice_id', correctionSource).order('sort_order').order('id'),
+        ])
+        if (!active) return
+        if (source.error || lines.error || !source.data || source.data.invoice_type !== 'Factura' || !source.data.cai) { setDraftError('No se pudo cargar la factura original para corregir.'); setDraftLoading(false); return }
+        restoreDraft(draftEditorFromInvoice(source.data, lines.data || [], blankFiscalOptions(), toDateInputValue()))
+        setDraftLoading(false); setLoadedContext(context); return
       }
 
       if (requestedQuotationId && !parentId) {
@@ -326,7 +399,7 @@ export default function NewInvoicePage() {
           setDueDate(calculateDueDate(
             toDateInputValue(),
             requestedClient || null,
-            QUOTATION_DOCUMENT_TYPE
+            'Factura'
           ))
           setQuotations([quotation])
           await applyQuotation(quotation)
@@ -341,7 +414,7 @@ export default function NewInvoicePage() {
         const [parentResult, receivableResult] = await Promise.all([
           supabase
             .from('invoices')
-            .select('id, invoice_number, invoice_type, cliente_id, cliente_nombre, cliente_rtn, cliente_direccion, cliente_email, total, currency')
+            .select('id, invoice_number, invoice_type, cliente_id, cliente_nombre, cliente_rtn, cliente_direccion, cliente_email, total, currency, point_of_sale, cai, rango_desde')
             .eq('id', parentId)
             .single(),
           supabase
@@ -353,6 +426,13 @@ export default function NewInvoicePage() {
         const parent = parentResult.data
 
         if (parent) {
+          let parentPoint = parent.point_of_sale
+          if (!parentPoint && parent.cai) {
+            const { data: range } = await supabase.from('cai_ranges').select('point_of_sale')
+              .eq('cai', parent.cai).eq('rango_desde', parent.rango_desde).limit(1).maybeSingle()
+            parentPoint = range?.point_of_sale
+          }
+          setParentPointOfSale(parentPoint || '')
           setParentInvoice({
             ...parent,
             balance: Number(receivableResult.data?.balance ?? parent.total),
@@ -365,7 +445,7 @@ export default function NewInvoicePage() {
           // Pre-fill items from parent
           const { data: parentItems } = await supabase
             .from('invoice_items')
-            .select('description, quantity, unit_price, amount, sort_order, isv_rate')
+            .select('description, quantity, unit_price, amount, discount_amount, sort_order, isv_rate')
             .eq('invoice_id', parentId)
             .order('sort_order')
 
@@ -375,6 +455,7 @@ export default function NewInvoicePage() {
               description: it.description,
               quantity: String(it.quantity),
               unit_price: String(it.unit_price),
+              discount_amount: String(it.discount_amount||0),
               amount: it.amount,
               isv_rate: Number(it.isv_rate || 0) as 0 | 15 | 18,
             })))
@@ -385,14 +466,17 @@ export default function NewInvoicePage() {
         if (docType === 'nc') setInvoiceType('Nota de Crédito')
         else if (docType === 'nd') setInvoiceType('Nota de Débito')
       }
+      if (active) setLoadedContext(context)
     }
 
-    init()
-  }, [parentId, docType, requestedQuotationId, applyQuotation])
+    void init().catch(() => { if (active) { setDraftError('No se pudo cargar el formulario. Recarga para reintentar.'); setDraftLoading(false) } })
+    return () => { active = false }
+  }, [parentId, docType, requestedQuotationId, requestedDraft, correctionSource, restoreDraft, applyQuotation, context])
 
   useEffect(() => {
+    let cancelled = false
     const timeout = window.setTimeout(async () => {
-      if (!IS_FISCAL[invoiceType]) {
+      if (!IS_FISCAL[invoiceType] || !pointOfSale) {
         setActiveCai(null)
         return
       }
@@ -401,20 +485,22 @@ export default function NewInvoicePage() {
         .from('cai_ranges')
         .select('*')
         .eq('document_type', invoiceType)
+        .eq('point_of_sale', pointOfSale)
         .eq('is_active', true)
         .maybeSingle()
 
+      if (cancelled) return
       if (error) {
         toast.error('Error al cargar el rango CAI', { description: error.message })
       }
       setActiveCai((data as CaiRange | null) ?? null)
     }, 0)
 
-    return () => window.clearTimeout(timeout)
-  }, [invoiceType])
+    return () => { cancelled = true; window.clearTimeout(timeout) }
+  }, [invoiceType, pointOfSale])
 
   useEffect(() => {
-    if (!clienteId || parentId || invoiceType !== QUOTATION_DOCUMENT_TYPE) {
+    if (!clienteId || parentId || invoiceType !== 'Factura') {
       return
     }
     supabase
@@ -457,9 +543,10 @@ export default function NewInvoicePage() {
       prev.map((it) => {
         if (it.id !== id) return it
         const updated = { ...it, [field]: value }
+        if (field === 'isv_rate') updated.tax_treatment = Number(value) > 0 ? 'Gravada' : 'Exenta'
         const qty = parseFloat(String(updated.quantity)) || 0
         const price = parseFloat(String(updated.unit_price)) || 0
-        updated.amount = qty * price
+        updated.amount = Math.round(qty * price * 100) / 100 - Number(updated.discount_amount || 0)
         return updated
       })
     )
@@ -482,19 +569,67 @@ export default function NewInvoicePage() {
 
   // Totals
   const isFiscal = IS_FISCAL[invoiceType]
-  const importeExento = items.filter((i) => i.isv_rate === 0).reduce((s, i) => s + i.amount, 0)
-  const importeGravado15 = items.filter((i) => i.isv_rate === 15).reduce((s, i) => s + i.amount, 0)
-  const importeGravado18 = items.filter((i) => i.isv_rate === 18).reduce((s, i) => s + i.amount, 0)
-  const isv15Amount = importeGravado15 * 0.15
-  const isv18Amount = importeGravado18 * 0.18
-  const subtotal = importeExento + importeGravado15 + importeGravado18
-  const taxAmount = isv15Amount + isv18Amount
-  const total = subtotal + taxAmount
+  const conversionNeeded = Boolean(quotationId && sourceCurrency && sourceCurrency !== currency)
+  const conversionValid = !conversionNeeded || (fiscalOptions.conversionEnabled && Number.isFinite(Number(fiscalOptions.conversionRate)) && Number(fiscalOptions.conversionRate) > 0 && Number(fiscalOptions.conversionRate) <= 1000000)
+  let fiscalError = ''
+  let discountTotal = 0
+  let amounts = calculateInvoiceFiscal([], fiscalOptions.mode)
+  try {
+    const prepared = items.map(item => ({item,line:invoiceLineAmounts(Number(item.quantity),Number(item.unit_price),Number(item.discount_amount||0),conversionNeeded&&conversionValid?{currency,rate:Number(fiscalOptions.conversionRate),operation:fiscalOptions.conversionOperation}:undefined)}))
+    discountTotal=prepared.reduce((sum,{line})=>sum+line.discount,0)
+    const displayItems=prepared.map(({item,line})=>({...item,amount:line.net}))
+    amounts = calculateInvoiceFiscal(displayItems, fiscalOptions.mode)
+  }
+  catch (error) { fiscalError = error instanceof Error ? error.message : 'Revisa los importes de las líneas.' }
+  const importeExento = amounts.exempt
+  const importeGravado15 = amounts.taxable15
+  const importeGravado18 = amounts.taxable18
+  const isv15Amount = amounts.tax15
+  const isv18Amount = amounts.tax18
+  const subtotal = amounts.subtotal
+  const taxAmount = amounts.tax
+  const total = amounts.total
   const totalLps = currency === 'USD' ? total * (parseFloat(exchangeRate) || 1) : total
   const paymentTerms = getClientPaymentTerms(selectedCliente)
 
+  const formReady = loadedContext === context && !draftLoading && !draftError
+  const editorState: DraftEditorState = { invoiceType: 'Factura', clienteId, quotationId, issueDate, dueDate, currency, exchangeRate, notes, motivo, items, fiscalOptions, sourceCurrency }
+  const draftDirty = !draft || draftEditorSignature(draft.editor_state) !== draftEditorSignature(editorState)
+  const sourceInvoiceId = draft?.source_invoice_id || correctionSource || null
+  async function persistDraft() {
+    if (draft && !draftDirty) return draft
+    const invoice = draftInvoicePayload(editorState, fiscalOptionsPayload({ ...fiscalOptions, conversionEnabled: conversionNeeded && fiscalOptions.conversionEnabled }, sourceCurrency), pointOfSale)
+    const args = { p_id: draft?.id || draftIdentity.current, p_revision: draft?.revision || 0, p_invoice: invoice,
+      p_items: draftItemPayload(items), p_editor_state: editorState, p_quotation_id: quotationId || null, p_source_invoice_id: sourceInvoiceId }
+    const signature = draftEditorSignature(args)
+    if (draftAttempt.current.signature !== signature) draftAttempt.current = { signature, key: crypto.randomUUID() }
+    const result = await supabase.rpc('save_invoice_draft', { ...args, p_request_key: draftAttempt.current.key })
+    if (result.error || !result.data) throw new Error(result.error?.message || 'No se pudo confirmar el guardado. Reintenta sin cambiar el borrador.')
+    if (owner.current !== context) return null
+    const saved = result.data as InvoiceDraft
+    draftIdentity.current = saved.id; setDraft(saved)
+    return saved
+  }
+  async function handleSaveDraft() {
+    if (!formReady || saving || saveLock.current === context || invoiceType !== 'Factura') return
+    saveLock.current = context; setSaving(true)
+    try {
+      const saved = await persistDraft()
+      if (saved && owner.current === context) {
+        markFormSaved(); toast.success('Borrador guardado. Todavía no se ha asignado número fiscal.')
+        router.replace(`/invoicing/new?draft=${saved.id}`)
+      }
+    } catch (error) { if (owner.current === context) toast.error((error as Error).message) }
+    finally { if (saveLock.current === context) saveLock.current = ''; if (owner.current === context) setSaving(false) }
+  }
+
   const handleSave = async () => {
+    if (saveLock.current === context || saving || !formReady) return
     setSubmitted(true)
+    if (fiscalError) { toast.error(fiscalError); return }
+    if (!conversionValid) { toast.error('Confirma la conversión y su tasa antes de facturar en otra moneda'); return }
+    if (fiscalOptions.referenceEnabled && (!Number.isFinite(Number(fiscalOptions.referenceRate)) || !(Number(fiscalOptions.referenceRate) > 0) || Number(fiscalOptions.referenceRate) > 1000000 || fiscalOptions.referenceCurrency === currency)) { toast.error('Revisa moneda y tasa de equivalencia'); return }
+    if (fiscalOptions.mode === 'Gravada' && amounts.classification !== 'Gravada') { toast.error('Todas las líneas deben ser gravables para este tipo fiscal.'); return }
     if (!clienteId || !issueDate || items.length === 0) {
       toast.error('Completa los campos requeridos')
       return
@@ -526,6 +661,7 @@ export default function NewInvoicePage() {
       setSaving(false)
       return
     }
+    if (!pointOfSale) { toast.error('Asigna una oficina activa en el perfil del cliente antes de facturar'); return }
     if (isFiscal && !activeCai) {
       toast.error(`No hay un rango CAI activo para ${invoiceType}.`)
       return
@@ -552,6 +688,9 @@ export default function NewInvoicePage() {
     setSaving(true)
 
     const invoicePayload = {
+      line_discounts: Object.fromEntries(items.filter(item=>item.source_pricing_item_id).map(item=>[item.source_pricing_item_id!,Number(item.discount_amount||0)])),
+      line_accounts: Object.fromEntries(items.filter(item => item.source_pricing_item_id && item.income_account_id).map(item => [item.source_pricing_item_id!, item.income_account_id])),
+      point_of_sale: pointOfSale,
       invoice_type: invoiceType,
       cliente_id: clienteId,
       issue_date: issueDate,
@@ -561,18 +700,33 @@ export default function NewInvoicePage() {
       notes: notes || null,
       motivo: IS_NOTE[invoiceType] ? motivo : null,
       parent_invoice_id: parentId || null,
-      es_exonerado: esExonerado,
-      orden_compra_exenta: esExonerado ? ordenCompraExenta || null : null,
-      no_constancia_exonerado: esExonerado ? noConstanciaExonerado || null : null,
-      no_registro_sag: esExonerado ? noRegistroSag || null : null,
+      ...fiscalOptionsPayload({ ...fiscalOptions, conversionEnabled: conversionNeeded && fiscalOptions.conversionEnabled }, sourceCurrency),
     }
     const itemPayload = items.map((item, index) => ({
         description: item.description.trim(),
         quantity: parseFloat(item.quantity) || 0,
         unit_price: parseFloat(item.unit_price) || 0,
+        discount_amount: Number(item.discount_amount||0),
         isv_rate: item.isv_rate,
+        tax_treatment: item.tax_treatment,
+        income_account_id: item.income_account_id || null,
         sort_order: index,
       }))
+    if (invoiceType === 'Factura') {
+      saveLock.current = context
+      try {
+        if (sourceInvoiceId && (draftDirty || draft?.status !== 'Aprobada')) throw new Error('Guarda la propuesta y solicita aprobación del master antes de emitir la corrección.')
+        const prepared = sourceInvoiceId ? draft : await persistDraft()
+        if (!prepared || owner.current !== context) return
+        const result = await supabase.rpc('issue_invoice_draft', { p_id: prepared.id, p_revision: prepared.revision })
+        if (result.error) throw result.error
+        const issued = (result.data as { invoice_id: string; invoice_number: string }[] | null)?.[0]
+        if (!issued) throw new Error('No se pudo confirmar la emisión. El borrador se conserva para reintentar.')
+        if (owner.current === context) { markFormSaved(); toast.success(`Factura ${issued.invoice_number} emitida`); router.push(`/invoicing/${issued.invoice_id}`) }
+      } catch (error) { if (owner.current === context) toast.error((error as Error).message || 'No se pudo emitir; el borrador se conserva.') }
+      finally { if (saveLock.current === context) saveLock.current = ''; if (owner.current === context) setSaving(false) }
+      return
+    }
     const { data, error } = quotationId
       ? await supabase.rpc('create_invoice_from_quotation', {
           p_invoice: invoicePayload,
@@ -592,6 +746,7 @@ export default function NewInvoicePage() {
     }
 
     toast.success(`${invoiceType} ${invoice.invoice_number} creada`)
+    markFormSaved()
     router.push(
       requestedReturnTo
         ? `/invoicing/${invoice.invoice_id}?returnTo=${encodeURIComponent(returnHref)}`
@@ -607,14 +762,16 @@ export default function NewInvoicePage() {
     : invoiceType === 'Proforma' ? 'Proforma'
     : 'Factura'
 
+  if (!formReady) return <div className="space-y-4 p-4">{draftError ? <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-800">{draftError}</p> : <p role="status">Cargando formulario y borrador…</p>}<Link className={secondaryButtonClass} href="/invoicing/drafts">Volver a borradores</Link></div>
+
   return (
     <div className="space-y-6">
       <UnsavedChangesGuard />
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
         <button
           type="button"
-          onClick={() => router.push(parentId ? `/invoicing/${parentId}` : returnHref)}
+          onClick={() => requestFormNavigation(() => router.push(parentId ? `/invoicing/${parentId}` : returnHref))}
           className={secondaryButtonClass}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -625,16 +782,20 @@ export default function NewInvoicePage() {
             Facturación
           </p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
-            {parentInvoice ? `Nueva ${docLabel}` : 'Nuevo documento'}
+            {draft ? `${draftLabel(draft.id)} · ${draft.status}` : sourceInvoiceId ? 'Preparar corrección de factura' : parentInvoice ? `Nueva ${docLabel}` : 'Nuevo documento'}
           </h1>
         </div>
       </div>
+      {draftLoading && <p role="status">Cargando borrador y configuración…</p>}
+      {draftError && <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-800">{draftError}</p>}
+      {invoiceType === 'Factura' && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-100 bg-rose-50/60 p-4 text-sm text-slate-700 dark:border-rose-900 dark:bg-rose-950/20 dark:text-slate-300"><div><p className="font-semibold">Prepara y confirma antes de emitir</p><p className="mt-1 text-xs">Puedes guardar información incompleta como borrador. El CAI, el correlativo y el saldo se asignan al emitir.</p></div><Link href="/invoicing/drafts" className="font-semibold text-[#B3282D] underline dark:text-rose-300">Ver borradores y correcciones</Link>{quotationId && selectedQuotation && <button type="button" disabled={saving || loadingQuotation} className={secondaryButtonClass} onClick={() => void applyQuotation(selectedQuotation)}>Volver a cargar líneas de cotización</button>}</div>}
+      {draft?.source_invoice_id && <InvoiceCorrectionReview draft={draft} dirty={draftDirty} onChanged={setDraft} />}
 
       {/* Alert: no CAI activo para documentos fiscales */}
       {isFiscal && !activeCai && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>No hay un rango CAI activo para {invoiceType}. No se puede emitir este documento. <a href="/settings/cai" className="underline font-semibold">Registrar rango CAI →</a></span>
+          <span>No hay un rango CAI activo para {invoiceType} en {pointOfSale || 'la oficina seleccionada'}. No se puede emitir este documento. <a href="/settings/cai" className="underline font-semibold">Registrar rango CAI →</a></span>
         </div>
       )}
 
@@ -657,8 +818,8 @@ export default function NewInvoicePage() {
       )}
 
       {/* Main form */}
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+      <fieldset disabled={!formReady || saving} className="grid min-w-0 gap-6 xl:grid-cols-3">
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <section className={cardClass}>
             <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Datos generales</h2>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -674,22 +835,22 @@ export default function NewInvoicePage() {
                     setInvoiceType(nextType)
                     setDueDate(calculateDueDate(issueDate, selectedCliente, nextType))
                   }}
-                  disabled={!!parentInvoice || Boolean(quotationId)}
+                  disabled={!!parentInvoice || Boolean(quotationId) || Boolean(draft) || Boolean(sourceInvoiceId)}
                   className={`${fieldClass} ${reqClass(submitted, invoiceType)} disabled:opacity-60`}
                 >
-                  {IS_DEMO_ENVIRONMENT ? (
-                    <option value="Proforma">Proforma Demo</option>
-                  ) : (
-                    <>
-                      <option value="Factura">Factura</option>
-                      <option value="Proforma">Proforma</option>
-                      <option value="Nota de Crédito">Nota de Crédito</option>
-                      <option value="Nota de Débito">Nota de Débito</option>
-                    </>
-                  )}
+                  <option value="Factura">Factura</option>
+                  <option value="Proforma">Proforma</option>
+                  <option value="Nota de Crédito">Nota de Crédito</option>
+                  <option value="Nota de Débito">Nota de Débito</option>
                 </select>
               </div>
 
+              {/* Punto de venta de la emisión fiscal */}
+              <div>
+                <label htmlFor="invoice-point-of-sale" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">Punto de venta <span className="text-red-500">*</span></label>
+                <input id="invoice-point-of-sale" value={pointOfSale || 'Sin oficina asignada'} readOnly className={fieldClass} />
+                <p className="mt-1 text-xs text-slate-500">La oficina corresponde al perfil del cliente; las notas conservan la oficina de su factura original.</p>
+              </div>
               {/* Cliente (bloqueado si viene de parent) */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
@@ -720,8 +881,8 @@ export default function NewInvoicePage() {
                 )}
               </div>
 
-              {/* Cotización validada */}
-              {!parentId && invoiceType === QUOTATION_DOCUMENT_TYPE && clienteId && (
+              {/* Cotización validada (solo Factura) */}
+              {!parentId && invoiceType === 'Factura' && clienteId && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                     Cotización validada (opcional)
@@ -733,9 +894,7 @@ export default function NewInvoicePage() {
                       disabled={Boolean(quotationId) || loadingQuotation}
                       className={`${fieldClass} disabled:bg-slate-50 disabled:opacity-70 dark:disabled:bg-slate-800`}
                     >
-                      <option value="">
-                        {IS_DEMO_ENVIRONMENT ? 'Proforma manual' : 'Factura manual'}
-                      </option>
+                      <option value="">Factura manual</option>
                       {quotations.map((q) => {
                         const alreadyInvoiced = quotationHasActiveInvoice(q)
                         const validated = q.financial_validation_status === 'Validado'
@@ -744,11 +903,7 @@ export default function NewInvoicePage() {
                             {q.quotation_number || q.id}
                             {q.total_sale ? ` · Total cotizado ${Number(q.total_sale).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : ''}
                             {!validated ? ' · Costos pendientes' : ''}
-                            {alreadyInvoiced
-                              ? IS_DEMO_ENVIRONMENT
-                                ? ' · Ya vinculada'
-                                : ' · Ya facturada'
-                              : ''}
+                            {alreadyInvoiced ? ' · Ya facturada' : ''}
                           </option>
                         )
                       })}
@@ -810,8 +965,8 @@ export default function NewInvoicePage() {
                 </label>
                 <select
                   value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  disabled={clienteLocked || Boolean(quotationId)}
+                  onChange={(e) => { setCurrency(e.target.value); setFiscalOptions(prev => ({ ...prev, referenceCurrency: e.target.value === prev.referenceCurrency ? (e.target.value === 'USD' ? 'HNL' : 'USD') : prev.referenceCurrency })) }}
+                  disabled={!!parentInvoice}
                   className={`${fieldClass} disabled:opacity-60`}
                 >
                   <option value="USD">USD</option>
@@ -897,59 +1052,7 @@ export default function NewInvoicePage() {
             </section>
           )}
 
-          {/* Exoneración (solo documentos fiscales) */}
-          {isFiscal && (
-            <section className={cardClass}>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-900 dark:text-white">Exoneración</h2>
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={esExonerado}
-                    onChange={(e) => setEsExonerado(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600 dark:border-slate-600"
-                  />
-                  Cliente exonerado
-                </label>
-              </div>
-
-              {esExonerado && (
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      N° Orden de Compra Exenta <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      value={ordenCompraExenta}
-                      onChange={(e) => setOrdenCompraExenta(e.target.value)}
-                      placeholder="OCE-..."
-                      className={`${fieldClass} ${reqClass(submitted, ordenCompraExenta)}`}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      N° Constancia exoneración
-                    </label>
-                    <input
-                      value={noConstanciaExonerado}
-                      onChange={(e) => setNoConstanciaExonerado(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      N° Registro SAG
-                    </label>
-                    <input
-                      value={noRegistroSag}
-                      onChange={(e) => setNoRegistroSag(e.target.value)}
-                      className={fieldClass}
-                    />
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
+          <InvoiceFiscalOptions value={fiscalOptions} onChange={setFiscalOptions} currency={currency} sourceCurrency={quotationId ? sourceCurrency : undefined} disabled={saving} />
 
           {selectedQuotation && (
             <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/20">
@@ -967,7 +1070,7 @@ export default function NewInvoicePage() {
 
           {/* Line items */}
           <section className={cardClass}>
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-base font-semibold text-slate-900 dark:text-white">Líneas del documento</h2>
               {quotationId ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
@@ -987,20 +1090,22 @@ export default function NewInvoicePage() {
             </div>
 
             <div className="space-y-2">
-              <div className={`grid gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 ${isFiscal ? 'grid-cols-[1fr_72px_110px_90px_110px_36px]' : 'grid-cols-[1fr_72px_110px_110px_36px]'}`}>
+              <div className="hidden grid-cols-[minmax(0,1fr)_72px_110px_150px_110px_36px] gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 lg:grid">
                 <span>Descripción</span>
                 <span className="text-right">Qty</span>
-                <span className="text-right">Precio unit.</span>
-                {isFiscal && <span className="text-center">ISV</span>}
-                <span className="text-right">Importe</span>
+                <span className="text-right">Precio unit. {conversionNeeded ? sourceCurrency : currency}</span>
+                <span className="text-center">ISV</span>
+                <span className="text-right">Importe {conversionNeeded ? sourceCurrency : currency}</span>
                 <span />
               </div>
 
+              <InvoiceLineSettingsProvider>
               {items.map((it) => (
                 <div
                   key={it.id}
-                  className={`grid items-center gap-2 ${isFiscal ? 'grid-cols-[1fr_72px_110px_90px_110px_36px]' : 'grid-cols-[1fr_72px_110px_110px_36px]'}`}
+                  className="grid min-w-0 grid-cols-2 items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700 lg:grid-cols-[minmax(0,1fr)_72px_110px_150px_110px_36px] lg:items-center lg:gap-2 lg:border-0 lg:p-0"
                 >
+                  <label className="col-span-2 min-w-0 space-y-1 text-xs lg:col-span-1"><span className="lg:hidden">Descripción</span>
                   <input
                     type="text"
                     placeholder="Descripción del servicio..."
@@ -1009,6 +1114,8 @@ export default function NewInvoicePage() {
                     readOnly={Boolean(it.source_pricing_item_id)}
                     className={`${fieldClass} text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800 ${submitted && !it.description ? 'border-red-400' : ''}`}
                   />
+                  </label>
+                  <label className="min-w-0 space-y-1 text-xs"><span className="lg:hidden">Cantidad</span>
                   <input
                     type="number"
                     value={it.quantity}
@@ -1018,6 +1125,8 @@ export default function NewInvoicePage() {
                     readOnly={Boolean(it.source_pricing_item_id)}
                     className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
                   />
+                  </label>
+                  <label className="min-w-0 space-y-1 text-xs"><span className="lg:hidden">Precio unitario {currency}</span>
                   <input
                     type="number"
                     value={it.unit_price}
@@ -1027,25 +1136,22 @@ export default function NewInvoicePage() {
                     readOnly={Boolean(it.source_pricing_item_id)}
                     className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
                   />
-                  {isFiscal && (
-                    <select
-                      value={it.isv_rate}
-                      onChange={(e) => updateItem(it.id, 'isv_rate', Number(e.target.value) as 0 | 15 | 18)}
-                      disabled={Boolean(it.source_pricing_item_id)}
-                      className={`${fieldClass} text-center text-sm disabled:bg-slate-50 disabled:text-slate-600 dark:disabled:bg-slate-800`}
-                    >
-                      <option value={15}>15%</option>
-                      <option value={18}>18%</option>
-                      <option value={0}>Exento</option>
+                  </label>
+                  <div className="space-y-1">
+                    <label className="flex gap-1 text-xs"><input type="checkbox" aria-label="Línea gravable" checked={it.isv_rate > 0 && fiscalOptions.mode !== 'Exonerada' && fiscalOptions.mode !== 'Exenta'} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} onChange={e => { updateItem(it.id, 'isv_rate', e.target.checked ? 15 : 0); updateItem(it.id, 'tax_treatment', e.target.checked ? 'Gravada' : 'Exenta') }} />Gravable</label>
+                    <select aria-label="Tasa ISV de línea" value={it.isv_rate} onChange={e => updateItem(it.id, 'isv_rate', Number(e.target.value))} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} className={fieldClass}>
+                      <option value={15}>15%</option><option value={18}>18%</option><option value={0}>Sin ISV</option>
                     </select>
-                  )}
+                    {it.isv_rate === 0 && <select aria-label="Motivo sin ISV" className={fieldClass} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} value={it.tax_treatment || 'Exenta'} onChange={e=>updateItem(it.id,'tax_treatment',e.target.value)}><option value="Exenta">Exenta</option><option value="Exonerada">Exonerada</option></select>}
+                  </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-sm font-medium dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                    <span className="mb-1 block text-[10px] font-normal text-slate-500 lg:hidden">Importe neto</span>
                     {it.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </div>
                   {it.source_pricing_item_id ? (
                     <span
                       title="Línea vinculada a la cotización"
-                      className="flex h-9 w-9 items-center justify-center text-emerald-600 dark:text-emerald-400"
+                      className="col-span-2 flex h-9 w-9 items-center justify-center justify-self-end text-emerald-600 dark:text-emerald-400 lg:col-span-1"
                     >
                       <LockKeyhole className="h-4 w-4" />
                     </span>
@@ -1054,13 +1160,21 @@ export default function NewInvoicePage() {
                       type="button"
                       onClick={() => requestItemRemoval(it)}
                       disabled={items.length === 1}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-30 dark:hover:bg-rose-950/30"
+                      className="col-span-2 flex h-9 w-9 items-center justify-center justify-self-end rounded-xl text-slate-400 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-30 dark:hover:bg-rose-950/30 lg:col-span-1"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
+                  <label className="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">Descuento de esta línea {conversionNeeded?sourceCurrency:currency}
+                    <input aria-label="Descuento de línea" type="number" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
+                    <span>Se aplica antes del ISV.</span>
+                  </label>
+                  <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} readonlyService={Boolean(it.source_pricing_item_id)} onService={service => {
+                    updateItem(it.id,'description',service.label); updateItem(it.id,'isv_rate',service.taxable ? 15 : 0)
+                  }}/>
                 </div>
               ))}
+              </InvoiceLineSettingsProvider>
             </div>
           </section>
         </div>
@@ -1068,8 +1182,10 @@ export default function NewInvoicePage() {
         {/* Right col */}
         <div className="space-y-4">
           <section className={cardClass}>
-            <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Resumen</h2>
+            <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Resumen {currency}</h2>
+            {fiscalError && <p role="alert" className="text-sm text-red-600">{fiscalError}</p>}
             <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span>Descuentos y rebajas</span><span>{currency} {discountTotal.toFixed(2)}</span></div>
               {isFiscal ? (
                 <>
                   {importeExento > 0 && (
@@ -1110,11 +1226,13 @@ export default function NewInvoicePage() {
                     <span>{currency} {subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500 dark:text-slate-400">ISV (15%)</span>
+                    <span className="text-slate-500 dark:text-slate-400">ISV</span>
                     <span>{currency} {taxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </>
               )}
+              {amounts.exonerated > 0 && <div className="flex justify-between"><span>Importe exonerado</span><span>{currency} {amounts.exonerated.toFixed(2)}</span></div>}
+              {fiscalOptions.referenceEnabled && Number.isFinite(Number(fiscalOptions.referenceRate)) && Number(fiscalOptions.referenceRate)>0 && Number(fiscalOptions.referenceRate)<=1000000 && <p className="text-xs text-slate-500">Equivalencia informativa: {fiscalOptions.referenceCurrency} {convertMoney(total,{currency:fiscalOptions.referenceCurrency,rate:Number(fiscalOptions.referenceRate),operation:fiscalOptions.referenceOperation}).toFixed(2)}</p>}
               <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
                 <div className="flex justify-between">
                   <span className="font-semibold text-slate-900 dark:text-white">Total</span>
@@ -1151,26 +1269,29 @@ export default function NewInvoicePage() {
               }
               {selectedCliente.direccion && <p className="mt-1 text-xs text-slate-500">{selectedCliente.direccion}</p>}
               {selectedCliente.email && <p className="text-xs text-slate-500">{selectedCliente.email}</p>}
+              <Link href={`/clientes/${selectedCliente.id}/edit`} className="mt-2 inline-block text-xs font-semibold text-blue-700 underline dark:text-blue-300">Revisar nombre, RTN y domicilio en el perfil del cliente</Link>
             </section>
           )}
 
           <button
             type="button"
-            onClick={handleSave}
-            disabled={saving || loadingQuotation}
+            onClick={() => invoiceType === 'Factura' ? setIssueConfirmation(true) : void handleSave()}
+            disabled={saving || loadingQuotation || Boolean(sourceInvoiceId && (!isMaster || draftDirty || draft?.status !== 'Aprobada'))}
             className={`w-full ${primaryButtonClass}`}
           >
-            {saving ? 'Generando...' : `Generar ${docLabel}`}
+            {saving ? 'Guardando…' : invoiceType === 'Factura' ? sourceInvoiceId ? 'Emitir corrección aprobada' : 'Emitir factura' : `Generar ${docLabel}`}
           </button>
+          {invoiceType === 'Factura' && <button type="button" onClick={() => void handleSaveDraft()} disabled={saving || loadingQuotation} className={`w-full ${secondaryButtonClass}`}>Guardar borrador</button>}
           <button
             type="button"
-            onClick={() => router.push(parentId ? `/invoicing/${parentId}` : returnHref)}
+            onClick={() => requestFormNavigation(() => router.push(parentId ? `/invoicing/${parentId}` : returnHref))}
             className={`w-full ${secondaryButtonClass}`}
           >
             Cancelar
           </button>
         </div>
-      </div>
+      </fieldset>
+      <ConfirmDialog open={issueConfirmation} onOpenChange={setIssueConfirmation} title={sourceInvoiceId ? 'Emitir factura sustituta' : 'Emitir factura'} description="Se validará toda la información y se asignará un número fiscal. El documento emitido conservará su historial y generará su saldo por cobrar." confirmLabel="Confirmar emisión" onConfirm={() => { setIssueConfirmation(false); void handleSave() }} />
       <ConfirmDialog
         open={quotationChangePending !== null}
         onOpenChange={(open) => { if (!open) setQuotationChangePending(null) }}

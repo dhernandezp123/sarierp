@@ -52,6 +52,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     '/operations/shipping-instructions',
     '/agents',
     '/operations/garantias',
+    '/manual-invoices',
     '/reports',
     '/historico',
     '/miami',
@@ -62,6 +63,10 @@ export const rolePermissions: Record<UserRole, string[]> = {
   ],
 
   Contabilidad: [
+    '/accounting',
+    '/manual-invoices',
+    '/clientes',
+    '/quotations',
     '/dashboard',
     '/alerts',
     '/financial-dashboard',
@@ -77,6 +82,8 @@ export const rolePermissions: Record<UserRole, string[]> = {
   ],
 
   Finanzas: [
+    '/accounting',
+    '/manual-invoices',
     '/dashboard',
     '/alerts',
     '/financial-dashboard',
@@ -96,12 +103,43 @@ function matchesPath(path: string, allowedPath: string) {
   return path === allowedPath || path.startsWith(`${allowedPath}/`)
 }
 
+export function canViewClientOperationsReport(role: string | null | undefined) {
+  return ['Admin', 'Operaciones', 'Ventas'].includes(role || '')
+}
+
+export function canManageCompanySettings(role: string | null | undefined) {
+  return ['Admin', 'Contabilidad'].includes(role || '')
+}
+
+export function canManageCaiRanges(role: string | null | undefined) {
+  return ['Admin', 'Contabilidad'].includes(role || '')
+}
+
+export function canViewQuotationCosts(role: string | null | undefined) {
+  return ['Admin', 'Pricing', 'Contabilidad'].includes(role || '')
+}
+
+// La autorizacion efectiva se comprueba tambien en RLS y replace_client_rates.
+export function canManageClientRates(role: string | null | undefined) {
+  return ['Admin', 'Pricing', 'Ventas'].includes(role || '')
+}
+
 export function getDefaultPathForRole(role: string | null | undefined) {
   return role === 'Cliente' ? '/portal' : '/dashboard'
 }
 
 export function canAccessPath(role: string | null | undefined, path: string) {
   if (!role) return false
+  // The tenant Admin wildcard never grants access to the platform console.
+  if (matchesPath(path, '/platform')) return false
+  if (matchesPath(path, '/reports/client-operations')) return canViewClientOperationsReport(role)
+
+  if (role === 'Contabilidad') {
+    if (matchesPath(path, '/clientes/nuevo')) return false
+    if (path.startsWith('/quotations/')) {
+      return /^\/quotations\/(?!new(?:\/|$))[^/]+\/?$/.test(path)
+    }
+  }
 
   if (path === '/profile' && role !== 'Cliente') {
     return true

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { PortalConfirmation } from '@/src/components/portal/PortalConfirmation'
@@ -9,6 +9,8 @@ import { ChevronLeft, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { readAllReportRows } from '@/src/lib/report-query'
+import { reportMiamiIncident, MIAMI_INCIDENT_TYPES, INCIDENT_DESCRIPTION_LIMIT } from '@/src/lib/miami-incidents'
 
 type PackageOption = {
   id: string
@@ -18,101 +20,95 @@ type PackageOption = {
   status: string
 }
 
-const TIPOS = [
-  'Dañado',
-  'Incompleto',
-  'No reconozco este paquete',
-  'Pérdida',
-  'Otro',
-]
+const TIPOS = MIAMI_INCIDENT_TYPES
 
 export default function NuevaIncidenciaPage() {
-  const { profile } = useUser()
+  const { user, profile, loading: userLoading } = useUser()
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselectedId = searchParams.get('packageId')
 
+  const clientId = profile?.cliente_id || ''
+  const tenantId = profile?.tenant_id || ''
+  const canReport = !!user && profile?.id === user.id && profile.rol === 'Cliente'
+    && profile.status === 'Aprobado' && profile.is_active === true && !profile.is_platform_admin && !!clientId && !!tenantId
+  const context = `${tenantId}:${user?.id || ''}:${clientId}:${canReport}`
+  const version = useRef(0)
+  const submitting = useRef(false)
+  const [loadedContext, setLoadedContext] = useState('')
   const [packages, setPackages] = useState<PackageOption[]>([])
   const [selectedPkg, setSelectedPkg] = useState<PackageOption | null>(null)
   const [tipo, setTipo] = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [sent, setSent] = useState(false)
+  const [confirmation, setConfirmation] = useState<{ context: string; tracking: string } | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const loadPackages = useCallback(async (clientId: string) => {
+  const loadPackages = useCallback(async () => {
+    const request = ++version.current
+    const isCurrent = () => request === version.current
+    if (userLoading || !canReport) return
     setLoadError(false)
     setLoading(true)
     try {
-    const { data, error } = await supabase
-      .from('miami_packages')
-      .select('id, tracking_number, warehouse_number, carrier, status')
-      .eq('cliente_id', clientId)
-      .neq('status', 'Entregado')
-      .order('received_at', { ascending: false })
-
-    if (error) throw error
-    const pkgs = (data ?? []) as PackageOption[]
-    setPackages(pkgs)
-
-    if (preselectedId) {
-      const found = pkgs.find(p => p.id === preselectedId)
-      if (found) setSelectedPkg(found)
-    }
-    } catch { setLoadError(true) } finally { setLoading(false) }
-  }, [preselectedId])
+      const pkgs = await readAllReportRows<PackageOption>((from, to) => supabase.from('miami_packages')
+        .select('id, tracking_number, warehouse_number, carrier, status')
+        .eq('tenant_id', tenantId).eq('cliente_id', clientId).in('status', ['Asignado', 'Con incidencia'])
+        .neq('cargo_status', 'Entregado').order('received_at', { ascending: false }).order('id').range(from, to),
+      { label: 'paquetes disponibles', isCurrent })
+      if (!isCurrent()) return
+      setPackages(pkgs)
+      setSelectedPkg(previous => pkgs.find(pkg => pkg.id === (previous?.id || preselectedId)) || null)
+      setLoadedContext(context)
+    } catch {
+      if (isCurrent()) { setLoadError(true); setLoadedContext(context) }
+    } finally { if (isCurrent()) setLoading(false) }
+  }, [canReport, clientId, context, preselectedId, tenantId, userLoading])
 
   useEffect(() => {
-    const clientId = profile?.cliente_id
-    if (!clientId) return
-    const timeout = window.setTimeout(() => void loadPackages(clientId), 0)
-    return () => window.clearTimeout(timeout)
-  }, [profile?.cliente_id, loadPackages])
+    const timer = setTimeout(() => {
+      setPackages([]); setSelectedPkg(null); setTipo(''); setDescripcion('')
+      setConfirmation(null); setSubmitError(''); setSaving(false)
+      void loadPackages()
+    }, 0)
+    return () => { clearTimeout(timer); version.current += 1 }
+  }, [loadPackages])
 
-
-
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (saving) return
-    if (!profile?.cliente_id) { toast.error('No se encontró el cliente asociado'); return }
-    if (!selectedPkg) { toast.error('Selecciona un paquete'); return }
-    if (!tipo)         { toast.error('Selecciona el tipo de problema'); return }
-    if (!descripcion.trim()) { toast.error('Describe el problema'); return }
-
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (submitting.current || saving || !canReport || loadedContext !== context) return
+    if (!selectedPkg || !tipo || !descripcion.trim()) { toast.error('Completa el paquete, tipo y descripción.'); return }
+    submitting.current = true
+    const request = version.current
+    const isCurrent = () => request === version.current
     setSaving(true)
+    setSubmitError('')
     try {
-      const { error } = await supabase.from('miami_incidencias').insert({
-        package_id:  selectedPkg.id,
-        cliente_id:  profile.cliente_id,
-        tipo,
-        descripcion: descripcion.trim(),
-        status:      'Abierta',
-      })
-
-      if (error) throw error
-
-      // Update package status
-      const { error: statusError } = await supabase
-        .from('miami_packages')
-        .update({ status: 'Con incidencia' })
-        .eq('id', selectedPkg.id)
-
-      if (statusError) toast.warning('El caso fue registrado. El estado del paquete queda pendiente de actualizar; no necesitas enviarlo otra vez.')
-      else toast.success('Incidencia registrada')
-      setSent(true)
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Error al reportar')
+      const result = await reportMiamiIncident(supabase, { packageId: selectedPkg.id, tipo, descripcion },
+        { userId: user!.id, tenantId, clientId }, isCurrent)
+      if (!isCurrent()) return
+      toast.success(result.already_applied ? 'El reporte ya estaba registrado' : 'Incidencia registrada')
+      setConfirmation({ context, tracking: result.tracking_number })
+    } catch (error) {
+      if (isCurrent()) {
+        const message = error instanceof Error ? error.message : 'No se confirmó el reporte. Consulta Incidencias antes de reintentar.'
+        setSubmitError(message)
+        toast.error(message)
+      }
     } finally {
-      setSaving(false)
+      submitting.current = false
+      if (isCurrent()) setSaving(false)
     }
   }
 
   const fieldClass = 'h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-950'
 
-  if (sent) return <PortalConfirmation title="Incidencia registrada" description="Puedes consultar el estado y la respuesta del equipo en Incidencias. Conserva el tracking para cualquier consulta." reference={selectedPkg?.tracking_number} href="/portal/incidencias" />
-  if (loadError) return <PortalError onRetry={() => profile?.cliente_id && void loadPackages(profile.cliente_id)} />
+  if (userLoading || !canReport) return <p role="status" className="p-6 text-sm">Preparando tu portal...</p>
+  if (loadedContext !== context || loading) return <p role="status" className="p-6 text-sm">Cargando paquetes...</p>
+  if (confirmation?.context === context) return <PortalConfirmation title="Incidencia registrada" description="Puedes consultar el estado y la respuesta del equipo en Incidencias. Conserva el tracking para cualquier consulta." reference={confirmation.tracking} href="/portal/incidencias" />
+  if (loadError) return <PortalError onRetry={() => void loadPackages()} />
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
@@ -130,6 +126,8 @@ export default function NuevaIncidenciaPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {submitError && <p role="alert" className="rounded-xl border border-amber-300 p-3 text-sm">{submitError} <Link href="/portal/incidencias" className="font-semibold underline">Consultar Incidencias</Link></p>}
+        <fieldset disabled={saving} className="space-y-4">
         {/* Package selector */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <label className="mb-3 block text-sm font-semibold text-slate-900 dark:text-white">
@@ -169,7 +167,7 @@ export default function NuevaIncidenciaPage() {
           <label className="mb-3 block text-sm font-semibold text-slate-900 dark:text-white">
             Describe el problema con detalle <span className="text-red-500">*</span>
           </label>
-          <textarea aria-label="Descripción del problema"
+          <textarea aria-label="Descripción del problema" maxLength={INCIDENT_DESCRIPTION_LIMIT}
             value={descripcion}
             onChange={e => setDescripcion(e.target.value)}
             rows={4}
@@ -198,12 +196,13 @@ export default function NuevaIncidenciaPage() {
           </button>
           <button
             type="submit"
-            disabled={saving || !selectedPkg || !tipo || !descripcion.trim()}
+            disabled={saving || !selectedPkg || !tipo || !descripcion.trim() || descripcion.trim().length > INCIDENT_DESCRIPTION_LIMIT}
             className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? 'Enviando...' : 'Reportar problema'}
           </button>
         </div>
+        </fieldset>
       </form>
     </div>
   )

@@ -1,0 +1,127 @@
+{
+  "reviewed_against": "8bf64c3ca3e129069a61afbd496db5f648d5004c",
+  "variants": {
+    "src/app/api/admin/invite/route.ts": {
+      "reason": "Outbound invitations blocked",
+      "source_sha256": "0b164726b7f6fbb5c2543d453b94f4f28ed66e5635bd50e0878aa2fda9c4d335",
+      "trial_sha256": "dd992f54db18f1a6110b66f7042c9067965495ae973906849eb1ecfe66306ba7"
+    },
+    "src/app/layout.tsx": {
+      "reason": "Temporary-access acceptance gate, banner and print notice",
+      "source_sha256": "1b8cf71a9f6e22c901b569c2e637e0dba4703b7284d1d213c5ffaca03a465d36",
+      "trial_sha256": "184e4b84a61614936bb85fea848df9543279a8d921920d6a582820932beec771"
+    },
+    "src/app/portal/layout.tsx": {
+      "reason": "Temporary-access acceptance gate, banner and print notice",
+      "source_sha256": "8c200351e24133142fabfc37660879d9038b21570ce4c3b8d15c68b21e746f02",
+      "trial_sha256": "cbc72c4251dcb242d6f2720983b0f3c0988abc57e8f107af2aae26ca38e80550"
+    },
+    "src/app/robots.ts": {
+      "reason": "Sandbox excluded from indexing",
+      "source_sha256": "a82254db6f3fe06a99a74d0bc05ef07680c69afba2d2c5baaccf127c12a5d10d",
+      "trial_sha256": "f55d7482a2f510108ba14a60306524769931db423b9e0e9fa65dafb413bb7953"
+    },
+    "src/components/layout/protected-shell.tsx": {
+      "reason": "Temporary-access acceptance gate, banner and print notice",
+      "source_sha256": "9551b00ca69caa165fa73da14136444d8ce573ed8c894db9bc21c71898cea96d",
+      "trial_sha256": "670f5f4898d700e83e7a31c96beb2435cb439eaa827d9b31b82abe46364d51a0"
+    },
+    "src/components/pdf/FiscalDocumentLayout.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "f9f004e8cbab52a4559d34ca5803045578db9dc97353dee941558854cdd9c1ac",
+      "trial_sha256": "675873573eb1e574fcd45c5842b94181b2227b27d56e196d58fdff5774462273"
+    },
+    "src/components/pdf/arrival-notice-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "0669f92d081cd89ec9114ee797cb70ff7ece358c205601f08e9e53dbec9a95b6",
+      "trial_sha256": "cdac44bb871ea3911a5d7227ffe0b46ed0d8852744d4fa8c90aad7c6a73039fd"
+    },
+    "src/components/pdf/awb-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "3456fda1bf885256d2741d0f30b05f7681e797393f0da85f8d647b9fd5630860",
+      "trial_sha256": "6a6baf22e7fb3f7d5bdd18ed9fedf7b9a891011866c3b9a24b54984d4e910aa4"
+    },
+    "src/components/pdf/carta-porte-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "f6982256ec40ec03da33cf7194aeeab6315a1f1f3994e2ba26245f84e450f20b",
+      "trial_sha256": "b8a8e793404f9d569342c73ebc5595a6794a62360f4431439709c3769ec96c15"
+    },
+    "src/components/pdf/cost-detail-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "b259526efb642f7640535b5587a29d99160e3ea2f60bac4efe765bcd15645db8",
+      "trial_sha256": "bc5859d57192dbc20255cf019acc4f197da9adf9c2c4b10ae8c250bde093a761"
+    },
+    "src/components/pdf/estado-cuenta-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "384934436721f8a053dfa9623f465f4d045a2304297888b7f616c350d3a02110",
+      "trial_sha256": "7073c9c0ad212df111c9fa042ec88ec1914fe19f935c30f6f5ceeb2be6db2d2f"
+    },
+    "src/components/pdf/house-bl-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "c7170d34d3f578c365e3fd04ef73202f772321a7bb5cabe5667156d845978fa1",
+      "trial_sha256": "f93f76ca44a364bc675468c4b7a954efdfea4d4316426e0aa83bcc95a1b98f15"
+    },
+    "src/components/pdf/manual-invoice-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "ee9c5f82566d6edf6c083ca69146ebc2c62ff6874f12150f55b2b039e2c5e3d0",
+      "trial_sha256": "5c5cdf3f964c7c1256733143783241f881539533a96695a0321a252092bf5853"
+    },
+    "src/components/pdf/quotation-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "1d6cd646cfa86ae16b67009c55b6930d7c5c884bdb5533660aa0fceff0199581",
+      "trial_sha256": "f0ec2c0e85ed535f8538088b42a23950103955c4eeced68a63e57a94ecd150f3"
+    },
+    "src/components/pdf/recibo-pago-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "08f81673af24b6dcb6f6f7c3e2f4b75fd00fd01f9f97c6520f9d85d3c2b0d481",
+      "trial_sha256": "5d1ca600f8bc483137063c83b85c8935472822e2419aaf7b24ddbcdd89074e07"
+    },
+    "src/components/pdf/report-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "cbd118155cf11a64eb7d46c9a1a3f75ad56459f7518ec3b84bd34b60076300be",
+      "trial_sha256": "a8be2e2f322dcc4b0792a0d8a511fcce6b7569e5315cb466104330aad46d6e07"
+    },
+    "src/components/pdf/shipping-instruction-order-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "68042b38d204538e7ea93920af808094b9e262037153aac31d5056b3441aa7a4",
+      "trial_sha256": "930cf7521339e0660bf5cc3dc0aa44649bd40a71e8de6e335bc4cee8e2586130"
+    },
+    "src/components/pdf/shipping-instruction-pdf.tsx": {
+      "reason": "Sandbox watermark on every PDF page",
+      "source_sha256": "6a1fc4e506de82cc9ba6f0ce045e09b25bb3019addee86659fd0cee40c7923e2",
+      "trial_sha256": "a9d7493cc6fde9c19181ca7c40a6d9b1d4bac7847b88b4012bd7241b7312af57"
+    },
+    "src/lib/company-branding.ts": {
+      "reason": "Fictitious Atlas branding",
+      "source_sha256": "a9b1826ed3fb37a177a3d08a6c69fa2902babf8f210ba31a46edb50eacf287a7",
+      "trial_sha256": "c1bf6f6ce4a28dd02b7949b407f3fb915de223af191c84b38b023fa8d367e999"
+    },
+    "src/proxy.ts": {
+      "reason": "Sandbox hostname mapping, noindex, registration/recovery and private assets blocked",
+      "source_sha256": "9d6ba03ec650f4d3fe6c459954926ad67c0199237902f3090d2f70f8247e1560",
+      "trial_sha256": "233b1a847e4887332b7a9f0ba406021874459aca008fefa4620bea4f923d2388"
+    },
+    "src/types/index.ts": {
+      "reason": "Temporary-access profile metadata",
+      "source_sha256": "6ac1105b8680fa289e29d75bf536d0dfc10c602d62ea253353d867cc39552303",
+      "trial_sha256": "00ae4d523367a8884e02087eb2492786bc8162a825f3f076e6b3b9405630db90"
+    },
+    "supabase/migrations/20260918190000_agent_360_read_access.sql": {
+      "reason": "Preserve already-applied historical Demo source; current functions compared separately",
+      "source_sha256": "3bf75fbfb34f25cf2af09c5945d7a40ef0b2f16b530831238c50e2c6d475088e",
+      "trial_sha256": "5e4c0f6ff5a1987f12dd89a3bd74446dd5080180ed6ac177ad8585be86e347f5"
+    }
+  },
+  "trial_only_source": [
+    "src/app/(protected)/admin/demo-requests/page.tsx",
+    "src/components/demo/DemoAcceptanceGate.tsx",
+    "src/components/demo/DemoEnvironmentBanner.tsx",
+    "src/components/demo/DemoPrintWatermark.tsx",
+    "src/components/demo/DemoReadOnlyNotice.tsx",
+    "src/components/pdf/DemoPdfWatermark.tsx",
+    "src/lib/demo-environment.ts",
+    "src/lib/demo-print.ts",
+    "src/lib/external-url.ts",
+    "src/lib/html.ts"
+  ]
+}

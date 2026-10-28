@@ -11,12 +11,29 @@ const INVITABLE_ROLES = [
   'Cliente',
 ] as const
 
+function inviteName(value: unknown) {
+  if (typeof value !== 'string') return null
+  const name = value.trim()
+  return name && name.length <= 100 && !/[\u0000-\u001f\u007f]/.test(name) ? name : null
+}
+
 export async function POST(request: Request) {
+  if (process.env.APP_ENV === 'demo' || process.env.NEXT_PUBLIC_APP_ENV === 'demo') {
+    return NextResponse.json({ error: 'Las invitaciones están bloqueadas en Demo' }, { status: 403 })
+  }
   try {
-    const { email, rol } = (await request.json()) as { email: string; rol: string }
+    const body = await request.json() as Record<string, unknown>
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const rol = typeof body.rol === 'string' ? body.rol : ''
+    const nombre = inviteName(body.nombre)
+    const apellido = inviteName(body.apellido)
 
     if (!email || !rol) {
       return NextResponse.json({ error: 'Email y rol son requeridos' }, { status: 400 })
+    }
+
+    if (!nombre || !apellido) {
+      return NextResponse.json({ error: 'Nombre y apellido son requeridos y deben tener hasta 100 caracteres, sin saltos de línea' }, { status: 400 })
     }
 
     if (!INVITABLE_ROLES.includes(rol as (typeof INVITABLE_ROLES)[number])) {
@@ -56,37 +73,41 @@ export async function POST(request: Request) {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('rol, status, is_active, is_demo_user')
+      .select('rol, status, is_active, tenant_id, is_platform_admin')
       .eq('id', authData.user.id)
       .single()
 
-    if (profileError || profile?.rol !== 'Admin' || profile?.status !== 'Aprobado' || profile?.is_active === false) {
+    if (
+      profileError
+      || profile?.rol !== 'Admin'
+      || profile?.status !== 'Aprobado'
+      || profile?.is_active !== true
+      || profile?.is_platform_admin === true
+      || !profile?.tenant_id
+    ) {
       return NextResponse.json({ error: 'Solo Admin puede invitar usuarios' }, { status: 403 })
     }
 
-    const { data: environment } = await supabaseAdmin
-      .from('platform_environment')
-      .select('environment')
-      .eq('singleton', true)
-      .maybeSingle()
+    const { data: tenantDomain, error: domainError } = await supabaseAdmin
+      .from('tenant_domains')
+      .select('hostname')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('is_primary', true)
+      .eq('is_active', true)
+      .single()
 
-    const isDemoEnvironment =
-      process.env.APP_ENV === 'demo'
-      || process.env.NEXT_PUBLIC_APP_ENV === 'demo'
-      || environment?.environment === 'demo'
-
-    if (isDemoEnvironment || profile.is_demo_user === true) {
+    if (domainError || !tenantDomain?.hostname) {
       return NextResponse.json(
-        { error: 'Las invitaciones están bloqueadas en el ambiente demo' },
-        { status: 403 }
+        { error: 'La empresa no tiene un dominio principal activo' },
+        { status: 409 }
       )
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    const siteUrl = `https://${tenantDomain.hostname}`
 
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${siteUrl}/onboarding`,
-      data: { rol, invited_by_admin: true },
+      data: { rol, invited_by_admin: true, tenant_id: profile.tenant_id, nombre, apellido },
     })
 
     if (error) {
@@ -97,6 +118,9 @@ export async function POST(request: Request) {
       .from('profiles')
       .update({
         email: email.trim().toLowerCase(),
+        nombre,
+        apellido,
+        tenant_id: profile.tenant_id,
         rol,
         status: rol === 'Cliente' ? 'Pendiente' : 'Aprobado',
         is_active: true,
@@ -104,6 +128,8 @@ export async function POST(request: Request) {
         approved_by: rol === 'Cliente' ? null : authData.user.id,
       })
       .eq('id', data.user.id)
+      .select('id')
+      .single()
 
     if (invitedProfileError) {
       return NextResponse.json(

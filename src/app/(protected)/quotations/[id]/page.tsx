@@ -25,27 +25,27 @@ import { toast } from 'sonner'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
-import { createActivityLog } from '@/src/lib/activity-logger'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 import { createNotification } from '@/src/lib/notifications'
-import { allowedTransitions, canTransition } from '@/src/lib/quotation-status'
+import { transitionQuotation, quotationRevision } from '@/src/lib/quotation-transition'
+import { allowedTransitions, canTransition, canTransitionForRole } from '@/src/lib/quotation-status'
 import { quotationListHref, quotationTransitionHint } from '@/src/lib/quotation-detail-ux'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import {
   QUOTATION_LOSS_REASONS,
   type QuotationLossReason,
 } from '@/src/lib/quotation-loss-reasons'
-import {
-  PDFDownloadLink,
-  pdf,
-} from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
+import { pdf } from '@react-pdf/renderer'
 
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import CostDetailPDF from '../../../../components/pdf/cost-detail-pdf'
 import { CostAnalysisPanel } from '@/src/components/pricing/CostAnalysisPanel'
+import { canViewQuotationCosts } from '@/src/lib/permissions'
 import { InsuranceCalculationDialog } from '@/src/components/quotations/InsuranceCalculationDialog'
+import { QuotationRepricingDialog } from '@/src/components/quotations/QuotationRepricingDialog'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 import {
   DEFAULT_EMAIL_TEMPLATES,
   fetchActiveEmailTemplates,
@@ -53,14 +53,15 @@ import {
   type EmailTemplate,
 } from '@/src/lib/email-templates'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
+  getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import {
   DEFAULT_TAX_RATE_PERCENT,
   calculateTaxAmount,
   normalizeTaxRatePercent,
+  resolvePersistedTaxAmount,
 } from '@/src/lib/tax'
 import { DEFAULT_INSURANCE_COST_RATE_PERCENT } from '@/src/lib/insurance-calculator'
 import { formatDate, formatDateTime } from '@/src/lib/format'
@@ -103,6 +104,8 @@ const statusOptions = [
 
 const getServiceProductLabel = (value?: string | null) => {
   switch (value) {
+    case 'customs_only':
+      return 'Servicio de Aduanas'
     case 'miami_lcl':
       return 'Miami Consolidado LCL'
     case 'miami_air':
@@ -398,9 +401,10 @@ function QuotationDetail() {
   const emailTriggerRef = useRef<HTMLButtonElement>(null)
   const userRole = profile?.rol
   const canManagePricing = ['Admin', 'Pricing'].includes(userRole || '')
-  const canPrintCostDetail = canManagePricing
+  const canPrintCostDetail = canViewQuotationCosts(userRole)
   const canGenerateSI = ['Admin', 'Ventas'].includes(userRole || '')
   const canEditQuotation = ['Admin', 'Ventas', 'Operaciones'].includes(userRole || '')
+  const canPrepareEmail = canManagePricing || canEditQuotation
   const canGenerateCxP = ['Admin', 'Finanzas', 'Contabilidad'].includes(userRole || '')
 
   const [quotation, setQuotation] = useState<QuotationDetail | null>(null)
@@ -449,7 +453,6 @@ function QuotationDetail() {
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [repricingDialogOpen, setRepricingDialogOpen] = useState(false)
   const [insuranceCalculationOpen, setInsuranceCalculationOpen] = useState(false)
-  const [repricingReason, setRepricingReason] = useState('')
   const [reopeningRepricing, setReopeningRepricing] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [plantillaCotizacion, setPlantillaCotizacion] = useState<string | null>(null)
@@ -593,11 +596,8 @@ function QuotationDetail() {
       .eq('entity_id', id)
       .order('created_at', { ascending: false })
 
-    const { data: companyData, error: companyError } = await supabase
-      .from('company_settings')
-      .select(`${COMPANY_BRANDING_SELECT}, default_tax_rate, insurance_cost_rate_percent, insurance_included_service_patterns, insurance_excluded_service_patterns`)
-      .limit(1)
-      .maybeSingle()
+    const { data: companyData, error: companyError } =
+      await loadCurrentCompanySettings(supabase)
 
     if (version !== loadVersion.current) return
     const failed = [
@@ -766,7 +766,7 @@ function QuotationDetail() {
       return
     }
 
-    if (oldStatus === 'Ganada' && newStatus === 'Pendiente de Fijar Precios') {
+    if (oldStatus !== 'Borrador' && newStatus === 'Pendiente de Fijar Precios') {
       await openRepricingDialog()
       return
     }
@@ -789,68 +789,22 @@ function QuotationDetail() {
 
     const oldStatus = quotation.status || 'Borrador'
 
-    if (!canTransition(oldStatus, newStatus)) {
+    if (!canTransition(oldStatus, newStatus, quotation?.service_product)) {
       toast.error(`Transicion no permitida: ${oldStatus} a ${newStatus}`)
       return false
     }
 
-    const { error } = await supabase
-      .from('quotations')
-      .update({
-        status: newStatus,
-        ...(loss
-          ? {
-              loss_reason: loss.reason,
-              loss_reason_detail: loss.detail || null,
-            }
-          : {}),
-      })
-      .eq('id', quotation.id)
-
-    if (error) {
-      toast.error(error.message)
+    let updatedQuotation
+    try {
+      updatedQuotation = await transitionQuotation(supabase, quotation, newStatus, { loss })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo cambiar el estado')
       return false
     }
 
-    await supabase.from('quotation_status_history').insert([
-      {
-        quotation_id: quotation.id,
-        old_status: oldStatus,
-        new_status: newStatus,
-        changed_by: profile?.id,
-        notes: loss
-          ? `Razón: ${loss.reason}${loss.detail ? `. Detalle: ${loss.detail}` : ''}`
-          : null,
-      },
-    ])
-
-    await createActivityLog({
-      module: 'quotations',
-      action: 'status_changed',
-      entityType: 'quotation',
-      entityId: quotation.id,
-      description: `Estado actualizado de ${oldStatus} a ${newStatus}`,
-      metadata: {
-        oldStatus,
-        newStatus,
-        ...(loss
-          ? { lossReason: loss.reason, lossReasonDetail: loss.detail || null }
-          : {}),
-      },
-    })
-
     toast.success('Estado actualizado')
 
-    setQuotation({
-      ...quotation,
-      status: newStatus,
-      ...(loss
-        ? {
-            loss_reason: loss.reason,
-            loss_reason_detail: loss.detail || null,
-          }
-        : {}),
-    })
+    setQuotation((current: typeof quotation) => current?.id === quotation.id ? { ...current, ...updatedQuotation } : current)
 
     await fetchStatusHistory()
     await loadChangeLogs()
@@ -929,6 +883,8 @@ function QuotationDetail() {
         {
           p_option_id: optionPendingAcceptance.id,
           p_sync_operation: syncOperation,
+          p_expected_status: quotation.status,
+          p_expected_revision: quotationRevision(quotation),
         }
       )
 
@@ -1015,14 +971,12 @@ function QuotationDetail() {
   }
 
   const openRepricingDialog = async () => {
-    setRepricingReason('')
     setRepricingDialogOpen(true)
     await loadRepricingImpact()
   }
 
   const resetRepricingDialog = () => {
     setRepricingDialogOpen(false)
-    setRepricingReason('')
     setRepricingImpact({
       hasShippingInstruction: false,
       bookingsCount: 0,
@@ -1030,10 +984,10 @@ function QuotationDetail() {
     })
   }
 
-  const reopenForRepricing = async () => {
+  const reopenForRepricing = async (draftReason: string) => {
     if (!quotation?.id) return
 
-    const reason = repricingReason.trim()
+    const reason = draftReason.trim()
 
     if (!reason) {
       toast.error('Debes ingresar el motivo del repricing.')
@@ -1043,77 +997,21 @@ function QuotationDetail() {
     const previousStatus = quotation.status || 'Ganada'
     const newStatus = 'Pendiente de Fijar Precios'
 
-    if (!canTransition(previousStatus, newStatus)) {
+    if (!canTransition(previousStatus, newStatus, quotation?.service_product)) {
       toast.error(`Transicion no permitida: ${previousStatus} a ${newStatus}`)
       return
     }
 
     setReopeningRepricing(true)
 
-    const { error } = await supabase
-      .from('quotations')
-      .update({
-        status: newStatus,
-        pricing_approved: false,
-        pricing_approved_at: null,
-        pricing_approved_by: null,
-      })
-      .eq('id', quotation.id)
-
-    if (error) {
+    try {
+      const updatedQuotation = await transitionQuotation(supabase, quotation, newStatus, { reason })
+      setQuotation((current: typeof quotation) => current?.id === quotation.id ? { ...current, ...updatedQuotation } : current)
+    } catch (error) {
       setReopeningRepricing(false)
-      toast.error(error.message)
+      toast.error(error instanceof Error ? error.message : 'No se pudo reabrir la cotizacion')
       return
     }
-
-    await supabase.from('quotation_status_history').insert([
-      {
-        quotation_id: quotation.id,
-        old_status: previousStatus,
-        new_status: newStatus,
-        changed_by: profile?.id,
-      },
-    ])
-
-    const { error: changeLogError } = await supabase
-      .from('quotation_change_logs')
-      .insert([
-        {
-          quotation_id: quotation.id,
-          change_type: 'quotation_reopened_for_repricing',
-          reason,
-          changed_by: profile?.id,
-        },
-      ])
-
-    if (changeLogError) {
-      toast.error(changeLogError.message)
-    }
-
-    await createActivityLog({
-      module: 'quotations',
-      action: 'quotation_reopened_for_repricing',
-      entityType: 'quotation',
-      entityId: quotation.id,
-      description: `Cotización ${
-        quotation.quotation_number || quotation.id
-      } reabierta para repricing`,
-      metadata: {
-        previous_status: previousStatus,
-        new_status: newStatus,
-        reason,
-        has_shipping_instruction: repricingImpact.hasShippingInstruction,
-        bookings_count: repricingImpact.bookingsCount,
-      },
-    })
-
-    setQuotation({
-      ...quotation,
-      status: newStatus,
-      pricing_approved: false,
-      pricing_approved_at: null,
-      pricing_approved_by: null,
-    })
 
     await fetchStatusHistory()
     await loadChangeLogs()
@@ -1445,14 +1343,11 @@ function QuotationDetail() {
   }
 
   const openEmailComposer = async () => {
+    if (!canPrepareEmail) return
     setEmailLoading(true)
     try {
               if (!plantillaCotizacion) {
-                const { data } = await supabase
-                  .from('company_settings')
-                  .select('plantilla_cotizacion')
-                  .limit(1)
-                  .maybeSingle()
+                const { data } = await loadCurrentCompanySettings(supabase)
                 setPlantillaCotizacion(data?.plantilla_cotizacion ?? '')
               }
               if (emailTemplates.length === 0) {
@@ -1539,7 +1434,9 @@ const pricingTotals = pricingItems.reduce(
 
     const subtotal = qty * sale
     const costTotal = qty * cost
-    const tax = calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
+    const tax = quotation.service_product === 'customs_only'
+      ? resolvePersistedTaxAmount({ taxable: Boolean(item.taxable), subtotal, taxAmount: item.tax_amount, taxRatePercent: item.tax_rate, fallbackTaxRatePercent: defaultTaxRate })
+      : calculateTaxAmount(Boolean(item.taxable), subtotal, defaultTaxRate)
     const total = subtotal + tax
     const profit = subtotal - costTotal
 
@@ -1556,7 +1453,7 @@ const pricingTotals = pricingItems.reduce(
 
 const hasPricingItems = pricingItems.length > 0
 const statusActions = statusOptions.filter((status) =>
-  canTransition(quotation.status || 'Borrador', status) &&
+  canTransitionForRole(quotation.status || 'Borrador', status, userRole, quotation.service_product) &&
   !(quotation.status === 'Ganada' && status === 'Pendiente de Fijar Precios')
 )
 const hasStatusActions = canEditQuotation && (statusActions.length > 0 || quotation.status === 'Perdida')
@@ -1728,7 +1625,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         : 'Carrier'
 
   const isMiamiEmailFlow =
-    quotation?.service_product === 'miami_lcl' || quotation?.service_product === 'miami_air'
+    ['miami_lcl', 'miami_air', 'customs_only'].includes(quotation?.service_product)
 
   const commercialTotalLabel =
     commercialTotal > 0
@@ -1794,7 +1691,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           ? formatDisplayDate(quotation?.valid_until)
           : '',
     cierre:
-      plantillaCotizacion || 'Saludos cordiales,\nEquipo Comercial',
+      plantillaCotizacion || `Saludos cordiales,\n${getCompanyTradeName(companyBranding)} — Equipo Comercial`,
   }
 
   const activeEmailTemplate =
@@ -1833,9 +1730,9 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           </div>
 
           <DialogDescription className="mb-4">Descarga el PDF, abre tu aplicación de correo y adjúntalo manualmente antes de enviar. Preparar este mensaje no cambia el estado de la cotización.</DialogDescription>
-          <PDFDownloadLink document={<QuotationPDF quotation={quotation} selectedAgent={selectedAgent} pricingItems={pricingItems} commercialOptions={getClientVisibleQuotationOptions(commercialOptions)} quotationContainers={quotationContainers} cargoLines={cargoLines} company={companyBranding} />} fileName={(quotation.quotation_number || 'cotizacion') + '.pdf'} className="mb-4 inline-flex rounded-lg border px-3 py-2 text-sm font-semibold">
+          <PdfDownloadButton document={<QuotationPDF quotation={quotation} selectedAgent={selectedAgent} pricingItems={pricingItems} commercialOptions={getClientVisibleQuotationOptions(commercialOptions)} quotationContainers={quotationContainers} cargoLines={cargoLines} company={companyBranding} />} fileName={(quotation.quotation_number || 'cotizacion') + '.pdf'} className="mb-4 inline-flex rounded-lg border px-3 py-2 text-sm font-semibold">
             {({ loading: generating }) => generating ? 'Generando PDF…' : '1. Descargar PDF'}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
           {emailTemplates.length > 1 && (
             <div className="mb-3 flex flex-wrap gap-2">
               {emailTemplates.map((template) => (
@@ -1877,14 +1774,8 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             className="mb-4 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
           />
 
-          {IS_DEMO_ENVIRONMENT && (
-            <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Simulación demo: puedes copiar el texto, pero no se abrirá ni enviará ningún correo real.
-            </p>
-          )}
-
           <div className="flex flex-wrap gap-3">
-            {mailtoLinkQ && !IS_DEMO_ENVIRONMENT && (
+            {mailtoLinkQ && (
               <a
                 href={mailtoLinkQ}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
@@ -2001,7 +1892,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             }}
             suggestedTitle={`Dar seguimiento a ${quotation.quotation_number || 'cotización'}`}
           />
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={
               <QuotationPDF
                 quotation={quotation}
@@ -2025,7 +1916,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                 </span>
               </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
 
           <button
             type="button"
@@ -2037,7 +1928,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             <span className="sr-only">Imprimir cotización</span>
           </button>
 
-          <button
+          {canPrepareEmail && <button
             type="button"
             title="Preparar correo"
             ref={emailTriggerRef}
@@ -2047,9 +1938,9 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           >
             <Mail className="h-4 w-4" />
             <span className="sr-only">{emailLoading ? 'Cargando correo…' : 'Preparar correo'}</span>
-          </button>
+          </button>}
 
-          {(canManagePricing ||
+          {(canPrintCostDetail || canManagePricing ||
             canEditQuotation ||
             (canGenerateSI && quotation.status === 'Ganada') ||
             (canGenerateCxP && quotation.status === 'Ganada')) && (
@@ -2142,7 +2033,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     </button>
                   )}
 
-                  {canManagePricing && quotation.status === 'Ganada' && (
+                  {canManagePricing && quotation.status === 'Ganada' && quotation.service_product !== 'customs_only' && (
                     <button
                       type="button"
                       onClick={() => {
@@ -2188,17 +2079,17 @@ const combinedTimeline: CommercialTimelineEvent[] = [
         <div>
           <p className="font-semibold">Siguiente paso</p>
           <p className="mt-1 text-slate-600 dark:text-slate-300">{
-            quotation.status === 'Borrador' ? 'Completa los datos del embarque y solicita pricing.' :
+            quotation.status === 'Borrador' ? (quotation.service_product === 'customs_only' ? 'Completa los honorarios y el alcance del Servicio de Aduanas para aprobar la propuesta.' : 'Completa los datos del embarque y solicita pricing.') :
             quotation.status === 'Pendiente de Fijar Precios' ? 'Pricing debe revisar costos y preparar las tarifas comerciales.' :
-            quotation.status === 'Pricing Aprobado' ? (commercialOptions.length ? 'Pricing debe ofrecer las opciones antes de compartirlas con el cliente.' : 'Revisa el PDF y prepara la comunicación al cliente.') :
+            quotation.status === 'Pricing Aprobado' ? (quotation.repricing_return_status === 'Ganada' ? 'Pricing debe aprobar el ajuste para volver a Ganada. La venta ya está confirmada por el cliente.' : commercialOptions.length ? 'Pricing debe ofrecer las opciones antes de compartirlas con el cliente.' : 'Revisa el PDF y prepara la comunicación al cliente.') :
             quotation.status === 'Enviada al Cliente' ? (commercialOptions.length && !commercialOptions.some((option) => option.status === 'Aceptada') ? 'Registra cuál de las opciones ofrecidas eligió el cliente para confirmar la venta.' : 'Registra la respuesta del cliente desde el estado de la cotización.') :
             quotation.status === 'Ganada' ? 'Continúa con las Shipping Instructions de esta cotización.' :
             quotation.status === 'Perdida' ? 'Puedes reactivarla creando una nueva cotización vinculada.' : 'Consulta las acciones disponibles según tu rol.'
           }</p>
         </div>
         {quotation.status === 'Borrador' && canEditQuotation ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/quotations/' + quotation.id + '/edit'}>Completar cotización</Link> :
-          ['Pendiente de Fijar Precios', 'Pricing Aprobado'].includes(quotation.status) && canManagePricing ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/pricing-comparison?quotation=' + quotation.id}>Revisar pricing</Link> :
-          quotation.status === 'Pricing Aprobado' && !commercialOptions.length ? <button disabled={emailLoading} onClick={openEmailComposer} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Preparar correo</button> :
+          ['Pendiente de Fijar Precios', 'Pricing Aprobado'].includes(quotation.status) && canManagePricing && quotation.service_product !== 'customs_only' ? <Link className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white" href={'/pricing-comparison?quotation=' + quotation.id}>Revisar pricing</Link> :
+          canPrepareEmail && quotation.status === 'Pricing Aprobado' && !commercialOptions.length ? <button disabled={emailLoading} onClick={openEmailComposer} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Preparar correo</button> :
           quotation.status === 'Enviada al Cliente' && canGenerateSI && commercialOptions.some((option) => option.status === 'Ofrecida') ? <button onClick={() => { document.getElementById('commercial-options')?.focus(); document.getElementById('commercial-options')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Elegir opción del cliente</button> :
           quotation.status === 'Ganada' && canGenerateSI ? <button disabled={creatingRouting} onClick={createRoutingInstruction} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">{creatingRouting ? 'Abriendo operación…' : 'Abrir / generar operación'}</button> :
           quotation.status === 'Perdida' && canEditQuotation ? <button disabled={duplicating} onClick={requestDuplicateQuotation} className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white">Reactivar cotización</button> : null}
@@ -2267,7 +2158,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                               ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'
                               : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
                         }`}>
-                          {option.status}
+                          {option.status === 'Aceptada' && option.supersedes_option_id ? 'Ajuste aprobado' : option.status}
                         </span>
                         {option.is_recommended && (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-violet-700 dark:text-violet-300">
@@ -2450,7 +2341,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
-                  Detalles del Embarque
+                  {quotation.service_product === 'customs_only' ? 'Detalles del servicio de Aduanas' : 'Detalles del Embarque'}
                 </CardTitle>
               </CardHeader>
 
@@ -2469,6 +2360,12 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   </p>
                 </div>
 
+                {quotation.service_product === 'customs_only' ? <>
+                  <div><p className="text-xs text-slate-500">Aduana de despacho</p><p className="font-semibold">{quotation.puerto_destino}</p></div>
+                  <div><p className="text-xs text-slate-500">Mercancía</p><p className="font-semibold">{quotation.commodity}</p></div>
+                  <div><p className="text-xs text-slate-500">Entrega final</p><p className="font-semibold">{pricingItems.some(item => item.rate_code === 'customs_delivery') ? quotation.delivery_address : 'No incluida'}</p></div>
+                  <div><p className="text-xs text-slate-500">Válida hasta</p><p className="font-semibold">{formatDisplayDate(quotation.valid_until)}</p></div>
+                </> : <>
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Tipo</p>
                   <p className="font-semibold text-slate-900 dark:text-white">
@@ -2633,6 +2530,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                     {quotation.commodity || 'N/A'}
                   </p>
                 </div>
+              </>}
               </CardContent>
             </Card>
 
@@ -2771,12 +2669,12 @@ const combinedTimeline: CommercialTimelineEvent[] = [
           <Card>
             <CardHeader>
               <CardTitle className="text-lg font-semibold text-slate-900 dark:text-white">
-                Tarifas de Agentes
+                {quotation.service_product === 'customs_only' ? 'Servicio propio' : 'Tarifas de Agentes'}
               </CardTitle>
             </CardHeader>
 
             <CardContent>
-              {agentQuotes.length === 0 ? (
+              {quotation.service_product === 'customs_only' ? <p className="text-sm text-slate-500">Servicio de Aduanas con honorarios propios. Consulta los cargos del servicio y la entrega final en el resumen comercial.</p> : agentQuotes.length === 0 ? (
                 <p className="text-gray-500 dark:text-slate-400">
                   No hay tarifas registradas.
                 </p>
@@ -3156,73 +3054,14 @@ const combinedTimeline: CommercialTimelineEvent[] = [
       onConfirm={duplicateQuotation}
     />
 
-    <Dialog
-      open={repricingDialogOpen}
-      onOpenChange={(open) => {
-        if (!open && !reopeningRepricing) {
-          resetRepricingDialog()
-          return
-        }
-
-        setRepricingDialogOpen(open)
-      }}
-    >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Reabrir para Repricing</DialogTitle>
-          <DialogDescription>
-            Regresa esta cotización ganada a Pendiente de Fijar Precios para corregir tarifa, costos o carrier/naviera.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {(repricingImpact.hasShippingInstruction || repricingImpact.bookingsCount > 0) && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
-              Esta cotización ya tiene operación asociada. Reabrir pricing no actualizará Routing ni Bookings automáticamente en esta fase.
-            </div>
-          )}
-
-          {repricingImpact.loading && (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Revisando impacto operativo...
-            </p>
-          )}
-
-          <div>
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Motivo
-            </label>
-            <textarea
-              value={repricingReason}
-              onChange={(event) => setRepricingReason(event.target.value)}
-              placeholder="Ej: Cambio de naviera / actualización de tarifa al zarpe"
-              rows={4}
-              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-slate-400"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={resetRepricingDialog}
-              disabled={reopeningRepricing}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="button"
-              onClick={reopenForRepricing}
-              disabled={reopeningRepricing || repricingImpact.loading}
-              className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:opacity-50"
-            >
-              {reopeningRepricing ? 'Reabriendo...' : 'Confirmar reapertura'}
-            </button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    {repricingDialogOpen && (
+      <QuotationRepricingDialog
+        busy={reopeningRepricing}
+        impact={repricingImpact}
+        onCancel={resetRepricingDialog}
+        onConfirm={reopenForRepricing}
+      />
+    )}
 
     {quotation && (
       <InsuranceCalculationDialog

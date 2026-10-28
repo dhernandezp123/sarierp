@@ -1,5 +1,5 @@
-import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer'
 import { DemoPdfWatermark } from './DemoPdfWatermark'
+import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer'
 
 export type EstadoCuentaItem = {
   invoice_number: string | null
@@ -110,7 +110,7 @@ export function EstadoCuentaPdf({ data }: { data: EstadoCuentaData }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <DemoPdfWatermark />
+      <DemoPdfWatermark />
         {/* Header */}
         <View style={styles.headerRow}>
           <View>

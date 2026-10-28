@@ -1,3 +1,4 @@
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 import {
   Page,
   Text,
@@ -10,9 +11,9 @@ import {
   type CompanyBranding,
   getCompanyAddressLines,
   getCompanyDisplayName,
+  getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
-import { DemoPdfWatermark } from './DemoPdfWatermark'
 import type { QuotationCommercialOption } from '@/src/lib/quotation-options'
 
 function formatCurrency(value: number) {
@@ -389,7 +390,7 @@ const styles = StyleSheet.create({
 
 const quotationTerms = [
   { type: 'paragraph', text: 'Las tarifas cotizadas están sujetas a disponibilidad de espacio, equipo, itinerarios y confirmación final por parte de la naviera, aerolínea, transportista o proveedor involucrado. Esta cotización no incluye cargos, impuestos, tasas, almacenajes, demoras, detenciones, inspecciones, multas, gastos extraordinarios o cualquier otro concepto no expresamente indicado en la presente propuesta.' },
-  { type: 'paragraph', text: 'Los tiempos de tránsito son estimados y se proporcionan únicamente como referencia. Estos pueden variar debido a factores operativos, condiciones climáticas, congestión portuaria o aeroportuaria, cambios de itinerario, transbordos, restricciones gubernamentales, huelgas, eventos de fuerza mayor u otras circunstancias fuera del control razonable del proveedor del servicio.' },
+  { type: 'paragraph', text: 'Los tiempos de tránsito son estimados y se proporcionan únicamente como referencia. Estos pueden variar debido a factores operativos, condiciones climáticas, congestión portuaria o aeroportuaria, cambios de itinerario, transbordos, restricciones gubernamentales, huelgas, eventos de fuerza mayor u otras circunstancias fuera del control de Sari Express.' },
   { type: 'paragraph', text: 'El cliente es responsable de proporcionar información completa, exacta y veraz sobre la mercancía, incluyendo peso, dimensiones, volumen, cantidad de bultos, clasificación, valor comercial, naturaleza de la carga y cualquier requisito especial de manejo o transporte. Cualquier diferencia detectada posteriormente podrá generar ajustes tarifarios, recotizaciones o cargos adicionales.' },
   { type: 'heading', text: 'CONDICIONES ESPECÍFICAS' },
   { type: 'paragraph', text: 'Las tarifas presentadas han sido calculadas con base en la información suministrada por el cliente al momento de la solicitud. Cualquier modificación en las características de la carga, origen, destino, Incoterm, cantidades, pesos, dimensiones o requerimientos especiales podrá generar ajustes en la presente cotización.' },
@@ -398,22 +399,22 @@ const quotationTerms = [
   { type: 'paragraph', text: 'Los cargos por almacenaje, demurrage, detention, ocupación de equipo, abandono, movimientos extraordinarios, inspecciones, servicios especiales, verificaciones documentales, revisiones físicas o cualquier gasto generado por causas atribuibles al consignatario, importador, exportador o propietario de la carga no están incluidos en esta cotización y serán facturados adicionalmente cuando correspondan.' },
   { type: 'paragraph', text: 'Los costos derivados de inspecciones realizadas por autoridades aduaneras, sanitarias, fitosanitarias, portuarias, aeroportuarias o cualquier entidad regulatoria en origen, tránsito o destino serán responsabilidad del cliente cuando dichos costos no se encuentren expresamente incluidos en la presente propuesta.' },
   { type: 'heading', text: 'CLÁUSULAS ESPECIALES' },
-  { type: 'paragraph', text: 'Salvo indicación expresa en esta cotización, el seguro de carga no está incluido. Se recomienda asegurar toda mercancía transportada nacional o internacionalmente.' },
+  { type: 'paragraph', text: 'Salvo indicación expresa en esta cotización, el seguro de carga no está incluido. Sari Express recomienda asegurar toda mercancía transportada nacional o internacionalmente.' },
   { type: 'paragraph', text: 'En caso de que el cliente decida no contratar seguro de carga, acepta asumir los riesgos asociados a pérdida, robo, daño parcial o total, mojadura, contaminación, avería, incendio, eventos climáticos, avería gruesa, actos de terceros u otras contingencias inherentes al transporte y manejo de mercancías.' },
   { type: 'paragraph', text: 'En caso de contar con una póliza propia de seguro de carga, será responsabilidad del cliente verificar que dicha cobertura sea suficiente para cubrir los riesgos asociados al transporte contratado.' },
   { type: 'heading', text: 'FACTURACIÓN Y PAGOS' },
   { type: 'paragraph', text: 'La presente cotización es válida únicamente durante el período indicado. La aceptación posterior a la fecha de vencimiento requerirá una nueva validación de tarifas, recargos y disponibilidad.' },
-  { type: 'paragraph', text: 'El pago deberá realizarse conforme a las condiciones de crédito o pago previamente acordadas entre las partes. La prestación del servicio podrá quedar condicionada a la recepción de pagos, anticipos, garantías o documentación requerida por el proveedor.' },
+  { type: 'paragraph', text: 'El pago deberá realizarse conforme a las condiciones de crédito o pago previamente acordadas entre las partes. La prestación del servicio podrá quedar condicionada a la recepción de pagos, anticipos, garantías o documentación requerida por Sari Express.' },
   { type: 'paragraph', text: 'Cualquier gasto adicional generado durante la ejecución del servicio que no se encuentre contemplado en la presente cotización podrá ser facturado posteriormente al cliente, previa justificación y respaldo correspondiente.' },
   { type: 'heading', text: 'ACEPTACIÓN DE TÉRMINOS Y CONDICIONES' },
   { type: 'paragraph', text: 'La aceptación de esta cotización, ya sea de forma escrita, electrónica, mediante orden de servicio, confirmación por correo electrónico o instrucción de embarque, constituirá aceptación expresa de los presentes términos y condiciones.' },
   { type: 'paragraph', text: 'Al aceptar esta propuesta, el cliente declara haber leído, comprendido y aceptado íntegramente las condiciones aquí descritas.' },
   { type: 'heading', text: 'EXONERACIÓN DE RESPONSABILIDAD' },
-  { type: 'paragraph', text: 'El proveedor del servicio no será responsable por retrasos, pérdidas económicas indirectas, lucro cesante, interrupciones comerciales, incumplimientos de terceros, cambios regulatorios, cierres de puertos, congestión logística, cancelaciones de itinerarios, eventos climáticos, conflictos laborales, actos gubernamentales o cualquier otra situación fuera de su control razonable.' },
-  { type: 'paragraph', text: 'Asimismo, el proveedor no será responsable por daños derivados de información incorrecta, incompleta o tardía proporcionada por el cliente o por terceros relacionados con la operación.' },
+  { type: 'paragraph', text: 'Sari Express no será responsable por retrasos, pérdidas económicas indirectas, lucro cesante, interrupciones comerciales, incumplimientos de terceros, cambios regulatorios, cierres de puertos, congestión logística, cancelaciones de itinerarios, eventos climáticos, conflictos laborales, actos gubernamentales o cualquier otra situación fuera de su control razonable.' },
+  { type: 'paragraph', text: 'Asimismo, Sari Express no será responsable por daños derivados de información incorrecta, incompleta o tardía proporcionada por el cliente o por terceros relacionados con la operación.' },
   { type: 'heading', text: 'ACTUALIZACIONES Y CAMBIOS' },
   { type: 'paragraph', text: 'Las tarifas, condiciones operativas y requisitos documentales podrán ser modificados por navieras, aerolíneas, autoridades gubernamentales, terminales, proveedores de transporte o cualquier tercero involucrado en la cadena logística.' },
-  { type: 'paragraph', text: 'El proveedor se reserva el derecho de actualizar o modificar las condiciones comerciales de futuras cotizaciones cuando las circunstancias operativas, regulatorias o de mercado así lo requieran, sin que ello afecte los servicios previamente confirmados bajo aceptación expresa.' },
+  { type: 'paragraph', text: 'Sari Express se reserva el derecho de actualizar o modificar las condiciones comerciales de futuras cotizaciones cuando las circunstancias operativas, regulatorias o de mercado así lo requieran, sin que ello afecte los servicios previamente confirmados bajo aceptación expresa.' },
 ]
 
 function formatMoney(value: any) {
@@ -442,6 +443,7 @@ function getQuoteTitle(quoteType?: string) {
 }
 
 function getQuoteTitleByProduct(quotation: any) {
+  if (quotation.service_product === 'customs_only') return 'Cotización de Servicio de Aduanas'
   if (quotation.service_product === 'miami_lcl') {
     return 'Cotización Miami Consolidado LCL'
   }
@@ -731,8 +733,9 @@ function QuotationPDFPages({
 }) {
   const companyBranding = normalizeCompanyBranding(company)
   const companyName = getCompanyDisplayName(companyBranding)
+  const companyTradeName = getCompanyTradeName(companyBranding)
   const companyAddressLines = getCompanyAddressLines(companyBranding)
-  const companyLogo = companyBranding.logo_url || '/brand/lockup-h-color.png'
+  const companyLogo = companyBranding.logo_url || '/logo/sari-logo.png'
   const generalClientNotes = String(quotation.client_notes || '').trim()
   const specificOptionNotes = String(optionClientNotes || '').trim()
   const quoteTitle = getQuoteTitleByProduct(quotation)
@@ -871,7 +874,7 @@ function QuotationPDFPages({
   return (
     <>
       <Page size="A4" style={styles.page}>
-        <DemoPdfWatermark />
+      <DemoPdfWatermark />
         <View style={styles.header}>
           <View>
             <Image src={companyLogo} style={styles.logo} />
@@ -1003,7 +1006,14 @@ function QuotationPDFPages({
             </View>
           </View>
 
-          <View style={styles.infoBox}>
+          {serviceProduct === 'customs_only' ? <View style={styles.infoBox}>
+            <Text style={styles.boxTitle}>DETALLES DEL SERVICIO</Text>
+            <View style={styles.row}><Text style={styles.label}>Servicio:</Text><Text style={styles.value}>Aduanas</Text></View>
+            <View style={styles.row}><Text style={styles.label}>Tipo de operación:</Text><Text style={styles.value}>{quotation.trade_direction === 'export' ? 'Exportación' : 'Importación'}</Text></View>
+            <View style={styles.row}><Text style={styles.label}>Aduana:</Text><Text style={styles.value}>{quotation.puerto_destino || 'N/A'}</Text></View>
+            <View style={styles.fullRow}><Text style={styles.blockLabel}>Mercancía:</Text><Text style={styles.blockValue}>{quotation.commodity || 'N/A'}</Text></View>
+            <View style={styles.fullRow}><Text style={styles.blockLabel}>Dirección de entrega:</Text><Text style={styles.blockValue}>{pricingItems.some(item => item.rate_code === 'customs_delivery') ? quotation.delivery_address || 'Por definir' : 'No incluida'}</Text></View>
+          </View> : <View style={styles.infoBox}>
             <Text style={styles.boxTitle}>
               DETALLES DEL EMBARQUE
             </Text>
@@ -1159,10 +1169,10 @@ function QuotationPDFPages({
               </View>
 
             </View>
-          </View>
+          </View>}
         </View>
 
-        {cargoLines.length > 0 && !useCargoAnnex && (
+        {serviceProduct !== 'customs_only' && cargoLines.length > 0 && !useCargoAnnex && (
           <CargoDetailsTable
             title="DETALLE DE CARGA"
             cargoLines={cargoLines}
@@ -1284,7 +1294,7 @@ function QuotationPDFPages({
 
       {includeTerms && (
       <Page size="A4" style={styles.page}>
-        <DemoPdfWatermark />
+      <DemoPdfWatermark />
         <View style={styles.terms}>
           <Text style={styles.sectionTitle}>TÉRMINOS Y CONDICIONES GENERALES</Text>
           {quotationTerms.map((term, index) => (
@@ -1296,7 +1306,7 @@ function QuotationPDFPages({
                   : styles.termParagraph
               }
             >
-              {term.text}
+              {term.text.replaceAll('Sari Express', companyTradeName)}
             </Text>
           ))}
         </View>

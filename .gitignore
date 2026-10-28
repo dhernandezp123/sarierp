@@ -55,3 +55,10 @@ next-env.d.ts
 
 # Local Claude permissions
 /.claude/settings.local.json
+
+# Local invoice reference extraction and PDF verification artifacts
+/.local/manual-invoice/
+/.local/npm-cache/
+
+# Generated from the pinned OCR dependencies by predev/prebuild.
+/public/ocr-assets/runtime/

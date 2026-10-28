@@ -1,6 +1,13 @@
 ﻿'use client'
 
+import {
+  type CargoDimensionLine, getCargoVolumeMode, hasLineVolume, calculateLineCbm,
+  calculateLineFt3, getCargoWeightUnit, getLineUnitWeightLbs,
+  getLineTotalWeightLbs, getLineTotalWeightKg,
+} from '@/src/lib/quotation-cargo'
+
 import { toDateInputValue } from '@/src/lib/format'
+import { createQuotation } from '@/src/lib/quotation-create'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -9,6 +16,10 @@ import { pdf } from '@react-pdf/renderer'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
+import { loadCurrentCompanySettings, type TenantCompanySettings } from '@/src/lib/company-settings'
+import { withMiamiInsurance } from '@/src/lib/miami-insurance'
+import { INSURANCE_SURCHARGE_PERCENT } from '@/src/lib/insurance-calculator'
+import { isInsurancePricingItem } from '@/src/lib/insurance-coverage'
 import QuotationPDF from '../../../../components/pdf/quotation-pdf'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
@@ -16,6 +27,9 @@ import { UnsavedChangesGuard, markFormSaved } from '@/src/components/ui/UnsavedC
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { MiamiQuotationSection } from '@/src/components/quotations/MiamiQuotationSection'
+import { CustomsQuotationSection } from '@/src/components/quotations/CustomsQuotationSection'
+import { buildCustomsPricingItems, hydrateCustomsCharges, newCustomsCharges, validateCustomsQuotation } from '@/src/lib/customs-quotation'
+import { isCustomsOnly, usesOwnPricing } from '@/src/lib/quotation-products'
 import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
 import {
   fetchActiveServiceProducts,
@@ -24,7 +38,6 @@ import {
 } from '@/src/lib/quotation-products'
 import { usesClientRatesFromCatalog } from '@/src/lib/pricing-catalogs'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
@@ -36,19 +49,7 @@ const formatNumber = (value: number, decimals = 2) =>
     maximumFractionDigits: decimals,
   })
 
-type CargoDimensionLine = {
-  id: string
-  quantity: string
-  packageType: 'Caja' | 'Pallet' | 'Pieza'
-  length: string
-  width: string
-  height: string
-  dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
-  weight: string
-  weightUnit?: 'lbs' | 'kg'
-  volumeMode?: 'dimensions' | 'manual'
-  manualCbm?: string | number
-}
+
 
 type ContainerLine = {
   container_type_id: string
@@ -83,6 +84,7 @@ export default function NewQuotationPage() {
   const [clientes, setClientes] = useState<any[]>([])
   const [companyBranding, setCompanyBranding] =
     useState<CompanyBranding>(normalizeCompanyBranding(null))
+  const [companySettings, setCompanySettings] = useState<TenantCompanySettings | null>(null)
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
   const [containerTypes, setContainerTypes] = useState<any[]>([])
@@ -90,6 +92,7 @@ export default function NewQuotationPage() {
     createEmptyCargoLine(),
   ])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
+  const [customsCharges, setCustomsCharges] = useState(newCustomsCharges)
   const [containerLinePendingRemoval, setContainerLinePendingRemoval] = useState<{
     index: number
     line: ContainerLine
@@ -151,7 +154,9 @@ export default function NewQuotationPage() {
     cantidad_bultos: '',
     commodity: '',
 
-    requires_insurance: false,
+    // null uses the client's Miami default until a choice is made for this quote.
+    requires_insurance: null as boolean | null,
+    insurance_taxable: false,
     fob_value: '',
     freight_value: '',
     insurance_markup_percentage: '10',
@@ -181,12 +186,8 @@ export default function NewQuotationPage() {
   }, [])
 
   const fetchCompanyBranding = async () => {
-    const { data } = await supabase
-      .from('company_settings')
-      .select(COMPANY_BRANDING_SELECT)
-      .limit(1)
-      .maybeSingle()
-
+    const { data, error } = await loadCurrentCompanySettings(supabase)
+    setCompanySettings(error ? null : data)
     setCompanyBranding(normalizeCompanyBranding(data))
   }
 
@@ -356,6 +357,19 @@ export default function NewQuotationPage() {
         id: sourceQuote.id,
         quotation_number: sourceQuote.quotation_number,
       })
+      let sourceInsuranceTaxable = false
+      if (isCustomsOnly(sourceQuote.service_product) || usesClientRatesFromCatalog(serviceProductOptions, sourceQuote.service_product)) {
+        const { data: sourceItems, error: itemsError } = await supabase.from('pricing_items').select('*').eq('quotation_id', quotationId).is('deleted_at', null).order('created_at')
+        if (itemsError) {
+          toast.error(itemsError.message)
+          return
+        }
+        if (isCustomsOnly(sourceQuote.service_product)) {
+          setCustomsCharges(hydrateCustomsCharges(sourceItems || []))
+        } else {
+          sourceInsuranceTaxable = (sourceItems || []).find(isInsurancePricingItem)?.taxable === true
+        }
+      }
       setFormData({
         cliente_id: toFormString(sourceQuote.cliente_id),
         trade_direction: sourceQuote.trade_direction || 'import',
@@ -391,6 +405,7 @@ export default function NewQuotationPage() {
         cantidad_bultos: toFormString(sourceQuote.cantidad_bultos),
         commodity: sourceQuote.commodity || '',
         requires_insurance: Boolean(sourceQuote.requires_insurance),
+        insurance_taxable: sourceInsuranceTaxable,
         fob_value: toFormString(sourceQuote.fob_value),
         freight_value: toFormString(sourceQuote.freight_value),
         insurance_markup_percentage: toFormString(
@@ -486,6 +501,18 @@ export default function NewQuotationPage() {
   }
 
   const applyServiceProductChange = (serviceProduct: string) => {
+    if (isCustomsOnly(serviceProduct)) {
+      setFormData(previous => ({ ...initialFormData, cliente_id: previous.cliente_id,
+        trade_direction: previous.trade_direction, contact_name: previous.contact_name,
+        contact_email: previous.contact_email, contact_phone: previous.contact_phone,
+        contact_country: previous.contact_country, contact_state: previous.contact_state,
+        service_product: serviceProduct, quote_type: 'Aduanas', tipo_transporte: 'Aduanas',
+        commodity: previous.commodity, destino: previous.destino, valid_until: previous.valid_until,
+      }))
+      clearContainerLines()
+      setCargoLines([])
+      return
+    }
     const isMiamiProduct = usesClientRatesFromCatalog(serviceProductOptions, serviceProduct)
 
     setFormData((prev) => ({
@@ -497,14 +524,14 @@ export default function NewQuotationPage() {
           : 'Marítima'
         : serviceProduct === 'other_origin_air'
           ? 'Aéreo'
-          : prev.tipo_transporte,
+          : prev.tipo_transporte === 'Aduanas' ? '' : prev.tipo_transporte,
       quote_type: isMiamiProduct
         ? serviceProduct === 'miami_air'
           ? 'Consolidado'
           : 'LCL'
         : serviceProduct === 'other_origin_air'
           ? 'Consolidado'
-          : prev.quote_type,
+          : prev.quote_type === 'Aduanas' ? '' : prev.quote_type,
       origen: isMiamiProduct ? prev.origen || 'Miami, FL' : prev.origen,
       puerto_origen: isMiamiProduct
         ? prev.puerto_origen || 'Miami'
@@ -525,7 +552,7 @@ export default function NewQuotationPage() {
   const handleServiceProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const serviceProduct = e.target.value
     const willClearContainers =
-      usesClientRatesFromCatalog(serviceProductOptions, serviceProduct) &&
+      (usesClientRatesFromCatalog(serviceProductOptions, serviceProduct) || isCustomsOnly(serviceProduct)) &&
       containerLines.length > 0
     if (willClearContainers) {
       setContainerResetPending({ kind: 'service_product', value: serviceProduct })
@@ -546,6 +573,8 @@ export default function NewQuotationPage() {
     const updatedData = {
       ...formData,
       cliente_id: clienteId,
+      requires_insurance: clienteId === formData.cliente_id ? formData.requires_insurance : null,
+      insurance_taxable: clienteId === formData.cliente_id && formData.insurance_taxable,
       contact_name: selectedCliente?.contacto || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
@@ -689,16 +718,17 @@ export default function NewQuotationPage() {
       return
     }
 
-    if (!formData.incoterm) {
+    if (!isCustomsFlow && !formData.incoterm) {
       toast.error('Debes seleccionar el Incoterm')
       return
     }
 
-    const submitIsMiamiFlow = usesClientRatesFromCatalog(
-      serviceProductOptions,
-      formData.service_product
-    )
+    const submitIsMiamiFlow = usesOwnPricing(formData.service_product)
     const isDraftSave = status === 'Borrador'
+    if (isCustomsFlow) {
+      const error = validateCustomsQuotation(customsCharges, formData, isDraftSave)
+      if (error) { toast.error(error); return }
+    }
 
     if (!isDraftSave && formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
       toast.error('Ingresa FT3 o libras para calcular la tarifa Miami LCL')
@@ -763,6 +793,13 @@ export default function NewQuotationPage() {
       setLoading(true)
 
       const quotationId = crypto.randomUUID()
+      const automaticPricing = isCustomsFlow
+        ? { items: buildCustomsPricingItems(quotationId, customsCharges, miami.taxRatePercent, companyBranding?.trade_name || 'Sari Express', profile?.id), error: null, insurance: null }
+        : buildMiamiCreationPricing(quotationId)
+      if (submitIsMiamiFlow && !isDraftSave && automaticPricing.error) {
+        toast.error(automaticPricing.error)
+        return
+      }
       const quotationPayload = {
         id: quotationId,
         cliente_id: formData.cliente_id,
@@ -795,31 +832,31 @@ export default function NewQuotationPage() {
         container_qty: Number(formData.container_qty || 0),
         package_type: formData.package_type,
         package_details: formData.package_details,
-        peso_kg: submitIsMiamiFlow || requiresCargoLines
+        peso_kg: isMiamiFlow || requiresCargoLines
           ? totalCargoKg > 0
             ? totalCargoKg
             : null
           : Number(formData.peso_kg),
         peso_lbs:
-          submitIsMiamiFlow || requiresCargoLines
+           isMiamiFlow || requiresCargoLines
             ? totalCargoWeight > 0
               ? totalCargoWeight
               : null
             : null,
         gross_weight: Number(formData.gross_weight),
-        volumen_cbm: submitIsMiamiFlow || requiresCargoLines
+        volumen_cbm: isMiamiFlow || requiresCargoLines
           ? totalCargoCbm > 0
             ? totalCargoCbm
             : null
           : Number(formData.volumen_cbm),
         volumen_ft3:
-          submitIsMiamiFlow || requiresCargoLines
+           isMiamiFlow || requiresCargoLines
             ? totalCargoFt3 > 0
               ? totalCargoFt3
               : null
             : null,
         cantidad_bultos:
-          submitIsMiamiFlow || requiresCargoLines
+           isMiamiFlow || requiresCargoLines
             ? cargoLines.reduce(
                 (sum, line) => sum + Number(line.quantity || 0),
                 0
@@ -827,14 +864,16 @@ export default function NewQuotationPage() {
             : Number(formData.cantidad_bultos),
         commodity: formData.commodity,
 
-        requires_insurance: formData.requires_insurance,
-        fob_value: Number(formData.fob_value),
+        requires_insurance: requiresCargoInsurance,
+        fob_value: submitIsMiamiFlow && requiresCargoInsurance ? Number(formData.commercial_value) : Number(formData.fob_value),
         freight_value: Number(formData.freight_value),
-        insurance_markup_percentage: Number(
+        insurance_markup_percentage: submitIsMiamiFlow && requiresCargoInsurance ? INSURANCE_SURCHARGE_PERCENT : Number(
           formData.insurance_markup_percentage
         ),
-        insurance_rate: Number(formData.insurance_rate),
-        insurance_cost: Number(formData.insurance_cost),
+        insurance_rate: submitIsMiamiFlow && requiresCargoInsurance ? Number(insuranceCliente?.seguro_porcentaje || 0) : Number(formData.insurance_rate),
+        insurance_cost: submitIsMiamiFlow
+          ? automaticPricing.insurance?.cost_amount ?? 0
+          : Number(formData.insurance_cost),
 
         pricing_notes: formData.pricing_notes || null,
         observaciones: formData.observaciones || null,
@@ -852,7 +891,7 @@ export default function NewQuotationPage() {
           }))
         : []
 
-      const cargoRows = (submitIsMiamiFlow || requiresCargoLines ? cargoLines : [])
+      const cargoRows = (isMiamiFlow || requiresCargoLines ? cargoLines : [])
         .filter((line) => {
           return (
             Number(line.quantity || 0) > 0 &&
@@ -871,77 +910,11 @@ export default function NewQuotationPage() {
           cbm: calculateLineCbm(line),
         }))
 
-      const autoItems = miami.buildMiamiPricingItems(quotationId)
+      const autoItems = automaticPricing.items
 
-      const { data: quotationResult, error } = await supabase.rpc(
-        'create_quotation_with_child_lines',
-        {
-          p_quotation_data: quotationPayload,
-          p_container_lines: containerRows,
-          p_cargo_lines: cargoRows,
-          p_pricing_items: autoItems,
-        }
-      )
-
-      const quotation =
-        (quotationResult as Array<{ id: string; quotation_number: string | null }> | null)?.[0] || null
-
-      if (error) {
-        toast.error(error.message)
-        return
-      }
-
-      if (!quotation) {
-        toast.error('No se pudo crear la cotización')
-        return
-      }
-
-      if (Boolean(false) && requiresContainerLines && containerLines.length > 0) {
-        const rows = containerLines.map((line) => ({
-          quotation_id: quotation.id,
-          container_type_id: line.container_type_id,
-          container_type_name: line.container_type_name,
-          quantity: line.quantity,
-          notes: line.notes,
-        }))
-
-        const { error: containerError } = await supabase
-          .from('quotation_containers')
-          .insert(rows)
-
-        if (containerError) {
-          toast.error(
-            'La cotización se creó, pero no se guardaron los contenedores'
-          )
-          return
-        }
-      }
-
-      if (Boolean(false) && autoItems.length > 0) {
-        const { error: pricingItemsError } = await supabase
-          .from('pricing_items')
-          .insert(autoItems)
-
-        if (pricingItemsError) {
-          toast.error(
-            'La cotización se creó, pero no se pudieron aplicar las tarifas'
-          )
-          return
-        }
-      }
-
-      if (Boolean(false) && cargoRows.length > 0) {
-        const { error: cargoLinesError } = await supabase
-          .from('quotation_cargo_lines')
-          .insert(cargoRows)
-
-        if (cargoLinesError) {
-          toast.error(
-            'La cotización se creó, pero no se pudo guardar el detalle de carga'
-          )
-          return
-        }
-      }
+      const quotation = await createQuotation(supabase, {
+        quotation: quotationPayload, containers: containerRows, cargo: cargoRows, pricing: autoItems,
+      })
 
       if (initialStatus === 'Pendiente de Fijar Precios') {
         const pricingUsers = await fetchPricingUsers()
@@ -1024,6 +997,7 @@ export default function NewQuotationPage() {
       }
 
       setFormData(initialFormData)
+      setCustomsCharges(newCustomsCharges())
       setSubmitted(false)
       setCargoLines([createEmptyCargoLine()])
       setContainerLines([])
@@ -1044,8 +1018,8 @@ export default function NewQuotationPage() {
       })
 
       await fetchCatalogs()
-    } catch {
-      // silently continue — fetchCatalogs shows its own toasts
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo crear la cotización. Revisa los datos e intenta nuevamente.')
     } finally {
       setLoading(false)
     }
@@ -1085,81 +1059,6 @@ export default function NewQuotationPage() {
   const moneyFieldClass = `${fieldClass} md:max-w-[180px]`
   const dateFieldClass = `${fieldClass} md:max-w-[220px]`
 
-  const getCbmPerUnit = (line: CargoDimensionLine) => {
-    const length = Number(line.length || 0)
-    const width = Number(line.width || 0)
-    const height = Number(line.height || 0)
-
-    if (!length || !width || !height) return 0
-
-    if (line.dimensionUnit === 'in') {
-      return (length * width * height) / 61023.7441
-    }
-
-    if (line.dimensionUnit === 'cm') {
-      return (length * width * height) / 1_000_000
-    }
-
-    if (line.dimensionUnit === 'mm') {
-      return (length * width * height) / 1_000_000_000
-    }
-
-    if (line.dimensionUnit === 'm') {
-      return length * width * height
-    }
-
-    return 0
-  }
-
-  const getCargoVolumeMode = (line: CargoDimensionLine) =>
-    line.volumeMode || 'dimensions'
-
-  const hasLineVolume = (line: CargoDimensionLine) => {
-    if (getCargoVolumeMode(line) === 'manual') {
-      return Number(line.manualCbm || 0) > 0
-    }
-
-    return (
-      Number(line.length || 0) > 0 &&
-      Number(line.width || 0) > 0 &&
-      Number(line.height || 0) > 0
-    )
-  }
-
-  const calculateLineCbm = (line: CargoDimensionLine) => {
-    if (getCargoVolumeMode(line) === 'manual') {
-      return Number(line.manualCbm || 0)
-    }
-
-    const quantity = Number(line.quantity || 0)
-    if (!quantity) return 0
-
-    return getCbmPerUnit(line) * quantity
-  }
-
-  const calculateLineFt3 = (line: CargoDimensionLine) => {
-    return calculateLineCbm(line) * 35.3147
-  }
-
-  const getCargoWeightUnit = (line: CargoDimensionLine) =>
-    line.weightUnit || 'lbs'
-
-  const getLineUnitWeightLbs = (line: CargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
-    return getCargoWeightUnit(line) === 'kg' ? weight * 2.20462 : weight
-  }
-
-  const getLineUnitWeightKg = (line: CargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
-    return getCargoWeightUnit(line) === 'kg' ? weight : weight / 2.20462
-  }
-
-  const getLineTotalWeightLbs = (line: CargoDimensionLine) =>
-    getLineUnitWeightLbs(line) * Number(line.quantity || 0)
-
-  const getLineTotalWeightKg = (line: CargoDimensionLine) =>
-    getLineUnitWeightKg(line) * Number(line.quantity || 0)
-
   const totalCargoFt3 = cargoLines.reduce(
     (sum, line) => sum + calculateLineFt3(line),
     0
@@ -1190,6 +1089,21 @@ export default function NewQuotationPage() {
   })
 
   const isMiamiFlow = miami.isMiamiFlow
+  const isCustomsFlow = isCustomsOnly(formData.service_product)
+  const insuranceCliente = clientes.find(cliente => cliente.id === formData.cliente_id)
+  const clientInsuranceDefault = isMiamiFlow && insuranceCliente?.asegura_carga === true
+  const requiresCargoInsurance = formData.requires_insurance ?? clientInsuranceDefault
+  const buildMiamiCreationPricing = (quotationId: string) => withMiamiInsurance({
+    quotationId,
+    items: miami.buildMiamiPricingItems(quotationId),
+    required: isMiamiFlow && requiresCargoInsurance,
+    taxable: formData.insurance_taxable,
+    commercialValue: Number(formData.commercial_value),
+    saleRatePercent: Number(insuranceCliente?.seguro_porcentaje || 0),
+    settings: companySettings,
+    createdBy: profile?.id,
+  })
+  const insurancePreview = buildMiamiCreationPricing('preview')
 
   const buildPreviewCargoLines = () => {
     return cargoLines
@@ -1226,6 +1140,7 @@ export default function NewQuotationPage() {
     return {
       ...formData,
       id: 'preview',
+      requires_insurance: requiresCargoInsurance,
       quotation_number: 'PREVIEW',
       cliente: selectedCliente || null,
       clientes: selectedCliente || null,
@@ -1263,6 +1178,15 @@ export default function NewQuotationPage() {
   }
 
   const handlePreviewMiamiPdf = async () => {
+    if (isCustomsFlow) {
+      const error = validateCustomsQuotation(customsCharges, formData)
+      if (error) { toast.error(error); return }
+      const blob = await pdf(<QuotationPDF quotation={{ ...formData, id: 'preview', quotation_number: 'PREVIEW', created_at: new Date().toISOString(), clientes: insuranceCliente }} selectedAgent={null} pricingItems={buildCustomsPricingItems('preview', customsCharges, miami.taxRatePercent, companyBranding?.trade_name || 'Sari Express', profile?.id).map(item => ({ ...item, id: item.rate_code }))} quotationContainers={[]} cargoLines={[]} company={companyBranding} />).toBlob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000)
+      return
+    }
     if (!miami.canUseMiamiCalculator) return
 
     if (formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
@@ -1275,11 +1199,13 @@ export default function NewQuotationPage() {
       return
     }
 
+    const previewPricing = buildMiamiCreationPricing('preview')
+    if (previewPricing.error) { toast.error(previewPricing.error); return }
     const blob = await pdf(
       <QuotationPDF
         quotation={buildDraftQuotation()}
         selectedAgent={null}
-        pricingItems={miami.buildMiamiPreviewItems()}
+        pricingItems={previewPricing.items.map(item => ({...item, id:crypto.randomUUID()}))}
         quotationContainers={[]}
         cargoLines={buildPreviewCargoLines()}
         company={companyBranding}
@@ -1376,7 +1302,7 @@ export default function NewQuotationPage() {
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            {!isCustomsFlow && <><div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Incoterm <span className="text-red-400">*</span>
               </label>
@@ -1410,6 +1336,7 @@ export default function NewQuotationPage() {
                 className={dateFieldClass}
               />
             </div>
+            </>}
           </div>
         </section>
 
@@ -1577,7 +1504,9 @@ export default function NewQuotationPage() {
           miami={miami}
         />
 
-          {!isMiamiFlow && (
+          {isCustomsFlow && <CustomsQuotationSection data={formData} onChange={(field, value) => setFormData(previous => ({ ...previous, [field]: value }))} charges={customsCharges} setCharges={setCustomsCharges} taxRate={miami.taxRatePercent} />}
+
+          {!isMiamiFlow && !isCustomsFlow && (
             <section className={cardClass}>
               <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -1625,7 +1554,7 @@ export default function NewQuotationPage() {
           )}
 
 
-          {!isMiamiFlow && (
+          {!isMiamiFlow && !isCustomsFlow && (
             <>
               <section className={cardClass}>
                 <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
@@ -2365,7 +2294,7 @@ export default function NewQuotationPage() {
           </>
           )}
 
-          <section className={cardClass}>
+          {!isCustomsFlow && <section className={cardClass}>
             <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
                 Seguro de Carga
@@ -2376,7 +2305,7 @@ export default function NewQuotationPage() {
               <input
                 type="checkbox"
                 name="requires_insurance"
-                checked={formData.requires_insurance}
+                checked={requiresCargoInsurance}
                 onChange={handleChange}
                 className="h-4 w-4 rounded border-slate-300"
               />
@@ -2385,18 +2314,21 @@ export default function NewQuotationPage() {
                   Cliente solicita seguro de carga
                 </p>
                 <p className="text-xs text-slate-400 dark:text-slate-500">
-                  Se calculará el costo del seguro sobre el valor FOB
+                  {isMiamiFlow ? 'Se incluirá el seguro Full Cover en los cargos y el PDF de la cotización.' : 'Se calculará el costo del seguro sobre el valor FOB'}
                 </p>
               </div>
             </label>
 
-            {formData.requires_insurance && (
+            {requiresCargoInsurance && (
               <div className="mt-4 flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   Valor comercial / Valor FOB (USD)
                 </label>
                 <input
                   name="commercial_value"
+                  type="number"
+                  min="0"
+                  step="0.01"
                   placeholder="0.00"
                   value={formData.commercial_value}
                   onChange={handleChange}
@@ -2404,9 +2336,30 @@ export default function NewQuotationPage() {
                 />
               </div>
             )}
-          </section>
+            {isMiamiFlow && requiresCargoInsurance && (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900">
+                {clientInsuranceDefault && <p className="mb-2 text-xs text-slate-500">El cliente tiene seguro por defecto. Puedes desmarcarlo si esta carga no requiere seguro.</p>}
+                <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    name="insurance_taxable"
+                    checked={formData.insurance_taxable}
+                    onChange={handleChange}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Aplicar ISV al seguro de carga
+                </label>
+                {insurancePreview.error ? <p role="status" className="text-amber-700 dark:text-amber-300">{insurancePreview.error}</p> : insurancePreview.insurance && <>
+                  <p>Prima del seguro: USD {formatNumber(insurancePreview.insurance.sale_amount)}</p>
+                  <p>{insurancePreview.insurance.taxable ? `ISV (${insurancePreview.insurance.tax_rate}%): USD ${formatNumber(insurancePreview.insurance.tax_amount)}` : 'ISV: no aplicado'}</p>
+                  <p className="mt-1 font-semibold">Total del seguro: USD {formatNumber(insurancePreview.insurance.total_amount)}</p>
+                  <p className="mt-2 text-xs text-slate-500">Este cargo se guardará junto con los demás cargos de Miami.</p>
+                </>}
+              </div>
+            )}
+          </section>}
 
-          {!isMiamiFlow && (
+          {!isMiamiFlow && !isCustomsFlow && (
             <section className={cardClass}>
               <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
                 <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
@@ -2448,17 +2401,17 @@ export default function NewQuotationPage() {
             </section>
           )}
 
-          <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/60 dark:bg-[#0b1220]">
             <p className="text-xs text-slate-400 dark:text-slate-500">
               El número de cotización se genera automáticamente al guardar.
             </p>
 
-            <div className="flex items-center gap-2">
-            {isMiamiFlow && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+            {(isMiamiFlow || isCustomsFlow) && (
               <button
                 type="button"
                 onClick={handlePreviewMiamiPdf}
-                disabled={!miami.canUseMiamiCalculator}
+                disabled={!isCustomsFlow && !miami.canUseMiamiCalculator}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Previsualizar PDF
@@ -2482,7 +2435,7 @@ export default function NewQuotationPage() {
             >
               {loading
                 ? 'Enviando...'
-                : isMiamiFlow
+                : isMiamiFlow || isCustomsFlow
                   ? 'Crear cotización aprobada'
                   : 'Enviar a Pricing'}
             </button>

@@ -4,6 +4,7 @@ import loadTs from './load-ts.mjs'
 
 const {
   billingQueueActionHref,
+  billingQueueHandoff,
   billingReturnHref,
   operationsAreComplete,
 } = loadTs('src/lib/billing-readiness.ts')
@@ -18,6 +19,18 @@ test('solo considera completa una cotizacion con todas sus operaciones cerradas'
     { operational_status: 'Finalizado', closed_at: '2026-09-18T10:00:00Z' },
     { operational_status: 'Arribado', closed_at: null },
   ]), false)
+})
+
+test('billing handoffs name an owner and never give Finance a restricted edit link', () => {
+  const base = { quotation_id: 'quote-1', client_id: 'client-1', primary_shipping_instruction_id: 'si-1' }
+  for (const readiness_code of ['CLIENT_DATA_MISSING', 'PRICING_INVALID', 'OPERATIONS_PENDING']) {
+    const result = billingQueueHandoff({ ...base, readiness_code }, 'Finanzas', '/invoicing?view=work')
+    assert.equal(result.href, null)
+    assert.ok(result.owner)
+    assert.ok(billingQueueHandoff({ ...base, readiness_code }, 'Admin', '/invoicing?view=work').href)
+  }
+  assert.equal(billingQueueHandoff({ ...base, readiness_code: 'PRICING_INVALID' }, 'Pricing', '').href, '/pricing-comparison?quotation=quote-1')
+  assert.equal(billingQueueHandoff({ ...base, readiness_code: 'READY_TO_INVOICE' }, null, '').href, null)
 })
 
 test('solo acepta retornos internos a la bandeja de facturacion', () => {

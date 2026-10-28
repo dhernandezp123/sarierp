@@ -1,3 +1,5 @@
+import { literalTextFilter } from './postgrest-search'
+
 /** Display transport separately from assignment and incident state. */
 export function portalPackageStatus(pkg: { status: string; cargo_status?: string | null }) {
   if (pkg.status === 'Entregado') return 'Entregado'
@@ -5,10 +7,7 @@ export function portalPackageStatus(pkg: { status: string; cargo_status?: string
 }
 
 export function portalTrackingFilter(value: string) {
-  const literal = value.trim().replace(/\\/g, '\\\\').replace(/[%_]/g, char => '\\' + char)
-  // Quote for PostgREST after escaping SQL LIKE characters; both parsers consume escapes.
-  const pattern = JSON.stringify(`%${literal}%`)
-  return ['tracking_number', 'warehouse_number'].map(field => `${field}.ilike.${pattern}`).join(',')
+  return literalTextFilter(['tracking_number', 'warehouse_number'], value)
 }
 
 export function portalDeadline(value: string | null, zone?: string | null) {

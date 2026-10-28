@@ -29,6 +29,9 @@ when '7f000000-0000-0000-0000-000000000002' then 'Ventas'::public.user_role
 when '7f000000-0000-0000-0000-000000000004' then 'Operaciones'::public.user_role
 else 'Cliente'::public.user_role end
 where id::text like '7f000000-%';
+-- Explicit tenant fixtures for the current multi-tenant schema.
+update public.profiles set tenant_id='00000000-0000-4000-8000-000000000001' where id::text like '7f000000-%';
+select set_config('request.jwt.claims','{"sub":"7f000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
 insert into public.clientes(id, nombre, rtn, direccion, email_1) values
 ('7f100000-0000-0000-0000-000000000001','Cliente integral','08011999123456','Tegucigalpa','integral@test.local');
 insert into public.quotations(id, cliente_id, created_by, quotation_number, status, service_product, quote_type, tipo_transporte, commodity) values
@@ -42,7 +45,7 @@ select set_config('request.jwt.claims','{"sub":"7f000000-0000-0000-0000-00000000
 select public.save_quotation_edit('7f200000-0000-0000-0000-000000000004','Borrador',
   '{"commodity":"Guardada","contact_name":"Contacto correcto","peso_lbs":20,"total_sale":100}',
   false,'[]',true,'[{"package_type":"Caja","quantity":2,"weight_lbs":10,"ft3":1,"cbm":0.0283}]',
-  true,'[{"description":"Flete Miami","quantity":1,"sale_amount":100,"cost_amount":50}]',true);
+  true,'[{"description":"Flete Miami","quantity":1,"sale_amount":100,"cost_amount":50}]',true,0);
 select pg_temp.assert_true((select commodity = 'Guardada' and contact_name = 'Contacto correcto' and status = 'Pendiente de Fijar Precios'
   from public.quotations where id = '7f200000-0000-0000-0000-000000000004'),'header + status saved');
 select pg_temp.assert_true((select count(*) = 1 from public.quotation_cargo_lines where quotation_id = '7f200000-0000-0000-0000-000000000004'),'cargo saved');
@@ -51,9 +54,9 @@ select pg_temp.expect_error($cmd$select public.save_quotation_edit('7f200000-000
   true,'[{"description":"Bad pricing","quantity":-1}]',false)$cmd$,'P0001');
 select pg_temp.assert_true((select commodity = 'Guardada' and total_sale = 100 from public.quotations where id = '7f200000-0000-0000-0000-000000000004'),'rollback header');
 select pg_temp.assert_true((select quantity = 2 from public.quotation_cargo_lines where quotation_id = '7f200000-0000-0000-0000-000000000004'),'rollback cargo');
-select pg_temp.expect_error($cmd$select public.save_quotation_edit('7f200000-0000-0000-0000-000000000004','Borrador','{}')$cmd$,'40001');
+select pg_temp.expect_error($cmd$select public.save_quotation_edit('7f200000-0000-0000-0000-000000000004','Borrador','{}')$cmd$,'PT409');
 select pg_temp.expect_error($cmd$select public.save_quotation_edit('7f200000-0000-0000-0000-000000000004','Pendiente de Fijar Precios','{"created_by":"7f000000-0000-0000-0000-000000000001"}')$cmd$,'23514');
-select pg_temp.expect_error($cmd$select public.save_quotation_edit('7f200000-0000-0000-0000-000000000001','Ganada','{}',false,'[]',false,'[]',false,'[]',true)$cmd$,'23514');
+select pg_temp.expect_error($cmd$select public.save_quotation_edit('7f200000-0000-0000-0000-000000000001','Ganada','{}',false,'[]',false,'[]',false,'[]',true,0)$cmd$,'23514');
 
 select set_config('request.jwt.claims','{"sub":"7f000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
 select public.create_shipment_from_quotation('7f200000-0000-0000-0000-000000000001');
@@ -61,8 +64,11 @@ select public.create_shipment_from_quotation('7f200000-0000-0000-0000-0000000000
 select public.create_shipment_from_quotation('7f200000-0000-0000-0000-000000000002');
 select pg_temp.assert_true((select count(*) = 2 from public.shipments where quotation_id in ('7f200000-0000-0000-0000-000000000001','7f200000-0000-0000-0000-000000000002')),'Miami creates exactly one shipment per default key');
 select pg_temp.expect_error($cmd$select public.create_shipment_from_quotation('7f200000-0000-0000-0000-000000000003')$cmd$,'23514');
+-- Privileged fixture setup; the application selects agents via its atomic RPC.
+reset role;
 insert into public.agent_quotes(quotation_id, agente_nombre, carrier, is_selected)
 values ('7f200000-0000-0000-0000-000000000003','Agente integral','Naviera FCL',true);
+set local role authenticated;
 select public.create_shipment_from_quotation('7f200000-0000-0000-0000-000000000003');
 select pg_temp.assert_true((select carrier = 'Naviera FCL' from public.shipping_instructions where quotation_id = '7f200000-0000-0000-0000-000000000003'),'non-Miami retains selected carrier');
 select pg_temp.expect_error($cmd$select public.create_shipment_from_quotation('7f200000-0000-0000-0000-000000000004')$cmd$,'23514');

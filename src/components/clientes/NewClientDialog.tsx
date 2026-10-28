@@ -1,5 +1,7 @@
 'use client'
 
+import { BillingOfficeSelect } from '@/src/components/invoicing/BillingOfficeSelect'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -46,6 +48,7 @@ const initialForm = {
   email_1: '',
   pais: 'Honduras',
   tipo_persona: 'Corporativo',
+  billing_office_id: '',
   condicion_pago: 'Contado',
   dias_credito: '',
   tipo_cliente: '',
@@ -109,6 +112,7 @@ export default function NewClientDialog({
         email_1: form.email_1,
         pais: form.pais,
         tipo_persona: form.tipo_persona,
+        billing_office_id: form.billing_office_id || null,
         condicion_pago: form.condicion_pago,
         dias_credito: isCreditPayment(form.condicion_pago)
           ? Number(form.dias_credito || 0)
@@ -226,6 +230,7 @@ export default function NewClientDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
+            <BillingOfficeSelect value={form.billing_office_id} onChange={id => setForm(previous => ({ ...previous, billing_office_id: id }))} />
             <Field label="Condición de pago">
               <select name="condicion_pago" value={form.condicion_pago} onChange={handleChange} className={fieldClass}>
                 {CONDICIONES_PAGO.map((condicion) => (

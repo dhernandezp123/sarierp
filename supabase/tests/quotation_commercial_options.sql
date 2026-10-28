@@ -41,6 +41,9 @@ where id in (
   '6c000000-0000-0000-0000-000000000002'
 );
 
+-- Explicit tenant fixtures for the current multi-tenant schema.
+update public.profiles set tenant_id='00000000-0000-4000-8000-000000000001' where id in ('6c000000-0000-0000-0000-000000000002', '6c000000-0000-0000-0000-000000000001');
+select set_config('request.jwt.claims','{"sub":"6c000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
 insert into public.clientes (id, nombre)
 values ('6c100000-0000-0000-0000-000000000001', 'Cliente Opciones');
 
@@ -167,7 +170,8 @@ select pg_temp.expect_denied(
 
 set local role authenticated;
 
-select public.send_quotation_with_options('6c200000-0000-0000-0000-000000000001');
+select public.transition_quotation('6c200000-0000-0000-0000-000000000001', 'Pricing Aprobado',
+  (select status_revision from public.quotations where id='6c200000-0000-0000-0000-000000000001'), 'Enviada al Cliente');
 
 select pg_temp.assert_true(
   (
@@ -232,7 +236,8 @@ select * from public.finalize_quotation_option_selection(
     where quotation_id = '6c200000-0000-0000-0000-000000000001'
       and option_code = 'A'
   ),
-  false
+  false, 'Enviada al Cliente',
+  (select status_revision from public.quotations where id='6c200000-0000-0000-0000-000000000001')
 );
 
 select pg_temp.assert_true(
@@ -354,9 +359,8 @@ select set_config(
   true
 );
 
-select public.send_quotation_with_options(
-  '6c200000-0000-0000-0000-000000000002'
-);
+select public.transition_quotation('6c200000-0000-0000-0000-000000000002', 'Pricing Aprobado',
+  (select status_revision from public.quotations where id='6c200000-0000-0000-0000-000000000002'), 'Enviada al Cliente');
 
 set local role authenticated;
 select set_config(
@@ -371,7 +375,8 @@ select * from public.finalize_quotation_option_selection(
     where quotation_id = '6c200000-0000-0000-0000-000000000002'
       and option_code = 'A'
   ),
-  true
+  true, 'Enviada al Cliente',
+  (select status_revision from public.quotations where id='6c200000-0000-0000-0000-000000000002')
 );
 
 select pg_temp.assert_true(

@@ -54,10 +54,10 @@ test('later-page and context failures reject the whole result; stale loads canno
 })
 
 for (const demo of [true, false]) {
-  test('cost validation links ' + (demo ? 'Demo Proformas' : 'production invoices'), async () => {
+  test('cost validation links invoices in ' + (demo ? 'Demo' : 'Production'), async () => {
     const loader = loadTs('src/lib/cost-validation-data.ts', { './demo-environment': { IS_DEMO_ENVIRONMENT: demo } })
     const client = mockClient()
     await loader.loadCostValidationData(client, 'q')
-    assert.ok(client.calls.find(c => c.table === 'invoices').filters.some(f => f[0] === 'eq' && f[1] === 'invoice_type' && f[2] === (demo ? 'Proforma' : 'Factura')))
+    assert.ok(client.calls.find(c => c.table === 'invoices').filters.some(f => f[0] === 'eq' && f[1] === 'invoice_type' && f[2] === 'Factura'))
   })
 }

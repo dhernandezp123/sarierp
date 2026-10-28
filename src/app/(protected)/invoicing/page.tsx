@@ -1,12 +1,14 @@
 'use client'
 
+import { loadInvoiceList, type Invoice, type InvoiceType, type ReceivableSummary } from '@/src/lib/invoice-list'
+
 import { toDateInputValue } from '@/src/lib/format'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search, FileText, CheckCircle2, Clock, XCircle, AlertCircle, DollarSign, BarChart2, BookOpen, Mail, ArrowRight, ClipboardList } from 'lucide-react'
 import { toast } from 'sonner'
-import { PDFDownloadLink } from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -17,60 +19,15 @@ import {
   PLATFORM_ATTRIBUTION,
   PLATFORM_NAME,
 } from '@/src/lib/platform-branding'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
-import { getDemoHtmlWatermark } from '@/src/lib/demo-print'
 import {
-  getCompanyDisplayName,
-  normalizeCompanyBranding,
-} from '@/src/lib/company-branding'
-import { escapeHtml } from '@/src/lib/html'
-import {
-  billingQueueActionHref,
+  billingQueueHandoff,
   billingQueueHref,
   type BillingQueueRow,
   type BillingReadinessCode,
 } from '@/src/lib/billing-readiness'
-
-type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
-
-type Invoice = {
-  id: string
-  invoice_number: string | null
-  invoice_type: InvoiceType
-  status: string
-  cliente_id: string | null
-  cliente_nombre: string | null
-  cliente_rtn: string | null
-  cliente_email: string | null
-  issue_date: string | null
-  due_date: string | null
-  payment_condition: string | null
-  credit_days: number | null
-  total: number
-  currency: string
-  quotation_id: string | null
-  parent_invoice_id: string | null
-  invoice_payments: Array<{
-    amount: number
-    currency: string
-    payment_date: string
-    status: 'Aplicado' | 'Reversado'
-  }> | null
-}
-
-type ReceivableSummary = {
-  invoice_id: string
-  currency: string
-  original_total: number
-  credit_notes: number
-  debit_notes: number
-  adjusted_total: number
-  balance: number
-  paid_total: number
-  stored_status: string
-  receivable_status: string
-  days_overdue: number
-}
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { CreateContextTaskDialog } from '@/src/components/tasks/CreateContextTaskDialog'
 
 type EcCompanySettings = {
   legal_name: string | null
@@ -112,8 +69,14 @@ function formatUSD(amount: number, currency = 'USD') {
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
 export default function InvoicingPage() {
+  const tenant = useTenant()
+  const tenantName = tenant?.tradeName || 'Forwarders ERP'
   const router = useRouter()
-  const { profile } = useUser()
+  const { profile, user } = useUser()
+  const context = (profile?.tenant_id || '') + ':' + (user?.id || '')
+  const loadVersion = useRef(0)
+  const [loadedContext, setLoadedContext] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [loading, setLoading] = useState(true)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [receivables, setReceivables] = useState<ReceivableSummary[]>([])
@@ -137,41 +100,24 @@ export default function InvoicingPage() {
   const [ecLoadingCompany, setEcLoadingCompany] = useState(false)
   const [ecPdfData, setEcPdfData] = useState<EstadoCuentaData | null>(null)
 
-  async function fetchInvoices() {
+  const fetchInvoices = useCallback(async () => {
+    const version = ++loadVersion.current
+    const isCurrent = () => version === loadVersion.current
     setLoading(true)
+    setLoadError('')
     setWorkQueueError('')
-    const [invoicesResult, receivablesResult, workQueueResult] = await Promise.all([
-      supabase
-        .from('invoices')
-        .select('id, invoice_number, invoice_type, status, cliente_id, cliente_nombre, cliente_rtn, cliente_email, issue_date, due_date, payment_condition, credit_days, total, currency, quotation_id, parent_invoice_id, invoice_payments(amount, currency, payment_date, status)')
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('invoice_receivables')
-        .select('invoice_id, currency, original_total, credit_notes, debit_notes, adjusted_total, balance, paid_total, stored_status, receivable_status, days_overdue'),
-      supabase.rpc('get_billing_work_queue'),
-    ])
-
-    if (invoicesResult.error || receivablesResult.error) {
-      toast.error('Error al cargar facturas y saldos')
-      setLoading(false)
-      return
-    }
-    const receivableRows = (receivablesResult.data || []) as ReceivableSummary[]
-    const statuses = new Map(receivableRows.map((row) => [row.invoice_id, row.receivable_status]))
-    setInvoices(((invoicesResult.data || []) as Invoice[]).map((invoice) => ({
-      ...invoice,
-      status: statuses.get(invoice.id) || invoice.status,
-    })))
-    setReceivables(receivableRows)
-    if (workQueueResult.error) {
-      setWorkQueue([])
-      setWorkQueueError(workQueueResult.error.message || 'No se pudo cargar la cola por facturar.')
-    } else {
-      setWorkQueue((workQueueResult.data || []) as BillingQueueRow[])
-    }
-    setLoading(false)
-  }
+    try {
+      const result = await loadInvoiceList(supabase, isCurrent)
+      if (!isCurrent()) return
+      setInvoices(result.invoices)
+      setReceivables(result.receivables)
+      setWorkQueue(result.workQueue)
+      setWorkQueueError(result.workQueueError)
+      setLoadedContext(context)
+    } catch (error) {
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'No se pudieron cargar las facturas y saldos.')
+    } finally { if (isCurrent()) setLoading(false) }
+  }, [context])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -179,8 +125,8 @@ export default function InvoicingPage() {
       if (requestedView === 'documents') setView('documents')
       void fetchInvoices()
     }, 0)
-    return () => window.clearTimeout(timer)
-  }, [])
+    return () => { window.clearTimeout(timer); loadVersion.current += 1 }
+  }, [fetchInvoices])
 
   const changeView = (nextView: 'work' | 'documents') => {
     setView(nextView)
@@ -284,21 +230,14 @@ export default function InvoicingPage() {
     const mes = MESES[cierreMes - 1]
     const s = computeCierre()
     const fmt = (n: number, currency: string) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    const companyName = escapeHtml(
-      getCompanyDisplayName(normalizeCompanyBranding(ecCompany))
-    )
-    const demoWatermark = getDemoHtmlWatermark()
-    const summaryCards = s.summaries.map((summary) => {
-      const currency = escapeHtml(summary.currency)
-      return `
-<h2>${currency}</h2>
+    const summaryCards = s.summaries.map((summary) => `
+<h2>${summary.currency}</h2>
 <div class="grid">
-<div class="card"><div class="label">Total facturado</div><div class="value">${escapeHtml(fmt(summary.emitido, summary.currency))}</div></div>
-<div class="card"><div class="label">Cobrado</div><div class="value green">${escapeHtml(fmt(summary.cobrado, summary.currency))}</div></div>
-<div class="card"><div class="label">Por cobrar</div><div class="value amber">${escapeHtml(fmt(summary.porCobrar, summary.currency))}</div></div>
-<div class="card"><div class="label">Vencido</div><div class="value red">${escapeHtml(fmt(summary.vencido, summary.currency))}</div></div>
-</div>`
-    }).join('')
+<div class="card"><div class="label">Total facturado</div><div class="value">${fmt(summary.emitido, summary.currency)}</div></div>
+<div class="card"><div class="label">Cobrado</div><div class="value green">${fmt(summary.cobrado, summary.currency)}</div></div>
+<div class="card"><div class="label">Por cobrar</div><div class="value amber">${fmt(summary.porCobrar, summary.currency)}</div></div>
+<div class="card"><div class="label">Vencido</div><div class="value red">${fmt(summary.vencido, summary.currency)}</div></div>
+</div>`).join('')
     const html = `<!DOCTYPE html><html><head><title>Cierre ${mes} ${cierreAnio}</title>
 <style>body{font-family:Arial,sans-serif;padding:40px;color:#1e293b;max-width:700px;margin:0 auto}
 .title{font-size:22px;font-weight:bold;margin-bottom:4px}.sub{color:#64748b;font-size:13px;margin-bottom:28px}
@@ -307,11 +246,10 @@ export default function InvoicingPage() {
 .label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .value{font-size:22px;font-weight:bold}
 .green{color:#16a34a}.amber{color:#b45309}.red{color:#dc2626}
-.footer{font-size:11px;color:#94a3b8;margin-top:8px}${demoWatermark.styles}
+.footer{font-size:11px;color:#94a3b8;margin-top:8px}
 @media print{button{display:none}}</style></head><body>
-${demoWatermark.markup}
 <div class="title">Cierre del período</div>
-<div class="sub">${mes} ${cierreAnio} &mdash; ${companyName} &mdash; ${s.total} documentos</div>
+<div class="sub">${mes} ${cierreAnio} &mdash; ${tenantName} &mdash; ${s.total} documentos</div>
 ${summaryCards || '<p>Sin movimientos para este período.</p>'}
 <div class="footer">${PLATFORM_NAME}<br>${PLATFORM_ATTRIBUTION} &middot; ${new Date().toLocaleDateString('es-HN')}</div>
 <script>window.onload=()=>window.print()</script></body></html>`
@@ -336,10 +274,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
     setShowEC(true)
     if (!ecCompany) {
       setEcLoadingCompany(true)
-      const { data, error } = await supabase
-        .from('company_settings')
-        .select('legal_name, trade_name, rtn, address, phone')
-        .limit(1).single()
+      const { data, error } = await loadCurrentCompanySettings<EcCompanySettings>(supabase)
       if (error) {
         toast.error('No se pudo cargar la configuración de la empresa')
         setEcLoadingCompany(false)
@@ -381,7 +316,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       })
       .filter((item) => item.saldo > 0.005)
     setEcPdfData({
-      empresa: getCompanyDisplayName(normalizeCompanyBranding(ecCompany)),
+      empresa: ecCompany?.legal_name || ecCompany?.trade_name || tenantName,
       empresa_rtn: ecCompany?.rtn ?? null,
       empresa_dir: ecCompany?.address ?? null,
       empresa_tel: ecCompany?.phone ?? null,
@@ -402,7 +337,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       ).map(([currency, balance]) => ({ currency, balance }))
     : []
   const ecEmailSubject = ecPdfData
-    ? `Estado de cuenta al ${ecPdfData.fecha_generacion.split('-').reverse().join('/')} - ${ecPdfData.empresa}`
+    ? `Estado de cuenta al ${ecPdfData.fecha_generacion.split('-').reverse().join('/')} - ${tenantName}`
     : ''
   const ecEmailBody = ecPdfData
     ? [
@@ -416,14 +351,15 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         'Por favor adjunte el PDF descargado antes de enviar este correo.',
         '',
         'Saludos cordiales,',
-        ecPdfData.empresa,
+        tenantName,
       ].join('\n')
     : ''
   const ecMailto = ecPdfData?.cliente_email
     ? `mailto:${ecPdfData.cliente_email}?subject=${encodeURIComponent(ecEmailSubject)}&body=${encodeURIComponent(ecEmailBody)}`
     : ''
 
-  if (loading) return <PageSkeleton cards={3} rows={6} />
+  if (loadError) return <div className={cardClass}><p role="alert">{loadError}</p><button type="button" onClick={() => void fetchInvoices()} className={primaryButtonClass}>Reintentar</button></div>
+  if (loading || loadedContext !== context) return <PageSkeleton cards={3} rows={6} />
 
   return (
     <div className="space-y-6">
@@ -438,7 +374,10 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
             Facturas, proformas, notas de crédito y débito.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => router.push('/invoicing/voids')} className="rounded-xl border px-4 py-2 text-sm font-semibold">Anulaciones</button>
+          <button type="button" onClick={() => router.push('/invoicing/drafts')} className="rounded-xl border px-4 py-2 text-sm font-semibold">Borradores y correcciones</button>
+          <button type="button" onClick={() => router.push('/invoicing/new?doc_type=proforma')} className="rounded-xl border px-4 py-2 text-sm font-semibold">Nueva proforma</button>
           {['Admin', 'Finanzas', 'Contabilidad'].includes(profile?.rol || '') && (
             <button
               type="button"
@@ -594,21 +533,18 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
 
             <div className="flex gap-2">
               {ecPdfData && ecPdfData.items.length > 0 ? (
-                <PDFDownloadLink
+                <PdfDownloadButton
                   document={<EstadoCuentaPdf data={ecPdfData} />}
                   fileName={`estado-cuenta-${ecPdfData.cliente_nombre.replace(/\s+/g, '-').toLowerCase()}-${ecPdfData.fecha_generacion}.pdf`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
                 >
                   {({ loading: pdfLoading }) => (
-                    <button
-                      type="button"
-                      disabled={pdfLoading}
-                      className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
-                    >
+                    <>
                       <BookOpen className="h-4 w-4" />
                       {pdfLoading ? 'Generando...' : 'Descargar PDF'}
-                    </button>
+                    </>
                   )}
-                </PDFDownloadLink>
+                </PdfDownloadButton>
               ) : (
                 <button
                   type="button"
@@ -619,7 +555,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                   Descargar PDF
                 </button>
               )}
-              {ecPdfData && ecPdfData.items.length > 0 && ecMailto && !IS_DEMO_ENVIRONMENT && (
+              {ecPdfData && ecPdfData.items.length > 0 && ecMailto && (
                 <a
                   href={ecMailto}
                   className="inline-flex items-center gap-2 rounded-xl border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950/30"
@@ -717,9 +653,8 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                   </thead>
                   <tbody>
                     {workQueue.map((row) => {
-                      const actionHref = row.readiness_code === 'OPERATIONS_PENDING' && profile?.rol !== 'Admin'
-                        ? null
-                        : billingQueueActionHref(row, billingQueueHref('work'))
+                      const handoff = billingQueueHandoff(row, profile?.rol, billingQueueHref('work'))
+                      const actionHref = handoff.href
                       const ready = row.readiness_code === 'READY_TO_INVOICE'
                       return (
                         <tr key={row.quotation_id} className="border-b border-slate-100 align-top dark:border-slate-800">
@@ -738,6 +673,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                               {ready ? 'Lista para facturar' : row.next_action}
                             </span>
                             {row.blocker && <p className="mt-2 max-w-xs text-xs text-slate-500 dark:text-slate-400">{row.blocker}</p>}
+                            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Resuelve: {handoff.owner}</p>
                           </td>
                           <td className="py-4 text-right">
                             {actionHref ? (
@@ -750,7 +686,11 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                                 <ArrowRight className="h-4 w-4" />
                               </button>
                             ) : (
-                              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{row.next_action}</span>
+                              <CreateContextTaskDialog label="Programar seguimiento"
+                                suggestedTitle={`${row.quotation_number || row.quotation_id}: ${row.next_action} · ${handoff.owner}`}
+                                context={{ entityType: 'quotation', entityId: row.quotation_id,
+                                  entityLabel: row.quotation_number || row.quotation_id,
+                                  sourceModule: 'invoicing', sourcePath: billingQueueHref('work') }} />
                             )}
                           </td>
                         </tr>
@@ -863,6 +803,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                     >
                       <td className="py-3 pr-4 font-semibold text-blue-600 dark:text-blue-400">
                         {inv.invoice_number || <span className="text-slate-400 italic">Sin número</span>}
+                        {inv.point_of_sale && <span className="mt-1 block text-xs font-normal text-slate-500">{inv.point_of_sale}</span>}
                       </td>
                       <td className="pr-4">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${

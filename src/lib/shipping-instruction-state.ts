@@ -3,6 +3,14 @@ type ShippingInstructionRelations = {
   quotation?: unknown
 }
 
+/** Match the customer source used by the Shipping Instruction PDF. */
+export function getShippingInstructionClient<T>(routing: {
+  quotation?: { cliente?: T | null } | null
+  cliente?: T | null
+}): T | null {
+  return routing.quotation?.cliente ?? routing.cliente ?? null
+}
+
 /**
  * RPC mutations return only the physical shipping_instructions row. Preserve
  * the embedded relations loaded by PostgREST so the detail view does not lose

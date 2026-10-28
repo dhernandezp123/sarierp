@@ -5,6 +5,7 @@ import {
 } from '@/src/lib/booking-status'
 import { getMissingBookingDocuments } from '@/src/lib/booking-operational-state'
 import { calendarDaysUntil } from '@/src/lib/format'
+import { readAllReportRows, readReportRowsByIds } from '@/src/lib/report-query'
 
 export type SystemAlertCategory = 'Comercial' | 'Operativa' | 'Gerencial'
 export type SystemAlertSeverity = 'Alta' | 'Media' | 'Baja'
@@ -318,7 +319,8 @@ function routingBelongsToUser(
 export async function getSystemAlerts(
   supabaseClient: SupabaseClient,
   profile?: ProfileLike | null,
-  user?: UserLike | null
+  user?: UserLike | null,
+  isCurrent = () => true,
 ): Promise<SystemAlert[]> {
   const role = profile?.rol || ''
   const userId = user?.id || null
@@ -327,13 +329,11 @@ export async function getSystemAlerts(
   const isOperations = role === 'Operaciones'
   const isFinance = role === 'Contabilidad' || role === 'Finanzas'
 
-  const { data: quoteData, error: quoteError } = await supabaseClient
+  const quoteData = isOperations ? [] : await readAllReportRows((from, to) => supabaseClient
     .from('quotations')
     .select('*, clientes ( nombre )')
     .is('deleted_at', null)
-    .order('created_at', { ascending: false })
-
-  if (quoteError) throw quoteError
+    .order('created_at', { ascending: false }).order('id').range(from, to), { label: 'cotizaciones para alertas', isCurrent })
 
   let quotations = (quoteData || []) as QuotationRow[]
 
@@ -347,16 +347,12 @@ export async function getSystemAlerts(
 
   const quoteIds = quotations.map((quote) => quote.id)
 
-  const { data: pricingData, error: pricingError } = quoteIds.length > 0
-    ? await supabaseClient
+  const pricingData = await readReportRowsByIds(quoteIds, (batch, from, to) => supabaseClient
         .from('pricing_items')
-        .select('quotation_id, cost_amount, sale_amount, quantity')
-        .in('quotation_id', quoteIds)
-    : { data: [], error: null }
+        .select('id, quotation_id, cost_amount, sale_amount, quantity')
+        .in('quotation_id', batch).order('id').range(from, to), { label: 'pricing para alertas', isCurrent })
 
-  if (pricingError) throw pricingError
-
-  const { data: siData, error: siError } = await supabaseClient
+  const siData = isFinance ? [] : await readAllReportRows((from, to) => supabaseClient
     .from('shipments')
     .select(`
       id,
@@ -376,16 +372,9 @@ export async function getSystemAlerts(
         clientes (
           nombre
         )
-      ),
-      bookings (
-        id,
-        booking_number,
-        shipment_status
       )
     `)
-    .is('shipping_instruction.deleted_at', null)
-
-  if (siError) throw siError
+    .is('shipping_instruction.deleted_at', null).order('id').range(from, to), { label: 'operaciones para alertas', isCurrent })
 
   let shippingInstructions: ShippingInstructionRow[] =
     ((siData || []) as ShipmentAlertRaw[]).map((shipment) => {
@@ -414,7 +403,7 @@ export async function getSystemAlerts(
     shippingInstructions = []
   }
 
-  const { data: bookingsData, error: bookingsError } = await supabaseClient
+  const bookingRows = isFinance ? [] : await readAllReportRows((from, to) => supabaseClient
     .from('bookings')
     .select(`
       id,
@@ -449,31 +438,31 @@ export async function getSystemAlerts(
             nombre
           )
         )
-      ),
-      booking_documents (
-        document_type
-      ),
-      bills_of_lading (
-        bl_type,
-        status
-      ),
-      booking_containers (
-        container_type,
-        quantity
-      ),
-      booking_schedule_revisions (
-        id,
-        revision_number,
-        revision_type,
-        vessel_name,
-        voyage,
-        etd,
-        created_at,
-        client_notified_at
       )
-    `)
+    `).order('id').range(from, to), { label: 'bookings para alertas', isCurrent })
 
-  if (bookingsError) throw bookingsError
+  const bookingIds = bookingRows.map(row => row.id as string)
+  type Child<T> = T & { id: string; booking_id: string }
+  const children = <T,>(table: string, fields: string) => readReportRowsByIds<Child<T>>(bookingIds, async (batch, from, to) => {
+    const { data, error } = await supabaseClient.from(table).select(fields).in('booking_id', batch).order('id').range(from, to)
+    return { data: data as unknown as Child<T>[] | null, error }
+  }, { label: table, isCurrent })
+  const [documents, bills, containers, revisions] = await Promise.all([
+    children<BookingDocumentJoin>('booking_documents', 'id, booking_id, document_type'),
+    children<BillOfLadingJoin>('bills_of_lading', 'id, booking_id, bl_type, status'),
+    children<BookingContainerJoin>('booking_containers', 'id, booking_id, container_type, quantity'),
+    children<NonNullable<BookingRow['booking_schedule_revisions']>[number]>('booking_schedule_revisions', 'id, booking_id, revision_number, revision_type, vessel_name, voyage, etd, created_at, client_notified_at'),
+  ])
+  const group = <T extends { booking_id: string }>(rows: T[]) => {
+    const grouped = new Map<string, typeof rows>()
+    for (const row of rows) { const items = grouped.get(row.booking_id) || []; items.push(row); grouped.set(row.booking_id, items) }
+    return grouped
+  }
+  const byDocument = group(documents), byBill = group(bills), byContainer = group(containers), byRevision = group(revisions)
+  const bookingsData = bookingRows.map(row => ({ ...row,
+    booking_documents: byDocument.get(row.id) || [], bills_of_lading: byBill.get(row.id) || [],
+    booking_containers: byContainer.get(row.id) || [], booking_schedule_revisions: byRevision.get(row.id) || [],
+  }))
 
   let bookings: BookingRow[] =
     ((bookingsData || []) as BookingAlertRaw[]).map((booking) => {
@@ -508,13 +497,23 @@ export async function getSystemAlerts(
   if (isFinance) {
     bookings = []
   }
+  const bookingById = new Map(bookings.map(booking => [booking.id, booking]))
 
-  const { data: quotationContainerData, error: quotationContainerError } =
-    await supabaseClient
+  const contextQuoteIds = [...quoteIds, ...shippingInstructions.map(row => row.quotation_id), ...bookings.map(row => resolveJoin(row.shipment)?.quotation_id)]
+    .filter((id): id is string => !!id)
+  const quotationContainerData = await readReportRowsByIds(contextQuoteIds, (batch, from, to) => supabaseClient
       .from('quotation_containers')
-      .select('quotation_id, quantity')
+      .select('id, quotation_id, quantity').in('quotation_id', batch).order('id').range(from, to),
+    { label: 'contenedores para alertas', isCurrent })
 
-  if (quotationContainerError) throw quotationContainerError
+  const byShipment = new Map<string, typeof bookingRows>()
+  for (const booking of bookingRows) {
+    if (!booking.shipment_id) continue
+    const items = byShipment.get(booking.shipment_id) || []
+    items.push(booking)
+    byShipment.set(booking.shipment_id, items)
+  }
+  shippingInstructions = shippingInstructions.map(row => ({ ...row, bookings: (byShipment.get(row.id) || []) as ShippingInstructionRow['bookings'] }))
 
   const quotationContainers = (quotationContainerData || []) as QuotationContainerRow[]
   const alerts: SystemAlert[] = []
@@ -745,9 +744,7 @@ export async function getSystemAlerts(
       : null
 
     if (booking.booking_lifecycle_status === 'REPLACED') {
-      const replacement = bookings.find(
-        (candidate) => candidate.id === booking.replaced_by_booking_id
-      )
+      const replacement = bookingById.get(booking.replaced_by_booking_id || '')
       const hasReplacementConfirmation =
         replacement?.booking_documents?.some(
           (document) => document.document_type === 'Booking Confirmation'
@@ -985,15 +982,11 @@ export async function getSystemAlerts(
   })
 
   if (!isFinance) {
-    const { data: readinessAlertData, error: readinessAlertError } =
-      await supabaseClient.rpc('get_booking_readiness_alerts')
-
-    if (readinessAlertError) throw readinessAlertError
+    const readinessAlertData = await readAllReportRows((from, to) => supabaseClient.rpc('get_booking_readiness_alerts')
+      .order('alert_key').range(from, to), { label: 'alertas de preparacion', key: 'alert_key', isCurrent })
 
     ;((readinessAlertData || []) as ReadinessAlertRow[]).forEach((readinessAlert) => {
-      const booking = bookings.find(
-        (candidate) => candidate.id === readinessAlert.booking_id
-      )
+      const booking = bookingById.get(readinessAlert.booking_id)
       if (!booking) return
 
       alerts.push({

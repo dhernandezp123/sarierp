@@ -1,5 +1,15 @@
 'use client'
 
+import { CustomsQuotationSection } from '@/src/components/quotations/CustomsQuotationSection'
+import { buildCustomsPricingItems, hydrateCustomsCharges, newCustomsCharges, validateCustomsQuotation } from '@/src/lib/customs-quotation'
+import { isCustomsOnly, usesOwnPricing } from '@/src/lib/quotation-products'
+
+import {
+  type CargoDimensionLine, getCargoVolumeMode, calculateLineCbm,
+  calculateLineFt3, getCargoWeightUnit, getLineUnitWeightLbs,
+  getLineTotalWeightLbs, getLineTotalWeightKg,
+} from '@/src/lib/quotation-cargo'
+
 import { toDateInputValue } from '@/src/lib/format'
 
 import { useEffect, useRef, useState } from 'react'
@@ -14,10 +24,11 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { SectionNav } from '@/src/components/ui/SectionNav'
 import { createNotification } from '@/src/lib/notifications'
-import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
+import { UnsavedChangesGuard, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { canTransition } from '@/src/lib/quotation-status'
+import { quotationRevision } from '@/src/lib/quotation-transition'
 import {
   fetchActiveServiceProducts,
   serviceProducts,
@@ -52,20 +63,6 @@ const editorSections = [
   { href: '#quote-notes' as const, label: 'Observaciones' },
   { href: '#quote-actions' as const, label: 'Guardar' },
 ]
-
-type CargoDimensionLine = {
-  id: string
-  quantity: string
-  packageType: 'Caja' | 'Pallet' | 'Pieza'
-  length: string
-  width: string
-  height: string
-  dimensionUnit: 'in' | 'cm' | 'mm' | 'm'
-  weight: string
-  weightUnit?: 'lbs' | 'kg'
-  volumeMode?: 'dimensions' | 'manual'
-  manualCbm?: string | number
-}
 
 type ContainerLine = {
   container_type_id: string
@@ -114,6 +111,8 @@ export default function EditQuotationPage() {
   const saveInFlight = useRef(false)
   const [quotationNumber, setQuotationNumber] = useState<string | null>(null)
   const [sendPricingDialogOpen, setSendPricingDialogOpen] = useState(false)
+  const [statusRevision, setStatusRevision] = useState<number | string | null>(null)
+  const [repricingReason, setRepricingReason] = useState('')
   const [savingAfterEdit, setSavingAfterEdit] = useState(false)
   const [clientes, setClientes] = useState<any[]>([])
   const [originalClienteId, setOriginalClienteId] = useState('')
@@ -134,6 +133,7 @@ export default function EditQuotationPage() {
     discarded: 'containers' | 'cargo'
   } | null>(null)
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([])
+  const [customsCharges, setCustomsCharges] = useState(newCustomsCharges)
   const [editingContainerLineIndex, setEditingContainerLineIndex] =
     useState<number | null>(null)
   const [containerLineForm, setContainerLineForm] = useState({
@@ -275,6 +275,7 @@ export default function EditQuotationPage() {
       return
     }
 
+    setStatusRevision(data.status_revision)
     setFormData({
       cliente_id: data.cliente_id || '',
       status: data.status || '',
@@ -335,6 +336,7 @@ export default function EditQuotationPage() {
     }
 
     setPricingItems((data || []) as PricingItem[])
+    setCustomsCharges(hydrateCustomsCharges(data || []))
   }
 
   const fetchContainerLines = async (quotationId: string) => {
@@ -596,81 +598,6 @@ export default function EditQuotationPage() {
     }
   }
 
-  const getCbmPerUnit = (line: CargoDimensionLine) => {
-    const length = Number(line.length || 0)
-    const width = Number(line.width || 0)
-    const height = Number(line.height || 0)
-
-    if (!length || !width || !height) return 0
-
-    if (line.dimensionUnit === 'in') {
-      return (length * width * height) / 61023.7441
-    }
-
-    if (line.dimensionUnit === 'cm') {
-      return (length * width * height) / 1_000_000
-    }
-
-    if (line.dimensionUnit === 'mm') {
-      return (length * width * height) / 1_000_000_000
-    }
-
-    if (line.dimensionUnit === 'm') {
-      return length * width * height
-    }
-
-    return 0
-  }
-
-  const calculateLineCbm = (line: CargoDimensionLine) => {
-    if ((line.volumeMode || 'dimensions') === 'manual') {
-      return Number(line.manualCbm || 0)
-    }
-
-    const quantity = Number(line.quantity || 0)
-    if (!quantity) return 0
-
-    return getCbmPerUnit(line) * quantity
-  }
-
-  const calculateLineFt3 = (line: CargoDimensionLine) => {
-    return calculateLineCbm(line) * 35.3147
-  }
-
-  const getCargoVolumeMode = (line: CargoDimensionLine) =>
-    line.volumeMode || 'dimensions'
-
-  const hasLineVolume = (line: CargoDimensionLine) => {
-    if (getCargoVolumeMode(line) === 'manual') {
-      return Number(line.manualCbm || 0) > 0
-    }
-
-    return (
-      Number(line.length || 0) > 0 &&
-      Number(line.width || 0) > 0 &&
-      Number(line.height || 0) > 0
-    )
-  }
-
-  const getCargoWeightUnit = (line: CargoDimensionLine) =>
-    line.weightUnit || 'lbs'
-
-  const getLineUnitWeightLbs = (line: CargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
-    return getCargoWeightUnit(line) === 'kg' ? weight * 2.20462 : weight
-  }
-
-  const getLineUnitWeightKg = (line: CargoDimensionLine) => {
-    const weight = Number(line.weight || 0)
-    return getCargoWeightUnit(line) === 'kg' ? weight : weight / 2.20462
-  }
-
-  const getLineTotalWeightLbs = (line: CargoDimensionLine) =>
-    getLineUnitWeightLbs(line) * Number(line.quantity || 0)
-
-  const getLineTotalWeightKg = (line: CargoDimensionLine) =>
-    getLineUnitWeightKg(line) * Number(line.quantity || 0)
-
   const handleSendToPricing = async () => { await handleSave(true) }
 
   const handleSave = async (sendToPricing = false) => {
@@ -683,15 +610,24 @@ export default function EditQuotationPage() {
       toast.error('Selecciona el transporte y tipo de cotización')
       return
     }
+    if (sendToPricing && formData.status !== 'Borrador' && !repricingReason.trim()) {
+      setSendPricingDialogOpen(true)
+      toast.error('Ingresa el motivo para volver a solicitar pricing.')
+      return
+    }
 
     if (!formData.cliente_id) {
       toast.error('Debes seleccionar un cliente')
       return
     }
 
-    if (!formData.commodity.trim()) {
+    if (!formData.commodity.trim() && (!isCustomsOnly(formData.service_product) || formData.status !== 'Borrador' || sendToPricing)) {
       toast.error('Debes ingresar Commodity/Descripción de la carga')
       return
+    }
+    if (isCustomsOnly(formData.service_product)) {
+      const error = validateCustomsQuotation(customsCharges, formData, formData.status === 'Borrador' && !sendToPricing)
+      if (error) { toast.error(error); return }
     }
 
     const saveRequiresContainerLines =
@@ -715,11 +651,9 @@ export default function EditQuotationPage() {
     }
 
     const quotationId = params.id as string
-    const saveIsMiamiFlow =
-      formData.service_product === 'miami_lcl' ||
-      formData.service_product === 'miami_air'
+    const saveIsMiamiFlow = usesOwnPricing(formData.service_product)
 
-    if (saveIsMiamiFlow && !miami.canUseMiamiCalculator) {
+    if (miami.isMiamiFlow && !miami.canUseMiamiCalculator) {
       toast.error('No hay tarifas Miami disponibles para este cliente. Revisa las tarifas antes de guardar.')
       return
     }
@@ -734,7 +668,9 @@ export default function EditQuotationPage() {
       return
     }
 
-    const miamiPricingItems = saveIsMiamiFlow
+    const miamiPricingItems = isCustomsOnly(formData.service_product)
+      ? buildCustomsPricingItems(quotationId, customsCharges, miami.taxRatePercent, miami.supplierName, profile?.id)
+      : saveIsMiamiFlow
       ? miami.buildMiamiPricingItems(quotationId)
       : []
     const miamiTotalCost = miamiPricingItems.reduce(
@@ -814,7 +750,7 @@ export default function EditQuotationPage() {
 
         pricing_notes: formData.pricing_notes || null,
         observaciones: formData.observaciones || null,
-        ...(isMiamiFlow
+        ...(saveIsMiamiFlow
           ? { client_notes: formData.client_notes || null }
           : {}),
         ...(saveIsMiamiFlow
@@ -856,6 +792,8 @@ export default function EditQuotationPage() {
       const { error } = await supabase.rpc('save_quotation_edit', {
         p_quotation_id: quotationId,
         p_expected_status: formData.status,
+        p_expected_revision: quotationRevision({ id: quotationId, status: formData.status, status_revision: statusRevision }),
+        p_repricing_reason: repricingReason.trim() || null,
         p_quotation_data: quotationPayload,
         p_replace_containers: shouldReplaceContainers,
         p_container_lines: containerRows,
@@ -868,7 +806,7 @@ export default function EditQuotationPage() {
       if (error) throw error
       persisted = true
       if (saveIsMiamiFlow) setPricingItems(miamiPricingItems as PricingItem[])
-      if (sendToPricing) {
+      if (sendToPricing && !isCustomsOnly(formData.service_product)) {
         setFormData(previous => ({ ...previous, status: 'Pendiente de Fijar Precios' }))
         setSendPricingDialogOpen(false)
         try {
@@ -934,12 +872,13 @@ export default function EditQuotationPage() {
         }
       }
 
-      toast.success(sendToPricing ? 'Cambios guardados y cotización enviada a Pricing' : 'Cambios guardados correctamente')
+      toast.success(sendToPricing && isCustomsOnly(formData.service_product) ? 'Cotización de aduanas aprobada' : sendToPricing ? 'Cambios guardados y cotización enviada a Pricing' : 'Cambios guardados correctamente')
 
       if (!sendToPricing && !saveIsMiamiFlow && formData.status === 'Borrador') {
         setSendPricingDialogOpen(true)
         return
       }
+      markFormSaved()
       router.push(`/quotations/${params.id}`)
     } catch (error) {
       if (persisted) {
@@ -1075,6 +1014,7 @@ export default function EditQuotationPage() {
     formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
 
   const isMiamiFlow = miami.isMiamiFlow
+  const isCustomsFlow = isCustomsOnly(formData.service_product)
 
   const requiresLooseCargo =
     formData.quote_type === 'LCL' ||
@@ -1103,7 +1043,7 @@ export default function EditQuotationPage() {
         </div>
 
         <SectionNav
-          items={editorSections}
+          items={isCustomsFlow ? editorSections.filter(item => ['#quote-general', '#quote-actions'].includes(item.href)) : editorSections}
           label="Secciones del editor de cotización"
         />
 
@@ -1137,9 +1077,10 @@ export default function EditQuotationPage() {
               </div>
 
               <div className={fieldGroupClass}>
-                <label className={formLabelClass}>Transporte</label>
+                <label className={formLabelClass}>{isCustomsFlow ? 'Servicio' : 'Transporte'}</label>
               <select
                 name="tipo_transporte"
+                disabled={isCustomsFlow}
                 value={formData.tipo_transporte || ''}
                 onChange={(e) =>
                   setFormData({
@@ -1151,6 +1092,7 @@ export default function EditQuotationPage() {
                 className={fieldClass}
               >
                 <option value="">Transporte</option>
+                {isCustomsFlow && <option value="Aduanas">Servicio de Aduanas</option>}
                 <option value="Aéreo">Aéreo</option>
                 <option value="Marítima">Marítima</option>
                 <option value="Terrestre">Terrestre</option>
@@ -1163,10 +1105,11 @@ export default function EditQuotationPage() {
                 name="quote_type"
                 value={formData.quote_type || ''}
                 onChange={(e) => requestQuoteTypeChange(e.target.value)}
-                disabled={!formData.tipo_transporte}
+                disabled={isCustomsFlow || !formData.tipo_transporte}
                 className={fieldClass}
               >
                 <option value="">Tipo de cotización</option>
+                {isCustomsFlow && <option value="Aduanas">Aduanas</option>}
 
                 {(quoteTypeOptions[formData.tipo_transporte] || []).map((type) => (
                   <option key={type} value={type}>
@@ -1209,7 +1152,7 @@ export default function EditQuotationPage() {
               />
               </div>
 
-              <div className={fieldGroupClass}>
+              {!isCustomsFlow && <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Incoterm</label>
               <select
                 name="incoterm"
@@ -1226,7 +1169,7 @@ export default function EditQuotationPage() {
                 <option value="DAP">DAP</option>
                 <option value="DDP">DDP</option>
               </select>
-              </div>
+              </div>}
 
               <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Nombre de contacto</label>
@@ -1264,6 +1207,8 @@ export default function EditQuotationPage() {
             </div>
           </section>
 
+          {isCustomsFlow && <CustomsQuotationSection data={formData} onChange={(field, value) => setFormData(previous => ({ ...previous, [field]: value }))} charges={customsCharges} setCharges={setCustomsCharges} taxRate={miami.taxRatePercent} />}
+          {!isCustomsFlow && <>
           <section id="quote-route" className="scroll-mt-28 pt-3">
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
@@ -1929,6 +1874,7 @@ export default function EditQuotationPage() {
             )}
           </div>
 
+          </>}
           <datalist id="countries">
             {countries.map((country) => (
               <option key={country.id} value={country.name} />
@@ -1965,7 +1911,7 @@ export default function EditQuotationPage() {
                 disabled={saving}
                 className={primaryButtonClass}
               >
-                Enviar a Pricing
+                {isCustomsFlow ? 'Aprobar cotización de aduanas' : 'Enviar a Pricing'}
               </button>
             )}
 
@@ -1993,6 +1939,13 @@ export default function EditQuotationPage() {
               Los cambios fueron guardados correctamente. ¿Deseas enviar esta cotización al equipo de Pricing?
             </DialogDescription>
           </DialogHeader>
+
+          {formData.status !== 'Borrador' && (
+            <label className="block space-y-2 text-sm font-medium">
+              <span>Motivo de la nueva solicitud de pricing</span>
+              <textarea value={repricingReason} onChange={(event) => setRepricingReason(event.target.value)} rows={3} className={fieldClass} />
+            </label>
+          )}
 
           <div className="flex justify-end gap-2">
             <button

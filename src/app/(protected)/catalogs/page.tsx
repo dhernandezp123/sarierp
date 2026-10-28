@@ -1,14 +1,13 @@
 'use client'
 
+import { NumberInput } from '@/src/components/ui/NumberInput'
+
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Edit3, PackagePlus, Plus, RotateCcw, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
-import { useUser } from '@/src/hooks/useUser'
-import { DemoReadOnlyNotice } from '@/src/components/demo/DemoReadOnlyNotice'
-import { canManageSensitiveSettings } from '@/src/lib/demo-environment'
 import { notifyCarrierCatalogUpdated } from '@/src/hooks/useCarrierCatalog'
 import type { CarrierType } from '@/src/lib/constants/carriers'
 
@@ -107,8 +106,6 @@ const emptyClientRateForm = {
 const portTypes = ['Puerto', 'Ciudad', 'Aeropuerto', 'Frontera']
 
 export default function CatalogsPage() {
-  const { profile } = useUser()
-  const canManageCatalogs = canManageSensitiveSettings(profile)
   const [countries, setCountries] = useState<Country[]>([])
   const [ports, setPorts] = useState<Port[]>([])
   const [containerTypes, setContainerTypes] = useState<ContainerType[]>([])
@@ -236,10 +233,6 @@ export default function CatalogsPage() {
   }
 
   const createCountry = async () => {
-    if (!canManageCatalogs) {
-      toast.info('Los catálogos son de solo lectura en el ambiente demo')
-      return
-    }
     if (!countryName.trim()) {
       toast.info('Nombre de país requerido')
       return
@@ -260,10 +253,6 @@ export default function CatalogsPage() {
   }
 
   const createPort = async () => {
-    if (!canManageCatalogs) {
-      toast.info('Los catálogos son de solo lectura en el ambiente demo')
-      return
-    }
     if (!portForm.name.trim()) {
       toast.info('Nombre de puerto requerido')
       return
@@ -295,10 +284,6 @@ export default function CatalogsPage() {
   }
 
   const saveContainerType = async () => {
-    if (!canManageCatalogs) {
-      toast.info('Los catálogos son de solo lectura en el ambiente demo')
-      return
-    }
     const name = containerForm.name.trim()
     const category = containerForm.category.trim() || null
 
@@ -341,10 +326,6 @@ export default function CatalogsPage() {
   }
 
   const toggleContainerType = async (item: ContainerType) => {
-    if (!canManageCatalogs) {
-      toast.info('Los catálogos son de solo lectura en el ambiente demo')
-      return
-    }
     const nextActive = item.active === false
 
     setContainerTypes((current) =>
@@ -366,10 +347,6 @@ export default function CatalogsPage() {
   }
 
   const saveServiceProduct = async () => {
-    if (!canManageCatalogs) {
-      toast.info('Los catálogos son de solo lectura en el ambiente demo')
-      return
-    }
     const value = serviceProductForm.value.trim()
     const label = serviceProductForm.label.trim()
 
@@ -411,10 +388,6 @@ export default function CatalogsPage() {
   }
 
   const toggleServiceProduct = async (item: ServiceProductRow) => {
-    if (!canManageCatalogs) {
-      toast.info('Los catálogos son de solo lectura en el ambiente demo')
-      return
-    }
     const nextActive = item.active === false
 
     setServiceProducts((current) =>
@@ -436,10 +409,6 @@ export default function CatalogsPage() {
   }
 
   const saveClientRateCatalogItem = async () => {
-    if (!canManageCatalogs) {
-      toast.info('Los catálogos son de solo lectura en el ambiente demo')
-      return
-    }
     const code = clientRateForm.code.trim()
     const label = clientRateForm.label.trim()
     const category = clientRateForm.category.trim()
@@ -494,10 +463,6 @@ export default function CatalogsPage() {
   }
 
   const toggleClientRateCatalogItem = async (item: ClientRateCatalogRow) => {
-    if (!canManageCatalogs) {
-      toast.info('Los catálogos son de solo lectura en el ambiente demo')
-      return
-    }
     const nextActive = item.active === false
 
     setClientRateCatalog((current) =>
@@ -519,10 +484,6 @@ export default function CatalogsPage() {
   }
 
   const saveCarrier = async () => {
-    if (!canManageCatalogs) {
-      toast.info('Este catálogo es de solo lectura en Demo')
-      return
-    }
     const payload = {
       ...carrierForm,
       code: carrierForm.code.trim().toUpperCase(),
@@ -550,16 +511,11 @@ export default function CatalogsPage() {
   }
 
   const editCarrier = (item: CarrierCatalogRow) => {
-    if (!canManageCatalogs) return
     setEditingCarrierCode(item.code)
     setCarrierForm(item)
   }
 
   const toggleCarrier = async (item: CarrierCatalogRow) => {
-    if (!canManageCatalogs) {
-      toast.info('Este catálogo es de solo lectura en Demo')
-      return
-    }
     const { error } = await supabase.from('carrier_catalog')
       .update({ active: !item.active }).eq('code', item.code)
     if (error) {
@@ -578,42 +534,6 @@ export default function CatalogsPage() {
           Tablas maestras para pricing y cotizaciones de forwarders.
         </p>
       </div>
-
-      <DemoReadOnlyNotice label="Los datos maestros compartidos pueden consultarse y filtrarse, pero no editarse durante una demo." />
-
-      <section className={cardClass}>
-        <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-300">Cotizaciones</p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">Navieras y carriers</h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Administra las opciones del selector y los colores de sus badges.</p>
-        </div>
-        <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-          <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700/70">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-900 dark:text-white">{editingCarrierCode ? 'Editar naviera' : 'Nueva naviera'}</h3>
-              {editingCarrierCode && <button type="button" onClick={() => { setEditingCarrierCode(null); setCarrierForm(emptyCarrierForm) }} aria-label="Cancelar edición" className="rounded-lg border border-slate-200 p-2 dark:border-slate-700"><RotateCcw className="h-4 w-4" /></button>}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <input className={fieldClass} placeholder="Código (MSC)" value={carrierForm.code} disabled={Boolean(editingCarrierCode)} onChange={(e) => setCarrierForm((v) => ({ ...v, code: e.target.value }))} />
-              <select className={fieldClass} value={carrierForm.type} onChange={(e) => setCarrierForm((v) => ({ ...v, type: e.target.value as CarrierType }))}>
-                <option value="ocean">Marítimo</option><option value="air">Aéreo</option><option value="ground">Terrestre</option>
-              </select>
-            </div>
-            <input className={fieldClass} placeholder="Nombre completo" value={carrierForm.name} onChange={(e) => setCarrierForm((v) => ({ ...v, name: e.target.value }))} />
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs text-slate-500">Fondo<input type="color" className="mt-1 h-11 w-full rounded-lg border border-slate-200 p-1 dark:border-slate-700" value={carrierForm.bg_color} onChange={(e) => setCarrierForm((v) => ({ ...v, bg_color: e.target.value }))} /></label>
-              <label className="text-xs text-slate-500">Texto<input type="color" className="mt-1 h-11 w-full rounded-lg border border-slate-200 p-1 dark:border-slate-700" value={carrierForm.text_color} onChange={(e) => setCarrierForm((v) => ({ ...v, text_color: e.target.value }))} /></label>
-            </div>
-            <label className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700"><span className="text-sm font-semibold">Visible</span><Switch checked={carrierForm.active} onChange={() => setCarrierForm((v) => ({ ...v, active: !v.active }))} /></label>
-            <button type="button" disabled={savingCarrier || !canManageCatalogs} onClick={() => void saveCarrier()} className={`${primaryButtonClass} flex w-full items-center justify-center gap-2`}><Check className="h-4 w-4" />{savingCarrier ? 'Guardando...' : 'Guardar naviera'}</button>
-          </div>
-          <div className="max-h-[480px] overflow-auto rounded-xl border border-slate-200 dark:border-slate-700/70">
-            <table className="w-full text-sm"><thead><tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/60"><th className="px-4 py-3 text-left">Naviera</th><th className="px-4 py-3 text-left">Tipo</th><th className="px-4 py-3 text-left">Visible</th><th className="px-4 py-3 text-right">Acciones</th></tr></thead>
-              <tbody>{carrierCatalog.map((item) => <tr key={item.code} className="border-b border-slate-100 last:border-0 dark:border-slate-800"><td className="px-4 py-3"><span className="inline-flex items-center gap-2"><span style={{ backgroundColor: item.bg_color, color: item.text_color }} className="rounded-md px-2 py-1 text-xs font-bold">{item.code}</span><span>{item.name}</span></span></td><td className="px-4 py-3 capitalize">{item.type}</td><td className="px-4 py-3"><button type="button" disabled={!canManageCatalogs} onClick={() => void toggleCarrier(item)} className="flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"><Switch checked={item.active} /><span>{item.active ? 'Visible' : 'Oculta'}</span></button></td><td className="px-4 py-3 text-right"><button type="button" disabled={!canManageCatalogs} onClick={() => editCarrier(item)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700"><Edit3 className="h-3.5 w-3.5" />Editar</button></td></tr>)}</tbody>
-            </table>
-          </div>
-        </div>
-      </section>
 
       <section className={cardClass}>
         <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
@@ -914,7 +834,7 @@ export default function CatalogsPage() {
                 className={fieldClass}
                 placeholder="Nombre visible"
               />
-              <input
+              <NumberInput
                 type="number"
                 value={serviceProductForm.sort_order}
                 onChange={(event) =>
@@ -1081,7 +1001,7 @@ export default function CatalogsPage() {
                   placeholder="Unidad"
                 />
               </div>
-              <input
+              <NumberInput
                 type="number"
                 value={clientRateForm.sort_order}
                 onChange={(event) =>

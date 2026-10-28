@@ -34,13 +34,15 @@ values (
 update public.profiles
 set rol = 'Pricing',
     status = 'Aprobado',
-    is_active = true
+    is_active = true,
+    tenant_id = '00000000-0000-4000-8000-000000000001'
 where id = '49700000-0000-0000-0000-000000000001';
 
 insert into public.quotations (
-  id, quotation_number, quote_type, tipo_transporte, status, created_by
+  id, tenant_id, quotation_number, quote_type, tipo_transporte, status, created_by
 ) values (
   '49710000-0000-0000-0000-000000000001',
+  '00000000-0000-4000-8000-000000000001',
   'TEST-AIR-PRESERVE',
   'Consolidado',
   'Aéreo',
@@ -49,17 +51,19 @@ insert into public.quotations (
 );
 
 insert into public.agent_quotes (
-  id, quotation_id, agente_nombre, ocean_freight, carrier,
+  id, tenant_id, quotation_id, agente_nombre, ocean_freight, carrier,
   transit_time, valid_until, is_selected
 ) values
   (
     '49720000-0000-0000-0000-000000000001',
-      '49710000-0000-0000-0000-000000000001',
+    '00000000-0000-4000-8000-000000000001',
+    '49710000-0000-0000-0000-000000000001',
     'Agente anterior', 100, 'OLD AIR', '5 días', current_date + 10, true
   ),
   (
     '49720000-0000-0000-0000-000000000002',
-      '49710000-0000-0000-0000-000000000001',
+    '00000000-0000-4000-8000-000000000001',
+    '49710000-0000-0000-0000-000000000001',
     'Agente nuevo', 120, 'NEW AIR', '3 días', current_date + 20, false
   );
 

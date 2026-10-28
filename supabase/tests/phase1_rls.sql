@@ -58,26 +58,12 @@ select pg_temp.assert_true(
   'anon no debe consultar agents'
 );
 select pg_temp.assert_true(
-  not has_table_privilege('anon', 'public.leads', 'INSERT')
-    and has_column_privilege('anon', 'public.leads', 'nombre', 'INSERT')
-    and has_column_privilege('anon', 'public.leads', 'empresa', 'INSERT')
-    and has_column_privilege('anon', 'public.leads', 'email', 'INSERT')
-    and has_column_privilege('anon', 'public.leads', 'telefono', 'INSERT')
-    and not has_column_privilege('anon', 'public.leads', 'status', 'INSERT')
-    and not has_column_privilege('anon', 'public.leads', 'notes', 'INSERT'),
-  'anon solo debe insertar las cuatro columnas publicas de leads'
+  not has_table_privilege('anon', 'public.leads', 'INSERT'),
+  'las solicitudes de demo deben pasar por el servidor'
 );
 select pg_temp.assert_true(
   not has_function_privilege('anon', 'public.is_admin()', 'EXECUTE'),
   'anon no debe ejecutar helpers internos'
-);
-select pg_temp.assert_true(
-  has_function_privilege('anon', 'public.is_demo_environment()', 'EXECUTE'),
-  'anon debe evaluar el ambiente para las politicas publicas de leads y storage'
-);
-select pg_temp.assert_true(
-  has_function_privilege('anon', 'public.is_restricted_demo_context()', 'EXECUTE'),
-  'anon debe evaluar el guard restrictivo de las policies publicas de storage'
 );
 
 insert into auth.users (id, aud, role, email, raw_user_meta_data)
@@ -172,11 +158,13 @@ where id = '00000000-0000-0000-0000-000000000007';
 
 reset role;
 
--- anon solo crea leads y no puede leerlos.
+-- anon no puede crear leads directamente ni leerlos.
 set local role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
-insert into public.leads (nombre, empresa, email)
-values ('Lead RLS', 'Empresa RLS', 'lead@test.local');
+select pg_temp.expect_denied(
+  $$insert into public.leads (nombre, empresa, email) values ('Lead RLS', 'Empresa RLS', 'lead@test.local')$$,
+  'anon no debe insertar leads directamente'
+);
 select pg_temp.expect_denied(
   $$select * from public.leads$$,
   'anon no debe leer leads'

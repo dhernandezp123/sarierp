@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Clock, Download, FileText, History, Mail, Plus, Printer, Send, Trash2, Upload, X } from 'lucide-react'
-import { PDFDownloadLink, pdf } from '@react-pdf/renderer'
+import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
+import { pdf } from '@react-pdf/renderer'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
+import { buildTenantStoragePath, isTenantResourceStoragePath } from '@/src/lib/storage-paths'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
@@ -36,11 +38,11 @@ import {
   type BlValidationSources,
 } from '@/src/lib/bl-document-workflow'
 import {
-  COMPANY_BRANDING_SELECT,
   type CompanyBranding,
+  getCompanyTradeName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
+import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 
 const BOOKING_DOCUMENTS_BUCKET = 'booking-documents'
 const BOOKING_DOCUMENTS_STORAGE_MARKERS = [
@@ -384,7 +386,7 @@ export default function BLPage() {
   const params = useParams<{ id: string; bookingId: string; blId: string }>()
   const searchParams = useSearchParams()
   const router = useRouter()
-  const { user } = useUser()
+  const { user, profile } = useUser()
 
   const { id, bookingId, blId } = params
   const isNew = blId === 'new'
@@ -500,11 +502,7 @@ export default function BLPage() {
         `)
         .eq('id', bookingId)
         .single(),
-      supabase
-        .from('company_settings')
-        .select(`${COMPANY_BRANDING_SELECT}, condiciones_bl, condiciones_awb, condiciones_carta_porte`)
-        .limit(1)
-        .maybeSingle(),
+      loadCurrentCompanySettings(supabase),
     ])
 
     if (bookingError || !bookingData) {
@@ -1170,14 +1168,22 @@ export default function BLPage() {
   }
 
   const uploadDraftFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (IS_DEMO_ENVIRONMENT) return
-
     const file = e.target.files?.[0]
     if (!file) return
+    if (!profile?.tenant_id) {
+      toast.error('Tu perfil no tiene una empresa asignada')
+      return
+    }
 
     setUploadingDraft(true)
     const safeName = sanitizeFileName(file.name)
-    const path = `${bookingId}/bl-drafts/${isNew ? 'new' : blId}/${Date.now()}-${safeName}`
+    const path = buildTenantStoragePath(
+      profile.tenant_id,
+      bookingId,
+      'bl-drafts',
+      isNew ? 'new' : blId,
+      `${Date.now()}-${safeName}`,
+    )
 
     const { error: uploadError } = await supabase.storage
       .from(BOOKING_DOCUMENTS_BUCKET)
@@ -1203,7 +1209,7 @@ export default function BLPage() {
   const openDraftFile = async () => {
     const path = normalizeBookingDocumentPath(form.draft_file_url)
 
-    if (!path || !path.startsWith(`${bookingId}/`)) {
+    if (!path || !profile?.tenant_id || !isTenantResourceStoragePath(path, profile.tenant_id, bookingId)) {
       toast.error('La ruta del Draft MBL no es válida')
       return
     }
@@ -1246,7 +1252,7 @@ export default function BLPage() {
   const printUploadedMBLDraft = async () => {
     const path = normalizeBookingDocumentPath(form.draft_file_url)
 
-    if (!path || !path.startsWith(`${bookingId}/`)) {
+    if (!path || !profile?.tenant_id || !isTenantResourceStoragePath(path, profile.tenant_id, bookingId)) {
       toast.error('Sube y guarda el Draft MBL del agente antes de imprimirlo.')
       return
     }
@@ -1327,7 +1333,7 @@ export default function BLPage() {
     'Por favor revise la información y confírmenos su aprobación, o notifíquenos si requiere algún ajuste.',
     '',
     'Saludos,',
-    'Equipo de Operaciones',
+    `${getCompanyTradeName(companyBranding)} — Operaciones`,
   ].join('\n')
 
   const mailtoLink = form.consignee_email
@@ -1367,9 +1373,7 @@ export default function BLPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className={`${cardClass} w-full max-w-2xl`}>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                {IS_DEMO_ENVIRONMENT ? 'Simular envío de Draft' : 'Enviar Draft al Cliente'}
-              </h2>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Enviar Draft al Cliente</h2>
               <button type="button" onClick={() => setShowEmailModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="h-5 w-5" />
               </button>
@@ -1391,14 +1395,8 @@ export default function BLPage() {
               Recuerda adjuntar el PDF del draft al correo electrónico.
             </p>
 
-            {IS_DEMO_ENVIRONMENT && (
-              <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Simulación demo: no se abrirá un cliente de correo ni se enviará un mensaje real.
-              </p>
-            )}
-
             <div className="flex flex-wrap gap-3">
-              {mailtoLink && !IS_DEMO_ENVIRONMENT && (
+              {mailtoLink && (
                 <a
                   href={mailtoLink}
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
@@ -1424,11 +1422,7 @@ export default function BLPage() {
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
-                {sendingDraft
-                  ? 'Registrando...'
-                  : IS_DEMO_ENVIRONMENT
-                    ? 'Registrar simulación'
-                    : 'Registrar envío'}
+                {sendingDraft ? 'Registrando...' : 'Registrar envío'}
               </button>
               <button
                 type="button"
@@ -1522,31 +1516,22 @@ export default function BLPage() {
             Draft MBL del Agente
           </h2>
           <div className="flex items-center gap-4">
-            {!IS_DEMO_ENVIRONMENT && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  className="hidden"
-                  onChange={uploadDraftFile}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingDraft}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  <Upload className="h-4 w-4" />
-                  {uploadingDraft ? 'Subiendo...' : 'Subir Draft MBL'}
-                </button>
-              </>
-            )}
-            {IS_DEMO_ENVIRONMENT && !form.draft_file_url && (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                La carga de archivos está deshabilitada en la demo.
-              </p>
-            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={uploadDraftFile}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingDraft}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Upload className="h-4 w-4" />
+              {uploadingDraft ? 'Subiendo...' : 'Subir Draft MBL'}
+            </button>
             {form.draft_file_url && (
               <button
                 type="button"
@@ -1579,7 +1564,7 @@ export default function BLPage() {
             className={fieldClass}
             placeholder={
               isNew && form.bl_type === 'HBL'
-                ? `Se generará automáticamente (${IS_DEMO_ENVIRONMENT ? 'DEMO' : 'SARI'}-HBL-...)`
+                ? 'Se generará automáticamente (SARI-HBL-...)'
                 : 'MOLU1234567'
             }
           />
@@ -1978,7 +1963,7 @@ export default function BLPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2 text-sm font-semibold text-white hover:bg-violet-700"
             >
               <Mail className="h-4 w-4" />
-              {IS_DEMO_ENVIRONMENT ? 'Simular envío de Draft' : 'Enviar Draft al Cliente'}
+              Enviar Draft al Cliente
             </button>
           )}
         </div>
@@ -1995,7 +1980,7 @@ export default function BLPage() {
         )}
 
         {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte === 'Aéreo' && (
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={<AWBPdf awb={formToAWBData(form, condicionesAWB)} company={companyBranding} />}
             fileName={`AWB-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
@@ -2006,10 +1991,10 @@ export default function BLPage() {
                 {pdfLoading ? 'Generando...' : 'Descargar AWB PDF'}
               </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
         )}
         {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && tipoTransporte === 'Terrestre' && (
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={<CartaPortePdf cp={formToCartaPorteData(form, condicionesCP)} company={companyBranding} />}
             fileName={`CartaPorte-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
@@ -2020,10 +2005,10 @@ export default function BLPage() {
                 {pdfLoading ? 'Generando...' : 'Descargar Carta Porte PDF'}
               </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
         )}
         {!isNew && form.bl_type === 'HBL' && tipoTransporte !== 'Aéreo' && tipoTransporte !== 'Terrestre' && (
-          <PDFDownloadLink
+          <PdfDownloadButton
             document={<HouseBLPdf bl={formToHBLData(form, condicionesBL, containers)} company={companyBranding} />}
             fileName={`HBL-${form.bl_number || blId}.pdf`}
             className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-5 py-2 text-sm font-semibold text-white hover:bg-teal-700"
@@ -2038,7 +2023,7 @@ export default function BLPage() {
                     : 'Descargar HBL Draft'}
               </>
             )}
-          </PDFDownloadLink>
+          </PdfDownloadButton>
         )}
       </div>
 

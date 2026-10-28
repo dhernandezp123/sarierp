@@ -57,6 +57,10 @@ function requireDemoProjectKey(
   const value = process.env[name]?.trim()
   if (!value) throw new Error(`Falta ${name} para compilar el ambiente demo.`)
 
+  // GitHub's disposable build has no remote credentials. This exact sentinel is
+  // accepted only on Actions; deployed Preview still requires its real project key.
+  if (process.env.GITHUB_ACTIONS === 'true' && value === 'ci-placeholder-no-remote-access') return
+
   if (value.startsWith(modernPrefix)) return
 
   const payload = decodeJwtPayload(value)
@@ -92,7 +96,7 @@ function assertEnvironmentConfiguration() {
 assertEnvironmentConfiguration()
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  images: { qualities: [75, 90] },
 }
 
 export default nextConfig

@@ -15,12 +15,16 @@ export type UserStatus = 'Pendiente' | 'Aprobado' | 'Rechazado'
 
 export type Profile = {
   id: string
+  tenant_id?: string | null
   nombre: string | null
   apellido: string | null
   email: string | null
   rol: UserRole
   status: UserStatus
   is_active: boolean
+  is_demo_user?: boolean
+  demo_expires_at?: string | null
+  demo_access_grant_id?: string | null
   is_platform_admin?: boolean
   approved_at: string | null
   approved_by: string | null
@@ -29,9 +33,6 @@ export type Profile = {
   created_at: string
   updated_at?: string
   tutorial_completed?: boolean | null
-  is_demo_user?: boolean
-  demo_expires_at?: string | null
-  demo_access_grant_id?: string | null
 }
 
 export type SupportTicketStatus =

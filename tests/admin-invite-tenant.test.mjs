@@ -1,0 +1,127 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import loadTs from './load-ts.mjs'
+
+async function invite({
+  demo = false,
+  profile = {
+    rol: 'Admin', status: 'Aprobado', is_active: true,
+    is_platform_admin: false, tenant_id: 'tenant-sari',
+  },
+  domain = { hostname: 'sari.forwarders.app' },
+  body = { email: 'new@example.invalid', rol: 'Ventas', nombre: '  María José  ', apellido: '  Pérez López  ' },
+  profileUpdateError = false,
+} = {}) {
+  const previous = {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    anon: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    service: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    appEnvironment: process.env.APP_ENV,
+    publicEnvironment: process.env.NEXT_PUBLIC_APP_ENV,
+  }
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.invalid'
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'anon'
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service'
+  process.env.APP_ENV = demo ? 'demo' : 'production'
+  process.env.NEXT_PUBLIC_APP_ENV = demo ? 'demo' : 'production'
+  const invitations = []
+  const updates = []
+
+  const adminClient = {
+    auth: { admin: {
+      async inviteUserByEmail(email, options) {
+        invitations.push({ email, options })
+        return { data: { user: { id: 'invited-user' } }, error: null }
+      },
+    } },
+    from(table) {
+      let updateValue = null
+      const query = {
+        select() { return query },
+        update(value) { updateValue = value; updates.push(value); return query },
+        eq() { return query },
+        single: async () => updateValue && profileUpdateError ? {data:null,error:{message:'No profile row'}} : ({ data: updateValue ? { id:'invited-user' } : table === 'profiles' ? profile : domain, error: null }),
+        then(resolve, reject) {
+          return Promise.resolve({ data: updateValue ? { id: 'invited-user' } : null, error: null }).then(resolve, reject)
+        },
+      }
+      return query
+    },
+  }
+
+  try {
+    const { POST } = loadTs('src/app/api/admin/invite/route.ts', {
+      '@supabase/supabase-js': {
+        createClient(_url, key) {
+          if (key === 'anon') {
+            return { auth: { getUser: async () => ({ data: { user: { id: 'admin-user' } }, error: null }) } }
+          }
+          return adminClient
+        },
+      },
+    })
+    const response = await POST(new Request('http://localhost/api/admin/invite', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer token', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }))
+    return { response, body: await response.json(), invitations, updates }
+  } finally {
+    if (previous.appEnvironment === undefined) delete process.env.APP_ENV
+    else process.env.APP_ENV = previous.appEnvironment
+    if (previous.publicEnvironment === undefined) delete process.env.NEXT_PUBLIC_APP_ENV
+    else process.env.NEXT_PUBLIC_APP_ENV = previous.publicEnvironment
+    if (previous.url === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = previous.url
+    if (previous.anon === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    else process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = previous.anon
+    if (previous.service === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previous.service
+  }
+}
+
+test('Invitación: fija tenant y dominio principal tanto en Auth como en profiles', async () => {
+  const result = await invite()
+  assert.equal(result.response.status, 200)
+  assert.equal(result.invitations.length, 1)
+  assert.equal(result.invitations[0].options.redirectTo, 'https://sari.forwarders.app/onboarding')
+  assert.equal(result.invitations[0].options.data.tenant_id, 'tenant-sari')
+  assert.equal(result.updates[0].tenant_id, 'tenant-sari')
+  assert.equal(result.invitations[0].options.data.nombre,'María José')
+  assert.equal(result.invitations[0].options.data.apellido,'Pérez López')
+  assert.equal(result.updates[0].nombre,'María José')
+  assert.equal(result.updates[0].apellido,'Pérez López')
+})
+
+test('Invitación: Demo bloquea el correo antes de usar Auth administrativo', async () => {
+  const result = await invite({demo:true})
+  assert.equal(result.response.status,403)
+  assert.equal(result.invitations.length,0)
+  assert.equal(result.updates.length,0)
+})
+
+test('Invitación: nombres ausentes, vacíos o inválidos se rechazan antes de enviar correo', async () => {
+  for (const values of [{},{nombre:' ',apellido:'Pérez'},{nombre:'María',apellido:''},{nombre:7,apellido:'Pérez'},{nombre:'A'.repeat(101),apellido:'Pérez'},{nombre:'María\nOtra',apellido:'Pérez'}]) {
+    const result=await invite({body:{email:'new@example.invalid',rol:'Ventas',...values}})
+    assert.equal(result.response.status,400)
+    assert.equal(result.invitations.length,0)
+  }
+})
+
+test('Invitación: un perfil no guardado no se anuncia como una invitación completamente preparada', async () => {
+  const result=await invite({profileUpdateError:true})
+  assert.equal(result.response.status,500)
+  assert.match(result.body.error,/invitación fue enviada/)
+  assert.equal(result.invitations.length,1)
+})
+
+test('Invitación: un Admin sin tenant o de plataforma no usa service_role para invitar', async () => {
+  for (const profile of [
+    { rol: 'Admin', status: 'Aprobado', is_active: true, is_platform_admin: false, tenant_id: null },
+    { rol: 'Admin', status: 'Aprobado', is_active: true, is_platform_admin: true, tenant_id: null },
+  ]) {
+    const result = await invite({ profile })
+    assert.equal(result.response.status, 403)
+    assert.equal(result.invitations.length, 0)
+  }
+})

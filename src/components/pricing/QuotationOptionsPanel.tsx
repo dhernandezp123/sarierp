@@ -223,7 +223,7 @@ export function QuotationOptionsPanel({
                       Opción {option.option_code}
                     </span>
                     <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', statusClass[option.status])}>
-                      {option.status}
+                      {option.status === 'Aceptada' && option.supersedes_option_id ? 'Ajuste aprobado' : option.status}
                     </span>
                     {option.is_recommended && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-800 dark:bg-violet-950/50 dark:text-violet-200">

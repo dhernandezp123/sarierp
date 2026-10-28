@@ -110,7 +110,7 @@ export default function SupportTicketDetailPage() {
       supabase
         .from('support_tickets')
         .select(`
-          id, ticket_number, subject, category, priority, status,
+          id, tenant_id, ticket_number, subject, category, priority, status,
           created_by, assigned_to, source_path, source_module, browser_info,
           last_activity_at, first_response_at, resolved_at, closed_at,
           created_at, updated_at,
@@ -212,12 +212,13 @@ export default function SupportTicketDetailPage() {
   }
 
   const uploadAttachments = async (messageId: string) => {
-    if (!user || files.length === 0) return
+    if (!user || !ticket?.tenant_id || files.length === 0) return
 
     const result = await uploadSupportAttachmentFiles({
       ticketId,
       messageId,
       userId: user.id,
+      tenantId: ticket.tenant_id,
       files,
     })
 

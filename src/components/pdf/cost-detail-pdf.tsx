@@ -1,3 +1,4 @@
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 import {
   Page,
   Text,
@@ -12,7 +13,6 @@ import {
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
 import { calculateTaxAmount, normalizeTaxRatePercent } from '@/src/lib/tax'
-import { DemoPdfWatermark } from './DemoPdfWatermark'
 import { containerCount, freightBreakdown, type CostContainer } from '@/src/lib/cost-analysis'
 
 function formatCurrency(value: number) {
@@ -521,10 +521,10 @@ export default function CostDetailPDF({
   return (
     <Document>
       <Page size="LETTER" orientation="landscape" style={styles.page}>
-        <DemoPdfWatermark />
+      <DemoPdfWatermark />
         <View style={styles.header}>
           <View>
-            <Image src="/brand/lockup-h-color.png" style={styles.logo} />
+            <Image src="/logo/sari-logo.png" style={styles.logo} />
           </View>
 
           <View style={styles.headerRight}>

@@ -3,23 +3,21 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
-import { DemoEnvironmentBanner } from '@/src/components/demo/DemoEnvironmentBanner'
-import {
-  IS_DEMO_ENVIRONMENT,
-  isDemoAccessExpired,
-} from '@/src/lib/demo-environment'
 import { PLATFORM_CONTACT_EMAIL } from '@/src/lib/platform-branding'
 import { getLoginDestination } from '@/src/lib/auth-redirect'
+import { TenantBrand } from '@/src/components/tenant/TenantBrand'
+import { useTenant } from '@/src/components/tenant/TenantProvider'
+import { profileMatchesTenant } from '@/src/lib/tenant-context'
 
 const emailInputId = 'portal-login-email'
 const passwordInputId = 'portal-login-password'
 
 export default function PortalLoginPage() {
   const router = useRouter()
+  const tenant = useTenant()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -30,12 +28,17 @@ export default function PortalLoginPage() {
     if (loading) return
     setLoading(true)
     try {
+      if (!tenant) {
+        toast.error('No se pudo validar la empresa de este enlace.')
+        return
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) { toast.error('Correo o contraseña incorrectos'); return }
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('rol, status, is_active, is_demo_user, demo_expires_at, demo_access_grant_id')
+        .select('rol, status, is_active, tenant_id')
         .eq('id', data.user.id)
         .single()
 
@@ -45,21 +48,9 @@ export default function PortalLoginPage() {
         return
       }
 
-      if (
-        IS_DEMO_ENVIRONMENT
-        && (
-          profile.is_demo_user !== true
-          || !profile.demo_access_grant_id
-        )
-      ) {
+      if (!profileMatchesTenant(profile.tenant_id, tenant)) {
         await supabase.auth.signOut()
-        toast.error('Esta cuenta no está habilitada para el ambiente demo.')
-        return
-      }
-
-      if (isDemoAccessExpired(profile)) {
-        await supabase.auth.signOut()
-        toast.error('El acceso temporal de esta cuenta demo ha vencido.')
+        toast.error('Esta cuenta pertenece a otra empresa. Revisa el enlace de acceso.')
         return
       }
 
@@ -83,17 +74,9 @@ export default function PortalLoginPage() {
         <div className="pointer-events-none absolute -bottom-52 -left-36 h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_50%_50%,rgba(239,142,1,0.14),rgba(239,142,1,0)_60%)]" />
 
         {/* logo */}
-        <div className="relative z-10 flex items-center gap-4">
-          <Image
-            src="/brand/isotipo-color.png"
-            alt=""
-            width={40}
-            height={40}
-            className="h-10 w-10 shrink-0 object-contain"
-          />
-          <span className="font-display text-[22px] font-bold tracking-tight">
-            Forwarders <span className="text-[#EF8E01]">ERP</span>
-          </span>
+        <div className="relative z-10">
+          <TenantBrand compact inverse />
+          <p className="mt-2 text-center text-xs uppercase tracking-[0.18em] text-slate-400">Operado con Forwarders ERP</p>
         </div>
 
         {/* pitch */}
@@ -151,23 +134,9 @@ export default function PortalLoginPage() {
       {/* RIGHT · LOGIN FORM */}
       <div className="flex w-full flex-col justify-center bg-white px-8 py-12 dark:bg-[#020817] lg:w-[480px] lg:flex-none lg:px-14 lg:py-16">
         <div className="mx-auto w-full max-w-[360px]">
-          <DemoEnvironmentBanner className="mb-7 rounded-xl border" />
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <Image
-              src="/brand/isotipo-color.png"
-              alt=""
-              width={40}
-              height={40}
-              className="h-10 w-10 shrink-0 object-contain"
-            />
-            <div>
-              <p className="font-display text-lg font-bold tracking-tight text-[#07111F] dark:text-white">
-                Forwarders <span className="text-[#EF8E01]">ERP</span>
-              </p>
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#7E8AA0]">
-                Portal de clientes
-              </p>
-            </div>
+          <div className="mb-8 lg:hidden">
+            <TenantBrand compact />
+            <p className="mt-2 text-center text-xs font-medium uppercase tracking-[0.16em] text-[#7E8AA0]">Portal de clientes</p>
           </div>
 
           <div className="mb-9">
@@ -226,30 +195,26 @@ export default function PortalLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="h-[46px] w-full rounded-[10px] bg-[#0038BD] text-[15px] font-semibold text-white transition-colors hover:bg-[#022a91] disabled:cursor-not-allowed disabled:bg-[#5B7CD6] dark:bg-blue-600 dark:hover:bg-blue-700 dark:disabled:bg-blue-900"
+              className="h-[46px] w-full rounded-[10px] bg-tenant-primary text-[15px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? 'Ingresando...' : 'Ingresar'}
             </button>
 
-            {!IS_DEMO_ENVIRONMENT && (
-              <div className="text-center">
-                <Link href="/portal/forgot-password" className="text-sm font-medium text-[#0038BD] hover:underline dark:text-blue-400">
-                  ¿Olvidaste tu contraseña?
-                </Link>
-              </div>
-            )}
+            <div className="text-center">
+              <Link href="/portal/forgot-password" className="text-sm font-medium text-[#0038BD] hover:underline dark:text-blue-400">
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
           </form>
 
           <div className="my-8 h-px bg-[#EDEFF3] dark:bg-slate-800" />
 
-          {!IS_DEMO_ENVIRONMENT && (
-            <p className="text-center text-sm leading-relaxed text-[#5B6573] dark:text-slate-400">
-              ¿Aún no tienes acceso?{' '}
-              <Link href="/portal/register" className="font-semibold text-[#0038BD] hover:underline dark:text-blue-400">
-                Solicitar cuenta
-              </Link>
-            </p>
-          )}
+          <p className="text-center text-sm leading-relaxed text-[#5B6573] dark:text-slate-400">
+            ¿Aún no tienes acceso?{' '}
+            <Link href="/portal/register" className="font-semibold text-[#0038BD] hover:underline dark:text-blue-400">
+              Solicitar cuenta
+            </Link>
+          </p>
           <p className="mt-4.5 text-center text-xs leading-relaxed text-[#9AA3B2] dark:text-slate-500">
             ¿Problemas de acceso? <a href={`mailto:${PLATFORM_CONTACT_EMAIL}`} className="font-medium text-blue-600 underline dark:text-blue-400">Contactar al soporte de la plataforma</a>. Para aprobar tu cuenta, contacta a tu agente de carga.
           </p>

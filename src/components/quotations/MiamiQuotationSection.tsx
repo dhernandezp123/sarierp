@@ -1,5 +1,7 @@
 'use client'
 
+import { NumberInput } from '@/src/components/ui/NumberInput'
+
 import type React from 'react'
 import { useEffect, useState } from 'react'
 
@@ -1226,7 +1228,7 @@ export function MiamiQuotationSection({
                   <label className={fieldLabelClass}>
                     Monto pickup manual (USD)
                   </label>
-                  <input
+                  <NumberInput
                     type="number"
                     value={miami.manualPickupAmount}
                     onChange={(e) =>

@@ -1,3 +1,4 @@
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 import {
   Document,
   Font,
@@ -13,7 +14,6 @@ import {
   getCompanyDisplayName,
   normalizeCompanyBranding,
 } from '@/src/lib/company-branding'
-import { DemoPdfWatermark } from './DemoPdfWatermark'
 
 export type HBLContainerData = {
   container_number: string | null
@@ -440,7 +440,7 @@ export default function HouseBLPdf({
   return (
     <Document>
       <Page size="LETTER" style={styles.page}>
-        <DemoPdfWatermark />
+      <DemoPdfWatermark />
         <View style={styles.header}>
           <View style={styles.headerBrand}>
             <Text style={styles.companyName}>{companyName}</Text>

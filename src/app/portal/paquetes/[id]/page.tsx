@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner'
 import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
+import { buildTenantStoragePath } from '@/src/lib/storage-paths'
 import { useUser } from '@/src/hooks/useUser'
 import Link from 'next/link'
 import { portalPackageStatus } from '@/src/lib/portal'
@@ -232,7 +233,7 @@ export default function PortalPaqueteDetailPage() {
   }
 
   const uploadCommercialInvoice = async () => {
-    if (!pkg || !profile?.id || !profile.cliente_id || !selectedFile) return
+    if (!pkg || !profile?.id || !profile.tenant_id || !profile.cliente_id || !selectedFile) return
 
     if (!ALLOWED_DOCUMENT_TYPES.has(selectedFile.type)) {
       toast.error('Adjunta un archivo PDF, JPG o PNG')
@@ -250,7 +251,11 @@ export default function PortalPaqueteDetailPage() {
       : selectedFile.type === 'image/png'
         ? 'png'
         : 'jpg'
-    const filePath = `${profile.cliente_id}/${pkg.id}/${crypto.randomUUID()}.${extension}`
+    const filePath = buildTenantStoragePath(
+      profile.tenant_id,
+      pkg.id,
+      `${crypto.randomUUID()}.${extension}`,
+    )
 
     const { error: uploadError } = await supabase.storage
       .from(PACKAGE_DOCUMENT_BUCKET)

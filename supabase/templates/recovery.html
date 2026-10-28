@@ -1,0 +1,64 @@
+{{ $brand := "Forwarders ERP" }}
+{{ $logo := "https://forwarders.app/brand/lockup-h-color.png" }}
+{{ $color := "#0038BD" }}
+{{ $logoWidth := "224" }}
+{{ if eq .RedirectTo "https://sari.forwarders.app/auth/callback?next=/portal/reset-password" }}
+  {{ $brand = "Sari Express" }}
+  {{ $logo = "https://sari.forwarders.app/logo/sari-logo.png" }}
+  {{ $color = "#0038BD" }}
+  {{ $logoWidth = "180" }}
+{{ end }}
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Restablece tu contraseña · {{ $brand }}</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f3f5f9;color:#182234;font-family:Arial,Helvetica,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Recupera tu acceso a {{ $brand }} y elige una nueva contraseña.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f5f9;">
+      <tr>
+        <td align="center" style="padding:32px 12px;">
+          <!--[if mso]><table role="presentation" width="560" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border:1px solid #e2e7ef;border-radius:16px;">
+            <tr>
+              <td style="height:5px;background-color:{{ $color }};border-radius:16px 16px 0 0;font-size:0;line-height:0;">&nbsp;</td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:28px 24px 20px;">
+                <img src="{{ $logo }}" width="{{ $logoWidth }}" alt="{{ $brand }}" style="display:block;width:{{ $logoWidth }}px;max-width:100%;height:auto;border:0;">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 28px 32px;">
+                <p style="margin:0 0 12px;font-size:12px;line-height:18px;letter-spacing:1.2px;font-weight:bold;color:{{ $color }};">RECUPERACIÓN DE ACCESO</p>
+                <h1 style="margin:0 0 18px;font-size:26px;line-height:34px;color:#111c30;">Restablece tu contraseña</h1>
+                <p style="margin:0 0 16px;font-size:16px;line-height:26px;">Recibimos una solicitud para restablecer la contraseña de tu cuenta en <strong>{{ $brand }}</strong>.</p>
+                <p style="margin:0 0 24px;font-size:16px;line-height:26px;">Haz clic en el botón para elegir una nueva contraseña y recuperar tu acceso.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                  <tr>
+                    <td align="center" bgcolor="{{ $color }}" style="border-radius:8px;mso-padding-alt:15px 20px;">
+                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:15px 20px;border:1px solid {{ $color }};border-radius:8px;background-color:{{ $color }};color:#ffffff;text-decoration:none;font-size:16px;line-height:22px;font-weight:bold;">Restablecer contraseña</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 20px;font-size:14px;line-height:22px;color:#526176;">Este enlace es personal y de un solo uso. No lo compartas. Si ya venció, puedes solicitar uno nuevo desde la página de inicio de sesión.</p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f7fb;border-radius:8px;">
+                  <tr><td style="padding:16px;font-size:14px;line-height:22px;color:#526176;"><strong style="color:#27364b;">¿No solicitaste este cambio?</strong><br>Puedes ignorar este correo. Tu contraseña seguirá siendo la misma.</td></tr>
+                </table>
+                <p style="margin:24px 0 8px;font-size:12px;line-height:19px;color:#64748b;">Si el botón no funciona, usa este enlace alternativo. También puedes copiarlo desde el menú del enlace:</p>
+                <p style="margin:0;font-size:13px;line-height:21px;"><a href="{{ .ConfirmationURL }}" style="color:{{ $color }};text-decoration:underline;">Abrir enlace de recuperación</a></p>
+              </td>
+            </tr>
+          </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+          <p style="margin:20px 0 6px;font-size:13px;line-height:20px;color:#526176;">{{ $brand }}</p>
+          <p style="margin:0;font-size:11px;line-height:18px;color:#64748b;">Freight Management Platform by Hernova Systems</p>
+          <p style="margin:8px 0 0;font-size:11px;line-height:18px;color:#64748b;">Correo automático · No respondas a esta dirección.</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

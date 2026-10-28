@@ -1,20 +1,20 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ScanLine, X, Search, CheckCircle2, Lock, Package, Trash2, Truck } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { useMiamiCarriers } from '@/src/hooks/useMiamiCarriers'
-import { notifyClientPackageAssigned } from '@/src/lib/client-notifications'
+import { assignMiamiPackage } from '@/src/lib/miami-assignment'
+import { readAllReportRows } from '@/src/lib/report-query'
 import { sendMiamiPackageAssignmentEmail } from '@/src/lib/miami-assignment-email'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { NewCarrierModal } from '@/src/components/miami/NewCarrierModal'
-import { IS_DEMO_ENVIRONMENT } from '@/src/lib/demo-environment'
 
 type Manifest = {
   id: string
@@ -72,7 +72,12 @@ export default function ManifiestoDetailPage() {
   const [selectedClient, setSelectedClient] = useState<ClienteOption | null>(null)
   const [assigning, setAssigning] = useState(false)
 
-  useEffect(() => { loadData() }, [id])
+  const context = `${profile?.tenant_id || ''}:${user?.id || ''}:${id}`
+  const activeContext = useRef(context)
+  const loadVersion = useRef(0)
+  const assignmentInFlight = useRef(false)
+  const [loadedContext, setLoadedContext] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Auto-focus scan input when manifest is open
   useEffect(() => {
@@ -82,6 +87,7 @@ export default function ManifiestoDetailPage() {
   // Client search debounce
   useEffect(() => {
     if (!assignPackageId || clientSearch.trim().length < 2) { setClientResults([]); return }
+    let current = true
     const t = setTimeout(async () => {
       const { data } = await supabase
         .from('clientes')
@@ -89,37 +95,46 @@ export default function ManifiestoDetailPage() {
         .ilike('nombre', `%${clientSearch}%`)
         .is('deleted_at', null)
         .limit(8)
-      setClientResults((data ?? []) as ClienteOption[])
+      if (current) setClientResults((data ?? []) as ClienteOption[])
     }, 250)
-    return () => clearTimeout(t)
-  }, [clientSearch, assignPackageId])
+    return () => { current = false; clearTimeout(t) }
+  }, [clientSearch, assignPackageId, context])
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (activeContext.current !== context) return
+    const version = ++loadVersion.current
+    const isCurrent = () => activeContext.current === context && loadVersion.current === version
     setLoading(true)
-    const [{ data: mData, error: mErr }, { data: pkgData, error: pkgErr }] = await Promise.all([
-      supabase.from('miami_manifests').select('*').eq('id', id).single(),
-      supabase
-        .from('miami_packages')
-        .select('id, tracking_number, carrier, weight_lbs, ft3, status, warehouse_number, cliente_id, received_at')
-        .eq('manifest_id', id)
-        .order('received_at', { ascending: false }),
-    ])
-
-    if (mErr) { toast.error('Manifiesto no encontrado'); router.push('/miami/manifiestos'); return }
-    setManifest(mData as Manifest)
-
-    // Fetch client names
-    const pkgs = (pkgData ?? []) as PackageRow[]
-    const clientIds = [...new Set(pkgs.filter(p => p.cliente_id).map(p => p.cliente_id!))]
-    if (clientIds.length > 0) {
-      const { data: clientes } = await supabase.from('clientes').select('id, nombre').in('id', clientIds)
-      const clientMap = Object.fromEntries((clientes ?? []).map(c => [c.id, c.nombre]))
-      pkgs.forEach(p => { if (p.cliente_id) p.cliente_nombre = clientMap[p.cliente_id] ?? null })
+    setLoadError(null)
+    try {
+      const [manifestResult, packageRows] = await Promise.all([
+        supabase.from('miami_manifests').select('*').eq('id', id).single(),
+        readAllReportRows<PackageRow & { cliente: { nombre: string } | { nombre: string }[] | null }>((from, to) => supabase
+          .from('miami_packages')
+          .select('id, tracking_number, carrier, weight_lbs, ft3, status, warehouse_number, cliente_id, received_at, cliente:clientes(nombre)')
+          .eq('manifest_id', id).order('received_at', { ascending: false }).order('id').range(from, to),
+        { label: 'paquetes del manifiesto', isCurrent }),
+      ])
+      if (manifestResult.error) throw new Error(manifestResult.error.message)
+      if (!manifestResult.data) throw new Error('Manifiesto no disponible')
+      if (!isCurrent()) return
+      setManifest(manifestResult.data as Manifest)
+      setPackages(packageRows.map(row => ({ ...row, cliente_nombre: (Array.isArray(row.cliente) ? row.cliente[0] : row.cliente)?.nombre || null })))
+    } catch (error) {
+      if (isCurrent()) setLoadError(error instanceof Error ? error.message : 'No se pudo cargar el manifiesto')
+    } finally {
+      if (isCurrent()) { setLoading(false); setLoadedContext(context) }
     }
+  }, [context, id])
 
-    setPackages(pkgs)
-    setLoading(false)
-  }
+  useEffect(() => {
+    activeContext.current = context
+    const timer = setTimeout(() => {
+      setAssignPackageId(null); setSelectedClient(null); setClientSearch(''); setClientResults([])
+      void loadData()
+    }, 0)
+    return () => { clearTimeout(timer); loadVersion.current += 1; activeContext.current = '' }
+  }, [loadData, context])
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -185,7 +200,7 @@ export default function ManifiestoDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!deletePackage || IS_DEMO_ENVIRONMENT) return
+    if (!deletePackage) return
     try {
       const { data, error } = await supabase.rpc('delete_miami_manifest_package', {
         p_package_id: deletePackage.id,
@@ -230,10 +245,6 @@ export default function ManifiestoDetailPage() {
   }
 
   const handleDeleteManifest = async () => {
-    if (IS_DEMO_ENVIRONMENT || profile?.is_demo_user === true) {
-      toast.info('La eliminación completa de manifiestos está bloqueada en el ambiente demo')
-      return
-    }
     if (!deleteReason.trim()) {
       toast.error('Indica el motivo de la eliminación')
       return
@@ -273,51 +284,44 @@ export default function ManifiestoDetailPage() {
   }
 
   const handleAssign = async () => {
-    if (!assignPackageId || !selectedClient) return
+    if (!assignPackageId || !selectedClient || assignmentInFlight.current) return
+    assignmentInFlight.current = true
     setAssigning(true)
     try {
-      const { data: whData } = await supabase.rpc('next_warehouse_number')
-      const { error } = await supabase.from('miami_packages').update({
-        cliente_id: selectedClient.id,
-        warehouse_number: whData,
-        status: 'Asignado',
-        assigned_at: new Date().toISOString(),
-        assigned_by: user?.id ?? null,
-      }).eq('id', assignPackageId)
-      if (error) throw error
-
-      // Find tracking number for notification
-      const pkg = packages.find(p => p.id === assignPackageId)
-      if (pkg) {
-        await notifyClientPackageAssigned({
-          clienteId:       selectedClient.id,
-          packageId:       assignPackageId,
-          trackingNumber:  pkg.tracking_number,
-          warehouseNumber: whData,
-        })
-        const emailResult = await sendMiamiPackageAssignmentEmail(assignPackageId)
-        if (!emailResult.ok) {
-          toast.warning('Paquete asignado, pero el correo no fue enviado', {
-            description: emailResult.error,
-          })
-        } else if (emailResult.skipped) {
-          toast.info('El cliente no tiene correo principal configurado')
-        }
+      const assigned = await assignMiamiPackage(supabase, assignPackageId, selectedClient.id, id)
+      if (activeContext.current !== context) return
+      const emailResult = await sendMiamiPackageAssignmentEmail(assigned.id)
+      if (activeContext.current !== context) return
+      if (!emailResult.ok) {
+        toast.warning('Paquete asignado, pero el correo no fue enviado', { description: emailResult.error })
+      } else if (emailResult.skipped) {
+        toast.info('El cliente no tiene correo principal configurado')
       }
-
-      toast.success(`Asignado a ${selectedClient.nombre} — WH: ${whData}`)
+      toast.success('Asignado a ' + selectedClient.nombre + ' - WH: ' + assigned.warehouse_number)
       setAssignPackageId(null)
       setSelectedClient(null)
       setClientSearch('')
       await loadData()
-    } catch (err: any) {
-      toast.error(err.message ?? 'Error al asignar')
+    } catch (error) {
+      if (activeContext.current === context) {
+        toast.error(error instanceof Error ? error.message : 'Error al asignar')
+        setAssignPackageId(null); setSelectedClient(null); setClientSearch('')
+        await loadData()
+      }
     } finally {
+      assignmentInFlight.current = false
       setAssigning(false)
     }
   }
 
-  if (loading) return (
+  if (loadError && loadedContext === context) return (
+    <div className={cardClass} role="alert">
+      <p className="text-sm text-red-600">{loadError}</p>
+      <button type="button" className={secondaryButtonClass} onClick={() => void loadData()}>Reintentar</button>
+    </div>
+  )
+
+  if (loading || loadedContext !== context) return (
     <div className="space-y-6">
       <div className="h-8 w-64 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" />
       <div className={`${cardClass} p-6`}><TableSkeleton rows={6} cols={5} /></div>
@@ -327,8 +331,6 @@ export default function ManifiestoDetailPage() {
   if (!manifest) return null
   const isOpen = manifest.status === 'Abierto'
   const isAdmin = profile?.rol === 'Admin'
-  const canDeleteManifest =
-    isAdmin && !IS_DEMO_ENVIRONMENT && profile?.is_demo_user !== true
 
   return (
     <div className="space-y-6">
@@ -381,14 +383,14 @@ export default function ManifiestoDetailPage() {
         <div className="flex flex-wrap items-center gap-3">
           {isOpen && (
             <>
-              {!IS_DEMO_ENVIRONMENT && <button
+              <button
                 type="button"
                 onClick={() => setCarrierModalOpen(true)}
                 className={`${secondaryButtonClass} inline-flex items-center gap-2`}
               >
                 <Truck className="h-4 w-4" />
                 Nuevo transportista
-              </button>}
+              </button>
               <button
                 type="button"
                 onClick={() => setConfirmClose(true)}
@@ -400,7 +402,7 @@ export default function ManifiestoDetailPage() {
               </button>
             </>
           )}
-          {canDeleteManifest && (
+          {isAdmin && (
             <button
               type="button"
               onClick={() => { setDeleteManifestOpen(true); setDeleteReason('') }}
@@ -436,7 +438,7 @@ export default function ManifiestoDetailPage() {
                 className={`${fieldClass} w-auto ${!manifest.carrier ? 'border-amber-400 dark:border-amber-600' : ''}`}
               >
                 <option value="" disabled>Seleccionar...</option>
-                {carriers.filter(c => !IS_DEMO_ENVIRONMENT || c !== 'Otro').map(c => (
+                {carriers.map(c => (
                   <option key={c} value={c}>{c === 'Otro' ? 'Otro (agregar nuevo...)' : c}</option>
                 ))}
               </select>
@@ -549,7 +551,7 @@ export default function ManifiestoDetailPage() {
                             >
                               Asignar
                             </button>
-                            {isOpen && !IS_DEMO_ENVIRONMENT && (
+                            {isOpen && (
                               <button
                                 type="button"
                                 onClick={() => setDeletePackage(p)}
@@ -573,12 +575,12 @@ export default function ManifiestoDetailPage() {
         )}
       </div>
 
-      {!IS_DEMO_ENVIRONMENT && <NewCarrierModal
+      <NewCarrierModal
         open={carrierModalOpen}
         onClose={() => setCarrierModalOpen(false)}
         carriers={carriers}
         onCreated={handleCarrierCreated}
-      />}
+      />
 
       {/* Delete manifest modal (Admin) */}
       {deleteManifestOpen && (
@@ -645,7 +647,7 @@ export default function ManifiestoDetailPage() {
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-[#0b1220]">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="font-semibold text-slate-900 dark:text-white">Asignar a cliente</h3>
-              <button type="button" onClick={() => { setAssignPackageId(null); setSelectedClient(null); setClientSearch('') }}>
+              <button type="button" aria-label="Cerrar asignación" disabled={assigning} onClick={() => { setAssignPackageId(null); setSelectedClient(null); setClientSearch('') }}>
                 <X className="h-5 w-5 text-slate-400" />
               </button>
             </div>
@@ -661,7 +663,7 @@ export default function ManifiestoDetailPage() {
                   <p className="font-semibold text-emerald-800 dark:text-emerald-200">{selectedClient.nombre}</p>
                   {selectedClient.codigo_cliente && <p className="text-xs text-emerald-600 dark:text-emerald-400">{selectedClient.codigo_cliente}</p>}
                 </div>
-                <button type="button" onClick={() => { setSelectedClient(null); setClientSearch('') }}>
+                <button type="button" aria-label="Cambiar cliente" disabled={assigning} onClick={() => { setSelectedClient(null); setClientSearch('') }}>
                   <X className="h-4 w-4 text-emerald-600" />
                 </button>
               </div>
@@ -703,6 +705,7 @@ export default function ManifiestoDetailPage() {
               <button
                 type="button"
                 onClick={() => { setAssignPackageId(null); setSelectedClient(null); setClientSearch('') }}
+                disabled={assigning}
                 className={secondaryButtonClass}
               >
                 Cancelar

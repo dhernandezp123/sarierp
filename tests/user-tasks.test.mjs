@@ -50,6 +50,8 @@ test('las vistas de tareas separan pendientes, vencidas y completadas', () => {
 })
 
 test('los enlaces de contexto aceptan solo rutas internas del tipo esperado', () => {
+  assert.equal(userTaskSourceHref({ ...baseTask, entity_type: 'quotation', source_path: '/invoicing?view=work&private=1' }), '/invoicing?view=work')
+  assert.equal(userTaskSourceHref({ ...baseTask, entity_type: 'quotation', source_path: '/invoicing-evil' }), null)
   assert.equal(userTaskSourceHref(baseTask), '/agents/agent-1')
   assert.equal(userTaskSourceHref({ ...baseTask, source_path: '//evil.test/agents/1' }), null)
   assert.equal(userTaskSourceHref({ ...baseTask, source_path: '/invoicing/1' }), null)
