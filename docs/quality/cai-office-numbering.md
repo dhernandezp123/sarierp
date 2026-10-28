@@ -1,5 +1,23 @@
 # CAI por oficina y tipo de documento — 28/10/2026
 
+## Confirmación vigente posterior al despliegue
+
+El propietario corrigió la asignación: **Tegucigalpa `000-000` y San Pedro Sula
+`001-001`**. Esta es la referencia vigente; las observaciones siguientes conservan
+la evidencia y la confirmación anterior utilizadas para la publicación.
+
+La revisión remota posterior todavía encuentra SPS `001-001`, TGU `000-001` y
+siete rangos asociados a esos prefijos; seis tienen correlativo superior al inicio.
+No hay documentos fiscales vinculados en este ERP, pero puede existir numeración
+previa en otro sistema. El ajuste `20261028180000` está preparado: corrige solo
+la ficha TGU, desactiva sus tres rangos incompatibles y conserva su identidad,
+fechas y correlativos. Registra auditoría y rechaza cambios si aparecen documentos
+fiscales TGU. No modifica SPS ni reescribe la migración aplicada. El propietario
+autorizó expresamente aplicar y conservar el historial, incluyendo la desactivación:
+TGU quedaría sin rangos activos hasta registrar su autorización SAR `000-000`.
+La fuente real pasó pruebas con rollback en ambas bases locales; su aplicación
+remota se verificará por separado.
+
 ## Verificación de solo lectura
 
 Producción y Prueba usan un CAI activo por combinación de **empresa, oficina y

@@ -2,10 +2,11 @@ import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 
 if (!process.env.CI) throw new Error('This runner only targets the disposable CI stack.')
-const files = ['invoice_drafts_and_master_review.sql', 'demo_production_parity.sql', 'finance_reporting_and_banks.sql', 'cai_office_numbering.sql', 'cai_office_backfill.sql', 'cai_master_lifecycle.sql']
+const files = ['invoice_drafts_and_master_review.sql', 'demo_production_parity.sql', 'finance_reporting_and_banks.sql', 'cai_office_numbering.sql', 'cai_office_backfill.sql', 'cai_master_lifecycle.sql', 'tgu_confirmed_fiscal_prefix.sql']
 for (const file of files) {
   let sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8')
   sql = sql.replaceAll('-- APPLY_CONFIRMED_OFFICE_BINDING_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028150000_cai_office_binding.sql', import.meta.url), 'utf8'))
+  sql = sql.replaceAll('-- APPLY_LATEST_TGU_CONFIRMATION_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028180000_tgu_confirmed_fiscal_prefix.sql', import.meta.url), 'utf8'))
   sql = sql.replace('begin;', `begin;
 update public.platform_environment set dataset_version='atlas-forwarding-demo-v1',dataset_seeded_at=now(),dataset_client_id='10000000-0000-4000-8000-000000000001' where singleton;`)
   if (file === 'invoice_drafts_and_master_review.sql' || file === 'finance_reporting_and_banks.sql' || file.startsWith('cai_')) {
