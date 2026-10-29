@@ -1,9 +1,38 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-29 - UX-FIN-04 - Combobox buscable en configuración de cuentas
+
+- Estado: implementado en main y Demo; validación funcional, visual y builds
+  locales aprobados. Sin commit ni publicación; aceptación autenticada pendiente.
+- Archivo: `src/app/(protected)/accounting/settings/page.tsx` en ambos árboles.
+  Los once selectores nativos de cuentas operativas usan `CompactSelect` con
+  búsqueda explícita por código/nombre, sin distinguir mayúsculas ni tildes.
+  Lista con desplazamiento y tamaño acotados; código/nombre y nivel/naturaleza;
+  etiquetas asociadas al campo, manejo de teclado, foco y «Sin configurar».
+- Se conservan los filtros de cuenta activa/de movimiento y naturaleza por uso,
+  incluido Costo para compras. Mismas identidades de cuentas y RPC de guardado;
+  no se activa la contabilidad ni se cambian fechas, permisos o SQL. Los controles
+  se deshabilitan durante el guardado. Máster y usuario por oficina ya disponían
+  de combobox con búsqueda y se reutilizan sin duplicarlos.
+- Validaciones: 506/506 Node, TypeScript y ESLint de la página en ambos árboles.
+  Página y controles reales renderizados con 714 cuentas ficticias: siete
+  comprobaciones de búsqueda, elegibilidad, guardado, limpieza, teclado/Escape y
+  menús en 1280/768/390 px y oscuro, sin errores en la ejecución final.
+  Fixture/capturas privados en `.ua/intermediate/settings-combobox-validation/`;
+  emulación de dispositivo, no prueba física de iPad/Safari ni UAT autenticada.
+- Paridad de código aprobada: 543 compartidos, 26 variantes, cero diferencias.
+- Builds main y Demo aprobados. El build local Demo usa los placeholders
+  no funcionales ya utilizados para compilar ese ambiente, sin credenciales
+  reales ni acceso autenticado remoto; no es evidencia de UAT.
+- Pendiente: commit/publicación a cargo de Claude y
+  aceptación autenticada. Se conservan separados los cambios CAI-CONFIRM-03 ya
+  aplicados; no se vuelve a ejecutar su migración ni se alteran datos reales.
+
 ### 2026-10-29 - CAI-CONFIRM-03 - Restaurar TGU a los rangos registrados 000-001
 
-- Estado: aplicado y verificado en Producción y Pruebas; aceptación autenticada
-  con Zonia pendiente. Migración y pruebas preparadas para el commit de Claude.
+- Estado: aplicado y verificado en Producción y Pruebas (registro de Codex);
+  fuente versionada en main `a80bbff` y demo `8c26c5d`. Validación SQL de CI y
+  aceptación autenticada con Zonia pendientes.
 - El propietario confirmó expresamente restaurar TGU 000-001. SPS conserva
   001-001. Zonia ya es el máster individual aprobado y activo; el bloqueo era la
   oficina 000-000 frente a sus tres rangos 000-001 conservados por la corrección anterior.
@@ -30,8 +59,20 @@
 - Entre la instantánea inicial y la aplicación, un usuario actualizó un cliente
   y registró su historial; la hora de esa operación precede a la restauración.
   Esa edición se preservó y no forma parte de la transacción de mantenimiento.
-- Pendiente: activación por Zonia y aceptación autenticada. Archivos preparados
-  para el commit de Claude; no se requiere ni se realiza despliegue frontend.
+- Commit y publicación (29/10/2026): MD5 de la fuente confirmado antes del commit
+  (`d780f06a0e216a03d47de8804df77b70`), idéntica en ambas ramas; ningún workflow
+  aplica migraciones. Local: TypeScript, `npm test` 506/512, `lint:ci` sin
+  regresiones y paridad 0 diferencias. El Supabase local tiene un esquema anterior
+  (sin `billing_offices`) y no se modificó, por lo que la prueba SQL no se pudo
+  ejecutar localmente. CI Quality `40915293175` (main) y `40915300401` (demo):
+  application aprobado; database falló dos veces al descargar imágenes Docker
+  (`toomanyrequests: Data limit exceeded`) antes de ejecutar SQL. Paridad
+  `40915300561` aprobada. Vercel: Production commit `a80bbff`
+  (`sarierp-fa2y6hijd`) y Preview commit `8c26c5d` (`sarierp-bjjekqtjg`) `READY`,
+  alias verificados; login 200. Frontend sin cambios funcionales.
+- Pendiente: relanzar el job database cuando el registro lo permita y confirmar
+  `tgu_restore_registered_cai_prefix.sql` en ambos; activación por Zonia y
+  aceptación autenticada.
 
 ### 2026-10-29 - UX-FIN-03 - Navegación de Anulaciones y formularios de Configuración contable
 
