@@ -2,7 +2,7 @@
 
 ### 2026-10-29 - CI-SQL-02 - Evitar gateways innecesarios en las pruebas SQL
 
-- Estado: implementado; pendiente la ejecución CI de esta revisión.
+- Estado: verificado en CI de main y Demo; todas las suites SQL/RLS aprobadas.
 - Archivos: .github/workflows/quality.yml en main y Demo. No cambia SQL ni
   servicios desplegados. El arranque de CI excluye Kong y PostgREST, que no
   utilizan las fixtures ejecutadas directamente con docker exec / psql.
@@ -13,12 +13,14 @@
   pruebas: 34/34 SQL main pasó en CI y 10/10 Trial pasó localmente.
 - Validación: revisión de los runners, sin peticiones HTTP a esos servicios;
   referencia: https://supabase.com/docs/reference/cli/supabase-start.
-- Pendiente: verificar CI de ambos y registrar sus commits/resultados.
+- Verificación: Quality main 40932807229 y Demo 40932813644 aprobados; paridad
+  40932813618 aprobada. Commits CI main 94805c72f540d7f1d72bfb525f451de3a7661790
+  y Demo 843d452cf9a50ae183be67e3ace7480f89678f7e; sin cambios de negocio ni datos.
 
 ### 2026-10-29 - ACC-SERVICE-01 - Cuentas contables por servicio y variante fiscal
 
-- Estado: implementado y validado localmente en Production y Trial; aplicación
-  remota y publicación en verificación. UAT autenticada con Zonia pendiente.
+- Estado: publicado y verificado técnicamente en Production y Trial.
+  UAT autenticada con Zonia pendiente.
 - Configuración: contador de conceptos únicos pendientes, ingresos, costos/gastos
   y clasificación; búsqueda por código/nombre y secciones separadas para cargos
   y familias operativas. Variantes I, E y Exonerada independientes y estables;
@@ -50,12 +52,31 @@
   los códigos I/E de ADUANA; no se cargan asignaciones reales. Emulación de
   navegador no equivale a iPad físico ni UAT. Trial conserva sus bloqueos de
   correo y usa datos ficticios; no se transfieren catálogos ni secretos.
-- Commit: se registra tras la publicación técnica.
+- Publicación técnica verificada: migración 20261029180000 aplicada en ambos
+  ambientes, MD5 2d985f0244f99735688bde9e6d3b6a16. Huellas de 131 tablas
+  originales de Production y 134 de Trial preservadas en la transacción; sin
+  cambios de usuarios, permisos anteriores, CAI/correlativos ni otras migraciones.
+  Contabilidad automática desactivada; cero asignaciones reales precargadas.
+  Production conserva 714 cuentas / 572 auxiliares. Trial no recibe el catálogo real.
+- Despliegues Vercel Ready: Production dpl_DCmKBm2FfXEJY9Q4Bz4szJbUGEZ9 y
+  Preview dpl_B3Nh5UHrwMifyU8yBv5X8Tf3ggEP. sari.forwarders.app y
+  demo.forwarders.app coinciden con sus manifests inmutables; 23/29 checks HTTP
+  sin sesión aprobados, incluidas protección de rutas/API y restricciones Demo.
+  Un 503 inicial de Trial no se reprodujo en consultas individuales ni en el
+  smoke completo posterior. Estas comprobaciones no son UAT autenticada.
+- CI Quality de ambos aprobado (aplicación y SQL/RLS) y paridad vigente aprobada.
+  El primer job SQL Trial falló descargando Kong por límites de registro Docker;
+  se corrigió el arranque CI excluyendo Kong/PostgREST sin quitar pruebas ni
+  inicialización Auth/Storage (CI-SQL-02). La ejecución
+  de paridad inicial de main fue cancelada por su grupo compartido; la última
+  compara ambas ramas y pasó. Logs y manifiestos en la evidencia privada.
+- Código publicado: main 8c1a372fc8ddc6ab794f39c13eca52725f39739d;
+  demo 3184eeb8822f1578da5dca3e1c9a0835c00c9d1d.
 
 ### 2026-10-29 - UX-FIN-04 - Combobox buscable en configuración de cuentas
 
 - Estado: implementado en main y Demo; validación funcional, visual y builds
-  locales aprobados. Incluido en ACC-SERVICE-01; aceptación autenticada pendiente.
+  locales aprobados. Publicado con ACC-SERVICE-01; aceptación autenticada pendiente.
 - Archivo: `src/app/(protected)/accounting/settings/page.tsx` en ambos árboles.
   Los once selectores nativos de cuentas operativas usan `CompactSelect` con
   búsqueda explícita por código/nombre, sin distinguir mayúsculas ni tildes.
@@ -76,7 +97,7 @@
 - Builds main y Demo aprobados. El build local Demo usa los placeholders
   no funcionales ya utilizados para compilar ese ambiente, sin credenciales
   reales ni acceso autenticado remoto; no es evidencia de UAT.
-- Pendiente: publicación técnica incluida en ACC-SERVICE-01 y
+- Publicación técnica completada con ACC-SERVICE-01. Pendiente:
   aceptación autenticada. Se conservan separados los cambios CAI-CONFIRM-03 ya
   aplicados; no se vuelve a ejecutar su migración ni se alteran datos reales.
 
