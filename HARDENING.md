@@ -1,5 +1,20 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-29 - CI-SQL-02 - Evitar gateways innecesarios en las pruebas SQL
+
+- Estado: implementado; pendiente la ejecución CI de esta revisión.
+- Archivos: .github/workflows/quality.yml en main y Demo. No cambia SQL ni
+  servicios desplegados. El arranque de CI excluye Kong y PostgREST, que no
+  utilizan las fixtures ejecutadas directamente con docker exec / psql.
+  Se conserva la inicialización de Auth/Storage, todas las migraciones,
+  suites completas, comprobaciones de salud y limpieza de la pila desechable.
+- Motivo: CI Trial falló dos veces antes de ejecutar SQL por límites de descarga
+  de ECR/GHCR y fallbacks inexistentes de Kong/PostgREST. No fue fallo de las
+  pruebas: 34/34 SQL main pasó en CI y 10/10 Trial pasó localmente.
+- Validación: revisión de los runners, sin peticiones HTTP a esos servicios;
+  referencia: https://supabase.com/docs/reference/cli/supabase-start.
+- Pendiente: verificar CI de ambos y registrar sus commits/resultados.
+
 ### 2026-10-29 - ACC-SERVICE-01 - Cuentas contables por servicio y variante fiscal
 
 - Estado: implementado y validado localmente en Production y Trial; aplicación

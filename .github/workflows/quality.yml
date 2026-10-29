@@ -45,7 +45,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Start disposable local database
-        run: npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor
+        # SQL fixtures connect directly through docker exec / psql.
+        # Keep Auth/Storage schema initialization; API gateways are not used.
+        run: npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,kong,postgrest
       - name: SQL and RLS regression suites
         run: node scripts/validate-audit-sql.mjs
       - name: Stop disposable stack
