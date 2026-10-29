@@ -1,5 +1,36 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-29 - UX-ACC-01 / ACC-DELETE-01 - Edición confirmada y eliminación segura de cuentas
+
+- Estado: implementado, migrado en Produccion/Pruebas y publicado; UAT
+  autenticada pendiente.
+- Hallazgo: en `/accounting/accounts`, Editar cargaba el formulario arriba de
+  la tabla sin desplazar ni enfocar; el usuario no notaba que ya podía editar.
+  El catálogo tampoco permitía eliminar cuentas creadas por error.
+- UX: Editar/Nueva cuenta desplazan al formulario y enfocan Código; formulario
+  resaltado con el código en el título; fila en edición marcada ("Editando").
+  Guardar una cuenta existente pide confirmación (ConfirmDialog); nueva cuenta
+  guarda directo. Ícono de papelera por fila con confirmación destructiva.
+- SQL: `20261029230000_delete_unused_accounting_account.sql` crea
+  `delete_accounting_account(uuid)` (security definer, `can_manage_finance`,
+  lock del catálogo por tenant). Solo elimina cuentas sin hijas, sin
+  `journal_lines`, sin uso en `purchase_documents.items` (JSON sin FK) y sin
+  referencias por FK (configuración, activos, tesorería, servicios); en esos
+  casos indica desactivar. EXECUTE revocado a `public`/`anon`.
+- Archivos: `src/app/(protected)/accounting/accounts/page.tsx`, migración y
+  `supabase/tests/accounting_catalog_structure.sql` (rechazos por hijas,
+  movimientos, compra y asignación; borrado exitoso; anon sin EXECUTE).
+- Validación: TypeScript; Node 530/530; lint 0 regresiones; SQL aislado
+  `sarierp_aud01` reseteado a 162 migraciones: 35/35 suites aprobadas.
+- Aplicación remota aislada (sin `db push` general; Outlook `20261002120000`
+  sigue excluido): preflight de solo lectura, ensayo con rollback verificado y
+  transacción registrada en `schema_migrations` con MD5
+  064df3b7e04bf856b08bd814f2f30010. Produccion: 714 cuentas sin cambios;
+  Demo: 0 cuentas. Postflight: función presente, anon sin EXECUTE.
+  Evidencia privada en `.ua/intermediate/account-delete-release-20261029/`.
+- Pendiente: UAT con sesión real (editar con confirmación, eliminar una cuenta
+  sin uso y verificar el rechazo de una con movimientos). Hash: ver commit.
+
 ### 2026-10-29 - RELEASE-SUP-CAT-01 - Publicacion de catalogo y modal de proveedores
 
 - Estado: publicado y verificado en Produccion/Pruebas; UAT pendiente.
