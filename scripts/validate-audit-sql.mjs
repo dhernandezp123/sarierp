@@ -16,6 +16,7 @@ const files = [
   'cai_master_lifecycle.sql',
   'fiscal_offices.sql', 'fiscal_invoice_workflow.sql', 'customer_collections.sql',
   'accounting_engine.sql',
+  'accounting_catalog_structure.sql',
   'accounting_financial_sources.sql',
   'fixed_assets.sql',
   'accounting_currency.sql',
@@ -34,6 +35,9 @@ const files = [
 for (const file of files) {
   let sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8').replaceAll('-- APPLY_CONFIRMED_OFFICE_BINDING_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028150000_cai_office_binding.sql', import.meta.url), 'utf8'))
   sql = sql.replaceAll('-- APPLY_LATEST_TGU_CONFIRMATION_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028180000_tgu_confirmed_fiscal_prefix.sql', import.meta.url), 'utf8'))
+  if (/^(billing_points_of_sale|cai_|tgu_|fiscal_|customer_collections|accounting_|fixed_assets|invoice_drafts_|finance_reporting_)/.test(file)) {
+    sql = sql.replace(/^begin;/im, "begin;\nset local time zone 'America/Tegucigalpa';")
+  }
   const result = spawnSync('docker', ['exec', '-i', container, 'psql', '-X', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], {
     input: sql, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
   })
