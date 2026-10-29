@@ -25,7 +25,7 @@ insert into public.billing_user_office_access(tenant_id,profile_id,office_ids,re
 insert into public.clientes(id,nombre,rtn,condicion_pago,tenant_id,billing_office_id) values('dd280200-0000-4000-8000-000000000001','Cliente ficticio','08019999123456','Contado','dd280000-0000-4000-8000-000000000100','dd280100-0000-4000-8000-000000000001');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"dd280000-0000-4000-8000-000000000001","role":"authenticated"}',true);
-select pg_temp.assert_true(not public.is_invoice_master(),'Admin no es master por defecto');
+select pg_temp.assert_true(public.is_invoice_master(),'Admin tiene autoridad financiera en su empresa');
 select pg_temp.expect_error($c$select public.set_invoice_master('dd280000-0000-4000-8000-000000000004','Ajeno')$c$,'esta empresa');
 select public.set_invoice_master('dd280000-0000-4000-8000-000000000002','Designación de prueba');
 select set_config('request.jwt.claims','{"sub":"dd280000-0000-4000-8000-000000000002","role":"authenticated"}',true);
@@ -62,7 +62,9 @@ select pg_temp.expect_error($c$select * from public.issue_invoice_draft('dd28040
 select public.save_invoice_draft('dd280400-0000-4000-8000-000000000002',1,'dd280500-0000-4000-8000-000000000005',(select invoice from payload),'[{"description":"Servicio corregido","quantity":2,"unit_price":100,"isv_rate":0}]','{"changed":true}',null,(select invoice_id from issued));
 select pg_temp.assert_true((select status='Borrador' and reviewed_revision is null from public.invoice_drafts where id='dd280400-0000-4000-8000-000000000002'),'Editar invalida aprobación');
 select public.submit_invoice_correction('dd280400-0000-4000-8000-000000000002',2,'Cantidad confirmada');
+select set_config('request.jwt.claims','{"sub":"dd280000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.review_invoice_correction('dd280400-0000-4000-8000-000000000002',2,true,'Confirmación final');
+select set_config('request.jwt.claims','{"sub":"dd280000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 update public.clientes set rtn='08019999123457' where id='dd280200-0000-4000-8000-000000000001';
 select pg_temp.expect_error($c$select * from public.issue_invoice_draft('dd280400-0000-4000-8000-000000000002',2)$c$,'datos del cliente o emisor cambiaron');
 update public.clientes set rtn='08019999123456' where id='dd280200-0000-4000-8000-000000000001';

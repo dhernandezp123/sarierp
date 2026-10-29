@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import Sidebar from '@/src/components/layout/sidebar'
 import Topbar from '@/src/components/layout/topbar'
 import { ErrorBoundary } from '@/src/components/ui/error-boundary'
+import { WorkspaceBreadcrumbs } from '@/src/components/layout/WorkspaceBreadcrumbs'
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/src/components/ui/dialog'
 import { X } from 'lucide-react'
 import OnboardingTutorial from '@/src/components/onboarding/OnboardingTutorial'
@@ -75,7 +76,8 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar mobileNavOpen={mobileNavOpen} onOpenMobileNav={() => setMobileNavOpen(true)} />
 
-        <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+        <main data-erp-workspace="" className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          {!isPlatformAdmin&&<WorkspaceBreadcrumbs/>}
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
 

@@ -1,5 +1,113 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-29 - UX-SUP-01 - Paginación del listado de proveedores
+
+- Estado: implementado en main y demo; validación/publicación en curso.
+- Archivo: `src/app/(protected)/suppliers/page.tsx`; reutiliza `Pagination`
+  con 25/50/75/100, rango visible y anterior/siguiente fuera del scroll de tabla.
+  Los filtros y cambios de tamaño regresan a página 1; se pagina el resultado
+  filtrado completo. `readAllReportRows` recupera todas las páginas de la API,
+  con orden estable por nombre/id, evitando truncamiento del listado.
+- Pruebas: `tests/suppliers-pagination.test.mjs` verifica 124 activos, última
+  página, tamaños, filtros/inactivos y respuestas de API limitadas a 40 filas.
+  Suites Node completas: main 521/521 y demo 527/527. Compilación inicial sufrió
+  falta de heap al ejecutar varias verificaciones; se reintenta secuencialmente.
+- No modifica datos, SQL ni permisos. Incluye en la publicación autorizada los
+  cambios pendientes UX-NAV-01, AUTH-FIN-01 y documentación DATA-SUP-01.
+- Validaci?n final: builds optimizados y TypeScript en ambos, lint:ci sin
+  regresiones (223 hist?ricos), navegador con datos ficticios a 1280/390 px.
+  Pendiente: commit/despliegue y UAT autenticada. Hash: pendiente.
+
+### 2026-10-29 - AUTH-FIN-01 - Autoridad financiera de Admin y acceso a proveedores
+
+- Estado: migración aplicada en Producción y Pruebas; verificación RLS real en
+  Producción aprobada para los dos Admin de Sari y Zonia. UAT visual pendiente.
+- Causa: `is_invoice_master` exigía designación individual también a Admin,
+  contradiciendo la autorización solicitada de acceso administrativo completo.
+  Ahora admite Admin aprobado/activo del tenant o Contabilidad designada. No
+  concede acceso de plataforma ni entre empresas; conserva la designación de Zonia.
+- Aprobaciones de corrección: admite revisor Admin vigente de la misma empresa;
+  para Contabilidad mantiene identidad y fecha de la designación. Continúan
+  aprobación por versión, contexto, anulación previa, auditoría y correlativos.
+- Archivos: `supabase/migrations/20261029210000_tenant_admin_financial_authority.sql`
+  y `supabase/tests/{cai_master_lifecycle,invoice_drafts_and_master_review,
+  service_accounting_assignments}.sql`, replicados en demo. Sin cambios de frontend.
+- Validación: 34 escenarios SQL de producción y 10 de demo en base aislada con
+  rollback; escenario CAI repetido tras corregir el contexto del fixture inactivo.
+  Incluyen activar/desactivar CAI como Admin, editar proveedores como Admin y
+  Contabilidad, aprobación por Admin, aislamiento y rechazo de Admin inactivo.
+  Node de acceso/cuentas: 13/13; TypeScript en ambos; paridad 553/26 sin diferencias.
+- Remoto: ensayo con rollback y aplicación transaccional de la única migración,
+  con comprobación de definiciones previas, registro de versión y fingerprints
+  inalterados de CAI/historial, proveedores, perfiles, facturas, borradores,
+  aprobaciones y oficinas. Cada Admin y Zonia ve 124 proveedores y pudo actualizar
+  uno bajo rol authenticated; esas escrituras de verificación se revirtieron.
+- Evidencia privada ignorada por Git: `.ua/intermediate/admin-finance-access-20261029/`
+  y logs relacionados. Pendiente: commit del código/SQL y aceptación visual al
+  recargar la página; no hace falta despliegue frontend para este permiso. Hash: pendiente.
+
+### 2026-10-29 - DATA-SUP-01 - Importación del listado de proveedores de Sari
+
+- Estado: carga aplicada y verificada mediante lectura independiente en Sari
+  Producción. Archivo: `Resumen proveedores.xlsx`, 128 filas de datos.
+- Resultado: 124 proveedores únicos; 123 insertados y uno existente enriquecido
+  sin modificar su configuración. Cuatro pares repetidos se consolidaron por
+  nombre normalizado y/o RTN coincidente, conservando sus datos complementarios.
+  Valores de los nuevos, confirmados por el usuario: Otro, HNL, contado (0 días).
+- Direcciones, ciudades, departamentos y retenciones originales se conservaron
+  en notas. Trece RTN de 13 dígitos se conservaron sin completar ni inventar
+  dígitos y quedaron identificados para revisión de Contabilidad.
+- Ejecución: transacción con bloqueo breve y comprobación del snapshot previo,
+  tenant y ambiente; ensayo con rollback, carga con commit y consulta posterior.
+  Verificador comparó todos los valores importados y la configuración anterior.
+  TypeScript sin errores. No hubo cambios de código de aplicación, SQL de
+  esquema, RLS ni despliegue. Datos y credenciales no se copiaron a Demo.
+- Evidencias/scripts/SQL/CSV de revisión: directorio local ignorado por Git
+  `.ua/intermediate/supplier-import-20261029/` y scripts privados relacionados.
+  Los datos personales del archivo no se incorporan al repositorio.
+- Pendiente: revisar los 13 RTN con Contabilidad y aceptación visual con sesión
+  autenticada. Hash de documentación: pendiente; no se solicitó commit.
+
+### 2026-10-29 - UX-NAV-01 - Breadcrumbs y filtros de selección múltiple
+
+- Estado: implementado y validado localmente en los worktrees main y demo.
+  Sin commit ni publicación de este ajuste. UAT autenticada pendiente.
+- Cambios: rutas de navegación compartidas con ancestros válidos, página actual
+  sin enlace, detalle contextual conservado sin duplicación y ruta expandible
+  en móvil. Selector múltiple reutilizable con búsqueda sin tildes, teclado,
+  etiquetas removibles, selección de resultados y menú de ancho/alto acotados.
+- Integración: tipos/estados/oficinas en Facturación; clientes/proveedores,
+  estados y tipos en estados de cuenta; clientes/fases/modalidades/estados en
+  operaciones; cuentas contables en Mayor; cuentas bancarias en reportes.
+  Crear documentos y conciliar una cuenta mantienen selección única.
+- Integridad: Pendientes/Vencidos se unen sin duplicar filas; exportación y
+  totales utilizan los mismos filtros. El Mayor conserva apertura y saldo por
+  cuenta; bancos mantienen cuenta y moneda; filtrar tipos de movimiento no
+  altera el saldo histórico completo. Operaciones de varios clientes se
+  identifican como consolidado interno; una selección individual conserva el
+  reporte comercial y su lista explícita de columnas autorizadas.
+- Archivos: `src/components/ui/{Breadcrumbs,MultiSelect}.tsx`,
+  `src/components/layout/{WorkspaceBreadcrumbs,protected-shell}.tsx`,
+  `src/app/globals.css`, `src/lib/{workspace-breadcrumbs,invoice-list-filters,
+  multi-account-ledger,finance-report,treasury-report,client-operations-report}.ts`,
+  `src/components/accounting/{FinanceReportWorkspace,TreasuryWorkspace}.tsx`,
+  páginas de `invoicing`, `accounting/books`, `reports/client-operations`,
+  `tests/{navigation-multiselect,client-operations-report,collections-workspace}.test.mjs`
+  y `docs/quality/environment-parity.json`. SQL: ninguno; sin cambios de RLS,
+  permisos, CAI o datos. Se conservan las 26 variantes de ambiente revisadas.
+- Validación local: TypeScript sin errores en ambos worktrees; Node 519/519 en
+  main y 525/525 en demo; lint:ci sin regresiones (223 diagnósticos históricos).
+  Builds optimizados aprobados en ambos; demo compiló con placeholders sin
+  credenciales, sin transferir variables sensibles de Producción.
+  Paridad: 552 archivos compartidos, 26 variantes, 0 diferencias inesperadas.
+  Navegador Chrome con datos sintéticos: 7 escenarios de teclado/foco,
+  accesibilidad, filtros/exportación, saldos separados, jerarquía y ausencia
+  de desbordamiento a 1280/768/390 px; tema oscuro; sin errores de ejecución.
+  Evidencia local en `.ua/intermediate/navigation-filters-20261029/` (ignorada).
+- Pendiente: publicación y aceptación con sesión real. La
+  emulación de viewport no acredita prueba física en iPadOS/Safari. No se
+  transfirieron credenciales ni datos reales entre ambientes. Hash: pendiente.
+
 ### 2026-10-29 - UX-FORM-01 - Formularios con etiqueta arriba y registro de Compras
 
 - Estado: publicado en Producción y Pruebas; revisión autenticada pendiente. No

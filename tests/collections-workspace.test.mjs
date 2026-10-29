@@ -86,14 +86,14 @@ test('un fallo del directorio se puede recuperar desde la pantalla sin mostrar u
 test('Estado histórico comparte exportación, cliente buscable y filtro de NC sin cambiar el saldo completo', async()=>{
  const events=[{id:'1',kind:'Factura',debit:100,credit:0,movement_date:'2026-10-01'},{id:'2',kind:'Nota de Crédito',debit:0,credit:20,movement_date:'2026-10-02'},{id:'3',kind:'Pago',debit:0,credit:30,movement_date:'2026-10-03'}].map(e=>({...e,party_id:'a',party_name:'Cliente Horizonte',currency:'HNL',reference:e.id,description:'Movimiento ficticio',reconstructed:false}))
  const client={from(table){const q={select:()=>q,order:()=>q,returns:()=>q,maybeSingle:async()=>({data:{starts_on:'2026-01-01',has_legacy:false},error:null}),range:async(from,to)=>({data:(table==='clientes'?clients:[]).slice(from,to+1),error:null})};return q},rpc(name){return{range:async(from,to)=>({data:(name==='finance_movements_at'?events:[]).slice(from,to+1),error:null})}}}
- const app=mountPage('src/app/(protected)/invoicing/statements/page.tsx',{'@/src/lib/supabase/client':{supabase:client},'@/src/components/ui/ClienteCombobox':{ClienteCombobox:'ClienteCombobox'},'@/src/components/invoicing/FinancialReportExport':{FinancialReportExport:'Export'}},{props:{side:'receivable',initialView:'movements'},unwrap:element=>element.type})
+ const app=mountPage('src/app/(protected)/invoicing/statements/page.tsx',{'@/src/lib/supabase/client':{supabase:client},'@/src/components/ui/MultiSelect':{MultiSelect:'MultiSelect'},'@/src/components/invoicing/FinancialReportExport':{FinancialReportExport:'Export'}},{props:{side:'receivable',initialView:'movements'},unwrap:element=>element.type})
  try{
   await app.ready();await app.tick();app.render()
-  app.find(n=>n.type==='ClienteCombobox').props.onChange('a');app.render()
+  app.find(n=>n.props?.id==='finance-party').props.onValueChange(['a']);app.render()
   assert.ok(app.find(n=>n.type==='Export'),app.text())
   const full=app.find(n=>n.type==='Export').props.data
   assert.equal(full.rows.length,3);assert.equal(full.metrics.find(m=>m.label.includes('Saldo HNL')).value,'HNL 50.00')
-  app.find(n=>n.props?.['aria-label']==='Mostrar Nota de Crédito').props.onChange({target:{checked:true}});app.render()
+  app.find(n=>n.props?.['aria-label']==='Tipos de movimiento').props.onValueChange(['Nota de Crédito']);app.render()
   const filtered=app.find(n=>n.type==='Export').props.data
   assert.equal(filtered.rows.length,1);assert.equal(filtered.rows[0].kind,'Nota de Crédito');assert.equal(filtered.metrics.find(m=>m.label.includes('Saldo HNL')).value,'HNL 50.00')
  }finally{app.cleanup()}
