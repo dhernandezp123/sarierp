@@ -5,7 +5,7 @@ import { CalendarPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
-import { fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import type {
   UserTaskEntityType,
   UserTaskModule,
@@ -112,8 +112,8 @@ export function CreateContextTaskDialog({
         </DialogHeader>
 
         <div className="grid gap-4">
-          <label className="space-y-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Título
+          <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-200">
+            <span className={fieldLabelClass}>Título</span>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -122,8 +122,8 @@ export function CreateContextTaskDialog({
               autoFocus
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Notas opcionales
+          <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-200">
+            <span className={fieldLabelClass}>Notas opcionales</span>
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
@@ -133,8 +133,8 @@ export function CreateContextTaskDialog({
             />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-              Prioridad
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-200">
+              <span className={fieldLabelClass}>Prioridad</span>
               <select
                 value={priority}
                 onChange={(event) => setPriority(event.target.value as UserTaskPriority)}
@@ -145,8 +145,8 @@ export function CreateContextTaskDialog({
                 <option value="Alta">Alta</option>
               </select>
             </label>
-            <label className="space-y-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-              Vencimiento
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-200">
+              <span className={fieldLabelClass}>Vencimiento</span>
               <input
                 type="date"
                 value={dueDate}

@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { useAccounting } from '@/src/hooks/useAccounting'
 import { supabase } from '@/src/lib/supabase/client'
-import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { buildTenantStoragePath } from '@/src/lib/storage-paths'
@@ -472,8 +472,8 @@ export default function SupplierDetailPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-500">Fecha factura</label>
                 <input type="date" value={cpForm.fecha_factura} onChange={setCP('fecha_factura')} className={fieldClass} />
               </div>
-              {cpForm.moneda !== 'HNL' && <label className="text-sm">HNL por {cpForm.moneda}<input type="number" min="0.000001" max="1000000" step="0.000001" value={cpForm.tipo_cambio} onChange={setCP('tipo_cambio')} className={fieldClass}/></label>}
-              <label className="text-sm">Cuenta de costo / gasto / activo<select value={cpForm.expense_account_id} onChange={setCP('expense_account_id')} className={fieldClass}><option value="">Cuenta de compras configurada</option>{accounting?.accounts.filter(a=>a.active&&a.postable&&['Activo','Costo','Gasto'].includes(a.kind)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>
+              {cpForm.moneda !== 'HNL' && <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>HNL por {cpForm.moneda}</span><input type="number" min="0.000001" max="1000000" step="0.000001" value={cpForm.tipo_cambio} onChange={setCP('tipo_cambio')} className={fieldClass}/></label>}
+              <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Cuenta de costo / gasto / activo</span><select value={cpForm.expense_account_id} onChange={setCP('expense_account_id')} className={fieldClass}><option value="">Cuenta de compras configurada</option>{accounting?.accounts.filter(a=>a.active&&a.postable&&['Activo','Costo','Gasto'].includes(a.kind)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>
               <p className="text-sm md:col-span-2">Para varias cuentas por línea, ISV acreditable o boleta fiscal, usa <Link className="text-blue-700 underline" href="/accounting/purchases">Compras y documentos</Link>.</p>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">
@@ -549,13 +549,13 @@ export default function SupplierDetailPage() {
                             </button>
                           )}
                           <label
-                            className={`cursor-pointer ${uploadingDocId === c.id ? 'opacity-40' : ''}`}
+                            className={`flex min-w-0 flex-col gap-1.5 cursor-pointer ${uploadingDocId === c.id ? 'opacity-40' : ''}`}
                             title={c.documento_url ? 'Reemplazar documento' : 'Subir documento'}
                           >
-                            {uploadingDocId === c.id
+                            <span className={fieldLabelClass}>{uploadingDocId === c.id
                               ? <span className="text-[10px] text-slate-400">...</span>
                               : <Upload className="h-3.5 w-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" />
-                            }
+                            }</span>
                             <input
                               type="file"
                               className="hidden"

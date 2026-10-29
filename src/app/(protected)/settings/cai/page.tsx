@@ -16,7 +16,7 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { ToggleSwitch } from '@/src/components/ui/toggle-switch'
 import { CompactSelect } from '@/src/components/ui/CompactSelect'
-import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 
 type CaiRange = {
   id: string
@@ -481,7 +481,7 @@ export default function CaiSettingsPage() {
                 className={fieldClass}
               />
             </div>
-            <label className="space-y-2 text-sm sm:col-span-2">Motivo del registro o corrección
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm sm:col-span-2"><span className={fieldLabelClass}>Motivo del registro o corrección</span>
               <textarea aria-label="Motivo del cambio CAI" value={reason} onChange={event=>setReason(event.target.value)} maxLength={1000} className={`${fieldClass} h-auto min-h-20 resize-y py-3`} rows={2}/>
             </label>
           </div>
@@ -570,7 +570,7 @@ export default function CaiSettingsPage() {
       {pendingAction&&canManageRanges&&<section ref={actionRef} className="w-full max-w-2xl space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/40" aria-label="Motivo de acción CAI">
         <h2 className="font-semibold">{pendingAction.kind==='archive'?'Eliminar de uso':pendingAction.range.is_active?'Desactivar':'Activar'} CAI · {pendingAction.range.cai}</h2>
         <p className="text-sm text-slate-500">{pendingAction.kind==='archive'?'El registro y sus movimientos quedarán disponibles como historial.':'El cambio afecta únicamente esta oficina y tipo de documento. Activar reemplaza al CAI activo de esa misma serie.'}</p>
-        <label className="block space-y-2 text-sm">Motivo<textarea aria-label="Motivo de acción CAI" className={fieldClass} maxLength={1000} value={actionReason} onChange={event=>setActionReason(event.target.value)} rows={2}/></label>
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Motivo</span><textarea aria-label="Motivo de acción CAI" className={fieldClass} maxLength={1000} value={actionReason} onChange={event=>setActionReason(event.target.value)} rows={2}/></label>
         <div className="flex gap-2"><button type="button" aria-label="Confirmar cambio CAI" title="Confirmar cambio" disabled={!actionReason.trim()||activating!==null} className={primaryButtonClass} onClick={()=>setConfirmAction(true)}><CheckCircle2 className="h-4 w-4"/></button><button type="button" aria-label="Cancelar cambio CAI" title="Cancelar" disabled={activating!==null} className={secondaryButtonClass} onClick={()=>setPendingAction(null)}><X className="h-4 w-4"/></button></div>
       </section>}
       <ConfirmDialog open={confirmAction&&canManageRanges} onOpenChange={setConfirmAction} title="Confirmar cambio CAI" description="La acción, el motivo y el usuario quedarán registrados. Los documentos ya emitidos conservarán sus datos originales." onConfirm={()=>void applyAction()}/>

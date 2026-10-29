@@ -14,7 +14,7 @@ import {
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
-import { fieldClass } from '@/src/lib/ui-classes'
+import { fieldClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { ACTIVITY_EXECUTION_STATUSES, activityExecutionLabel, type ActivityExecutionStatus } from '@/src/lib/sales-visits'
 import {
@@ -1284,9 +1284,9 @@ function SalesWorkQueuePanel({
             Aging desde el último cambio de estado y seguimientos de la actividad más reciente.
           </p>
         </div>
-        <label className="relative block w-full lg:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <span className="sr-only">Buscar en Mi día</span>
+        <label className="flex min-w-0 flex-col gap-1.5 relative w-full lg:max-w-sm">
+          <span className={fieldLabelClass}><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <span className="sr-only">Buscar en Mi día</span></span>
           <input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}

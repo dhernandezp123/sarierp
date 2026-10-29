@@ -7,6 +7,7 @@ import { readAllReportRows } from '@/src/lib/report-query'
 import type { AccountingAccount } from '@/src/lib/accounting'
 import { eligibleServiceAccount, pricingServiceReference, serviceTaxLabels, type ServiceConcept, type ServiceAccountingProfile, type ServiceAccountingVariant, type ServiceTaxVariant, type ServiceSourceKind } from '@/src/lib/service-accounting'
 import { CompactSelect } from '@/src/components/ui/CompactSelect'
+import { fieldLabelClass, fieldStackClass } from '@/src/lib/ui-classes'
 
 type Reference = { kind:ServiceSourceKind;code:string }
 type Source = { rateCode?:string|null;itemType?:string|null;product?:string|null }
@@ -52,6 +53,6 @@ export function ServiceLineAccountSelect({accountId,onAccount,reference,variant,
 export function InvoiceLineSettings({accountId,onAccount,onService,onClearService,reference,source,variant='E',disabled=false,readonlyService=false}:{accountId:string;onAccount:(id:string)=>void;onService:(s:ServiceChoice)=>void;onClearService?:()=>void;reference?:Reference;source?:Source;variant?:ServiceTaxVariant;disabled?:boolean;readonlyService?:boolean}) {
   const {concepts} = useContext(CatalogContext)
   const ref = reference || (source?pricingServiceReference(source.rateCode,source.itemType,source.product,concepts):undefined)
-  return <div className="col-span-full grid gap-2 pb-3 sm:grid-cols-2">{!readonlyService&&<div className="min-w-0 space-y-1 text-xs"><p>Servicio de catálogo (opcional)</p><ServiceCatalogSelect reference={ref} variant={variant} disabled={disabled} onSelect={onService} onClear={onClearService}/></div>}
-    <div className="min-w-0 space-y-1 text-xs"><p>Cuenta de ingreso</p><ServiceLineAccountSelect accountId={accountId} onAccount={onAccount} reference={ref} variant={variant} disabled={disabled}/></div></div>
+  return <div className="col-span-full grid gap-2 pb-3 sm:grid-cols-2">{!readonlyService&&<div className={fieldStackClass}><p className={fieldLabelClass}>Servicio de catálogo (opcional)</p><ServiceCatalogSelect reference={ref} variant={variant} disabled={disabled} onSelect={onService} onClear={onClearService}/></div>}
+    <div className={fieldStackClass}><p className={fieldLabelClass}>Cuenta de ingreso</p><ServiceLineAccountSelect accountId={accountId} onAccount={onAccount} reference={ref} variant={variant} disabled={disabled}/></div></div>
 }

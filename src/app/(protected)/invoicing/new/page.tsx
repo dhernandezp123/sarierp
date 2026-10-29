@@ -21,6 +21,7 @@ import {
   secondaryButtonClass,
   cardClass,
   fieldClass,
+  fieldLabelClass,
 } from '@/src/lib/ui-classes'
 import { billingReturnHref } from '@/src/lib/billing-readiness'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
@@ -1125,7 +1126,7 @@ export default function NewInvoicePage() {
                   key={it.id}
                   className="grid min-w-0 grid-cols-2 items-start gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700 lg:grid-cols-[minmax(0,1fr)_72px_110px_150px_110px_36px] lg:items-center lg:gap-2 lg:border-0 lg:p-0"
                 >
-                  <label className="col-span-2 min-w-0 space-y-1 text-xs lg:col-span-1"><span className="lg:hidden">Descripción</span>
+                  <label className="flex min-w-0 flex-col gap-1.5 col-span-2 min-w-0 text-xs lg:col-span-1"><span className={fieldLabelClass}>Descripción</span>
                   <input
                     type="text"
                     placeholder="Descripción del servicio..."
@@ -1135,7 +1136,7 @@ export default function NewInvoicePage() {
                     className={`${fieldClass} text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800 ${submitted && !it.description ? 'border-red-400' : ''}`}
                   />
                   </label>
-                  <label className="min-w-0 space-y-1 text-xs"><span className="lg:hidden">Cantidad</span>
+                  <label className="flex min-w-0 flex-col gap-1.5 min-w-0 text-xs"><span className={fieldLabelClass}>Cantidad</span>
                   <NumberInput type="number"
                     value={it.quantity}
                     onChange={(e) => updateItem(it.id, 'quantity', e.target.value)}
@@ -1145,7 +1146,7 @@ export default function NewInvoicePage() {
                     className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
                   />
                   </label>
-                  <label className="min-w-0 space-y-1 text-xs"><span className="lg:hidden">Precio unitario {currency}</span>
+                  <label className="flex min-w-0 flex-col gap-1.5 min-w-0 text-xs"><span className={fieldLabelClass}>Precio unitario {currency}</span>
                   <NumberInput type="number"
                     value={it.unit_price}
                     onChange={(e) => updateItem(it.id, 'unit_price', e.target.value)}

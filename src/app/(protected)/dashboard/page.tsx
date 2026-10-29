@@ -25,6 +25,7 @@ import {
   fieldClass,
   primaryButtonClass,
   secondaryButtonClass as baseSecondaryButtonClass,
+  fieldLabelClass,
 } from '@/src/lib/ui-classes'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import {
@@ -1163,7 +1164,7 @@ function TasksPanel({
       />
 
       <div className="mb-4 grid items-end gap-3 md:grid-cols-[1fr_140px]">
-        <label className="space-y-1 text-sm text-slate-700 dark:text-slate-200">Título
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-200"><span className={fieldLabelClass}>Título</span>
         <input
           aria-label="Título de la tarea"
           value={taskTitle}
@@ -1173,7 +1174,7 @@ function TasksPanel({
         />
         </label>
 
-        <label className="space-y-1 text-sm text-slate-700 dark:text-slate-200">Prioridad
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-200"><span className={fieldLabelClass}>Prioridad</span>
         <select
           aria-label="Prioridad de la tarea"
           value={taskPriority}
@@ -1188,7 +1189,7 @@ function TasksPanel({
         </select>
         </label>
 
-        <label className="space-y-1 text-sm text-slate-700 dark:text-slate-200">Vencimiento
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-200"><span className={fieldLabelClass}>Vencimiento</span>
         <input
           type="date"
           aria-label="Fecha de vencimiento de la tarea"

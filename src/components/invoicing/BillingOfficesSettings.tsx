@@ -6,7 +6,7 @@ import { useUser } from '@/src/hooks/useUser'
 import { supabase } from '@/src/lib/supabase/client'
 import { canManageCompanySettings } from '@/src/lib/permissions'
 import { validateOffice, type BillingOffice } from '@/src/lib/fiscal-offices'
-import { fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 
 const empty = { name: '', address: '', phone: '', email: '', establishment_code: '', emission_point_code: '', is_active: true }
 const fields = [
@@ -63,7 +63,7 @@ export function BillingOfficesSettings() {
     {canEdit && current && !current.error && !draft && <button type="button" className={secondaryButtonClass} onClick={() => setEditor({ identity, original: null, form: { ...empty } })}>Agregar oficina</button>}
     {draft && canEdit && <fieldset disabled={saving} className="space-y-4 border-t pt-4">
       <legend className="font-medium">{draft.original ? 'Editar oficina' : 'Nueva oficina'}</legend>
-      <div className="grid gap-4 md:grid-cols-2">{fields.map(([key, label]) => <label key={key} className="space-y-1 text-sm"><span>{label}</span><input className={fieldClass} value={draft.form[key]} type={key === 'email' ? 'email' : 'text'} maxLength={key.includes('code') ? 3 : key === 'name' ? 120 : 500} onChange={event => setEditor({ ...draft, form: { ...draft.form, [key]: event.target.value } })} /></label>)}</div>
+      <div className="grid gap-4 md:grid-cols-2">{fields.map(([key, label]) => <label key={key} className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>{label}</span><input className={fieldClass} value={draft.form[key]} type={key === 'email' ? 'email' : 'text'} maxLength={key.includes('code') ? 3 : key === 'name' ? 120 : 500} onChange={event => setEditor({ ...draft, form: { ...draft.form, [key]: event.target.value } })} /></label>)}</div>
       <label className="flex gap-2 text-sm"><input type="checkbox" checked={draft.form.is_active} onChange={event => setEditor({ ...draft, form: { ...draft.form, is_active: event.target.checked } })} />Oficina activa para nuevas emisiones</label>
       <div className="flex gap-2"><button type="button" className={primaryButtonClass} onClick={() => void save()}>{saving ? 'Guardando…' : 'Guardar oficina'}</button><button type="button" className={secondaryButtonClass} onClick={() => setEditor(null)}>Cancelar</button></div>
     </fieldset>}

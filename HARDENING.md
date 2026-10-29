@@ -1,5 +1,47 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-29 - UX-FORM-01 - Formularios con etiqueta arriba y registro de Compras
+
+- Estado: implementado y verificado localmente; pendiente commit, publicación y
+  revisión autenticada. No modifica SQL, permisos, RPC ni datos.
+- Hallazgo (reportado por el usuario en Compras > Registrar documento): las
+  etiquetas `<label>Texto<select/></label>` sin clase dejaban el texto en línea y
+  el `select` (máx. 448 px) a su lado; "Oficina emisora" mostraba dos etiquetas
+  (`BillingOfficeSelect` traía la suya, también en línea en los cuatro
+  formularios de clientes); tres tamaños de etiqueta; grilla única con huecos;
+  líneas sin bloque; sin marcas de obligatorio; total suelto. Auditoría del repo:
+  52 etiquetas con `select` al lado y 145 con campo sin separación en 45
+  archivos; etiquetas separadas no `block` en Pricing (`labelClass`), Cobranza y
+  reporte de operaciones.
+- Cambios: `FormField`/`FormSection` en `src/components/ui/form-field.tsx`
+  (antes vacío) y `fieldLabelClass`, `fieldStackClass`, `formSectionTitleClass`
+  en `ui-classes.ts`. Compras rediseñada con el patrón de `/quotations/new`:
+  secciones Documento / Datos del proveedor (boleta) / Líneas, cada línea como
+  bloque numerado con importe y "Quitar", resumen Subtotal/ISV/Total y acciones a
+  la derecha; listado con `Pagination` y enlaces de marca. Misma lógica de
+  guardado y validación. `BillingOfficeSelect` recibe `label` y `required`.
+  ~170 etiquetas apiladas en 45 archivos (Contabilidad, Facturación, Operaciones,
+  Cotizaciones, Plataforma, portal) con el texto en `fieldLabelClass`, sin
+  `mt-*` redundante ni negrita heredada por el control; `labelClass` de
+  `src/lib/ui.ts` pasa a `block`; `InvoiceLineSettings` usa la misma etiqueta;
+  Activos y Asientos usan `Pagination`. Excepciones intencionales sin cambio:
+  filtros en línea "Ver"/"Mostrar" (dashboard, detalle de cotización), botón
+  "Importar CSV", descuento en línea de `invoicing/new` y campo USD de la
+  comparación FCL. Skill: `ui-conventions.md` agrega la sección "Formularios" y
+  `SKILL.md` la referencia.
+- Demo: mismo cambio; `InsuranceCalculationDialog.tsx` es variante revisada
+  (marca de agua de impresión) y el manifiesto de paridad actualiza sus huellas
+  en ambas ramas.
+- Validaciones: `npx tsc --noEmit`; `npm test` 511/511; `lint:ci` 517
+  archivos, 223 históricos, 0 regresiones. Navegador (fixture fuera de Git,
+  Chrome headless): Compras factura a 1280 y 768 px, boleta USD y retención a
+  1280 px; Nuevo cliente; Activos; Asientos; Caja y bancos; Cuentas por cobrar.
+  Escaneo final: solo quedan las excepciones intencionales.
+- Pendiente: commit y despliegue en ambas ramas (`npm run build` local OK);
+  revisión autenticada en Compras (registro real de factura, boleta y
+  retención) y en formularios de Operaciones, que no se renderizaron en el
+  fixture.
+
 ### 2026-10-29 - CI-SQL-02 - Evitar gateways innecesarios en las pruebas SQL
 
 - Estado: verificado en CI de main y Demo; todas las suites SQL/RLS aprobadas.

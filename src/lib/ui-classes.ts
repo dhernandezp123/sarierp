@@ -27,3 +27,15 @@ export const tableHeaderClass =
 
 export const filterSelectClass =
   'h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:border-blue-400 dark:focus:ring-blue-950'
+
+/** Etiqueta de campo de formulario: arriba del control, como en Cotizaciones. */
+export const fieldLabelClass =
+  'text-xs font-medium text-slate-500 dark:text-slate-400'
+
+/** Contenedor etiqueta + control: siempre apilados. */
+export const fieldStackClass =
+  'flex min-w-0 flex-col gap-1.5'
+
+/** Título de sección dentro de una tarjeta de formulario. */
+export const formSectionTitleClass =
+  'text-sm font-semibold text-slate-900 dark:text-white'

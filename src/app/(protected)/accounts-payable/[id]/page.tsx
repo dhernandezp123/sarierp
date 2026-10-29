@@ -14,7 +14,7 @@ import { useTreasuryAccounts } from '@/src/hooks/useTreasuryAccounts'
 import { TreasuryAccountField } from '@/src/components/accounting/TreasuryAccountField'
 import { NumberInput } from '@/src/components/ui/NumberInput'
 import { supabase } from '@/src/lib/supabase/client'
-import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/src/components/ui/dialog'
 
@@ -371,7 +371,7 @@ export default function APDetailPage() {
         {showPagoForm && (
           <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
             <TreasuryAccountField {...treasury} currency={cuenta.moneda} value={bankAccount} onChange={setBankAccount}/>
-            {!!treasury.accounts.length&&cuenta.moneda==='USD'&&<label className="my-3 block text-xs font-semibold">Tasa HNL por USD del pago<NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
+            {!!treasury.accounts.length&&cuenta.moneda==='USD'&&<label className="flex min-w-0 flex-col gap-1.5 my-3 text-xs"><span className={fieldLabelClass}>Tasa HNL por USD del pago</span><NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/src/components/ui/dialog'
-import { fieldClassSm, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { fieldClassSm, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { ACCESS_STATUSES, COMPANY_STATUSES, INTERNAL_ROLES, platformMutation, type PlatformCompany, type PlatformUser } from '@/src/lib/platform-admin'
 
 function useSave(onSaved: () => void) {
@@ -49,9 +49,9 @@ function Editor({ title, description, saving, error, onCancel, onSubmit, childre
 }
 
 function Reason({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return <label className="block text-sm font-medium">Motivo del cambio
+  return <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Motivo del cambio</span>
     <textarea required minLength={5} maxLength={500} rows={3} value={value} onChange={event => onChange(event.target.value)}
-      className={`${fieldClassSm} mt-1 h-auto py-2`} placeholder="Explica por qué se realiza este cambio" />
+      className={`${fieldClassSm} h-auto py-2`} placeholder="Explica por qué se realiza este cambio" />
     <span className="mt-1 block text-xs font-normal text-slate-500">Quedará en la actividad administrativa con tu usuario y la fecha.</span>
   </label>
 }
@@ -69,14 +69,14 @@ export function PlatformCompanyDialog({ company, onCancel, onSaved }: { company:
     onSubmit={event => { event.preventDefault(); void save(company
       ? { action: 'update-company', id: company.id, name, status, expected_updated_at: company.updated_at, reason }
       : { action: 'create-company', name, slug, reason }) }}>
-    <label className="block text-sm font-medium">Nombre de la empresa
-      <input required maxLength={160} value={name} onChange={event => setName(event.target.value)} className={`${fieldClassSm} mt-1`} />
+    <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Nombre de la empresa</span>
+      <input required maxLength={160} value={name} onChange={event => setName(event.target.value)} className={fieldClassSm} />
     </label>
-    {!company ? <label className="block text-sm font-medium">Subdominio
-      <input required maxLength={63} value={slug} onChange={event => setSlug(event.target.value.toLowerCase())} pattern="[a-z0-9]+(-[a-z0-9]+)*" className={`${fieldClassSm} mt-1`} placeholder="miempresa" />
+    {!company ? <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Subdominio</span>
+      <input required maxLength={63} value={slug} onChange={event => setSlug(event.target.value.toLowerCase())} pattern="[a-z0-9]+(-[a-z0-9]+)*" className={fieldClassSm} placeholder="miempresa" />
       <span className="mt-1 block break-all text-xs font-normal text-slate-500">https://{slug || 'miempresa'}.forwarders.app/login</span>
-    </label> : <label className="block text-sm font-medium">Estado
-      <select value={status} onChange={event => setStatus(event.target.value)} className={`${fieldClassSm} mt-1`}>
+    </label> : <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Estado</span>
+      <select value={status} onChange={event => setStatus(event.target.value)} className={fieldClassSm}>
         {COMPANY_STATUSES.map(value => <option key={value}>{value}</option>)}
       </select>
     </label>}
@@ -100,13 +100,13 @@ export function PlatformUserDialog({ user, onCancel, onSaved }: { user: Platform
     saving={saving} error={error} onCancel={onCancel}
     onSubmit={event => { event.preventDefault(); void save({ action: 'update-user', id: user.id, rol: role, status, is_active: active, reason,
       expected: { rol: user.rol, status: user.status, is_active: user.is_active, tenant_id: user.tenant_id } }) }}>
-    <label className="block text-sm font-medium">Rol en la empresa
-      <select value={role} onChange={event => setRole(event.target.value)} disabled={user.rol === 'Cliente'} className={`${fieldClassSm} mt-1`}>
+    <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Rol en la empresa</span>
+      <select value={role} onChange={event => setRole(event.target.value)} disabled={user.rol === 'Cliente'} className={fieldClassSm}>
         {(user.rol === 'Cliente' ? ['Cliente'] : INTERNAL_ROLES).map(value => <option key={value}>{value}</option>)}
       </select>
     </label>
-    <label className="block text-sm font-medium">Aprobación
-      <select value={status} onChange={event => setStatus(event.target.value)} className={`${fieldClassSm} mt-1`}>
+    <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Aprobación</span>
+      <select value={status} onChange={event => setStatus(event.target.value)} className={fieldClassSm}>
         {ACCESS_STATUSES.map(value => <option key={value}>{value}</option>)}
       </select>
     </label>

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, MapPin, MessageSquarePlus } from 'lucide-react'
-import { cardClass, fieldClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 
 export type BookingTimelineEvent = {
   id: string
@@ -256,38 +256,38 @@ export function BookingTimeline({
 
       {showNoteForm && (
         <div className="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/60 md:grid-cols-2">
-          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-            Etiqueta
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Etiqueta</span>
             <input
               value={eventLabel}
               onChange={(event) => setEventLabel(event.target.value)}
-              className={`${fieldClass} mt-1`}
+              className={fieldClass}
             />
           </label>
-          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-            Fecha y hora de ocurrencia
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Fecha y hora de ocurrencia</span>
             <input
               type="datetime-local"
               value={occurredAt}
               onChange={(event) => setOccurredAt(event.target.value)}
-              className={`${fieldClass} mt-1`}
+              className={fieldClass}
             />
           </label>
-          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-            Ubicación
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Ubicación</span>
             <input
               value={location}
               onChange={(event) => setLocation(event.target.value)}
-              className={`${fieldClass} mt-1`}
+              className={fieldClass}
             />
           </label>
-          <label className="text-xs font-medium text-slate-600 dark:text-slate-300 md:col-span-2">
-            Notas
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300 md:col-span-2">
+            <span className={fieldLabelClass}>Notas</span>
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               rows={3}
-              className={`${fieldClass} mt-1 min-h-24`}
+              className={`${fieldClass} min-h-24`}
             />
           </label>
           <div className="flex justify-end gap-2 md:col-span-2">
