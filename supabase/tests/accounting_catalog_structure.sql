@@ -50,6 +50,17 @@ select pg_temp.expect_error($sql$select public.create_manual_journal('ac290000-0
 select pg_temp.assert_true((select count(*)=2 from public.journal_entries),'Asiento incompatible no persiste');
 select public.create_purchase_document('ac290000-0000-4000-8000-000000000021',jsonb_build_object('document_type','Factura de proveedor','supplier_id','ac290000-0000-4000-8000-000000000020','currency','HNL','issue_date',current_date,'document_number','TEST-CATALOG-COST'),jsonb_build_array(jsonb_build_object('account_id',(select id from public.accounting_accounts where code='42101'),'description','Costo ficticio','quantity',1,'unit_price',100,'discount_amount',5,'tax_rate',0)));
 select pg_temp.assert_true(exists(select 1 from public.purchase_documents where document_number='TEST-CATALOG-COST' and total=95),'Compra admite costo conservando descuentos');
+select pg_temp.expect_error($sql$select public.delete_accounting_account((select id from public.accounting_accounts where code='43'))$sql$,'cuentas hijas');
+select pg_temp.expect_error($sql$select public.delete_accounting_account((select id from public.accounting_accounts where code='11101'))$sql$,'movimientos contables');
+select public.save_accounting_account('{"code":"43102","name":"Gasto de compra ficticio","kind":"Gasto","account_level":"Auxiliar"}'::jsonb||jsonb_build_object('parent_id',(select id from public.accounting_accounts where code='43')));
+select public.create_purchase_document('ac290000-0000-4000-8000-000000000022',jsonb_build_object('document_type','Factura de proveedor','supplier_id','ac290000-0000-4000-8000-000000000020','currency','HNL','issue_date',current_date,'document_number','TEST-CATALOG-EXPENSE'),jsonb_build_array(jsonb_build_object('account_id',(select id from public.accounting_accounts where code='43102'),'description','Gasto ficticio','quantity',1,'unit_price',10,'tax_rate',0)));
+select pg_temp.expect_error($sql$select public.delete_accounting_account((select id from public.accounting_accounts where code='43102'))$sql$,'documentos de compra');
+select public.save_accounting_account('{"code":"11102","name":"Caja asignada ficticia","kind":"Activo","account_level":"Auxiliar"}'::jsonb||jsonb_build_object('parent_id',(select id from public.accounting_accounts where code='11')));
+select public.save_accounting_settings(false,null,jsonb_build_object('cash',(select id from public.accounting_accounts where code='11102')));
+select pg_temp.expect_error($sql$select public.delete_accounting_account((select id from public.accounting_accounts where code='11102'))$sql$,'asignada en configuración');
+select public.delete_accounting_account((select id from public.accounting_accounts where code='43101'));
+select pg_temp.assert_true(not exists(select 1 from public.accounting_accounts where code='43101'),'Elimina una cuenta sin uso');
+select pg_temp.assert_true(not has_function_privilege('anon','public.delete_accounting_account(uuid)','execute'),'Anon no elimina cuentas');
 select pg_temp.assert_true(not has_function_privilege('anon','public.import_accounting_accounts(jsonb)','execute') and not has_table_privilege('authenticated','public.accounting_accounts','insert'),'Permisos de catálogo siguen protegidos');
 reset role;
 set constraints all immediate;
