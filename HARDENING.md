@@ -1,5 +1,38 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-29 - CAI-CONFIRM-03 - Restaurar TGU a los rangos registrados 000-001
+
+- Estado: aplicado y verificado en Producción y Pruebas; aceptación autenticada
+  con Zonia pendiente. Migración y pruebas preparadas para el commit de Claude.
+- El propietario confirmó expresamente restaurar TGU 000-001. SPS conserva
+  001-001. Zonia ya es el máster individual aprobado y activo; el bloqueo era la
+  oficina 000-000 frente a sus tres rangos 000-001 conservados por la corrección anterior.
+- SQL nuevo: `supabase/migrations/20261029170000_restore_tgu_registered_cai_prefix.sql`.
+  Conserva las migraciones aplicadas, valida rangos/documentos y cambia únicamente
+  el punto de emisión TGU. No deshabilita triggers, no activa rangos, no cambia
+  CAI, límites, fechas, correlativos, permisos ni cuentas. Auditoría administrativa
+  sin suplantar al máster. Instalación vacía/Pruebas no recibe configuración real.
+- Regresión: `supabase/tests/tgu_restore_registered_cai_prefix.sql`; reproduce
+  el bloqueo, restaura la oficina, compara cada campo CAI, comprueba idempotencia,
+  deniega al usuario no máster y permite reactivar los tres documentos al máster
+  sin consumir números. Runners `scripts/validate-audit-sql.mjs` y, en Demo,
+  `scripts/validate-demo-sql.mjs`, con acceso ficticio propio del ambiente.
+- Validaciones: SQL/RLS local en ambas bases dentro de rollback; ensayos remotos
+  conservan todas las filas originales, Auth, funciones, políticas, triggers,
+  permisos e historial de migraciones; CAI y numeración íntegros. Sin cambio de UI.
+- Aplicación atómica: solo cambia el código TGU y se añade una auditoría con
+  usuario nulo; la transacción compara todas las filas originales bajo bloqueo.
+  Postflight: 131/134 tablas con RLS, funciones y permisos intactos, siete CAI
+  originales iguales y tres TGU inactivos; Pruebas conserva cero CAI y sus oficinas
+  sin códigos. Fuente aplicada idéntica en ambos historiales (MD5
+  `d780f06a0e216a03d47de8804df77b70`). TypeScript en ambos árboles, ESLint de
+  runners, diff y paridad aprobados: 543 compartidos, 26 variantes, cero diferencias.
+- Entre la instantánea inicial y la aplicación, un usuario actualizó un cliente
+  y registró su historial; la hora de esa operación precede a la restauración.
+  Esa edición se preservó y no forma parte de la transacción de mantenimiento.
+- Pendiente: activación por Zonia y aceptación autenticada. Archivos preparados
+  para el commit de Claude; no se requiere ni se realiza despliegue frontend.
+
 ### 2026-10-29 - UX-FIN-03 - Navegación de Anulaciones y formularios de Configuración contable
 
 - Estado: publicado en Producción y Pruebas; revisión autenticada pendiente. No
