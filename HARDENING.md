@@ -1,5 +1,67 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-29 - RELEASE-SUP-CAT-01 - Publicacion de catalogo y modal de proveedores
+
+- Estado: SQL aplicado en Produccion/Pruebas; publicacion frontend en curso.
+- Migracion 20261029220000 registrada con MD5 540b83d708e07bfb22de8f81add2deb0;
+  ensayos con rollback y fingerprints de todos los registros existentes intactos.
+  Se conservan 124 proveedores de Sari y uno de Demo, sin reclasificacion.
+- RLS real de Produccion: dos Admin y Zonia crearon/editaron/reactivaron tipos
+  con tres eventos por actor; todo revertido. Catalogos iniciales: siete por
+  ambiente, cero eventos residuales; FK validada y RPC anonima denegada.
+- Limite Demo detectado: cuenta Admin vigente por rol/status pero acceso demo
+  vencido desde 01/10/2026; el guard la rechazo. No se modifico la vigencia ni
+  se afirma UAT autenticada en ese ambiente. Fixtures con acceso valido pasaron.
+- Validaciones locales: build main y demo; TypeScript; SQL aislado 35/11;
+  Node completo antes del modal 525/525 y 11 pruebas especificas finales en
+  ambas ramas. Navegador sintetico: catalogo y modal, fallos/cancelacion/foco,
+  una escritura y recarga sin navegar; 1280/390 px. Paridad 559/26 sin diferencias.
+- Evidencia privada en .ua/intermediate/supplier-catalog-release-20261029/,
+  supplier-type-catalog-20261029/ y supplier-modal-20261029/. Sin datos ni
+  credenciales en Git ni transferencia de proveedores reales a Demo.
+- Pendiente: CI, commit/publicacion y smoke; UAT con sesion real. Hash pendiente.
+
+### 2026-10-29 - UX-SUP-02 - Alta de proveedor en modal
+
+- Estado: preparado y validado localmente; commit/publicación/UAT pendientes.
+  Listado y estado vacío abren NewSupplierDialog; SupplierForm comparte todos
+  los datos con `/suppliers/new`. Guardado recarga sin navegar; cancelación
+  protege cambios y devuelve foco al origen. Error conserva campos; envío único
+  bloquea cierre/edición y descarta respuestas posteriores al desmontaje.
+- Archivos: SupplierForm, NewSupplierDialog, páginas listado/alta y prueba
+  `new-supplier-dialog.test.mjs`. Sin SQL ni permisos adicionales ni datos reales.
+- Validación: TypeScript en ambos, 11 pruebas específicas main/demo; lint de
+  componentes nuevos y ruta de alta limpio; build main aprobado. Navegador
+  sintético: foco/cancelación, envío/errores, recarga sin navegación, 1280/390 px.
+  Paridad 559/26 sin diferencias inesperadas. Evidencia en directorio privado
+  `.ua/intermediate/supplier-modal-20261029/` del worktree principal.
+- Publicar con CAT-SUP-01 tras aplicar su migración pendiente. Mantener los
+  controles propios de demo. UAT real y dispositivo físico no acreditados.
+  Hash pendiente de commit.
+
+### 2026-10-29 - CAT-SUP-01 - Catálogo dinámico de tipos de proveedores
+
+- Estado: preparado localmente en main/demo; SQL remoto, commit, despliegue y UAT
+  pendientes. Acceso desde Catálogos y Proveedores a `/suppliers/types`.
+- Catálogo por tenant con nombre editable, código permanente, orden y switch
+  activo. Admin/máster administran vía RPC versionada y auditada; finanzas
+  consulta. FK tenant/código sustituye el CHECK fijo, con los siete valores
+  originales como semillas por empresa. Inactivos conservan referencias y
+  bloquean nuevas asignaciones; no se reclasifican proveedores automáticamente.
+- Conectado a filtro buscable, indicadores, alta y edición de proveedor.
+  Archivos: migración `20261029220000_supplier_type_catalog.sql`, prueba SQL y
+  runners, hook/selector/página de tipos, páginas de proveedores/Catálogos,
+  breadcrumbs y pruebas Node de catálogo/paginación.
+- Validación: Node main 525/525; seis pruebas específicas en demo; TypeScript;
+  SQL aislado 35 main/11 demo con rollback; navegador sintético 1280/390 px para
+  alta/renombrado/desactivación y propagación. Lint:ci sin regresiones (528 archivos, 223 diagnósticos históricos);
+  build optimizado de main aprobado, nuevos componentes sin diagnósticos.
+  Paridad: 557 archivos compartidos, 26 variantes, sin diferencias inesperadas.
+- No se aplicó SQL remoto ni se copiaron datos reales. Conservar controles demo
+  y aplicar migración antes del frontend. Pendiente: aplicar migración, publicar
+  y aceptar con sesión real. Evidencia en el worktree principal, directorio
+  privado `.ua/intermediate/supplier-type-catalog-20261029/`. Hash: pendiente.
+
 ### 2026-10-29 - RELEASE-UX-SUP-01 - Publicacion verificada en ambos ambientes
 
 - Estado: codigo funcional publicado y verificado; UAT autenticada pendiente.

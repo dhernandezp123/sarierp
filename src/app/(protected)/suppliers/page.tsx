@@ -1,15 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Plus, Search, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
-import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, primaryButtonClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { readAllReportRows } from '@/src/lib/report-query'
+import { useSupplierTypes } from '@/src/hooks/useSupplierTypes'
+import { SupplierTypeSelect } from '@/src/components/suppliers/SupplierTypeSelect'
+import { FormField } from '@/src/components/ui/form-field'
+import { NewSupplierDialog } from '@/src/components/suppliers/NewSupplierDialog'
+
 
 type Proveedor = {
   id: string
@@ -24,26 +29,23 @@ type Proveedor = {
   agents: { name: string } | null
 }
 
-const SUPPLIER_TYPES = ['Agente', 'Carrier', 'Aduanal', 'Transporte', 'Almacen', 'Courier', 'Otro']
-
-const TIPO_COLORS: Record<string, string> = {
-  Agente: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  Carrier: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-  Aduanal: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  Transporte: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-  Almacen: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
-  Courier: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
-  Otro: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-}
 
 export default function SuppliersPage() {
+  const catalog = useSupplierTypes()
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [tipoFilter, setTipoFilter] = useState('Todos')
+  const [tipoFilter, setTipoFilter] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
+  const [newSupplierOpen, setNewSupplierOpen] = useState(false)
+  const newSupplierTrigger = useRef<HTMLElement|null>(null)
+  function openNewSupplier(event?:React.MouseEvent<HTMLButtonElement>){
+    if(event?.currentTarget)newSupplierTrigger.current=event.currentTarget
+    else if(typeof document!=='undefined')newSupplierTrigger.current=document.activeElement instanceof HTMLElement?document.activeElement:null
+    setNewSupplierOpen(true)
+  }
 
   const fetchProveedores = async () => {
     setLoading(true)
@@ -65,43 +67,34 @@ export default function SuppliersPage() {
   const filtered = proveedores.filter((p) => {
     const q = search.toLowerCase()
     const matchSearch = p.nombre.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q) || p.contacto?.toLowerCase().includes(q)
-    const matchTipo = tipoFilter === 'Todos' || p.tipo === tipoFilter
+    const matchTipo = tipoFilter === '' || p.tipo === tipoFilter
     const matchActive = showInactive ? true : p.is_active
     return matchSearch && matchTipo && matchActive
   })
 
-  const metrics = {
-    total: proveedores.filter((p) => p.is_active).length,
-    byTipo: Object.fromEntries(
-      ['Agente', 'Carrier', 'Aduanal', 'Transporte'].map((t) => [
-        t, proveedores.filter((p) => p.tipo === t && p.is_active).length,
-      ])
-    ),
-  }
+  const typeMetrics = catalog.types.map(t=>({...t,count:proveedores.filter(p=>p.is_active&&p.tipo===t.code).length})).filter(t=>t.active||t.count).sort((a,b)=>b.count-a.count||a.sort_order-b.sort_order).slice(0,3)
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)))
   const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Proveedores</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Agentes, carriers, aduanales y otros proveedores de servicio.
           </p>
         </div>
-        <Link href="/suppliers/new" className={primaryButtonClass}>
+        <div className="flex flex-wrap gap-2"><Link href="/suppliers/types" className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium">Tipos de proveedores</Link><button type="button" onClick={openNewSupplier} className={primaryButtonClass}>
           <Plus className="h-4 w-4" />
           Nuevo proveedor
-        </Link>
+        </button></div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: 'Total activos', value: metrics.total, color: 'text-slate-900 dark:text-white' },
-          { label: 'Agentes', value: metrics.byTipo.Agente ?? 0, color: 'text-blue-700 dark:text-blue-300' },
-          { label: 'Carriers', value: metrics.byTipo.Carrier ?? 0, color: 'text-violet-700 dark:text-violet-300' },
-          { label: 'Aduanales', value: metrics.byTipo.Aduanal ?? 0, color: 'text-amber-700 dark:text-amber-300' },
+          { label: 'Total activos', value: proveedores.filter(p=>p.is_active).length, color: 'text-slate-900 dark:text-white' },
+          ...typeMetrics.map(t=>({label:t.label,value:t.count,color:'text-[#B3282D] dark:text-rose-300'})),
         ].map((k) => (
           <div key={k.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
             <p className="text-xs text-slate-500 dark:text-slate-400">{k.label}</p>
@@ -110,7 +103,7 @@ export default function SuppliersPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <div className="relative min-w-48 flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -120,16 +113,7 @@ export default function SuppliersPage() {
             className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-4 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
           />
         </div>
-        <select
-          value={tipoFilter}
-          onChange={(e) => { setTipoFilter(e.target.value); setPage(1) }}
-          className={`${fieldClass} w-40`}
-        >
-          <option value="Todos">Todos los tipos</option>
-          {SUPPLIER_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+        <FormField as="div" label="Tipo de proveedor" className="w-full max-w-md"><SupplierTypeSelect types={catalog.types} value={tipoFilter} onChange={value=>{setTipoFilter(value);setPage(1)}} loading={catalog.loading} error={catalog.error} filter/></FormField>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <input
             type="checkbox"
@@ -149,7 +133,7 @@ export default function SuppliersPage() {
             icon={<Building2 className="h-6 w-6" />}
             title="No hay proveedores"
             description="Agrega un agente, carrier u otro proveedor para registrar cuentas por pagar."
-            action={{ label: 'Nuevo proveedor', href: '/suppliers/new' }}
+            action={{ label: 'Nuevo proveedor', onClick: openNewSupplier }}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -171,8 +155,8 @@ export default function SuppliersPage() {
                       {!p.is_active && <span className="text-xs italic text-slate-400">Inactivo</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${TIPO_COLORS[p.tipo] ?? TIPO_COLORS.Otro}`}>
-                        {p.tipo}
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300`}>
+                        {catalog.label(p.tipo)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -201,6 +185,7 @@ export default function SuppliersPage() {
           pageSizeOptions={[25, 50, 75, 100]} onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />}
       </div>
+      <NewSupplierDialog open={newSupplierOpen} onOpenChange={setNewSupplierOpen} returnFocusRef={newSupplierTrigger} onCreated={()=>{setPage(1);void fetchProveedores()}}/>
     </div>
   )
 }

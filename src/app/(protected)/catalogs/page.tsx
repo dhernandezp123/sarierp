@@ -1,5 +1,8 @@
 'use client'
 
+import Link from 'next/link'
+import { useUser } from '@/src/hooks/useUser'
+import { canAccessPath } from '@/src/lib/permissions'
 import { NumberInput } from '@/src/components/ui/NumberInput'
 
 import { useEffect, useMemo, useState } from 'react'
@@ -106,6 +109,7 @@ const emptyClientRateForm = {
 const portTypes = ['Puerto', 'Ciudad', 'Aeropuerto', 'Frontera']
 
 export default function CatalogsPage() {
+  const { profile } = useUser()
   const [countries, setCountries] = useState<Country[]>([])
   const [ports, setPorts] = useState<Port[]>([])
   const [containerTypes, setContainerTypes] = useState<ContainerType[]>([])
@@ -530,6 +534,7 @@ export default function CatalogsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Catálogos</h1>
+          {canAccessPath(profile?.rol,"/suppliers/types")&&<Link href="/suppliers/types" className="mt-4 inline-flex rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-[#B3282D]">Tipos de proveedores →</Link>}
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Tablas maestras para pricing y cotizaciones de forwarders.
         </p>

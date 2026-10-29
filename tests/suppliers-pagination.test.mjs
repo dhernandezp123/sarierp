@@ -16,7 +16,7 @@ function setup() {
     } }
     return q
   } }
-  const app = mountPage('src/app/(protected)/suppliers/page.tsx', { '@/src/lib/supabase/client': { supabase: api } })
+  const app = mountPage('src/app/(protected)/suppliers/page.tsx', { '@/src/lib/supabase/client': { supabase: api }, '@/src/hooks/useSupplierTypes': { useSupplierTypes:()=>({types:[{code:'Agente',label:'Agente',active:true,sort_order:10},{code:'Otro',label:'Otro',active:true,sort_order:20}],loading:false,error:null,label:code=>code}) }, '@/src/components/suppliers/SupplierTypeSelect':{SupplierTypeSelect:'SupplierTypeSelect'} })
   const pager = () => app.find(n => n.type === 'Pagination').props
   const visible = () => Math.max(0, app.findAll(n => n.type === 'tr').length - 1)
   return { app, pager, visible, offsets }
@@ -56,7 +56,7 @@ test('buscar, filtrar tipo o cambiar inactivos vuelve a la primera página y pag
     app.find(n => n.type === 'input' && n.props.type === 'checkbox').props.onChange({ target: { checked: true } }); app.render()
     assert.equal(pager().page, 1); assert.equal(pager().total, 126)
     pager().onPageChange(6); app.render(); assert.equal(visible(), 1)
-    app.find(n => n.type === 'select').props.onChange({ target: { value: 'Agente' } }); app.render()
+    app.find(n => n.type === 'SupplierTypeSelect').props.onChange('Agente'); app.render()
     assert.equal(pager().page, 1); assert.equal(pager().total, 63); assert.equal(visible(), 25)
   } finally { app.cleanup() }
 })
