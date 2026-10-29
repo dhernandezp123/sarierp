@@ -1,5 +1,35 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-29 - RELEASE-UX-SUP-01 - Publicacion verificada en ambos ambientes
+
+- Estado: codigo funcional publicado y verificado; UAT autenticada pendiente.
+- Commits funcionales: main `2e0a165f68558a2f3b08e8c918e98213d1bd4213`;
+  demo `9adf40ad956446ea53e4ffd37d7c8c05b4ca23d3`.
+- Incluye UX-SUP-01 (25/50/75/100), UX-NAV-01, AUTH-FIN-01 y documentacion
+  DATA-SUP-01. No se publica el Excel ni datos personales de proveedores.
+- Validacion final: Node 521/521 y 527/527; TypeScript y builds en ambos;
+  lint:ci 524/537 archivos, 223 diagnosticos historicos, 0 regresiones;
+  SQL/RLS aislado 34 escenarios de produccion y 10 de demo; paridad 553
+  compartidos, 26 variantes revisadas, 0 diferencias inesperadas.
+- Navegador con datos ficticios: paginacion, tamanos y filtros a 1280/390 px,
+  pagina final completa y paginador visible fuera del scroll de tabla. Las
+  capturas no acreditan pruebas fisicas de iPadOS/Safari ni sesion real.
+- GitHub Quality: [main](https://github.com/dhernandezp123/sarierp/actions/runs/40950555933)
+  y [demo](https://github.com/dhernandezp123/sarierp/actions/runs/40950555797),
+  application/database aprobados. [Paridad](https://github.com/dhernandezp123/sarierp/actions/runs/40950555913)
+  aprobada; el run simultaneo de demo fue cancelado por concurrencia, sin fallo.
+- Vercel READY: main `sarierp-ip9hlle33` y demo `sarierp-cywfojydx`.
+  Smoke HTTP sin sesion: 23 rutas produccion y 29 demo; manifiestos de cada
+  dominio coinciden con su despliegue inmutable. /suppliers protegido en ambos.
+- Base remota: hash de migracion 20261029210000 verificado en ambos; Sari
+  conserva 124 proveedores y la designacion master de Zonia. Sin transferencia
+  de datos/credenciales a Demo. Escrituras RLS de verificacion revertidas.
+- Operacion local: se libero cache descargable npm y cache de fixture para
+  recuperar espacio; lint/build se completaron secuencialmente con heap 3072 MB.
+  No se eliminaron datos ni volumenes Docker; contenedor aislado detenido.
+- Evidencia privada: .ua/intermediate/suppliers-pagination-20261029/ y logs
+  relacionados, ignorados por Git. Este seguimiento solo modifica documentacion.
+
 ### 2026-10-29 - UX-SUP-01 - Paginación del listado de proveedores
 
 - Estado: implementado en main y demo; validación/publicación en curso.
@@ -37,7 +67,7 @@
 ### 2026-10-29 - UX-NAV-01 - Breadcrumbs y filtros de selección múltiple
 
 - Estado: implementado y validado localmente en los worktrees main y demo.
-  Sin commit ni publicación de este ajuste. UAT autenticada pendiente.
+  Publicado en RELEASE-UX-SUP-01. UAT autenticada pendiente.
 - Cambios: rutas de navegación compartidas con ancestros válidos, página actual
   sin enlace, detalle contextual conservado sin duplicación y ruta expandible
   en móvil. Selector múltiple reutilizable con búsqueda sin tildes, teclado,
@@ -70,7 +100,7 @@
   accesibilidad, filtros/exportación, saldos separados, jerarquía y ausencia
   de desbordamiento a 1280/768/390 px; tema oscuro; sin errores de ejecución.
   Evidencia local en `.ua/intermediate/navigation-filters-20261029/` (ignorada).
-- Pendiente: publicación y aceptación con sesión real. La
+- Publicación verificada en RELEASE-UX-SUP-01; aceptación con sesión real pendiente. La
   emulación de viewport no acredita prueba física en iPadOS/Safari. No se
   transfirieron credenciales ni datos reales entre ambientes. Hash: pendiente.
 
