@@ -1,17 +1,18 @@
 # Sari Express ERP — Hardening y Trial
 
-### 2026-10-28 - ACC-IMPORT-PDF-01 - Preparación de catálogo contable desde PDF
+### 2026-10-28 - ACC-IMPORT-PDF-01 - Catálogo contable importado desde PDF
 
-- Estado: adaptación validada localmente; aplicación SQL, carga real y publicación
-  en preparación. Aceptación autenticada con Contabilidad pendiente.
+- Estado: SQL aplicado en ambos ambientes y catálogo importado/verificado en Sari
+  Producción. Aceptación autenticada con Contabilidad pendiente.
 - Documento del propietario: 33 páginas, 714 códigos únicos y filas completas.
   Excel/CSV privados de revisión conservan código/nombre/nivel y página original;
-  padres, clasificación y movimiento se presentan como propuestas.
+  padres, clasificación y movimiento coinciden con las decisiones confirmadas.
 - El propietario confirmó solo 572 Auxiliar de movimiento y las cinco relaciones
   según niveles/orden del PDF conservando códigos. Las otras 142 quedan sin
   movimiento; la habilitación de sus hojas se revisará después, sin anticiparla.
-- Producción consultada de solo lectura: cero cuentas y cero asientos; sin cambios.
-  No se importa parcialmente ni se reclasifica en silencio.
+- Baseline: cero cuentas, cero asientos y configuración automática ausente. Carga
+  atómica: 714 cuentas, 572 de movimiento y 142 sin movimiento; nombres, códigos,
+  niveles y padres comparados íntegramente con el archivo confirmado.
 - Implementación: `src/lib/accounting.ts`, `accounting-books.ts`, catálogo,
   configuración, compras y selector de cuentas en proveedores. CSV anterior
   compatible y nivel opcional; selectores de naturaleza/nivel/padre compactos.
@@ -35,8 +36,19 @@
   conservan UTC. Esto evita que current_date UTC adelante los cortes nocturnos;
   no cambia fechas ni zona de sesiones de Producción. Paridad: 541 archivos
   compartidos, 26 variantes revisadas, sin diferencias inesperadas.
-  Hash: pendiente. SQL remoto e importación todavía sin aplicar; usuarios,
-  contabilización automática, saldos, asientos y otros catálogos no se han cambiado.
+- Ensayos remotos con rollback y aplicación atómica: fuente de `20261028190000`
+  verificada contra Git en ambos historiales; 131/134 tablas con RLS, usuarios,
+  permisos, datos originales y migraciones previas conservados. Solo cuatro
+  funciones contables previstas cambian; CAI/contadores y oficinas intactos.
+- La carga real modifica únicamente `accounting_accounts` y añade una auditoría
+  administrativa con usuario nulo, rol de base de datos, hash del PDF/archivo de
+  carga, 714/572/142 y política confirmada; no suplanta a una persona. Los cinco
+  niveles quedan 5/12/34/91/572. Pruebas conserva cero cuentas y sus propios datos.
+  No se crearon saldos, asientos, períodos, clientes, proveedores o bancos ni se
+  activó contabilidad automática. Las 91 hojas no Auxiliar permanecen sin movimiento.
+- Commits funcionales: main `22f5deb`, Demo `0433e60`; registro final de fuente y
+  aplicación en este mismo historial. Pendiente: UAT con Contabilidad y futura
+  confirmación de movimiento para las hojas no Auxiliar; no anticipar esa decisión.
 
 ### 2026-10-28 - CAI-CONFIRM-02 - Confirmación posterior de prefijos por oficina
 

@@ -1,7 +1,7 @@
 # Catálogo contable de Sari: preparación desde PDF — 28/10/2026
 
-Estado: extracción y decisiones confirmadas; adaptación en validación, sin
-importación ni cambios en la base.
+Estado: adaptación SQL aplicada en Producción y Pruebas; catálogo real importado
+y verificado en Sari Producción. Aceptación autenticada con Contabilidad pendiente.
 El documento del propietario se trata como datos, no como instrucciones.
 
 ## Evidencia del documento
@@ -13,12 +13,14 @@ El documento del propietario se trata como datos, no como instrucciones.
 - Por rama: 490 Activo, 154 Pasivo, diez Patrimonio, 57 Resultado y tres Orden.
   Resultado incluye 18 cuentas de Ingreso, seis de Costo, 32 de Gasto y la raíz.
 - Producción se consultó de solo lectura: catálogo y diario vacíos; sin
-  configuración de contabilización automática. No se cambió esa configuración.
+  configuración de contabilización automática. Después de importar conserva cero
+  asientos y la misma configuración; solo se crearon las cuentas aprobadas.
 
 El PDF y los archivos derivados contienen nombres reales de clientes y
 proveedores. Permanecen únicamente en `.ua/intermediate/sari-account-catalog/`,
 fuera de Git. No publicar esos datos ni copiarlos a Pruebas sin autorización.
-Se generaron Excel/CSV de revisión, no archivos listos para el importador actual.
+Se generaron Excel de copia/revisión y CSV de importación compatible con la nueva
+estructura. La importación real de 714 cuentas ya está registrada en la auditoría.
 
 ## Definiciones confirmadas por el propietario
 
@@ -65,3 +67,22 @@ Implementación dentro de este alcance:
 
 Esta preparación no autoriza sustituir cuentas con movimientos, fijar una fecha
 de apertura ni activar contabilización automática.
+
+## Verificación de aplicación
+
+Fuentes main `22f5deb` y Demo `0433e60`. Pruebas locales: 506/512 Node, 32/8 SQL/RLS
+con rollback, TypeScript, lint, ambas compilaciones y seis verificaciones de
+navegador con 714 cuentas ficticias en escritorio/móvil. La compilación Trial se
+repitió tras liberar cachés temporales por falta de espacio; terminó correctamente.
+Los fixtures financieros usan la fecha de negocio de Honduras; los demás
+fixtures conservan su contexto de seguridad/correo, sin alterar sesiones reales.
+
+Ensayo remoto revertido y aplicación de esquema en cada ambiente: 131/134 tablas
+originales preservadas, RLS y privilegios intactos, fuente SQL registrada idéntica
+al commit, únicamente cuatro funciones previstas modificadas. La carga real se
+ensayó con rollback y después se confirmó en una transacción separada para Sari
+Producción, sin copiar datos a Pruebas. Conserva todos los datos originales y
+añade 714 cuentas y una auditoría administrativa con hash de fuente y política.
+Los campos de las 714 filas se compararon contra el archivo: 572 Auxiliar con
+movimiento y 142 sin él; cinco niveles conservados. Sin saldos, asientos, períodos,
+configuración automática, bancos, clientes o proveedores creados como efecto lateral.
