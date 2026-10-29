@@ -22,7 +22,7 @@ export function workspaceBreadcrumbs(pathname:string):WorkspaceCrumb[]{
  if(!root||pathname==='/dashboard')return []
  const result:WorkspaceCrumb[]=[{label:'Inicio',href:'/dashboard'},{...root}]
  if(parts.length===1)return result
- const section=leaves[parts[0]]?.[parts[1]]
+ const section=leaves[parts[0]]?.[parts[1]]||(parts[0]==='suppliers'&&parts[1]==='types'?'Tipos de proveedores':undefined)
  if(section){
   const path=`/${parts[0]}/${parts[1]}`
   const linked=['operations','miami'].includes(parts[0])&&parts[1]!=='ingreso'

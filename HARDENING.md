@@ -1,5 +1,87 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-29 - RELEASE-SUP-CAT-01 - Publicacion de catalogo y modal de proveedores
+
+- Estado: SQL aplicado en Produccion/Pruebas; publicacion frontend en curso.
+- Migracion 20261029220000 registrada con MD5 540b83d708e07bfb22de8f81add2deb0;
+  ensayos con rollback y fingerprints de todos los registros existentes intactos.
+  Se conservan 124 proveedores de Sari y uno de Demo, sin reclasificacion.
+- RLS real de Produccion: dos Admin y Zonia crearon/editaron/reactivaron tipos
+  con tres eventos por actor; todo revertido. Catalogos iniciales: siete por
+  ambiente, cero eventos residuales; FK validada y RPC anonima denegada.
+- Limite Demo detectado: cuenta Admin vigente por rol/status pero acceso demo
+  vencido desde 01/10/2026; el guard la rechazo. No se modifico la vigencia ni
+  se afirma UAT autenticada en ese ambiente. Fixtures con acceso valido pasaron.
+- Validaciones locales: build main y demo; TypeScript; SQL aislado 35/11;
+  Node completo antes del modal 525/525 y 11 pruebas especificas finales en
+  ambas ramas. Navegador sintetico: catalogo y modal, fallos/cancelacion/foco,
+  una escritura y recarga sin navegar; 1280/390 px. Paridad 559/26 sin diferencias.
+- Evidencia privada en .ua/intermediate/supplier-catalog-release-20261029/,
+  supplier-type-catalog-20261029/ y supplier-modal-20261029/. Sin datos ni
+  credenciales en Git ni transferencia de proveedores reales a Demo.
+- Pendiente: CI, commit/publicacion y smoke; UAT con sesion real. Hash pendiente.
+
+### 2026-10-29 - UX-SUP-02 - Alta de proveedor en modal desde el listado
+
+- Estado: implementado y validado localmente en main/demo; commit, publicación
+  y UAT autenticada pendientes. No se modificaron proveedores reales.
+- El botón Nuevo proveedor del encabezado y del estado vacío abre un Dialog
+  accesible, con desplazamiento interno y retorno de foco al botón de origen.
+  Reutiliza SupplierForm para modal y ruta `/suppliers/new`, con información,
+  contacto, tipo del catálogo y condiciones de pago. Guarda sin navegar y
+  recarga el listado; cancelar protege los cambios mediante el guard existente.
+- Envío protegido contra dobles clics; campos y cierre bloqueados mientras
+  guarda. Un error conserva los valores. Respuestas posteriores al desmontaje
+  no disparan navegación, callbacks ni avisos en otro contexto.
+- Archivos: `src/components/suppliers/{SupplierForm,NewSupplierDialog}.tsx`,
+  páginas de listado/alta y `tests/new-supplier-dialog.test.mjs`.
+- Validación: TypeScript en ambos worktrees; 11 pruebas específicas en main y
+  demo; componentes nuevos y ruta de alta sin diagnósticos ESLint; build main
+  aprobado. Navegador con datos ficticios: cancelación/descartar/foco, una sola
+  escritura, bloqueo de Escape durante envío, error y conservación de valores,
+  recarga a 125 registros sin navegar, modal contenido a 1280/390 px; sin errores.
+  Paridad: 559 archivos compartidos y 26 variantes, sin diferencias inesperadas.
+- Evidencia privada ignorada en `.ua/intermediate/supplier-modal-20261029/`.
+  No cambian SQL ni permisos en este ajuste. Publicar junto a CAT-SUP-01,
+  aplicando primero su migración pendiente. No acredita UAT con sesión real
+  ni prueba física iPadOS/Safari. Hash pendiente de commit.
+
+### 2026-10-29 - CAT-SUP-01 - Catálogo dinámico de tipos de proveedores
+
+- Estado: implementado localmente en main/demo; SQL remoto, commit, despliegue
+  y UAT autenticada pendientes. No cambia la clasificación de proveedores actuales.
+- Ubicación: acceso en Catálogos y en Proveedores a `/suppliers/types`.
+  Crear/editar nombre, código inicial, orden y activar/desactivar con switch;
+  búsqueda y paginación. Admin y máster de Contabilidad administran; los otros
+  usuarios financieros autorizados consultan y utilizan opciones activas.
+- Datos: `supplier_types` por tenant y eventos inmutables de cambios. Se migran
+  los siete valores originales como datos iniciales y se inicializan empresas
+  nuevas; se reemplaza el CHECK fijo por FK compuesta tenant/código. El código
+  permanece estable al renombrar. Tipos inactivos conservan referencias y permiten
+  editar otros datos del proveedor, pero no admiten nuevas asignaciones.
+- Conexión: filtro con búsqueda, indicadores dinámicos, alta y edición de ficha.
+  Activar/desactivar no borra otro formulario sin guardar (regresión cubierta).
+  Sin listas de opciones fijas ni fallback estático ante fallo del catálogo.
+  Lecturas paginadas completas y respuestas obsoletas descartadas por contexto.
+- Archivos: migración `20261029220000_supplier_type_catalog.sql`;
+  `supabase/tests/supplier_type_catalog.sql`, runners SQL de ambos ambientes;
+  `useSupplierTypes.ts`, `SupplierTypeSelect.tsx`, página `suppliers/types`,
+  páginas de listado/alta/detalle y Catálogos, `workspace-breadcrumbs.ts`,
+  `supplier-types.test.mjs` y actualización de `suppliers-pagination.test.mjs`.
+- Validación: Node completo main 525/525; seis pruebas específicas también en
+  demo; TypeScript en ambos; SQL aislado 35 escenarios main y 11 demo, todo con
+  rollback. Navegador con datos ficticios: crear, renombrar sin cambiar código,
+  desactivar, propagación al filtro y adaptación 1280/390 px; sin errores.
+  Lint:ci sin regresiones (528 archivos, 223 diagnósticos históricos);
+  build optimizado de main aprobado, nuevos componentes sin diagnósticos.
+  Paridad: 557 archivos compartidos, 26 variantes, sin diferencias inesperadas. Evidencia local ignorada en
+  `.ua/intermediate/supplier-type-catalog-20261029/` y logs SQL relacionados.
+- No se ejecutó SQL en Producción/Pruebas ni se copiaron proveedores reales.
+  Aplicar la migración antes del frontend. Sin eliminación de tipos ni pérdida
+  de historial; asignación de categorías sigue siendo decisión del usuario.
+- Pendiente: aplicar SQL, publicar y aceptar con sesión real.
+  Hash: pendiente de commit.
+
 ### 2026-10-29 - RELEASE-UX-SUP-01 - Publicacion verificada en ambos ambientes
 
 - Estado: codigo funcional publicado y verificado; UAT autenticada pendiente.

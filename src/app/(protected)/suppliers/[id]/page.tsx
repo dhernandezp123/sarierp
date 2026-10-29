@@ -5,6 +5,10 @@ import { formatDate as fmtDate, formatMoney as fmtMoney } from '@/src/lib/format
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useSupplierTypes } from '@/src/hooks/useSupplierTypes'
+import { SupplierTypeSelect } from '@/src/components/suppliers/SupplierTypeSelect'
+import { FormField } from '@/src/components/ui/form-field'
+
 import Link from 'next/link'
 import { Plus, AlertCircle, Clock, Upload, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
@@ -54,6 +58,7 @@ const editableTextFields = ['rtn', 'email', 'telefono', 'contacto', 'pais'] as c
 export default function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const catalog = useSupplierTypes()
   const { user, profile } = useUser()
   const { data: accounting } = useAccounting()
   const context = `${profile?.tenant_id || ''}:${user?.id || ''}:${id}`
@@ -140,6 +145,8 @@ export default function SupplierDetailPage() {
       return
     }
 
+    if (!proveedor) return
+    if (editForm.tipo !== proveedor.tipo && !catalog.types.some(t=>t.active&&t.code===editForm.tipo)) { toast.error('Selecciona un tipo de proveedor activo.'); return }
     setSaving(true)
     const { error } = await supabase.from('proveedores').update({
       nombre: editForm.nombre.trim(),
@@ -311,7 +318,7 @@ export default function SupplierDetailPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{proveedor.nombre}</h1>
           <div className="mt-1 flex items-center gap-2">
-            <span className="text-sm text-slate-500 dark:text-slate-400">{proveedor.tipo}</span>
+            <span className="text-sm text-slate-500 dark:text-slate-400">{catalog.label(proveedor.tipo)}</span>
             {!proveedor.is_active && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800">Inactivo</span>}
           </div>
         </div>
@@ -355,6 +362,7 @@ export default function SupplierDetailPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-500">Nombre</label>
                 <input value={editForm.nombre || ''} onChange={setEF('nombre')} className={fieldClass} />
               </div>
+              <FormField as="div" label="Tipo de proveedor" required><SupplierTypeSelect types={catalog.types} value={editForm.tipo||''} onChange={value=>setEditForm(p=>({...p,tipo:value}))} loading={catalog.loading} error={catalog.error}/></FormField>
               {editableTextFields.map((f) => (
                 <div key={f}>
                   <label className="mb-1 block text-xs font-medium text-slate-500 capitalize">{f}</label>
@@ -386,7 +394,7 @@ export default function SupplierDetailPage() {
             <h2 className="mb-3 text-base font-semibold text-slate-900 dark:text-white">Informacion del proveedor</h2>
             <div className="grid gap-x-8 gap-y-2 text-sm md:grid-cols-2">
               {[
-                ['Tipo', proveedor.tipo],
+                ['Tipo', catalog.label(proveedor.tipo)],
                 ['RTN / Tax ID', proveedor.rtn || '-'],
                 ['Pais', proveedor.pais || '-'],
                 ['Contacto', proveedor.contacto || '-'],
