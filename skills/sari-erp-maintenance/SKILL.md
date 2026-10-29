@@ -46,8 +46,9 @@ histórica; no conviertas una revisión en una reescritura general.
 
 ## Cambios de UX y landing
 
-Reutiliza componentes existentes (`Tabs`, `ConfirmDialog`, campos, Sonner) y
-los assets en `public/brand` y `public/product`. Mantén CTAs ligados a acciones
+Reutiliza componentes existentes (`Tabs`, `Dialog`, `ConfirmDialog`, campos,
+Sonner) y los assets en `public/brand` y `public/product`. Para pantallas
+internas, y en especial Finanzas, sigue [las convenciones de UI](references/ui-conventions.md). Mantén CTAs ligados a acciones
 reales, etiquetas visibles y navegación por teclado. Evita bloquear el acceso
 con intros obligatorias. Comprueba móvil, foco, errores y recuperación tras fallos
 de red. Las capturas demo deben identificarse; no inventes testimonios, cifras,

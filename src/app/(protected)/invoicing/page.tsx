@@ -2,17 +2,20 @@
 
 import { loadInvoiceList, type Invoice, type InvoiceType, type ReceivableSummary } from '@/src/lib/invoice-list'
 
-import { toDateInputValue } from '@/src/lib/format'
+import { formatDate, formatMoney, toDateInputValue } from '@/src/lib/format'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Plus, Search, FileText, CheckCircle2, Clock, XCircle, AlertCircle, DollarSign, BarChart2, BookOpen, Mail, ArrowRight, ClipboardList } from 'lucide-react'
+import { Plus, Search, FileText, CheckCircle2, Clock, XCircle, AlertCircle, DollarSign, BarChart2, BookOpen, Mail, ArrowRight, ClipboardList, Receipt } from 'lucide-react'
 import { toast } from 'sonner'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, cardClass, filterSelectClass, fieldClassSm } from '@/src/lib/ui-classes'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/src/components/ui/dialog'
+import { FinancePageHeader, financeActionClass, financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { EstadoCuentaPdf, type EstadoCuentaData, type EstadoCuentaItem } from '@/src/components/pdf/estado-cuenta-pdf'
 import {
@@ -54,16 +57,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   Saldada: { label: 'Saldada', color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300', icon: <CheckCircle2 className="h-3 w-3" /> },
   Vencida: { label: 'Vencida', color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300', icon: <AlertCircle className="h-3 w-3" /> },
   Anulada: { label: 'Anulada', color: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500 line-through', icon: <XCircle className="h-3 w-3" /> },
-}
-
-function formatDate(d: string | null) {
-  if (!d) return '—'
-  const [y, m, day] = d.split('T')[0].split('-')
-  return `${day}/${m}/${y}`
-}
-
-function formatUSD(amount: number, currency = 'USD') {
-  return `${currency} ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -175,8 +168,8 @@ export default function InvoicingPage() {
 
   const formatReceivableTotal = (key: 'pendiente' | 'pagado' | 'vencido') =>
     totalsByCurrency.length > 0
-      ? totalsByCurrency.map(([currency, totals]) => formatUSD(totals[key], currency)).join(' · ')
-      : formatUSD(0)
+      ? totalsByCurrency.map(([currency, totals]) => formatMoney(totals[key], currency)).join(' · ')
+      : formatMoney(0)
 
   const computeCierre = () => {
     const inPeriod = (dateValue: string | null) => {
@@ -229,14 +222,13 @@ export default function InvoicingPage() {
   const imprimirCierre = () => {
     const mes = MESES[cierreMes - 1]
     const s = computeCierre()
-    const fmt = (n: number, currency: string) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     const summaryCards = s.summaries.map((summary) => `
 <h2>${summary.currency}</h2>
 <div class="grid">
-<div class="card"><div class="label">Total facturado</div><div class="value">${fmt(summary.emitido, summary.currency)}</div></div>
-<div class="card"><div class="label">Cobrado</div><div class="value green">${fmt(summary.cobrado, summary.currency)}</div></div>
-<div class="card"><div class="label">Por cobrar</div><div class="value amber">${fmt(summary.porCobrar, summary.currency)}</div></div>
-<div class="card"><div class="label">Vencido</div><div class="value red">${fmt(summary.vencido, summary.currency)}</div></div>
+<div class="card"><div class="label">Total facturado</div><div class="value">${formatMoney(summary.emitido, summary.currency)}</div></div>
+<div class="card"><div class="label">Cobrado</div><div class="value green">${formatMoney(summary.cobrado, summary.currency)}</div></div>
+<div class="card"><div class="label">Por cobrar</div><div class="value amber">${formatMoney(summary.porCobrar, summary.currency)}</div></div>
+<div class="card"><div class="label">Vencido</div><div class="value red">${formatMoney(summary.vencido, summary.currency)}</div></div>
 </div>`).join('')
     const html = `<!DOCTYPE html><html><head><title>Cierre ${mes} ${cierreAnio}</title>
 <style>body{font-family:Arial,sans-serif;padding:40px;color:#1e293b;max-width:700px;margin:0 auto}
@@ -256,6 +248,15 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close() }
   }
+
+  // Años con documentos, más el actual: el selector no caduca con el calendario.
+  const cierreYears = Array.from(new Set([
+    today.getFullYear(),
+    cierreAnio,
+    ...invoices.map((invoice) => Number(invoice.issue_date?.slice(0, 4))).filter((year) => year > 2000),
+  ])).sort((a, b) => b - a)
+
+  const closeEC = () => { setShowEC(false); setEcPdfData(null); setEcClienteId('') }
 
   // Clientes únicos para el selector del estado de cuenta
   const ecClientes = Array.from(
@@ -345,7 +346,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         '',
         'Adjuntamos su estado de cuenta actualizado.',
         ...ecBalances.map(({ currency, balance }) =>
-          `Saldo pendiente: ${currency} ${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          `Saldo pendiente: ${formatMoney(balance, currency)}`
         ),
         '',
         'Por favor adjunte el PDF descargado antes de enviar este correo.',
@@ -363,224 +364,205 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-            Finanzas
-          </p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-900 dark:text-white">Facturación</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Facturas, proformas, notas de crédito y débito.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => router.push('/invoicing/voids')} className="rounded-xl border px-4 py-2 text-sm font-semibold">Anulaciones</button>
-          <button type="button" onClick={() => router.push('/invoicing/drafts')} className="rounded-xl border px-4 py-2 text-sm font-semibold">Borradores y correcciones</button>
-          <button type="button" onClick={() => router.push('/invoicing/new?doc_type=proforma')} className="rounded-xl border px-4 py-2 text-sm font-semibold">Nueva proforma</button>
+      <FinancePageHeader
+        eyebrow="Finanzas · Facturación"
+        title="Facturación"
+        description="Facturas, proformas, notas de crédito y débito."
+        icon={Receipt}
+        actions={<>
+          <Link href="/invoicing/voids" className={financeActionClass}>Anulaciones</Link>
+          <Link href="/invoicing/drafts" className={financeActionClass}>Borradores y correcciones</Link>
+          <Link href="/invoicing/new?doc_type=proforma" className={financeActionClass}>Nueva proforma</Link>
           {['Admin', 'Finanzas', 'Contabilidad'].includes(profile?.rol || '') && (
-            <button
-              type="button"
-              onClick={openEC}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
+            <button type="button" onClick={openEC} className={financeActionClass}>
               <BookOpen className="h-4 w-4" />
               Estado de cuenta
             </button>
           )}
           {['Admin', 'Finanzas'].includes(profile?.rol || '') && (
-            <button
-              type="button"
-              onClick={() => setShowCierre(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
+            <button type="button" onClick={() => setShowCierre(true)} className={financeActionClass}>
               <BarChart2 className="h-4 w-4" />
               Cierre del mes
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => router.push('/invoicing/new')}
-            className={primaryButtonClass}
-          >
+          <Link href="/invoicing/new" className={`${primaryButtonClass} inline-flex items-center gap-2`}>
             <Plus className="h-4 w-4" />
             Nueva factura
-          </button>
-        </div>
-      </div>
+          </Link>
+        </>}
+      />
 
-      {showCierre && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0b1220]">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900 dark:text-white">Cierre del período</h3>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Mes</label>
-                <select
-                  value={cierreMes}
-                  onChange={(e) => setCierreMes(Number(e.target.value))}
-                  className={fieldClassSm}
-                >
-                  {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Año</label>
-                <select
-                  value={cierreAnio}
-                  onChange={(e) => setCierreAnio(Number(e.target.value))}
-                  className={fieldClassSm}
-                >
-                  {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
+      <Dialog open={showCierre} onOpenChange={setShowCierre}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cierre del período</DialogTitle>
+            <DialogDescription>Resumen por moneda de lo facturado, cobrado y pendiente en el mes seleccionado.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="cierre-mes" className="mb-1 block text-xs font-medium text-slate-500">Mes</label>
+              <select
+                id="cierre-mes"
+                value={cierreMes}
+                onChange={(e) => setCierreMes(Number(e.target.value))}
+                className={fieldClassSm}
+              >
+                {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
             </div>
-            {(() => {
-              const s = computeCierre()
-              const fmt = (n: number, currency: string) => `${currency} ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-              return (
-                <div className="mb-4 max-h-[55vh] space-y-3 overflow-y-auto">
-                  {s.summaries.length === 0 ? (
-                    <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500 dark:border-slate-700">
-                      Sin movimientos para este período.
-                    </p>
-                  ) : s.summaries.map((summary) => (
-                    <div key={summary.currency}>
-                      <p className="mb-1 text-xs font-bold text-slate-500">{summary.currency}</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                          <p className="text-[10px] uppercase tracking-wide text-slate-400">Facturado</p>
-                          <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{fmt(summary.emitido, summary.currency)}</p>
-                        </div>
-                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800/50 dark:bg-emerald-950/30">
-                          <p className="text-[10px] uppercase tracking-wide text-slate-400">Cobrado</p>
-                          <p className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-300">{fmt(summary.cobrado, summary.currency)}</p>
-                        </div>
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/50 dark:bg-amber-950/30">
-                          <p className="text-[10px] uppercase tracking-wide text-slate-400">Por cobrar</p>
-                          <p className="mt-1 text-sm font-bold text-amber-700 dark:text-amber-300">{fmt(summary.porCobrar, summary.currency)}</p>
-                        </div>
-                        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 dark:border-rose-800/50 dark:bg-rose-950/30">
-                          <p className="text-[10px] uppercase tracking-wide text-slate-400">Vencido</p>
-                          <p className="mt-1 text-sm font-bold text-rose-700 dark:text-rose-300">{fmt(summary.vencido, summary.currency)}</p>
-                        </div>
+            <div>
+              <label htmlFor="cierre-anio" className="mb-1 block text-xs font-medium text-slate-500">Año</label>
+              <select
+                id="cierre-anio"
+                value={cierreAnio}
+                onChange={(e) => setCierreAnio(Number(e.target.value))}
+                className={fieldClassSm}
+              >
+                {cierreYears.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          </div>
+          {(() => {
+            const s = computeCierre()
+            return (
+              <div className="max-h-[55vh] space-y-3 overflow-y-auto">
+                {s.summaries.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500 dark:border-slate-700">
+                    Sin movimientos para este período.
+                  </p>
+                ) : s.summaries.map((summary) => (
+                  <div key={summary.currency}>
+                    <p className="mb-1 text-xs font-bold text-slate-500">{summary.currency}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Facturado</p>
+                        <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{formatMoney(summary.emitido, summary.currency)}</p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800/50 dark:bg-emerald-950/30">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Cobrado</p>
+                        <p className="mt-1 text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatMoney(summary.cobrado, summary.currency)}</p>
+                      </div>
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/50 dark:bg-amber-950/30">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Por cobrar</p>
+                        <p className="mt-1 text-sm font-bold text-amber-700 dark:text-amber-300">{formatMoney(summary.porCobrar, summary.currency)}</p>
+                      </div>
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 dark:border-rose-800/50 dark:bg-rose-950/30">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Vencido</p>
+                        <p className="mt-1 text-sm font-bold text-rose-700 dark:text-rose-300">{formatMoney(summary.vencido, summary.currency)}</p>
                       </div>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setShowCierre(false)} className={financeActionClass}>
+              Cerrar
+            </button>
+            <button type="button" onClick={imprimirCierre} className={`${primaryButtonClass} inline-flex items-center gap-2`}>
+              <BarChart2 className="h-4 w-4" />
+              Imprimir
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Link href="/accounting/receivables" className={`${financeLinkClass} inline-block text-sm underline`}>Estado de cuenta completo · filtros, antigüedad, PDF / Excel / CSV</Link>
+
+      <Dialog open={showEC} onOpenChange={(open) => { if (!open) closeEC() }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Estado de cuenta</DialogTitle>
+            <DialogDescription>
+              Genera el resumen actual de facturas pendientes. Para fechas de corte, antigüedad, notas y Excel, utiliza el reporte completo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div>
+            <label htmlFor="ec-cliente" className="mb-1 block text-xs font-medium text-slate-500">Cliente</label>
+            {ecLoadingCompany ? (
+              <p className="text-sm text-slate-400">Cargando...</p>
+            ) : (
+              <select
+                id="ec-cliente"
+                value={ecClienteId}
+                onChange={(e) => {
+                  setEcClienteId(e.target.value)
+                  setEcPdfData(null)
+                  if (e.target.value) buildEcPdf(e.target.value)
+                }}
+                className={fieldClassSm}
+              >
+                <option value="">— Seleccionar cliente —</option>
+                {ecClientes.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {ecPdfData && ecClienteId && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+              {ecPdfData.items.length === 0 ? (
+                <p className="text-xs text-slate-500">Este cliente no tiene facturas pendientes.</p>
+              ) : (
+                <div className="space-y-1 text-xs text-slate-500">
+                  <p>{ecPdfData.items.length} factura{ecPdfData.items.length !== 1 ? 's' : ''} pendiente{ecPdfData.items.length !== 1 ? 's' : ''}</p>
+                  {ecBalances.map(({ currency, balance }) => (
+                    <p key={currency} className="font-semibold text-slate-700 dark:text-slate-200">
+                      {formatMoney(balance, currency)}
+                    </p>
                   ))}
                 </div>
-              )
-            })()}
-            <div className="flex gap-2">
-              <button type="button" onClick={imprimirCierre} className={primaryButtonClass}>
-                <BarChart2 className="h-4 w-4" />
-                Imprimir
-              </button>
-              <button type="button" onClick={() => setShowCierre(false)} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <button type="button" className="text-sm font-semibold text-[#B3282D] underline" onClick={()=>router.push('/accounting/receivables')}>Estado de cuenta completo · filtros, antigüedad, PDF / Excel / CSV</button>
-      {/* Modal: Estado de cuenta */}
-      {showEC && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0b1220]">
-            <h3 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">Estado de cuenta</h3>
-            <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-              Genera el resumen actual de facturas pendientes. Para fechas de corte, antigüedad, notas y Excel, utiliza el reporte completo.
-            </p>
-
-            <div className="mb-4">
-              <label className="mb-1 block text-xs font-medium text-slate-500">Cliente</label>
-              {ecLoadingCompany ? (
-                <p className="text-sm text-slate-400">Cargando...</p>
-              ) : (
-                <select
-                  value={ecClienteId}
-                  onChange={(e) => {
-                    setEcClienteId(e.target.value)
-                    setEcPdfData(null)
-                    if (e.target.value) buildEcPdf(e.target.value)
-                  }}
-                  className={fieldClassSm}
-                >
-                  <option value="">— Seleccionar cliente —</option>
-                  {ecClientes.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
               )}
             </div>
+          )}
 
-            {ecPdfData && ecClienteId && (
-              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/40">
-                {ecPdfData.items.length === 0 ? (
-                  <p className="text-xs text-slate-500">Este cliente no tiene facturas pendientes.</p>
-                ) : (
-                  <div className="space-y-1 text-xs text-slate-500">
-                    <p>{ecPdfData.items.length} factura{ecPdfData.items.length !== 1 ? 's' : ''} pendiente{ecPdfData.items.length !== 1 ? 's' : ''}</p>
-                    {ecBalances.map(({ currency, balance }) => (
-                      <p key={currency} className="font-semibold text-slate-700 dark:text-slate-200">
-                        {currency} {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                    ))}
-                  </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            {ecPdfData && ecPdfData.items.length > 0 ? (
+              <PdfDownloadButton
+                document={<EstadoCuentaPdf data={ecPdfData} />}
+                fileName={`estado-cuenta-${ecPdfData.cliente_nombre.replace(/\s+/g, '-').toLowerCase()}-${ecPdfData.fecha_generacion}.pdf`}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
+              >
+                {({ loading: pdfLoading }) => (
+                  <>
+                    <BookOpen className="h-4 w-4" />
+                    {pdfLoading ? 'Generando...' : 'Descargar PDF'}
+                  </>
                 )}
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              {ecPdfData && ecPdfData.items.length > 0 ? (
-                <PdfDownloadButton
-                  document={<EstadoCuentaPdf data={ecPdfData} />}
-                  fileName={`estado-cuenta-${ecPdfData.cliente_nombre.replace(/\s+/g, '-').toLowerCase()}-${ecPdfData.fecha_generacion}.pdf`}
-                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900"
-                >
-                  {({ loading: pdfLoading }) => (
-                    <>
-                      <BookOpen className="h-4 w-4" />
-                      {pdfLoading ? 'Generando...' : 'Descargar PDF'}
-                    </>
-                  )}
-                </PdfDownloadButton>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white opacity-40 dark:bg-white dark:text-slate-900"
-                >
-                  <BookOpen className="h-4 w-4" />
-                  Descargar PDF
-                </button>
-              )}
-              {ecPdfData && ecPdfData.items.length > 0 && ecMailto && (
-                <a
-                  href={ecMailto}
-                  className="inline-flex items-center gap-2 rounded-xl border border-blue-300 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-950/30"
-                >
-                  <Mail className="h-4 w-4" />
-                  Preparar correo
-                </a>
-              )}
+              </PdfDownloadButton>
+            ) : (
               <button
                 type="button"
-                onClick={() => { setShowEC(false); setEcPdfData(null); setEcClienteId('') }}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+                disabled
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white opacity-40 dark:bg-white dark:text-slate-900"
               >
-                Cerrar
+                <BookOpen className="h-4 w-4" />
+                Descargar PDF
               </button>
-            </div>
-            {ecPdfData && ecPdfData.items.length > 0 && (
-              <p className="mt-3 text-xs text-slate-400">
-                Descargue el PDF y adjúntelo manualmente al correo antes de enviarlo.
-              </p>
             )}
+            {ecPdfData && ecPdfData.items.length > 0 && ecMailto && (
+              <a
+                href={ecMailto}
+                className={financeActionClass}
+              >
+                <Mail className="h-4 w-4" />
+                Preparar correo
+              </a>
+            )}
+            <button type="button" onClick={closeEC} className={financeActionClass}>
+              Cerrar
+            </button>
           </div>
-        </div>
-      )}
+          {ecPdfData && ecPdfData.items.length > 0 && (
+            <p className="text-xs text-slate-400">
+              Descargue el PDF y adjúntelo manualmente al correo antes de enviarlo.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
         <button
@@ -659,15 +641,15 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                       const ready = row.readiness_code === 'READY_TO_INVOICE'
                       return (
                         <tr key={row.quotation_id} className="border-b border-slate-100 align-top dark:border-slate-800">
-                          <td className="py-4 pr-4 font-semibold text-blue-600 dark:text-blue-400">{row.quotation_number || row.quotation_id}</td>
+                          <td className="py-4 pr-4 font-semibold text-slate-900 dark:text-white">{row.quotation_number || row.quotation_id}</td>
                           <td className="py-4 pr-4 text-slate-700 dark:text-slate-300">{row.client_name}</td>
                           <td className="py-4 pr-4 text-slate-600 dark:text-slate-400">
                             <p>{row.shipment_count} operación{row.shipment_count === 1 ? '' : 'es'}</p>
                             <p className="mt-1 text-xs">{row.shipment_numbers || 'Sin shipment activo'}</p>
                           </td>
-                          <td className="py-4 pr-4 text-slate-600 dark:text-slate-400">{formatDate(row.latest_closed_at)}</td>
+                          <td className="py-4 pr-4 text-slate-600 dark:text-slate-400">{formatDate(row.latest_closed_at, '—')}</td>
                           <td className="py-4 pr-4 font-semibold text-slate-900 dark:text-white">
-                            {row.currency ? formatUSD(Number(row.estimated_total || 0), row.currency) : '—'}
+                            {row.currency ? formatMoney(Number(row.estimated_total || 0), row.currency) : '—'}
                           </td>
                           <td className="py-4 pr-4">
                             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${ready ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'}`}>
@@ -802,8 +784,10 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                       onClick={() => router.push(`/invoicing/${inv.id}`)}
                       className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
                     >
-                      <td className="py-3 pr-4 font-semibold text-blue-600 dark:text-blue-400">
-                        {inv.invoice_number || <span className="text-slate-400 italic">Sin número</span>}
+                      <td className="py-3 pr-4">
+                        <Link href={`/invoicing/${inv.id}`} onClick={(event) => event.stopPropagation()} className={financeLinkClass}>
+                          {inv.invoice_number || <span className="font-normal italic text-slate-400">Sin número</span>}
+                        </Link>
                         {inv.point_of_sale && <span className="mt-1 block text-xs font-normal text-slate-500">{inv.point_of_sale}</span>}
                       </td>
                       <td className="pr-4">
@@ -825,10 +809,10 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                           : inv.payment_condition || '—'}
                       </td>
                       <td className="pr-4 text-slate-600 dark:text-slate-400">
-                        {formatDate(inv.issue_date)}
+                        {formatDate(inv.issue_date, '—')}
                       </td>
                       <td className={`pr-4 ${isOverdue ? 'font-semibold text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                        {formatDate(inv.due_date)}
+                        {formatDate(inv.due_date, '—')}
                         {isOverdue && <span className="ml-1 text-xs">⚠</span>}
                       </td>
                       <td className="pr-4">
@@ -838,7 +822,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
                         </span>
                       </td>
                       <td className="text-right font-semibold text-slate-900 dark:text-white">
-                        {formatUSD(inv.total, inv.currency)}
+                        {formatMoney(inv.total, inv.currency)}
                       </td>
                     </tr>
                   )

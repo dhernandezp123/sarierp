@@ -4,11 +4,15 @@ import { cn } from '@/src/lib/utils'
 
 export const financeActionClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
 
-export function FinancePageHeader({ title, description, icon: Icon, actions }: { title: string; description: string; icon: LucideIcon; actions: ReactNode }) {
-  return <header className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-    <div className="flex items-start gap-4"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 text-[#B3282D] dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300"><Icon aria-hidden="true" className="h-6 w-6" /></div>
-      <div><p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#B3282D] dark:text-rose-300">Facturación · Gestión financiera</p><h1 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-3xl">{title}</h1><p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</p></div>
-    </div><div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+export const financeLinkClass = 'font-semibold text-[#B3282D] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 dark:text-rose-300'
+
+/** Cabecera única de Finanzas y Contabilidad: el eyebrow identifica el área. */
+export function FinancePageHeader({ title, description, icon: Icon, actions, eyebrow = 'Finanzas' }: { title: ReactNode; description?: ReactNode; icon: LucideIcon; actions?: ReactNode; eyebrow?: string }) {
+  // Las acciones bajan de línea antes de comprimir el título (Facturación tiene seis).
+  return <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+    <div className="flex min-w-0 flex-1 basis-80 items-start gap-4"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 text-[#B3282D] dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300"><Icon aria-hidden="true" className="h-6 w-6" /></div>
+      <div className="min-w-0"><p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#B3282D] dark:text-rose-300">{eyebrow}</p><h1 className="text-2xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-3xl">{title}</h1>{description && <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</p>}</div>
+    </div>{actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
   </header>
 }
 

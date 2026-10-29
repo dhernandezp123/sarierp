@@ -4,6 +4,8 @@ import { supabase } from '@/src/lib/supabase/client'
 import { useAccounting } from '@/src/hooks/useAccounting'
 import { readAllReportRows } from '@/src/lib/report-query'
 import { AccountingNav } from '@/src/components/accounting/AccountingNav'
+import { FinancePageHeader } from '@/src/components/invoicing/FinanceWorkspace'
+import { BookOpen } from 'lucide-react'
 import { FinancialReportExport } from '@/src/components/invoicing/FinancialReportExport'
 import { accountingBook,bookLabels,type BookType,type BookLine } from '@/src/lib/accounting-books'
 import { toDateInputValue } from '@/src/lib/format'
@@ -29,7 +31,7 @@ export default function AccountingBooksPage(){
  }
  let report:ReturnType<typeof accountingBook>|null=null,reportError=''
  if(current){try{report=accountingBook(current.lines,type,from,to,account)}catch(e){reportError=(e as Error).message}}
- return <div className="space-y-5 p-4 sm:p-6"><h1 className="text-2xl font-bold">Libros y estados financieros</h1><AccountingNav/>
+ return <div className="space-y-6"><FinancePageHeader eyebrow="Contabilidad" title="Libros y estados financieros" description="Libro diario, mayor, balance de comprobación, balance general y estado de resultados por período." icon={BookOpen}/><AccountingNav/>
  <form className={`${cardClass} grid gap-3 sm:grid-cols-4`} onSubmit={e=>{e.preventDefault();void load()}}><label>Reporte<select className={fieldClass} value={type} onChange={e=>{setType(e.target.value as BookType);setPage(0)}}>{Object.entries(bookLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>Desde<input type="date" required className={fieldClass} value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Hasta<input type="date" required className={fieldClass} value={to} onChange={e=>setTo(e.target.value)}/></label>
  {type==='ledger'&&<label>Cuenta<select required className={fieldClass} value={account} onChange={e=>{setAccount(e.target.value);setPage(0)}}><option value="">Seleccionar cuenta</option>{data?.accounts.filter(a=>a.postable).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>}<button className={primaryButtonClass} disabled={busy}>{busy?'Consultando…':'Consultar'}</button></form>
  {(error||readError||reportError)&&<p role="alert" className="text-red-600">{error||readError||reportError}</p>}

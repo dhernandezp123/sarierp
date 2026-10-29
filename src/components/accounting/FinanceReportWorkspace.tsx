@@ -1,9 +1,10 @@
 'use client'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { AlertCircle, BarChart3, ChevronLeft, ChevronRight, FileText, History, LoaderCircle, RefreshCw, Wallet } from 'lucide-react'
+import { AlertCircle, BarChart3, FileText, History, LoaderCircle, RefreshCw, Wallet } from 'lucide-react'
 import { AccountingNav } from './AccountingNav'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
+import { Pagination } from '@/src/components/ui/Pagination'
 import { FinanceEmptyState, FinanceMetric, FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
 import { FinancialReportExport } from '@/src/components/invoicing/FinancialReportExport'
 import { useFinanceReport } from '@/src/hooks/useFinanceReport'
@@ -13,9 +14,9 @@ import { formatDate, formatMoney, toDateInputValue } from '@/src/lib/format'
 import { cardClass, fieldClass } from '@/src/lib/ui-classes'
 import type { ReportPdfData } from '@/src/components/pdf/report-pdf'
 
-export function FinanceReportWorkspace({side,initialView='documents'}:{side:FinanceSide;initialView?:'documents'|'aging'|'movements'}) {
+export function FinanceReportWorkspace({side,initialView='documents',title,eyebrow='Contabilidad',showAccountingNav=true}:{side:FinanceSide;initialView?:'documents'|'aging'|'movements';title?:string;eyebrow?:string;showAccountingNav?:boolean}) {
   const [filters,setFilters]=useState<FinanceFilters>({party:'',currency:'Todos',status:'Pendientes',cutoff:toDateInputValue(new Date()),from:'',to:'',dateField:'issue_date',includeDebit:true})
-  const [view,setView]=useState(initialView),[blocks,setBlocks]=useState(false),[revision,setRevision]=useState(0),[page,setPage]=useState(0)
+  const [view,setView]=useState(initialView),[blocks,setBlocks]=useState(false),[revision,setRevision]=useState(0),[page,setPage]=useState(0),[pageSize,setPageSize]=useState(50)
   const [kinds,setKinds]=useState<string[]>([])
   const result=useFinanceReport(side,filters.cutoff,revision),partyLabel=side==='receivable'?'Cliente':'Proveedor'
   function change<K extends keyof FinanceFilters>(key:K,value:FinanceFilters[K]){setFilters(f=>({...f,[key]:value}));setPage(0)}
@@ -27,11 +28,11 @@ export function FinanceReportWorkspace({side,initialView='documents'}:{side:Fina
   const report=computed.data,error=result.error||computed.error
   // Running balances cannot be added as document subtotals.
   const exported=report&&blocks&&view==='documents'?groupedFinancialReport(report):report
-  const pages=Math.max(1,Math.ceil((report?.rows.length||0)/50)),currentPage=Math.min(page,pages-1)
+  const pages=Math.max(1,Math.ceil((report?.rows.length||0)/pageSize)),currentPage=Math.min(page,pages-1)
   function cell(data:ReportPdfData,row:ReportPdfData['rows'][number],key:string){const column=data.columns.find(c=>c.key===key);const value=row[key];return column?.format==='money'&&typeof value==='number'?formatMoney(value,String(row.currency||'')):String(value??'—')}
   return <div className="space-y-6">
-    <FinancePageHeader title={side==='receivable'?'Cuentas por cobrar':'Estado de cuenta de proveedores'} description="Documentos y saldos a la fecha de corte. Consulta el detalle, la antigüedad y el movimiento de cada cuenta." icon={Wallet} actions={<><Link href="/reports" className={financeActionClass}>Otros reportes</Link><button type="button" className={financeActionClass} onClick={()=>setRevision(r=>r+1)}><RefreshCw className="h-4 w-4"/>Actualizar</button></>}/>
-    <AccountingNav/>
+    <FinancePageHeader eyebrow={eyebrow} title={title||(side==='receivable'?'Cuentas por cobrar':'Estado de cuenta de proveedores')} description="Documentos y saldos a la fecha de corte. Consulta el detalle, la antigüedad y el movimiento de cada cuenta." icon={Wallet} actions={<><Link href="/reports" className={financeActionClass}>Otros reportes</Link><button type="button" className={financeActionClass} onClick={()=>setRevision(r=>r+1)}><RefreshCw className="h-4 w-4"/>Actualizar</button></>}/>
+    {showAccountingNav&&<AccountingNav/>}
     <section className={`${cardClass} space-y-5`} aria-label="Filtros financieros">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><div className="md:col-span-2"><label htmlFor="finance-party" className="mb-2 block text-xs font-semibold">{partyLabel}</label><div className="flex gap-2"><ClienteCombobox id="finance-party" aria-label={partyLabel} clientes={result.parties} value={filters.party} onChange={value=>change('party',value)} placeholder={`Todos los ${side==='receivable'?'clientes':'proveedores'}`} loading={result.loading}/>{filters.party&&<button type="button" className={financeActionClass} onClick={()=>change('party','')}>Todos</button>}</div></div>
         <label className="text-xs font-semibold">Fecha de corte<input className={`${fieldClass} mt-2`} type="date" value={filters.cutoff} max={toDateInputValue(new Date())} onChange={e=>change('cutoff',e.target.value)}/></label>
@@ -50,8 +51,8 @@ export function FinanceReportWorkspace({side,initialView='documents'}:{side:Fina
     {result.loading&&<p role="status" className="flex items-center gap-2 p-5 text-sm text-slate-500"><LoaderCircle className="h-5 w-5 animate-spin"/>Preparando el corte financiero…</p>}
     {report&&<><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{report.metrics.map((m,i)=><FinanceMetric key={`${m.label}-${i}`} label={m.label} value={m.value} icon={Wallet} tone="rose"/>)}</div>
       <section className={`${cardClass} !p-0`}><div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 p-5 dark:border-slate-800"><div><h2 className="font-bold">{report.title}</h2><p className="mt-1 text-xs text-slate-500">{report.rows.length} registros · {report.dateRange}</p></div>{exported&&<FinancialReportExport data={exported} filename={`${side}-${view}-${filters.cutoff}`} disabled={!report.rows.length}/>}</div>
-        {report.rows.length?<div className="overflow-x-auto"><table className="w-full min-w-[1000px] text-xs"><thead className="bg-slate-50 dark:bg-slate-900"><tr>{report.columns.map(c=><th key={c.key} scope="col" className={`px-4 py-3 ${c.align==='right'?'text-right':'text-left'}`}>{c.label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{report.rows.slice(currentPage*50,currentPage*50+50).map((row,i)=><tr key={`${row.id||row.__party_id||''}-${i}`} className="hover:bg-slate-50 dark:hover:bg-slate-900">{report.columns.map(c=><td key={c.key} className={`px-4 py-4 ${c.align==='right'?'whitespace-nowrap text-right tabular-nums':''}`}>{cell(report,row,c.key)}</td>)}</tr>)}</tbody></table></div>:<FinanceEmptyState icon={FileText} title="Sin registros para estos filtros" description="Prueba otro estado, fecha de corte o cliente/proveedor."/>}
-        <div className="flex items-center justify-between gap-3 border-t p-4 text-xs"><span>Página {currentPage+1} de {pages} · La exportación incluye todos los registros.</span><div className="flex gap-2"><button type="button" className={financeActionClass} disabled={currentPage===0} onClick={()=>setPage(currentPage-1)}><ChevronLeft className="h-4 w-4"/>Anterior</button><button type="button" className={financeActionClass} disabled={currentPage+1>=pages} onClick={()=>setPage(currentPage+1)}>Siguiente<ChevronRight className="h-4 w-4"/></button></div></div>
+        {report.rows.length?<div className="overflow-x-auto"><table className="w-full min-w-[1000px] text-xs"><thead className="bg-slate-50 dark:bg-slate-900"><tr>{report.columns.map(c=><th key={c.key} scope="col" className={`px-4 py-3 ${c.align==='right'?'text-right':'text-left'}`}>{c.label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{report.rows.slice(currentPage*pageSize,(currentPage+1)*pageSize).map((row,i)=><tr key={`${row.id||row.__party_id||''}-${i}`} className="hover:bg-slate-50 dark:hover:bg-slate-900">{report.columns.map(c=><td key={c.key} className={`px-4 py-4 ${c.align==='right'?'whitespace-nowrap text-right tabular-nums':''}`}>{cell(report,row,c.key)}</td>)}</tr>)}</tbody></table></div>:<FinanceEmptyState icon={FileText} title="Sin registros para estos filtros" description="Prueba otro estado, fecha de corte o cliente/proveedor."/>}
+        <Pagination page={currentPage+1} pageSize={pageSize} total={report.rows.length} onPageChange={p=>setPage(p-1)} onPageSizeChange={size=>{setPageSize(size);setPage(0)}}/><p className="px-4 pb-4 text-xs text-slate-500">La exportación incluye todos los registros.</p>
       </section><div className="space-y-1 text-xs text-slate-500">{report.filters.map(f=><p key={f}>{f}</p>)}</div></>}
   </div>
 }
