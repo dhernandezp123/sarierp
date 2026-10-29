@@ -309,7 +309,7 @@ export default function APDetailPage() {
         </div>
       </div>
 
-      {cuenta.parent_ap_id && <Link href={`/accounts-payable/${cuenta.parent_ap_id}`} className="text-sm text-blue-600 hover:underline">Ver cuenta principal para gestionar pagos y ajustes</Link>}
+      {cuenta.parent_ap_id && <Link href={`/accounts-payable/${cuenta.parent_ap_id}`} className="text-sm font-semibold text-[#B3282D] underline-offset-4 hover:underline dark:text-rose-300">Ver cuenta principal para gestionar pagos y ajustes</Link>}
       {cuenta.cancellation_reason && <p className={cardClass}>Anulada: {cuenta.cancellation_reason} / {formatDateTime(cuenta.cancelled_at)}</p>}
 
       <section className={cardClass}>
@@ -330,7 +330,7 @@ export default function APDetailPage() {
           {cuenta.quotations && (
             <div className="flex gap-2">
               <span className="w-32 shrink-0 font-medium text-slate-500">Cotizacion:</span>
-              <Link href={`/quotations/${cuenta.quotations.id}`} className="text-blue-600 hover:underline dark:text-blue-400">
+              <Link href={`/quotations/${cuenta.quotations.id}`} className="font-semibold text-[#B3282D] underline-offset-4 hover:underline dark:text-rose-300">
                 {cuenta.quotations.quotation_number || 'Ver cotizacion'}
               </Link>
             </div>
@@ -375,7 +375,7 @@ export default function APDetailPage() {
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>
-                <input type="number" step="0.01" min="0.01" max={saldoPendiente} value={pagoForm.monto} onChange={setP('monto')} className={fieldClass}
+                <NumberInput type="number" step="0.01" min="0.01" max={saldoPendiente} value={pagoForm.monto} onChange={setP('monto')} className={fieldClass}
                   placeholder={`Max. ${fmtMoney(saldoPendiente, cuenta.moneda)}`} />
               </div>
               <div>
@@ -516,8 +516,7 @@ export default function APDetailPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>
-                <input
-                  type="number"
+                <NumberInput type="number"
                   step="0.01"
                   min="0"
                   value={ncNdForm.monto}

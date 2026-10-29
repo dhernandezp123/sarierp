@@ -15,7 +15,7 @@ export function InvoiceCorrectionLinks({ invoiceId, original }: { invoiceId: str
   }, [context, invoiceId])
   const current = state?.context === context ? state : null
   return <section className={`${cardClass} space-y-4`}><div><h2 className="font-semibold">Corrección y trazabilidad</h2><p className="mt-1 max-w-3xl text-sm text-slate-500">La propuesta permite corregir los datos con aprobación y emisión del master. La anulación del original requiere aprobación de Contabilidad.</p></div>
-    {original?.invoice_id && <p className="text-sm">Sustituye la factura anulada <Link className="font-semibold text-blue-700 underline" href={`/invoicing/${original.invoice_id}`}>{original.invoice_number || 'Ver original'}</Link>.</p>}
+    {original?.invoice_id && <p className="text-sm">Sustituye la factura anulada <Link className="font-semibold text-[#B3282D] underline underline-offset-4 dark:text-rose-300" href={`/invoicing/${original.invoice_id}`}>{original.invoice_number || 'Ver original'}</Link>.</p>}
     {!current ? <p role="status" className="text-xs text-slate-500">Consultando sustituciones…</p> : current.error ? <p role="alert" className="text-sm text-rose-700">No se pudo consultar la trazabilidad. Recarga para reintentar.</p> : current.replacement ? <Link href={`/invoicing/${current.replacement}`} className={secondaryButtonClass}>Ver factura sustituta emitida</Link> : <Link href={`/invoicing/new?correct=${invoiceId}`} className={secondaryButtonClass}>Preparar corrección</Link>}
   </section>
 }

@@ -4,7 +4,9 @@ import { InvoiceFiscalOptions, blankFiscalOptions, fiscalOptionsPayload } from '
 import { InvoiceLineSettings, InvoiceLineSettingsProvider } from '@/src/components/invoicing/InvoiceLineSettings'
 import { calculateInvoiceFiscal, convertMoney, invoiceLineAmounts, type TaxTreatment } from '@/src/lib/invoice-fiscal'
 
-import { toDateInputValue } from '@/src/lib/format'
+import { formatDate, formatMoney, toDateInputValue } from '@/src/lib/format'
+import { NumberInput } from '@/src/components/ui/NumberInput'
+import { financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -135,12 +137,6 @@ function newItem(): InvoiceItem {
 
 function reqClass(submitted: boolean, value: string) {
   return submitted && !value ? 'border-red-400 dark:border-red-500' : ''
-}
-
-function fmtDate(iso: string) {
-  if (!iso) return '—'
-  const [y, m, d] = iso.split('-')
-  return `${d}/${m}/${y}`
 }
 
 function getClientPaymentTerms(client: Cliente | null) {
@@ -784,8 +780,8 @@ export default function NewInvoicePage() {
           Volver
         </button>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-            Facturación
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#B3282D] dark:text-rose-300">
+            Finanzas · Facturación
           </p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
             {draft ? `${draftLabel(draft.id)} · ${draft.status}` : sourceInvoiceId ? 'Preparar corrección de factura' : parentInvoice ? `Nueva ${docLabel}` : 'Nuevo documento'}
@@ -815,10 +811,10 @@ export default function NewInvoicePage() {
               Emitida contra: {parentInvoice.invoice_type} {parentInvoice.invoice_number}
             </p>
             <p className="text-blue-600 dark:text-blue-400">
-              Cliente: {parentInvoice.cliente_nombre} · Total: {parentInvoice.currency} {parentInvoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              Cliente: {parentInvoice.cliente_nombre} · Total: {formatMoney(parentInvoice.total, parentInvoice.currency)}
             </p>
             <p className="text-blue-600 dark:text-blue-400">
-              Saldo pendiente: {parentInvoice.currency} {parentInvoice.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              Saldo pendiente: {formatMoney(parentInvoice.balance, parentInvoice.currency)}
             </p>
           </div>
         </div>
@@ -989,8 +985,7 @@ export default function NewInvoicePage() {
                     {isFiscal && <span className="ml-1 text-red-500">*</span>}
                     {isFiscal && <span className="ml-1 text-xs font-normal text-slate-400">— SAR exige total en HNL</span>}
                   </label>
-                  <input
-                    type="number"
+                  <NumberInput type="number"
                     value={exchangeRate}
                     onChange={(e) => setExchangeRate(e.target.value)}
                     min="1"
@@ -1053,7 +1048,7 @@ export default function NewInvoicePage() {
                 </div>
                 <div>
                   <span className="block font-semibold">Fecha límite</span>
-                  <span>{fmtDate(activeCai.fecha_limite_emision)}</span>
+                  <span>{formatDate(activeCai.fecha_limite_emision, '—')}</span>
                 </div>
               </div>
             </section>
@@ -1123,8 +1118,7 @@ export default function NewInvoicePage() {
                   />
                   </label>
                   <label className="min-w-0 space-y-1 text-xs"><span className="lg:hidden">Cantidad</span>
-                  <input
-                    type="number"
+                  <NumberInput type="number"
                     value={it.quantity}
                     onChange={(e) => updateItem(it.id, 'quantity', e.target.value)}
                     min="0"
@@ -1134,8 +1128,7 @@ export default function NewInvoicePage() {
                   />
                   </label>
                   <label className="min-w-0 space-y-1 text-xs"><span className="lg:hidden">Precio unitario {currency}</span>
-                  <input
-                    type="number"
+                  <NumberInput type="number"
                     value={it.unit_price}
                     onChange={(e) => updateItem(it.id, 'unit_price', e.target.value)}
                     min="0"
@@ -1173,7 +1166,7 @@ export default function NewInvoicePage() {
                     </button>
                   )}
                   <label className="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">Descuento de esta línea {conversionNeeded?sourceCurrency:currency}
-                    <input aria-label="Descuento de línea" type="number" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
+                    <NumberInput type="number" aria-label="Descuento de línea" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
                     <span>Se aplica antes del ISV.</span>
                   </label>
                   <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} readonlyService={Boolean(it.source_pricing_item_id)} onService={service => {
@@ -1198,31 +1191,31 @@ export default function NewInvoicePage() {
                   {importeExento > 0 && (
                     <div className="flex justify-between">
                       <span className="text-slate-500 dark:text-slate-400">Importe exento</span>
-                      <span>{currency} {importeExento.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      <span>{formatMoney(importeExento, currency)}</span>
                     </div>
                   )}
                   {importeGravado15 > 0 && (
                     <div className="flex justify-between">
                       <span className="text-slate-500 dark:text-slate-400">Gravado 15%</span>
-                      <span>{currency} {importeGravado15.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      <span>{formatMoney(importeGravado15, currency)}</span>
                     </div>
                   )}
                   {importeGravado18 > 0 && (
                     <div className="flex justify-between">
                       <span className="text-slate-500 dark:text-slate-400">Gravado 18%</span>
-                      <span>{currency} {importeGravado18.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      <span>{formatMoney(importeGravado18, currency)}</span>
                     </div>
                   )}
                   {isv15Amount > 0 && (
                     <div className="flex justify-between">
                       <span className="text-slate-500 dark:text-slate-400">ISV 15%</span>
-                      <span>{currency} {isv15Amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      <span>{formatMoney(isv15Amount, currency)}</span>
                     </div>
                   )}
                   {isv18Amount > 0 && (
                     <div className="flex justify-between">
                       <span className="text-slate-500 dark:text-slate-400">ISV 18%</span>
-                      <span>{currency} {isv18Amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                      <span>{formatMoney(isv18Amount, currency)}</span>
                     </div>
                   )}
                 </>
@@ -1230,27 +1223,27 @@ export default function NewInvoicePage() {
                 <>
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">Subtotal</span>
-                    <span>{currency} {subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span>{formatMoney(subtotal, currency)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 dark:text-slate-400">ISV</span>
-                    <span>{currency} {taxAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span>{formatMoney(taxAmount, currency)}</span>
                   </div>
                 </>
               )}
-              {amounts.exonerated > 0 && <div className="flex justify-between"><span>Importe exonerado</span><span>{currency} {amounts.exonerated.toFixed(2)}</span></div>}
+              {amounts.exonerated > 0 && <div className="flex justify-between"><span>Importe exonerado</span><span>{formatMoney(amounts.exonerated, currency)}</span></div>}
               {fiscalOptions.referenceEnabled && Number.isFinite(Number(fiscalOptions.referenceRate)) && Number(fiscalOptions.referenceRate)>0 && Number(fiscalOptions.referenceRate)<=1000000 && <p className="text-xs text-slate-500">Equivalencia informativa: {fiscalOptions.referenceCurrency} {convertMoney(total,{currency:fiscalOptions.referenceCurrency,rate:Number(fiscalOptions.referenceRate),operation:fiscalOptions.referenceOperation}).toFixed(2)}</p>}
               <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
                 <div className="flex justify-between">
                   <span className="font-semibold text-slate-900 dark:text-white">Total</span>
                   <span className="text-lg font-bold text-slate-900 dark:text-white">
-                    {currency} {total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatMoney(total, currency)}
                   </span>
                 </div>
                 {currency === 'USD' && (
                   <div className="mt-1 flex justify-between text-xs text-slate-500 dark:text-slate-400">
                     <span>≈ HNL</span>
-                    <span>{totalLps.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span>{formatMoney(totalLps, 'HNL')}</span>
                   </div>
                 )}
               </div>
@@ -1276,7 +1269,7 @@ export default function NewInvoicePage() {
               }
               {selectedCliente.direccion && <p className="mt-1 text-xs text-slate-500">{selectedCliente.direccion}</p>}
               {selectedCliente.email && <p className="text-xs text-slate-500">{selectedCliente.email}</p>}
-              <Link href={`/clientes/${selectedCliente.id}/edit`} className="mt-2 inline-block text-xs font-semibold text-blue-700 underline dark:text-blue-300">Revisar nombre, RTN y domicilio en el perfil del cliente</Link>
+              <Link href={`/clientes/${selectedCliente.id}/edit`} className={`${financeLinkClass} mt-2 inline-block text-xs underline`}>Revisar nombre, RTN y domicilio en el perfil del cliente</Link>
             </section>
           )}
 
@@ -1315,7 +1308,7 @@ export default function NewInvoicePage() {
         onOpenChange={(open) => { if (!open) setItemPendingRemoval(null) }}
         title="Quitar línea de factura"
         description={itemPendingRemoval
-          ? `¿Deseas descartar ${itemPendingRemoval.description || 'esta línea'} por USD ${itemPendingRemoval.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}?`
+          ? `¿Deseas descartar ${itemPendingRemoval.description || 'esta línea'} por ${formatMoney(itemPendingRemoval.amount, currency)}?`
           : undefined}
         confirmLabel="Quitar línea"
         danger

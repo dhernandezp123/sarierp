@@ -36,7 +36,7 @@ export function FiscalVoidReview({ request, onChanged }: { request: FiscalVoidRe
     </DialogHeader><div className="space-y-2 text-sm"><p className="font-semibold">{request.document_type} · {request.document_number}</p>
       <p>{request.point_of_sale || 'Sin oficina'} · Emisión {formatDate(request.issue_date)} · {formatMoney(Number(request.total), request.currency)}</p><p>CAI: {request.cai || 'No aplica'}</p>
       <p>Solicitó {request.requested_by_name} · {formatDateTime(request.requested_at)}</p><p className="whitespace-pre-wrap">Motivo: {request.reason}</p>
-      <Link className="text-blue-700 underline" href={fiscalVoidDocumentHref(request)} target="_blank" rel="noopener noreferrer">Consultar documento original</Link>
+      <Link className="text-[#B3282D] underline underline-offset-4 dark:text-rose-300" href={fiscalVoidDocumentHref(request)} target="_blank" rel="noopener noreferrer">Consultar documento original</Link>
       <p>Para devoluciones o ajustes posteriores de una venta, utiliza una nota de crédito vinculada a la factura.</p>
       {request.document_type !== 'Proforma' && <label className="flex items-start gap-2"><input type="checkbox" checked={originals} disabled={busy} onChange={e => setOriginals(e.target.checked)} />Confirmo que se trata de un error de emisión y que se resguardarán original y copia con la leyenda ANULADA.</label>}
     </div><label className="text-sm font-medium" htmlFor={`void-review-${request.id}`}>Motivo de la decisión</label><textarea id={`void-review-${request.id}`} className={fieldClass} value={reason} maxLength={1000} disabled={busy} onChange={e => setReason(e.target.value)} />
@@ -75,7 +75,7 @@ export function FiscalVoidControl({ table, documentId, status, onChanged, reques
     finally { if (lock.current === context) lock.current = ''; if (owner.current === context) setBusy('') }
   }
   if (!allowed) return null
-  return <section className={`${cardClass} space-y-3`}><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Anulación y registro</h2><Link className="text-sm text-blue-700 underline" href="/invoicing/voids">Ver registro de anulaciones</Link></div>
+  return <section className={`${cardClass} space-y-3`}><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Anulación y registro</h2><Link className="text-sm text-[#B3282D] underline underline-offset-4 dark:text-rose-300" href="/invoicing/voids">Ver registro de anulaciones</Link></div>
     {!current ? <p>Cargando historial…</p> : current.error ? <p role="alert">{current.error} <button type="button" className={secondaryButtonClass} onClick={() => void reload()}>Reintentar</button></p> : <>
       {status !== 'Anulada' && !requestDisabled && !current.rows.some(r => r.status === 'Pendiente') && <button type="button" className={secondaryButtonClass} onClick={() => { setReason(''); setOpen(context) }}>Solicitar anulación</button>}
       {!current.rows.length && <p className="text-sm text-slate-500">{status === 'Anulada' ? 'Documento anulado antes de este flujo; no hay una aprobación registrada en estas solicitudes.' : 'La anulación requiere un motivo y aprobación de Contabilidad. El documento no se elimina.'}</p>}

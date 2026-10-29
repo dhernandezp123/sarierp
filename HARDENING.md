@@ -1,5 +1,72 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-29 - UX-FIN-02 - Coherencia visual de Finanzas y Contabilidad (fase 1)
+
+- Estado: validado localmente y enviado a publicación en Producción (`main`) y
+  Pruebas (`demo`, Preview); revisión autenticada en navegador pendiente. No
+  modifica SQL, permisos, RPC, cálculos, estados ni datos.
+- Hallazgo: tres estilos de cabecera (azul en Facturación, marca en Cobranza con
+  eyebrow fijo "Facturación · Gestión financiera" incluso en Caja/Proveedores, y
+  `h1` sin descripción en Contabilidad); doble padding en Contabilidad/Cobranza;
+  cinco modales `fixed inset-0` sin foco atrapado ni Escape; formateadores
+  locales de fecha/moneda; `type="number"` sin `NumberInput`; tres paginaciones;
+  enlaces azules; "Estados de cuenta" titulado "Cuentas por cobrar" con pestañas
+  contables sin pestaña activa; filas de documentos abribles solo con mouse;
+  selector de año del cierre fijo en 2024–2027; aviso de quitar línea de factura
+  siempre en "USD" aunque el documento fuera HNL.
+- Cambios:
+  - `FinanceWorkspace.tsx`: `FinancePageHeader` con `eyebrow`, descripción y
+    acciones opcionales; `financeLinkClass`.
+  - Cabecera única en Facturación, Borradores, Anulaciones, Cobranza, Estados de
+    cuenta, Cuentas por cobrar/proveedores, Caja y bancos y las seis páginas de
+    Contabilidad (`accounts`, `assets`, `books`, `journal`, `purchases`,
+    `settings`); se retira el padding duplicado.
+  - `Dialog` en Cierre del período y Estado de cuenta (`invoicing/page.tsx`) y en
+    Registrar pago, Pago de contado registrado y Reversar pago
+    (`invoicing/[id]/page.tsx`); no se cierran mientras se guarda o reversa.
+  - `formatMoney`/`formatDate(…, '—')` en listado, detalle y nueva factura. El
+    precio unitario conserva sus decimales adicionales.
+  - `NumberInput type="number"` en Cobranza, nueva factura, pagos del detalle,
+    asientos, compras, activos y montos de CxP.
+  - `Pagination` en Anulaciones, recibos de Cobranza y reportes de cartera.
+  - Enlaces de marca en Facturación, Contabilidad, anulación fiscal, correcciones
+    y CxP; número de factura enlazado y enfocable con teclado.
+  - `/invoicing/statements` titulado "Estados de cuenta", sin `AccountingNav`.
+  - Años del cierre derivados de los documentos y del año actual.
+  - Aviso de quitar línea con la moneda del documento.
+- Fuera de alcance (fases siguientes): reorganizar la navegación de Finanzas,
+  unificar accesos al estado de cuenta, acción principal y menú en Facturación,
+  Dashboard Financiero (rentabilidad cotizada), prellenar TC en Cobranza, cierre
+  mediante el exportador financiero y monedas fijas HNL/USD en selectores.
+- Pruebas: `tests/supplier-payment-flow.test.mjs` simula `NumberInput` como
+  `input`, igual que `tests/page-harness.mjs`; los demás tests no cambian.
+- Skill: `skills/sari-erp-maintenance/SKILL.md` enlaza la nueva
+  `references/ui-conventions.md`; `module-map.md` separa Facturación/cobranza,
+  Contabilidad/tesorería y Pagos/costos e incluye las pruebas SQL financieras.
+- Validaciones: `npx tsc --noEmit` aprobado; `npm test` 506/506;
+  `npm run lint:ci` 512 archivos, 223 diagnósticos históricos, 0 regresiones;
+  `npm run build` aprobado. SQL/RLS no aplica (sin cambios de base).
+- Pruebas (`demo`): mismos archivos; `invoicing/page.tsx` conserva su variante
+  revisada (marca sandbox en la impresión del cierre) y el manifiesto
+  `docs/quality/environment-parity.json` actualiza sus dos huellas en ambas ramas.
+  `check-environment-parity.mjs`: 541 compartidos, 26 variantes revisadas, 0
+  diferencias. Demo: TypeScript, `npm test` 512/512 y `lint:ci` (525 archivos,
+  223 históricos, 0 regresiones). El build local de Demo exige claves reales del
+  proyecto Demo y no se ejecutó; lo valida el build Preview de Vercel.
+- Riesgos / pendientes:
+  - Revisión visual en navegador (escritorio y móvil, claro/oscuro) de las
+    pantallas citadas y de los cinco diálogos: solo hubo inspección de código.
+  - El listado conserva la fila clicable; el enlace detiene la propagación.
+- Revisión posterior (29/10/2026): la cabecera pasaba a fila desde 640 px con
+  acciones `shrink-0`; en Facturación (seis acciones, sin sidebar bajo 1024 px)
+  los botones salían de la vista y el título quedaba en 0 px. `FinancePageHeader`
+  usa ahora `flex-wrap`, título `flex-1 basis-80` y acciones `max-w-full`
+  envolventes. Medido en Chrome headless con el Tailwind del proyecto sobre la
+  misma cabecera: antes, a 700/768 px, acciones hasta 863 px y título 0 px; a 1024
+  px, título 57 px. Ahora, a 640/700/768/1024 px, sin desborde y título completo
+  (286 px); las acciones bajan bajo el título. Falta revisión en la app real.
+- Commit: pendiente.
+
 ### 2026-10-28 - ACC-IMPORT-PDF-01 - Catálogo contable importado desde PDF
 
 - Estado: SQL aplicado en ambos ambientes y catálogo importado/verificado en Sari

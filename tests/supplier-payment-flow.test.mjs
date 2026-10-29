@@ -69,6 +69,7 @@ function mount({ balanceOverrides = {}, legacyParentId = null, balanceError = fa
     '@/src/lib/supabase/client': { supabase },
     '@/src/components/ui/dialog': tags(['Dialog', 'DialogContent', 'DialogHeader', 'DialogDescription', 'DialogTitle', 'DialogFooter']),
     '@/src/components/ui/page-skeleton': { PageSkeleton: 'skeleton' },
+    '@/src/components/ui/NumberInput': { NumberInput: 'input' },
     'sonner': { toast: Object.fromEntries(['error', 'success', 'info'].map(name => [name, text => messages.push({ name, text })])) },
   })
   const render = () => { cursor = 0; tree = Page(); effects.splice(0).forEach(fn => fn()); return tree }

@@ -6,7 +6,7 @@ import { InvoiceCorrectionLinks } from '@/src/components/invoicing/InvoiceCorrec
 import { InvoiceJournal } from '@/src/components/accounting/InvoiceJournal'
 import type { IssuerSnapshot } from '@/src/lib/fiscal-offices'
 
-import { toDateInputValue } from '@/src/lib/format'
+import { formatDate, formatMoney, toDateInputValue } from '@/src/lib/format'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTreasuryAccounts } from '@/src/hooks/useTreasuryAccounts'
@@ -20,6 +20,8 @@ import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { supabase } from '../../../../lib/supabase/client'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass } from '@/src/lib/ui-classes'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/src/components/ui/dialog'
+import { financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { InvoicePdf, type InvoicePdfData } from '@/src/components/pdf/invoice-pdf'
 import { ReciboPagoPdf, type ReciboPagoData } from '@/src/components/pdf/recibo-pago-pdf'
@@ -234,12 +236,6 @@ const STATUS_COLOR: Record<string, string> = {
   Saldada: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
   Vencida: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
   Anulada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500',
-}
-
-function formatDate(d: string | null) {
-  if (!d) return '—'
-  const [y, m, day] = d.split('T')[0].split('-')
-  return `${day}/${m}/${y}`
 }
 
 function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
@@ -606,8 +602,8 @@ export default function InvoiceDetailPage() {
             Volver
           </button>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-              {invoice.invoice_type}
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#B3282D] dark:text-rose-300">
+              Finanzas · {invoice.invoice_type}
             </p>
             <h1 className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">
               {invoice.invoice_number || 'Sin número'}
@@ -704,33 +700,33 @@ export default function InvoiceDetailPage() {
                 <tbody>
                   {items.map((it) => (
                     <tr key={it.id} className="border-b border-slate-100 dark:border-slate-800">
-                      <td className="py-2.5 pr-4 text-slate-700 dark:text-slate-300">{it.description}{Number(it.discount_amount)>0&&<p className="text-xs text-slate-500">Descuento antes de ISV: {invoice.currency} {Number(it.discount_amount).toFixed(2)}</p>}</td>
+                      <td className="py-2.5 pr-4 text-slate-700 dark:text-slate-300">{it.description}{Number(it.discount_amount)>0&&<p className="text-xs text-slate-500">Descuento antes de ISV: {formatMoney(Number(it.discount_amount), invoice.currency)}</p>}</td>
                       <td className="pr-4 text-right">{it.quantity}</td>
                       <td className="pr-4 text-right">{invoice.currency} {it.unit_price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                      <td className="text-right font-medium">{invoice.currency} {it.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                      <td className="text-right font-medium">{formatMoney(it.amount, invoice.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-300 dark:border-slate-600">
                     <td colSpan={3} className="py-2.5 pr-4 text-right text-sm text-slate-500">Subtotal</td>
-                    <td className="text-right font-medium">{invoice.currency} {invoice.subtotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    <td className="text-right font-medium">{formatMoney(invoice.subtotal, invoice.currency)}</td>
                   </tr>
                   <tr>
                     <td colSpan={3} className="pr-4 text-right text-sm text-slate-500">ISV ({invoice.tax_rate}%)</td>
-                    <td className="text-right font-medium">{invoice.currency} {invoice.tax_amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+                    <td className="text-right font-medium">{formatMoney(invoice.tax_amount, invoice.currency)}</td>
                   </tr>
                   <tr className="border-t-2 border-slate-900 dark:border-white">
                     <td colSpan={3} className="py-2.5 pr-4 text-right font-bold text-slate-900 dark:text-white">TOTAL</td>
                     <td className="text-right text-lg font-bold text-slate-900 dark:text-white">
-                      {invoice.currency} {invoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatMoney(invoice.total, invoice.currency)}
                     </td>
                   </tr>
                   {invoice.currency === 'USD' && invoice.total_lps && (
                     <tr>
                       <td colSpan={3} className="pr-4 text-right text-xs text-slate-400">≈ HNL (TC {invoice.exchange_rate})</td>
                       <td className="text-right text-xs text-slate-400">
-                        HNL {invoice.total_lps.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {formatMoney(invoice.total_lps, 'HNL')}
                       </td>
                     </tr>
                   )}
@@ -774,7 +770,7 @@ export default function InvoiceDetailPage() {
                   <tbody>
                     {payments.map((p) => (
                       <tr key={p.id} className={`border-b border-slate-100 dark:border-slate-800 ${p.status === 'Reversado' ? 'opacity-60' : ''}`}>
-                        <td className="py-2.5 pr-4">{formatDate(p.payment_date)}</td>
+                        <td className="py-2.5 pr-4">{formatDate(p.payment_date, '—')}</td>
                         <td className="pr-4 text-slate-600 dark:text-slate-400">
                           <div>{paymentMethodLabel(p.payment_method)}</div>
                           {p.invoice_fiscal_type && (
@@ -784,8 +780,7 @@ export default function InvoiceDetailPage() {
                             <div className="mt-1 space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
                               {p.invoice_payment_splits.map((split) => (
                                 <div key={split.id}>
-                                  {paymentMethodLabel(split.payment_method)}: {p.currency}{' '}
-                                  {Number(split.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  {paymentMethodLabel(split.payment_method)}: {formatMoney(Number(split.amount), p.currency)}
                                 </div>
                               ))}
                             </div>
@@ -801,18 +796,18 @@ export default function InvoiceDetailPage() {
                           )}
                         </td>
                         <td className={`text-right font-semibold ${p.status === 'Reversado' ? 'text-slate-500 line-through' : 'text-emerald-700 dark:text-emerald-400'}`}>
-                          {p.currency} {Number(p.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          {formatMoney(Number(p.amount), p.currency)}
                         </td>
                         <td>
                           <div className="flex items-center">
-                            {p.receipt_id && <Link className="px-2 text-xs text-blue-700 underline" href="/invoicing/collections">Ver recibo en Cobranza</Link>}
+                            {p.receipt_id && <Link className={`${financeLinkClass} px-2 text-xs`} href="/invoicing/collections">Ver recibo en Cobranza</Link>}
                             {p.status === 'Aplicado' && !p.receipt_id && (
                               <>
                                 <PdfDownloadButton
                                   document={<ReciboPagoPdf data={makeReceiptData(p)} />}
                                   fileName={`recibo-${invoice.invoice_number || 'pago'}-${p.payment_date}.pdf`}
                                   title="Generar recibo de este pago"
-                                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/30"
+                                  className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-[#B3282D] hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/30"
                                 >
                                   {({ loading: pdfLoading }) => (
                                     <>
@@ -845,13 +840,13 @@ export default function InvoiceDetailPage() {
                 <div className="text-right">
                   <p className="text-xs text-slate-400">Total pagado</p>
                   <p className="font-bold text-emerald-700 dark:text-emerald-400">
-                    {invoice.currency} {paidTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatMoney(paidTotal, invoice.currency)}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-400">Saldo pendiente</p>
                   <p className={`font-bold ${pending <= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                    {invoice.currency} {Math.max(0, pending).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    {formatMoney(Math.max(0, pending), invoice.currency)}
                   </p>
                 </div>
               </div>
@@ -867,15 +862,15 @@ export default function InvoiceDetailPage() {
             {invoice.point_of_sale && <InfoRow label="Punto de venta" value={invoice.point_of_sale} />}
             <InfoRow label="Tipo" value={invoice.invoice_type} />
             <InfoRow label="Estado" value={invoice.status} />
-            <InfoRow label="Emisión" value={formatDate(invoice.issue_date)} />
-            <InfoRow label="Vencimiento" value={formatDate(invoice.due_date)} />
+            <InfoRow label="Emisión" value={formatDate(invoice.issue_date, '—')} />
+            <InfoRow label="Vencimiento" value={formatDate(invoice.due_date, '—')} />
             <InfoRow
               label="Condición de pago"
               value={invoice.payment_condition === 'Credito'
                 ? `Crédito · ${invoice.credit_days || 0} días`
                 : invoice.payment_condition}
             />
-            {invoice.paid_date && <InfoRow label="Pagado el" value={formatDate(invoice.paid_date)} />}
+            {invoice.paid_date && <InfoRow label="Pagado el" value={formatDate(invoice.paid_date, '—')} />}
           </section>
 
           <section className={cardClass}>
@@ -908,7 +903,7 @@ export default function InvoiceDetailPage() {
               <button
                 type="button"
                 onClick={() => router.push(`/invoicing/${invoice.parent_invoice_id}`)}
-                className="text-sm font-semibold text-blue-600 underline dark:text-blue-400"
+                className={`${financeLinkClass} text-sm`}
               >
                 Ver factura original →
               </button>
@@ -938,11 +933,11 @@ export default function InvoiceDetailPage() {
                       <span className="font-medium text-slate-900 dark:text-white">
                         {note.invoice_number || 'Sin número'}
                       </span>
-                      <span className="ml-2 text-xs text-slate-500">{formatDate(note.issue_date)}</span>
+                      <span className="ml-2 text-xs text-slate-500">{formatDate(note.issue_date, '—')}</span>
                       <span className="ml-2 text-xs text-slate-400">{note.status}</span>
                     </div>
                     <span className={`font-semibold ${note.invoice_type === 'Nota de Crédito' ? 'text-rose-600 dark:text-rose-400' : 'text-orange-600 dark:text-orange-400'}`}>
-                      {note.invoice_type === 'Nota de Crédito' ? '-' : '+'}{note.currency} {note.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {note.invoice_type === 'Nota de Crédito' ? '-' : '+'}{formatMoney(note.total, note.currency)}
                     </span>
                   </button>
                 ))}
@@ -952,23 +947,24 @@ export default function InvoiceDetailPage() {
                 <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500 dark:text-slate-400">Factura original</span>
-                    <span>{invoice.currency} {invoice.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    <span>{formatMoney(invoice.total, invoice.currency)}</span>
                   </div>
                   {appliedLinkedNotes.map((note) => (
                     <div key={note.id} className="flex justify-between text-sm">
                       <span className="text-slate-500 dark:text-slate-400">{note.invoice_type === 'Nota de Crédito' ? 'Crédito' : 'Débito'}</span>
                       <span className={note.invoice_type === 'Nota de Crédito' ? 'text-rose-600' : 'text-orange-600'}>
-                        {note.invoice_type === 'Nota de Crédito' ? '-' : '+'}{note.currency} {note.total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {note.invoice_type === 'Nota de Crédito' ? '-' : '+'}{formatMoney(note.total, note.currency)}
                       </span>
                     </div>
                   ))}
                   <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold dark:border-slate-700">
                     <span>Balance efectivo</span>
                     <span className="text-slate-900 dark:text-white">
-                      {invoice.currency} {(
+                      {formatMoney(
                         invoice.total +
-                        appliedLinkedNotes.reduce((s, n) => s + (n.invoice_type === 'Nota de Débito' ? n.total : -n.total), 0)
-                      ).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        appliedLinkedNotes.reduce((s, n) => s + (n.invoice_type === 'Nota de Débito' ? n.total : -n.total), 0),
+                        invoice.currency
+                      )}
                     </span>
                   </div>
                 </div>
@@ -989,302 +985,297 @@ export default function InvoiceDetailPage() {
       </div>
 
       {/* Payment modal */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white shadow-2xl dark:bg-[#0b1220]">
-            <div className="border-b border-slate-200 p-5 dark:border-slate-700">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Registrar pago</h2>
+      <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open && !savingPayment) setShowPaymentModal(false) }}>
+        <DialogContent showCloseButton={!savingPayment} className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Registrar pago</DialogTitle>
+            <DialogDescription>{invoice.invoice_number || 'Documento sin número'} · Saldo pendiente {formatMoney(Math.max(0, pending), invoice.currency)}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <TreasuryAccountField {...treasury} currency={invoice.currency} value={bankAccount} onChange={setBankAccount}/>
+            {!!treasury.accounts.length&&invoice.currency==='USD'&&<label className="block text-xs font-semibold">Tasa HNL por USD del cobro<NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Monto ({invoice.currency}) <span className="text-red-500">*</span>
+              </label>
+              <NumberInput type="number"
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+                placeholder={`Ej. ${invoice.total.toFixed(2)}`}
+                min="0"
+                max={Math.max(0, pending)}
+                step="0.01"
+                className={fieldClass}
+              />
             </div>
-            <div className="space-y-4 p-5">
-              <TreasuryAccountField {...treasury} currency={invoice.currency} value={bankAccount} onChange={setBankAccount}/>
-              {!!treasury.accounts.length&&invoice.currency==='USD'&&<label className="block text-xs font-semibold">Tasa HNL por USD del cobro<NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Monto ({invoice.currency}) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  placeholder={`Ej. ${invoice.total.toFixed(2)}`}
-                  min="0"
-                  max={Math.max(0, pending)}
-                  step="0.01"
-                  className={fieldClass}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Tipo fiscal de factura <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={payFiscalType}
-                    onChange={(e) => setPayFiscalType(e.target.value as InvoiceFiscalType)}
-                    className={fieldClass}
-                  >
-                    {invoice.invoice_type === 'Proforma' ? (
-                      <option value="No aplica">No aplica</option>
-                    ) : (
-                      <>
-                        <option value="Gravada">Gravada</option>
-                        <option value="Mixta">Mixta</option>
-                        <option value="Exenta">Exenta</option>
-                        <option value="Exonerada">Exonerada</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Punto de venta <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={payPointOfSale}
-                    onChange={(e) => setPayPointOfSale(e.target.value)}
-                    className={fieldClass}
-                  >
-                    <option value="">Seleccionar ciudad...</option>
-                    {pointsOfSale.map((point) => (
-                      <option key={point} value={point}>{point}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Fecha de pago <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={payDate}
-                  onChange={(e) => setPayDate(e.target.value)}
-                  max={toDateInputValue()}
-                  className={fieldClass}
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Forma de pago <span className="text-red-500">*</span>
+                  Tipo fiscal de factura <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={payMethod}
-                  onChange={(e) => {
-                    const method = e.target.value as PaymentMethod | ''
-                    setPayMethod(method)
-                    setPayRef('')
-                    if (method !== 'Mixto') setPaySplits(emptyPaymentSplits())
-                  }}
+                  value={payFiscalType}
+                  onChange={(e) => setPayFiscalType(e.target.value as InvoiceFiscalType)}
                   className={fieldClass}
                 >
-                  <option value="">Seleccionar...</option>
-                  {PAYMENT_METHODS.map((method) => (
-                    <option key={method.value} value={method.value}>{method.label}</option>
+                  {invoice.invoice_type === 'Proforma' ? (
+                    <option value="No aplica">No aplica</option>
+                  ) : (
+                    <>
+                      <option value="Gravada">Gravada</option>
+                      <option value="Mixta">Mixta</option>
+                      <option value="Exenta">Exenta</option>
+                      <option value="Exonerada">Exonerada</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  Punto de venta <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={payPointOfSale}
+                  onChange={(e) => setPayPointOfSale(e.target.value)}
+                  className={fieldClass}
+                >
+                  <option value="">Seleccionar ciudad...</option>
+                  {pointsOfSale.map((point) => (
+                    <option key={point} value={point}>{point}</option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Condición de la factura: {invoice.payment_condition === 'Credito'
-                    ? `Crédito · ${invoice.credit_days || 0} días`
-                    : 'Contado'}
-                </p>
-              </div>
-              {payMethod === 'Mixto' && (
-                <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Desglose mixto</h3>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      Total: {invoice.currency}{' '}
-                      {SPLIT_METHODS.reduce((sum, method) => (
-                        sum + (paySplits[method.value].enabled ? Number(paySplits[method.value].amount || 0) : 0)
-                      ), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="space-y-3">
-                    {SPLIT_METHODS.map((method) => {
-                      const split = paySplits[method.value]
-                      return (
-                        <div key={method.value} className="grid items-center gap-2 sm:grid-cols-[120px_1fr_1.4fr]">
-                          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                            <input
-                              type="checkbox"
-                              checked={split.enabled}
-                              onChange={(e) => setPaySplits((current) => ({
-                                ...current,
-                                [method.value]: {
-                                  ...current[method.value],
-                                  enabled: e.target.checked,
-                                  amount: e.target.checked ? current[method.value].amount : '',
-                                  reference: e.target.checked ? current[method.value].reference : '',
-                                },
-                              }))}
-                            />
-                            {method.label}
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={split.amount}
-                            disabled={!split.enabled}
-                            onChange={(e) => setPaySplits((current) => ({
-                              ...current,
-                              [method.value]: { ...current[method.value], amount: e.target.value },
-                            }))}
-                            placeholder="Monto"
-                            className={`${fieldClass} disabled:opacity-50`}
-                          />
-                          <input
-                            value={split.reference}
-                            disabled={!split.enabled}
-                            onChange={(e) => setPaySplits((current) => ({
-                              ...current,
-                              [method.value]: { ...current[method.value], reference: e.target.value },
-                            }))}
-                            placeholder={paymentReferenceLabel(method.value)}
-                            className={`${fieldClass} disabled:opacity-50`}
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-              {payMethod && payMethod !== 'Mixto' && (
-                <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    {paymentReferenceLabel(payMethod)} <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={payRef}
-                    onChange={(e) => setPayRef(e.target.value)}
-                    className={fieldClass}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Notas
-                </label>
-                <textarea
-                  value={payNotes}
-                  onChange={(e) => setPayNotes(e.target.value)}
-                  rows={2}
-                  className={`${fieldClass} resize-none`}
-                />
               </div>
             </div>
-            <div className="flex justify-end gap-3 border-t border-slate-200 p-5 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(false)}
-                className={secondaryButtonClass}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={savePayment}
-                disabled={savingPayment}
-                className={primaryButtonClass}
-              >
-                {savingPayment ? 'Guardando...' : 'Registrar pago'}
-              </button>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Fecha de pago <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={payDate}
+                onChange={(e) => setPayDate(e.target.value)}
+                max={toDateInputValue()}
+                className={fieldClass}
+              />
             </div>
-          </div>
-        </div>
-      )}
-
-      {receiptPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white shadow-2xl dark:bg-[#0b1220]">
-            <div className="border-b border-slate-200 p-5 dark:border-slate-700">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Pago de contado registrado</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                El recibo quedará vinculado a la factura {invoice.invoice_number || 'sin número'} y a este pago.
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Forma de pago <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={payMethod}
+                onChange={(e) => {
+                  const method = e.target.value as PaymentMethod | ''
+                  setPayMethod(method)
+                  setPayRef('')
+                  if (method !== 'Mixto') setPaySplits(emptyPaymentSplits())
+                }}
+                className={fieldClass}
+              >
+                <option value="">Seleccionar...</option>
+                {PAYMENT_METHODS.map((method) => (
+                  <option key={method.value} value={method.value}>{method.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Condición de la factura: {invoice.payment_condition === 'Credito'
+                  ? `Crédito · ${invoice.credit_days || 0} días`
+                  : 'Contado'}
               </p>
             </div>
-            <div className="p-5">
-              <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4 dark:bg-slate-800/60">
-                <span className="text-sm text-slate-500 dark:text-slate-400">Monto recibido</span>
-                <strong className="text-lg text-emerald-700 dark:text-emerald-400">
-                  {receiptPayment.currency} {Number(receiptPayment.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </strong>
+            {payMethod === 'Mixto' && (
+              <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Desglose mixto</h3>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Total: {formatMoney(SPLIT_METHODS.reduce((sum, method) => (
+                      sum + (paySplits[method.value].enabled ? Number(paySplits[method.value].amount || 0) : 0)
+                    ), 0), invoice.currency)}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {SPLIT_METHODS.map((method) => {
+                    const split = paySplits[method.value]
+                    return (
+                      <div key={method.value} className="grid items-center gap-2 sm:grid-cols-[120px_1fr_1.4fr]">
+                        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                          <input
+                            type="checkbox"
+                            checked={split.enabled}
+                            onChange={(e) => setPaySplits((current) => ({
+                              ...current,
+                              [method.value]: {
+                                ...current[method.value],
+                                enabled: e.target.checked,
+                                amount: e.target.checked ? current[method.value].amount : '',
+                                reference: e.target.checked ? current[method.value].reference : '',
+                              },
+                            }))}
+                          />
+                          {method.label}
+                        </label>
+                        <NumberInput type="number"
+                          aria-label={`Monto ${method.label}`}
+                          min="0"
+                          step="0.01"
+                          value={split.amount}
+                          disabled={!split.enabled}
+                          onChange={(e) => setPaySplits((current) => ({
+                            ...current,
+                            [method.value]: { ...current[method.value], amount: e.target.value },
+                          }))}
+                          placeholder="Monto"
+                          className={`${fieldClass} disabled:opacity-50`}
+                        />
+                        <input
+                          value={split.reference}
+                          disabled={!split.enabled}
+                          onChange={(e) => setPaySplits((current) => ({
+                            ...current,
+                            [method.value]: { ...current[method.value], reference: e.target.value },
+                          }))}
+                          placeholder={paymentReferenceLabel(method.value)}
+                          className={`${fieldClass} disabled:opacity-50`}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-            <div className="flex justify-end gap-3 border-t border-slate-200 p-5 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={() => setReceiptPayment(null)}
-                className={secondaryButtonClass}
-              >
-                Cerrar
-              </button>
-              <PdfDownloadButton
-                document={<ReciboPagoPdf data={makeReceiptData(receiptPayment)} />}
-                fileName={`recibo-${invoice.invoice_number || 'pago'}-${receiptPayment.payment_date}.pdf`}
-                className={primaryButtonClass}
-              >
-                {({ loading: pdfLoading }) => (
-                  <>
-                    <Printer className="h-4 w-4" />
-                    {pdfLoading ? 'Generando...' : 'Generar recibo'}
-                  </>
-                )}
-              </PdfDownloadButton>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {paymentToReverse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-[#0b1220]">
-            <div className="border-b border-slate-200 p-5 dark:border-slate-700">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Reversar pago</h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                El movimiento no se eliminará y quedará visible en el historial.
-              </p>
-            </div>
-            <div className="space-y-4 p-5">
-              <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
-                <span className="text-slate-500">Monto:</span>{' '}
-                <strong>{paymentToReverse.currency} {Number(paymentToReverse.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
-              </div>
+            )}
+            {payMethod && payMethod !== 'Mixto' && (
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Motivo del reverso <span className="text-red-500">*</span>
+                  {paymentReferenceLabel(payMethod)} <span className="text-red-500">*</span>
                 </label>
-                <textarea
-                  value={reversalReason}
-                  onChange={(event) => setReversalReason(event.target.value)}
-                  rows={3}
-                  placeholder="Ej. transferencia aplicada a la factura incorrecta"
-                  className={`${fieldClass} resize-none`}
+                <input
+                  type="text"
+                  value={payRef}
+                  onChange={(e) => setPayRef(e.target.value)}
+                  className={fieldClass}
                 />
               </div>
-            </div>
-            <div className="flex justify-end gap-3 border-t border-slate-200 p-5 dark:border-slate-700">
-              <button
-                type="button"
-                onClick={() => { setPaymentToReverse(null); setReversalReason('') }}
-                disabled={reversingPayment}
-                className={secondaryButtonClass}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={reversePayment}
-                disabled={reversingPayment || !reversalReason.trim()}
-                className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
-              >
-                {reversingPayment ? 'Reversando...' : 'Confirmar reverso'}
-              </button>
+            )}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Notas
+              </label>
+              <textarea
+                value={payNotes}
+                onChange={(e) => setPayNotes(e.target.value)}
+                rows={2}
+                className={`${fieldClass} resize-none`}
+              />
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setShowPaymentModal(false)}
+              disabled={savingPayment}
+              className={secondaryButtonClass}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={savePayment}
+              disabled={savingPayment}
+              className={primaryButtonClass}
+            >
+              {savingPayment ? 'Guardando...' : 'Registrar pago'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!receiptPayment} onOpenChange={(open) => { if (!open) setReceiptPayment(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pago de contado registrado</DialogTitle>
+            <DialogDescription>
+              El recibo quedará vinculado a la factura {invoice.invoice_number || 'sin número'} y a este pago.
+            </DialogDescription>
+          </DialogHeader>
+          {receiptPayment && <>
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 p-4 dark:bg-slate-800/60">
+              <span className="text-sm text-slate-500 dark:text-slate-400">Monto recibido</span>
+              <strong className="text-lg text-emerald-700 dark:text-emerald-400">
+                {formatMoney(Number(receiptPayment.amount), receiptPayment.currency)}
+              </strong>
+            </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setReceiptPayment(null)}
+              className={secondaryButtonClass}
+            >
+              Cerrar
+            </button>
+            <PdfDownloadButton
+              document={<ReciboPagoPdf data={makeReceiptData(receiptPayment)} />}
+              fileName={`recibo-${invoice.invoice_number || 'pago'}-${receiptPayment.payment_date}.pdf`}
+              className={primaryButtonClass}
+            >
+              {({ loading: pdfLoading }) => (
+                <>
+                  <Printer className="h-4 w-4" />
+                  {pdfLoading ? 'Generando...' : 'Generar recibo'}
+                </>
+              )}
+            </PdfDownloadButton>
+          </DialogFooter>
+          </>}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!paymentToReverse} onOpenChange={(open) => { if (!open && !reversingPayment) { setPaymentToReverse(null); setReversalReason('') } }}>
+        <DialogContent showCloseButton={!reversingPayment} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reversar pago</DialogTitle>
+            <DialogDescription>
+              El movimiento no se eliminará y quedará visible en el historial.
+            </DialogDescription>
+          </DialogHeader>
+          {paymentToReverse && <div className="space-y-4">
+            <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800/60">
+              <span className="text-slate-500">Monto:</span>{' '}
+              <strong>{formatMoney(Number(paymentToReverse.amount), paymentToReverse.currency)}</strong>
+            </div>
+            <div>
+              <label htmlFor="payment-reversal-reason" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Motivo del reverso <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="payment-reversal-reason"
+                value={reversalReason}
+                onChange={(event) => setReversalReason(event.target.value)}
+                rows={3}
+                placeholder="Ej. transferencia aplicada a la factura incorrecta"
+                className={`${fieldClass} resize-none`}
+              />
+            </div>
+          </div>}
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => { setPaymentToReverse(null); setReversalReason('') }}
+              disabled={reversingPayment}
+              className={secondaryButtonClass}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={reversePayment}
+              disabled={reversingPayment || !reversalReason.trim()}
+              className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {reversingPayment ? 'Reversando...' : 'Confirmar reverso'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
