@@ -1,7 +1,8 @@
 import type { InvoiceFiscalOptionsValue } from '@/src/components/invoicing/InvoiceFiscalOptions'
 import type { TaxTreatment } from '@/src/lib/invoice-fiscal'
+import type { ServiceSourceKind } from '@/src/lib/service-accounting'
 
-export type DraftEditorItem = { id: string; description: string; quantity: string; unit_price: string; amount: number; isv_rate: 0 | 15 | 18; discount_amount?: string; income_account_id?: string; tax_treatment?: TaxTreatment; source_pricing_item_id?: string }
+export type DraftEditorItem = { id: string; description: string; quantity: string; unit_price: string; amount: number; isv_rate: 0 | 15 | 18; discount_amount?: string; income_account_id?: string; tax_treatment?: TaxTreatment; source_pricing_item_id?: string; service_catalog_kind?:ServiceSourceKind;service_catalog_code?:string;source_rate_code?:string|null;source_item_type?:string|null;source_product?:string|null }
 export type DraftEditorState = {
   invoiceType: 'Factura'; clienteId: string; quotationId: string; issueDate: string; dueDate: string
   currency: string; exchangeRate: string; notes: string; motivo: string; items: DraftEditorItem[]
@@ -32,13 +33,13 @@ export function draftInvoicePayload(state: DraftEditorState, fiscal: Record<stri
 export function draftItemPayload(items: DraftEditorItem[]) {
   return items.map((item, sort_order) => ({ description: item.description.trim(), quantity: Number(item.quantity) || 0,
     unit_price: Number(item.unit_price) || 0, discount_amount: Number(item.discount_amount || 0), isv_rate: item.isv_rate,
-    tax_treatment: item.tax_treatment, income_account_id: item.income_account_id || null, sort_order }))
+    tax_treatment: item.tax_treatment, income_account_id: item.income_account_id || null, service_catalog_kind:item.service_catalog_kind||null,service_catalog_code:item.service_catalog_code||null, sort_order }))
 }
 export function draftEditorFromInvoice(invoice: Record<string, unknown>, items: Record<string, unknown>[], options: InvoiceFiscalOptionsValue, date: string): DraftEditorState {
   const reference = invoice.reference_equivalence as { currency?: string; rate?: number; operation?: 'multiply' | 'divide' } | null
   return { invoiceType: 'Factura', clienteId: String(invoice.cliente_id || ''), quotationId: '', issueDate: date, dueDate: '',
     currency: String(invoice.currency || 'HNL'), exchangeRate: String(invoice.exchange_rate || 1), notes: String(invoice.notes || ''), motivo: '', sourceCurrency: '',
     fiscalOptions: { ...options, mode: (invoice.fiscal_mode as InvoiceFiscalOptionsValue['mode']) || 'Mixta', order: String(invoice.orden_compra_exenta || ''), registry: String(invoice.no_constancia_exonerado || ''), sag: String(invoice.no_registro_sag || ''), documents: (invoice.exoneration_documents as InvoiceFiscalOptionsValue['documents']) || [], referenceEnabled: Boolean(reference), referenceCurrency: reference?.currency || options.referenceCurrency, referenceRate: reference?.rate ? String(reference.rate) : '', referenceOperation: reference?.operation || 'divide' },
-    items: items.map(item => ({ id: String(item.id), description: String(item.description || ''), quantity: String(item.quantity ?? ''), unit_price: String(item.unit_price ?? ''), discount_amount: String(item.discount_amount || 0), amount: Number(item.amount || 0), isv_rate: Number(item.isv_rate || 0) as 0 | 15 | 18, tax_treatment: item.tax_treatment as TaxTreatment | undefined, income_account_id: String(item.income_account_id || '') })),
+    items: items.map(item => ({ id: String(item.id), description: String(item.description || ''), quantity: String(item.quantity ?? ''), unit_price: String(item.unit_price ?? ''), discount_amount: String(item.discount_amount || 0), amount: Number(item.amount || 0), isv_rate: Number(item.isv_rate || 0) as 0 | 15 | 18, tax_treatment: item.tax_treatment as TaxTreatment | undefined, income_account_id: String(item.income_account_id || ''), service_catalog_kind:item.service_catalog_kind as ServiceSourceKind|undefined,service_catalog_code:item.service_catalog_code ? String(item.service_catalog_code) : undefined })),
   }
 }
