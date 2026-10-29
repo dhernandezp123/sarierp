@@ -1,9 +1,46 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-29 - ACC-SERVICE-01 - Cuentas contables por servicio y variante fiscal
+
+- Estado: implementado y validado localmente en Production y Trial; aplicación
+  remota y publicación en verificación. UAT autenticada con Zonia pendiente.
+- Configuración: contador de conceptos únicos pendientes, ingresos, costos/gastos
+  y clasificación; búsqueda por código/nombre y secciones separadas para cargos
+  y familias operativas. Variantes I, E y Exonerada independientes y estables;
+  se configuran solo las variantes/lados aplicables, exclusivamente por el máster.
+  No se asignan cuentas ambiguas ni costos por suposición. No se activa contabilidad.
+- Archivos: src/lib/service-accounting.ts, src/hooks/useServiceAccounting.ts,
+  src/components/accounting/ServiceAccountingAssignments.tsx,
+  src/components/invoicing/InvoiceLineSettings.tsx, src/lib/invoice-drafts.ts,
+  src/app/(protected)/accounting/settings/page.tsx,
+  src/app/(protected)/accounting/purchases/page.tsx,
+  src/app/(protected)/invoicing/new/page.tsx.
+- SQL: supabase/migrations/20261029180000_service_accounting_assignments.sql;
+  dos tablas con RLS, FK por tenant, RPC máster con revisión y auditoría atómicas.
+  El servicio exacto de pricing se conserva; una familia solo aplica al flete.
+  Facturas/compras guardan sus cuentas al emitir. Cambiar asignaciones no modifica
+  históricos; un servicio sin cuenta guardada no se contabiliza con un ingreso
+  global supuesto. Se admite cuenta explícita válida para referencias retiradas.
+- Pruebas: tests/service-accounting.test.mjs y
+  supabase/tests/service_accounting_assignments.sql; registradas en los runners
+  SQL de main y Demo. 511/511 Node, 34/34 SQL Production, 10/10 SQL Trial,
+  más revalidación de la última versión de variantes en ambas bases aisladas.
+  TypeScript en ambos, ESLint sin regresiones y ambos builds aprobados.
+  Seis comprobaciones en navegador con datos ficticios (escritorio/móvil,
+  búsqueda, filtros, variantes, guardado/error, permiso máster), sin errores.
+  Paridad: 547 archivos compartidos y 26 variantes revisadas, cero diferencias.
+- Incluye UX-FIN-04 pendiente: once combobox de cuentas operativas, sin alterar
+  sus filtros, IDs ni RPC. Evidencia privada: .ua/intermediate/service-account-release-20261029/.
+- Riesgos/pendientes: Zonia debe definir auxiliares de costos/gastos y confirmar
+  los códigos I/E de ADUANA; no se cargan asignaciones reales. Emulación de
+  navegador no equivale a iPad físico ni UAT. Trial conserva sus bloqueos de
+  correo y usa datos ficticios; no se transfieren catálogos ni secretos.
+- Commit: se registra tras la publicación técnica.
+
 ### 2026-10-29 - UX-FIN-04 - Combobox buscable en configuración de cuentas
 
 - Estado: implementado en main y Demo; validación funcional, visual y builds
-  locales aprobados. Sin commit ni publicación; aceptación autenticada pendiente.
+  locales aprobados. Incluido en ACC-SERVICE-01; aceptación autenticada pendiente.
 - Archivo: `src/app/(protected)/accounting/settings/page.tsx` en ambos árboles.
   Los once selectores nativos de cuentas operativas usan `CompactSelect` con
   búsqueda explícita por código/nombre, sin distinguir mayúsculas ni tildes.
@@ -24,7 +61,7 @@
 - Builds main y Demo aprobados. El build local Demo usa los placeholders
   no funcionales ya utilizados para compilar ese ambiente, sin credenciales
   reales ni acceso autenticado remoto; no es evidencia de UAT.
-- Pendiente: commit/publicación a cargo de Claude y
+- Pendiente: publicación técnica incluida en ACC-SERVICE-01 y
   aceptación autenticada. Se conservan separados los cambios CAI-CONFIRM-03 ya
   aplicados; no se vuelve a ejecutar su migración ni se alteran datos reales.
 

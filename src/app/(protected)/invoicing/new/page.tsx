@@ -27,12 +27,18 @@ import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import { loadBillingPointsOfSale } from '@/src/lib/billing-points-of-sale'
 import { useUser } from '@/src/hooks/useUser'
 import { draftEditorFromInvoice, draftEditorSignature, draftInvoicePayload, draftItemPayload, draftLabel, type DraftEditorState, type InvoiceDraft } from '@/src/lib/invoice-drafts'
+import { fiscalAccountVariant, type ServiceSourceKind } from '@/src/lib/service-accounting'
 import { InvoiceCorrectionReview } from '@/src/components/invoicing/InvoiceCorrectionReview'
 import { useInvoiceMaster } from '@/src/hooks/useInvoiceMaster'
 
 type InvoiceType = 'Proforma' | 'Factura' | 'Nota de Crédito' | 'Nota de Débito'
 
 type InvoiceItem = {
+  service_catalog_kind?:ServiceSourceKind
+  service_catalog_code?:string
+  source_rate_code?:string|null
+  source_item_type?:string|null
+  source_product?:string|null
   discount_amount?: string
   income_account_id?: string
   tax_treatment?: TaxTreatment
@@ -57,6 +63,7 @@ type Cliente = {
 }
 
 type Quotation = {
+  service_product?:string|null
   id: string
   quotation_number: string | null
   cliente_id: string | null
@@ -72,6 +79,8 @@ type Quotation = {
 }
 
 type PricingItem = {
+  rate_code?:string|null
+  item_type?:string|null
   id: string
   description: string
   quantity: number | null
@@ -116,7 +125,7 @@ function quotationHasActiveInvoice(quotation: Quotation) {
 async function fetchQuotationPricingItems(quotationId: string) {
   return supabase
     .from('pricing_items')
-    .select('id, description, quantity, sale_amount, currency, taxable, tax_rate')
+    .select('id, description, quantity, sale_amount, currency, taxable, tax_rate, rate_code, item_type')
     .eq('quotation_id', quotationId)
     .is('deleted_at', null)
     .order('created_at', { ascending: true })
@@ -323,6 +332,9 @@ export default function NewInvoicePage() {
       return {
         id: crypto.randomUUID(),
         source_pricing_item_id: item.id,
+        source_rate_code: item.rate_code,
+        source_item_type: item.item_type,
+        source_product: quotation.service_product,
         description: item.description,
         quantity: String(quantity),
         unit_price: String(unitPrice),
@@ -384,7 +396,7 @@ export default function NewInvoicePage() {
       if (requestedQuotationId && !parentId) {
         const { data: requestedQuotation, error: quotationError } = await supabase
           .from('quotations')
-          .select('id, quotation_number, cliente_id, status, financial_validation_status, clientes(nombre), total_sale, invoices(id, status, invoice_type)')
+          .select('id, quotation_number, cliente_id, status, financial_validation_status, clientes(nombre), total_sale, service_product, invoices(id, status, invoice_type)')
           .eq('id', requestedQuotationId)
           .is('deleted_at', null)
           .single()
@@ -446,7 +458,7 @@ export default function NewInvoicePage() {
           // Pre-fill items from parent
           const { data: parentItems } = await supabase
             .from('invoice_items')
-            .select('description, quantity, unit_price, amount, discount_amount, sort_order, isv_rate')
+            .select('description, quantity, unit_price, amount, discount_amount, sort_order, isv_rate, tax_treatment, income_account_id, service_catalog_kind, service_catalog_code')
             .eq('invoice_id', parentId)
             .order('sort_order')
 
@@ -457,6 +469,10 @@ export default function NewInvoicePage() {
               quantity: String(it.quantity),
               unit_price: String(it.unit_price),
               discount_amount: String(it.discount_amount||0),
+              income_account_id: it.income_account_id || '',
+              service_catalog_kind: it.service_catalog_kind as ServiceSourceKind | undefined,
+              service_catalog_code: it.service_catalog_code || undefined,
+              tax_treatment: it.tax_treatment as TaxTreatment | undefined,
               amount: it.amount,
               isv_rate: Number(it.isv_rate || 0) as 0 | 15 | 18,
             })))
@@ -712,6 +728,8 @@ export default function NewInvoicePage() {
         isv_rate: item.isv_rate,
         tax_treatment: item.tax_treatment,
         income_account_id: item.income_account_id || null,
+        service_catalog_kind: item.service_catalog_kind || null,
+        service_catalog_code: item.service_catalog_code || null,
         sort_order: index,
       }))
     if (invoiceType === 'Factura') {
@@ -1169,8 +1187,9 @@ export default function NewInvoicePage() {
                     <NumberInput type="number" aria-label="Descuento de línea" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
                     <span>Se aplica antes del ISV.</span>
                   </label>
-                  <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} readonlyService={Boolean(it.source_pricing_item_id)} onService={service => {
-                    updateItem(it.id,'description',service.label); updateItem(it.id,'isv_rate',service.taxable ? 15 : 0)
+                  <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} disabled={saving} readonlyService={Boolean(it.source_pricing_item_id)} reference={it.service_catalog_kind&&it.service_catalog_code?{kind:it.service_catalog_kind,code:it.service_catalog_code}:undefined} source={{rateCode:it.source_rate_code,itemType:it.source_item_type,product:it.source_product}} variant={fiscalAccountVariant(['Exenta','Exonerada'].includes(fiscalOptions.mode)?fiscalOptions.mode:it.tax_treatment,it.isv_rate)} onClearService={()=>setItems(previous=>previous.map(item=>item.id===it.id?{...item,service_catalog_kind:undefined,service_catalog_code:undefined}:item))} onService={service => {
+                    const variant = service.tax_variant || (service.taxable ? 'I' : 'E')
+                    setItems(previous=>previous.map(item=>item.id===it.id?{...item,description:service.label,isv_rate:variant==='I'?15:0,tax_treatment:variant==='I'?'Gravada':variant==='E'?'Exenta':'Exonerada',income_account_id:'',service_catalog_kind:service.kind,service_catalog_code:service.code}:item))
                   }}/>
                 </div>
               ))}
