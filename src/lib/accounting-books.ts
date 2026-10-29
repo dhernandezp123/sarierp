@@ -40,12 +40,13 @@ export function accountingBook(lines:BookLine[],type:BookType,from:string,to:str
  }
  report.columns=[{key:'kind',label:'Grupo'},{key:'code',label:'Código'},{key:'name',label:'Cuenta',width:'40%'},{key:'balance',label:'HNL',align:'right'}]
  if(type==='income'){
-  const result=accounts.filter(a=>['Ingreso','Gasto'].includes(a.kind));let income=0,expense=0
-  report.rows=result.map(a=>{const balance=a.kind==='Ingreso'?a.credit-a.debit:a.debit-a.credit;if(a.kind==='Ingreso')income+=balance;else expense+=balance;return{kind:a.kind,code:a.code,name:a.name,balance:balance/100}})
-  report.metrics=[metric('Ingresos',income),metric('Gastos',expense),metric('Resultado del período',income-expense)]
+  const result=accounts.filter(a=>['Ingreso','Costo','Gasto'].includes(a.kind));let income=0,cost=0,expense=0
+  report.rows=result.map(a=>{const balance=a.kind==='Ingreso'?a.credit-a.debit:a.debit-a.credit;if(a.kind==='Ingreso')income+=balance;else if(a.kind==='Costo')cost+=balance;else expense+=balance;return{kind:a.kind,code:a.code,name:a.name,balance:balance/100}})
+  report.metrics=[metric('Ingresos',income),metric('Costos',cost),metric('Gastos',expense),metric('Resultado del período',income-cost-expense)]
  }else{
   let assets=0,liabilities=0,equity=0,result=0
-  for(const a of accounts){if(a.kind==='Ingreso'||a.kind==='Gasto'){result-=a.closing;continue}
+  for(const a of accounts){if(a.kind==='Ingreso'||a.kind==='Costo'||a.kind==='Gasto'){result-=a.closing;continue}
+   if(a.kind==='Orden'||a.kind==='Resultado')continue
    const balance=a.kind==='Activo'?a.closing:-a.closing
    if(a.kind==='Activo')assets+=balance;else if(a.kind==='Pasivo')liabilities+=balance;else equity+=balance
    report.rows.push({kind:a.kind,code:a.code,name:a.name,balance:balance/100})

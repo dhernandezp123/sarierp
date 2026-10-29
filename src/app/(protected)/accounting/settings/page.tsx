@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useAccounting } from '@/src/hooks/useAccounting'
 import { AccountingNav } from '@/src/components/accounting/AccountingNav'
-import { accountingPurposes,type AccountingPeriod } from '@/src/lib/accounting'
+import { accountingPurposes,matchesAccountingPurpose,type AccountingPeriod } from '@/src/lib/accounting'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { formatDate } from '@/src/lib/format'
 import { cardClass,fieldClass,primaryButtonClass,secondaryButtonClass } from '@/src/lib/ui-classes'
@@ -35,7 +35,7 @@ export default function AccountingSettingsPage(){
  {error&&<p role="alert" className="text-red-600">{error} <button onClick={()=>void reload()}>Reintentar</button></p>}{loading&&<p>Cargando…</p>}
  {data&&form&&<><form className={`${cardClass} space-y-4`} onSubmit={e=>{e.preventDefault();void save()}}><fieldset disabled={busy} className="space-y-4"><legend className="font-semibold">Cuentas operativas y activación</legend>
  <p className="text-sm">La contabilidad se prepara sin saldos iniciales. Define las cuentas, los períodos y la fecha de inicio cuando Contabilidad la apruebe. La moneda de los libros es HNL; los documentos conservan su moneda original.</p>
- <div className="grid gap-3 md:grid-cols-2">{accountingPurposes.map(([purpose,label,kind])=><label key={purpose}>{label}<select className={fieldClass} value={form.mappings[purpose]||''} onChange={e=>setDraft({...form,context,mappings:{...form.mappings,[purpose]:e.target.value}})}><option value="">Sin configurar</option>{data.accounts.filter(a=>a.postable&&a.active&&a.kind===kind).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>)}</div>
+ <div className="grid gap-3 md:grid-cols-2">{accountingPurposes.map(([purpose,label,kind])=><label key={purpose}>{label}<select className={fieldClass} value={form.mappings[purpose]||''} onChange={e=>setDraft({...form,context,mappings:{...form.mappings,[purpose]:e.target.value}})}><option value="">Sin configurar</option>{data.accounts.filter(a=>a.postable&&a.active&&matchesAccountingPurpose(purpose,kind,a.kind)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>)}</div>
  <label className="block">Fecha de inicio contable<input className={fieldClass} type="date" value={form.start} onChange={e=>setDraft({...form,context,start:e.target.value})}/></label>
  <label className="flex gap-2"><input type="checkbox" checked={form.automatic} onChange={e=>setDraft({...form,context,automatic:e.target.checked})}/>Activar contabilización automática desde la fecha indicada</label>
  <button className={primaryButtonClass}>Guardar configuración</button></fieldset></form>

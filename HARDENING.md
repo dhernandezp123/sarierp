@@ -1,5 +1,43 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-28 - ACC-IMPORT-PDF-01 - Preparación de catálogo contable desde PDF
+
+- Estado: adaptación validada localmente; aplicación SQL, carga real y publicación
+  en preparación. Aceptación autenticada con Contabilidad pendiente.
+- Documento del propietario: 33 páginas, 714 códigos únicos y filas completas.
+  Excel/CSV privados de revisión conservan código/nombre/nivel y página original;
+  padres, clasificación y movimiento se presentan como propuestas.
+- El propietario confirmó solo 572 Auxiliar de movimiento y las cinco relaciones
+  según niveles/orden del PDF conservando códigos. Las otras 142 quedan sin
+  movimiento; la habilitación de sus hojas se revisará después, sin anticiparla.
+- Producción consultada de solo lectura: cero cuentas y cero asientos; sin cambios.
+  No se importa parcialmente ni se reclasifica en silencio.
+- Implementación: `src/lib/accounting.ts`, `accounting-books.ts`, catálogo,
+  configuración, compras y selector de cuentas en proveedores. CSV anterior
+  compatible y nivel opcional; selectores de naturaleza/nivel/padre compactos.
+- SQL nuevo: `20261028190000_account_catalog_structure.sql`, sin cuentas reales.
+  Agrega Costo/Resultado/Orden y nivel; agrupadoras sin movimiento, padres mixtos
+  de Resultado; compras/cuenta por defecto aceptan Costo y los asientos de Orden
+  balancean independientemente. Estados financieros excluyen Orden e incluyen
+  costos en el resultado. Plan: `docs/plans/sari-chart-of-accounts-import-20261028.md`.
+- Regresiones: tests de catálogo/libros y `accounting_catalog_structure.sql`, con
+  fixtures ficticios para ambos ambientes y runners de SQL correspondientes.
+  Datos reales y artefactos permanecen fuera de Git en
+  `.ua/intermediate/sari-account-catalog/`; no se copian a Pruebas.
+- Validación: extracción de las 33 páginas, revisión visual de primera/última,
+  unicidad, integridad de filas y jerarquía propuesta; consulta remota de solo
+  lectura. Archivo confirmado validado con el parser real, padres antes de hijas,
+  códigos textuales y 572/142. Aprobados: 506/512 Node, 32/8 SQL/RLS con rollback,
+  TypeScript, lint y compilaciones de ambos árboles. Seis comprobaciones de
+  navegador con 714 cuentas ficticias validan paginación/búsqueda, niveles,
+  padre mixto, importación CSV y menú móvil acotado, sin errores de ejecución.
+  Los fixtures financieros usan la zona de negocio Honduras; correo/seguridad
+  conservan UTC. Esto evita que current_date UTC adelante los cortes nocturnos;
+  no cambia fechas ni zona de sesiones de Producción. Paridad: 541 archivos
+  compartidos, 26 variantes revisadas, sin diferencias inesperadas.
+  Hash: pendiente. SQL remoto e importación todavía sin aplicar; usuarios,
+  contabilización automática, saldos, asientos y otros catálogos no se han cambiado.
+
 ### 2026-10-28 - CAI-CONFIRM-02 - Confirmación posterior de prefijos por oficina
 
 - Estado: SQL aplicado y verificado en Producción y Pruebas. Nueva autorización
