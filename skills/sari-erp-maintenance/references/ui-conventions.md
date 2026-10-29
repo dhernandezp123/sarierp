@@ -11,15 +11,57 @@ de estas piezas ya cubre el caso.
 | Modal con formulario o información | `Dialog` de `src/components/ui/dialog.tsx` | `div fixed inset-0` propio: no atrapa foco ni cierra con Escape |
 | Confirmación simple | `ConfirmDialog` | `window.confirm()` |
 | Avisos | Sonner (`toast`) | `alert()` |
-| Paginación de tablas | `Pagination` | Botones Anterior/Siguiente propios |
+| Paginación de tablas | `Pagination` (con `pageSize` en estado) | Botones Anterior/Siguiente propios |
 | Montos editables | `NumberInput` con `type="number"` explícito | `<input type="number">` directo: pierde texto intermedio como `1.` |
 | Moneda y fecha | `formatMoney`, `formatDate`, `formatDateTime` de `src/lib/format.ts` | Formateadores locales y `toLocaleString('en-US')` sueltos |
 | Lista sin resultados | `EmptyState` o `FinanceEmptyState` | Texto suelto sin acción |
+| Campo con etiqueta | `FormField` de `src/components/ui/form-field.tsx` | `<label>Texto<select/></label>` sin apilar |
+| Bloque de formulario con título | `FormSection` (mismo archivo) | `legend` o `h2` sueltos con estilos propios |
 
-Una etiqueta que envuelve texto y campo usa `flex flex-col gap-1.5`: `space-y`
-no separa el texto suelto, y un `select` (limitado a 448 px en `globals.css`)
-queda en la misma línea que su etiqueta. En filas de filtros, `items-end`
-mantiene alineados los campos aunque una etiqueta ocupe dos líneas.
+## Formularios
+
+Referencia visual: `/quotations/new`. Toda captura (alta de documento, filtros,
+diálogos) sigue esta anatomía:
+
+- **Etiqueta arriba, control abajo.** Usa `FormField` (`label`, `required`,
+  `hint`, `className`). Pinta la etiqueta con `fieldLabelClass`
+  (`text-xs font-medium text-slate-500`), apila con `fieldStackClass`
+  (`flex min-w-0 flex-col gap-1.5`) y añade `*` rojo si `required`. Con
+  `CompactSelect`, combobox u otro control que ya tenga `aria-label`, usa
+  `as="div"` para que la etiqueta no reciba los clics.
+- **Nunca** `<label>Texto<select/></label>` sin clase: el texto queda en línea y
+  el `select` (limitado a 448 px en `globals.css`) se coloca a su lado. Tampoco
+  `space-y-*` como sustituto: no separa texto suelto. Una etiqueta separada
+  (`<label htmlFor>` + control) debe ser `block` o estar en un contenedor
+  `flex-col`; `labelClass` de `src/lib/ui.ts` ya incluye `block`.
+- **La etiqueta no impone peso al control.** No pongas `font-semibold` o
+  `font-medium` en el `label` contenedor: los controles heredan la fuente
+  (`font: inherit`) y el valor sale en negrita. El estilo va en el `span`.
+- **Secciones con título.** Agrupa por significado con `FormSection` (título
+  `text-sm font-semibold`, descripción breve, línea `border-b`). Ejemplo de
+  Compras: Documento → Datos del proveedor (solo boleta) → Líneas → resumen.
+- **Grilla 1/2/3 columnas**: `grid gap-4 sm:grid-cols-2 lg:grid-cols-3`
+  (`lg:grid-cols-4` en líneas de detalle). Ordena los campos como se leen en el
+  documento físico y evita filas con un solo campo; un campo largo usa
+  `col-span-2`, no una fila propia.
+- **Componentes reutilizables no fijan su etiqueta.** Reciben `label` (por
+  ejemplo `BillingOfficeSelect label="Oficina emisora"`); la página no añade
+  una segunda etiqueta encima.
+- **Líneas repetibles** (conceptos, cargos): cada una en un bloque con borde,
+  encabezado «Línea N», su importe a la derecha y «Quitar» con icono. «Agregar
+  línea» va en la cabecera de la sección.
+- **Cierre**: observaciones a la izquierda; resumen (Subtotal, ISV, Total por
+  moneda) y acciones alineadas a la derecha, con «Cancelar» antes de la acción
+  principal.
+- **Filtros en línea intencionales** («Ver [select]», «Mostrar [select]») son
+  la excepción: `flex items-center gap-2` explícito, solo para un selector
+  corto que se lee como frase.
+- En filas de filtros, `items-end` mantiene alineados los campos aunque una
+  etiqueta ocupe dos líneas.
+
+Para auditar el repo, busca `<label` que envuelva texto y control sin
+`flex-col` ni `grid` en su clase; cada hallazgo debe pasar a `FormField` o al
+patrón apilado.
 
 `formatDate(value, '—')` conserva la raya larga cuando la pantalla la usaba como
 vacío. Un precio unitario puede tener más de dos decimales; no lo pases por

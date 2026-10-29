@@ -10,7 +10,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { sendMiamiPackageAssignmentEmail } from '@/src/lib/miami-assignment-email'
 import { formatMiamiDateTime, toMiamiDateInputValue } from '@/src/lib/format'
-import { cardClass, fieldClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
@@ -497,32 +497,32 @@ export default function InventarioPage() {
               ))}
             </div>
           </div>
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Desde
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <span className={fieldLabelClass}>Desde</span>
             <input
               type="date"
               value={receivedFrom}
               max={receivedTo || undefined}
               onChange={(event) => { setReceivedFrom(event.target.value); setFilterCargo('Todos'); setPage(1) }}
-              className={`${fieldClass} mt-1 w-auto`}
+              className={`${fieldClass} w-auto`}
             />
           </label>
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Hasta
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <span className={fieldLabelClass}>Hasta</span>
             <input
               type="date"
               value={receivedTo}
               min={receivedFrom || undefined}
               onChange={(event) => { setReceivedTo(event.target.value); setFilterCargo('Todos'); setPage(1) }}
-              className={`${fieldClass} mt-1 w-auto`}
+              className={`${fieldClass} w-auto`}
             />
           </label>
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Origen
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <span className={fieldLabelClass}>Origen</span>
             <select
               value={filterSource}
               onChange={(event) => { setFilterSource(event.target.value); setPage(1) }}
-              className={`${fieldClass} mt-1 w-auto`}
+              className={`${fieldClass} w-auto`}
             >
               <option value="Todos">Todos los ingresos</option>
               <option value="Individual">Ingreso individual</option>

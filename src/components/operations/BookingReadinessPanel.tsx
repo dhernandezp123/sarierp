@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
-import { cardClass, fieldClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import {
   Dialog,
   DialogContent,
@@ -994,8 +994,8 @@ export function BookingReadinessPanel({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Tipo
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Tipo</span>
               <select
                 value={cutoffForm.code}
                 onChange={(event) => {
@@ -1008,7 +1008,7 @@ export function BookingReadinessPanel({
                     label: option?.[1] || current.label,
                   }))
                 }}
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               >
                 {cutoffOptions.map(([code, label]) => (
                   <option key={code} value={code}>
@@ -1017,8 +1017,8 @@ export function BookingReadinessPanel({
                 ))}
               </select>
             </label>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Etiqueta
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Etiqueta</span>
               <input
                 value={cutoffForm.label}
                 onChange={(event) =>
@@ -1027,11 +1027,11 @@ export function BookingReadinessPanel({
                     label: event.target.value,
                   }))
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Fecha y hora
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Fecha y hora</span>
               <input
                 type="datetime-local"
                 value={cutoffForm.dueAt}
@@ -1041,11 +1041,11 @@ export function BookingReadinessPanel({
                     dueAt: event.target.value,
                   }))
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Timezone IANA
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Timezone IANA</span>
               <input
                 value={cutoffForm.timezone}
                 onChange={(event) =>
@@ -1055,11 +1055,11 @@ export function BookingReadinessPanel({
                   }))
                 }
                 placeholder="America/Tegucigalpa"
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Alcance
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Alcance</span>
               <select
                 value={cutoffForm.containerId}
                 onChange={(event) =>
@@ -1068,7 +1068,7 @@ export function BookingReadinessPanel({
                     containerId: event.target.value,
                   }))
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               >
                 <option value="">Booking completo</option>
                 {containers
@@ -1080,8 +1080,8 @@ export function BookingReadinessPanel({
                   ))}
               </select>
             </label>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Referencia de origen
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Referencia de origen</span>
               <input
                 value={cutoffForm.sourceReference}
                 onChange={(event) =>
@@ -1090,11 +1090,11 @@ export function BookingReadinessPanel({
                     sourceReference: event.target.value,
                   }))
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 sm:col-span-2">
-              Motivo del cambio
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300 sm:col-span-2">
+              <span className={fieldLabelClass}>Motivo del cambio</span>
               <input
                 value={cutoffForm.reason}
                 onChange={(event) =>
@@ -1104,7 +1104,7 @@ export function BookingReadinessPanel({
                   }))
                 }
                 placeholder="Obligatorio al reemplazar un cut-off vigente"
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
           </div>
@@ -1147,23 +1147,23 @@ export function BookingReadinessPanel({
               La acción conservará before/after en activity log y timeline.
             </DialogDescription>
           </DialogHeader>
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Motivo o nota
+          <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+            <span className={fieldLabelClass}>Motivo o nota</span>
             <textarea
               value={actionReason}
               onChange={(event) => setActionReason(event.target.value)}
-              className={`${fieldClass} mt-1 min-h-24`}
+              className={`${fieldClass} min-h-24`}
             />
           </label>
           {(cutoffAction?.kind === 'waive' ||
             requirementAction?.kind === 'waive') && (
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Vence la excepción (opcional)
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Vence la excepción (opcional)</span>
               <input
                 type="datetime-local"
                 value={exceptionExpiry}
                 onChange={(event) => setExceptionExpiry(event.target.value)}
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
           )}
@@ -1212,8 +1212,8 @@ export function BookingReadinessPanel({
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-sm font-medium">
-              Masa bruta verificada
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
+              <span className={fieldLabelClass}>Masa bruta verificada</span>
               <input
                 type="number"
                 min="0.001"
@@ -1225,11 +1225,11 @@ export function BookingReadinessPanel({
                     grossMass: event.target.value,
                   }))
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
-            <label className="text-sm font-medium">
-              Unidad
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
+              <span className={fieldLabelClass}>Unidad</span>
               <select
                 value={vgmForm.unit}
                 onChange={(event) =>
@@ -1238,14 +1238,14 @@ export function BookingReadinessPanel({
                     unit: event.target.value as 'KG' | 'LB',
                   }))
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               >
                 <option value="KG">KG</option>
                 <option value="LB">LB</option>
               </select>
             </label>
-            <label className="text-sm font-medium">
-              Método
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
+              <span className={fieldLabelClass}>Método</span>
               <select
                 value={vgmForm.method}
                 onChange={(event) =>
@@ -1254,7 +1254,7 @@ export function BookingReadinessPanel({
                     method: event.target.value,
                   }))
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               >
                 <option value="METHOD_1">Método 1</option>
                 <option value="METHOD_2">Método 2</option>
@@ -1262,8 +1262,8 @@ export function BookingReadinessPanel({
                 <option value="OTHER">Otro</option>
               </select>
             </label>
-            <label className="text-sm font-medium">
-              Fecha de pesaje
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
+              <span className={fieldLabelClass}>Fecha de pesaje</span>
               <input
                 type="datetime-local"
                 value={vgmForm.weighedAt}
@@ -1273,7 +1273,7 @@ export function BookingReadinessPanel({
                     weighedAt: event.target.value,
                   }))
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
           </div>

@@ -34,6 +34,7 @@ import {
   type ReadinessWorkAlert,
 } from '@/src/lib/operations-control-tower'
 import { operationsDashboardHref } from '@/src/lib/operations-navigation'
+import { fieldLabelClass } from '@/src/lib/ui-classes'
 
 type ClientJoin = {
   nombre: string | null
@@ -947,9 +948,9 @@ function OperationsControlTower({
             Riesgo, aging y siguiente acción en una sola cola operativa.
           </p>
         </div>
-        <label className="relative block w-full lg:max-w-sm">
-          <Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <span className="sr-only">Buscar en Control Tower</span>
+        <label className="flex min-w-0 flex-col gap-1.5 relative w-full lg:max-w-sm">
+          <span className={fieldLabelClass}><Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <span className="sr-only">Buscar en Control Tower</span></span>
           <input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}

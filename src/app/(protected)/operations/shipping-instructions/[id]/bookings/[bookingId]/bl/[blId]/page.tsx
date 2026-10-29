@@ -10,7 +10,7 @@ import { useUser } from '@/src/hooks/useUser'
 import { buildTenantStoragePath, isTenantResourceStoragePath } from '@/src/lib/storage-paths'
 import { createActivityLog } from '@/src/lib/activity-logger'
 import { supabase } from '@/src/lib/supabase/client'
-import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import HouseBLPdf, { type HBLData } from '@/src/components/pdf/house-bl-pdf'
 import AWBPdf, { type AWBData } from '@/src/components/pdf/awb-pdf'
 import CartaPortePdf, { type CartaPorteData } from '@/src/components/pdf/carta-porte-pdf'
@@ -2120,14 +2120,14 @@ export default function BLPage() {
             </div>
           )}
 
-          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-            {exceptionAction?.kind === 'justify' ? 'Justificación' : 'Motivo de revocación'}
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>{exceptionAction?.kind === 'justify' ? 'Justificación' : 'Motivo de revocación'}</span>
             <textarea
               rows={4}
               maxLength={2000}
               value={exceptionReason}
               onChange={(event) => setExceptionReason(event.target.value)}
-              className={`${fieldClass} mt-1 min-h-24`}
+              className={`${fieldClass} min-h-24`}
               placeholder={
                 exceptionAction?.kind === 'justify'
                   ? 'Ej: Switch BL autorizado por el cliente el 18/09/2026...'

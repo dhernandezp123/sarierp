@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
 import { canManagePlatform, COMPANY_STATUSES, ACCESS_STATUSES, type PlatformSection, type PlatformData, type PlatformCompany, type PlatformUser, type PlatformEvent } from '@/src/lib/platform-admin'
 import { formatDateTime } from '@/src/lib/format'
-import { cardClass, fieldClassSm, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClassSm, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { PlatformCompanyDialog, PlatformUserDialog } from './PlatformDialogs'
 
@@ -87,11 +87,11 @@ export function PlatformConsole({ section }: { section: PlatformSection }) {
     </header>
 
     {section !== 'overview' && <form onSubmit={event => { event.preventDefault(); setQuery(search.trim()); setPage(1) }} className="flex flex-wrap items-end gap-3">
-      <label className="w-full min-w-0 text-sm font-medium sm:w-auto sm:flex-1">Buscar
-        <input value={search} maxLength={100} onChange={event => setSearch(event.target.value)} className={`${fieldClassSm} mt-1`} placeholder={section === 'users' ? 'Nombre, correo o empresa' : section === 'companies' ? 'Nombre o subdominio' : 'Empresa, motivo o administrador'} />
+      <label className="flex w-full min-w-0 flex-col gap-1.5 text-sm sm:w-auto sm:flex-1"><span className={fieldLabelClass}>Buscar</span>
+        <input value={search} maxLength={100} onChange={event => setSearch(event.target.value)} className={fieldClassSm} placeholder={section === 'users' ? 'Nombre, correo o empresa' : section === 'companies' ? 'Nombre o subdominio' : 'Empresa, motivo o administrador'} />
       </label>
-      {(section === 'companies' || section === 'users') && <label className="text-sm font-medium">Estado
-        <select value={status} onChange={event => { setStatus(event.target.value); setPage(1) }} className={`${fieldClassSm} mt-1`}><option value="">Todos</option>{(section === 'companies' ? COMPANY_STATUSES : ACCESS_STATUSES).map(value => <option key={value}>{value}</option>)}</select>
+      {(section === 'companies' || section === 'users') && <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Estado</span>
+        <select value={status} onChange={event => { setStatus(event.target.value); setPage(1) }} className={fieldClassSm}><option value="">Todos</option>{(section === 'companies' ? COMPANY_STATUSES : ACCESS_STATUSES).map(value => <option key={value}>{value}</option>)}</select>
       </label>}
       <button type="submit" className={`${secondaryButtonClass} inline-flex items-center gap-2`}><Search size={16} />Buscar</button>
     </form>}

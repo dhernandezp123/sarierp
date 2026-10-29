@@ -82,6 +82,7 @@ import {
 import {
   primaryButtonClass,
   secondaryButtonClass,
+  fieldLabelClass,
 } from '@/src/lib/ui-classes'
 import { formatDateTime, toDateInputValue } from '@/src/lib/format'
 
@@ -6964,8 +6965,8 @@ const profitabilityColor =
 
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/60 dark:bg-blue-950/30">
-              <label className="block text-sm font-semibold text-blue-950 dark:text-blue-100">
-                Porcentaje de costo de la aseguradora (%)
+              <label className="flex min-w-0 flex-col gap-1.5 text-sm text-blue-950 dark:text-blue-100">
+                <span className={fieldLabelClass}>Porcentaje de costo de la aseguradora (%)</span>
                 <input
                   type="number"
                   min="0.0001"
@@ -6974,7 +6975,7 @@ const profitabilityColor =
                   value={quotationInsuranceCostRate}
                   onChange={(event) => setQuotationInsuranceCostRate(event.target.value)}
                   disabled={applyingCargoInsurance}
-                  className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-slate-950 dark:border-blue-800 dark:bg-slate-950 dark:text-white"
+                  className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm text-slate-950 dark:border-blue-800 dark:bg-slate-950 dark:text-white"
                 />
               </label>
               <p className="mt-2 text-xs text-blue-800 dark:text-blue-200">

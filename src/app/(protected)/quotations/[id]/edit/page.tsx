@@ -40,6 +40,7 @@ import {
   fieldClass,
   primaryButtonClass,
   secondaryButtonClass,
+  fieldLabelClass,
 } from '@/src/lib/ui-classes'
 import {
   Dialog,
@@ -1941,8 +1942,8 @@ export default function EditQuotationPage() {
           </DialogHeader>
 
           {formData.status !== 'Borrador' && (
-            <label className="block space-y-2 text-sm font-medium">
-              <span>Motivo de la nueva solicitud de pricing</span>
+            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
+              <span className={fieldLabelClass}>Motivo de la nueva solicitud de pricing</span>
               <textarea value={repricingReason} onChange={(event) => setRepricingReason(event.target.value)} rows={3} className={fieldClass} />
             </label>
           )}

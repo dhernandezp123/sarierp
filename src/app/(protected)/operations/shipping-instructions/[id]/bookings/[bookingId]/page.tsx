@@ -37,6 +37,7 @@ import {
   cardClass,
   fieldClass,
   secondaryButtonClass,
+  fieldLabelClass,
 } from '@/src/lib/ui-classes'
 import { cn } from '@/src/lib/utils'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
@@ -2376,32 +2377,32 @@ export default function RoutingBookingChildPage() {
             )}
 
           <div className="grid gap-4 py-2 sm:grid-cols-2">
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              Fecha y hora
+            <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <span className={fieldLabelClass}>Fecha y hora</span>
               <input
                 type="datetime-local"
                 value={actionOccurredAt}
                 onChange={(event) => setActionOccurredAt(event.target.value)}
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              Ubicación
+            <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <span className={fieldLabelClass}>Ubicación</span>
               <input
                 value={actionLocation}
                 onChange={(event) => setActionLocation(event.target.value)}
                 placeholder="Puerto, terminal o ciudad"
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               />
             </label>
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-300 sm:col-span-2">
-              Notas
+            <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300 sm:col-span-2">
+              <span className={fieldLabelClass}>Notas</span>
               <textarea
                 value={actionNotes}
                 onChange={(event) => setActionNotes(event.target.value)}
                 rows={3}
                 placeholder="Observaciones de la transición"
-                className={`${fieldClass} mt-1 min-h-24`}
+                className={`${fieldClass} min-h-24`}
               />
             </label>
           </div>

@@ -11,6 +11,7 @@ import {
   fieldClass,
   cardClass,
   secondaryButtonClass,
+  fieldLabelClass,
 } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
@@ -243,8 +244,8 @@ export default function RoutingInboxPage() {
 
       {/* Filtros */}
       <div className="grid gap-3 lg:grid-cols-3">
-        <label className="space-y-1.5">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className={fieldLabelClass}>
             Buscar
           </span>
           <input
@@ -255,8 +256,8 @@ export default function RoutingInboxPage() {
             className={fieldClass}
           />
         </label>
-        <label className="space-y-1.5">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className={fieldLabelClass}>
             Asignación
           </span>
           <select
@@ -269,8 +270,8 @@ export default function RoutingInboxPage() {
             <option value="Mis asignados">Mis asignados</option>
           </select>
         </label>
-        <label className="space-y-1.5">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className={fieldLabelClass}>
             Estado
           </span>
           <select

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { nextCustomsStatus } from '@/src/lib/customs-quotation'
-import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { formatDate } from '@/src/lib/format'
 
 export function CustomsServicePanel({ id, number, status, updatedAt, quotation, canManage, reload }: {
@@ -61,7 +61,7 @@ export function CustomsServicePanel({ id, number, status, updatedAt, quotation, 
       </dl>
       {loadError && <div role="alert" className="mt-4"><p>No se pudieron cargar los cargos o el historial del servicio.</p><button className={secondaryButtonClass} onClick={load}>Reintentar</button></div>}
       {canManage && next && !loadError && <div className="mt-6 space-y-3">
-        <label className="block space-y-1 text-sm"><span>Evidencia / referencia de la gestión *</span><textarea className={`${fieldClass} min-h-24`} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Documento de liberación, referencia de entrega o detalle de la gestión realizada..." /></label>
+        <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Evidencia / referencia de la gestión *</span><textarea className={`${fieldClass} min-h-24`} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Documento de liberación, referencia de entrega o detalle de la gestión realizada..." /></label>
         <div className="flex flex-wrap gap-3"><button className={primaryButtonClass} disabled={saving || !notes.trim()} onClick={() => advance()}>{saving ? 'Guardando...' : `Registrar: ${next}`}</button>
         <button className={secondaryButtonClass} disabled={saving || !notes.trim()} onClick={() => advance('Cancelada')}>Cancelar servicio con motivo</button></div>
       </div>}

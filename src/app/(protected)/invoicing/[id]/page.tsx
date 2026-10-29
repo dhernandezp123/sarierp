@@ -19,7 +19,7 @@ import { toast } from 'sonner'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { supabase } from '../../../../lib/supabase/client'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
-import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass } from '@/src/lib/ui-classes'
+import { primaryButtonClass, secondaryButtonClass, cardClass, fieldClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/src/components/ui/dialog'
 import { financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
@@ -993,7 +993,7 @@ export default function InvoiceDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <TreasuryAccountField {...treasury} currency={invoice.currency} value={bankAccount} onChange={setBankAccount}/>
-            {!!treasury.accounts.length&&invoice.currency==='USD'&&<label className="block text-xs font-semibold">Tasa HNL por USD del cobro<NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
+            {!!treasury.accounts.length&&invoice.currency==='USD'&&<label className="flex min-w-0 flex-col gap-1.5 text-xs"><span className={fieldLabelClass}>Tasa HNL por USD del cobro</span><NumberInput value={bankRate} min="0.000001" step="0.000001" className={fieldClass} onChange={e=>setBankRate(e.target.value)}/></label>}
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Monto ({invoice.currency}) <span className="text-red-500">*</span>

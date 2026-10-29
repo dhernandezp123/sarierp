@@ -16,6 +16,7 @@ import {
   cardClass,
   fieldClass,
   secondaryButtonClass,
+  fieldLabelClass,
 } from '@/src/lib/ui-classes'
 
 export type ScheduleBooking = {
@@ -567,80 +568,80 @@ export function BookingScheduleManager({
           {action && action !== 'cancel' && (
             <div className="grid gap-4 md:grid-cols-2">
               {action !== 'confirm' && (
-                <label className="text-sm text-slate-700 dark:text-slate-300">
-                  Carrier
+                <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                  <span className={fieldLabelClass}>Carrier</span>
                   <input
                     value={form.carrier}
                     onChange={(event) => setForm({ ...form, carrier: event.target.value })}
                     disabled={action === 'rollover'}
-                    className={`${fieldClass} mt-1`}
+                    className={fieldClass}
                   />
                 </label>
               )}
               {(action === 'confirm' || action === 'replace' || action === 'admin') && (
                 <>
-                  <label className="text-sm text-slate-700 dark:text-slate-300">
-                    Booking number
+                  <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                    <span className={fieldLabelClass}>Booking number</span>
                     <input
                       value={form.bookingNumber}
                       onChange={(event) => setForm({ ...form, bookingNumber: event.target.value })}
                       disabled={action === 'confirm' && Boolean(booking.booking_number)}
-                      className={`${fieldClass} mt-1`}
+                      className={fieldClass}
                     />
                   </label>
-                  <label className="text-sm text-slate-700 dark:text-slate-300">
-                    Carrier booking
+                  <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                    <span className={fieldLabelClass}>Carrier booking</span>
                     <input
                       value={form.carrierBooking}
                       onChange={(event) => setForm({ ...form, carrierBooking: event.target.value })}
                       disabled={action === 'confirm' && Boolean(booking.carrier_booking)}
-                      className={`${fieldClass} mt-1`}
+                      className={fieldClass}
                     />
                   </label>
                 </>
               )}
               {action !== 'confirm' && (
                 <>
-                  <label className="text-sm text-slate-700 dark:text-slate-300">
-                    Vessel
+                  <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                    <span className={fieldLabelClass}>Vessel</span>
                     <input
                       value={form.vesselName}
                       onChange={(event) => setForm({ ...form, vesselName: event.target.value })}
-                      className={`${fieldClass} mt-1`}
+                      className={fieldClass}
                     />
                   </label>
-                  <label className="text-sm text-slate-700 dark:text-slate-300">
-                    Voyage
+                  <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                    <span className={fieldLabelClass}>Voyage</span>
                     <input
                       value={form.voyage}
                       onChange={(event) => setForm({ ...form, voyage: event.target.value })}
-                      className={`${fieldClass} mt-1`}
+                      className={fieldClass}
                     />
                   </label>
-                  <label className="text-sm text-slate-700 dark:text-slate-300">
-                    ETD
+                  <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                    <span className={fieldLabelClass}>ETD</span>
                     <input
                       type="date"
                       value={form.etd}
                       onChange={(event) => setForm({ ...form, etd: event.target.value })}
-                      className={`${fieldClass} mt-1`}
+                      className={fieldClass}
                     />
                   </label>
-                  <label className="text-sm text-slate-700 dark:text-slate-300">
-                    ETA
+                  <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300">
+                    <span className={fieldLabelClass}>ETA</span>
                     <input
                       type="date"
                       value={form.eta}
                       onChange={(event) => setForm({ ...form, eta: event.target.value })}
-                      className={`${fieldClass} mt-1`}
+                      className={fieldClass}
                     />
                   </label>
-                  <label className="text-sm text-slate-700 dark:text-slate-300 md:col-span-2">
-                    Ruta / transbordo
+                  <label className="flex min-w-0 flex-col gap-1.5 text-sm text-slate-700 dark:text-slate-300 md:col-span-2">
+                    <span className={fieldLabelClass}>Ruta / transbordo</span>
                     <input
                       value={form.routingSummary}
                       onChange={(event) => setForm({ ...form, routingSummary: event.target.value })}
-                      className={`${fieldClass} mt-1`}
+                      className={fieldClass}
                     />
                   </label>
                 </>
@@ -649,12 +650,12 @@ export function BookingScheduleManager({
           )}
 
           {action === 'rollover' && booking.shipment_status === 'Listo para Embarque' && (
-            <label className="mt-4 block text-sm text-slate-700 dark:text-slate-300">
-              Estado después del rollover
+            <label className="flex min-w-0 flex-col gap-1.5 mt-4 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Estado después del rollover</span>
               <select
                 value={form.targetStatus}
                 onChange={(event) => setForm({ ...form, targetStatus: event.target.value })}
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               >
                 <option value="Booking Confirmado">Booking Confirmado</option>
                 <option value="Documentación Pendiente">Documentación Pendiente</option>
@@ -663,8 +664,8 @@ export function BookingScheduleManager({
           )}
 
           {action === 'replace' && (
-            <label className="mt-4 block text-sm text-slate-700 dark:text-slate-300">
-              Tratamiento de contenedores
+            <label className="flex min-w-0 flex-col gap-1.5 mt-4 text-sm text-slate-700 dark:text-slate-300">
+              <span className={fieldLabelClass}>Tratamiento de contenedores</span>
               <select
                 value={form.containerTreatment}
                 onChange={(event) =>
@@ -673,7 +674,7 @@ export function BookingScheduleManager({
                     containerTreatment: event.target.value as ScheduleForm['containerTreatment'],
                   })
                 }
-                className={`${fieldClass} mt-1`}
+                className={fieldClass}
               >
                 <option value="KEEP_WITH_OLD">Conservar con el anterior (recomendado)</option>
                 <option value="MOVE_UNASSIGNED">Mover solo sin eventos físicos</option>
@@ -689,13 +690,13 @@ export function BookingScheduleManager({
             </p>
           )}
 
-          <label className="mt-4 block text-sm text-slate-700 dark:text-slate-300">
-            Motivo obligatorio
+          <label className="flex min-w-0 flex-col gap-1.5 mt-4 text-sm text-slate-700 dark:text-slate-300">
+            <span className={fieldLabelClass}>Motivo obligatorio</span>
             <textarea
               value={form.reason}
               onChange={(event) => setForm({ ...form, reason: event.target.value })}
               rows={3}
-              className={`${fieldClass} mt-1 min-h-24`}
+              className={`${fieldClass} min-h-24`}
             />
           </label>
 

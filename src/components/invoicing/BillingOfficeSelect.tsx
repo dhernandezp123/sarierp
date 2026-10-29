@@ -3,10 +3,11 @@
 import { useEffect, useId, useState } from 'react'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
-import { fieldClass } from '@/src/lib/ui-classes'
+import { fieldClass, fieldLabelClass, fieldStackClass } from '@/src/lib/ui-classes'
 
-export function BillingOfficeSelect({ value, onChange, disabled = false }: {
-  value: string; onChange: (id: string) => void; disabled?: boolean
+// La etiqueta la decide cada formulario (Compras: oficina emisora; clientes: de facturación).
+export function BillingOfficeSelect({ value, onChange, disabled = false, label = 'Oficina de facturación', required = false }: {
+  value: string; onChange: (id: string) => void; disabled?: boolean; label?: string; required?: boolean
 }) {
   const { profile } = useUser()
   const identity = `${profile?.id}:${profile?.tenant_id}`
@@ -24,9 +25,9 @@ export function BillingOfficeSelect({ value, onChange, disabled = false }: {
     return () => { active = false }
   }, [identity, retry])
   const current = state.identity === identity ? state : { rows: [], error: '', loading: true }
-  return <div className="space-y-1.5">
-    <label htmlFor={id} className="text-xs font-medium text-slate-500">Oficina de facturación</label>
-    <select id={id} value={value} disabled={disabled || current.loading || !!current.error} onChange={event => onChange(event.target.value)} className={fieldClass}>
+  return <div className={fieldStackClass}>
+    <label htmlFor={id} className={fieldLabelClass}>{label}{required && <span className="text-red-400"> *</span>}</label>
+    <select id={id} required={required} value={value} disabled={disabled || current.loading || !!current.error} onChange={event => onChange(event.target.value)} className={fieldClass}>
       <option value="">{current.loading ? 'Cargando oficinas…' : 'Sin asignar — requiere asignación antes de facturar'}</option>
       {current.rows.filter(row => row.is_active || row.id === value).map(row => <option key={row.id} value={row.id} disabled={!row.is_active}>{row.name}{!row.is_active ? ' (inactiva)' : ''}</option>)}
     </select>

@@ -113,8 +113,8 @@
     },
     "src/components/quotations/InsuranceCalculationDialog.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",
-      "source_sha256": "152274bc83634935ff32751867320fb224bbe8307ca642a126f024e36936532a",
-      "trial_sha256": "bf14d49252474e4912af6f7191c467968fdf7b83b70cd6b771f481944d9a5778"
+      "source_sha256": "59d423419b431fea8803a2f44cb6fee5a0017c00b8b4c521f55ed714ba17c3c7",
+      "trial_sha256": "ac7db54243ec566b8ea74d9f8fb8c9276f03fa189732dd0d3e7e21225b5bc26b"
     },
     "src/components/pricing/FclAgentComparisonTable.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",

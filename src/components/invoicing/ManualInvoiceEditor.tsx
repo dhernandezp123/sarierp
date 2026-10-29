@@ -14,7 +14,7 @@ import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
 import { measureOperation } from '@/src/lib/browser/measurements'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs'
-import { cardClass, fieldClassSm, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClassSm, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { formatDateTime, formatMoney } from '@/src/lib/format'
 import type { OcrProgress } from '@/src/lib/browser/manual-invoice-ocr'
 import { blankManualInvoice, formatManualInvoiceDate, MANUAL_INVOICE_MAX_BYTES, MANUAL_INVOICE_MIMES, manualInvoiceCents, manualInvoiceFields,
@@ -199,8 +199,8 @@ export function ManualInvoiceEditor() {
   const field = (key: ManualInvoiceField) => {
     const definition = manualInvoiceFields.find(([name]) => name === key)!
     const isDate = key === 'issue_date' || key === 'due_date'
-    return <label key={key} className="block space-y-1 text-sm font-medium">
-      <span>{definition[1]}</span>
+    return <label key={key} className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
+      <span className={fieldLabelClass}>{definition[1]}</span>
       <input type={isDate ? 'date' : 'text'} value={data[key]} maxLength={definition[2]} disabled={Boolean(busy)}
         onChange={(event) => change({ ...data, [key]: event.target.value })}
         className={`${fieldClassSm} !border-amber-300 !bg-amber-50 dark:!border-amber-700 dark:!bg-amber-950/30`} />
@@ -224,7 +224,7 @@ export function ManualInvoiceEditor() {
         <div className={cardClass}><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm">Versiones guardadas. Al editar se conserva el documento anterior.</p>
           <button onClick={() => void reloadHistory()} disabled={loadingHistory || Boolean(busy)} className={secondaryButtonClass}>Actualizar</button></div>
           <form className="mb-3 flex flex-wrap gap-2" onSubmit={event => { event.preventDefault(); void reloadHistory(false, 0, historySearch.trim()) }}>
-            <label className="flex-1 text-sm">Buscar factura o cliente<input value={historySearch} maxLength={120} onChange={event => setHistorySearch(event.target.value)} className={fieldClassSm} /></label>
+            <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Buscar factura o cliente</span><input value={historySearch} maxLength={120} onChange={event => setHistorySearch(event.target.value)} className={fieldClassSm} /></label>
             <button type="submit" disabled={loadingHistory || Boolean(busy)} className={secondaryButtonClass}>Buscar</button>
           </form>
           {!loadingHistory && !historyError && <p className="mb-3 text-sm text-slate-500">Mostrando {history.length} de {historyTotal} versiones.</p>}
@@ -253,7 +253,7 @@ export function ManualInvoiceEditor() {
           {busy === 'ocr' && <div className="mt-3 space-y-1"><p role="status" className="text-sm">{ocrProgress.message} {ocrProgress.percent}%</p><progress aria-label="Progreso de lectura" className="h-2 w-full" max={100} value={ocrProgress.percent} /></div>}
         </div>
         {warnings.length > 0 && <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"><p className="font-semibold">Observaciones de la lectura</p><ul className="mt-2 list-inside list-disc">{warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
-        {recognizedText && <details className={cardClass}><summary className="cursor-pointer font-semibold">Ver texto reconocido</summary><label className="mt-3 block space-y-1 text-sm"><span>Texto de apoyo para completar datos que no se ubicaron</span><textarea readOnly rows={8} value={recognizedText} className={`${fieldClassSm} h-auto py-2`} /></label></details>}
+        {recognizedText && <details className={cardClass}><summary className="cursor-pointer font-semibold">Ver texto reconocido</summary><label className="flex min-w-0 flex-col gap-1.5 mt-3 text-sm"><span className={fieldLabelClass}>Texto de apoyo para completar datos que no se ubicaron</span><textarea readOnly rows={8} value={recognizedText} className={`${fieldClassSm} h-auto py-2`} /></label></details>}
         <div className="grid items-start gap-6 xl:grid-cols-[1.15fr_1fr]">
           <div className="space-y-4"><h2 className="font-semibold">2. Revisa y edita los campos amarillos</h2>
             {section('Factura', ['invoice_number', 'issue_date', 'due_date', 'file_number', 'customer_reference'])}
@@ -262,11 +262,11 @@ export function ManualInvoiceEditor() {
             {section('Referencias', ['booking_number', 'container_size', 'container_number', 'consol_number'])}
             <div className={cardClass}><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Description of Charges</h3><button aria-label="Agregar cargo" className={secondaryButtonClass} disabled={Boolean(busy) || data.items.length >= 100} onClick={() => change({ ...data, items: [...data.items, { description: '', amount: '' }] })}><Plus size={16} /></button></div>
               <div className="space-y-3">{data.items.map((item, index) => <div key={index} className="flex flex-wrap items-end gap-2">
-                <label className="min-w-[180px] flex-1 space-y-1 text-sm"><span>Descripción {index + 1}</span><input value={item.description} maxLength={180} disabled={Boolean(busy)} className={`${fieldClassSm} !bg-amber-50 dark:!bg-amber-950/30`} onChange={(event) => change({ ...data, items: data.items.map((line, n) => n === index ? { ...line, description: event.target.value } : line) })} /></label>
-                <label className="w-32 space-y-1 text-sm"><span>Importe USD</span><input inputMode="decimal" value={item.amount} disabled={Boolean(busy)} maxLength={20} placeholder="3,300.00" className={`${fieldClassSm} !bg-amber-50 dark:!bg-amber-950/30`} onChange={(event) => change({ ...data, items: data.items.map((line, n) => n === index ? { ...line, amount: event.target.value } : line) })} /></label>
+                <label className="flex min-w-[180px] flex-1 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Descripción {index + 1}</span><input value={item.description} maxLength={180} disabled={Boolean(busy)} className={`${fieldClassSm} !bg-amber-50 dark:!bg-amber-950/30`} onChange={(event) => change({ ...data, items: data.items.map((line, n) => n === index ? { ...line, description: event.target.value } : line) })} /></label>
+                <label className="flex min-w-0 flex-col gap-1.5 w-32 text-sm"><span className={fieldLabelClass}>Importe USD</span><input inputMode="decimal" value={item.amount} disabled={Boolean(busy)} maxLength={20} placeholder="3,300.00" className={`${fieldClassSm} !bg-amber-50 dark:!bg-amber-950/30`} onChange={(event) => change({ ...data, items: data.items.map((line, n) => n === index ? { ...line, amount: event.target.value } : line) })} /></label>
                 <button className="rounded-lg p-2 text-red-600 hover:bg-red-50" aria-label={`Eliminar cargo ${index + 1}`} disabled={Boolean(busy) || data.items.length === 1} onClick={() => change({ ...data, items: data.items.filter((_, n) => n !== index) })}><Trash2 size={18} /></button>
               </div>)}</div>
-              <label className="mt-4 block space-y-1 text-sm"><span>Warehouse Receipts (un WR por línea, sin el prefijo WR #)</span><textarea rows={5} disabled={Boolean(busy)} className={`${fieldClassSm} h-auto py-2 !bg-amber-50 dark:!bg-amber-950/30`} value={data.warehouse_receipts.join('\n')} onChange={(event) => change({ ...data, warehouse_receipts: event.target.value.split('\n') })} /></label>
+              <label className="flex min-w-0 flex-col gap-1.5 mt-4 text-sm"><span className={fieldLabelClass}>Warehouse Receipts (un WR por línea, sin el prefijo WR #)</span><textarea rows={5} disabled={Boolean(busy)} className={`${fieldClassSm} h-auto py-2 !bg-amber-50 dark:!bg-amber-950/30`} value={data.warehouse_receipts.join('\n')} onChange={(event) => change({ ...data, warehouse_receipts: event.target.value.split('\n') })} /></label>
               <p className="mt-4 text-right text-lg font-bold">Total Amount: {formatMoney(total, 'USD')}</p>
               {sourceTotal && <p className="mt-2 text-right text-sm">Total leído del original: {sourceCents === null ? 'No interpretable; revisar original' : formatMoney(sourceCents / 100, 'USD')}</p>}
               {totalMismatch && <p role="alert" className="mt-2 text-sm text-amber-700 dark:text-amber-300">El total de los cargos difiere del original. Revisa los importes o confirma que el cambio es intencional.</p>}

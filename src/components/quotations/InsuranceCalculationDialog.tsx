@@ -21,6 +21,7 @@ import {
   isInsurancePricingItem,
   partitionInsuranceCoverage,
 } from '@/src/lib/insurance-coverage'
+import { fieldLabelClass } from '@/src/lib/ui-classes'
 
 type InsuranceCalculationDialogProps = {
   open: boolean
@@ -489,8 +490,8 @@ export function InsuranceCalculationDialog({
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <label className="space-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
-            Valor factura / FOB
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Valor factura / FOB</span>
             <input
               type="number"
               min="0"
@@ -500,8 +501,8 @@ export function InsuranceCalculationDialog({
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
             />
           </label>
-          <label className="space-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
-            Servicios full cover declarados
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Servicios full cover declarados</span>
             <input
               type="number"
               min="0"
@@ -511,8 +512,8 @@ export function InsuranceCalculationDialog({
               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
             />
           </label>
-          <label className="space-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
-            Impuestos nacionales (excluidos)
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Impuestos nacionales (excluidos)</span>
             <input
               type="number"
               value="0"

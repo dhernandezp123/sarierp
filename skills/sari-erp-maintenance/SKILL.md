@@ -48,7 +48,8 @@ histórica; no conviertas una revisión en una reescritura general.
 
 Reutiliza componentes existentes (`Tabs`, `Dialog`, `ConfirmDialog`, campos,
 Sonner) y los assets en `public/brand` y `public/product`. Para pantallas
-internas, y en especial Finanzas, sigue [las convenciones de UI](references/ui-conventions.md). Mantén CTAs ligados a acciones
+internas, y en especial Finanzas, sigue [las convenciones de UI](references/ui-conventions.md);
+todo formulario usa `FormField`/`FormSection` con la etiqueta arriba, como `/quotations/new`. Mantén CTAs ligados a acciones
 reales, etiquetas visibles y navegación por teclado. Evita bloquear el acceso
 con intros obligatorias. Comprueba móvil, foco, errores y recuperación tras fallos
 de red. Las capturas demo deben identificarse; no inventes testimonios, cifras,

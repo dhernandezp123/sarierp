@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, Edit3, PackagePlus, Plus, RotateCcw, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
-import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
+import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { notifyCarrierCatalogUpdated } from '@/src/hooks/useCarrierCatalog'
 import type { CarrierType } from '@/src/lib/constants/carriers'
@@ -555,8 +555,8 @@ export default function CatalogsPage() {
             </div>
             <input className={fieldClass} placeholder="Nombre completo" value={carrierForm.name} onChange={(e) => setCarrierForm((v) => ({ ...v, name: e.target.value }))} />
             <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs text-slate-500">Fondo<input type="color" className="mt-1 h-11 w-full rounded-lg border border-slate-200 p-1 dark:border-slate-700" value={carrierForm.bg_color} onChange={(e) => setCarrierForm((v) => ({ ...v, bg_color: e.target.value }))} /></label>
-              <label className="text-xs text-slate-500">Texto<input type="color" className="mt-1 h-11 w-full rounded-lg border border-slate-200 p-1 dark:border-slate-700" value={carrierForm.text_color} onChange={(e) => setCarrierForm((v) => ({ ...v, text_color: e.target.value }))} /></label>
+              <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-500"><span className={fieldLabelClass}>Fondo</span><input type="color" className="h-11 w-full rounded-lg border border-slate-200 p-1 dark:border-slate-700" value={carrierForm.bg_color} onChange={(e) => setCarrierForm((v) => ({ ...v, bg_color: e.target.value }))} /></label>
+              <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-500"><span className={fieldLabelClass}>Texto</span><input type="color" className="h-11 w-full rounded-lg border border-slate-200 p-1 dark:border-slate-700" value={carrierForm.text_color} onChange={(e) => setCarrierForm((v) => ({ ...v, text_color: e.target.value }))} /></label>
             </div>
             <label className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700"><span className="text-sm font-semibold">Visible</span><Switch checked={carrierForm.active} onChange={() => setCarrierForm((v) => ({ ...v, active: !v.active }))} /></label>
             <button type="button" disabled={savingCarrier} onClick={() => void saveCarrier()} className={`${primaryButtonClass} flex w-full items-center justify-center gap-2`}><Check className="h-4 w-4" />{savingCarrier ? 'Guardando...' : 'Guardar naviera'}</button>

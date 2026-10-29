@@ -8,6 +8,7 @@ import { ChevronLeft, ScanLine } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
+import { fieldLabelClass } from '@/src/lib/ui-classes'
 
 const CARRIERS = ['UPS', 'FedEx', 'DHL', 'USPS', 'Amazon Logistics', 'OnTrac', 'LaserShip', 'Otro']
 
@@ -114,7 +115,7 @@ export default function NuevaPreAlertaPage() {
             </select>
           </div>
 
-          {form.carrier === "Otro" && <label className="block text-sm font-medium">Nombre del transportista<input aria-label="Campo de formulario" className={fieldClass} value={otherCarrier} onChange={event => setOtherCarrier(event.target.value)} required /></label>}
+          {form.carrier === "Otro" && <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Nombre del transportista</span><input aria-label="Campo de formulario" className={fieldClass} value={otherCarrier} onChange={event => setOtherCarrier(event.target.value)} required /></label>}
           {/* Description */}
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">

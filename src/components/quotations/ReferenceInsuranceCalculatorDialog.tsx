@@ -16,6 +16,7 @@ import {
   INSURANCE_MINIMUM_CHARGE_USD,
   INSURANCE_SURCHARGE_PERCENT,
 } from '@/src/lib/insurance-calculator'
+import { fieldLabelClass } from '@/src/lib/ui-classes'
 
 type ReferenceInsuranceCalculatorDialogProps = {
   open: boolean
@@ -88,8 +89,8 @@ export default function ReferenceInsuranceCalculatorDialog({
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
-            Valor de mercancía / FOB (USD)
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Valor de mercancía / FOB (USD)</span>
             <input
               type="number"
               min="0"
@@ -100,8 +101,8 @@ export default function ReferenceInsuranceCalculatorDialog({
               className={inputClassName}
             />
           </label>
-          <label className="space-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
-            Flete y servicios (USD)
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Flete y servicios (USD)</span>
             <input
               type="number"
               min="0"
@@ -112,8 +113,8 @@ export default function ReferenceInsuranceCalculatorDialog({
               className={inputClassName}
             />
           </label>
-          <label className="space-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
-            Impuestos nacionales (USD)
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Impuestos nacionales (USD)</span>
             <input
               type="number"
               min="0"
@@ -124,8 +125,8 @@ export default function ReferenceInsuranceCalculatorDialog({
               className={inputClassName}
             />
           </label>
-          <label className="space-y-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
-            Tarifa de seguro (%)
+          <label className="flex min-w-0 flex-col gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+            <span className={fieldLabelClass}>Tarifa de seguro (%)</span>
             <input
               type="number"
               min="0"
