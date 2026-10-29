@@ -2,9 +2,8 @@
 
 ### 2026-10-29 - UX-FIN-02 - Coherencia visual de Finanzas y Contabilidad (fase 1)
 
-- Estado: validado localmente y enviado a publicación en Producción (`main`) y
-  Pruebas (`demo`, Preview); revisión autenticada en navegador pendiente. No
-  modifica SQL, permisos, RPC, cálculos, estados ni datos.
+- Estado: publicado en Producción y Pruebas; revisión autenticada en navegador
+  pendiente. No modifica SQL, permisos, RPC, cálculos, estados ni datos.
 - Hallazgo: tres estilos de cabecera (azul en Facturación, marca en Cobranza con
   eyebrow fijo "Facturación · Gestión financiera" incluso en Caja/Proveedores, y
   `h1` sin descripción en Contabilidad); doble padding en Contabilidad/Cobranza;
@@ -65,7 +64,19 @@
   misma cabecera: antes, a 700/768 px, acciones hasta 863 px y título 0 px; a 1024
   px, título 57 px. Ahora, a 640/700/768/1024 px, sin desborde y título completo
   (286 px); las acciones bajan bajo el título. Falta revisión en la app real.
-- Commit: pendiente.
+- Commits funcionales: main `c0b4d13c47bf1371832f2e91f2ccc12ab64c9554`, demo
+  `4da6cb1b369aed1478f82d460b19d9a765553556`. Se hizo push de ambos sin SQL.
+- CI: Quality `40901983813` (main) y `40901993850` (demo) aprobados. Paridad
+  `40901993808` (demo, compara el nuevo `origin/main` con Pruebas) aprobada; la
+  ejecución `40901984074` de main quedó cancelada por el grupo de concurrencia
+  `environment-parity` al iniciar la de demo.
+- Publicación: Vercel Production `dpl_HzMdt3YTGGCyCZpjLtzLVWwxFVdm`, `READY`,
+  commit `c0b4d13`, URL `https://sarierp-qriyjndhu-claudherhn-5641s-projects.vercel.app`,
+  alias `sari.forwarders.app` verificado. Pruebas: Preview
+  `dpl_GDGbvE2jQZiD4DCKxapsoqNWszrV`, `READY`, commit `4da6cb1`, alias
+  `demo.forwarders.app` verificado; Demo no usó destino de Producción. Smoke sin
+  sesión en ambos dominios: login 200 y `/invoicing` 307 a login. No certifica
+  la revisión autenticada de las pantallas.
 
 ### 2026-10-28 - ACC-IMPORT-PDF-01 - Catálogo contable importado desde PDF
 
