@@ -28,8 +28,14 @@
   064df3b7e04bf856b08bd814f2f30010. Produccion: 714 cuentas sin cambios;
   Demo: 0 cuentas. Postflight: función presente, anon sin EXECUTE.
   Evidencia privada en `.ua/intermediate/account-delete-release-20261029/`.
+- Publicación: commits main 4812ce3, demo 70d1013. Vercel READY: Produccion
+  sarierp-79wywqadb (sari.forwarders.app), Pruebas sarierp-3eudlzdsj
+  (demo.forwarders.app). Smoke: /login 200 y /accounting/accounts 307 a login
+  en ambos. CI: Quality main 40967701591 y demo 40968082878 (application y
+  database) aprobados; paridad demo 40968082834 aprobada y main 40967701673
+  aprobada al reejecutar (fallo inicial: corrió antes del push de demo).
 - Pendiente: UAT con sesión real (editar con confirmación, eliminar una cuenta
-  sin uso y verificar el rechazo de una con movimientos). Hash: ver commit.
+  sin uso y verificar el rechazo de una con movimientos).
 
 ### 2026-10-29 - RELEASE-SUP-CAT-01 - Publicacion de catalogo y modal de proveedores
 
