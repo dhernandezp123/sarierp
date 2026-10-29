@@ -28,6 +28,7 @@ export type ReportBooking = {
   booking_lifecycle_status: string
 }
 export type ClientOperationRow = {
+  clientId?:string;clientName?:string
   id: string; quotationId: string | null; instructionId: string | null
   quotation: string; operation: string; origin: string; consignee: string
   modality: string; status: string; phase: 'approved' | 'active'
@@ -109,21 +110,37 @@ export async function loadClientOperations(clientId: string, isCurrent: () => bo
   return clientOperationRows(clientId, shipments, quotations, bookings)
 }
 
-export function filterClientOperations(rows: ClientOperationRow[], scope: OperationReportScope, mode: OperationReportMode) {
-  return rows.filter(row => (scope === 'all' || row.phase === scope) && (mode === 'all' || (mode === 'other' ? !['FCL', 'LCL'].includes(row.modality) : row.modality === mode)))
+export async function loadClientsOperations(clients:ClientOption[],isCurrent:()=>boolean){
+ const requested=[...new Map(clients.map(c=>[c.id,c])).values()]
+ if(requested.length===1)return (await loadClientOperations(requested[0].id,isCurrent)).map(row=>({...row,clientId:requested[0].id,clientName:requested[0].nombre||'Cliente'}))
+ const ids=requested.map(c=>c.id)
+ const [shipments,quotations]=await Promise.all([
+  readReportRowsByIds<ReportShipment>(ids,(batch,from,to)=>supabase.from('shipments').select(`id,client_id,quotation_id,shipment_number,origin,service_type,operational_status,closed_at,quotation:quotations (${quotationFields}),shipping_instruction:shipping_instructions (id,consignee,origin_address,deleted_at,shipment_status,operational_status)`).in('client_id',batch).order('id').range(from,to),{label:'operaciones de los clientes',isCurrent}),
+  readReportRowsByIds<ReportQuotation>(ids,(batch,from,to)=>supabase.from('quotations').select(quotationFields).in('cliente_id',batch).eq('status','Ganada').is('deleted_at',null).order('id').range(from,to),{label:'cotizaciones aprobadas',isCurrent}),
+ ])
+ const bookings=await readReportRowsByIds<ReportBooking>(shipments.filter(s=>!s.closed_at&&!terminal(s.operational_status)).map(s=>s.id),(batch,from,to)=>supabase.from('bookings').select('id,shipment_id,shipment_status,booking_lifecycle_status').in('shipment_id',batch).eq('booking_lifecycle_status','ACTIVE').order('id').range(from,to),{label:'estados de embarque',isCurrent})
+ return requested.flatMap(c=>clientOperationRows(c.id,shipments,quotations,bookings).map(row=>({...row,clientId:c.id,clientName:c.nombre||'Cliente'})))
 }
 
-export function clientOperationsReport(client: ClientOption, rows: ClientOperationRow[], scope: OperationReportScope, mode: OperationReportMode, generatedAt: string): ReportPdfData {
+export function filterClientOperations(rows: ClientOperationRow[], scope: OperationReportScope|OperationReportScope[], mode: OperationReportMode|OperationReportMode[],statuses:string[]=[]) {
+  const scopes=Array.isArray(scope)?scope:[scope],modes=Array.isArray(mode)?mode:[mode]
+  return rows.filter(row => (!scopes.length||scopes.includes('all')||scopes.includes(row.phase))&&(!modes.length||modes.includes('all')||modes.some(m=>m==='other'?!['FCL','LCL'].includes(row.modality):row.modality===m))&&(!statuses.length||statuses.includes(row.status)))
+}
+
+export function clientOperationsReport(client: ClientOption, rows: ClientOperationRow[], scope: OperationReportScope|OperationReportScope[], mode: OperationReportMode|OperationReportMode[], generatedAt: string, clients:ClientOption[]=[client],statuses:string[]=[]): ReportPdfData {
+  const multiple=clients.length>1,scopes=Array.isArray(scope)?scope:[scope],modes=Array.isArray(mode)?mode:[mode]
+  const scopeLabel=!scopes.length||scopes.includes('all')||scopes.length>1?'Aprobadas pendientes de operación y operaciones en curso':scopes[0]==='active'?'Operaciones en curso':'Aprobadas pendientes de operación'
+  const modeLabel=!modes.length||modes.includes('all')?'Todas las modalidades':modes.map(m=>m==='other'?'Otras modalidades':`Modalidad: ${m}`).join(', ')
   return {
-    audience: 'client', title: 'Operaciones aprobadas y activas',
-    subtitle: [client.nombre || 'Cliente', client.codigo_cliente, client.rtn ? `RTN ${client.rtn}` : ''].filter(Boolean).join(' · '),
+    audience: multiple?undefined:'client', title: 'Operaciones aprobadas y activas',
+    subtitle: multiple?`Consolidado interno · ${clients.length} clientes`:[client.nombre || 'Cliente', client.codigo_cliente, client.rtn ? `RTN ${client.rtn}` : ''].filter(Boolean).join(' · '),
     generatedAt: formatDateTime(generatedAt),
-    filters: [scope === 'active' ? 'Operaciones en curso' : scope === 'approved' ? 'Aprobadas pendientes de operación' : 'Aprobadas pendientes de operación y operaciones en curso', mode === 'all' ? 'Todas las modalidades' : mode === 'other' ? 'Otras modalidades' : `Modalidad: ${mode}`],
+    filters: [scopeLabel,modeLabel,...(statuses.length?[`Estados: ${statuses.join(', ')}`]:[]),...(multiple?[`Clientes: ${clients.map(c=>c.nombre||'Cliente').join(', ')}`]:[])],
     metrics: [{ label: 'Registros', value: String(rows.length) }, { label: 'FCL', value: String(rows.filter(r => r.modality === 'FCL').length) }, { label: 'LCL', value: String(rows.filter(r => r.modality === 'LCL').length) }],
-    columns: [{ key: 'quotation', label: 'N.º cotización', width: '14%' }, { key: 'operation', label: 'N.º operación', width: '13%' },
+    columns: [...(multiple?[{key:'client',label:'Cliente'}]:[]),{ key: 'quotation', label: 'N.º cotización', width: '14%' }, { key: 'operation', label: 'N.º operación', width: '13%' },
       { key: 'origin', label: 'Lugar de origen', width: '20%' }, { key: 'consignee', label: 'Consignatario', width: '24%' },
       { key: 'modality', label: 'Modalidad', width: '8%' }, { key: 'status', label: 'Estado', width: '21%' }],
     // Deliberate allowlist: no internal identifiers, notes, suppliers or prices.
-    rows: rows.map(({ quotation, operation, origin, consignee, modality, status }) => ({ quotation, operation, origin, consignee, modality, status })),
+    rows: rows.map(({ clientName,quotation, operation, origin, consignee, modality, status }) => ({ ...(multiple?{client:clientName||'Cliente'}:{}),quotation, operation, origin, consignee, modality, status })),
   }
 }

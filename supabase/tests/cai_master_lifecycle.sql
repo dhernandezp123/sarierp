@@ -26,7 +26,7 @@ select pg_temp.assert_true((select bool_and(fecha_limite_emision='2099-08-20' an
 select pg_temp.expect_error($c$select public.save_cai_range((select id from ranges where office='SPS'),1,(select payload from ranges where office='SPS'),'Formulario antiguo')$c$,'cambió');
 select public.set_cai_range_active(id,revision,true,'Habilitar serie corregida') from public.cai_ranges;
 select pg_temp.assert_true((select count(*)=2 from public.cai_ranges where is_active),'Dos oficinas activas simultáneas');
--- Admin/Accounting without the personal master assignment cannot manage CAI.
+-- Accounting without the personal assignment cannot manage CAI; Admin can.
 select set_config('request.jwt.claims','{"sub":"ca280000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select pg_temp.assert_true(not public.is_invoice_master(),'Contabilidad no es master por rol');
 select pg_temp.expect_error($c$select public.save_cai_range(null,0,'{}','Intento ajeno')$c$,'máster');
@@ -41,9 +41,15 @@ select pg_temp.expect_error($c$select public.save_billing_user_office_access('ca
 select pg_temp.expect_error($c$select * from public.create_manual_invoice_with_items('{"invoice_type":"Factura","cliente_id":"ca280200-0000-4000-8000-000000000001","currency":"HNL","fiscal_mode":"Exenta"}','[{"description":"Servicio ficticio","quantity":1,"unit_price":100,"isv_rate":0}]')$c$,'autorización');
 select pg_temp.assert_true((select count(*)=0 from public.invoices) and (select bool_and(next_number=1) from public.cai_ranges),'Bloqueo sin documento ni consumo de correlativo');
 select set_config('request.jwt.claims','{"sub":"ca280000-0000-4000-8000-000000000003","role":"authenticated"}',true);
-select pg_temp.assert_true(not public.is_invoice_master(),'Admin tampoco es master por rol');
-select pg_temp.expect_error($c$select public.archive_cai_range((select id from ranges where office='SPS'),3,'No autorizado')$c$,'máster');
+select pg_temp.assert_true(public.is_invoice_master(),'Admin tiene autoridad fiscal en su empresa');
+select public.set_cai_range_active(c.id,c.revision,false,'Admin desactiva con auditoria') from public.cai_ranges c join ranges r on r.id=c.id where r.office='SPS';
+select pg_temp.assert_true((select not is_active from public.cai_ranges where point_of_sale='SPS'),'Admin puede desactivar');
+select public.set_cai_range_active(c.id,c.revision,true,'Admin reactiva con auditoria') from public.cai_ranges c join ranges r on r.id=c.id where r.office='SPS';
+select pg_temp.assert_true((select is_active from public.cai_ranges where point_of_sale='SPS'),'Admin puede reactivar');
+insert into public.proveedores(id,nombre,tipo,moneda,terminos_pago) values('ca280400-0000-4000-8000-000000000001','Proveedor ficticio Admin','Otro','HNL',0);
 select set_config('request.jwt.claims','{"sub":"ca280000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+update public.proveedores set telefono='99990000' where id='ca280400-0000-4000-8000-000000000001';
+select pg_temp.assert_true((select telefono='99990000' from public.proveedores where id='ca280400-0000-4000-8000-000000000001'),'Master Contabilidad puede modificar proveedores');
 select public.save_billing_user_office_access('ca280000-0000-4000-8000-000000000002',0,array['ca280100-0000-4000-8000-000000000001']::uuid[],'Apoyo autorizado para SPS');
 select pg_temp.expect_error($c$select public.save_billing_user_office_access('ca280000-0000-4000-8000-000000000002',0,'{}','Versión obsoleta')$c$,'cambiaron');
 select pg_temp.expect_error($c$select public.save_billing_user_office_access('ca280000-0000-4000-8000-000000000004',0,'{}','Usuario ajeno')$c$,'esta empresa');
@@ -92,6 +98,13 @@ select set_config('request.jwt.claims','{"sub":"ca280000-0000-4000-8000-00000000
 select pg_temp.assert_true((select count(*)=0 from public.cai_ranges) and (select count(*)=0 from public.cai_range_events) and (select count(*)=0 from public.billing_office_access_events),'Master ajeno no ve configuración ni historial');
 select pg_temp.expect_error($c$select public.set_cai_range_active((select id from ranges where office='TGU'),1,false,'Ajeno')$c$,'no existe');
 select pg_temp.assert_true(not has_function_privilege('authenticated','public.activate_cai_range_trusted(uuid)','execute') and not has_function_privilege('anon','public.save_cai_range(uuid,integer,jsonb,text)','execute'),'Sin rutas públicas para saltar permisos');
+reset role;
+select set_config('request.jwt.claims','{}',true);
+update public.profiles set is_active=false where id='ca280000-0000-4000-8000-000000000003';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"ca280000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+select pg_temp.assert_true(not public.is_invoice_master(),'Admin inactivo no obtiene autoridad');
+select pg_temp.assert_true((select count(*)=0 from public.proveedores),'Admin inactivo no ve proveedores');
 reset role;
 set constraints all immediate;
 rollback;

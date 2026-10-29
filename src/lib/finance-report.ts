@@ -15,6 +15,7 @@ export type FinanceMovement = {
   kind: string; reference: string; description: string; debit: number; credit: number; reconstructed: boolean
 }
 export type FinanceFilters = {
+  parties?:string[];partyNames?:string[];statuses?:Exclude<FinanceStatus,'Todos'>[];documentTypes?:string[]
   party: string; currency: string; status: FinanceStatus; cutoff: string; from: string; to: string
   dateField: 'issue_date' | 'created_on' | 'due_date'; includeDebit: boolean
 }
@@ -41,16 +42,16 @@ export function agingBucket(days: number): AgingKey {
 export function filterFinanceDocuments(documents: FinanceDocument[], filters: FinanceFilters) {
   validateFinanceDates(filters.cutoff, filters.from, filters.to)
   return documents.filter(d => {
-    if (filters.party && d.party_id !== filters.party) return false
+    if (filters.parties ? filters.parties.length&&!filters.parties.includes(d.party_id) : filters.party&&d.party_id!==filters.party) return false
+    if (filters.documentTypes?.length&&!filters.documentTypes.includes(d.document_type))return false
     if (filters.currency !== 'Todos' && d.currency !== filters.currency) return false
     if (!filters.includeDebit && d.document_type === 'Nota de Débito') return false
     const date = d[filters.dateField]
     if ((filters.from || filters.to) && !date) return false
     if ((filters.from && date! < filters.from) || (filters.to && date! > filters.to)) return false
     const balance = financialCents(d.balance)
-    if (filters.status === 'Pendientes' && balance <= 0) return false
-    if (filters.status === 'Vencidos' && (balance <= 0 || d.days_overdue <= 0)) return false
-    if (filters.status === 'Pagados' && (balance !== 0 || d.needs_review)) return false
+    const statuses=filters.statuses??(filters.status==='Todos'?[]:[filters.status])
+    if(statuses.length&&!statuses.some(status=>status==='Pendientes'?balance>0:status==='Vencidos'?balance>0&&d.days_overdue>0:balance===0&&!d.needs_review))return false
     return true
   }).sort((a,b) => a.party_name.localeCompare(b.party_name, 'es') || a.party_id.localeCompare(b.party_id)
     || a.currency.localeCompare(b.currency) || a.issue_date.localeCompare(b.issue_date) || a.id.localeCompare(b.id))
@@ -98,8 +99,9 @@ export function financeDocumentReport(documents: FinanceDocument[], filters: Fin
   const totals=new Map<string,number>()
   for(const row of rows)totals.set(row.currency,(totals.get(row.currency)||0)+financialCents(row.balance))
   const formattedColumns=columns.map(c=>({...c,...(['current','d30','d60','d90','older','unclassified','total','original','credit','paid','withheld','balance'].includes(c.key)?{format:'money' as const}:c.key==='days'?{format:'integer' as const}:{})}))
-  return {complete:true,title,subtitle:filters.party?rows[0]?.party_name||'Tercero seleccionado':'Listado general',dateRange:`Al ${formatDate(filters.cutoff)}`,generatedAt:formatDate(new Date()),
-    filters:[`Estado: ${filters.status}`,`Moneda: ${filters.currency}`,filters.includeDebit?'Facturas y notas de débito':'Solo facturas; subtotal de los documentos seleccionados',
+  return {complete:true,title,subtitle:filters.parties?.length?filters.partyNames?.join(' · ')||'Terceros seleccionados':filters.party?rows[0]?.party_name||'Tercero seleccionado':'Listado general',dateRange:`Al ${formatDate(filters.cutoff)}`,generatedAt:formatDate(new Date()),
+    filters:[`Estado: ${filters.statuses?(filters.statuses.join(', ')||'Todos'):filters.status}`,`Moneda: ${filters.currency}`,filters.documentTypes?`Tipos de documento: ${filters.documentTypes.join(', ')||'Todos los disponibles'}`:filters.includeDebit?'Facturas y notas de débito':'Solo facturas; subtotal de los documentos seleccionados',
+      ...(filters.parties?.length?[`Terceros: ${filters.partyNames?.join(', ')||'Selección aplicada'}`]:[]),
       'Mora calculada desde vencimiento; Actual = saldo no vencido.',
       ...(filters.from||filters.to?[`Documentos por ${filters.dateField==='due_date'?'vencimiento':filters.dateField==='created_on'?'creación':'emisión'}: ${formatDate(filters.from)} — ${formatDate(filters.to)}. Cartera parcial.`]:[]),
       ...(rows.some(d=>d.reconstructed)?['Contiene datos anteriores reconstruidos; revisar la cobertura histórica indicada.']:[]),
@@ -111,14 +113,14 @@ export function financeDocumentReport(documents: FinanceDocument[], filters: Fin
 }
 
 export function financeMovementReport(movements: FinanceMovement[], filters: FinanceFilters, side: FinanceSide, kinds: string[] = []): ReportPdfData {
-  const selected=movements.filter(m=>(!filters.party||m.party_id===filters.party)&&(filters.currency==='Todos'||m.currency===filters.currency))
+  const selected=movements.filter(m=>(filters.parties?(!filters.parties.length||filters.parties.includes(m.party_id)):(!filters.party||m.party_id===filters.party))&&(filters.currency==='Todos'||m.currency===filters.currency))
   const statement=financeStatement(selected,filters.from||'0001-01-01',filters.cutoff,kinds)
   const rows=statement.rows.filter(m=>filters.includeDebit||m.kind!=='Nota de Débito')
   const totals=new Map<string,{opening:number;debit:number;credit:number;closing:number}>()
   for(const group of statement.groups){const sum=totals.get(group.currency)||{opening:0,debit:0,credit:0,closing:0};for(const key of ['opening','debit','credit','closing'] as const)sum[key]+=financialCents(group[key]);totals.set(group.currency,sum)}
   const detailFilters=[...(kinds.length?[`Tipos visibles: ${kinds.join(', ')}. Los saldos incluyen todos los tipos.`]:[]),...(!filters.includeDebit?['Notas de débito ocultas en el detalle.']:[])]
   return {complete:true,title:side==='receivable'?'Estado de cuenta del cliente':'Estado de cuenta del proveedor',subtitle:'Auxiliar consolidado de movimientos',dateRange:`${filters.from?formatDate(filters.from):'Inicio del historial'} al ${formatDate(filters.cutoff)}`,generatedAt:formatDate(new Date()),
-    filters:['El saldo incluye todos los movimientos; los filtros por tipo solo ocultan detalle.',...detailFilters,...(side==='receivable'?['El estado incluye los recibos completos, una vez, y los anticipos. Los anticipos sin aplicar no liquidan facturas: Por pagar se consulta en Documentos y el remanente en Cobranza.']:['Los abonos incluyen pagos y retenciones; las retenciones no son salida bancaria.']),...(selected.some(m=>m.reconstructed)?['Incluye apertura reconstruida a partir de los registros disponibles.']:[])],
+    filters:['El saldo incluye todos los movimientos; los filtros por tipo solo ocultan detalle.',...detailFilters,...(filters.parties?.length?[`Terceros: ${filters.partyNames?.join(', ')||'Selección aplicada'}`]:[]),...(side==='receivable'?['El estado incluye los recibos completos, una vez, y los anticipos. Los anticipos sin aplicar no liquidan facturas: Por pagar se consulta en Documentos y el remanente en Cobranza.']:['Los abonos incluyen pagos y retenciones; las retenciones no son salida bancaria.']),...(selected.some(m=>m.reconstructed)?['Incluye apertura reconstruida a partir de los registros disponibles.']:[])],
     metrics:[...totals].flatMap(([currency,g])=>[{label:`Apertura ${currency}`,value:formatMoney(g.opening/100,currency)},{label:`Cargos ${currency}`,value:formatMoney(g.debit/100,currency)},{label:`Abonos ${currency}`,value:formatMoney(g.credit/100,currency)},{label:`Saldo ${currency}`,value:formatMoney(g.closing/100,currency)}]),
     columns:[{key:'party',label:side==='receivable'?'Cliente':'Proveedor'},{key:'currency',label:'Moneda'},{key:'date',label:'Fecha'},{key:'kind',label:'Tipo'},{key:'reference',label:'Referencia'},{key:'description',label:'Descripción'},{key:'debit',label:'Cargo',align:'right',format:'money'},{key:'credit',label:'Abono',align:'right',format:'money'},{key:'balance',label:'Saldo',align:'right',format:'money'}],
     rows:rows.map(m=>({__party_id:m.party_id,party:m.party_name,currency:m.currency,date:formatDate(m.movement_date),kind:m.kind,reference:m.reference,description:m.description,debit:Number(m.debit),credit:Number(m.credit),balance:m.balance})),

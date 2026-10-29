@@ -14,10 +14,13 @@ import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { supabase } from '../../../lib/supabase/client'
 import { useUser } from '../../../hooks/useUser'
 import { PageSkeleton } from '@/src/components/ui/page-skeleton'
-import { primaryButtonClass, cardClass, filterSelectClass, fieldClassSm } from '@/src/lib/ui-classes'
+import { primaryButtonClass, cardClass, fieldClassSm } from '@/src/lib/ui-classes'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/src/components/ui/dialog'
 import { FinancePageHeader, financeActionClass, financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
 import { Pagination } from '@/src/components/ui/Pagination'
+import { MultiSelect } from '@/src/components/ui/MultiSelect'
+import { FormField } from '@/src/components/ui/form-field'
+import { filterInvoiceList } from '@/src/lib/invoice-list-filters'
 import { EstadoCuentaPdf, type EstadoCuentaData, type EstadoCuentaItem } from '@/src/components/pdf/estado-cuenta-pdf'
 import {
   PLATFORM_ATTRIBUTION,
@@ -78,8 +81,8 @@ export default function InvoicingPage() {
   const [workQueueError, setWorkQueueError] = useState('')
   const [view, setView] = useState<'work' | 'documents'>('work')
   const [search, setSearch] = useState('')
-  const [filterType, setFilterType] = useState<'all' | InvoiceType>('all')
-  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterTypes,setFilterTypes]=useState<InvoiceType[]>([])
+  const [filterStatuses,setFilterStatuses]=useState<string[]>([]),[filterOffices,setFilterOffices]=useState<string[]>([])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [showCierre, setShowCierre] = useState(false)
@@ -141,22 +144,13 @@ export default function InvoicingPage() {
     }
   )
 
-  const filtered = invoices.filter((inv) => {
-    if (filterType !== 'all' && inv.invoice_type !== filterType) return false
-    if (filterStatus !== 'all' && inv.status !== filterStatus) return false
-    if (search) {
-      const q = search.toLowerCase()
-      const matchNum = inv.invoice_number?.toLowerCase().includes(q)
-      const matchClient = inv.cliente_nombre?.toLowerCase().includes(q)
-      if (!matchNum && !matchClient) return false
-    }
-    return true
-  })
+  const filtered=filterInvoiceList(invoices,{types:filterTypes,statuses:filterStatuses,offices:filterOffices,search})
+  const filteredIds=new Set(filtered.map(row=>row.id))
 
   const paginatedInvoices = filtered.slice((page - 1) * pageSize, page * pageSize)
 
   const totalsByCurrency = Array.from(receivables
-    .filter((row) => !['Borrador', 'Anulada'].includes(row.stored_status))
+    .filter((row) => !['Borrador', 'Anulada'].includes(row.stored_status)&&(view!=='documents'||filteredIds.has(row.invoice_id)))
     .reduce((totals, row) => {
       const currency = row.currency || 'USD'
       const current = totals.get(currency) || { pendiente: 0, pagado: 0, vencido: 0 }
@@ -709,39 +703,20 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-2 xl:grid-cols-4 dark:border-slate-700/60 dark:bg-[#0b1220]">
+        <FormField label="Buscar documentos"><span className="relative block">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar por número o cliente..."
+            placeholder="Número, cliente o RTN…"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+            className="min-h-12 w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           />
-        </div>
-        <select
-          value={filterType}
-          onChange={(e) => { setFilterType(e.target.value as typeof filterType); setPage(1) }}
-          className={filterSelectClass}
-        >
-          <option value="all">Todos los tipos</option>
-          <option value="Proforma">Proforma</option>
-          <option value="Factura">Factura</option>
-          <option value="Nota de Crédito">Nota de Crédito</option>
-          <option value="Nota de Débito">Nota de Débito</option>
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => { setFilterStatus(e.target.value); setPage(1) }}
-          className={filterSelectClass}
-        >
-          <option value="all">Todos los estados</option>
-          {Object.keys(STATUS_CONFIG).map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-        <span className="ml-auto text-xs text-slate-400">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</span>
+        </span></FormField>
+        <FormField as="div" label="Tipos de documento"><MultiSelect aria-label="Tipos de documento" value={filterTypes} onValueChange={values=>{setFilterTypes(values as InvoiceType[]);setPage(1)}} options={['Proforma','Factura','Nota de Crédito','Nota de Débito'].map(value=>({value,label:value}))} placeholder="Todos los tipos"/></FormField>
+        <FormField as="div" label="Estados"><MultiSelect aria-label="Estados de documento" value={filterStatuses} onValueChange={values=>{setFilterStatuses(values);setPage(1)}} options={Object.keys(STATUS_CONFIG).map(value=>({value,label:value}))} placeholder="Todos los estados"/></FormField><FormField as="div" label="Oficinas"><MultiSelect aria-label="Oficinas" value={filterOffices} onValueChange={values=>{setFilterOffices(values);setPage(1)}} options={[...new Set(invoices.map(i=>i.point_of_sale).filter((value):value is string=>Boolean(value)))].sort().map(value=>({value,label:value}))} placeholder="Todas las oficinas"/></FormField>
+        <span className="text-xs text-slate-400 md:col-span-2 xl:col-span-4">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</span>
 
       </div>
 

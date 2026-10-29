@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Rich breadcrumbs supplied by a page replace the shell fallback, including
+   during loading/navigation. display:none also removes the duplicate from AT. */
+[data-erp-workspace]:has([data-page-breadcrumbs]) > .workspace-breadcrumbs {
+  display: none;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

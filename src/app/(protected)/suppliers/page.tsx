@@ -8,6 +8,8 @@ import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, primaryButtonClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
+import { Pagination } from '@/src/components/ui/Pagination'
+import { readAllReportRows } from '@/src/lib/report-query'
 
 type Proveedor = {
   id: string
@@ -40,20 +42,22 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState('')
   const [tipoFilter, setTipoFilter] = useState('Todos')
   const [showInactive, setShowInactive] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
 
   const fetchProveedores = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('proveedores')
-      .select('id, nombre, tipo, contacto, email, moneda, terminos_pago, is_active, pais, agents(name)')
-      .order('nombre', { ascending: true })
-
-    if (error) {
-      toast.error(error.message)
-    } else {
-      setProveedores((data || []) as unknown as Proveedor[])
+    try {
+      const data = await readAllReportRows((from, to) => supabase
+        .from('proveedores')
+        .select('id, nombre, tipo, contacto, email, moneda, terminos_pago, is_active, pais, agents(name)')
+        .order('nombre', { ascending: true }).order('id').range(from, to), { label: 'proveedores' })
+      setProveedores(data as unknown as Proveedor[])
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los proveedores.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => { fetchProveedores() }, [])
@@ -74,6 +78,8 @@ export default function SuppliersPage() {
       ])
     ),
   }
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)))
+  const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   return (
     <div className="space-y-6">
@@ -109,14 +115,14 @@ export default function SuppliersPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             placeholder="Buscar por nombre, email..."
             className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-4 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"
           />
         </div>
         <select
           value={tipoFilter}
-          onChange={(e) => setTipoFilter(e.target.value)}
+          onChange={(e) => { setTipoFilter(e.target.value); setPage(1) }}
           className={`${fieldClass} w-40`}
         >
           <option value="Todos">Todos los tipos</option>
@@ -128,7 +134,7 @@ export default function SuppliersPage() {
           <input
             type="checkbox"
             checked={showInactive}
-            onChange={(e) => setShowInactive(e.target.checked)}
+            onChange={(e) => { setShowInactive(e.target.checked); setPage(1) }}
             className="rounded"
           />
           Mostrar inactivos
@@ -156,7 +162,7 @@ export default function SuppliersPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
+                {visible.map((p) => (
                   <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-800/30">
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900 dark:text-white">{p.nombre}</div>
@@ -189,11 +195,11 @@ export default function SuppliersPage() {
                 ))}
               </tbody>
             </table>
-            <div className="border-t border-slate-100 px-4 py-2 dark:border-slate-800">
-              <p className="text-xs text-slate-400">{filtered.length} de {proveedores.length} proveedores</p>
-            </div>
           </div>
         )}
+        {!loading && <Pagination page={currentPage} pageSize={pageSize} total={filtered.length}
+          pageSizeOptions={[25, 50, 75, 100]} onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }} />}
       </div>
     </div>
   )

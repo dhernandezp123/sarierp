@@ -73,12 +73,12 @@ test('carga todas las páginas por cliente y estados de bookings; falla completo
 
 function workspace(api) {
   return mountPage('src/app/(protected)/reports/client-operations/page.tsx', {
-    '@/src/lib/supabase/client': { supabase: api }, '@/src/components/ui/ClienteCombobox': { ClienteCombobox: 'ClientPicker' },
+    '@/src/lib/supabase/client': { supabase: api }, '@/src/components/ui/MultiSelect': { MultiSelect: 'MultiPicker' },
     '@/src/components/invoicing/FinancialReportExport': { FinancialReportExport: 'Export' },
   }, { exported: 'ClientOperationsWorkspace', props: { context: 'user-a:tenant-a' } })
 }
 const ready = async app => { await app.ready(); await app.tick(); app.render() }
-const choose = async (app, id) => { app.find(n => n.type === 'ClientPicker').props.onChange(id); app.render(); await app.tick(); app.render() }
+const choose = async (app, id) => { app.find(n => n.props?.id === 'operation-report-client').props.onValueChange([id]); app.render(); await app.tick(); app.render() }
 
 test('pantalla real filtra la exportación completa, oculta resultados al cambiar cliente y permite recuperar errores', async () => {
   const api = backend({ fail: true }), app = workspace(api)
@@ -87,9 +87,9 @@ test('pantalla real filtra la exportación completa, oculta resultados al cambia
     assert.match(app.text(), /No se pudo cargar estados de embarque/); assert.equal(app.find(n => n.type === 'Export'), undefined)
     api.recover(); app.button('Reintentar reporte').props.onClick(); app.render(); await app.tick(); app.render()
     assert.equal(app.find(n => n.type === 'Export').props.data.rows.length, 3)
-    app.find(n => n.props?.id === 'operation-report-mode').props.onChange({ target: { value: 'LCL' } }); app.render()
+    app.find(n => n.props?.id === 'operation-report-mode').props.onValueChange(['LCL']); app.render()
     assert.equal(app.find(n => n.type === 'Export').props.data.rows.length, 1)
-    app.find(n => n.type === 'ClientPicker').props.onChange('client-b'); app.render()
+    app.find(n => n.props?.id === 'operation-report-client').props.onValueChange(['client-b']); app.render()
     assert.equal(app.find(n => n.type === 'Export'), undefined); assert.doesNotMatch(app.text(), /Importador consignado/)
     await app.tick(); app.render(); assert.equal(app.find(n => n.type === 'Export').props.disabled, true)
   } finally { app.cleanup() }

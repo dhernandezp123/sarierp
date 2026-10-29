@@ -23,8 +23,8 @@
     },
     "src/components/layout/protected-shell.tsx": {
       "reason": "Temporary-access acceptance gate, banner and print notice",
-      "source_sha256": "9551b00ca69caa165fa73da14136444d8ce573ed8c894db9bc21c71898cea96d",
-      "trial_sha256": "670f5f4898d700e83e7a31c96beb2435cb439eaa827d9b31b82abe46364d51a0"
+      "source_sha256": "c483f3f2573998a1f851489621775a1d178f223ea9e4fe271d2a0e77a60402b8",
+      "trial_sha256": "87fe84e1fe60c81f4756da4c93e2e7f9497e24a33b537c154ee6221d6877d15f"
     },
     "src/components/pdf/FiscalDocumentLayout.tsx": {
       "reason": "Sandbox watermark on every PDF page",
@@ -123,8 +123,8 @@
     },
     "src/app/(protected)/invoicing/page.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",
-      "source_sha256": "3c9fbca4d2c4d998a839a29f11c4bc2a2639e2dbfeceeb97b62fe669450adc6b",
-      "trial_sha256": "03dec815ff5aa71e3e584599cfdfbdceb9a35edb49a8dd46113e3909aa431e82"
+      "source_sha256": "ed94f381f6f8011898bfe26513113d0bb20e12f4f6b96d7a0f443b5ce975ed77",
+      "trial_sha256": "696e66c7d45ad92ff559faf4fdc828861502643d89b75e21c3f3e977d7ef3528"
     },
     "src/app/(protected)/miami/embarques/page.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",
