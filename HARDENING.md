@@ -2,8 +2,8 @@
 
 ### 2026-10-29 - UX-FORM-01 - Formularios con etiqueta arriba y registro de Compras
 
-- Estado: implementado y verificado localmente; pendiente commit, publicación y
-  revisión autenticada. No modifica SQL, permisos, RPC ni datos.
+- Estado: publicado en Producción y Pruebas; revisión autenticada pendiente. No
+  modifica SQL, permisos, RPC ni datos.
 - Hallazgo (reportado por el usuario en Compras > Registrar documento): las
   etiquetas `<label>Texto<select/></label>` sin clase dejaban el texto en línea y
   el `select` (máx. 448 px) a su lado; "Oficina emisora" mostraba dos etiquetas
@@ -37,8 +37,20 @@
   Chrome headless): Compras factura a 1280 y 768 px, boleta USD y retención a
   1280 px; Nuevo cliente; Activos; Asientos; Caja y bancos; Cuentas por cobrar.
   Escaneo final: solo quedan las excepciones intencionales.
-- Pendiente: commit y despliegue en ambas ramas (`npm run build` local OK);
-  revisión autenticada en Compras (registro real de factura, boleta y
+- Commits funcionales: main `dc5b25e`, demo `1c5bf19` (cherry-pick limpio).
+  Demo: `tsc`, `npm test` 517/517, `lint:ci` 530 archivos sin regresiones y
+  paridad 547 compartidos / 26 variantes / 0 diferencias. `npm run build` local
+  aprobado en main.
+- Publicación: Vercel Production `sarierp-r77o4fzs5` (commit `dc5b25e`, alias
+  `sari.forwarders.app`) y Preview `sarierp-h8t51xn28` (commit `1c5bf19`, alias
+  `demo.forwarders.app`) en Ready; `/login` 200 y `/accounting/purchases` 307 al
+  login en ambos.
+- CI: Quality `40937926397` (main) aprobado en aplicación y base de datos;
+  paridad `40937931508` (demo) aprobada (la de main se canceló por el grupo de
+  concurrencia compartido). Quality `40937931558` (demo): aplicación aprobada;
+  base de datos falló al descargar imágenes Docker (`toomanyrequests: Data limit
+  exceeded`) antes de ejecutar SQL; el commit no incluye SQL.
+- Pendiente: revisión autenticada en Compras (registro real de factura, boleta y
   retención) y en formularios de Operaciones, que no se renderizaron en el
   fixture.
 
