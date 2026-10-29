@@ -2,7 +2,7 @@
 
 ### 2026-10-29 - RELEASE-SUP-CAT-01 - Publicacion de catalogo y modal de proveedores
 
-- Estado: SQL aplicado en Produccion/Pruebas; publicacion frontend en curso.
+- Estado: publicado y verificado en Produccion/Pruebas; UAT pendiente.
 - Migracion 20261029220000 registrada con MD5 540b83d708e07bfb22de8f81add2deb0;
   ensayos con rollback y fingerprints de todos los registros existentes intactos.
   Se conservan 124 proveedores de Sari y uno de Demo, sin reclasificacion.
@@ -19,11 +19,19 @@
 - Evidencia privada en .ua/intermediate/supplier-catalog-release-20261029/,
   supplier-type-catalog-20261029/ y supplier-modal-20261029/. Sin datos ni
   credenciales en Git ni transferencia de proveedores reales a Demo.
-- Pendiente: CI, commit/publicacion y smoke; UAT con sesion real. Hash pendiente.
+- Commits funcionales: main c29c3e8adfacef0b89764aaae35287d3cfa1c4ba;
+  demo 3d9a42b655aba363b990c86b8a152eca137a6aab.
+- Quality main 40962199655 y demo 40962199464: application/database aprobados.
+  Paridad 40962199934 aprobada; run simultaneo main cancelado por concurrencia.
+- Vercel READY: main sarierp-axonw1vzo; demo sarierp-fre7pl1iw. Smoke HTTP
+  sin sesion: 23/29 rutas y manifiestos de dominios iguales a los inmutables;
+  /suppliers, /suppliers/types y /suppliers/new protegidos en ambos.
+- UAT con sesion real pendiente; acceso Admin demo vencido sin modificacion.
+  Este seguimiento solo modifica documentacion.
 
 ### 2026-10-29 - UX-SUP-02 - Alta de proveedor en modal
 
-- Estado: preparado y validado localmente; commit/publicación/UAT pendientes.
+- Estado: publicado en RELEASE-SUP-CAT-01; UAT autenticada pendiente.
   Listado y estado vacío abren NewSupplierDialog; SupplierForm comparte todos
   los datos con `/suppliers/new`. Guardado recarga sin navegar; cancelación
   protege cambios y devuelve foco al origen. Error conserva campos; envío único
