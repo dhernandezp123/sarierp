@@ -1,5 +1,45 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-29 - UX-FIN-03 - Navegación de Anulaciones y formularios de Configuración contable
+
+- Estado: validado localmente con páginas reales renderizadas en Chrome; pendiente
+  de publicar y de revisión autenticada. No modifica SQL, permisos ni datos.
+- Hallazgos reportados por el usuario tras UX-FIN-02 (revisión visual omitida
+  antes de publicar):
+  - La pestaña "Anulaciones" de `AccountingNav` llevaba a `/invoicing/voids`,
+    que no muestra la barra contable: las pestañas desaparecían.
+  - `/accounting/settings`: cada etiqueta quedaba en línea con su `select`
+    (limitado a 448 px), con filas escalonadas y recuadros pegados al texto desde
+    ~1100 px; tarjetas superiores de 768 px frente a inferiores a todo el ancho;
+    fecha de inicio a todo el ancho. Maquetación previa a UX-FIN-02, no detectada.
+  - Anulaciones a 768 px: campo de búsqueda desalineado por etiqueta de dos líneas
+    y paginación dentro del desplazamiento horizontal de la tabla.
+  - `/invoicing`: el enlace "Estado de cuenta completo" y el selector "Por
+    facturar / Documentos emitidos" eran elementos en línea contiguos y quedaban
+    pegados (ya ocurría antes de UX-FIN-02; el botón pasó a enlace sin separarlos).
+- Cambios: `src/app/(protected)/accounting/voids/page.tsx` reexporta la página
+  de Anulaciones; esta detecta `/accounting` para mostrar `AccountingNav` con la
+  pestaña activa y eyebrow Contabilidad (sin el acceso a Facturación). Desde
+  Facturación no cambia. `AccountingNav` apunta a `/accounting/voids`.
+  Configuración: etiquetas `flex flex-col`, rejilla de dos columnas con separación,
+  máster y oficinas lado a lado desde `xl`, fecha `max-w-xs`, títulos uniformes.
+  Anulaciones: filtros `items-end`, etiquetas en columna y paginación fuera del
+  área desplazable. Facturación: selector y enlace en una fila `flex-wrap`
+  con separación (selector a la izquierda, reporte a la derecha) y `aria-pressed`
+  en el selector; Demo conserva su marca de agua y el manifiesto de paridad
+  actualiza las huellas de `invoicing/page.tsx` en ambas ramas. Skill: `ui-conventions.md` agrega la regla de etiquetas, la
+  ruta contable de Anulaciones y la verificación visual obligatoria.
+- Validaciones: `npx tsc --noEmit`; `npm test` 506/506; `lint:ci` 513 archivos,
+  223 históricos, 0 regresiones; `npm run build` con `/accounting/voids`.
+  Navegador: fixture fuera de Git (`.ua/intermediate/fin-fixture`) con las
+  páginas reales, `globals.css`, sesión Admin y Supabase sintéticos por alias de
+  webpack; Chrome headless a 1280 y 768 px. Revisadas Configuración (antes y
+  después), Anulaciones en Contabilidad y Facturación, Cuentas, Asientos,
+  Compras, Activos, Caja y bancos, Cuentas por cobrar, Estado de proveedores,
+  Libros y Facturación (antes y después a 1600, 1280 y 768 px). Tipografía del fixture distinta a la app (sin fuente cargada).
+- Pendiente: revisión autenticada en Producción y móvil real; Chrome headless no
+  baja de 504 px de viewport y la captura a 390 px no es válida.
+
 ### 2026-10-29 - UX-FIN-02 - Coherencia visual de Finanzas y Contabilidad (fase 1)
 
 - Estado: publicado en Producción y Pruebas; revisión autenticada en navegador

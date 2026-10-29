@@ -123,8 +123,8 @@
     },
     "src/app/(protected)/invoicing/page.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",
-      "source_sha256": "18f41f382ac3882067c9c9918c8323a332121597e244f3ae905450dbc87e0b6d",
-      "trial_sha256": "c20a777631f841cf0472b5e2088b86387d6f492b741c4897a07f475e2df124e1"
+      "source_sha256": "3c9fbca4d2c4d998a839a29f11c4bc2a2639e2dbfeceeb97b62fe669450adc6b",
+      "trial_sha256": "03dec815ff5aa71e3e584599cfdfbdceb9a35edb49a8dd46113e3909aa431e82"
     },
     "src/app/(protected)/miami/embarques/page.tsx": {
       "reason": "Sandbox watermark in independent HTML print windows",
