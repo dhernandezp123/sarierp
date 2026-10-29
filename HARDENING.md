@@ -2,8 +2,8 @@
 
 ### 2026-10-29 - UX-FIN-03 - Navegación de Anulaciones y formularios de Configuración contable
 
-- Estado: validado localmente con páginas reales renderizadas en Chrome; pendiente
-  de publicar y de revisión autenticada. No modifica SQL, permisos ni datos.
+- Estado: publicado en Producción y Pruebas; revisión autenticada pendiente. No
+  modifica SQL, permisos ni datos.
 - Hallazgos reportados por el usuario tras UX-FIN-02 (revisión visual omitida
   antes de publicar):
   - La pestaña "Anulaciones" de `AccountingNav` llevaba a `/invoicing/voids`,
@@ -39,6 +39,17 @@
   Libros y Facturación (antes y después a 1600, 1280 y 768 px). Tipografía del fixture distinta a la app (sin fuente cargada).
 - Pendiente: revisión autenticada en Producción y móvil real; Chrome headless no
   baja de 504 px de viewport y la captura a 390 px no es válida.
+- Commits funcionales: main `4b38840`, demo `9a55358`; push de ambos sin SQL.
+- CI: Quality `40909464676` (main) aprobado; paridad `40909465437` (demo)
+  aprobada; la de main `40909464562` quedó cancelada por el grupo de
+  concurrencia. Quality `40909465431` (demo) falló solo en el job database al
+  descargar imágenes Docker (`toomanyrequests`, límite del registro); application
+  aprobó y el job relanzado terminó aprobado, sin cambios de código.
+- Publicación: Vercel Production `dpl_CmDEzinTjDmMSPm2RTdcVZQPVxwP`, `READY`,
+  commit `4b38840`, alias `sari.forwarders.app`; Preview
+  `dpl_FmgcCy3vSkN7dew1mtypcsrsLG4E`, `READY`, commit `9a55358`, alias
+  `demo.forwarders.app`. Smoke sin sesión en ambos: login 200 y
+  `/accounting/voids` 307 a login.
 
 ### 2026-10-29 - UX-FIN-02 - Coherencia visual de Finanzas y Contabilidad (fase 1)
 
