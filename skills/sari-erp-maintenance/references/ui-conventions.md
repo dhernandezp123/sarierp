@@ -16,6 +16,11 @@ de estas piezas ya cubre el caso.
 | Moneda y fecha | `formatMoney`, `formatDate`, `formatDateTime` de `src/lib/format.ts` | Formateadores locales y `toLocaleString('en-US')` sueltos |
 | Lista sin resultados | `EmptyState` o `FinanceEmptyState` | Texto suelto sin acción |
 
+Una etiqueta que envuelve texto y campo usa `flex flex-col gap-1.5`: `space-y`
+no separa el texto suelto, y un `select` (limitado a 448 px en `globals.css`)
+queda en la misma línea que su etiqueta. En filas de filtros, `items-end`
+mantiene alineados los campos aunque una etiqueta ocupe dos líneas.
+
 `formatDate(value, '—')` conserva la raya larga cuando la pantalla la usaba como
 vacío. Un precio unitario puede tener más de dos decimales; no lo pases por
 `formatMoney` si eso trunca información.
@@ -34,6 +39,18 @@ vacío. Un precio unitario puede tener más de dos decimales; no lo pases por
   enfocable para teclado.
 - `AccountingNav` solo en pantallas de Contabilidad; una pantalla de Facturación
   que reutiliza un workspace contable debe ocultarla y tener su propio título.
+  Cada pestaña debe apuntar a una ruta `/accounting/*` que muestre la misma
+  barra (Anulaciones usa `/accounting/voids`, que reexporta la página de
+  Facturación); si no, la barra desaparece al navegar.
+
+## Verificación visual
+
+Un cambio de UI no se publica solo con TypeScript, pruebas y build. Renderiza
+las páginas reales con datos sintéticos (fixture fuera de Git en
+`.ua/intermediate/`, sesión y cliente Supabase sustituidos por alias de webpack)
+y revísalas en Chrome a 1280 y 768 px como mínimo, más el ancho en que se
+reporte el fallo. Chrome headless no baja de unos 500 px de viewport: para
+móvil usa emulación de dispositivo, no `--window-size`.
 
 ## Invariantes de Finanzas visibles en la UI
 

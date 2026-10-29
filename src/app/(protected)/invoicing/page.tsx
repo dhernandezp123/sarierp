@@ -469,8 +469,6 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         </DialogContent>
       </Dialog>
 
-      <Link href="/accounting/receivables" className={`${financeLinkClass} inline-block text-sm underline`}>Estado de cuenta completo · filtros, antigüedad, PDF / Excel / CSV</Link>
-
       <Dialog open={showEC} onOpenChange={(open) => { if (!open) closeEC() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -565,21 +563,27 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         </DialogContent>
       </Dialog>
 
-      <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
-        <button
-          type="button"
-          onClick={() => changeView('work')}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${view === 'work' ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-        >
-          Por facturar
-        </button>
-        <button
-          type="button"
-          onClick={() => changeView('documents')}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${view === 'documents' ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-        >
-          Documentos emitidos
-        </button>
+      {/* Vista de trabajo a la izquierda; el reporte completo, separado a la derecha. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-[#0b1220]">
+          <button
+            type="button"
+            aria-pressed={view === 'work'}
+            onClick={() => changeView('work')}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${view === 'work' ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+          >
+            Por facturar
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === 'documents'}
+            onClick={() => changeView('documents')}
+            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${view === 'documents' ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+          >
+            Documentos emitidos
+          </button>
+        </div>
+        <Link href="/accounting/receivables" className={`${financeLinkClass} text-sm underline`}>Estado de cuenta completo · filtros, antigüedad, PDF / Excel / CSV</Link>
       </div>
 
       {view === 'work' ? (
