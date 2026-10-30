@@ -6,6 +6,7 @@ import { formatDate as fmtDate, formatMoney as fmtMoney } from '@/src/lib/format
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSupplierTypes } from '@/src/hooks/useSupplierTypes'
+import { SupplierExpenseAccountSelect } from '@/src/components/suppliers/SupplierExpenseAccountSelect'
 import { SupplierTypeSelect } from '@/src/components/suppliers/SupplierTypeSelect'
 import { FormField } from '@/src/components/ui/form-field'
 
@@ -25,12 +26,14 @@ type Proveedor = {
   nombre: string
   tipo: string
   rtn: string | null
+  direccion: string | null
   email: string | null
   telefono: string | null
   contacto: string | null
   pais: string | null
   moneda: string
   terminos_pago: number
+  default_expense_account_id: string | null
   agente_id: string | null
   is_active: boolean
   notas: string | null
@@ -151,7 +154,9 @@ export default function SupplierDetailPage() {
     const { error } = await supabase.from('proveedores').update({
       nombre: editForm.nombre.trim(),
       tipo: editForm.tipo,
+      default_expense_account_id: editForm.default_expense_account_id || null,
       rtn: editForm.rtn || null,
+      direccion: editForm.direccion?.trim() || null,
       email: editForm.email || null,
       telefono: editForm.telefono || null,
       contacto: editForm.contacto || null,
@@ -363,6 +368,8 @@ export default function SupplierDetailPage() {
                 <input value={editForm.nombre || ''} onChange={setEF('nombre')} className={fieldClass} />
               </div>
               <FormField as="div" label="Tipo de proveedor" required><SupplierTypeSelect types={catalog.types} value={editForm.tipo||''} onChange={value=>setEditForm(p=>({...p,tipo:value}))} loading={catalog.loading} error={catalog.error}/></FormField>
+              <FormField as="div" label="Cuenta de gasto predeterminada" hint="Se propone en nuevas compras; cada documento o línea puede usar otra cuenta."><SupplierExpenseAccountSelect accounts={accounting?.accounts||[]} value={editForm.default_expense_account_id||''} onChange={value=>setEditForm(p=>({...p,default_expense_account_id:value}))} disabled={saving}/></FormField>
+              <FormField label="Dirección" className="md:col-span-2"><input maxLength={1000} value={editForm.direccion||''} onChange={setEF('direccion')} className={fieldClass}/></FormField>
               {editableTextFields.map((f) => (
                 <div key={f}>
                   <label className="mb-1 block text-xs font-medium text-slate-500 capitalize">{f}</label>
@@ -395,7 +402,9 @@ export default function SupplierDetailPage() {
             <div className="grid gap-x-8 gap-y-2 text-sm md:grid-cols-2">
               {[
                 ['Tipo', catalog.label(proveedor.tipo)],
+                ['Cuenta de gasto', accounting?.accounts.find(a=>a.id===proveedor.default_expense_account_id)?[accounting.accounts.find(a=>a.id===proveedor.default_expense_account_id)?.code,accounting.accounts.find(a=>a.id===proveedor.default_expense_account_id)?.name].join(' · '):proveedor.default_expense_account_id?'Cuenta no disponible':'Sin configurar'],
                 ['RTN / Tax ID', proveedor.rtn || '-'],
+                ['Dirección', proveedor.direccion || '-'],
                 ['Pais', proveedor.pais || '-'],
                 ['Contacto', proveedor.contacto || '-'],
                 ['Email', proveedor.email || '-'],
@@ -430,7 +439,7 @@ export default function SupplierDetailPage() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">Cuentas por pagar</h2>
           <button type="button" onClick={() => {
-            setCpForm((prev) => ({ ...prev, moneda: proveedor.moneda }))
+            setCpForm((prev) => ({ ...prev, moneda: proveedor.moneda, expense_account_id: proveedor.default_expense_account_id || '' }))
             setShowCPForm(!showCPForm)
           }}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900">

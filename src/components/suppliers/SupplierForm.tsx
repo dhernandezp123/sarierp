@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useAccounting } from '@/src/hooks/useAccounting'
+import { SupplierExpenseAccountSelect } from '@/src/components/suppliers/SupplierExpenseAccountSelect'
 import { useSupplierTypes } from '@/src/hooks/useSupplierTypes'
 import { SupplierTypeSelect } from '@/src/components/suppliers/SupplierTypeSelect'
 import { FormField } from '@/src/components/ui/form-field'
@@ -20,6 +22,7 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
   const mounted = useRef(true)
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const catalog = useSupplierTypes()
+  const accounting = useAccounting()
   const [agentes, setAgentes] = useState<Agente[]>([])
   const [saving, setSaving] = useState(false)
 
@@ -27,6 +30,7 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
     nombre: '',
     tipo: '',
     rtn: '',
+    direccion: '',
     email: '',
     telefono: '',
     contacto: '',
@@ -34,6 +38,7 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
     moneda: 'USD',
     terminos_pago: '30',
     agente_id: '',
+    default_expense_account_id: '',
     notas: '',
   })
 
@@ -74,6 +79,7 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
         nombre: form.nombre.trim(),
         tipo: form.tipo,
         rtn: form.rtn.trim() || null,
+        direccion: form.direccion.trim() || null,
         email: form.email.trim() || null,
         telefono: form.telefono.trim() || null,
         contacto: form.contacto.trim() || null,
@@ -81,6 +87,7 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
         moneda: form.moneda,
         terminos_pago: terminosPago,
         agente_id: form.agente_id || null,
+        default_expense_account_id: form.default_expense_account_id || null,
         notas: form.notas.trim() || null,
       })
       .select('id')
@@ -106,7 +113,7 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
 
   return (
     <form onSubmit={event=>{event.preventDefault();void handleSave()}} className="space-y-5">
-      <UnsavedChangesGuard dirty={form.nombre!==''||form.tipo!==''||form.rtn!==''||form.email!==''||form.telefono!==''||form.contacto!==''||form.pais!==''||form.moneda!=='USD'||form.terminos_pago!=='30'||form.agente_id!==''||form.notas!==''} />
+      <UnsavedChangesGuard dirty={form.nombre!==''||form.tipo!==''||form.rtn!==''||form.direccion!==''||form.email!==''||form.telefono!==''||form.contacto!==''||form.pais!==''||form.moneda!=='USD'||form.terminos_pago!=='30'||form.agente_id!==''||form.default_expense_account_id!==''||form.notas!==''} />
       <fieldset disabled={saving} className="m-0 min-w-0 space-y-5 border-0 p-0">
       <section className={cardClass}>
         <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Informacion general</h2>
@@ -170,6 +177,8 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
             <label className="mb-1 block text-xs font-medium text-slate-500">Terminos de pago (dias)</label>
             <input type="number" min="0" value={form.terminos_pago} onChange={set('terminos_pago')} className={fieldClass} />
           </div>
+          <FormField label="Dirección" className="md:col-span-2"><input maxLength={1000} value={form.direccion} onChange={set('direccion')} className={fieldClass}/></FormField>
+          <FormField as="div" label="Cuenta de gasto predeterminada" hint="Se propone en compras nuevas y puede cambiarse por documento o línea." className="md:col-span-2"><SupplierExpenseAccountSelect accounts={accounting.data?.accounts||[]} value={form.default_expense_account_id} onChange={id=>setForm(p=>({...p,default_expense_account_id:id}))} disabled={saving||accounting.loading}/>{accounting.error&&<span role="alert" className="text-xs text-red-600">{accounting.error}</span>}</FormField>
           <div className="md:col-span-2">
             <label className="mb-1 block text-xs font-medium text-slate-500">Notas internas</label>
             <textarea rows={3} value={form.notas} onChange={set('notas')} className={`${fieldClass} min-h-20`} placeholder="Condiciones especiales, instrucciones de pago..." />

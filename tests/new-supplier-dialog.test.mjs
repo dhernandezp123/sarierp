@@ -8,6 +8,8 @@ function setup({single=async()=>({data:{id:'created'},error:null}),onCreated=()=
  const writes=[],errors=[]
  const api={from(table){if(table==='agents')return {select:()=>({order:()=>Promise.resolve({data:[]})})};return {insert:payload=>{writes.push(payload);return {select:()=>({single})}}}}}
  const app=mountPage('src/components/suppliers/SupplierForm.tsx',{
+  '@/src/hooks/useAccounting':{useAccounting:()=>({data:{accounts:[]},loading:false,error:''})},
+  '@/src/components/suppliers/SupplierExpenseAccountSelect':{SupplierExpenseAccountSelect:'SupplierExpenseAccountSelect'},
   '@/src/hooks/useSupplierTypes':{useSupplierTypes:()=>catalog},
   '@/src/components/suppliers/SupplierTypeSelect':{SupplierTypeSelect:'SupplierTypeSelect'},
   '@/src/components/ui/UnsavedChangesGuard':guard,

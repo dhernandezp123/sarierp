@@ -1,5 +1,18 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-30 - SUP-DEFAULT-ACCOUNT-01 - Proveedores categorizados y cuenta de gasto predeterminada
+
+- Estado: migracion aplicada y registrada en Produccion/Demo; datos actualizados y verificados solo en Sari Produccion; UI main/demo validada; publicacion autorizada en curso, UAT autenticada pendiente.
+- Migracion: supabase/migrations/20261030193000_supplier_default_expense_account.sql. Campos direccion y default_expense_account_id, FK compuesta tenant/cuenta, validacion de auxiliar activa de Costo/Gasto y auditoria del cambio. No cambia permisos RLS ni habilita cuentas de otras empresas.
+- Compras nuevas: prioridad cuenta explicita de linea > cuenta del servicio > cuenta del documento (incluye desactivar default con null explicito) > cuenta del proveedor. Las AP manuales nuevas heredan default salvo override; las AP de documentos multilinea y NC/ND conservan su tratamiento. No reescribe documentos, partidas ni saldos previos.
+- UI: SupplierExpenseAccountSelect, SupplierForm, suppliers/[id], accounting/purchases y helper supplier-accounting. Busqueda por codigo/nombre; selector compacto. Cambiar proveedor/default del documento actualiza solo lineas que seguian el default, conservando overrides manuales/servicios. Direccion estructurada en perfil.
+- Datos privados: Resumen proveedores categorizado.xlsx, 125 filas para 124 IDs existentes. Gomez Vega consolidado; 11 tipos nuevos, 124 cuentas asignadas y 50 direcciones estructuradas. Nombre, RTN completo, moneda y condiciones anteriores preservados; blancos no borran datos. Combinacion Sari Express/Transporte conservada por confirmacion expresa. Retencion fuente retenida sin inferir politica automatica. No hay nuevos proveedores ni datos reales transferidos a Demo.
+- Evidencia/SQL operativo privado: .ua/intermediate/supplier-categorized-20261030/ (ignorado; no versionar PII). Migracion y carga dry-run rollback OK; aplicacion atomica y lectura independiente posterior OK. Fingerprints de tablas ajenas y cuentas intactos.
+- Validaciones: pruebas SQL locales production/trial supplier_default_expense_account OK; regresiones service_accounting_assignments y supplier_type_catalog OK. 532 pruebas Node OK, TypeScript OK, ESLint de archivos afectados OK, build Produccion OK. Fixtures y runners SQL actualizados.
+- Infra: Docker recuperado con Continue del aviso de actualizacion previa fallida; sin borrar volumenes ni datos. Solo contenedor de replay iniciado para pruebas.
+- Revision visual sintetica de proveedor/compras OK en 1623/1280/768/390 px; herencia y override por linea comprobados en navegador. Publicacion autorizada en curso; UAT autenticada pendiente.
+
+
 ### 2026-10-30 - ACC-SERVICE-IMPORT-01 - Concepto unico y checkbox Exento de ISV
 
 - Estado: carga parcial aplicada/verificada en Produccion; UI validada main/demo, publicacion autorizada en curso; UAT autenticada pendiente. Datos reales no transferidos a Demo.
