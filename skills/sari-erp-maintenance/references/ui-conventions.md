@@ -94,8 +94,11 @@ que llenen la pagina. Dimensiona por el dato esperado: codigos y correlativos co
 para nombres y cuentas padre con codigo y descripcion. Son referencias visuales,
 no nuevos limites de caracteres ni cambios de validacion de negocio.
 
-Acota tambien el contenedor del editor cuando la captura sea pequena (por ejemplo
-max-w-5xl en Cuentas), agrupa checkboxes y coloca acciones juntas al pie. Usa
+En Cuentas, aprovecha el ancho del contenedor para colocar Codigo, Nombre,
+Naturaleza, Nivel y Cuenta padre en una sola fila en escritorio, conservando
+anchos cortos para los datos cortos y flexibles para nombre/padre. Evita limitar
+el editor a un panel estrecho que deje vacio el resto de la pagina. Agrupa
+checkboxes y coloca acciones juntas al pie. Usa
 columnas de ancho acotado con minmax(0,1fr) para texto largo, o flex-wrap sin
 flex-grow en selectores cortos. En movil, una columna con ancho disponible,
 min-w-0 y sin overflow horizontal. Conserva etiqueta arriba y reutiliza FormField.
