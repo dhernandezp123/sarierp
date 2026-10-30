@@ -1,5 +1,27 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-30 - ACC-CATALOG-CLEANUP-01 - 704 cuentas y estado visual
+
+- Estado: depuracion aplicada y verificada en Produccion; UX validada y sincronizada con Pruebas, publicacion en curso; UAT visual pendiente.
+- Autorizacion explicita: eliminar las cuentas anteriores ausentes del Excel, dejando exclusivamente las 704 actualizadas.
+- SQL operativo privado: `.ua/intermediate/catalog-update-20261030/delete-obsolete-dry-run.sql` y `delete-obsolete-apply.sql`; rollback y aplicacion atomica OK. 104 filas eliminadas; 704 retenidas byte a byte, con sus IDs y jerarquias. FK vigentes impiden eliminar cuentas vinculadas; documentos de compra JSON revisados expresamente. Auditoria de eliminacion conservada en activity_logs.
+- Lectura independiente posterior: exactamente 704 cuentas, 700 activas y 4 reservas inactivas; coincide cada campo y padre con el catalogo aprobado. Sustituye la politica anterior de conservar cuentas ausentes inactivas de ACC-CATALOG-UPDATE-01.
+- UI: `src/app/(protected)/accounting/accounts/page.tsx`; Badge existente verde para Activa, rosado para Inactiva (incluye modo oscuro); CompactSelect por Todas/Activas/Inactivas, combina busqueda y reinicia paginacion. Sin librerias nuevas ni cambios de esquema/RLS.
+- Validaciones: TypeScript OK, ESLint del archivo OK, 3 pruebas accounting.test.mjs OK. Build de produccion OK. Publicacion y UAT visual pendientes; sin commit solicitado.
+
+
+### 2026-10-30 - ACC-CATALOG-UPDATE-01 - Catalogo Excel actualizado de Sari
+
+- Estado: aplicado y verificado en Produccion; sin cambios de aplicacion ni despliegue frontend.
+- Datos privados: `CatalogoCuentas (1).xlsx`; preparacion y evidencia en `.ua/intermediate/catalog-update-20261030/` (ignorado, no publicar).
+- 704 cuentas del catalogo: 700 activas, 588 auxiliares con movimientos; 4 reservas inactivas/no imputables con etiqueta tecnica `[RESERVADA SIN NOMBRE]`, conservando el nombre fuente vacio en la auditoria.
+- Correcciones autorizadas: 412 Ingresos no operacionales, 41202 Intereses devengados, 41203 Ingresos por comision, 52 Costos; 11301 SubCuenta y 4110107 Auxiliar.
+- 94 cuentas incorporadas; 104 anteriores ausentes desactivadas sin eliminar: 808 registros conservados. Identificadores de codigos existentes preservados.
+- SQL operativo privado: `dry-run.sql` (rollback) y `apply.sql` (transaccion atomica). No cambia esquema, migraciones, RLS, saldos iniciales ni configuracion de contabilizacion automatica. Auditoria en `activity_logs` con catalogo anterior completo y datos aprobados.
+- Validaciones: entorno Production, snapshot exacto bajo bloqueo, referencias contables vacias, jerarquia sin ciclos, igualdad de todos los campos importados, IDs preservados, dry-run remoto OK, aplicacion OK y lectura independiente posterior OK; `npx.cmd tsc --noEmit` OK.
+- Pendiente: UAT autenticada de Contabilidad y asignar nombres a reservas; Demo no recibe datos reales. Sin commit solicitado en esta operacion.
+
+
 ### 2026-10-29 - UX-ACC-01 / ACC-DELETE-01 - Edición confirmada y eliminación segura de cuentas
 
 - Estado: implementado, migrado en Produccion/Pruebas y publicado; UAT
