@@ -18,7 +18,7 @@ const files = [
   'fiscal_offices.sql', 'fiscal_invoice_workflow.sql', 'customer_collections.sql',
   'accounting_engine.sql',
   'accounting_catalog_structure.sql',
-  'service_accounting_assignments.sql', 'supplier_type_catalog.sql',
+  'service_accounting_assignments.sql', 'supplier_type_catalog.sql', 'supplier_default_expense_account.sql',
   'accounting_financial_sources.sql',
   'fixed_assets.sql',
   'accounting_currency.sql',
