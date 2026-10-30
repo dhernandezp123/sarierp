@@ -1,5 +1,16 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-30 - ACC-SERVICE-IMPORT-01 - Concepto unico y checkbox Exento de ISV
+
+- Estado: carga parcial aplicada/verificada en Produccion; UI validada main/demo, publicacion autorizada en curso; UAT autenticada pendiente. Datos reales no transferidos a Demo.
+- Archivo actualizado trae 100 filas, 99 conceptos unicos al consolidar Desconsolidacion con su variante I; no se crean codigos de servicio duplicados por I/E. Fuente/datos/SQL y evidencia privados en .ua/intermediate/service-catalog-review-20261030/ (ignorado).
+- 4 altas exentas (Bunker, Emergency Bunker, GRI, Insurance) y actualizacion del cargo Desconsolidacion existente a gravable, segun marca explicita I del archivo. Un perfil por concepto, cuenta de ingreso del archivo enlazada a variantes I/E sin cambiar la naturaleza de esa cuenta; costos pendientes. No altera documentos/pricing items historicos.
+- Por confirmacion expresa: 90 conceptos sin marca fiscal quedan pendientes sin importacion/activacion, y 4 casos contables fuera de ingresos quedan pendientes. Reporte privado pending-services.csv.
+- UI: src/app/(protected)/catalogs/page.tsx, checkbox Exento de ISV controla el inverso del campo taxable existente; lista identifica gravado/exento. No migra esquema ni cambia politica RLS. Perfil master contable figura como responsable de asignaciones; motivo RPC y auditoria separada indican importacion automatizada por soporte autorizada por propietario, no accion manual de Zonia.
+- Validacion: rollback remoto OK, aplicacion atomica OK, fingerprints de tablas ajenas preservados, lectura independiente de 5 perfiles/10 variantes y cuentas contables intactas OK. TypeScript y 5 pruebas service-accounting OK; lint:ci 531 archivos, 223 diagnosticos historicos, 0 regresiones (catalogos mantiene set-state-in-effect preexistente); build OK.
+- Pendiente: clasificacion fiscal por Zonia, 4 excepciones y auxiliares de costo/gasto; publicacion del checkbox y UAT autenticada. Revision visual sintetica en 1623/1280/768/390 px OK; guardado true/false verificado sobre un unico concepto.
+
+
 ### 2026-10-30 - UX-ACC-EDITOR-02 - Editor en una fila de escritorio
 
 - Estado: TypeScript, ESLint y build OK; fila unica verificada en 1623/1280 px y sin overflow en 768/390 px con datos sinteticos. Publicacion en curso; UAT autenticada pendiente. HMR local reporta Router action dispatched before initialization; sin errores del formulario.

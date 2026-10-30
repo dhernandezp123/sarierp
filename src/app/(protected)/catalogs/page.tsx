@@ -1054,6 +1054,15 @@ export default function CatalogsPage() {
                   <option value="other">Otro</option>
                 </select>
               )}
+              <div className="rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
+                <label className="flex cursor-pointer items-center gap-3 text-sm text-slate-800 dark:text-slate-100">
+                  <input type="checkbox" checked={!clientRateForm.taxable} disabled={savingClientRate}
+                    onChange={event => setClientRateForm(current => ({ ...current, taxable: !event.target.checked }))}
+                    className="h-4 w-4 shrink-0 accent-[#B3282D]" />
+                  <span className="font-semibold">Exento de ISV</span>
+                </label>
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Marcado: sin ISV. Desmarcado: servicio gravable. No crees otro servicio para cambiar su condición fiscal.</p>
+              </div>
               <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
                 <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">Visible</span>
                 <Switch
@@ -1105,7 +1114,7 @@ export default function CatalogsPage() {
                       <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
                         {item.is_destination_rate ? 'Destino SPS/TGU' : 'Global'}
                         {item.is_optional_charge ? ' · Opcional' : ''}
-                        {item.taxable ? ' · ISV' : ''}
+                        {item.taxable ? ' · Gravado con ISV' : ' · Exento de ISV'}
                       </td>
                       <td className="px-4 py-3">
                         <button type="button" onClick={() => void toggleClientRateCatalogItem(item)} className="flex items-center gap-2">
