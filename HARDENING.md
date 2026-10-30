@@ -1,5 +1,47 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-30 - ACC-SERVICE-IMPORT-01 - Concepto unico y checkbox Exento de ISV
+
+- Estado: carga parcial aplicada/verificada en Produccion; UI validada main/demo, publicacion autorizada en curso; UAT autenticada pendiente. Datos reales no transferidos a Demo.
+- Archivo actualizado trae 100 filas, 99 conceptos unicos al consolidar Desconsolidacion con su variante I; no se crean codigos de servicio duplicados por I/E. Fuente/datos/SQL y evidencia privados en .ua/intermediate/service-catalog-review-20261030/ (ignorado).
+- 4 altas exentas (Bunker, Emergency Bunker, GRI, Insurance) y actualizacion del cargo Desconsolidacion existente a gravable, segun marca explicita I del archivo. Un perfil por concepto, cuenta de ingreso del archivo enlazada a variantes I/E sin cambiar la naturaleza de esa cuenta; costos pendientes. No altera documentos/pricing items historicos.
+- Por confirmacion expresa: 90 conceptos sin marca fiscal quedan pendientes sin importacion/activacion, y 4 casos contables fuera de ingresos quedan pendientes. Reporte privado pending-services.csv.
+- UI: src/app/(protected)/catalogs/page.tsx, checkbox Exento de ISV controla el inverso del campo taxable existente; lista identifica gravado/exento. No migra esquema ni cambia politica RLS. Perfil master contable figura como responsable de asignaciones; motivo RPC y auditoria separada indican importacion automatizada por soporte autorizada por propietario, no accion manual de Zonia.
+- Validacion: rollback remoto OK, aplicacion atomica OK, fingerprints de tablas ajenas preservados, lectura independiente de 5 perfiles/10 variantes y cuentas contables intactas OK. TypeScript y 5 pruebas service-accounting OK; lint:ci 531 archivos, 223 diagnosticos historicos, 0 regresiones (catalogos mantiene set-state-in-effect preexistente); build OK.
+- Pendiente: clasificacion fiscal por Zonia, 4 excepciones y auxiliares de costo/gasto; publicacion del checkbox y UAT autenticada. Revision visual sintetica en 1623/1280/768/390 px OK; guardado true/false verificado sobre un unico concepto.
+
+
+### 2026-10-30 - DATA-CLIENT-IMPORT-03 - Cierre de clientes y control de RTN
+
+- Estado: aplicado y verificado en Produccion. CBM completado sobre perfil existente, sin duplicarlo; Distribuidora de Todo creada por autorizacion expresa sin nit/rtn, oficina TGU segun ciudad y Contado/0 dias/HNL. No se reutiliza el RTN de Swissport.
+- Carga del Excel sin filas pendientes; queda completar RTN propio de Distribuidora antes de emitir. Evidencia privada en .ua/intermediate/client-import-20261030/last-completion.json y SQL last-dry-run/last-apply (ignorado; no versionar PII).
+- Bloqueo ya existente en create_invoice_office_base: exige RTN para documento fiscal antes del correlativo; cadena vigente issue_invoice_draft -> create_manual_invoice_with_items -> create_invoice_with_items_trusted -> create_invoice_fiscal_base -> create_invoice_office_base. RPC de emision directa revocadas a authenticated; se conserva esa proteccion. Sin migracion ni cambio de aplicacion requerido.
+- Validaciones: dry-run carga OK; prueba real con rol authenticated/Admin de save_invoice_draft e issue_invoice_draft rechaza por RTN, todo con rollback; aplicacion atomica OK y lectura independiente compara cambios y preservacion de 395 perfiles anteriores OK. Tablas ajenas preservadas. Total 396 registros Sari, incluyendo perfiles previamente eliminados sin reactivar.
+- Solo HARDENING modificado. UAT de interfaz pendiente; no requiere despliegue frontend.
+
+
+### 2026-10-30 - DATA-CLIENT-IMPORT-02 - Correspondencias confirmadas por propietario
+
+- Estado: aplicado y verificado en Produccion. Datos reales solo en Sari; sin cambios de esquema/RLS/frontend.
+- SQL y evidencia privados en .ua/intermediate/client-import-20261030/: resolve-dry-run/resolve-apply, final-dry-run/final-apply y final-completion.json. No versionar SQL con nombres, direcciones, RTN o contactos.
+- Segunda fase: 2 altas y 12 perfiles existentes completados/renombrados por instrucciones explicitas; tercera fase: Soluciones Integrales creada como empresa distinta de AGROIN, Turcios asociado al perfil existente confirmado. Aliases separados por pleca donde se solicito.
+- M & D Import: existe un perfil activo y otro previamente eliminado; se completa solo el activo, sin restaurar, borrar ni fusionar historiales. Swissport usa su fila propia y denominacion confirmada; no toma la direccion de Distribuidora de Todo cuyo RTN estaba mal asignado.
+- Total acumulado de la importacion: 318 nuevos, 35 perfiles existentes enriquecidos; 395 clientes Sari incluyendo registros anteriores. Identificadores, saldos, oficinas y condiciones de credito existentes preservados; solo renombres autorizados. Nuevos con Contado/0 dias/limite 0/HNL y oficina segun regla confirmada.
+- Pendientes finales: 2 filas, Distribuidora de Todo (confirmar RTN propio) y CBM Intl Freight (confirmar correspondencia). Reporte privado pending.csv actualizado; version inicial conservada.
+- Validaciones: ambos lotes dry-run con rollback OK, aplicacion atomica OK, fingerprints de tablas ajenas intactos, comparacion independiente de todos los clientes y campos de las tres fases OK; TypeScript OK. UAT autenticada pendiente. Sin commit solicitado; no requiere despliegue frontend.
+
+
+### 2026-10-30 - DATA-CLIENT-IMPORT-01 - Clientes Sari desde Excel sin duplicados nuevos
+
+- Estado: aplicado y verificado en Produccion; no se transfieren datos reales a Demo. Sin cambios de aplicacion, esquema o RLS.
+- Fuente privada: Resumen clientes.xlsx, 361 filas; evidencia y SQL operativo en .ua/intermediate/client-import-20261030/ (ignorado; no versionar nombres, RTN, contactos ni SQL con datos).
+- 315 clientes nuevos y 22 existentes enriquecidos solo en campos vacios; total Sari 392. Nuevos: Contado, 0 dias, limite 0, HNL; TGU para Tegucigalpa/Comayaguela y SPS para el resto, autorizado por el propietario. Condiciones comerciales, oficina, nombre, IDs y responsables existentes preservados.
+- Cuatro pares claramente repetidos consolidados por nombre/RTN sin crear doble cliente; 20 filas agrupadas en 17 casos pendientes por identidad dudosa, nombre abreviado o duplicado existente. Reporte privado pending.csv. No se fusionan historiales ni se reactiva/elimina cliente alguno.
+- Identificadores fiscales fuente conservados sin inventar digitos; formatos atipicos senalados en observaciones. Sin asignacion especulativa de vendedor ni segmento.
+- Validaciones: preflight vivo bajo bloqueo/snapshot, transaccion dry-run con rollback OK, aplicacion atomica OK, codigos de cliente generados por trigger existente, fingerprints de tablas ajenas preservados, lectura independiente posterior compara campos de todos los importados y los 77 preexistentes; TypeScript OK.
+- Pendiente: confirmar 17 casos, revisar identificaciones fiscales atipicas y UAT autenticada. Sin commit solicitado; no requiere despliegue frontend.
+
+
 ### 2026-10-30 - UX-ACC-EDITOR-02 - Editor en una fila de escritorio
 
 - Estado: TypeScript, ESLint y build OK; fila unica verificada en 1623/1280 px y sin overflow en 768/390 px con datos sinteticos. Publicacion en curso; UAT autenticada pendiente. HMR local reporta Router action dispatched before initialization; sin errores del formulario.
