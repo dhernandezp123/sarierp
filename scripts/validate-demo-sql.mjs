@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
 
 if (!process.env.CI) throw new Error('This runner only targets the disposable CI stack.')
-const files = ['invoice_drafts_and_master_review.sql', 'demo_production_parity.sql', 'finance_reporting_and_banks.sql', 'cai_office_numbering.sql', 'cai_office_backfill.sql', 'cai_master_lifecycle.sql', 'tgu_confirmed_fiscal_prefix.sql', 'tgu_restore_registered_cai_prefix.sql', 'accounting_catalog_structure.sql', 'service_accounting_assignments.sql', 'supplier_type_catalog.sql', 'supplier_default_expense_account.sql']
+const files = ['invoice_drafts_and_master_review.sql', 'demo_production_parity.sql', 'finance_reporting_and_banks.sql', 'cai_office_numbering.sql', 'cai_office_backfill.sql', 'cai_master_lifecycle.sql', 'tgu_confirmed_fiscal_prefix.sql', 'tgu_restore_registered_cai_prefix.sql', 'accounting_catalog_structure.sql', 'service_accounting_assignments.sql', 'supplier_type_catalog.sql', 'supplier_default_expense_account.sql', 'purchase_optional_supplier_identity.sql']
 for (const file of files) {
   let sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8')
   sql = sql.replaceAll('-- APPLY_CONFIRMED_OFFICE_BINDING_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028150000_cai_office_binding.sql', import.meta.url), 'utf8'))
