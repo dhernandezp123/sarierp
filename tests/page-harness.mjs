@@ -1,7 +1,7 @@
 import loadTs from './load-ts.mjs'
 import { createContext } from 'react'
 
-export function mountPage(entry, mocks = {}, { exported = 'default', props = {}, unwrap } = {}) {
+export function mountPage(entry, mocks = {}, { exported = 'default', props = {}, unwrap, expand } = {}) {
   const hooks = [], effects = []
   let cursor = 0, tree
   const same = (a, b) => a?.length === b?.length && a.every((value, index) => Object.is(value, b[index]))
@@ -49,7 +49,14 @@ export function mountPage(entry, mocks = {}, { exported = 'default', props = {},
     ...mocks,
   })[exported]
   const component = unwrap ? unwrap(entryComponent(props)) : entryComponent
-  const render = () => { cursor = 0; tree = component(props); effects.splice(0).forEach(fn => fn()); return tree }
+  // `expand(type)` renderiza en línea componentes hijos sin estado propio (secciones de formulario).
+  const inline = node => {
+    if (!node || typeof node !== 'object') return node
+    if (Array.isArray(node)) return node.map(inline)
+    if (expand && typeof node.type === 'function' && expand(node.type)) return inline(node.type(node.props))
+    return node.props?.children === undefined ? node : { ...node, props: { ...node.props, children: inline(node.props.children) } }
+  }
+  const render = () => { cursor = 0; tree = inline(component(props)); effects.splice(0).forEach(fn => fn()); return tree }
   const nodes = node => !node || typeof node !== 'object' ? [] : Array.isArray(node) ? node.flatMap(nodes) : [node, ...nodes(node.props?.children)]
   const text = node => node == null ? '' : Array.isArray(node) ? node.map(text).join('') : typeof node === 'object' ? text(node.props?.children) : String(node)
   const tick = () => new Promise(resolve => setTimeout(resolve, 30))

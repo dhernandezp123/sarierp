@@ -49,7 +49,6 @@ type MiamiQuotationSectionProps = {
   ) => void
   fieldClass: string
   cardClass: string
-  todayString: string
   cargoLines: MiamiCargoDimensionLine[]
   setCargoLines: React.Dispatch<React.SetStateAction<MiamiCargoDimensionLine[]>>
   calculateLineCbm: (line: MiamiCargoDimensionLine) => number
@@ -66,7 +65,6 @@ export function MiamiQuotationSection({
   handleChange,
   fieldClass,
   cardClass,
-  todayString,
   cargoLines,
   setCargoLines,
   calculateLineCbm,
@@ -86,7 +84,6 @@ export function MiamiQuotationSection({
     'text-xs font-medium text-slate-500 dark:text-slate-400'
   const compactFieldClass = `${fieldClass} md:max-w-[180px]`
   const moneyFieldClass = `${fieldClass} md:max-w-[220px]`
-  const dateFieldClass = `${fieldClass} md:max-w-[220px]`
   const routeFieldClass = `${fieldClass} md:max-w-[260px]`
   const mediumFieldClass = `${fieldClass} md:max-w-xl`
 
@@ -309,9 +306,9 @@ export function MiamiQuotationSection({
         </div>
       )}
 
-      {!miami.canUseMiamiCalculator && (
+      {formData.cliente_id && !miami.canUseMiamiCalculator && (
         <p role="status" className="mt-4 rounded-xl border border-amber-200 p-4 text-sm text-amber-800 dark:text-amber-200">
-          Puedes completar la carga. Para calcular y guardar la tarifa Miami, selecciona un cliente con tarifas activas disponibles.
+          Este cliente no tiene tarifas Miami activas. Puedes completar la carga, pero para calcular y guardar la tarifa necesita tarifas activas.
         </p>
       )}
       {miami.isMiamiFlow && (
@@ -377,24 +374,6 @@ export function MiamiQuotationSection({
               />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className={fieldLabelClass}>
-                  Válida hasta
-                </label>
-
-                <input
-                  type="date"
-                  name="valid_until"
-                  value={formData.valid_until}
-                  min={todayString}
-                  onChange={handleChange}
-                  className={dateFieldClass}
-                />
-
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  La cotización será válida hasta esta fecha.
-                </p>
-              </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -946,9 +925,9 @@ export function MiamiQuotationSection({
 
           {miami.canUseMiamiCalculator && <>
           <div className="mb-4">
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
               Flujo rápido Miami Consolidado
-            </h2>
+            </h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Usa las tarifas activas del cliente para calcular y generar la cotización automáticamente.
             </p>

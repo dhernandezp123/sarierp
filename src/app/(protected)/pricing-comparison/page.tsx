@@ -122,9 +122,12 @@ import {
   DialogTitle,
 } from '@/src/components/ui/dialog'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
+import {
+  AIR_VOLUMETRIC_DIVISOR_CM3,
+  AIR_VOLUMETRIC_KG_PER_CBM,
+  getAirChargeableWeights,
+} from '@/src/lib/quotation-cargo'
 
-const AIR_VOLUMETRIC_DIVISOR_CM3 = 6000
-const AIR_VOLUMETRIC_KG_PER_CBM = 1_000_000 / AIR_VOLUMETRIC_DIVISOR_CM3
 
 type CargoLine = {
   id: string
@@ -884,13 +887,8 @@ function PricingComparisonContent() {
   const getAirConsolidatedWeights = () => {
     const realKg = totalCargoKg || Number(selectedQuote?.peso_kg || 0)
     const cbm = totalCargoCbm || Number(selectedQuote?.volumen_cbm || 0)
-    const volumetricKg = cbm * AIR_VOLUMETRIC_KG_PER_CBM
 
-    return {
-      actualWeightKg: realKg,
-      volumetricWeightKg: volumetricKg,
-      chargeableWeightKg: Math.max(realKg, volumetricKg, 0),
-    }
+    return getAirChargeableWeights(realKg, cbm)
   }
 
   const getChargeableKg = () =>
