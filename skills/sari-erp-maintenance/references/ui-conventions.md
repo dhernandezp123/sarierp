@@ -85,6 +85,25 @@ vacío. Un precio unitario puede tener más de dos decimales; no lo pases por
   barra (Anulaciones usa `/accounting/voids`, que reexporta la página de
   Facturación); si no, la barra desaparece al navegar.
 
+
+## Anchos de campos segun contenido
+
+En los formularios internos, evita repartir todos los controles en columnas iguales
+que llenen la pagina. Dimensiona por el dato esperado: codigos y correlativos cortos
+(aprox. 9-12 rem), naturaleza/nivel/estado (aprox. 12-14 rem); reserva mas espacio
+para nombres y cuentas padre con codigo y descripcion. Son referencias visuales,
+no nuevos limites de caracteres ni cambios de validacion de negocio.
+
+Acota tambien el contenedor del editor cuando la captura sea pequena (por ejemplo
+max-w-5xl en Cuentas), agrupa checkboxes y coloca acciones juntas al pie. Usa
+columnas de ancho acotado con minmax(0,1fr) para texto largo, o flex-wrap sin
+flex-grow en selectores cortos. En movil, una columna con ancho disponible,
+min-w-0 y sin overflow horizontal. Conserva etiqueta arriba y reutiliza FormField.
+
+Referencia: editor y filtros de /accounting/accounts. Verifica escritorio amplio,
+768 px y movil; no basta poner max-w al selector dejando media pagina vacia
+en su celda.
+
 ## Verificación visual
 
 Un cambio de UI no se publica solo con TypeScript, pruebas y build. Renderiza
