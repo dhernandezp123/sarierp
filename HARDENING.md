@@ -1,5 +1,31 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-30 - OPS-TEST-CLEANUP-1081-01 - Limpieza excepcional confirmada de prueba interna
+
+- Estado: aplicada y verificada en Produccion. El propietario confirma expresamente que 001-001-11-00001081 fue prueba interna no entregada ni declarada/reportada al SAR; solicita eliminar el dato y rehabilitar 1081, retirando la solicitud pendiente creada en OPS-VOID-TEST-1081-01.
+- Sin pagos, NC/ND, retenciones, partida contable ni otros documentos de la serie. Respaldo tecnico privado previo conservado. Transaccion exclusiva y acotada retira boleta, AP, solicitud Pendiente e historial financiero exclusivo de la prueba; devuelve next_number de SPS 1082 a 1081. No crea anulacion fiscal. Se conserva activity_logs tecnico de soporte y evento de correccion CAI; no se atribuye aprobacion a Zonia.
+- Controles excepcionales suspendidos solo dentro de la transaccion bloqueada, restaurados antes de confirmar; comparacion completa de definiciones/estados de triggers intacta. Sin cambios permanentes de esquema, funciones, RLS ni permisos. Resto de tablas y filas preservadas mediante fingerprints.
+- Validaciones: dry-run con rollback OK, aplicacion atomica OK, postflight independiente confirma cero boleta/AP/solicitud/historial de prueba y siguiente 1081. Prueba de allocator devuelve exactamente 001-001-11-00001081 dentro de savepoint revertido, sin consumo de numeracion ni documento nuevo. No requiere despliegue de frontend. Evidencia privada .ua/intermediate/void-test-purchase-1081-20261030/ ignorado; commit documental pendiente.
+
+
+### 2026-10-30 - OPS-VOID-TEST-1081-01 - Solicitud de anulacion de boleta de prueba
+
+- Estado historico: solicitud registrada inicialmente; posteriormente retirada mediante limpieza de prueba interna expresamente confirmada por el propietario, documentada en OPS-TEST-CLEANUP-1081-01. Sin aprobacion atribuida a Zonia.
+- Operacion de soporte autorizada expresamente por propietario, RPC request_fiscal_void bajo contexto del Admin emisor, motivo explicito de soporte y activity_logs adicional con user_id null. Resguardo original/copia preguntado al propietario; no se afirma confirmacion ni aprobacion.
+- Validaciones: dry-run con rollback, aplicacion atomica y postflight independiente OK. Boleta, cuenta por pagar y fingerprint de rangos CAI intactos. Siguiente SPS 1082; 1081 no liberado para duplicar numeracion fiscal. No cambia esquema ni codigo. Evidencia privada .ua/intermediate/void-test-purchase-1081-20261030/ ignorado.
+- Resolucion: reemplazada por OPS-TEST-CLEANUP-1081-01; no queda solicitud pendiente ni anulacion fiscal. Commit documental junto al cambio de Compras.
+
+
+### 2026-10-30 - UX-PURCHASE-PAYMENTS-MODAL-01 - Saldo y pagos sin abandonar Compras
+
+- Estado: implementado y validado localmente main/demo; publicacion autorizada en curso, UAT autenticada pendiente.
+- Archivos: accounting/purchases/page.tsx convierte ambos accesos Saldo y pagos a modal, conservando filtros/pagina y refrescando recursos al cerrar. SupplierPayableDetail.tsx extrae el contenido de accounts-payable/[id]/page.tsx; la ruta sigue disponible y ambos usan los mismos saldos canonicos y RPC de pagos/NC/ND/reversiones, sin cambios SQL/RLS. SupplierPayableDialog.tsx usa Dialog accesible, ancho limitado y scroll movil, enlace al detalle completo, retorno de foco al listado y bloqueo de cierre durante mutaciones.
+- Validaciones: 13 regresiones del flujo financiero + 1 de cierre durante transaccion OK. Navegador sintetico 1280/390: misma URL, filtros conservados, pago ficticio actualiza saldo/historial, Escape cierra solo NC/ND anidado, foco vuelve al listado y apertura desde Ver/PDF funciona sin apilar los modales principales. Incidencia conocida HMR local en evidencia privada; no se registran pagos ni documentos reales.
+- Validacion final: npm test 557/557 OK en main; TypeScript main/demo OK; lint de archivos afectados sin diagnosticos; build main OK. Demo 14/14 regresiones financieras y modal OK. Sin cambios de esquema ni datos remotos.
+- Evidencia: .ua/intermediate/purchase-payments-modal-20261030/ ignorado. Commit: pendiente.
+
+
+
 ### 2026-10-30 - FISCAL-PURCHASE-CONTACT-01 - Datos de proveedor opcionales en boleta
 
 - Estado: migracion aplicada y verificada en Produccion/Demo; interfaz y fixture SQL validados; publicacion autorizada en curso.

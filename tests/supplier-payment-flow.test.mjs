@@ -4,7 +4,7 @@ import loadTs from './load-ts.mjs'
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 20))
 const sameDeps = (a, b) => a?.length === b?.length && a.every((value, index) => Object.is(value, b[index]))
-function mount({ balanceOverrides = {}, legacyParentId = null, balanceError = false } = {}) {
+function mount({ balanceOverrides = {}, legacyParentId = null, balanceError = false, embedded = false } = {}) {
   const hooks = []; const effects = []; const calls = []; const messages = []
   const ledger = []; const notes = []
   const readFailures = new Set()
@@ -12,7 +12,7 @@ function mount({ balanceOverrides = {}, legacyParentId = null, balanceError = fa
   let pendingResponse = null
   const canonical = { monto: 100, total_adjusted: 100, paid_total: 0, pending_balance: 100, credit_notes: 0, debit_notes: 0,
     moneda: 'USD', status: 'Pendiente', tipo: 'AP', proveedores: { id: 'supplier', nombre: 'Prueba' }, ...balanceOverrides }
-  const redirects = []
+  const redirects = [], busyChanges = []
   const router = { push() {}, replace(path) { redirects.push(path) } }
   const react = {
     useState(initial) {
@@ -60,7 +60,7 @@ function mount({ balanceOverrides = {}, legacyParentId = null, balanceError = fa
     },
   }
   const tags = names => Object.fromEntries(names.map(name => [name, name]))
-  const { default: Page } = loadTs('src/app/(protected)/accounts-payable/[id]/page.tsx', {
+  const { SupplierPayableDetail: Page } = loadTs('src/components/accounting/SupplierPayableDetail.tsx', {
     react,
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
     'next/navigation': { useParams: () => ({ id: accountId }), useRouter: () => router },
@@ -72,7 +72,7 @@ function mount({ balanceOverrides = {}, legacyParentId = null, balanceError = fa
     '@/src/components/ui/NumberInput': { NumberInput: 'input' },
     'sonner': { toast: Object.fromEntries(['error', 'success', 'info'].map(name => [name, text => messages.push({ name, text })])) },
   })
-  const render = () => { cursor = 0; tree = Page(); effects.splice(0).forEach(fn => fn()); return tree }
+  const render = () => { cursor = 0; tree = Page({ id: accountId, embedded, onBusyChange: value => busyChanges.push(value) }); effects.splice(0).forEach(fn => fn()); return tree }
   const nodes = node => node == null || typeof node !== 'object' ? []
     : Array.isArray(node) ? node.flatMap(nodes) : [node, ...nodes(node.props?.children)]
   const text = node => node == null ? '' : Array.isArray(node) ? node.map(text).join('')
@@ -85,7 +85,7 @@ function mount({ balanceOverrides = {}, legacyParentId = null, balanceError = fa
     find(node => node.type === 'input' && node.props.type === 'number').props.onChange({ target: { value: String(amount) } }); render()
   }
   return {
-    ready, render, button, paymentForm, calls, ledger, messages, redirects,
+    ready, render, button, paymentForm, calls, ledger, messages, redirects, busyChanges,
     failRead(value) { failRead = value },
     failTable(table, value) { if (value) readFailures.add(table); else readFailures.delete(table) },
     holdResponse(promise) { pendingResponse = promise },
@@ -248,4 +248,25 @@ test('AUD-10: detalle respeta el estado y fecha canónicos, sin vencer hoy por l
       }
     }
   } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous }
+})
+
+
+test('modal conserva pagos y comunica el bloqueo mientras se confirma la transaccion', async () => {
+ const app = mount({ embedded: true });let resolve
+ try {
+  await app.ready();assert.equal(app.button('Volver'),undefined);assert.ok(app.text().includes('Abrir detalle completo'))
+  app.paymentForm(25);app.holdResponse(new Promise(r=>{resolve=r}))
+  const pending=app.button('Confirmar pago').props.onClick();app.render();assert.deepEqual(app.busyChanges,[true])
+  resolve({data:{payment_id:'confirmed'},error:null});await pending;app.render()
+  assert.deepEqual(app.busyChanges,[true,false]);assert.equal(app.button('Confirmar pago'),undefined);assert.deepEqual(app.redirects,[])
+ }finally{app.cleanup()}
+})
+
+test('cerrar y desmontar el modal invalida lecturas y efectos de una respuesta tardia', async () => {
+ const app=mount({embedded:true});let resolve
+ try{
+  await app.ready();app.paymentForm(25);app.holdResponse(new Promise(r=>{resolve=r}))
+  const pending=app.button('Confirmar pago').props.onClick();app.cleanup();resolve({data:{payment_id:'late'},error:null});await pending
+  assert.equal(app.messages.filter(m=>m.name==='success').length,0);assert.deepEqual(app.redirects,[])
+ }finally{app.cleanup()}
 })
