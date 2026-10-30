@@ -1,5 +1,13 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-30 - UX-ACC-EDITOR-01 - Editor contable proporcional al contenido
+
+- Estado: TypeScript, ESLint y build OK; revision visual sintetica OK en 1623/1280/768/390 px sin overflow; publicacion autorizada en curso, UAT autenticada pendiente.
+- Archivos: src/app/(protected)/accounting/accounts/page.tsx y skills/sari-erp-maintenance/references/ui-conventions.md. Sin SQL ni cambios de datos.
+- Editor max-w-5xl; codigo/naturaleza 10rem y nivel 13rem; nombre/cuenta padre con espacio descriptivo; checks agrupados y acciones al pie. Columna unica en movil. MaxLength y reglas de negocio intactos.
+- Regla permanente en referencia UI de la skill: dimensionar controles segun contenido sin celdas extensas vacias, no convertir el ancho visual en limite de datos.
+
+
 ### 2026-10-30 - UX-ACC-FILTERS-02 - Filtros contables compactos
 
 - Estado: validado en main/demo; publicacion autorizada en curso, UAT visual pendiente.
