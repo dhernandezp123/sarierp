@@ -1,5 +1,13 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-30 - UX-ACC-FILTERS-01 - Filtros combinados del catalogo contable
+
+- Estado: validado en main/demo; publicacion autorizada en curso, UAT visual pendiente.
+- Archivo: src/app/(protected)/accounting/accounts/page.tsx. Sin SQL ni cambios de datos/RLS.
+- Naturaleza (catalogo existente), nivel (incluye sin nivel definido), uso (recibe movimientos/sin movimiento), estado y busqueda por codigo/nombre combinables. CompactSelect existente, etiquetas arriba, grilla adaptable, total de resultados y Limpiar filtros. Todo cambio reinicia pagina; sin coincidencias explica la combinacion de filtros.
+- Validaciones: TypeScript y ESLint del archivo OK en main/demo; build de produccion OK; 6 comprobaciones de filtros combinados OK. UAT visual pendiente.
+
+
 ### 2026-10-30 - ACC-CATALOG-CLEANUP-01 - 704 cuentas y estado visual
 
 - Estado: depuracion aplicada y verificada en Produccion; UX validada y sincronizada con Pruebas, publicacion en curso; UAT visual pendiente.
