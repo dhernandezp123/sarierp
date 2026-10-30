@@ -28,7 +28,7 @@ async function form({product='miami_lcl',clientPolicy=false,saleRate=1,company=s
     '@/src/hooks/useMiamiQuotation':{useMiamiQuotation:()=>({isMiamiFlow:true,lclEstimated:500,airEstimated:500,canUseMiamiCalculator:true,buildMiamiPricingItems:id=>[freight(id)],buildMiamiPreviewItems:()=>[freight('preview')]})},
     '@react-pdf/renderer':{pdf:element=>{previews.push(element.props);return{toBlob:async()=>new Blob(['demo'])}}},
     sonner:{toast:{error:message=>errors.push(message),success(){},info(){}}},
-  })
+  },{expand:type=>typeof type==='function'})
   await page.ready()
   const change=(name,value,type='text')=>{const node=page.find(n=>n.props?.name===name);assert.ok(node,name);node.props.onChange({target:{name,value,type,checked:value}});page.render()}
   const selectClient=id=>{page.find(n=>n.type==='ClienteCombobox').props.onChange(id);page.render()}
@@ -74,7 +74,7 @@ test('desmarcar ISV después de aplicarlo vuelve a cero en PDF y borrador',async
     const preview=f.previews.at(-1).pricingItems.find(item=>item.item_type==='Seguro')
     assert.equal(preview.tax_amount,0)
     assert.equal(preview.total_amount,75)
-    await f.page.button('Guardar cotización').props.onClick()
+    await f.page.button('Guardar borrador').props.onClick()
     assert.equal(f.saves[0].quotation.status,'Borrador')
     const saved=f.saves[0].pricing.find(item=>item.item_type==='Seguro')
     assert.equal(saved.taxable,false)
@@ -100,7 +100,7 @@ test('seguro predeterminado del cliente se aplica sin marcar; faltan datos impid
     assert.equal(f.page.find(n=>n.props?.name==='requires_insurance').props.checked,true)
     await f.page.button('Crear cotización aprobada').props.onClick()
     assert.equal(f.saves.length,0);assert.ok(f.errors.some(e=>e.includes('FOB')))
-    await f.page.button('Guardar cotización').props.onClick()
+    await f.page.button('Guardar borrador').props.onClick()
     assert.equal(f.saves[0].quotation.status,'Borrador')
     assert.equal(f.saves[0].quotation.requires_insurance,true)
     assert.ok(!f.saves[0].pricing.some(item=>item.item_type==='Seguro'))
