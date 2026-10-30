@@ -1,5 +1,15 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-30 - UX-PURCHASE-PAYMENTS-MODAL-01 - Saldo y pagos sin abandonar Compras
+
+- Estado: implementado y validado localmente main/demo; publicacion autorizada en curso, UAT autenticada pendiente.
+- Archivos: accounting/purchases/page.tsx convierte ambos accesos Saldo y pagos a modal, conservando filtros/pagina y refrescando recursos al cerrar. SupplierPayableDetail.tsx extrae el contenido de accounts-payable/[id]/page.tsx; la ruta sigue disponible y ambos usan los mismos saldos canonicos y RPC de pagos/NC/ND/reversiones, sin cambios SQL/RLS. SupplierPayableDialog.tsx usa Dialog accesible, ancho limitado y scroll movil, enlace al detalle completo, retorno de foco al listado y bloqueo de cierre durante mutaciones.
+- Validaciones: 13 regresiones del flujo financiero + 1 de cierre durante transaccion OK. Navegador sintetico 1280/390: misma URL, filtros conservados, pago ficticio actualiza saldo/historial, Escape cierra solo NC/ND anidado, foco vuelve al listado y apertura desde Ver/PDF funciona sin apilar los modales principales. Incidencia conocida HMR local en evidencia privada; no se registran pagos ni documentos reales.
+- Validacion final: npm test 557/557 OK en main; TypeScript main/demo OK; lint de archivos afectados sin diagnosticos; build main OK. Demo 14/14 regresiones financieras y modal OK. Sin cambios de esquema ni datos remotos.
+- Evidencia: .ua/intermediate/purchase-payments-modal-20261030/ ignorado. Commit: pendiente.
+
+
+
 ### 2026-10-30 - FISCAL-PURCHASE-CONTACT-01 - Datos de proveedor opcionales en boleta
 
 - Estado: migracion aplicada y verificada en Produccion/Demo; interfaz y fixture SQL validados; publicacion autorizada en curso.
