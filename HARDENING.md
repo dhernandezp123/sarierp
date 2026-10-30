@@ -1,5 +1,12 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-30 - UX-ACC-EDITOR-02 - Editor en una fila de escritorio
+
+- Estado: TypeScript, ESLint y build OK; fila unica verificada en 1623/1280 px y sin overflow en 768/390 px con datos sinteticos. Publicacion en curso; UAT autenticada pendiente. HMR local reporta Router action dispatched before initialization; sin errores del formulario.
+- Archivos: src/app/(protected)/accounting/accounts/page.tsx, skills/sari-erp-maintenance/references/ui-conventions.md.
+- Sustituye max-w-5xl por ancho disponible; cinco campos contiguos en escritorio con codigo/naturaleza/nivel acotados y nombre/padre flexibles. Tablet y movil redistribuyen sin forzar scroll. Checks y acciones conservan filas propias. Sin cambios de datos ni validaciones de negocio.
+
+
 ### 2026-10-30 - UX-ACC-EDITOR-01 - Editor contable proporcional al contenido
 
 - Estado: TypeScript, ESLint y build OK; revision visual sintetica OK en 1623/1280/768/390 px sin overflow; publicacion autorizada en curso, UAT autenticada pendiente.
