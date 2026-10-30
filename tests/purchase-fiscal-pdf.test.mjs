@@ -27,3 +27,8 @@ test('importe literal redondea antes de separar centavos y resuelve centenas/mil
  assert.equal(amountInWords(1000000000),'MIL MILLONES CON 00/100')
  assert.equal(amountInWords(Infinity),'IMPORTE FUERA DE RANGO')
 })
+
+test('boleta sin identidad conserva PDF y no imprime valores null o undefined',async()=>{
+ const {text}=await render({...base,supplier_snapshot:{...base.supplier_snapshot,rtn:null}})
+ assert.ok(text.includes('Proveedor de prueba'));assert.ok(text.includes('CAI-BOLETA-TEST'));assert.doesNotMatch(text,/\b(null|undefined)\b/)
+})

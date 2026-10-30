@@ -1,5 +1,30 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-10-30 - FISCAL-PURCHASE-CONTACT-01 - Datos de proveedor opcionales en boleta
+
+- Estado: migracion aplicada y verificada en Produccion/Demo; interfaz y fixture SQL validados; publicacion autorizada en curso.
+- Archivos: accounting/purchases/page.tsx elimina required de domicilio y telefono del proveedor; migracion nueva 20261030213000_purchase_optional_supplier_contact.sql elimina solo ese bloqueo en create_purchase_document. No modifica migracion ya aplicada, emisor, CAI, permisos ni documentos historicos. Fixture purchase_optional_supplier_identity.sql comprueba emision sin identidad/domicilio/telefono con CAI conservado y transaccion revertida.
+- Validaciones: SQL production/trial aislado con rollback OK; aplicacion remota y registro exacto verificados, fingerprints de tablas y funciones fiscales ajenas intactos. TypeScript y lint OK. Navegador sintetico 1280/390 confirma campos opcionales y PDF en pestana separada; incidencia de HMR local documentada en evidencia privada. UAT autenticada pendiente. Commit: pendiente.
+
+
+### 2026-10-30 - UX-PURCHASE-PRINT-01 / FISCAL-PURCHASE-IDENTITY-01 - Impresion y RTN opcional en boleta
+
+- Estado: migracion aplicada y registrada en Produccion/Demo; interfaz implementada main/demo; publicacion autorizada en curso, UAT autenticada pendiente.
+- Migracion nueva: supabase/migrations/20261030210000_purchase_optional_supplier_identity.sql. Solo elimina obligatoriedad de identidad del proveedor en Boleta de Compra; domicilio/telefono, CAI, permisos, cuentas y validaciones de importes se conservan. Identidad disponible se congela en snapshot, ausencia queda null sin inventar valores. Facturas de clientes y retenciones mantienen sus funciones/reglas vigentes, hashes verificados.
+- UI: accounting/purchases agrega Imprimir junto a Descargar PDF y RTN/identidad opcional. PdfPrintButton genera al clic, reserva pestana antes de await, separa opener, evita doble envio, atiende popup bloqueado y errores; mantiene URL al cerrar modal y libera al cerrar pestana o vencer el plazo de limpieza. Descarga existente intacta. purchase-documents admite rtn null.
+- Validaciones: 12 pruebas PDF/impresion/descarga OK, incluido PDF sin identidad; fixture SQL purchase_optional_supplier_identity OK en schemas production/trial con rollback. TypeScript, lint de archivos afectados y build OK. Dry-run/aplicacion remota atomicamente verificados con fingerprints de todas las tablas intactos; no emite documentos reales ni consume correlativos. Runners SQL actualizados.
+- Evidencia privada en .ua/intermediate/purchase-print-optional-20261030/ y purchase-office-error-20261030/ (ignorado). Pendiente publicacion y UAT navegador autenticado. Cambios paralelos de Cotizaciones preservados y fuera de alcance.
+
+
+### 2026-10-30 - DATA-SPS-FISCAL-EMAIL-01 - Correo faltante de oficina bloqueaba boleta
+
+- Estado: corregido y verificado en Produccion. El CAI de Boleta estaba activo; fiscal_office_snapshot rechazaba la oficina SPS por correo vacio. Domicilio, telefono y codigos SAR completos.
+- Por confirmacion expresa del propietario, SPS usa el correo de la cuenta activa/aprobada de Zonia verificada en Auth y profiles del tenant Sari. Solo cambia billing_offices.email; registro en activity_logs con autor operativo de soporte y confirmacion del propietario. Sin cambios de esquema, frontend, permisos o documentos anteriores.
+- Evidencia privada en .ua/intermediate/purchase-office-error-20261030/ (ignorado). Validacion con rollback OK, aplicacion atomica OK, fiscal_office_snapshot retorna emisor valido con correo esperado y lectura independiente confirma persistencia. Fingerprint de todos los rangos CAI intacto, sin consumo de correlativos ni emision de documento.
+- Usuario confirma emision real mediante captura posterior; el soporte no emitio ese documento. No requiere despliegue. Cambios paralelos de Cotizaciones fuera de este alcance y preservados.
+
+
+
 ### 2026-10-30 - SUP-DEFAULT-ACCOUNT-01 - Proveedores categorizados y cuenta de gasto predeterminada
 
 - Estado: migracion aplicada y registrada en Produccion/Demo; datos actualizados y verificados solo en Sari Produccion; UI main/demo validada; publicacion autorizada en curso, UAT autenticada pendiente.
