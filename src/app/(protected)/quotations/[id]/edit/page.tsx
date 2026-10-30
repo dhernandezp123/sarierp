@@ -10,7 +10,6 @@ import {
   getLineTotalWeightLbs, getLineTotalWeightKg,
 } from '@/src/lib/quotation-cargo'
 
-import { toDateInputValue } from '@/src/lib/format'
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -1785,7 +1784,6 @@ export default function EditQuotationPage() {
                 handleChange={handleChange}
                 fieldClass={fieldClass}
                 cardClass={cardClass}
-                todayString={toDateInputValue()}
                 cargoLines={cargoLines}
                 setCargoLines={setCargoLines}
                 calculateLineCbm={calculateLineCbm}

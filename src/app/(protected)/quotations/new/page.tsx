@@ -1,18 +1,34 @@
 ﻿'use client'
 
 import {
-  type CargoDimensionLine, getCargoVolumeMode, hasLineVolume, calculateLineCbm,
-  calculateLineFt3, getCargoWeightUnit, getLineUnitWeightLbs,
-  getLineTotalWeightLbs, getLineTotalWeightKg,
+  type CargoDimensionLine,
+  type CargoValidationMode,
+  calculateLineCbm,
+  calculateLineFt3,
+  createEmptyCargoLine,
+  getAirChargeableWeights,
+  getLineTotalWeightKg,
+  getLineTotalWeightLbs,
+  getLineUnitWeightLbs,
+  hasLineVolume,
+  summarizeUncarriedCargo,
+  validateCargoLines,
 } from '@/src/lib/quotation-cargo'
+import {
+  type ContainerLine,
+  collectQuotationSubmitIssues,
+  createInitialQuotationForm,
+  filterPortsForTransport,
+} from '@/src/lib/quotation-form'
 
-import { toDateInputValue } from '@/src/lib/format'
+import { formatDate, toDateInputValue } from '@/src/lib/format'
 import { createQuotation } from '@/src/lib/quotation-create'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { pdf } from '@react-pdf/renderer'
+import { PackageSearch } from 'lucide-react'
 
 import { supabase } from '../../../../lib/supabase/client'
 import { useUser } from '../../../../hooks/useUser'
@@ -25,17 +41,29 @@ import { createActivityLog } from '@/src/lib/activity-logger'
 import { createNotification } from '@/src/lib/notifications'
 import { UnsavedChangesGuard, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
-import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
+import { EmptyState } from '@/src/components/ui/EmptyState'
 import { MiamiQuotationSection } from '@/src/components/quotations/MiamiQuotationSection'
 import { CustomsQuotationSection } from '@/src/components/quotations/CustomsQuotationSection'
+import { DuplicateCargoNotice, type DuplicateCargoNoticeData } from '@/src/components/quotations/DuplicateCargoNotice'
+import { QuotationActionBar } from '@/src/components/quotations/QuotationActionBar'
+import { QuotationCargoSection } from '@/src/components/quotations/QuotationCargoSection'
+import { QuotationClientProductSection } from '@/src/components/quotations/QuotationClientProductSection'
+import { QuotationConditionsSection } from '@/src/components/quotations/QuotationConditionsSection'
+import { QuotationContactSection } from '@/src/components/quotations/QuotationContactSection'
+import { QuotationInsuranceSection } from '@/src/components/quotations/QuotationInsuranceSection'
+import { QuotationNotesSection } from '@/src/components/quotations/QuotationNotesSection'
+import { QuotationRouteSection } from '@/src/components/quotations/QuotationRouteSection'
 import { buildCustomsPricingItems, hydrateCustomsCharges, newCustomsCharges, validateCustomsQuotation } from '@/src/lib/customs-quotation'
-import { isCustomsOnly, usesOwnPricing } from '@/src/lib/quotation-products'
-import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
 import {
   fetchActiveServiceProducts,
+  getCargoStructure,
+  getProductTransportRule,
+  isCustomsOnly,
+  resolveProductQuoteType,
   serviceProducts,
-  tradeDirections,
+  usesOwnPricing,
 } from '@/src/lib/quotation-products'
+import { useMiamiQuotation } from '@/src/hooks/useMiamiQuotation'
 import { usesClientRatesFromCatalog } from '@/src/lib/pricing-catalogs'
 import {
   type CompanyBranding,
@@ -48,29 +76,6 @@ const formatNumber = (value: number, decimals = 2) =>
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })
-
-
-
-type ContainerLine = {
-  container_type_id: string
-  container_type_name: string
-  quantity: number
-  notes: string | null
-}
-
-const createEmptyCargoLine = (): CargoDimensionLine => ({
-  id: crypto.randomUUID(),
-  quantity: '1',
-  packageType: 'Caja',
-  length: '',
-  width: '',
-  height: '',
-  dimensionUnit: 'm',
-  weight: '',
-  weightUnit: 'lbs',
-  volumeMode: 'dimensions',
-  manualCbm: '',
-})
 
 export default function NewQuotationPage() {
   const router = useRouter()
@@ -93,11 +98,6 @@ export default function NewQuotationPage() {
   ])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
   const [customsCharges, setCustomsCharges] = useState(newCustomsCharges)
-  const [containerLinePendingRemoval, setContainerLinePendingRemoval] = useState<{
-    index: number
-    line: ContainerLine
-  } | null>(null)
-  const [cargoLinePendingRemoval, setCargoLinePendingRemoval] = useState<CargoDimensionLine | null>(null)
   const [containerResetPending, setContainerResetPending] = useState<{
     kind: 'service_product' | 'tipo_transporte' | 'quote_type'
     value: string
@@ -107,66 +107,13 @@ export default function NewQuotationPage() {
     quotation_number: string | null
   } | null>(null)
   const [reactivationMode, setReactivationMode] = useState(false)
+  // Carga de la cotización origen que no encaja en la estructura del producto actual.
+  const [duplicateCargoNotice, setDuplicateCargoNotice] =
+    useState<DuplicateCargoNoticeData | null>(null)
+  const [cargoValidationMode, setCargoValidationMode] =
+    useState<CargoValidationMode | null>(null)
   const [reactivationReason, setReactivationReason] = useState('')
-  const [editingContainerLineIndex, setEditingContainerLineIndex] =
-    useState<number | null>(null)
-  const [containerLineForm, setContainerLineForm] = useState({
-    container_type_id: '',
-    container_type_name: '',
-    quantity: '1',
-    notes: '',
-  })
-  const initialFormData = {
-    cliente_id: '',
-
-    trade_direction: 'import',
-    service_product: '',
-    quote_type: '',
-    valid_until: defaultValidUntil,
-
-    contact_name: '',
-    contact_email: '',
-    contact_phone: '',
-    contact_state: '',
-    contact_country: '',
-    preferred_carrier: '',
-    transit_time: '',
-    target_rate: '',
-    commercial_value: '',
-
-    incoterm: '',
-    tipo_transporte: '',
-
-    origen: '',
-    destino: '',
-    puerto_origen: '',
-    puerto_destino: '',
-    pickup_address: '',
-    delivery_address: '',
-
-    container_type: '',
-    container_qty: '',
-    package_type: '',
-    package_details: '',
-    peso_kg: '',
-    gross_weight: '',
-    volumen_cbm: '',
-    cantidad_bultos: '',
-    commodity: '',
-
-    // null uses the client's Miami default until a choice is made for this quote.
-    requires_insurance: null as boolean | null,
-    insurance_taxable: false,
-    fob_value: '',
-    freight_value: '',
-    insurance_markup_percentage: '10',
-    insurance_rate: '1.0',
-    insurance_cost: '0',
-
-    observaciones: '',
-    pricing_notes: '',
-    client_notes: '',
-  }
+  const initialFormData = createInitialQuotationForm(defaultValidUntil)
 
   const [formData, setFormData] = useState(initialFormData)
   const [submitted, setSubmitted] = useState(false)
@@ -370,11 +317,17 @@ export default function NewQuotationPage() {
           sourceInsuranceTaxable = (sourceItems || []).find(isInsurancePricingItem)?.taxable === true
         }
       }
+      // Duplicados antiguos pueden traer transporte/modalidad incoherentes con su producto.
+      const sourceTransportRule = getProductTransportRule(sourceQuote.service_product)
+      const sourceTransport = sourceTransportRule?.transport ?? (sourceQuote.tipo_transporte || '')
+      const copyQuoteType = sourceTransportRule
+        ? resolveProductQuoteType(sourceTransportRule, sourceQuote.quote_type || '')
+        : sourceQuote.quote_type || ''
       setFormData({
         cliente_id: toFormString(sourceQuote.cliente_id),
         trade_direction: sourceQuote.trade_direction || 'import',
         service_product: sourceQuote.service_product || '',
-        quote_type: sourceQuote.quote_type || '',
+        quote_type: copyQuoteType,
         valid_until: getReusableValidUntil(sourceQuote.valid_until),
         contact_name: sourceQuote.contact_name || '',
         contact_email: sourceQuote.contact_email || '',
@@ -388,7 +341,7 @@ export default function NewQuotationPage() {
           sourceQuote.commercial_value || sourceQuote.fob_value
         ),
         incoterm: sourceQuote.incoterm || '',
-        tipo_transporte: sourceQuote.tipo_transporte || '',
+        tipo_transporte: sourceTransport,
         origen: sourceQuote.origen || '',
         destino: sourceQuote.destino || '',
         puerto_origen: sourceQuote.puerto_origen || '',
@@ -418,8 +371,26 @@ export default function NewQuotationPage() {
         client_notes: sourceQuote.client_notes || '',
       })
 
+      const sourceQuoteTypeValue = sourceQuote.quote_type || ''
+      const targetStructure = getCargoStructure(copyQuoteType)
+      const cargoSummary = summarizeUncarriedCargo({
+        containers: sourceContainers || [],
+        cargoLines: sourceCargoLines || [],
+        quote: sourceQuote,
+      }, targetStructure)
+      const cargoStructureChanged = cargoSummary.length > 0
+
+      setDuplicateCargoNotice(
+        cargoStructureChanged
+          ? {
+              sourceQuoteType: sourceQuoteTypeValue || 'sin modalidad',
+              summary: cargoSummary,
+            }
+          : null
+      )
+
       setContainerLines(
-        (sourceContainers || []).map((line: any) => ({
+        (targetStructure === 'loose' ? [] : sourceContainers || []).map((line: any) => ({
           container_type_id: line.container_type_id || '',
           container_type_name:
             line.container_type_name || line.container_type || '',
@@ -450,26 +421,18 @@ export default function NewQuotationPage() {
         } satisfies CargoDimensionLine
       })
 
-      if (copiedCargoLines.length > 0) {
-        setCargoLines(copiedCargoLines)
-      }
+      setCargoLines(
+        copiedCargoLines.length > 0 ? copiedCargoLines : [createEmptyCargoLine()]
+      )
 
-      toast.success('Cotización cargada para duplicar')
+      if (cargoStructureChanged) {
+        toast.warning('Parte de la carga de la cotización origen no se trasladó. Revísala antes de enviar.')
+      } else {
+        toast.success('Cotización cargada para duplicar')
+      }
     } finally {
       setLoading(false)
     }
-  }
-
-  const calculateInsurance = (data: any) => {
-    const fob = Number(data.fob_value || 0)
-    const freight = Number(data.freight_value || 0)
-    const markup = Number(data.insurance_markup_percentage || 0)
-    const rate = Number(data.insurance_rate || 0)
-
-    const cost =
-      ((fob + freight) * (1 + markup / 100)) * (rate / 100)
-
-    return cost.toFixed(2)
   }
 
   const handleChange = (
@@ -485,16 +448,6 @@ export default function NewQuotationPage() {
         type === 'checkbox'
           ? (e.target as HTMLInputElement).checked
           : value,
-    }
-
-    if (
-      name === 'fob_value' ||
-      name === 'freight_value' ||
-      name === 'insurance_markup_percentage' ||
-      name === 'insurance_rate' ||
-      name === 'requires_insurance'
-    ) {
-      updatedData.insurance_cost = calculateInsurance(updatedData)
     }
 
     setFormData(updatedData)
@@ -514,46 +467,64 @@ export default function NewQuotationPage() {
       return
     }
     const isMiamiProduct = usesClientRatesFromCatalog(serviceProductOptions, serviceProduct)
+    const { tipo_transporte: nextTransport, quote_type: nextQuoteType } =
+      getNextTransportSelection(serviceProduct)
 
     setFormData((prev) => ({
       ...prev,
       service_product: serviceProduct,
-      tipo_transporte: isMiamiProduct
-        ? serviceProduct === 'miami_air'
-          ? 'Aéreo'
-          : 'Marítima'
-        : serviceProduct === 'other_origin_air'
-          ? 'Aéreo'
-          : prev.tipo_transporte === 'Aduanas' ? '' : prev.tipo_transporte,
-      quote_type: isMiamiProduct
-        ? serviceProduct === 'miami_air'
-          ? 'Consolidado'
-          : 'LCL'
-        : serviceProduct === 'other_origin_air'
-          ? 'Consolidado'
-          : prev.quote_type === 'Aduanas' ? '' : prev.quote_type,
+      tipo_transporte: nextTransport,
+      quote_type: nextQuoteType,
       origen: isMiamiProduct ? prev.origen || 'Miami, FL' : prev.origen,
       puerto_origen: isMiamiProduct
         ? prev.puerto_origen || 'Miami'
         : prev.puerto_origen,
     }))
 
-    if (isMiamiProduct) {
+    if (nextQuoteType !== 'FCL' && nextQuoteType !== 'FTL') {
       clearContainerLines()
-
-      setCargoLines((prev) =>
-        prev.length > 0
-          ? prev
-          : [createEmptyCargoLine()]
-      )
     }
+
+    // Aduanas vacía las líneas de carga; cualquier otro producto parte con una línea.
+    setCargoLines((prev) =>
+      prev.length > 0
+        ? prev
+        : [createEmptyCargoLine()]
+    )
+  }
+
+  // Transporte y modalidad que tendrá la cotización al elegir un producto.
+  const getNextTransportSelection = (serviceProduct: string) => {
+    if (usesClientRatesFromCatalog(serviceProductOptions, serviceProduct)) {
+      return serviceProduct === 'miami_air'
+        ? { tipo_transporte: 'Aéreo', quote_type: 'Consolidado' }
+        : { tipo_transporte: 'Marítima', quote_type: 'LCL' }
+    }
+
+    const rule = getProductTransportRule(serviceProduct)
+    if (rule) {
+      return {
+        tipo_transporte: rule.transport,
+        quote_type: formData.tipo_transporte === rule.transport
+          ? resolveProductQuoteType(rule, formData.quote_type)
+          : resolveProductQuoteType(rule, ''),
+      }
+    }
+
+    return formData.tipo_transporte === 'Aduanas'
+      ? { tipo_transporte: '', quote_type: '' }
+      : { tipo_transporte: formData.tipo_transporte, quote_type: formData.quote_type }
   }
 
   const handleServiceProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const serviceProduct = e.target.value
+    const nextQuoteType = isCustomsOnly(serviceProduct)
+      ? 'Aduanas'
+      : getNextTransportSelection(serviceProduct).quote_type
     const willClearContainers =
-      (usesClientRatesFromCatalog(serviceProductOptions, serviceProduct) || isCustomsOnly(serviceProduct)) &&
-      containerLines.length > 0
+      containerLines.length > 0 &&
+      nextQuoteType !== 'FCL' &&
+      nextQuoteType !== 'FTL'
     if (willClearContainers) {
       setContainerResetPending({ kind: 'service_product', value: serviceProduct })
       return
@@ -561,10 +532,7 @@ export default function NewQuotationPage() {
     applyServiceProductChange(serviceProduct)
   }
 
-  const handleClienteChange = (
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    const clienteId = e.target.value
+  const handleClienteChange = (clienteId: string) => {
 
     const selectedCliente = clientes.find(
       (cliente) => cliente.id === clienteId
@@ -585,80 +553,11 @@ export default function NewQuotationPage() {
         selectedCliente?.seguro_porcentaje?.toString() || '1.0',
     }
 
-    updatedData.insurance_cost = calculateInsurance(updatedData)
-
     setFormData(updatedData)
-  }
-
-  const resetContainerLineForm = () => {
-    setContainerLineForm({
-      container_type_id: '',
-      container_type_name: '',
-      quantity: '1',
-      notes: '',
-    })
-  }
-
-  const handleAddContainerLine = () => {
-    if (!containerLineForm.container_type_id) {
-      toast.error('Selecciona un tipo de contenedor')
-      return
-    }
-
-    const selectedType = containerTypes.find(
-      (type) => type.id === containerLineForm.container_type_id
-    )
-
-    const line = {
-      container_type_id: containerLineForm.container_type_id,
-      container_type_name:
-        selectedType?.name || containerLineForm.container_type_name,
-      quantity: Number(containerLineForm.quantity || 1),
-      notes: containerLineForm.notes || null,
-    }
-
-    if (editingContainerLineIndex !== null) {
-      setContainerLines((prev) =>
-        prev.map((item, index) =>
-          index === editingContainerLineIndex ? line : item
-        )
-      )
-      setEditingContainerLineIndex(null)
-    } else {
-      setContainerLines((prev) => [...prev, line])
-    }
-
-    resetContainerLineForm()
-  }
-
-  const handleEditContainerLine = (index: number) => {
-    const line = containerLines[index]
-    if (!line) return
-
-    setContainerLineForm({
-      container_type_id: line.container_type_id,
-      container_type_name: line.container_type_name,
-      quantity: String(line.quantity || 1),
-      notes: line.notes || '',
-    })
-    setEditingContainerLineIndex(index)
-  }
-
-  const handleRemoveContainerLine = (index: number) => {
-    setContainerLines((prev) =>
-      prev.filter((_, itemIndex) => itemIndex !== index)
-    )
-
-    if (editingContainerLineIndex === index) {
-      setEditingContainerLineIndex(null)
-      resetContainerLineForm()
-    }
   }
 
   const clearContainerLines = () => {
     setContainerLines([])
-    setEditingContainerLineIndex(null)
-    resetContainerLineForm()
   }
 
   const requestTransportChange = (value: string) => {
@@ -695,93 +594,54 @@ export default function NewQuotationPage() {
     setContainerResetPending(null)
   }
 
+  const focusFormIssue = (field: string) => {
+    const target =
+      document.querySelector<HTMLElement>(`[data-field="${field}"]`) ||
+      document.querySelector<HTMLElement>(`[name="${field}"]`)
+    if (!target) return
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const control = target.matches('input, select, textarea, button')
+      ? target
+      : target.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea, button')
+    control?.focus({ preventScroll: true })
+  }
+
   const handleSubmit = async (status: string) => {
     setSubmitted(true)
-
-    if (reactivationMode && !reactivationReason.trim()) {
-      toast.error('Ingresa el motivo de reactivación.')
-      return
+    if (!isMiamiFlow && requiresCargoLines) {
+      setCargoValidationMode(status === 'Borrador' ? 'draft' : 'pricing')
     }
 
-    if (!formData.cliente_id) {
-      toast.error('Debes seleccionar un cliente')
-      return
-    }
-
-    if (!formData.service_product) {
-      toast.error('Debes seleccionar el producto / servicio')
-      return
-    }
-
-    if (!formData.trade_direction) {
-      toast.error('Debes seleccionar la dirección comercial')
-      return
-    }
-
-    if (!isCustomsFlow && !formData.incoterm) {
-      toast.error('Debes seleccionar el Incoterm')
+    const issues = collectQuotationSubmitIssues({
+      status,
+      formData,
+      todayString,
+      missingReactivationReason: reactivationMode && !reactivationReason.trim(),
+      isMiamiFlow,
+      isCustomsFlow,
+      customsCharges,
+      miamiLclEstimated: miami.lclEstimated,
+      miamiAirEstimated: miami.airEstimated,
+      containerCount: containerLines.length,
+      cargoLines,
+    })
+    if (issues.length > 0) {
+      toast.error(
+        issues.length === 1
+          ? issues[0].message
+          : `Faltan ${issues.length} datos para ${status === 'Borrador' ? 'guardar el borrador' : 'continuar'}`,
+        issues.length === 1
+          ? undefined
+          : { description: issues.map((issue) => issue.message).join(' · ') }
+      )
+      focusFormIssue(issues[0].field)
       return
     }
 
     const submitIsMiamiFlow = usesOwnPricing(formData.service_product)
     const isDraftSave = status === 'Borrador'
-    if (isCustomsFlow) {
-      const error = validateCustomsQuotation(customsCharges, formData, isDraftSave)
-      if (error) { toast.error(error); return }
-    }
-
-    if (!isDraftSave && formData.service_product === 'miami_lcl' && miami.lclEstimated <= 0) {
-      toast.error('Ingresa FT3 o libras para calcular la tarifa Miami LCL')
-      return
-    }
-
-    if (!isDraftSave && formData.service_product === 'miami_air' && miami.airEstimated <= 0) {
-      toast.error('Ingresa KG para calcular la tarifa Miami Aéreo')
-      return
-    }
-
     const initialStatus =
       submitIsMiamiFlow && !isDraftSave ? 'Pricing Aprobado' : status
-
-    if (initialStatus === 'Pendiente de Fijar Precios') {
-      if (!formData.tipo_transporte) {
-        toast.error('Debes seleccionar el tipo de transporte')
-        return
-      }
-
-      if (!formData.quote_type) {
-        toast.error('Debes seleccionar el tipo de cotización')
-        return
-      }
-
-      if (requiresContainerLines && containerLines.length === 0) {
-        toast.error('Agrega al menos una línea de contenedor/unidad')
-        return
-      }
-
-      if (requiresCargoLines && cargoLines.length === 0) {
-        toast.error('Agrega al menos una línea de carga')
-        return
-      }
-
-      if (!formData.commodity) {
-        toast.error('Debes ingresar la mercancía / descripción')
-        return
-      }
-    }
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    if (formData.valid_until) {
-      const validUntilDate = new Date(formData.valid_until)
-      validUntilDate.setHours(0, 0, 0, 0)
-
-      if (validUntilDate < today) {
-        toast.error('La fecha de validez no puede ser anterior a hoy')
-        return
-      }
-    }
 
     const validUntil =
       formData.valid_until ||
@@ -789,6 +649,7 @@ export default function NewQuotationPage() {
         .toISOString()
         .split('T')[0]
 
+    let navigatingToQuotation = false
     try {
       setLoading(true)
 
@@ -865,7 +726,8 @@ export default function NewQuotationPage() {
         commodity: formData.commodity,
 
         requires_insurance: requiresCargoInsurance,
-        fob_value: submitIsMiamiFlow && requiresCargoInsurance ? Number(formData.commercial_value) : Number(formData.fob_value),
+        // La pantalla captura un único valor comercial/FOB; Pricing calcula el seguro con él.
+        fob_value: requiresCargoInsurance ? Number(formData.commercial_value) : Number(formData.fob_value),
         freight_value: Number(formData.freight_value),
         insurance_markup_percentage: submitIsMiamiFlow && requiresCargoInsurance ? INSURANCE_SURCHARGE_PERCENT : Number(
           formData.insurance_markup_percentage
@@ -873,7 +735,7 @@ export default function NewQuotationPage() {
         insurance_rate: submitIsMiamiFlow && requiresCargoInsurance ? Number(insuranceCliente?.seguro_porcentaje || 0) : Number(formData.insurance_rate),
         insurance_cost: submitIsMiamiFlow
           ? automaticPricing.insurance?.cost_amount ?? 0
-          : Number(formData.insurance_cost),
+          : 0,
 
         pricing_notes: formData.pricing_notes || null,
         observaciones: formData.observaciones || null,
@@ -996,32 +858,22 @@ export default function NewQuotationPage() {
         })
       }
 
-      setFormData(initialFormData)
-      setCustomsCharges(newCustomsCharges())
-      setSubmitted(false)
-      setCargoLines([createEmptyCargoLine()])
-      setContainerLines([])
-      setDuplicateSource(null)
-      setReactivationMode(false)
-      setReactivationReason('')
-      setEditingContainerLineIndex(null)
-      resetContainerLineForm()
       markFormSaved()
-
-      toast.success('Cotización creada correctamente', {
-        duration: 8000,
-        closeButton: true,
-        action: {
-          label: 'Ir a Cotización',
-          onClick: () => router.push(`/quotations/${quotation.id}`),
-        },
-      })
-
-      await fetchCatalogs()
+      navigatingToQuotation = true
+      const createdNumber = quotation.quotation_number ? ` ${quotation.quotation_number}` : ''
+      toast.success(
+        initialStatus === 'Pendiente de Fijar Precios'
+          ? `Cotización${createdNumber} enviada a Pricing`
+          : initialStatus === 'Borrador'
+            ? `Borrador${createdNumber} guardado`
+            : `Cotización${createdNumber} creada`
+      )
+      router.push(`/quotations/${quotation.id}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo crear la cotización. Revisa los datos e intenta nuevamente.')
     } finally {
-      setLoading(false)
+      // Mantiene los botones bloqueados mientras se abre la cotización creada.
+      if (!navigatingToQuotation) setLoading(false)
     }
   }
 
@@ -1033,31 +885,34 @@ export default function NewQuotationPage() {
     (country) => country.name === formData.destino
   )
 
+  const routePorts = filterPortsForTransport(ports, formData.tipo_transporte)
+
   const originPorts = originCountry
-    ? ports.filter((port) => port.country_id === originCountry.id)
-    : ports
+    ? routePorts.filter((port) => port.country_id === originCountry.id)
+    : routePorts
 
   const destinationPorts = destinationCountry
-    ? ports.filter((port) => port.country_id === destinationCountry.id)
-    : ports
+    ? routePorts.filter((port) => port.country_id === destinationCountry.id)
+    : routePorts
 
   const quoteTypeOptions: Record<string, string[]> = {
     'Aéreo': ['Courier', 'Consolidado'],
     'Marítima': ['LCL', 'FCL'],
     Terrestre: ['LTL', 'FTL'],
   }
+  const hasProduct = Boolean(formData.service_product)
+  const productTransportRule = getProductTransportRule(formData.service_product)
+  const availableQuoteTypes =
+    productTransportRule?.modalities ||
+    quoteTypeOptions[formData.tipo_transporte] ||
+    []
 
-  const requiresContainerLines =
-    formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
+  const requiresContainerLines = getCargoStructure(formData.quote_type) === 'containers'
+  const requiresCargoLines = getCargoStructure(formData.quote_type) === 'loose'
+  const cargoLineIssues = cargoValidationMode
+    ? validateCargoLines(cargoLines, cargoValidationMode).issuesByLine
+    : {}
 
-  const requiresCargoLines =
-    formData.quote_type === 'LCL' ||
-    formData.quote_type === 'LTL' ||
-    formData.quote_type === 'Consolidado' ||
-    formData.quote_type === 'Courier'
-
-  const moneyFieldClass = `${fieldClass} md:max-w-[180px]`
-  const dateFieldClass = `${fieldClass} md:max-w-[220px]`
 
   const totalCargoFt3 = cargoLines.reduce(
     (sum, line) => sum + calculateLineFt3(line),
@@ -1077,6 +932,9 @@ export default function NewQuotationPage() {
     (sum, line) => sum + getLineTotalWeightKg(line),
     0
   )
+  const airWeights = formData.tipo_transporte === 'Aéreo' && requiresCargoLines
+    ? getAirChargeableWeights(totalCargoKg, totalCargoCbm)
+    : null
 
   const miami = useMiamiQuotation({
     clienteId: formData.cliente_id,
@@ -1090,6 +948,27 @@ export default function NewQuotationPage() {
 
   const isMiamiFlow = miami.isMiamiFlow
   const isCustomsFlow = isCustomsOnly(formData.service_product)
+
+  const selectedProductLabel = serviceProductOptions.find(
+    (product) => product.value === formData.service_product
+  )?.label
+  const routeSummary = [formData.origen, formData.destino].filter(Boolean).join(' → ')
+  const cargoSummary = requiresContainerLines
+    ? containerLines.map((line) => `${line.quantity} × ${line.container_type_name}`).join(', ')
+    : requiresCargoLines && totalCargoCbm + totalCargoKg > 0
+      ? [
+          `${formatNumber(totalCargoKg, 2)} kg`,
+          `${formatNumber(totalCargoCbm, 3)} CBM`,
+          airWeights ? `cobrable ${formatNumber(airWeights.chargeableWeightKg, 2)} kg` : '',
+        ].filter(Boolean).join(' / ')
+      : ''
+  const quotationSummary = [
+    selectedProductLabel,
+    !isCustomsFlow ? formData.quote_type : '',
+    !isCustomsFlow ? formData.incoterm : '',
+    routeSummary,
+    cargoSummary,
+  ].filter((value): value is string => Boolean(value))
   const insuranceCliente = clientes.find(cliente => cliente.id === formData.cliente_id)
   const clientInsuranceDefault = isMiamiFlow && insuranceCliente?.asegura_carga === true
   const requiresCargoInsurance = formData.requires_insurance ?? clientInsuranceDefault
@@ -1241,6 +1120,9 @@ export default function NewQuotationPage() {
                 : 'Completa los datos para generar la cotización.'}
             </p>
           </div>
+          <p className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
+            Fecha de creación: {formatDate(todayString)}
+          </p>
         </div>
 
         {duplicateSource && (
@@ -1250,12 +1132,17 @@ export default function NewQuotationPage() {
           </div>
         )}
 
+        {duplicateCargoNotice && (
+          <DuplicateCargoNotice notice={duplicateCargoNotice} quoteType={formData.quote_type} />
+        )}
+
         {reactivationMode && (
           <section className={cardClass}>
             <label className="text-sm font-semibold text-slate-900 dark:text-white">
               Motivo de reactivación <span className="text-red-500">*</span>
             </label>
             <textarea
+              data-field="reactivation_reason"
               value={reactivationReason}
               onChange={(event) => setReactivationReason(event.target.value)}
               rows={3}
@@ -1266,208 +1153,34 @@ export default function NewQuotationPage() {
           </section>
         )}
 
-        <section className={cardClass}>
-          <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-              Información General
-            </h2>
-          </div>
+        <QuotationClientProductSection
+          clientes={clientes}
+          formData={formData}
+          handleChange={handleChange}
+          onClientChange={handleClienteChange}
+          onServiceProductChange={handleServiceProductChange}
+          serviceProductOptions={serviceProductOptions}
+          reqClass={reqClass}
+        />
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="flex flex-col gap-1.5 lg:col-span-2">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Cliente <span className="text-red-400">*</span>
-              </label>
-              <ClienteCombobox
-                clientes={clientes}
-                value={formData.cliente_id}
-                onChange={(id) => {
-                  handleClienteChange({
-                    target: { name: 'cliente_id', value: id },
-                  } as React.ChangeEvent<HTMLSelectElement>)
-                }}
-                placeholder="Seleccionar cliente"
-                className={`${fieldClass} ${reqClass(formData.cliente_id)}`}
-              />
-            </div>
+        <QuotationContactSection formData={formData} handleChange={handleChange} />
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Fecha de creación
-              </label>
-              <input
-                value={new Date().toLocaleDateString('es-HN')}
-                disabled
-                className={fieldClass}
-              />
-            </div>
 
-            {!isCustomsFlow && <><div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Incoterm <span className="text-red-400">*</span>
-              </label>
-              <select
-                name="incoterm"
-                value={formData.incoterm}
-                onChange={handleChange}
-                className={`${fieldClass} ${reqClass(formData.incoterm)}`}
-              >
-                <option value="">Seleccionar Incoterm</option>
-                <option value="EXW">EXW</option>
-                <option value="FCA">FCA</option>
-                <option value="FOB">FOB</option>
-                <option value="CFR">CFR</option>
-                <option value="CIF">CIF</option>
-                <option value="DAP">DAP</option>
-                <option value="DDP">DDP</option>
-              </select>
-            </div>
+        {hasProduct ? (
+          <>
+        <QuotationConditionsSection
+          formData={formData}
+          handleChange={handleChange}
+          isMiamiFlow={isMiamiFlow}
+          isCustomsFlow={isCustomsFlow}
+          productTransportRule={productTransportRule}
+          availableQuoteTypes={availableQuoteTypes}
+          requestTransportChange={requestTransportChange}
+          requestQuoteTypeChange={requestQuoteTypeChange}
+          reqClass={reqClass}
+          todayString={todayString}
+        />
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Válida hasta
-              </label>
-              <input
-                type="date"
-                name="valid_until"
-                value={formData.valid_until}
-                min={todayString}
-                onChange={handleChange}
-                className={dateFieldClass}
-              />
-            </div>
-            </>}
-          </div>
-        </section>
-
-        <section className={cardClass}>
-          <div className="mb-5 flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-              Contacto del Cliente
-            </h2>
-            {formData.cliente_id && (
-              <span className="text-xs text-slate-400 dark:text-slate-500">
-                Auto-llenado desde el perfil del cliente
-              </span>
-            )}
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Nombre de contacto
-              </label>
-              <input
-                name="contact_name"
-                placeholder="Nombre del contacto"
-                value={formData.contact_name}
-                onChange={handleChange}
-                className={fieldClass}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Email
-              </label>
-              <input
-                name="contact_email"
-                type="email"
-                placeholder="email@empresa.com"
-                value={formData.contact_email}
-                onChange={handleChange}
-                className={fieldClass}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Teléfono
-              </label>
-              <input
-                name="contact_phone"
-                placeholder="+504 0000-0000"
-                value={formData.contact_phone}
-                onChange={handleChange}
-                className={fieldClass}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                País
-              </label>
-              <input
-                name="contact_country"
-                placeholder="País"
-                value={formData.contact_country}
-                disabled
-                className={fieldClass}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Departamento / Estado
-              </label>
-              <input
-                name="contact_state"
-                placeholder="Departamento / Estado"
-                value={formData.contact_state || ''}
-                disabled
-                className={fieldClass}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className={cardClass}>
-          <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-              Producto Comercial
-            </h2>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Dirección comercial <span className="text-red-400">*</span>
-              </label>
-              <select
-                name="trade_direction"
-                value={formData.trade_direction}
-                onChange={handleChange}
-                className={fieldClass}
-              >
-                <option value="">Seleccionar dirección</option>
-                {tradeDirections.map((direction) => (
-                  <option key={direction.value} value={direction.value}>
-                    {direction.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Producto / Servicio <span className="text-red-400">*</span>
-              </label>
-              <select
-                name="service_product"
-                value={formData.service_product}
-                onChange={handleServiceProductChange}
-                className={`${fieldClass} ${reqClass(formData.service_product)}`}
-              >
-                <option value="">Seleccionar producto</option>
-                {serviceProductOptions.map((product) => (
-                  <option key={product.value} value={product.value}>
-                    {product.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </section>
 
         <datalist id="countries">
           {countries.map((country) => (
@@ -1492,7 +1205,6 @@ export default function NewQuotationPage() {
           handleChange={handleChange}
           fieldClass={fieldClass}
           cardClass={cardClass}
-          todayString={todayString}
           cargoLines={cargoLines}
           setCargoLines={setCargoLines}
           calculateLineCbm={calculateLineCbm}
@@ -1504,958 +1216,65 @@ export default function NewQuotationPage() {
           miami={miami}
         />
 
-          {isCustomsFlow && <CustomsQuotationSection data={formData} onChange={(field, value) => setFormData(previous => ({ ...previous, [field]: value }))} charges={customsCharges} setCharges={setCustomsCharges} taxRate={miami.taxRatePercent} />}
+          {isCustomsFlow && <div data-field="customs"><CustomsQuotationSection data={formData} onChange={(field, value) => setFormData(previous => ({ ...previous, [field]: value }))} charges={customsCharges} setCharges={setCustomsCharges} taxRate={miami.taxRatePercent} /></div>}
 
-          {!isMiamiFlow && !isCustomsFlow && (
-            <section className={cardClass}>
-              <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Tipo de Cotización
-                </h2>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Tipo de transporte <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    className={`${fieldClass} ${reqClass(formData.tipo_transporte)}`}
-                    value={formData.tipo_transporte}
-                    onChange={(e) => requestTransportChange(e.target.value)}
-                  >
-                    <option value="">Seleccionar transporte</option>
-                    <option value="Aéreo">Aéreo</option>
-                    <option value="Marítima">Marítima</option>
-                    <option value="Terrestre">Terrestre</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Modalidad <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    className={`${fieldClass} ${reqClass(formData.quote_type)}`}
-                    value={formData.quote_type}
-                    onChange={(e) => requestQuoteTypeChange(e.target.value)}
-                    disabled={!formData.tipo_transporte}
-                  >
-                    <option value="">Seleccionar tipo</option>
-                    {(quoteTypeOptions[formData.tipo_transporte] || []).map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </section>
-          )}
 
 
           {!isMiamiFlow && !isCustomsFlow && (
             <>
-              <section className={cardClass}>
-                <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    Ruta
-                  </h2>
-                </div>
+              <QuotationRouteSection formData={formData} handleChange={handleChange} setFormData={setFormData} />
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      País de origen
-                    </label>
-                    <input
-                      list="countries"
-                      name="origen"
-                      placeholder="Ej. China"
-                      value={formData.origen}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      País de destino
-                    </label>
-                    <input
-                      list="countries"
-                      name="destino"
-                      placeholder="Ej. Honduras"
-                      value={formData.destino}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Puerto origen
-                    </label>
-                    <input
-                      list="originPorts"
-                      name="puerto_origen"
-                      placeholder="Ej. Shanghai"
-                      value={formData.puerto_origen}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Puerto destino
-                    </label>
-                    <input
-                      list="destinationPorts"
-                      name="puerto_destino"
-                      placeholder="Ej. Puerto Cortés"
-                      value={formData.puerto_destino}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Carrier de preferencia
-                    </label>
-                    <input
-                      name="preferred_carrier"
-                      placeholder="Ej. MSC, Hapag-Lloyd"
-                      value={formData.preferred_carrier || ''}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Target rate (USD)
-                    </label>
-                    <input
-                      name="target_rate"
-                      placeholder="0.00"
-                      value={formData.target_rate || ''}
-                      onChange={handleChange}
-                      className={moneyFieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Dirección de recolección EXW
-                    </label>
-                    <textarea
-                      className={`${fieldClass} min-h-20`}
-                      placeholder="Dirección completa de recolección"
-                      value={formData.pickup_address}
-                      onChange={(e) =>
-                        setFormData({ ...formData, pickup_address: e.target.value })
-                      }
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Dirección de entrega
-                    </label>
-                    <textarea
-                      className={`${fieldClass} min-h-20`}
-                      placeholder="Dirección completa de entrega"
-                      value={formData.delivery_address}
-                      onChange={(e) =>
-                        setFormData({ ...formData, delivery_address: e.target.value })
-                      }
-                    />
-                  </div>
-
-                </div>
-              </section>
-
-              <section className={cardClass}>
-                <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-                  <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                    Carga
-                  </h2>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {requiresContainerLines ? (
-                <div className="col-span-full space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/70">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <select
-                      value={containerLineForm.container_type_id}
-                      onChange={(e) => {
-                        const selectedType = containerTypes.find(
-                          (type) => type.id === e.target.value
-                        )
-
-                        setContainerLineForm({
-                          ...containerLineForm,
-                          container_type_id: e.target.value,
-                          container_type_name: selectedType?.name || '',
-                        })
-                      }}
-                      className={fieldClass}
-                    >
-                      <option value="">Tipo de contenedor / unidad</option>
-
-                      {containerTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Cantidad"
-                      value={containerLineForm.quantity}
-                      onChange={(e) =>
-                        setContainerLineForm({
-                          ...containerLineForm,
-                          quantity: e.target.value,
-                        })
-                      }
-                      className={fieldClass}
-                    />
-
-                    <input
-                      placeholder="Notas"
-                      value={containerLineForm.notes}
-                      onChange={(e) =>
-                        setContainerLineForm({
-                          ...containerLineForm,
-                          notes: e.target.value,
-                        })
-                      }
-                      className={fieldClass}
-                    />
-
-                    <button
-                      type="button"
-                      onClick={handleAddContainerLine}
-                      className="h-12 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
-                    >
-                      {editingContainerLineIndex !== null
-                        ? 'Actualizar'
-                        : 'Agregar'}
-                    </button>
-                  </div>
-
-                  {containerLines.length > 0 && (
-                    <div className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-700 dark:bg-slate-950/60">
-                      {containerLines.map((line, index) => (
-                        <div
-                          key={`${line.container_type_id}-${index}`}
-                          className="flex items-center justify-between gap-4 p-3"
-                        >
-                          <div>
-                            <p className="font-semibold text-slate-900 dark:text-white">
-                              {line.container_type_name}
-                            </p>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">
-                              Cantidad: {line.quantity}
-                              {line.notes ? ` · ${line.notes}` : ''}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-4">
-                            <button
-                              type="button"
-                              onClick={() => handleEditContainerLine(index)}
-                              className="text-sm font-semibold text-blue-600 dark:text-blue-300"
-                            >
-                              Modificar
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setContainerLinePendingRemoval({ index, line })}
-                              className="text-sm font-semibold text-red-700 dark:text-red-300"
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : !requiresCargoLines ? (
-                <>
-                  <select
-                    name="container_type"
-                    value={formData.container_type}
-                    onChange={handleChange}
-                    className={fieldClass}
-                  >
-                    <option value="">Tipo de contenedor / unidad</option>
-                    {containerTypes.map((type) => (
-                      <option key={type.id} value={type.name}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <input
-                    className={fieldClass}
-                    placeholder="Cantidad de contenedores / unidades"
-                    value={formData.container_qty}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        container_qty: e.target.value,
-                      })
-                    }
-                  />
-                </>
-              ) : null}
-
-              {requiresCargoLines && (
-                <div className="col-span-full space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/70">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-white">
-                        Detalle de carga
-                      </h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Ingresa paquetes, peso y dimensiones para calcular totales informativos.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCargoLines((prev) => [
-                          ...prev,
-                          createEmptyCargoLine(),
-                        ])
-                      }
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      Agregar línea
-                    </button>
-                  </div>
-
-                  {cargoLines.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                      Sin líneas de carga.
-                    </div>
-                  )}
-
-                  {cargoLines.length > 0 && (
-                    <div className="space-y-3">
-                      {cargoLines.map((line, idx) => {
-                        const lineFt3 = calculateLineFt3(line)
-                        const lineCbm = calculateLineCbm(line)
-                        const lineWeightUnit = getCargoWeightUnit(line)
-                        const lineVolumeMode = getCargoVolumeMode(line)
-                        const isLineComplete =
-                          Number(line.quantity || 0) > 0 &&
-                          hasLineVolume(line) &&
-                          Number(line.weight || 0) > 0
-                        const lineTotalLbs = getLineTotalWeightLbs(line)
-                        const lineTotalKg = getLineTotalWeightKg(line)
-
-                        return (
-                          <div
-                            key={line.id}
-                            className={`overflow-hidden rounded-2xl border transition-colors ${
-                              isLineComplete
-                                ? 'border-sky-300 dark:border-sky-800/70'
-                                : 'border-slate-200 dark:border-slate-700'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-700/60 dark:bg-slate-800/40">
-                              <span className="rounded-md bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-400">
-                                #{idx + 1}
-                              </span>
-                              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                                Línea de carga
-                              </span>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const hasMeaningfulData = Boolean(
-                                    line.length || line.width || line.height || line.weight || line.manualCbm
-                                  )
-                                  if (!hasMeaningfulData) {
-                                    setCargoLines((prev) => prev.filter((item) => item.id !== line.id))
-                                    return
-                                  }
-                                  setCargoLinePendingRemoval(line)
-                                }}
-                                className="ml-auto flex items-center gap-1 rounded-lg border border-transparent px-2.5 py-1 text-xs text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:text-slate-500 dark:hover:border-red-900/50 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-                                </svg>
-                                Quitar
-                              </button>
-                            </div>
-
-                            <div
-                              className={`space-y-3 p-4 ${
-                                isLineComplete
-                                  ? 'bg-sky-50/80 dark:bg-sky-950/25'
-                                  : 'bg-white dark:bg-slate-950/40'
-                              }`}
-                            >
-                              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Cant.
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    step="any"
-                                    placeholder="1"
-                                    value={line.quantity}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, quantity: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    className={`${fieldClass} h-10 w-full`}
-                                  />
-                                </div>
-
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Volumen
-                                  </label>
-                                  <select
-                                    value={lineVolumeMode}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? {
-                                                ...item,
-                                                volumeMode:
-                                                  e.target.value as CargoDimensionLine['volumeMode'],
-                                              }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    className={`${fieldClass} h-10 w-full text-sm`}
-                                  >
-                                    <option value="dimensions">Calcular por dimensiones</option>
-                                    <option value="manual">Ingresar CBM manual</option>
-                                  </select>
-                                </div>
-
-                                {lineVolumeMode === 'dimensions' ? (
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                      Unidad
-                                    </label>
-                                    <select
-                                      value={line.dimensionUnit}
-                                      onChange={(e) =>
-                                        setCargoLines((prev) =>
-                                          prev.map((item) =>
-                                            item.id === line.id
-                                              ? {
-                                                  ...item,
-                                                  dimensionUnit:
-                                                    e.target.value as CargoDimensionLine['dimensionUnit'],
-                                                }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      className={`${fieldClass} h-10 w-full text-sm`}
-                                    >
-                                      <option value="in">Pulgadas (in)</option>
-                                      <option value="cm">Centímetros (cm)</option>
-                                      <option value="mm">Milímetros (mm)</option>
-                                      <option value="m">Metros (m)</option>
-                                    </select>
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                      CBM total de la línea
-                                    </label>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="any"
-                                      placeholder="CBM total de la línea"
-                                      value={line.manualCbm || ''}
-                                      onChange={(e) =>
-                                        setCargoLines((prev) =>
-                                          prev.map((item) =>
-                                            item.id === line.id
-                                              ? {
-                                                  ...item,
-                                                  manualCbm: e.target.value,
-                                                }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      className={`${fieldClass} h-10 w-full`}
-                                    />
-                                  </div>
-                                )}
-
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                    Peso unit. {lineWeightUnit}
-                                  </label>
-                                  <div className="grid grid-cols-[1fr_82px] gap-2">
-                                    <input
-                                      type="number"
-                                      step="any"
-                                      placeholder={`Peso unit. ${lineWeightUnit}`}
-                                      value={line.weight}
-                                      onChange={(e) =>
-                                        setCargoLines((prev) =>
-                                          prev.map((item) =>
-                                            item.id === line.id
-                                              ? { ...item, weight: e.target.value }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      className={`${fieldClass} h-10 w-full`}
-                                    />
-
-                                    <select
-                                      value={lineWeightUnit}
-                                      onChange={(e) =>
-                                        setCargoLines((prev) =>
-                                          prev.map((item) =>
-                                            item.id === line.id
-                                              ? {
-                                                  ...item,
-                                                  weightUnit:
-                                                    e.target.value as CargoDimensionLine['weightUnit'],
-                                                }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      className={`${fieldClass} h-10 w-full`}
-                                    >
-                                      <option value="lbs">LBS</option>
-                                      <option value="kg">KG</option>
-                                    </select>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {lineVolumeMode === 'dimensions' && (
-                                <div className="grid grid-cols-3 gap-3">
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                      Largo
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="any"
-                                      placeholder="0"
-                                      value={line.length}
-                                      onChange={(e) =>
-                                        setCargoLines((prev) =>
-                                          prev.map((item) =>
-                                            item.id === line.id
-                                              ? { ...item, length: e.target.value }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      className={`${fieldClass} h-10`}
-                                    />
-                                  </div>
-
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                      Ancho
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="any"
-                                      placeholder="0"
-                                      value={line.width}
-                                      onChange={(e) =>
-                                        setCargoLines((prev) =>
-                                          prev.map((item) =>
-                                            item.id === line.id
-                                              ? { ...item, width: e.target.value }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      className={`${fieldClass} h-10`}
-                                    />
-                                  </div>
-
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                      Alto
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="any"
-                                      placeholder="0"
-                                      value={line.height}
-                                      onChange={(e) =>
-                                        setCargoLines((prev) =>
-                                          prev.map((item) =>
-                                            item.id === line.id
-                                              ? { ...item, height: e.target.value }
-                                              : item
-                                          )
-                                        )
-                                      }
-                                      className={`${fieldClass} h-10`}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                                KG {formatNumber(lineTotalKg, 2)} · LBS{' '}
-                                {formatNumber(lineTotalLbs, 0)} · FT3{' '}
-                                {formatNumber(lineFt3, 2)} · CBM{' '}
-                                {formatNumber(lineCbm, 3)}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <div className="rounded-xl bg-white p-4 dark:bg-slate-900">
-                      <p className="text-xs font-semibold uppercase text-slate-400 dark:text-slate-500">
-                        Peso KG
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
-                        {formatNumber(totalCargoKg, 2)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-white p-4 dark:bg-slate-900">
-                      <p className="text-xs font-semibold uppercase text-slate-400 dark:text-slate-500">
-                        Peso LBS
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
-                        {formatNumber(totalCargoWeight, 0)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-white p-4 dark:bg-slate-900">
-                      <p className="text-xs font-semibold uppercase text-slate-400 dark:text-slate-500">
-                        FT3
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
-                        {formatNumber(totalCargoFt3, 2)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-white p-4 dark:bg-slate-900">
-                      <p className="text-xs font-semibold uppercase text-slate-400 dark:text-slate-500">
-                        CBM
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">
-                        {formatNumber(totalCargoCbm, 3)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {!requiresCargoLines && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Tipo de empaque
-                    </label>
-                    <select
-                      className={fieldClass}
-                      value={formData.package_type}
-                      onChange={(e) =>
-                        setFormData({ ...formData, package_type: e.target.value })
-                      }
-                    >
-                      <option value="">Seleccionar</option>
-                      <option value="Cajas">Cajas</option>
-                      <option value="Pallets">Pallets</option>
-                      <option value="Envases">Envases</option>
-                      <option value="Tubos">Tubos</option>
-                      <option value="Cajas metálicas">Cajas metálicas</option>
-                      <option value="Cilindros">Cilindros</option>
-                      <option value="Rollos">Rollos</option>
-                      <option value="Sacos">Sacos</option>
-                      <option value="Granel">Granel</option>
-                      <option value="Otro">Otro</option>
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Peso KG
-                    </label>
-                    <input
-                      name="peso_kg"
-                      placeholder="0.00"
-                      value={formData.peso_kg}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Peso bruto
-                    </label>
-                    <input
-                      name="gross_weight"
-                      placeholder="0.00"
-                      value={formData.gross_weight}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      CBM
-                    </label>
-                    <input
-                      name="volumen_cbm"
-                      placeholder="0.000"
-                      value={formData.volumen_cbm}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Bultos
-                    </label>
-                    <input
-                      name="cantidad_bultos"
-                      placeholder="0"
-                      value={formData.cantidad_bultos}
-                      onChange={handleChange}
-                      className={fieldClass}
-                    />
-                  </div>
-                </>
-              )}
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Mercancía / Commodity <span className="text-red-400">*</span>
-                </label>
-                <input
-                  name="commodity"
-                  placeholder="Descripción de la mercancía"
-                  value={formData.commodity}
-                  onChange={handleChange}
-                  className={`${fieldClass} ${reqClass(formData.commodity)}`}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Detalles del empaque / observaciones de carga
-                </label>
-                <textarea
-                  className={`${fieldClass} min-h-24`}
-                  placeholder="Dimensiones, notas de embalaje, condiciones especiales..."
-                  value={formData.package_details}
-                  onChange={(e) =>
-                    setFormData({ ...formData, package_details: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-          </section>
+              <QuotationCargoSection
+                formData={formData}
+                handleChange={handleChange}
+                setFormData={setFormData}
+                reqClass={reqClass}
+                containerTypes={containerTypes}
+                containerLines={containerLines}
+                setContainerLines={setContainerLines}
+                cargoLines={cargoLines}
+                setCargoLines={setCargoLines}
+                cargoLineIssues={cargoLineIssues}
+                airWeights={airWeights}
+              />
 
           </>
           )}
 
-          {!isCustomsFlow && <section className={cardClass}>
-            <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                Seguro de Carga
-              </h2>
-            </div>
-
-            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
-              <input
-                type="checkbox"
-                name="requires_insurance"
-                checked={requiresCargoInsurance}
-                onChange={handleChange}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              <div>
-                <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  Cliente solicita seguro de carga
-                </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  {isMiamiFlow ? 'Se incluirá el seguro Full Cover en los cargos y el PDF de la cotización.' : 'Se calculará el costo del seguro sobre el valor FOB'}
-                </p>
-              </div>
-            </label>
-
-            {requiresCargoInsurance && (
-              <div className="mt-4 flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Valor comercial / Valor FOB (USD)
-                </label>
-                <input
-                  name="commercial_value"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={formData.commercial_value}
-                  onChange={handleChange}
-                  className={fieldClass}
-                />
-              </div>
-            )}
-            {isMiamiFlow && requiresCargoInsurance && (
-              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-900">
-                {clientInsuranceDefault && <p className="mb-2 text-xs text-slate-500">El cliente tiene seguro por defecto. Puedes desmarcarlo si esta carga no requiere seguro.</p>}
-                <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    name="insurance_taxable"
-                    checked={formData.insurance_taxable}
-                    onChange={handleChange}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-                  Aplicar ISV al seguro de carga
-                </label>
-                {insurancePreview.error ? <p role="status" className="text-amber-700 dark:text-amber-300">{insurancePreview.error}</p> : insurancePreview.insurance && <>
-                  <p>Prima del seguro: USD {formatNumber(insurancePreview.insurance.sale_amount)}</p>
-                  <p>{insurancePreview.insurance.taxable ? `ISV (${insurancePreview.insurance.tax_rate}%): USD ${formatNumber(insurancePreview.insurance.tax_amount)}` : 'ISV: no aplicado'}</p>
-                  <p className="mt-1 font-semibold">Total del seguro: USD {formatNumber(insurancePreview.insurance.total_amount)}</p>
-                  <p className="mt-2 text-xs text-slate-500">Este cargo se guardará junto con los demás cargos de Miami.</p>
-                </>}
-              </div>
-            )}
-          </section>}
-
-          {!isMiamiFlow && !isCustomsFlow && (
-            <section className={cardClass}>
-              <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Observaciones internas para Pricing
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                  Notas internas que verá el equipo de Pricing al revisar la cotización.
-                </p>
-              </div>
-              <textarea
-                name="pricing_notes"
-                value={formData.pricing_notes}
-                onChange={handleChange}
-                rows={4}
-                placeholder="Ej: Cliente requiere tarifa urgente, manejar con APS Express..."
-                className={`${fieldClass} min-h-28 resize-y`}
-              />
-            </section>
+          {!isCustomsFlow && (
+            <QuotationInsuranceSection
+              formData={formData}
+              handleChange={handleChange}
+              isMiamiFlow={isMiamiFlow}
+              requiresCargoInsurance={requiresCargoInsurance}
+              clientInsuranceDefault={clientInsuranceDefault}
+              insurancePreview={insurancePreview}
+            />
           )}
 
-          {isMiamiFlow && (
-            <section className={cardClass}>
-              <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800">
-                <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  Observaciones para Cliente (PDF)
-                </h2>
-                <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                  Estas observaciones aparecerán en la cotización enviada al cliente.
-                </p>
-              </div>
-              <textarea
-                name="client_notes"
-                value={formData.client_notes}
-                onChange={handleChange}
-                rows={4}
-                placeholder="Ej: Tarifa sujeta a disponibilidad, no incluye aduanas..."
-                className={`${fieldClass} min-h-28 resize-y`}
-              />
-            </section>
-          )}
+          <QuotationNotesSection formData={formData} handleChange={handleChange} isMiamiFlow={isMiamiFlow} isCustomsFlow={isCustomsFlow} />
 
-          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/60 dark:bg-[#0b1220]">
-            <p className="text-xs text-slate-400 dark:text-slate-500">
-              El número de cotización se genera automáticamente al guardar.
-            </p>
+          </>
+        ) : (
+          <section className={cardClass}>
+            <EmptyState
+              icon={<PackageSearch className="h-6 w-6" />}
+              title="Selecciona el producto o servicio"
+              description="Las condiciones, la ruta y la carga se muestran según el producto elegido."
+            />
+          </section>
+        )}
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
-            {(isMiamiFlow || isCustomsFlow) && (
-              <button
-                type="button"
-                onClick={handlePreviewMiamiPdf}
-                disabled={!isCustomsFlow && !miami.canUseMiamiCalculator}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                Previsualizar PDF
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => handleSubmit('Borrador')}
-              disabled={loading}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              Guardar cotización
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSubmit('Pendiente de Fijar Precios')}
-              disabled={loading}
-              className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-            >
-              {loading
-                ? 'Enviando...'
-                : isMiamiFlow || isCustomsFlow
-                  ? 'Crear cotización aprobada'
-                  : 'Enviar a Pricing'}
-            </button>
-            </div>
-          </div>
+          <QuotationActionBar
+            quotationSummary={quotationSummary}
+            isMiamiFlow={isMiamiFlow}
+            isCustomsFlow={isCustomsFlow}
+            canUseMiamiCalculator={miami.canUseMiamiCalculator}
+            loading={loading}
+            handlePreviewMiamiPdf={handlePreviewMiamiPdf}
+            handleSubmit={handleSubmit}
+          />
       </div>
-      <ConfirmDialog
-        open={containerLinePendingRemoval !== null}
-        onOpenChange={(open) => { if (!open) setContainerLinePendingRemoval(null) }}
-        title="Quitar contenedor"
-        description={containerLinePendingRemoval
-          ? `¿Deseas descartar ${containerLinePendingRemoval.line.quantity} × ${containerLinePendingRemoval.line.container_type_name} de esta cotización?`
-          : undefined}
-        confirmLabel="Quitar contenedor"
-        danger
-        onConfirm={() => {
-          if (containerLinePendingRemoval) handleRemoveContainerLine(containerLinePendingRemoval.index)
-          setContainerLinePendingRemoval(null)
-        }}
-      />
       <ConfirmDialog
         open={containerResetPending !== null}
         onOpenChange={(open) => { if (!open) setContainerResetPending(null) }}
@@ -2464,22 +1283,6 @@ export default function NewQuotationPage() {
         confirmLabel="Cambiar y quitar contenedores"
         danger
         onConfirm={confirmContainerReset}
-      />
-      <ConfirmDialog
-        open={cargoLinePendingRemoval !== null}
-        onOpenChange={(open) => { if (!open) setCargoLinePendingRemoval(null) }}
-        title="Quitar línea de carga"
-        description={cargoLinePendingRemoval
-          ? `¿Deseas descartar ${cargoLinePendingRemoval.quantity || 0} ${cargoLinePendingRemoval.packageType} y todos sus valores?`
-          : undefined}
-        confirmLabel="Quitar línea"
-        danger
-        onConfirm={() => {
-          if (cargoLinePendingRemoval) {
-            setCargoLines((prev) => prev.filter((item) => item.id !== cargoLinePendingRemoval.id))
-          }
-          setCargoLinePendingRemoval(null)
-        }}
       />
     </>
   )
