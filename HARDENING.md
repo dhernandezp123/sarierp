@@ -1,5 +1,13 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-10-30 - UX-ACC-FILTERS-02 - Filtros contables compactos
+
+- Estado: validado en main/demo; publicacion autorizada en curso, UAT visual pendiente.
+- Archivo: src/app/(protected)/accounting/accounts/page.tsx. Sin SQL ni cambios de datos.
+- Fila flex con salto de linea; anchos acotados desde sm: busqueda 288 px, estado 144 px, naturaleza 224 px, nivel 192 px y uso 208 px. Movil ocupa el ancho disponible; filtros no se estiran para rellenar escritorio.
+- Validaciones: TypeScript, ESLint y build de produccion OK; comprobacion visual pendiente.
+
+
 ### 2026-10-30 - UX-ACC-FILTERS-01 - Filtros combinados del catalogo contable
 
 - Estado: validado en main/demo; publicacion autorizada en curso, UAT visual pendiente.
