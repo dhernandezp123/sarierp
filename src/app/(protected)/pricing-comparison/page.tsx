@@ -1109,9 +1109,7 @@ function PricingComparisonContent() {
       valid_until: agentForm.valid_until || null,
       etd: agentForm.etd || null,
       suggested_sale: suggestedSale,
-      ...(['fcl', 'lcl'].includes(normalizeText(selectedQuote.quote_type))
-        ? { internal_notes: agentForm.internal_notes.trim() || null }
-        : {}),
+      internal_notes: agentForm.internal_notes.trim() || null,
       rate_per_kg: ratePerKg,
       actual_weight_kg: ratePerKg !== null ? airWeights.actualWeightKg : null,
       volumetric_weight_kg:
@@ -4604,7 +4602,6 @@ const profitabilityColor =
                         </div>
                       )}
 
-                      {['fcl', 'lcl'].includes(normalizeText(selectedQuote.quote_type)) && (
                         <div className="col-span-full w-full max-w-2xl">
                           <label htmlFor="agent-internal-notes" className={labelClass}>
                             Notas internas de la tarifa (opcional)
@@ -4624,7 +4621,6 @@ const profitabilityColor =
                             Comentarios de esta opción para el equipo. No aparecen en el PDF comercial.
                           </p>
                         </div>
-                      )}
 
                       <div className="col-span-full w-full max-w-4xl">
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700/60 dark:bg-slate-900/60">
@@ -5157,7 +5153,6 @@ const profitabilityColor =
                                     </div>
                                   </div>
 
-                                  {['fcl', 'lcl'].includes(normalizeText(selectedQuote.quote_type)) && (
                                     <div className="mt-4 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
                                       <p className="mb-2 text-xs font-semibold text-slate-600 dark:text-slate-300">Notas internas de la tarifa</p>
                                       <AgentQuoteNotes
@@ -5167,7 +5162,6 @@ const profitabilityColor =
                                         onSave={(notes) => saveAgentQuoteNotes(quote.id, notes)}
                                       />
                                     </div>
-                                  )}
 
                                   <div className="mt-5 flex items-center justify-between gap-2">
                                     <button
