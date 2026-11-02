@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 
 if (!process.env.CI) throw new Error('This runner only targets the disposable CI stack.')
 const files = ['invoice_drafts_and_master_review.sql', 'demo_production_parity.sql', 'finance_reporting_and_banks.sql', 'cai_office_numbering.sql', 'cai_office_backfill.sql', 'cai_master_lifecycle.sql', 'tgu_confirmed_fiscal_prefix.sql', 'tgu_restore_registered_cai_prefix.sql', 'accounting_catalog_structure.sql', 'service_accounting_assignments.sql', 'supplier_type_catalog.sql', 'supplier_default_expense_account.sql', 'purchase_optional_supplier_identity.sql']
+files.push('client_rate_access_and_audit.sql')
 for (const file of files) {
   let sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8')
   sql = sql.replaceAll('-- APPLY_CONFIRMED_OFFICE_BINDING_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028150000_cai_office_binding.sql', import.meta.url), 'utf8'))
@@ -19,6 +20,13 @@ update public.profiles set is_demo_user=true,demo_expires_at=now()+interval '1 d
 where id::text like '${file==='tgu_restore_registered_cai_prefix.sql' ? 'ce290000' : file.startsWith('cai_') ? 'ca280000' : file === 'finance_reporting_and_banks.sql' ? 'be280000' : 'dd280000'}-%';
 set local role authenticated;`)
     sql = sql.replaceAll('"role":"authenticated"','"role":"authenticated","app_metadata":{"demo_access_grant_id":"de280000-0000-4000-8000-000000000099"}')
+  }
+  if (file === 'client_rate_access_and_audit.sql') {
+    sql = sql.replace('set local role authenticated;', `
+update public.profiles set is_demo_user=true,demo_expires_at=now()+interval '1 day',demo_access_grant_id='de280000-0000-4000-8000-000000000099'
+where id::text like 'ac710000-%';
+set local role authenticated;`)
+    sql = sql.replace("jsonb_build_object('sub',actor,'role','authenticated')", "jsonb_build_object('sub',actor,'role','authenticated','app_metadata',jsonb_build_object('demo_access_grant_id','de280000-0000-4000-8000-000000000099'))")
   }
   const r = spawnSync('docker', ['exec', '-i', 'supabase_db_sarierp', 'psql', '-X', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1'], { input: sql, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 })
   if (r.error || r.status !== 0) { console.error(`FAIL ${file}`, r.error?.message || r.stderr); process.exit(1) }
