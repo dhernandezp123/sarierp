@@ -120,8 +120,9 @@ export function canViewQuotationCosts(role: string | null | undefined) {
 }
 
 // La autorizacion efectiva se comprueba tambien en RLS y replace_client_rates.
-export function canManageClientRates(role: string | null | undefined) {
-  return ['Admin', 'Pricing', 'Ventas'].includes(role || '')
+export function canManageClientRates(role: string | null | undefined, hasIndividualAccess = false) {
+  return ['Admin', 'Pricing', 'Ventas'].includes(role || '') ||
+    (role === 'Contabilidad' && hasIndividualAccess)
 }
 
 export function getDefaultPathForRole(role: string | null | undefined) {

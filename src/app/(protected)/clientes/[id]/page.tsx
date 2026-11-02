@@ -12,6 +12,8 @@ import { PageSkeleton } from '@/src/components/ui/page-skeleton'
 import { Breadcrumbs } from '@/src/components/ui/Breadcrumbs'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { canManageClientRates } from '@/src/lib/permissions'
+import { useClientRateAccess } from '@/src/hooks/useClientRateAccess'
+import { ClientRateHistory } from '@/src/components/clientes/ClientRateHistory'
 import {
   defaultClientRateCatalog,
   fetchActiveClientRateCatalog,
@@ -41,10 +43,11 @@ const getMiamiRateDestinationLabel = (value: string | null | undefined) => {
 
 export default function ClienteProfilePage() {
   const { profile } = useUser()
-  const canManageRates = canManageClientRates(profile?.rol)
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
+  const { hasIndividualAccess } = useClientRateAccess(id)
+  const canManageRates = canManageClientRates(profile?.rol, hasIndividualAccess)
 
   const [cliente, setCliente] = useState<any>(null)
   const [quotations, setQuotations] = useState<any[]>([])
@@ -52,6 +55,7 @@ export default function ClienteProfilePage() {
   const [clientRates, setClientRates] = useState<Record<string, ClientRate>>({})
   const [clientRateCatalog, setClientRateCatalog] = useState(defaultClientRateCatalog)
   const [savingRates, setSavingRates] = useState(false)
+  const [rateHistoryVersion, setRateHistoryVersion] = useState(0)
   const [newNote, setNewNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('resumen')
@@ -204,7 +208,7 @@ export default function ClienteProfilePage() {
   const saveClientRates = async () => {
     if (!id) return
     if (!canManageRates) {
-      toast.error('Solo Administración, Pricing y Ventas pueden modificar tarifas del cliente')
+      toast.error('No tienes permiso para modificar tarifas del cliente')
       return
     }
 
@@ -254,6 +258,7 @@ export default function ClienteProfilePage() {
     }
 
     toast.success('Tarifas del cliente guardadas')
+    setRateHistoryVersion((version) => version + 1)
     await loadClientRates(activeDestination)
     setSavingRates(false)
   }
@@ -822,8 +827,8 @@ export default function ClienteProfilePage() {
             <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-700/60">
               <p className="text-xs text-slate-400 dark:text-slate-500">
                 {canManageRates
-                  ? 'Los cambios se aplican a cotizaciones nuevas de este cliente.'
-                  : 'Tarifas de consulta. Administración, Pricing y Ventas gestionan los cambios.'}
+                  ? 'Los cambios se aplican a cotizaciones nuevas y quedan registrados con tu usuario.'
+                  : 'Tarifas de consulta. Los cambios requieren autorización.'}
               </p>
               {canManageRates && <button
                 type="button"
@@ -836,6 +841,8 @@ export default function ClienteProfilePage() {
             </div>
           </div>
         )}
+
+        {activeTab === 'tarifas' && <ClientRateHistory clienteId={id} refreshKey={rateHistoryVersion} />}
 
         {activeTab === 'notas' && (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-700/60 dark:bg-[#0b1220]">
