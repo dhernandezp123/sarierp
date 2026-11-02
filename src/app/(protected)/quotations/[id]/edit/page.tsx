@@ -2,14 +2,17 @@
 
 import { CustomsQuotationSection } from '@/src/components/quotations/CustomsQuotationSection'
 import { buildCustomsPricingItems, hydrateCustomsCharges, newCustomsCharges, validateCustomsQuotation } from '@/src/lib/customs-quotation'
-import { isCustomsOnly, usesOwnPricing } from '@/src/lib/quotation-products'
+import { getCargoStructure, getProductTransportRule, isCustomsOnly, usesOwnPricing } from '@/src/lib/quotation-products'
 
 import {
-  type CargoDimensionLine, getCargoVolumeMode, calculateLineCbm,
-  calculateLineFt3, getCargoWeightUnit, getLineUnitWeightLbs,
-  getLineTotalWeightLbs, getLineTotalWeightKg,
+  type CargoDimensionLine, type CargoLineIssue, calculateLineCbm,
+  calculateLineFt3, getAirChargeableWeights, getLineUnitWeightLbs,
+  getLineTotalWeightLbs, getLineTotalWeightKg, normalizeLegacyBlankInchLine,
 } from '@/src/lib/quotation-cargo'
-
+import type { ContainerLine } from '@/src/lib/quotation-form'
+import { getCargoSignature, getEditCargoTotals, getProductRuleMismatch, planQuotationEditCargo } from '@/src/lib/quotation-edit'
+import { CargoLinesEditor } from '@/src/components/quotations/CargoLinesEditor'
+import { ContainerLinesEditor } from '@/src/components/quotations/ContainerLinesEditor'
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -64,13 +67,6 @@ const editorSections = [
   { href: '#quote-actions' as const, label: 'Guardar' },
 ]
 
-type ContainerLine = {
-  container_type_id: string
-  container_type_name: string
-  quantity: number
-  notes: string | null
-}
-
 type PricingItem = {
   id?: string
   description: string | null
@@ -122,26 +118,17 @@ export default function EditQuotationPage() {
   const [containerTypes, setContainerTypes] = useState<any[]>([])
   const [containerLines, setContainerLines] = useState<ContainerLine[]>([])
   const [cargoLines, setCargoLines] = useState<CargoDimensionLine[]>([])
-  const [containerLinePendingRemoval, setContainerLinePendingRemoval] = useState<{
-    index: number
-    line: ContainerLine
-  } | null>(null)
-  const [cargoLinePendingRemoval, setCargoLinePendingRemoval] = useState<CargoDimensionLine | null>(null)
+  const [cargoLineIssues, setCargoLineIssues] = useState<Record<string, CargoLineIssue[]>>({})
+  // Carga tal como se abrió (o se guardó por última vez) para saber si se modificó.
+  const loadedCargo = useRef({ quoteType: '', containers: [] as ContainerLine[], cargo: [] as CargoDimensionLine[] })
   const [modeChangePending, setModeChangePending] = useState<{
-    kind: 'quote_type' | 'service_product'
+    kind: 'quote_type' | 'service_product' | 'product_rule'
     value: string
+    transport?: string
     discarded: 'containers' | 'cargo'
   } | null>(null)
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([])
   const [customsCharges, setCustomsCharges] = useState(newCustomsCharges)
-  const [editingContainerLineIndex, setEditingContainerLineIndex] =
-    useState<number | null>(null)
-  const [containerLineForm, setContainerLineForm] = useState({
-    container_type_id: '',
-    container_type_name: '',
-    quantity: '1',
-    notes: '',
-  })
 
   const [formData, setFormData] = useState({
     cliente_id: '',
@@ -276,6 +263,7 @@ export default function EditQuotationPage() {
     }
 
     setStatusRevision(data.status_revision)
+    loadedCargo.current.quoteType = data.quote_type || ''
     setFormData({
       cliente_id: data.cliente_id || '',
       status: data.status || '',
@@ -351,14 +339,14 @@ export default function EditQuotationPage() {
       return
     }
 
-    setContainerLines(
-      (data || []).map((line) => ({
-        container_type_id: line.container_type_id || '',
-        container_type_name: line.container_type_name || '',
-        quantity: Number(line.quantity || 1),
-        notes: line.notes || null,
-      }))
-    )
+    const lines: ContainerLine[] = (data || []).map((line) => ({
+      container_type_id: line.container_type_id || '',
+      container_type_name: line.container_type_name || '',
+      quantity: Number(line.quantity || 1),
+      notes: line.notes || null,
+    }))
+    loadedCargo.current.containers = lines
+    setContainerLines(lines)
   }
 
   const fetchCargoLines = async (quotationId: string) => {
@@ -373,30 +361,30 @@ export default function EditQuotationPage() {
       return
     }
 
-    setCargoLines(
-      (data || []).map((line) => {
-        const hasDimensions =
-          Number(line.length || 0) > 0 &&
-          Number(line.width || 0) > 0 &&
-          Number(line.height || 0) > 0
-        const hasSavedCbm = Number(line.cbm || 0) > 0
-        const volumeMode = !hasDimensions && hasSavedCbm ? 'manual' : 'dimensions'
+    const lines = (data || []).map((line): CargoDimensionLine => {
+      const hasDimensions =
+        Number(line.length || 0) > 0 &&
+        Number(line.width || 0) > 0 &&
+        Number(line.height || 0) > 0
+      const hasSavedCbm = Number(line.cbm || 0) > 0
+      const volumeMode = !hasDimensions && hasSavedCbm ? 'manual' : 'dimensions'
 
-        return {
-          id: line.id || crypto.randomUUID(),
-          quantity: String(line.quantity || 1),
-          packageType: line.package_type || 'Caja',
-          length: line.length ? String(line.length) : '',
-          width: line.width ? String(line.width) : '',
-          height: line.height ? String(line.height) : '',
-          dimensionUnit: line.dimension_unit || 'in',
-          weight: line.weight_lbs ? String(line.weight_lbs) : '',
-          weightUnit: 'lbs',
-          volumeMode,
-          manualCbm: volumeMode === 'manual' ? String(line.cbm || '') : '',
-        }
-      })
-    )
+      return {
+        id: line.id || crypto.randomUUID(),
+        quantity: String(line.quantity || 1),
+        packageType: line.package_type || 'Caja',
+        length: line.length ? String(line.length) : '',
+        width: line.width ? String(line.width) : '',
+        height: line.height ? String(line.height) : '',
+        dimensionUnit: line.dimension_unit || 'in',
+        weight: line.weight_lbs ? String(line.weight_lbs) : '',
+        weightUnit: 'lbs',
+        volumeMode,
+        manualCbm: volumeMode === 'manual' ? String(line.cbm || '') : '',
+      }
+    }).map(normalizeLegacyBlankInchLine)
+    loadedCargo.current.cargo = lines
+    setCargoLines(lines)
   }
 
   useEffect(() => {
@@ -527,75 +515,36 @@ export default function EditQuotationPage() {
     if (!modeChangePending) return
     if (modeChangePending.kind === 'service_product') {
       applyServiceProductChange(modeChangePending.value)
+    } else if (modeChangePending.kind === 'product_rule') {
+      setFormData((prev) => ({
+        ...prev,
+        tipo_transporte: modeChangePending.transport || prev.tipo_transporte,
+        quote_type: modeChangePending.value,
+      }))
     } else {
       setFormData((prev) => ({ ...prev, quote_type: modeChangePending.value }))
     }
     setModeChangePending(null)
   }
 
-  const resetContainerLineForm = () => {
-    setContainerLineForm({
-      container_type_id: '',
-      container_type_name: '',
-      quantity: '1',
-      notes: '',
-    })
-  }
-
-  const saveContainerLine = () => {
-    if (!containerLineForm.container_type_id) {
-      toast.error('Selecciona un tipo de contenedor')
+  // Corrige una cotización antigua cuyo transporte/modalidad no corresponde al producto.
+  // Si la estructura de carga cambia, pasa por la misma confirmación que la modalidad.
+  const applyProductRule = () => {
+    const mismatch = getProductRuleMismatch(formData.service_product, formData.tipo_transporte, formData.quote_type)
+    if (!mismatch) return
+    const { tipo_transporte, quote_type } = mismatch.target
+    const nextUsesContainers = quote_type === 'FCL' || quote_type === 'FTL'
+    const discarded = quote_type && !nextUsesContainers && containerLines.length > 0
+      ? 'containers'
+      : nextUsesContainers && cargoLines.length > 0
+        ? 'cargo'
+        : null
+    if (discarded) {
+      setModeChangePending({ kind: 'product_rule', value: quote_type, transport: tipo_transporte, discarded })
       return
     }
-
-    const selectedContainer = containerTypes.find(
-      (container) => container.id === containerLineForm.container_type_id
-    )
-
-    const line = {
-      container_type_id: containerLineForm.container_type_id,
-      container_type_name:
-        selectedContainer?.name || containerLineForm.container_type_name,
-      quantity: Number(containerLineForm.quantity || 1),
-      notes: containerLineForm.notes || null,
-    }
-
-    if (editingContainerLineIndex !== null) {
-      setContainerLines((prev) =>
-        prev.map((item, index) =>
-          index === editingContainerLineIndex ? line : item
-        )
-      )
-      setEditingContainerLineIndex(null)
-    } else {
-      setContainerLines((prev) => [...prev, line])
-    }
-
-    resetContainerLineForm()
-  }
-
-  const editContainerLine = (index: number) => {
-    const line = containerLines[index]
-    if (!line) return
-
-    setContainerLineForm({
-      container_type_id: line.container_type_id || '',
-      container_type_name: line.container_type_name || '',
-      quantity: String(line.quantity || 1),
-      notes: line.notes || '',
-    })
-    setEditingContainerLineIndex(index)
-  }
-
-  const deleteContainerLine = (index: number) => {
-    setContainerLines((prev) =>
-      prev.filter((_, itemIndex) => itemIndex !== index)
-    )
-
-    if (editingContainerLineIndex === index) {
-      setEditingContainerLineIndex(null)
-      resetContainerLineForm()
-    }
+    setFormData((prev) => ({ ...prev, tipo_transporte, quote_type }))
+    if (!quote_type) toast.info(`Selecciona la modalidad: ${mismatch.rule.modalities.join(' o ')}`)
   }
 
   const handleSendToPricing = async () => { await handleSave(true) }
@@ -630,25 +579,36 @@ export default function EditQuotationPage() {
       if (error) { toast.error(error); return }
     }
 
-    const saveRequiresContainerLines =
-      formData.quote_type === 'FCL' || formData.quote_type === 'FTL'
-    const saveRequiresLooseCargo =
-      formData.quote_type === 'LCL' ||
-      formData.quote_type === 'LTL' ||
-      formData.quote_type === 'Consolidado' ||
-      formData.quote_type === 'Courier' ||
-      formData.service_product === 'miami_lcl' ||
-      formData.service_product === 'miami_air'
-
-    if (saveRequiresContainerLines && containerLines.length === 0) {
-      toast.error('Debes agregar al menos un contenedor/unidad')
+    const isMiamiCargo = usesOwnPricing(formData.service_product) && !isCustomsOnly(formData.service_product)
+    const cargoStructure = isMiamiCargo ? 'loose' : getCargoStructure(formData.quote_type)
+    const cargoPlan = planQuotationEditCargo({
+      status: formData.status,
+      sendToPricing,
+      isMiamiFlow: isMiamiCargo,
+      quoteType: formData.quote_type,
+      cargoIntact:
+        getCargoSignature(formData.quote_type, containerLines, cargoLines) ===
+        getCargoSignature(loadedCargo.current.quoteType, loadedCargo.current.containers, loadedCargo.current.cargo),
+      containerLines,
+      cargoLines,
+      productMismatch: Boolean(productMismatch),
+    })
+    setCargoLineIssues(cargoPlan.issuesByLine)
+    if (!cargoPlan.ok) {
+      toast.error(cargoPlan.message)
+      const target = document.querySelector<HTMLElement>(`[data-field="${cargoPlan.field}"], [name="${cargoPlan.field}"]`)
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (target?.matches('select, input, textarea')) target.focus({ preventScroll: true })
       return
     }
-
-    if (saveRequiresLooseCargo && cargoLines.length === 0) {
-      toast.error('Debes agregar al menos una línea de carga')
-      return
-    }
+    const replacesCargo = cargoPlan.replace
+    const savedCargoLines = cargoPlan.cargoLinesToSave
+    const cargoTotals = getEditCargoTotals({
+      structure: cargoStructure,
+      replace: replacesCargo,
+      savedCargoLines,
+      formTotals: formData,
+    })
 
     const quotationId = params.id as string
     const saveIsMiamiFlow = usesOwnPricing(formData.service_product)
@@ -719,30 +679,8 @@ export default function EditQuotationPage() {
         container_type: formData.container_type,
         package_type: formData.package_type,
         package_details: formData.package_details,
-        peso_kg: saveRequiresLooseCargo
-          ? totalCargoKg > 0
-            ? totalCargoKg
-            : null
-          : Number(formData.peso_kg || 0),
-        peso_lbs: saveRequiresLooseCargo
-          ? totalCargoWeight > 0
-            ? totalCargoWeight
-            : null
-          : null,
+        ...cargoTotals,
         gross_weight: Number(formData.gross_weight || 0),
-        volumen_cbm: saveRequiresLooseCargo
-          ? totalCargoCbm > 0
-            ? totalCargoCbm
-            : null
-          : Number(formData.volumen_cbm || 0),
-        volumen_ft3: saveRequiresLooseCargo
-          ? totalCargoFt3 > 0
-            ? totalCargoFt3
-            : null
-          : null,
-        cantidad_bultos: saveRequiresLooseCargo
-          ? totalCargoPackages
-          : Number(formData.cantidad_bultos || 0),
         commodity: formData.commodity,
 
         requires_insurance: formData.requires_insurance,
@@ -763,11 +701,7 @@ export default function EditQuotationPage() {
           : {}),
       }
 
-      const shouldReplaceContainers =
-        saveRequiresContainerLines || saveRequiresLooseCargo
-      const shouldReplaceCargo =
-        saveRequiresContainerLines || saveRequiresLooseCargo
-      const containerRows = saveRequiresContainerLines
+      const containerRows = replacesCargo && cargoStructure === 'containers'
         ? containerLines.map((line) => ({
             container_type_id: line.container_type_id,
             container_type_name: line.container_type_name,
@@ -775,8 +709,8 @@ export default function EditQuotationPage() {
             notes: line.notes || null,
           }))
         : []
-      const cargoRows = saveRequiresLooseCargo
-        ? cargoLines.map((line) => ({
+      const cargoRows = replacesCargo && cargoStructure === 'loose'
+        ? savedCargoLines.map((line) => ({
             package_type: line.packageType,
             quantity: Number(line.quantity || 0),
             length: Number(line.length || 0),
@@ -795,9 +729,9 @@ export default function EditQuotationPage() {
         p_expected_revision: quotationRevision({ id: quotationId, status: formData.status, status_revision: statusRevision }),
         p_repricing_reason: repricingReason.trim() || null,
         p_quotation_data: quotationPayload,
-        p_replace_containers: shouldReplaceContainers,
+        p_replace_containers: replacesCargo,
         p_container_lines: containerRows,
-        p_replace_cargo: shouldReplaceCargo,
+        p_replace_cargo: replacesCargo,
         p_cargo_lines: cargoRows,
         p_replace_pricing: saveIsMiamiFlow,
         p_pricing_items: saveIsMiamiFlow ? miamiPricingItems : [],
@@ -805,6 +739,8 @@ export default function EditQuotationPage() {
       })
       if (error) throw error
       persisted = true
+      loadedCargo.current = { quoteType: formData.quote_type, containers: containerLines, cargo: cargoLines }
+      if (cargoPlan.warning) toast.warning(cargoPlan.warning)
       if (saveIsMiamiFlow) setPricingItems(miamiPricingItems as PricingItem[])
       if (sendToPricing && !isCustomsOnly(formData.service_product)) {
         setFormData(previous => ({ ...previous, status: 'Pendiente de Fijar Precios' }))
@@ -910,10 +846,6 @@ export default function EditQuotationPage() {
 
   const totalCargoKg = cargoLines.reduce(
     (sum, line) => sum + getLineTotalWeightKg(line),
-    0
-  )
-  const totalCargoPackages = cargoLines.reduce(
-    (sum, line) => sum + Number(line.quantity || 0),
     0
   )
 
@@ -1023,6 +955,31 @@ export default function EditQuotationPage() {
     formData.quote_type === 'Courier' ||
     isMiamiFlow
 
+  const removalNote = 'La eliminación será definitiva al guardar la cotización.'
+  const airWeights = formData.tipo_transporte === 'Aéreo'
+    ? getAirChargeableWeights(totalCargoKg, totalCargoCbm)
+    : null
+  const productMismatch = isCustomsFlow
+    ? null
+    : getProductRuleMismatch(formData.service_product, formData.tipo_transporte, formData.quote_type)
+  const productLabel =
+    serviceProductOptions.find((product) => product.value === formData.service_product)?.label ||
+    formData.service_product
+  // Con regla de producto solo se ofrecen sus opciones, más el valor guardado si no coincide.
+  const withCurrent = (options: string[], current: string) =>
+    current && !options.includes(current) ? [...options, current] : options
+  const productRule = getProductTransportRule(formData.service_product)
+  const transportOptions = withCurrent(
+    productRule ? [productRule.transport] : ['Aéreo', 'Marítima', 'Terrestre'],
+    formData.tipo_transporte
+  )
+  const modalityOptions = withCurrent(
+    productRule && productRule.transport === formData.tipo_transporte
+      ? productRule.modalities
+      : quoteTypeOptions[formData.tipo_transporte] || [],
+    formData.quote_type
+  )
+
   return (
     <>
       <UnsavedChangesGuard />
@@ -1043,7 +1000,9 @@ export default function EditQuotationPage() {
         </div>
 
         <SectionNav
-          items={isCustomsFlow ? editorSections.filter(item => ['#quote-general', '#quote-actions'].includes(item.href)) : editorSections}
+          items={isCustomsFlow
+            ? editorSections.filter(item => ['#quote-general', '#quote-actions'].includes(item.href))
+            : isMiamiFlow ? editorSections.filter(item => item.href !== '#quote-route') : editorSections}
           label="Secciones del editor de cotización"
         />
 
@@ -1093,9 +1052,11 @@ export default function EditQuotationPage() {
               >
                 <option value="">Transporte</option>
                 {isCustomsFlow && <option value="Aduanas">Servicio de Aduanas</option>}
-                <option value="Aéreo">Aéreo</option>
-                <option value="Marítima">Marítima</option>
-                <option value="Terrestre">Terrestre</option>
+                {!isCustomsFlow && transportOptions.map((transport) => (
+                  <option key={transport} value={transport}>
+                    {transport}
+                  </option>
+                ))}
               </select>
               </div>
 
@@ -1111,7 +1072,7 @@ export default function EditQuotationPage() {
                 <option value="">Tipo de cotización</option>
                 {isCustomsFlow && <option value="Aduanas">Aduanas</option>}
 
-                {(quoteTypeOptions[formData.tipo_transporte] || []).map((type) => (
+                {modalityOptions.map((type) => (
                   <option key={type} value={type}>
                     {type}
                   </option>
@@ -1205,11 +1166,31 @@ export default function EditQuotationPage() {
               </div>
 
             </div>
+            {productMismatch && (
+              <div
+                role="alert"
+                className="mt-4 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+              >
+                <p>
+                  El producto <strong>{productLabel}</strong> corresponde a{' '}
+                  {productMismatch.rule.transport} {productMismatch.rule.modalities.join(' / ')}, pero esta
+                  cotización tiene {formData.tipo_transporte || 'transporte sin definir'}{' '}
+                  {formData.quote_type || 'sin modalidad'}. Se guardará tal cual hasta que la ajustes.
+                </p>
+                <button
+                  type="button"
+                  onClick={applyProductRule}
+                  className={`${secondaryButtonClass} shrink-0`}
+                >
+                  Ajustar al producto
+                </button>
+              </div>
+            )}
           </section>
 
           {isCustomsFlow && <CustomsQuotationSection data={formData} onChange={(field, value) => setFormData(previous => ({ ...previous, [field]: value }))} charges={customsCharges} setCharges={setCustomsCharges} taxRate={miami.taxRatePercent} />}
           {!isCustomsFlow && <>
-          <section id="quote-route" className="scroll-mt-28 pt-3">
+          {!isMiamiFlow && <section id="quote-route" className="scroll-mt-28 pt-3">
             <h2 className="text-xl font-bold mb-4">Ruta</h2>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -1287,13 +1268,13 @@ export default function EditQuotationPage() {
                 </div>
               )}
             </div>
-          </section>
+          </section>}
 
           <section id="quote-cargo" className="scroll-mt-28 pt-3">
             <h2 className="text-xl font-bold mb-4">Carga</h2>
 
             <div className="space-y-4">
-              <div className="grid gap-4 lg:grid-cols-2">
+              {!isMiamiFlow && <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-4">
                   <div className={fieldGroupClass}>
                     <label className={formLabelClass}>Commodity / descripción de la carga</label>
@@ -1334,449 +1315,25 @@ export default function EditQuotationPage() {
                     className={`${fieldClass} min-h-[132px]`}
                   />
                 </div>
-              </div>
+              </div>}
 
               {requiresContainerLines && (
-                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <div className={fieldGroupClass}>
-                      <label className={formLabelClass}>Tipo de contenedor / unidad</label>
-                    <select
-                      value={containerLineForm.container_type_id}
-                      onChange={(e) => {
-                        const selectedContainer = containerTypes.find(
-                          (container) => container.id === e.target.value
-                        )
-
-                        setContainerLineForm({
-                          ...containerLineForm,
-                          container_type_id: e.target.value,
-                          container_type_name: selectedContainer?.name || '',
-                        })
-                      }}
-                      className={fieldClass}
-                    >
-                      <option value="">Tipo de contenedor / unidad</option>
-
-                      {containerTypes.map((container) => (
-                        <option key={container.id} value={container.id}>
-                          {container.name}
-                        </option>
-                      ))}
-                    </select>
-                    </div>
-
-                    <div className={fieldGroupClass}>
-                      <label className={formLabelClass}>Cantidad</label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Cantidad"
-                      value={containerLineForm.quantity}
-                      onChange={(e) =>
-                        setContainerLineForm({
-                          ...containerLineForm,
-                          quantity: e.target.value,
-                        })
-                      }
-                      className={fieldClass}
-                    />
-                    </div>
-
-                    <div className={fieldGroupClass}>
-                      <label className={formLabelClass}>Notas</label>
-                    <input
-                      placeholder="Notas"
-                      value={containerLineForm.notes}
-                      onChange={(e) =>
-                        setContainerLineForm({
-                          ...containerLineForm,
-                          notes: e.target.value,
-                        })
-                      }
-                      className={fieldClass}
-                    />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={saveContainerLine}
-                      className={primaryButtonClass}
-                    >
-                      {editingContainerLineIndex !== null
-                        ? 'Actualizar'
-                        : 'Agregar'}
-                    </button>
-                  </div>
-
-                  {containerLines.length > 0 && (
-                    <div className="divide-y rounded-xl border border-slate-200 bg-white">
-                      {containerLines.map((line, index) => (
-                        <div
-                          key={`${line.container_type_id}-${index}`}
-                          className="flex items-center justify-between gap-4 p-3"
-                        >
-                          <div>
-                            <p className="font-semibold text-slate-900">
-                              {line.container_type_name}
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              Cantidad: {line.quantity}
-                              {line.notes ? ` · ${line.notes}` : ''}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-4">
-                            <button
-                              type="button"
-                              onClick={() => editContainerLine(index)}
-                              className={secondaryButtonClass}
-                            >
-                              Modificar
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setContainerLinePendingRemoval({ index, line })}
-                              className={secondaryButtonClass}
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <ContainerLinesEditor
+                  containerTypes={containerTypes}
+                  lines={containerLines}
+                  setLines={setContainerLines}
+                  removalNote={removalNote}
+                />
               )}
 
               {requiresLooseCargo && !isMiamiFlow && (
-                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">
-                        Detalle de carga
-                      </h3>
-                      <p className="text-sm text-slate-500">
-                        Ingresa paquetes, peso y dimensiones para calcular totales informativos.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCargoLines((prev) => [
-                          ...prev,
-                          {
-                            id: crypto.randomUUID(),
-                            quantity: '1',
-                            packageType: 'Caja',
-                            length: '',
-                            width: '',
-                            height: '',
-                            dimensionUnit: 'm',
-                            weight: '',
-                            weightUnit: 'lbs',
-                            volumeMode: 'dimensions',
-                            manualCbm: '',
-                          },
-                        ])
-                      }
-                      className={secondaryButtonClass}
-                    >
-                      Agregar línea
-                    </button>
-                  </div>
-
-                  {cargoLines.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
-                      Sin líneas de carga.
-                    </div>
-                  )}
-
-                  {cargoLines.length > 0 && (
-                    <div className="space-y-3">
-                      {cargoLines.map((line, idx) => {
-                        const lineFt3 = calculateLineFt3(line)
-                        const lineCbm = calculateLineCbm(line)
-                        const lineWeightUnit = getCargoWeightUnit(line)
-                        const lineVolumeMode = getCargoVolumeMode(line)
-                        const lineTotalLbs = getLineTotalWeightLbs(line)
-                        const lineTotalKg = getLineTotalWeightKg(line)
-
-                        return (
-                          <div
-                            key={line.id}
-                            className="rounded-2xl border border-slate-200 bg-white p-4"
-                          >
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                              <span className="text-sm font-semibold text-slate-600">
-                                Línea #{idx + 1}
-                              </span>
-
-                              <button
-                                type="button"
-                                onClick={() => setCargoLinePendingRemoval(line)}
-                                className={secondaryButtonClass}
-                              >
-                                Quitar
-                              </button>
-                            </div>
-
-                            <div className="grid gap-3 md:grid-cols-4">
-                              <select
-                                value={line.packageType}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? {
-                                            ...item,
-                                            packageType:
-                                              e.target.value as CargoDimensionLine['packageType'],
-                                          }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              >
-                                <option>Caja</option>
-                                <option>Pallet</option>
-                                <option>Pieza</option>
-                              </select>
-
-                              <input
-                                type="number"
-                                min="1"
-                                placeholder="Cantidad"
-                                value={line.quantity}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? { ...item, quantity: e.target.value }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              />
-
-                              <select
-                                value={lineVolumeMode}
-                                onChange={(e) =>
-                                  setCargoLines((prev) =>
-                                    prev.map((item) =>
-                                      item.id === line.id
-                                        ? {
-                                            ...item,
-                                            volumeMode:
-                                              e.target.value as CargoDimensionLine['volumeMode'],
-                                          }
-                                        : item
-                                    )
-                                  )
-                                }
-                                className={fieldClass}
-                              >
-                                <option value="dimensions">
-                                  Calcular por dimensiones
-                                </option>
-                                <option value="manual">
-                                  Ingresar CBM manual
-                                </option>
-                              </select>
-
-                              {lineVolumeMode === 'dimensions' ? (
-                                <select
-                                  value={line.dimensionUnit}
-                                  onChange={(e) =>
-                                    setCargoLines((prev) =>
-                                      prev.map((item) =>
-                                        item.id === line.id
-                                          ? {
-                                              ...item,
-                                              dimensionUnit:
-                                                e.target.value as CargoDimensionLine['dimensionUnit'],
-                                            }
-                                          : item
-                                      )
-                                    )
-                                  }
-                                  className={fieldClass}
-                                >
-                                  <option value="in">Pulgadas (in)</option>
-                                  <option value="cm">Centímetros (cm)</option>
-                                  <option value="mm">Milímetros (mm)</option>
-                                  <option value="m">Metros (m)</option>
-                                </select>
-                              ) : (
-                                <div className="flex flex-col gap-1">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    placeholder="CBM total de la línea"
-                                    value={line.manualCbm || ''}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? {
-                                                ...item,
-                                                manualCbm: e.target.value,
-                                              }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    className={fieldClass}
-                                  />
-                                  <span className="text-xs text-slate-500">
-                                    CBM total de la línea
-                                  </span>
-                                </div>
-                              )}
-
-                              <div className="grid grid-cols-[1fr_92px] gap-2">
-                                <input
-                                  type="number"
-                                  placeholder={`Peso unitario ${lineWeightUnit}`}
-                                  value={line.weight}
-                                  onChange={(e) =>
-                                    setCargoLines((prev) =>
-                                      prev.map((item) =>
-                                        item.id === line.id
-                                          ? { ...item, weight: e.target.value }
-                                          : item
-                                      )
-                                    )
-                                  }
-                                  className={fieldClass}
-                                />
-
-                                <select
-                                  value={lineWeightUnit}
-                                  onChange={(e) =>
-                                    setCargoLines((prev) =>
-                                      prev.map((item) =>
-                                        item.id === line.id
-                                          ? {
-                                              ...item,
-                                              weightUnit:
-                                                e.target.value as CargoDimensionLine['weightUnit'],
-                                            }
-                                          : item
-                                      )
-                                    )
-                                  }
-                                  className={fieldClass}
-                                >
-                                  <option value="lbs">LBS</option>
-                                  <option value="kg">KG</option>
-                                </select>
-                              </div>
-
-                              {lineVolumeMode === 'dimensions' && (
-                                <>
-                                  <input
-                                    type="number"
-                                    placeholder="Largo"
-                                    value={line.length}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, length: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    className={fieldClass}
-                                  />
-
-                                  <input
-                                    type="number"
-                                    placeholder="Ancho"
-                                    value={line.width}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, width: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    className={fieldClass}
-                                  />
-
-                                  <input
-                                    type="number"
-                                    placeholder="Alto"
-                                    value={line.height}
-                                    onChange={(e) =>
-                                      setCargoLines((prev) =>
-                                        prev.map((item) =>
-                                          item.id === line.id
-                                            ? { ...item, height: e.target.value }
-                                            : item
-                                        )
-                                      )
-                                    }
-                                    className={fieldClass}
-                                  />
-                                </>
-                              )}
-
-                              <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
-                                KG {formatNumber(lineTotalKg, 2)} · LBS{' '}
-                                {formatNumber(lineTotalLbs, 0)} · FT3{' '}
-                                {formatNumber(lineFt3, 2)} · CBM{' '}
-                                {formatNumber(lineCbm, 3)}
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <div className="rounded-xl bg-white p-4">
-                      <p className="text-xs font-semibold uppercase text-slate-400">
-                        Peso KG
-                      </p>
-                      <p className="mt-1 text-lg font-semibold">
-                        {formatNumber(totalCargoKg, 2)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-white p-4">
-                      <p className="text-xs font-semibold uppercase text-slate-400">
-                        Peso LBS
-                      </p>
-                      <p className="mt-1 text-lg font-semibold">
-                        {formatNumber(totalCargoWeight, 0)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-white p-4">
-                      <p className="text-xs font-semibold uppercase text-slate-400">
-                        FT3
-                      </p>
-                      <p className="mt-1 text-lg font-semibold">
-                        {formatNumber(totalCargoFt3, 2)}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-white p-4">
-                      <p className="text-xs font-semibold uppercase text-slate-400">
-                        CBM
-                      </p>
-                      <p className="mt-1 text-lg font-semibold">
-                        {formatNumber(totalCargoCbm, 3)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <CargoLinesEditor
+                  lines={cargoLines}
+                  setLines={setCargoLines}
+                  issuesByLine={cargoLineIssues}
+                  airWeights={airWeights}
+                  removalNote={removalNote}
+                />
               )}
 
               <MiamiQuotationSection
@@ -1786,11 +1343,6 @@ export default function EditQuotationPage() {
                 cardClass={cardClass}
                 cargoLines={cargoLines}
                 setCargoLines={setCargoLines}
-                calculateLineCbm={calculateLineCbm}
-                calculateLineFt3={calculateLineFt3}
-                totalCargoFt3={totalCargoFt3}
-                totalCargoCbm={totalCargoCbm}
-                totalCargoWeight={totalCargoWeight}
                 formatNumber={formatNumber}
                 miami={miami}
               />
@@ -1973,20 +1525,6 @@ export default function EditQuotationPage() {
         </DialogContent>
       </Dialog>
       <ConfirmDialog
-        open={containerLinePendingRemoval !== null}
-        onOpenChange={(open) => { if (!open) setContainerLinePendingRemoval(null) }}
-        title="Quitar contenedor de la cotización"
-        description={containerLinePendingRemoval
-          ? `¿Deseas quitar ${containerLinePendingRemoval.line.quantity} × ${containerLinePendingRemoval.line.container_type_name}? La eliminación será definitiva al guardar la cotización.`
-          : undefined}
-        confirmLabel="Quitar contenedor"
-        danger
-        onConfirm={() => {
-          if (containerLinePendingRemoval) deleteContainerLine(containerLinePendingRemoval.index)
-          setContainerLinePendingRemoval(null)
-        }}
-      />
-      <ConfirmDialog
         open={modeChangePending !== null}
         onOpenChange={(open) => { if (!open) setModeChangePending(null) }}
         title="Cambiar modalidad de carga"
@@ -1996,22 +1534,6 @@ export default function EditQuotationPage() {
         confirmLabel="Cambiar modalidad"
         danger
         onConfirm={confirmModeChange}
-      />
-      <ConfirmDialog
-        open={cargoLinePendingRemoval !== null}
-        onOpenChange={(open) => { if (!open) setCargoLinePendingRemoval(null) }}
-        title="Quitar línea de carga"
-        description={cargoLinePendingRemoval
-          ? `¿Deseas quitar ${cargoLinePendingRemoval.quantity || 0} ${cargoLinePendingRemoval.packageType}? La eliminación será definitiva al guardar la cotización.`
-          : undefined}
-        confirmLabel="Quitar línea"
-        danger
-        onConfirm={() => {
-          if (cargoLinePendingRemoval) {
-            setCargoLines((prev) => prev.filter((item) => item.id !== cargoLinePendingRemoval.id))
-          }
-          setCargoLinePendingRemoval(null)
-        }}
       />
     </>
   )

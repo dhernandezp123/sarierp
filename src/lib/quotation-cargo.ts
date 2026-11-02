@@ -52,6 +52,13 @@ export const getCbmPerUnit = (line: CargoDimensionLine) => {
   return 0
 }
 
+// Las líneas guardadas en pulgadas sin dimensiones ni CBM se abren en metros,
+// la unidad por defecto actual (antes lo hacía un efecto de la sección Miami).
+export const normalizeLegacyBlankInchLine = (line: CargoDimensionLine): CargoDimensionLine =>
+  line.dimensionUnit === 'in' && !line.length && !line.width && !line.height && !line.manualCbm
+    ? { ...line, dimensionUnit: 'm' }
+    : line
+
 export const getCargoVolumeMode = (line: CargoDimensionLine) =>
   line.volumeMode || 'dimensions'
 

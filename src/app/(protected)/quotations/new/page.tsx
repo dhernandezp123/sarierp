@@ -1207,11 +1207,6 @@ export default function NewQuotationPage() {
           cardClass={cardClass}
           cargoLines={cargoLines}
           setCargoLines={setCargoLines}
-          calculateLineCbm={calculateLineCbm}
-          calculateLineFt3={calculateLineFt3}
-          totalCargoFt3={totalCargoFt3}
-          totalCargoCbm={totalCargoCbm}
-          totalCargoWeight={totalCargoWeight}
           formatNumber={formatNumber}
           miami={miami}
         />

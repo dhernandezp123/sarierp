@@ -40,11 +40,14 @@ export function CargoLinesEditor({
   setLines,
   issuesByLine = {},
   airWeights = null,
+  removalNote,
 }: {
   lines: CargoDimensionLine[]
   setLines: Dispatch<SetStateAction<CargoDimensionLine[]>>
   issuesByLine?: Record<string, CargoLineIssue[]>
   airWeights?: AirWeights | null
+  /** Texto añadido a la confirmación de borrado (p. ej. cuándo se aplica). */
+  removalNote?: string
 }) {
   const [pendingRemoval, setPendingRemoval] = useState<CargoDimensionLine | null>(null)
 
@@ -323,7 +326,7 @@ export function CargoLinesEditor({
         onOpenChange={(open) => { if (!open) setPendingRemoval(null) }}
         title="Quitar línea de carga"
         description={pendingRemoval
-          ? `¿Deseas descartar ${pendingRemoval.quantity || 0} ${pendingRemoval.packageType} y todos sus valores?`
+          ? `¿Deseas descartar ${pendingRemoval.quantity || 0} ${pendingRemoval.packageType} y todos sus valores?${removalNote ? ` ${removalNote}` : ''}`
           : undefined}
         confirmLabel="Quitar línea"
         danger
