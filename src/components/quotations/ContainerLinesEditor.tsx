@@ -17,10 +17,13 @@ export function ContainerLinesEditor({
   containerTypes,
   lines,
   setLines,
+  removalNote,
 }: {
   containerTypes: ContainerType[]
   lines: ContainerLine[]
   setLines: Dispatch<SetStateAction<ContainerLine[]>>
+  /** Texto añadido a la confirmación de borrado (p. ej. cuándo se aplica). */
+  removalNote?: string
 }) {
   const [form, setForm] = useState(emptyForm)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -170,7 +173,7 @@ export function ContainerLinesEditor({
         onOpenChange={(open) => { if (!open) setPendingRemoval(null) }}
         title="Quitar contenedor"
         description={pendingRemoval
-          ? `¿Deseas descartar ${pendingRemoval.line.quantity} × ${pendingRemoval.line.container_type_name} de esta cotización?`
+          ? `¿Deseas descartar ${pendingRemoval.line.quantity} × ${pendingRemoval.line.container_type_name} de esta cotización?${removalNote ? ` ${removalNote}` : ''}`
           : undefined}
         confirmLabel="Quitar contenedor"
         danger
