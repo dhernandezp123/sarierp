@@ -7,12 +7,15 @@ import loadTs from './load-ts.mjs'
 const Image = props => React.createElement(renderer.Image, { ...props, src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=' })
 const { default: QuotationPDF } = loadTs('src/components/pdf/quotation-pdf.tsx', { '@react-pdf/renderer': { ...renderer, Image } })
 
-for (const quoteType of ['FCL', 'LCL']) {
+for (const quoteType of ['FCL', 'LCL', 'Consolidado', 'Courier', 'LTL', 'FTL']) {
+  const transport = ['LTL', 'FTL'].includes(quoteType)
+    ? 'Terrestre'
+    : ['Consolidado', 'Courier'].includes(quoteType) ? 'Aéreo' : 'Marítima'
   test(`PDF comercial ${quoteType} excluye notas de la tarifa y mantiene las comerciales`, async () => {
     let layout
     const document = React.cloneElement(QuotationPDF({
       quotation: {
-        quotation_number: 'TEST-NOTAS', quote_type: quoteType, tipo_transporte: 'Marítimo',
+        quotation_number: 'TEST-NOTAS', quote_type: quoteType, tipo_transporte: transport,
         client_notes: 'Condiciones comerciales visibles', pricing_notes: 'VENTAS-SECRETO',
         clientes: { nombre: 'Cliente ficticio' },
       },
@@ -20,7 +23,7 @@ for (const quoteType of ['FCL', 'LCL']) {
         carrier: 'Carrier de prueba', transit_time: '20', internal_notes: 'TARIFA-SECRETO',
         agente_nombre: 'PROVEEDOR-SECRETO',
       },
-      pricingItems: [{ id: 'freight', item_type: 'Flete', description: 'Flete marítimo', quantity: 1, sale_amount: 200, cost_amount: 100, total_amount: 200 }],
+      pricingItems: [{ id: 'freight', item_type: 'Flete', description: `Flete ${transport}`, quantity: 1, sale_amount: 200, cost_amount: 100, total_amount: 200 }],
     }), { onRender: result => { layout = result._INTERNAL__LAYOUT__DATA_ } })
     const blob = await renderer.pdf(document).toBlob()
     assert.ok(blob.size > 1000)

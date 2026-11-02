@@ -1,5 +1,26 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-11-02 - PNOTE-03 - Notas internas en todos los servicios con tarifas de agentes
+
+- Estado: implementado y validado localmente con pruebas y navegador sobre fixture sintetico; sin commit ni despliegue. UAT autenticada pendiente.
+- Hallazgo: despues de habilitar Aereo Consolidado, Courier, LTL, FTL y servicios personalizados seguian sin campo, visualizacion ni inclusion de internal_notes en el payload de tarifa.
+- Archivos: src/app/(protected)/pricing-comparison/page.tsx, tests/agent-quote-notes-pdf.test.mjs y este registro. SQL: ninguno.
+- Cambio: se retira la lista de modalidades permitidas para notas; toda tarifa del comparativo admite capturar, guardar, consultar, editar y vaciar agent_quotes.internal_notes, incluido un servicio personalizado. Conserva el componente y los permisos existentes de Admin/Pricing en Pendiente de Fijar Precios, asi como la separacion de client_notes comerciales y pricing_notes de Ventas.
+- Alcance verificado en codigo: Miami LCL/aereo y Aduanas ocultan todo el comparativo porque usan cargos propios; sus observaciones comerciales client_notes siguen disponibles en Cierre y aparecen en PDF. No se presentan esas observaciones como notas internas por tarifa ni se crean tarifas de agentes para estos flujos.
+- Validaciones: npx.cmd tsc --noEmit OK; npm.cmd test 571/571 OK, con PDF real que excluye notas internas/proveedor y conserva client_notes para FCL, LCL, Consolidado, Courier, LTL y FTL; npm.cmd run lint:ci 556 archivos, 215 diagnosticos historicos, 0 regresiones; npm.cmd run build OK.
+- Navegador: 12 comprobaciones OK, 0 excepciones JS en pagina real con sesion/Supabase simulados y fixture compilado para evitar recargas del servidor de desarrollo. FCL, LCL, Aereo Consolidado, Courier, LTL, FTL y personalizado guardan notas independientes desde tarjeta y formulario; payload de nota limitado a internal_notes e IDs correctos. Alta nueva Courier conserva la nota. CSS real con PostCSS/Tailwind y @source explicito, campo compacto verificado a 1280/768/390 px. Miami LCL/aereo y Aduanas guardan sus observaciones comerciales. Evidencia privada .ua/intermediate/notes-all-browser-report.json y capturas notes-all-* (ignorados). git diff --check OK.
+- Pendientes: UAT autenticada de los servicios habilitados. No cambia esquema, RLS, costos ni estados. Cambios paralelos de Cotizaciones preservados. Hash pendiente.
+
+### 2026-11-02 - PNOTE-02 - Notas internas por tarifa de Aereo Consolidado
+
+- Estado: implementado y validado localmente con pruebas y navegador sobre fixture sintetico. Sin commit ni despliegue; UAT autenticada pendiente.
+- Hallazgo: Pricing Comparison limitaba a FCL/LCL el campo de notas internas, su inclusion en el payload de alta/edicion y su visualizacion en tarjetas; Aereo Consolidado no tenia la misma opcion.
+- Archivos: src/app/(protected)/pricing-comparison/page.tsx, tests/agent-quote-notes-pdf.test.mjs y este registro. SQL: ninguno; reutiliza agent_quotes.internal_notes y AgentQuoteNotes existentes.
+- Cambio: una condicion compartida habilita las notas para FCL/LCL y transporte Aereo con modalidad Consolidado. Permite capturarlas al crear/editar la tarifa y agregar/editar/vaciar la nota desde su tarjeta. Conserva permisos y validacion existentes de Admin/Pricing en Pendiente de Fijar Precios; las notas siguen visibles como consulta en otros estados y fuera del PDF comercial.
+- Validaciones ejecutadas: npx.cmd tsc --noEmit OK; npm.cmd test 568/568 OK, incluida la nueva cobertura de PDF aereo real que conserva client_notes y excluye notas internas y proveedor; npm.cmd run lint:ci 556 archivos, 215 diagnosticos historicos, 0 regresiones; npm.cmd run build OK; git diff --check OK.
+- Navegador: pagina real con Supabase/sesion simulados, 9 comprobaciones OK y 0 excepciones JS en la pasada final. Aereo: nota independiente por opcion, precarga y guardado desde formulario completo, modal a 390 px con Escape y devolucion del foco, campo compacto dentro de 1280/768 px, lectura sin accion de edicion para Ventas y Pricing Aprobado. Regresion FCL: guardar solo la nota sin repricing, recuperacion de error, tabla, vaciar a NULL e impresion interna. Evidencia privada: .ua/intermediate/notes-air-browser-report.json y capturas notes-air-* (ignorados).
+- Riesgos/pendientes: UAT autenticada del guardado y persistencia con RLS real. No cambia esquema, permisos, costos ni calculos de peso/flete. Cambios paralelos de Cotizaciones fuera del alcance y preservados. Hash de commit pendiente.
+
 ### 2026-10-30 - UX-PURCHASE-PAYMENTS-MODAL-01 - Saldo y pagos sin abandonar Compras
 
 - Estado: implementado y validado localmente main/demo; publicacion autorizada en curso, UAT autenticada pendiente.
