@@ -1,5 +1,19 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-11-02 - RATE-ACCESS-01 - Permiso individual y auditoria de tarifas de clientes
+
+- Estado: implementado y validado localmente; SQL aplicado y permiso individual de Zonia habilitado en Production. Frontend pendiente de publicacion; UAT autenticada pendiente.
+- Alcance: Zonia Flores conserva Contabilidad, Aprobado y activa. Solo su perfil recibe la delegacion; otros contadores y cambios de master no heredan el permiso. Admin/Pricing/Ventas conservan su acceso. No se alteran importes ni cotizaciones existentes.
+- Archivos: src/app/(protected)/clientes/[id]/page.tsx, src/hooks/useClientRateAccess.ts, src/components/clientes/ClientRateHistory.tsx, src/lib/client-rate-history.ts, src/lib/permissions.ts, tests/client-rate-access-history.test.mjs, scripts/validate-audit-sql.mjs, supabase/tests/client_rate_access_and_audit.sql y este registro.
+- SQL: nuevas migraciones 20261102183000_client_rate_access_and_audit.sql y 20261102190000_client_rate_audit_insert_guard.sql. Tabla de delegaciones sin escritura API; permiso aprobado/activo limitado por tenant y cliente. Se conserva replace_client_rates atomica. Trigger registra autor real, fecha, destino y snapshots antes/despues en activity_logs para INSERT/UPDATE/DELETE, incluso DML directo. Un fallo del registro revierte la tarifa. RLS impide editar/borrar y falsificar acciones/origen canonicos desde la API.
+- Consulta: Clientes > cliente > Tarifas muestra historial paginado. Agrupa delete/insert de un reemplazo y omite guardados identicos sin eliminar los eventos originales. Expone solo el cliente y tenant autorizados. Respuestas de permiso/historial obsoletas se descartan al cambiar usuario/cliente. Cero no equivale a ausencia. Sin backfill de cambios historicos ni recalculo de cotizaciones.
+- Validacion local: npx.cmd tsc --noEmit OK; npm.cmd test 580/580 OK (incluye 13 pruebas sin confirmar de Claude y 6 nuevas de este cambio); npm.cmd run lint:ci, 560 archivos, 215 diagnosticos historicos, 0 regresiones; npm.cmd run build OK. SQL/RLS en contenedor aislado: permisos, RPC, tenants, auditoria directa, fallo atomico, inmutabilidad/falsificacion, cuenta inactiva/pendiente, anonimo y regresion AUD-01 OK. Fixtures con rollback, sin tocar la base normal de desarrollo.
+- Navegador: 5 comprobaciones OK y 0 errores JavaScript en pagina real con usuario/Supabase simulados: guardar con autor/antes/despues, paginacion, consulta sin permiso, error/reintento y sin desbordamiento 1280/768/390 px. Fixture compilado y CSS real; no certifica sesion de Zonia. Evidencias privadas .ua/intermediate/client-rates-* ignoradas.
+- Production: ensayo rollback y aplicacion transaccional de ambas migraciones con fuente exacta registrada; delegacion de Zonia separada del SQL compartido y registrada como operacion autorizada, sin suplantar su autoria. Postflight confirma 1 delegado, rol intacto, permiso efectivo y trigger. Las 455 tarifas conservan huella 7839e818fe0b7de2c6cedb0f5d473468. No se realizaron escrituras de tarifas reales de prueba.
+- Pendientes: publicar frontend, sincronizar esquema Demo sin copiar perfiles/delegaciones de Production, CI/paridad y smoke. UAT con sesion real de Zonia para editar una tarifa autorizada y consultar su historial; no se declara completado ese recorrido.
+- Commit: pendiente.
+
+
 ### 2026-11-02 - PNOTE-03 - Notas internas en todos los servicios con tarifas de agentes
 
 - Estado: implementado y validado localmente con pruebas y navegador sobre fixture sintetico; sin commit ni despliegue. UAT autenticada pendiente.
