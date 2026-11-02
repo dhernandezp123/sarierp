@@ -1,5 +1,16 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-11-02 - QUAL-QUOTE-SERVICE-01 - Cambio de producto en edicion de cotizaciones
+
+- Estado: implementado y validado localmente; publicacion y UAT autenticada pendientes.
+- Hallazgo: la regla producto -> transporte/modalidad limitaba esos selectores, pero el selector de producto solo aparecia para Miami. Una LCL de otros origenes no podia corregirse a Aereo Consolidado desde el editor.
+- Archivos: src/app/(protected)/quotations/[id]/edit/page.tsx, src/lib/quotation-edit.ts, tests/quotation-edit.test.mjs y este registro. SQL: ninguno.
+- Cambio: selector Producto / servicio visible para los productos con pricing por agentes, con las opciones activas del catalogo y conservando un producto historico si no aparece en ellas. La seleccion aplica la regla de creacion para transporte y modalidad; LTL/FTL requiere elegir modalidad cuando no corresponde la previa. Miami conserva sus dos opciones y Aduanas su flujo dedicado. No cambia de familia de pricing automaticamente.
+- Integridad: LCL -> Aereo Consolidado conserva todas las lineas y recalcula sus totales al guardar por la RPC atomica existente. Los cambios entre contenedores y carga suelta pasan por la confirmacion existente. Guardar sin tocar la carga sigue omitiendo totales historicos. Se avisa revisar tarifas al cambiar el servicio; no se modifican tarifas, opciones comerciales ni operaciones como efecto lateral.
+- Validaciones: npx.cmd tsc --noEmit OK; npm.cmd test 582/582; npm.cmd run lint:ci 560 archivos, 215 diagnosticos historicos, 0 regresiones; npm.cmd run build OK. Navegador en pagina real con sesion/Supabase simulados: 14 comprobaciones OK, 0 errores JavaScript, sin overflow 1440/390 px y capturas revisadas. Incluye LCL -> Aereo conservando dos lineas en el payload RPC, cambio inverso y confirmacion/cancelacion hacia FCL con bloqueo si faltan contenedores, ademas de las 11 regresiones de edicion/Miami. Reproduccion del caso real mediante lectura exclusiva de producto/estado y cantidades, sin incluir identidad ni datos comerciales en las pruebas; fixture sintetico separado. Evidencias ignoradas en .ua/intermediate/quote-service-*.
+- Riesgos / pendientes: despliegue y UAT autenticada. No se modifica directamente la cotizacion reportada; el cambio se guarda desde su editor.
+- Commit: pendiente.
+
 ### 2026-11-02 - QUAL-QUOTE-EDIT-01 - Edicion y Miami usan los editores de carga compartidos; validacion de carga por accion
 
 - Estado: publicado en Produccion y Demo; CI Quality y paridad en verde, Vercel OK en ambos. UAT autenticada pendiente.

@@ -210,6 +210,17 @@ export type ProductRuleMismatch = {
   target: { tipo_transporte: string; quote_type: string }
 }
 
+// Al cambiar el producto, aplica la misma regla de transporte/modalidad que en
+// creacion. Los productos personalizados conservan la seleccion libre actual.
+export function getEditProductSelection(product: string, transport: string, quoteType: string) {
+  if (product === 'miami_lcl') return { tipo_transporte: 'Marítima', quote_type: 'LCL' }
+  if (product === 'miami_air') return { tipo_transporte: 'Aéreo', quote_type: 'Consolidado' }
+  const rule = getProductTransportRule(product)
+  return rule
+    ? { tipo_transporte: rule.transport, quote_type: resolveProductQuoteType(rule, transport === rule.transport ? quoteType : '') }
+    : { tipo_transporte: transport, quote_type: quoteType }
+}
+
 // Cotización guardada antes de que el producto definiera transporte y modalidad.
 // No se corrige al abrir: el usuario la ajusta con una acción explícita.
 export function getProductRuleMismatch(
