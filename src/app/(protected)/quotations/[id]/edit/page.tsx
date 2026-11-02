@@ -10,7 +10,7 @@ import {
   getLineTotalWeightLbs, getLineTotalWeightKg, normalizeLegacyBlankInchLine,
 } from '@/src/lib/quotation-cargo'
 import type { ContainerLine } from '@/src/lib/quotation-form'
-import { getCargoSignature, getEditCargoTotals, getProductRuleMismatch, planQuotationEditCargo } from '@/src/lib/quotation-edit'
+import { getCargoSignature, getEditCargoTotals, getEditProductSelection, getProductRuleMismatch, planQuotationEditCargo } from '@/src/lib/quotation-edit'
 import { CargoLinesEditor } from '@/src/components/quotations/CargoLinesEditor'
 import { ContainerLinesEditor } from '@/src/components/quotations/ContainerLinesEditor'
 
@@ -469,29 +469,22 @@ export default function EditQuotationPage() {
     setFormData((prev) => ({
       ...prev,
       service_product: serviceProduct,
-      ...(serviceProduct === 'miami_lcl'
-        ? {
-            tipo_transporte: 'Marítima',
-            quote_type: 'LCL',
-          }
-        : {}),
-      ...(serviceProduct === 'miami_air' || serviceProduct === 'other_origin_air'
-        ? {
-            tipo_transporte: 'Aéreo',
-            quote_type: 'Consolidado',
-          }
-        : {}),
+      ...getEditProductSelection(serviceProduct, prev.tipo_transporte, prev.quote_type),
     }))
   }
 
   const handleServiceProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const serviceProduct = e.target.value
-    const changesToLooseCargo = ['miami_lcl', 'miami_air', 'other_origin_air'].includes(serviceProduct)
-    if (changesToLooseCargo && containerLines.length > 0) {
+    const next = getEditProductSelection(serviceProduct, formData.tipo_transporte, formData.quote_type)
+    const structure = getCargoStructure(next.quote_type)
+    const discarded = structure === 'containers' && cargoLines.length > 0
+      ? 'cargo'
+      : structure === 'loose' && containerLines.length > 0 ? 'containers' : null
+    if (discarded) {
       setModeChangePending({
         kind: 'service_product',
         value: serviceProduct,
-        discarded: 'containers',
+        discarded,
       })
       return
     }
@@ -969,6 +962,9 @@ export default function EditQuotationPage() {
   const withCurrent = (options: string[], current: string) =>
     current && !options.includes(current) ? [...options, current] : options
   const productRule = getProductTransportRule(formData.service_product)
+  const editableProducts = serviceProductOptions.filter((product) =>
+    isMiamiFlow ? ['miami_lcl', 'miami_air'].includes(product.value) : !usesOwnPricing(product.value)
+  )
   const transportOptions = withCurrent(
     productRule ? [productRule.transport] : ['Aéreo', 'Marítima', 'Terrestre'],
     formData.tipo_transporte
@@ -1035,6 +1031,30 @@ export default function EditQuotationPage() {
                 </p>
               </div>
 
+              {!isCustomsFlow && (
+                <div className={fieldGroupClass}>
+                  <label htmlFor="edit-service-product" className={formLabelClass}>Producto / servicio</label>
+                  <select
+                    id="edit-service-product"
+                    name="service_product"
+                    value={formData.service_product || ''}
+                    onChange={handleServiceProductChange}
+                    className={fieldClass}
+                  >
+                    <option value="" disabled>Selecciona el producto o servicio</option>
+                    {formData.service_product && !editableProducts.some((product) => product.value === formData.service_product) && (
+                      <option value={formData.service_product}>{productLabel}</option>
+                    )}
+                    {editableProducts.map((product) => (
+                      <option key={product.value} value={product.value}>{product.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    El producto define transporte y modalidad. Revisa las tarifas al cambiar de servicio.
+                  </p>
+                </div>
+              )}
+
               <div className={fieldGroupClass}>
                 <label className={formLabelClass}>{isCustomsFlow ? 'Servicio' : 'Transporte'}</label>
               <select
@@ -1079,28 +1099,6 @@ export default function EditQuotationPage() {
                 ))}
               </select>
               </div>
-
-              {isMiamiFlow && (
-                <div className={fieldGroupClass}>
-                  <label className={formLabelClass}>Producto / servicio Miami</label>
-                <select
-                  name="service_product"
-                  value={formData.service_product || ''}
-                  onChange={handleServiceProductChange}
-                  className={fieldClass}
-                >
-                  {serviceProductOptions
-                    .filter((product) =>
-                      ['miami_lcl', 'miami_air'].includes(product.value)
-                    )
-                    .map((product) => (
-                      <option key={product.value} value={product.value}>
-                        {product.label}
-                      </option>
-                    ))}
-                </select>
-                </div>
-              )}
 
               <div className={fieldGroupClass}>
                 <label className={formLabelClass}>Válida hasta</label>

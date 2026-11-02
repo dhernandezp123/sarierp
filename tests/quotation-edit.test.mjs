@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import loadTs from './load-ts.mjs'
 
-const { getCargoSignature, getEditCargoTotals, getProductRuleMismatch, planQuotationEditCargo } = loadTs('src/lib/quotation-edit.ts')
+const { getCargoSignature, getEditCargoTotals, getEditProductSelection, getProductRuleMismatch, planQuotationEditCargo } = loadTs('src/lib/quotation-edit.ts')
 const { createEmptyCargoLine, normalizeLegacyBlankInchLine } = loadTs('src/lib/quotation-cargo.ts')
 
 const line = (overrides = {}) => ({ ...createEmptyCargoLine(), ...overrides })
@@ -146,4 +146,24 @@ test('totales del payload: sin reemplazo se omiten para conservar lbs y FT³ gua
 
   assert.deepEqual(getEditCargoTotals({ structure: 'containers', replace: true, savedCargoLines: [], formTotals }),
     { peso_kg: 45.36, peso_lbs: null, volumen_cbm: 2.5, volumen_ft3: null, cantidad_bultos: 3 })
+})
+
+test('cambiar LCL a aereo consolidado aplica producto y conserva sus lineas al guardar', () => {
+  const selection = getEditProductSelection('other_origin_air', 'Marítima', 'LCL')
+  assert.deepEqual(selection, { tipo_transporte: 'Aéreo', quote_type: 'Consolidado' })
+  const cargoLines = [complete(), complete({ quantity: '2' })]
+  const result = plan({ status: 'Pendiente de Fijar Precios', quoteType: selection.quote_type, cargoLines })
+  assert.equal(result.ok, true)
+  assert.equal(result.replace, true)
+  assert.deepEqual(result.cargoLinesToSave, cargoLines)
+  assert.equal(getProductRuleMismatch('other_origin_air', selection.tipo_transporte, selection.quote_type), null)
+})
+
+test('cambio de producto aplica FCL, Courier y LTL/FTL sin elegir una modalidad arbitraria', () => {
+  assert.deepEqual(getEditProductSelection('other_origin_fcl', 'Aéreo', 'Consolidado'), { tipo_transporte: 'Marítima', quote_type: 'FCL' })
+  assert.deepEqual(getEditProductSelection('courier', 'Marítima', 'LCL'), { tipo_transporte: 'Aéreo', quote_type: 'Courier' })
+  assert.deepEqual(getEditProductSelection('usa_ltl_ftl', 'Marítima', 'LCL'), { tipo_transporte: 'Terrestre', quote_type: '' })
+  assert.deepEqual(getEditProductSelection('usa_ltl_ftl', 'Terrestre', 'FTL'), { tipo_transporte: 'Terrestre', quote_type: 'FTL' })
+  assert.deepEqual(getEditProductSelection('custom_service', 'Marítima', 'LCL'), { tipo_transporte: 'Marítima', quote_type: 'LCL' })
+  assert.deepEqual(getEditProductSelection('miami_air', 'Marítima', 'LCL'), { tipo_transporte: 'Aéreo', quote_type: 'Consolidado' })
 })
