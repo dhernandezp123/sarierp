@@ -6,13 +6,13 @@ import { mountPage } from './page-harness.mjs'
 const { draftEditorSignature, draftItemPayload, draftEditorFromInvoice } = loadTs('src/lib/invoice-drafts.ts')
 const { blankFiscalOptions } = loadTs('src/components/invoicing/InvoiceFiscalOptions.tsx', { '@/src/hooks/useUser': { useUser: () => ({}) }, '@/src/lib/supabase/client': { supabase: {} } })
 const clientRow = { id: 'client', nombre: 'Cliente ficticio', rtn: '00000000000000', condicion_pago: 'Contado', dias_credito: 0, billing_office: { name: 'SPS', is_active: true } }
-function fixture({ query = '', saved = null, failSave = false, deferSave, master = false, officeAllowed = true } = {}) {
+function fixture({ query = '', saved = null, failSave = false, deferSave, master = false, officeAllowed = true, clients = [clientRow] } = {}) {
   const before = globalThis.window; globalThis.window = { setTimeout, clearTimeout }
   const writes = [], messages = [], routes = [], drafts = new Map(saved ? [[saved.id, saved]] : [])
   let current = { user: { id: 'finance' }, profile: { id: 'finance', tenant_id: 'tenant', rol: 'Contabilidad', status: 'Aprobado', is_active: true } }, fail = failSave, issued = false
   const router = { push: value => routes.push(value), replace: value => routes.push(value) }
   const api = { from(table) { const filters = [], q = { select: () => q, order: () => q, is: () => q, eq: (k,v) => { filters.push([k,v]); return q },
-    then: resolve => Promise.resolve({ data: table === 'clientes' ? [clientRow] : [], error: null }).then(resolve),
+    then: resolve => Promise.resolve({ data: table === 'clientes' ? clients : [], error: null }).then(resolve),
     maybeSingle: async () => ({ data: table === 'cai_ranges' ? { id: 'cai', cai: 'TEST', point_of_sale: 'SPS', document_type: 'Factura', fecha_limite_emision: '2099-12-31' } : null, error: null }),
     single: async () => ({ data: table === 'invoice_drafts' ? drafts.get(filters.find(([k]) => k === 'id')?.[1]) || null : null, error: null }),
   }; return q }, async rpc(name,args) {
@@ -60,11 +60,48 @@ test('sin autorización de oficina el formulario permite guardar borrador y bloq
   const f = fixture({ officeAllowed: false })
   try {
     await f.ready()
-    f.app.find(node=>node.type==='select'&&f.app.text(node).includes('Cliente ficticio')).props.onChange({target:{value:'client'}});f.app.render();await f.app.tick();f.app.render()
+    f.app.find(node=>node.props?.id==='invoice-client').props.onChange('client');f.app.render();await f.app.tick();f.app.render()
     assert.equal(f.app.button('Emitir factura').props.disabled,true)
     assert.match(f.app.text(),/No tienes autorización de emisión para SPS/)
     f.app.button('Guardar borrador').props.onClick();await f.app.tick();f.app.render()
     assert.equal(f.writes[0].name,'save_invoice_draft');assert.equal(f.issued(),false)
+  } finally { f.cleanup() }
+})
+
+test('seleccionar cliente con combobox calcula vencimiento y guarda los dias de credito del perfil', async () => {
+  const clients = [
+    { ...clientRow, id: 'credit-30', codigo_cliente: 'CLI-030', condicion_pago: 'Crédito', dias_credito: 30 },
+    { ...clientRow, id: 'credit-15', codigo_cliente: 'CLI-015', condicion_pago: 'Credito', dias_credito: 15 },
+    { ...clientRow, id: 'cash', codigo_cliente: 'CLI-000' },
+  ]
+  const f = fixture({ clients })
+  try {
+    await f.ready()
+    const selectClient = id => { f.app.find(n => n.props?.id === 'invoice-client').props.onChange(id); f.app.render() }
+    const dates = () => f.app.findAll(n => n.type === 'input' && n.props.type === 'date')
+    const changeIssue = value => { dates()[0].props.onChange({ target: { value } }); f.app.render() }
+    assert.deepEqual(f.app.find(n => n.props?.id === 'invoice-client').props.clientes.map(c => c.codigo_cliente), ['CLI-030', 'CLI-015', 'CLI-000'])
+    const today = dates()[0].props.value
+    selectClient('credit-30')
+    assert.equal(Date.parse(dates()[1].props.value) - Date.parse(today), 30 * 86400000)
+    changeIssue('2026-11-03')
+    assert.equal(dates()[1].props.value, '2026-12-03')
+    selectClient('credit-15')
+    assert.equal(dates()[1].props.value, '2026-11-18')
+    changeIssue('2026-12-25')
+    assert.equal(dates()[1].props.value, '2027-01-09')
+    selectClient('cash')
+    assert.equal(dates()[1].props.value, '2026-12-25')
+    changeIssue('2028-02-20')
+    selectClient('credit-15')
+    assert.equal(dates()[1].props.value, '2028-03-06')
+    assert.equal(dates()[1].props.readOnly, true)
+    f.app.button('Guardar borrador').props.onClick(); await f.app.tick(); f.app.render()
+    assert.equal(f.writes[0].name, 'save_invoice_draft')
+    assert.equal(f.writes[0].args.p_invoice.cliente_id, 'credit-15')
+    assert.equal(f.writes[0].args.p_invoice.issue_date, '2028-02-20')
+    assert.equal(f.writes[0].args.p_invoice.due_date, '2028-03-06')
+    assert.equal(f.issued(), false)
   } finally { f.cleanup() }
 })
 

@@ -114,7 +114,7 @@ test('acceso directo Nueva proforma crea una proforma real sin requerir ni consu
   try {
     await app.ready(); await tick(app)
     assert.ok(app.find(n => n.type === 'select' && n.props.value === 'Proforma'))
-    app.find(n => n.type === 'select' && app.text(n).includes('Cliente TGU')).props.onChange({ target: { value: 'cliente' } }); await tick(app)
+    app.find(n => n.props?.id === 'invoice-client').props.onChange('cliente'); await tick(app)
     app.find(n => n.type === 'input' && n.props.placeholder === 'Descripción del servicio...').props.onChange({ target: { value: 'Servicio proforma' } }); app.render()
     app.find(n => n.type === 'input' && n.props.type === 'number' && n.props.step === '0.01' && !n.props['aria-label'] && n.props.value === '0').props.onChange({ target: { value: '100' } }); app.render()
     app.find(n => n.type === 'button' && app.text(n).startsWith('Generar ')).props.onClick(); await tick(app)
