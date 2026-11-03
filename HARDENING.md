@@ -1,5 +1,17 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-11-03 - UX-OCR-CLAUDE-01 - Lectura de facturas SARI USA con Claude y respaldo local
+
+- Estado: validado localmente; commit y publicacion en Produccion/Demo autorizados en curso. Prueba autenticada con API real pendiente.
+- Hallazgo: el scanner utilizaba solo Tesseract/PDF.js en el navegador. El endpoint anterior dependia de OpenAI y no consumia la configuracion Anthropic agregada por el usuario en Vercel.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`, `src/lib/server/manual-invoice-pdf.ts`, `src/lib/browser/manual-invoice-ai.ts`, `src/app/api/manual-invoices/ocr/route.ts`, `src/components/invoicing/ManualInvoiceEditor.tsx`, `next.config.ts`, `tests/manual-invoice-ai.test.mjs`, `tests/manual-invoice-pdf-limit.test.mjs`, `tests/manual-invoice-routes.test.mjs`, `docs/manual-sari-usa-invoices.md` y este registro. SQL: ninguno. Sin nuevas librerias.
+- Cambio: proveedor `anthropic` con `ANTHROPIC_API_KEY` exclusiva de servidor y modelo configurable (`claude-sonnet-5-5` por defecto). Messages API, archivo original en base64, JSON Schema, pensamiento adaptativo/esfuerzo medium, 8192 tokens de salida y plazo de 75 segundos; sin temperatura ni reintentos facturables automaticos. Conserva compatibilidad explicita con OpenAI.
+- Flujo: disponibilidad autenticada sin secretos; boton Leer con IA y opcion Leer en este dispositivo. Informa el envio a Anthropic. Conserva orden de fechas seleccionado, ceros, campos ilegibles vacios y revision antes de guardar; rechaza respuestas truncadas/rechazadas, valida campos e informa diferencias de total calculadas en centavos. Cancelar o fallar no aplica respuestas tardias ni borra correcciones.
+- Controles: mantiene roles, tenant, dominio Sari, cuota diaria atomica de 20 intentos/usuario y archivo de 3 MB. PDF.js existente comprueba PDF valido/sin contrasena y maximo 5 paginas antes de la cuota y llamada externa; sin renderizar ni ejecutar acciones del PDF. Worker de servidor incluido explicitamente en tracing. Logs solo proveedor/modelo/duracion/tokens, sin contenido ni claves. No crea facturas fiscales, asientos ni CxC por leer.
+- Validaciones: suite completa `npm.cmd test`: 596/596 OK. `npx.cmd tsc --noEmit`, ESLint de archivos afectados y build de produccion aprobados. PDF real sintetico de 1/5 paginas aceptado; 6 paginas o corrupto rechazado antes de envio. Worker PDF incluido en el tracing de produccion. Chrome sobre el componente real con sesion/proveedor ficticios: 7 comprobaciones OK, cero excepciones JS/escrituras; llenado, fechas DMY, conservacion de correcciones al fallar, cancelacion y respaldo local; 1280/768/390 px sin overflow, capturas revisadas. Se amplio la base del campo de archivo para evitar que los botones lo comprimieran en movil/tableta. El fixture requirio corregir su inicializacion de fetch simulado ante HMR; no se cambiaron controles de la aplicacion por ese problema. Evidencia ignorada: `.ua/intermediate/ocr-ai-*` y `check-ocr-ai-browser.mjs`.
+- Riesgos/pendientes: verificar las cuatro variables de Vercel tras desplegar, acceso/saldo del modelo con API real y UAT con originales autorizados. Una cancelacion tras iniciar la llamada no garantiza evitar cargos de Anthropic. No se ha enviado ningun documento real al proveedor ni utilizado la clave en estas pruebas.
+- Commit: pendiente.
+
 ### 2026-11-03 - UX-REPORTS-FINANCE-01 - CxC y CxP conservan la vista de Reportes
 
 - Estado: publicado en Produccion y Demo; Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada pendiente.

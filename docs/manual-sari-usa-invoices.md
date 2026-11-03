@@ -13,10 +13,11 @@ Disponible para Admin, Operaciones, Finanzas y Contabilidad de Sari.
    incluso al completar la factura manualmente, y se guarda con cada versión.
    Cambiarlo conserva el día/mes ingresados; para reinterpretar el original,
    volver a leer con OCR. Bajo cada fecha se muestra cómo aparecerá en el PDF.
-3. Seleccionar **Leer con OCR**. La lectura gratuita se realiza en el dispositivo,
-   con progreso y **Cancelar lectura**. La primera lectura descarga el motor y
-   el modelo de idioma desde nuestra propia aplicación. No requiere clave API,
-   saldo ni una instalación del usuario.
+3. Con IA habilitada, seleccionar **Leer con IA** para enviar el original a Claude
+   (Anthropic) y extraer los campos. **Leer en este dispositivo** conserva la
+   alternativa gratuita. Si la IA no está configurada, aparece **Leer con OCR**.
+   La lectura local descarga el motor y el modelo desde nuestra aplicación;
+   no necesita clave API ni saldo. Ambas opciones permiten cancelar la lectura.
 4. Comparar los campos amarillos con el original. Revisar las observaciones y,
    si faltan datos, abrir **Ver texto reconocido** para apoyar la transcripción.
    Los campos ilegibles quedan vacíos; un importe ausente nunca se convierte
@@ -38,7 +39,11 @@ versiones antiguas sin formato guardado conservan DD/MM/YYYY al abrirse;
 las nuevas usan MM/DD/YYYY de forma predeterminada. El total se deriva de los cargos,
 con precisión de centavos, y se compara con el total leído cuando es legible.
 
-El original y el texto reconocido permanecen solo en memoria del navegador.
+En la lectura local, el original y el texto reconocido permanecen solo en memoria
+del navegador. La lectura con IA envía el original al proveedor configurado a través
+del servidor; se aplican las condiciones de tratamiento de datos de ese proveedor.
+El servidor no guarda el original ni su contenido en logs. Registra únicamente
+modelo, proveedor, duración y tokens de las lecturas finalizadas correctamente.
 El historial guarda los datos, no el original ni un PDF binario; el PDF se
 regenera desde la versión guardada. Cerrar o recargar sin guardar pierde los
 cambios. El módulo avisa antes de reemplazar datos y al cerrar la pestaña.
@@ -67,20 +72,53 @@ cambios. El módulo avisa antes de reemplazar datos y al cerrar la pestaña.
 - El modelo de idioma puede quedar en IndexedDB; los documentos no se guardan
   allí. No hay llamadas del lector a OpenAI ni un servicio OCR externo.
 
-## Servidor y opción anterior de OpenAI
+## Lectura con Claude y configuración del servidor
+
+Variables exclusivas del servidor en Vercel Production o `.env.local`:
+
+```env
+ANTHROPIC_API_KEY=<clave real, nunca versionada>
+MANUAL_INVOICE_OCR_PROVIDER=anthropic
+MANUAL_INVOICE_OCR_MODEL=claude-sonnet-5-5
+MANUAL_INVOICE_OCR_ENABLED=true
+```
+
+No usar `NEXT_PUBLIC_` para la clave. Las variables se aplican en un despliegue
+nuevo. GET `/api/manual-invoices/ocr` devuelve solamente disponibilidad y proveedor
+después de autorizar la sesión; nunca devuelve claves. No hay fallback automático
+a otro proveedor de pago si falta la clave o falla la lectura.
+
+La API usa Messages de Anthropic con PDF/imagen original en base64, razonamiento
+adaptativo con esfuerzo `medium`, JSON Schema y máximo de 8192 tokens de salida.
+No envía `temperature`. Valida los campos y fechas, conserva el formato seleccionado,
+los importes cero y los vacíos; advierte diferencias entre cargos y total impreso.
+Las respuestas truncadas o rechazadas no se aplican al formulario. Los errores o
+cancelaciones conservan los datos previos y permiten lectura local.
+
+Se conservan autorización por rol/tenant/dominio y cupo atómico de 20 intentos
+diarios por usuario. El servidor revisa PDFs válidos, sin contraseña y de hasta
+5 páginas antes de consumir cupo y llamar al proveedor. El límite permanece
+en 3 MB. La inspección usa el PDF.js ya instalado, sin render ni acciones del PDF.
+El proveedor tiene un plazo de 75 segundos, sin reintentos automáticos; cancelar
+después de iniciar la petición no garantiza evitar un cargo del proveedor.
+
+No se modifica la emisión fiscal ni se crean cuentas por cobrar por leer un archivo.
+Antes de uso operativo, verificar modelo/saldo y exactitud con facturas autorizadas
+de distintos formatos; las pruebas simuladas no certifican la API real.
+
+### Compatibilidad con la integración anterior de OpenAI
 
 La migración `20261012160000_manual_sari_usa_invoices.sql` ya está aplicada en
 Supabase Production. No hay SQL nuevo por el cambio a lectura local.
 
-La integración anterior de OpenAI sigue en código como opción administrativa,
-pero la interfaz utiliza exclusivamente el lector gratuito. Para evitar llamadas
-facturables desde la API anterior, `MANUAL_INVOICE_OCR_ENABLED` se establece en
-`false` en Production y `.env.local`. La clave privada existente se conserva
-en el servidor y nunca se envía al navegador.
+La integración anterior sigue disponible al seleccionar `MANUAL_INVOICE_OCR_PROVIDER=openai`
+(valor legacy si no se define), con `OPENAI_API_KEY` y un modelo de OpenAI.
+Para usar solo el lector gratuito, establecer `MANUAL_INVOICE_OCR_ENABLED=false`.
+Las claves se conservan exclusivamente en el servidor.
 
 La prueba anterior con una factura ficticia recibió `credit_balance_exhausted`.
-La alternativa actual funciona independientemente de ese saldo y no consume
-el cupo diario de la API OCR anterior.
+La alternativa local funciona independientemente de ese saldo y no consume
+el cupo diario de la API OCR.
 
 ## Validación y pendientes
 

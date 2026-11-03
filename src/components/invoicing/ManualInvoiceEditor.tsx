@@ -45,6 +45,8 @@ export function ManualInvoiceEditor() {
   const [ocrProgress, setOcrProgress] = useState<OcrProgress>({ message: '', percent: 0 })
   const [recognizedText, setRecognizedText] = useState('')
   const scanController = useRef<AbortController | null>(null)
+  const [aiAvailability, setAiAvailability] = useState<{ context: string; provider: 'anthropic' | 'openai' | null } | null>(null)
+  const aiProvider = aiAvailability?.context === context ? aiAvailability.provider : null
   const [busy, setBusy] = useState<'ocr' | 'save' | 'pdf' | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
   const [sourceTotal, setSourceTotal] = useState('')
@@ -93,6 +95,15 @@ export function ManualInvoiceEditor() {
 
   useEffect(() => () => { scanController.current?.abort() }, [])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetch('/api/manual-invoices/ocr', { cache: 'no-store', signal: controller.signal })
+      .then(readResponse).then((body) => {
+        if (!controller.signal.aborted) setAiAvailability({ context, provider: body.enabled && (body.provider === 'anthropic' || body.provider === 'openai') ? body.provider : null })
+      }).catch(() => { /* The local reader remains available when AI is disabled or unavailable. */ })
+    return () => { controller.abort(); scanController.current?.abort() }
+  }, [context])
+
   useEffect(() => () => { if (sourceUrl) URL.revokeObjectURL(sourceUrl) }, [sourceUrl])
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview.url) }, [preview])
 
@@ -117,16 +128,18 @@ export function ManualInvoiceEditor() {
     }
     replaceDocument(() => { reset(); setData({ ...blankManualInvoice(), date_format: data.date_format }); setFile(selected); setSourceUrl(URL.createObjectURL(selected)) })
   }
-  async function scan() {
+  async function scan(withAi = false) {
     if (!file || busy) return
     const controller = new AbortController()
     scanController.current = controller
     setBusy('ocr')
     setOcrProgress({ message: 'Preparando lectura…', percent: 0 })
     try {
-      const { readInvoiceInBrowser } = await import('@/src/lib/browser/manual-invoice-ocr')
+      const read = withAi
+        ? (await import('@/src/lib/browser/manual-invoice-ai')).readInvoiceWithAi
+        : (await import('@/src/lib/browser/manual-invoice-ocr')).readInvoiceInBrowser
       if (controller.signal.aborted) return
-      const body = await readInvoiceInBrowser(file, data.date_format, setOcrProgress, controller.signal)
+      const body = await read(file, data.date_format, setOcrProgress, controller.signal)
       if (controller.signal.aborted) return
       const extracted = validateManualInvoice(body.data, false)
       setRecognizedText(body.text); setWarnings(body.warnings)
@@ -239,16 +252,18 @@ export function ManualInvoiceEditor() {
         <div className={cardClass}>
           <h2 className="mb-2 font-semibold">1. Carga un documento o completa la factura manualmente</h2>
           <p className="mb-4 text-sm text-slate-500">PDF o foto (JPG, PNG, WEBP), hasta 3 MB y 5 páginas de una sola factura. El original se usa para comparar y no se guarda en el historial.</p>
-          <div className="flex flex-wrap items-end gap-3"><label className="min-w-0 flex-1 space-y-1 text-sm font-medium"><span className="block">Factura original</span>
+          <div className="flex flex-wrap items-end gap-3"><label className="min-w-0 basis-full grow space-y-1 text-sm font-medium sm:basis-64"><span className="block">Factura original</span>
             <input ref={fileInput} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={Boolean(busy)} className={`${fieldClassSm} h-auto py-2`} onChange={(event) => selectFile(event.target.files?.[0])} /></label>
-            <label className="space-y-1 text-sm font-medium"><span className="block">Formato de fechas (OCR y PDF)</span><select value={data.date_format} disabled={Boolean(busy)} onChange={(event) => change({ ...data, date_format: event.target.value as ManualInvoiceDateOrder })} className={fieldClassSm}>
+            <label className="min-w-0 basis-full space-y-1 text-sm font-medium sm:basis-auto"><span className="block">Formato de fechas (OCR y PDF)</span><select value={data.date_format} disabled={Boolean(busy)} onChange={(event) => change({ ...data, date_format: event.target.value as ManualInvoiceDateOrder })} className={fieldClassSm}>
               <option value="mdy">MM/DD/YYYY · SARI USA</option><option value="dmy">DD/MM/YYYY</option>
             </select></label>
-            <button className={`${primaryButtonClass} flex items-center gap-2`} disabled={!file || Boolean(busy)} onClick={() => dirty ? setPendingAction(() => () => { void scan() }) : void scan()}>
-              {busy === 'ocr' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileScan className="h-4 w-4" />} {busy === 'ocr' ? 'Leyendo…' : 'Leer con OCR'}</button>
+            <button className={`${primaryButtonClass} flex items-center gap-2`} disabled={!file || Boolean(busy)} onClick={() => dirty ? setPendingAction(() => () => { void scan(Boolean(aiProvider)) }) : void scan(Boolean(aiProvider))}>
+              {busy === 'ocr' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileScan className="h-4 w-4" />} {busy === 'ocr' ? 'Leyendo…' : aiProvider ? 'Leer con IA' : 'Leer con OCR'}</button>
+            {aiProvider && <button className={secondaryButtonClass} disabled={!file || Boolean(busy)} onClick={() => dirty ? setPendingAction(() => () => { void scan() }) : void scan()}>Leer en este dispositivo</button>}
             {busy === 'ocr' && <button className={secondaryButtonClass} onClick={() => scanController.current?.abort()}>Cancelar lectura</button>}
           </div>
           <p className="mt-2 text-sm text-slate-500">El formato se guarda con la factura y se aplica al PDF. Cambiarlo conserva las fechas ingresadas; para reinterpretar el original, vuelve a leerlo con OCR.</p>
+          {aiProvider && <p className="mt-2 text-sm text-slate-500">La lectura con IA envía el documento a {aiProvider === 'anthropic' ? 'Claude (Anthropic)' : 'OpenAI'} para extraer los datos. La lectura en este dispositivo es gratuita y conserva el archivo en tu navegador. Revisa los campos antes de guardar.</p>}
           {file && <p className="mt-2 break-all text-sm">Archivo cargado: {file.name}</p>}
           {busy === 'ocr' && <div className="mt-3 space-y-1"><p role="status" className="text-sm">{ocrProgress.message} {ocrProgress.percent}%</p><progress aria-label="Progreso de lectura" className="h-2 w-full" max={100} value={ocrProgress.percent} /></div>}
         </div>
