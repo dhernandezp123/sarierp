@@ -1,5 +1,16 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-11-03 - UX-REPORTS-FINANCE-01 - CxC y CxP conservan la vista de Reportes
+
+- Estado: validado localmente; publicacion main/demo autorizada en curso; UAT autenticada pendiente.
+- Hallazgo: /reports?report=receivable o payable reemplazaba toda la pagina por FinanceReportWorkspace, ocultaba las otras pestañas y desmontaba el estado de filtros de Reportes.
+- Archivos: src/app/(protected)/reports/page.tsx, src/components/accounting/FinanceReportWorkspace.tsx, tests/reports-financial-navigation.test.mjs y este registro. SQL: ninguno.
+- Cambio: mantiene cabecera Reportes y selector de reportes de escritorio/movil. CxC/CxP reutilizan FinanceReportWorkspace embebido, con Actualizar, filtros, vistas Documentos/Antiguedad/Movimientos, paginacion y exportaciones existentes. Oculta cabecera/navegacion contables solo al embeber; las rutas independientes conservan su comportamiento.
+- Contexto: cada panel financiero se monta al visitarlo y conserva filtros/vista/pagina al alternar pestañas; los inactivos quedan ocultos. Los controles se remontan al cambiar de panel para cerrar portales desplegables sin borrar filtros; IDs de terceros separados por lado. Comercial conserva busqueda, periodo y paginacion mediante savedViews. La identidad de la pantalla incluye usuario, tenant y rol, descartando paneles anteriores al cambiar contexto.
+- Datos/permisos: usa los mismos hooks y RPC canonicos de documentos/movimientos al corte, sin cambiar calculos, saldos, exportaciones, RLS o roles. Evita consultar los saldos legacy del contenedor cuando esta activo el panel financiero. URLs directas de roles comerciales siguen normalizadas a un reporte permitido.
+- Validaciones: npm.cmd test 587/587 OK; regresiones enfocadas Reportes/Cobranza 9/9 OK; npx.cmd tsc --noEmit OK; ESLint de los 3 archivos afectados OK; npm.cmd run build OK. Chrome con pagina real, Supabase/sesion ficticios y build de produccion local: 7 comprobaciones OK, 0 excepciones JS y 0 escrituras; pestañas, contexto independiente CxC/CxP, recuperacion de Comercial, cierre de menus, IDs, Actualizar y viewports 1280/768/390 px sin overflow de pagina. Capturas revisadas. El fixture dev presentaba un error de HMR durante la recarga; se repitio con build/start de produccion y paso sin errores. Evidencia ignorada en .ua/intermediate/reports-shell-20261103/ y reports-embedded-*-20261103.log.
+- Riesgos/pendientes: publicar y verificar desde sesion real. Los datos de paneles conservados se refrescan con Actualizar; no se certifica UAT autenticada. Hash de commit: pendiente.
+
 ### 2026-11-03 - UX-INVOICE-CLIENT-01 - Busqueda de cliente y verificacion del vencimiento
 
 - Estado: publicado en Produccion y Demo; CI Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada pendiente.
