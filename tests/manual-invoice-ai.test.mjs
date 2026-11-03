@@ -96,11 +96,22 @@ test('Claude refusals, truncated responses, malformed fields and impossible date
   const fetchMock = t.mock.method(globalThis, 'fetch')
   const responses = [claude(invoice(), { stop_reason: 'max_tokens' }), claude(invoice(), { stop_reason: 'refusal' }),
     claude(invoice(), { content: [{ type: 'thinking', text: JSON.stringify(invoice()) }] }),
-    claude({ ...invoice(), issue_date: '2026-02-30' }), claude({ ...invoice(), hbl: 'X'.repeat(51) })]
+    claude({ ...invoice(), issue_date: '2026-02-30' })]
   for (const response of responses) {
     fetchMock.mock.mockImplementation(async () => response)
     await assert.rejects(() => extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' }), error => error.status === 422)
   }
+})
+
+test('multi-line, overlong and unreadable OCR fields are cleaned or blanked with warnings instead of discarding the reading', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  fetchMock.mock.mockImplementation(async () => claude({ ...invoice(), bill_to_address: 'COLONIA SATELITE\nCALLE 3', hbl: 'X'.repeat(51),
+    due_date: '10/28/2026', items: [{ description: 'Freight\nOcean', amount: '10.00' }, { description: 'Fee', amount: 'diez' }] }))
+  const result = await extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' })
+  assert.equal(result.data.bill_to_address, 'COLONIA SATELITE CALLE 3')
+  assert.equal(result.data.hbl, ''); assert.ok(result.warnings.some(w => w.includes('HAWB/HBL')))
+  assert.equal(result.data.due_date, ''); assert.ok(result.warnings.some(w => w.includes('Vencimiento')))
+  assert.equal(result.data.items[0].description, 'Freight Ocean'); assert.equal(result.data.items[1].amount, '')
 })
 
 test('totals and missing amounts produce deterministic warnings without correcting the printed invoice', async (t) => {

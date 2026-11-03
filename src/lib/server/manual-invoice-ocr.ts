@@ -92,10 +92,14 @@ export async function extractManualInvoice(bytes: Buffer, mime: string, apiKey: 
   if (provider === 'anthropic' ? result.stop_reason !== 'end_turn' : result.status !== 'completed') throw new ManualInvoiceError('La lectura quedó incompleta. Intenta con una foto más clara o usa la lectura local.', 422)
   const text = provider === 'anthropic' ? result.content?.filter((item) => item.type === 'text').map((item) => item.text ?? '').join('') : result.output?.filter((item) => item.type === 'message').flatMap((item) => item.content ?? [])
     .filter((item) => item.type === 'output_text').map((item) => item.text ?? '').join('')
+  let parsed: Record<string, unknown>
+  try { parsed = JSON.parse(text ?? '') as Record<string, unknown> }
+  catch { throw new ManualInvoiceError('El OCR devolvió datos que requieren una nueva lectura. Intenta otra foto o utiliza la captura manual.', 422) }
   try {
-    const parsed = JSON.parse(text ?? '') as Record<string, unknown>
-    const data = validateManualInvoice({ ...parsed, date_format: dateFormat }, false)
+    const { source, warnings: cleanupWarnings } = sanitizeOcrInvoice(parsed)
+    const data = validateManualInvoice({ ...source, date_format: dateFormat }, false)
     const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.filter((warning): warning is string => typeof warning === 'string').slice(0, 20).map((warning) => warning.slice(0, 300)) : []
+    warnings.push(...cleanupWarnings)
     const source_total = typeof parsed.source_total === 'string' ? parsed.source_total.slice(0, 40) : ''
     const sourceCents = manualInvoiceCents(source_total)
     if (data.items.some((item) => item.amount === '')) warnings.push('Hay cargos sin importe legible; revísalos contra el original.')
@@ -104,5 +108,38 @@ export async function extractManualInvoice(bytes: Buffer, mime: string, apiKey: 
     console.info('manual_invoice_ocr', { provider, model, duration_ms: Date.now() - started,
       input_tokens: result.usage?.input_tokens, output_tokens: result.usage?.output_tokens })
     return { data, warnings, source_total }
-  } catch { throw new ManualInvoiceError('El OCR devolvió datos que requieren una nueva lectura. Intenta otra foto o utiliza la captura manual.', 422) }
+  } catch (error) {
+    console.warn('manual_invoice_ocr_invalid', { provider, model, reason: error instanceof Error ? error.message : 'unknown' })
+    throw new ManualInvoiceError('El OCR devolvió datos que requieren una nueva lectura. Intenta otra foto o utiliza la captura manual.', 422)
+  }
+}
+
+const singleLine = (value: unknown) => typeof value === 'string'
+  ? value.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+  : ''
+
+/** OCR output is untrusted: blank only the unusable fields instead of discarding the whole reading. */
+export function sanitizeOcrInvoice(parsed: Record<string, unknown>) {
+  const warnings: string[] = []
+  const source: Record<string, unknown> = {}
+  for (const [key, label, max] of manualInvoiceFields) {
+    let value = singleLine(parsed[key])
+    if (value.length > max) { warnings.push(`${label} excede ${max} caracteres; complétalo manualmente.`); value = '' }
+    if ((key === 'issue_date' || key === 'due_date') && value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      warnings.push(`${label} no se pudo interpretar; revísala contra el original.`); value = ''
+    }
+    source[key] = value
+  }
+  const rawItems = Array.isArray(parsed.items) ? parsed.items.slice(0, 100) : []
+  source.items = rawItems.map((raw, index) => {
+    const item = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
+    let description = singleLine(item.description)
+    let amount = singleLine(item.amount)
+    if (description.length > 180) { warnings.push(`La descripción del cargo ${index + 1} es demasiado larga; revísala.`); description = description.slice(0, 180).trim() }
+    if (amount && manualInvoiceCents(amount) === null) { warnings.push(`El importe del cargo ${index + 1} no se pudo leer; revísalo.`); amount = '' }
+    return { description, amount }
+  })
+  source.warehouse_receipts = (Array.isArray(parsed.warehouse_receipts) ? parsed.warehouse_receipts : [])
+    .map(singleLine).filter((wr) => wr && wr.length <= 40).slice(0, 200)
+  return { source, warnings }
 }

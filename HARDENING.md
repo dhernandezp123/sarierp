@@ -14674,3 +14674,22 @@ Agregar una entrada por fix:
   Alias `sari.forwarders.app` verificado contra ese despliegue. Smoke sin sesión:
   login 200 y pricing 307 a login. No se ejecutó SQL ni se crearon datos de
   negocio. Quality CI `39635482978` en ejecución al cerrar este registro.
+
+### 03/11/2026 - OCR-422-01 - Lectura OCR no se descarta por un campo inválido
+
+- Estado: validado localmente; publicación en Production en curso con este commit.
+- Hallazgo: `POST /api/manual-invoices/ocr` devolvía 422 («El OCR devolvió datos
+  que requieren una nueva lectura») con la factura 131929. Anthropic respondía,
+  pero un solo campo con salto de línea (dirección Bill to en varias líneas),
+  exceso de longitud, fecha no ISO o importe ilegible invalidaba toda la lectura.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`,
+  `tests/manual-invoice-ai.test.mjs` y este registro. SQL: ninguno.
+- Cambio: `sanitizeOcrInvoice` normaliza saltos de línea a espacios y deja vacío,
+  con aviso en español, el campo largo, la fecha no ISO o el importe ilegible.
+  Fechas imposibles, respuestas truncadas/rechazadas y JSON inválido siguen en
+  422. Los rechazos registran `manual_invoice_ocr_invalid` con el motivo, sin
+  datos del documento.
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs`
+  48/48, incluido el caso nuevo de campos multilínea/largos/ilegibles.
+- Riesgos / pendientes: reintentar 131929.pdf en Production; si persiste el 422,
+  revisar el motivo en el log `manual_invoice_ocr_invalid`.
