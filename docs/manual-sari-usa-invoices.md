@@ -102,6 +102,12 @@ en 3 MB. La inspección usa el PDF.js ya instalado, sin render ni acciones del P
 El proveedor tiene un plazo de 75 segundos, sin reintentos automáticos; cancelar
 después de iniciar la petición no garantiza evitar un cargo del proveedor.
 
+PDF.js requiere inicializar Canvas/DOMMatrix también al inspeccionar PDFs sin
+renderizarlos. El tracing de la ruta OCR incluye la dependencia opcional Canvas
+y su binding nativo por plataforma. `npm run build` ejecuta un `postbuild` que
+abre un PDF sintético usando solamente los archivos trazados, desde un directorio
+temporal aislado del checkout; si falta una dependencia, el build se rechaza.
+
 No se modifica la emisión fiscal ni se crean cuentas por cobrar por leer un archivo.
 Antes de uso operativo, verificar modelo/saldo y exactitud con facturas autorizadas
 de distintos formatos; las pruebas simuladas no certifican la API real.

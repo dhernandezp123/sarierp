@@ -20,3 +20,17 @@ test('paid OCR inspects real PDFs and rejects corrupt files or more than five pa
   await assert.rejects(() => validateInvoicePdf(pdfWithPages(6), signal), error => error.status === 400 && /5 páginas/.test(error.message))
   await assert.rejects(() => validateInvoicePdf(Buffer.from('%PDF-1.7 broken'), signal), error => error.status === 400 && /no es válido/.test(error.message))
 })
+
+test('a missing PDF runtime dependency gives an actionable error instead of a generic 500', async (t) => {
+  t.mock.method(console, 'error', () => {})
+  const { validateInvoicePdf: unavailableReader } = loadTs('src/lib/server/manual-invoice-pdf.ts', {
+    '@/src/lib/supabase/server': {},
+    'pdfjs-dist/legacy/build/pdf.mjs': { get GlobalWorkerOptions() { throw new ReferenceError('DOMMatrix is not defined') } },
+  })
+  await assert.rejects(() => unavailableReader(pdfWithPages(1), new AbortController().signal), error => {
+    assert.equal(error.status, 503)
+    assert.match(error.message, /lector PDF del servidor/)
+    assert.doesNotMatch(error.message, /DOMMatrix|node_modules/)
+    return true
+  })
+})
