@@ -373,10 +373,16 @@ function resolveDatePreset(dateFrom: string, dateTo: string, report: ReportId): 
 
 export default function ReportsPage() {
   const { user, profile } = useUser()
-  const params = useSearchParams()
-  const financial = ['Admin','Contabilidad','Finanzas'].includes(profile?.rol || '')
-  if (financial && ['receivable','payable'].includes(params.get('report') || '')) return <FinanceReportWorkspace key={`${user?.id}:${profile?.tenant_id}:${params.get('report')}`} side={params.get('report')==='payable'?'payable':'receivable'}/>
-  return <ReportsContent key={(user?.id || '') + ':' + profile?.rol} />
+  return <ReportsContent key={`${user?.id}:${profile?.tenant_id}:${profile?.rol}`} />
+}
+
+function FinancialReportPanel({ side, active }: { side: 'receivable' | 'payable'; active: boolean }) {
+  const [opened, setOpened] = useState(active)
+  if (active && !opened) setOpened(true)
+  if (!opened) return null
+  return <section hidden={!active} aria-label={side === 'receivable' ? 'Reporte de cuentas por cobrar' : 'Reporte de cuentas por pagar'}>
+    <FinanceReportWorkspace side={side} title={side === 'receivable' ? 'Cuentas por cobrar' : 'Cuentas por pagar'} embedded active={active} />
+  </section>
 }
 
 function ReportsContent() {
@@ -393,6 +399,7 @@ function ReportsContent() {
   const { report: activeReport, level: operationsGranularity, from: dateFrom, to: dateTo,
     client: clientFilter, seller: sellerFilter, service: serviceFilter, status: statusFilter,
     currency: currencyFilter, method: paymentMethodFilter, fiscal: fiscalTypeFilter, pos: pointOfSaleFilter } = view
+  const financialReport = activeReport === 'receivable' || activeReport === 'payable'
   const savedViews = useRef(new Map<ReportId, ReportView>())
   const updateView = (patch: Partial<ReportView>) => {
     // Pagination may change page size and page in the same event.
@@ -429,6 +436,8 @@ function ReportsContent() {
     useState<CompanyBranding>(normalizeCompanyBranding(null))
 
   const loadReports = useCallback(async () => {
+    // The embedded financial panels use the canonical cutoff report queries.
+    if (activeReport === 'receivable' || activeReport === 'payable') return
     if (!role || !REPORTS.some((report) => report.id === activeReport && report.roles.includes(role))) return
     const version = ++loadVersion.current
     const isCurrent = () => loadVersion.current === version
@@ -1693,15 +1702,15 @@ function ReportsContent() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Reportes</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Consulta resultados y exporta el detalle con los filtros seleccionados.</p>
-          {loadedAt && !busy && !loadError && <p className="mt-2 text-xs text-slate-500">Última consulta: {formatDateTime(loadedAt)}</p>}
+          {!financialReport && loadedAt && !busy && !loadError && <p className="mt-2 text-xs text-slate-500">Última consulta: {formatDateTime(loadedAt)}</p>}
         </div>
-        <div className="flex flex-wrap gap-2">
+        {!financialReport && <div className="flex flex-wrap gap-2">
           {canViewClientOperationsReport(role) && <Link href="/reports/client-operations" className={actionIconButtonClass}><FileDown aria-hidden="true" className="h-4 w-4" />Operaciones por cliente</Link>}
           <button type="button" onClick={() => void loadReports()} disabled={loading} className={actionIconButtonClass}><RefreshCcw aria-hidden="true" className="h-4 w-4" />Actualizar</button>
           <button type="button" onClick={() => exportCSV(rows, columns, exportFilename + '.csv')} disabled={!canExport} className={actionIconButtonClass}><Download aria-hidden="true" className="h-4 w-4" />Exportar CSV</button>
           <button type="button" onClick={() => void handlePdf(false)} disabled={!canExport || generatingPdf} className={actionIconButtonClass}><FileDown aria-hidden="true" className="h-4 w-4" />{generatingPdf ? 'Generando PDF…' : 'Descargar PDF'}</button>
           <button type="button" onClick={() => void handlePdf(true)} disabled={!canExport || generatingPdf} title="Abrir PDF para imprimir" className={actionIconButtonClass}><Printer aria-hidden="true" className="h-4 w-4" /><span className="sr-only">Abrir PDF para imprimir</span></button>
-        </div>
+        </div>}
       </div>
 
       <nav aria-label="Tipo de reporte" className="report-print-hidden space-y-3">
@@ -1731,6 +1740,10 @@ function ReportsContent() {
         </div>
       </nav>
 
+      <FinancialReportPanel side="receivable" active={activeReport === 'receivable'} />
+      <FinancialReportPanel side="payable" active={activeReport === 'payable'} />
+
+      {!financialReport && <>
       {activeReport === 'operations' && <div className="report-print-hidden flex flex-wrap items-center gap-2" aria-label="Nivel de detalle">
         {([['operations', 'Operaciones'], ['bookings', 'Bookings'], ['readiness', 'Preparación de embarques']] as const).map(([level, label]) => <button key={level} type="button" aria-pressed={operationsGranularity === level} onClick={() => updateView({ level, status: ALL, sort: '' })} className={`rounded-lg border px-3 py-2 text-sm ${operationsGranularity === level ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'}`}>{label}</button>)}
       </div>}
@@ -1801,7 +1814,7 @@ function ReportsContent() {
           </>}
         </section>
       </>}
-
+      </>}
     </div>
   )
 }
