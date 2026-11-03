@@ -83,6 +83,15 @@ MANUAL_INVOICE_OCR_MODEL=claude-sonnet-5-5
 MANUAL_INVOICE_OCR_ENABLED=true
 ```
 
+Para una clave emitida por AI STAR, y solo despues de autorizar que ese proveedor
+reciba la clave y los documentos, agregar `MANUAL_INVOICE_OCR_BASE_URL=https://ai.starimg.ru`.
+La ruta sigue usando el protocolo Anthropic Messages y el modelo configurado,
+pero envia la clave como `Authorization: Bearer` al endpoint de AI STAR. La pantalla
+identifica a AI STAR como receptor. Sin esta variable se conserva la API oficial
+de Anthropic con `x-api-key`. Solo se aceptan esos dos destinos HTTPS verificados;
+no se siguen redirecciones. La variable es exclusiva del servidor OCR, no cambia
+la configuracion global de Claude Code ni su suscripcion.
+
 No usar `NEXT_PUBLIC_` para la clave. Las variables se aplican en un despliegue
 nuevo. GET `/api/manual-invoices/ocr` devuelve solamente disponibilidad y proveedor
 después de autorizar la sesión; nunca devuelve claves. No hay fallback automático

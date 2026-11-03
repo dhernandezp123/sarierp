@@ -15,12 +15,15 @@ const claude = (data = invoice(), extra = {}) => Response.json({ stop_reason: 'e
 ], ...extra })
 
 test('AI configuration selects only the configured provider key and never falls back silently', () => {
-  const names = ['MANUAL_INVOICE_OCR_PROVIDER', 'MANUAL_INVOICE_OCR_ENABLED', 'MANUAL_INVOICE_OCR_MODEL', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
+  const names = ['MANUAL_INVOICE_OCR_PROVIDER', 'MANUAL_INVOICE_OCR_ENABLED', 'MANUAL_INVOICE_OCR_MODEL', 'MANUAL_INVOICE_OCR_BASE_URL', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
   const old = Object.fromEntries(names.map(name => [name, process.env[name]]))
   try {
     Object.assign(process.env, { MANUAL_INVOICE_OCR_PROVIDER: 'anthropic', MANUAL_INVOICE_OCR_ENABLED: 'true', ANTHROPIC_API_KEY: ' claude-test ', OPENAI_API_KEY: 'openai-test' })
     delete process.env.MANUAL_INVOICE_OCR_MODEL
-    assert.deepEqual(manualInvoiceOcrConfiguration(), { enabled: true, provider: 'anthropic', apiKey: 'claude-test', model: 'claude-sonnet-5-5' })
+    delete process.env.MANUAL_INVOICE_OCR_BASE_URL
+    assert.deepEqual(manualInvoiceOcrConfiguration(), { enabled: true, provider: 'anthropic', apiKey: 'claude-test', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5-5' })
+    process.env.MANUAL_INVOICE_OCR_BASE_URL = 'https://ai.starimg.ru/v1/'
+    assert.equal(manualInvoiceOcrConfiguration().baseUrl, 'https://ai.starimg.ru')
     delete process.env.ANTHROPIC_API_KEY
     assert.equal(manualInvoiceOcrConfiguration().enabled, false)
     process.env.MANUAL_INVOICE_OCR_PROVIDER = 'unknown'
@@ -29,6 +32,34 @@ test('AI configuration selects only the configured provider key and never falls 
     delete process.env.MANUAL_INVOICE_OCR_PROVIDER
     assert.equal(manualInvoiceOcrConfiguration().provider, 'openai')
   } finally { for (const name of names) { if (old[name] === undefined) delete process.env[name]; else process.env[name] = old[name] } }
+})
+
+test('AI STAR uses its documented endpoint and bearer authentication without changing extraction rules', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.equal(url, 'https://ai.starimg.ru/v1/messages')
+    assert.equal(options.headers.Authorization, 'Bearer gateway-test-key')
+    assert.equal('x-api-key' in options.headers, false)
+    assert.equal(options.headers['anthropic-version'], '2023-06-01')
+    assert.equal(options.redirect, 'error')
+    const body = JSON.parse(options.body)
+    assert.equal(body.model, 'claude-sonnet-5-5')
+    assert.equal(body.messages[0].content[0].type, 'document')
+    assert.equal(body.output_config.format.type, 'json_schema')
+    assert.match(body.system, /DD\/MM\/YYYY/)
+    return claude()
+  })
+  const result = await extractManualInvoice(Buffer.from('synthetic'), 'application/pdf', 'gateway-test-key', 'claude-sonnet-5-5', { provider: 'anthropic', baseUrl: 'https://ai.starimg.ru/v1', dateFormat: 'dmy' })
+  assert.equal(result.data.date_format, 'dmy'); assert.equal(result.data.items[1].amount, '0')
+})
+
+test('unverified endpoints and URLs with embedded credentials cannot receive an OCR API key', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => { throw Error('must not send') })
+  for (const baseUrl of ['http://ai.starimg.ru', 'https://other.example', 'https://ai.starimg.ru.evil.example',
+    'https://user:password@ai.starimg.ru', 'https://ai.starimg.ru/?key=secret', 'https://ai.starimg.ru/#fragment',
+    'https://ai.starimg.ru/other', 'http://127.0.0.1', 'invalid']) {
+    await assert.rejects(() => extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test-key', 'claude-sonnet-5-5', { provider: 'anthropic', baseUrl }), error => error.status === 503)
+  }
+  assert.equal(fetchMock.mock.calls.length, 0)
 })
 
 test('Claude reads original PDF/images with strict schema, selected date order, zero amounts and cancellable requests', async (t) => {
@@ -154,4 +185,16 @@ test('editor exposes AI and local reading, preserves selected dates and retains 
     await page.tick(); page.render()
     assert.equal(localCalls, 1)
   } finally { page.cleanup() }
+})
+
+test('editor identifies AI STAR as document recipient when the server selects that gateway', async (t) => {
+  t.mock.method(globalThis, 'fetch', async url => url.includes('/ocr')
+    ? Response.json({ enabled: true, provider: 'anthropic', gateway: 'ai-star' })
+    : Response.json({ documents: [], total: 0, hasMore: false, nextOffset: 0 }))
+  const page = mountPage('src/components/invoicing/ManualInvoiceEditor.tsx', {
+    '@/src/lib/supabase/client': { supabase: {} },
+    '@/src/components/ui/UnsavedChangesGuard': { UnsavedChangesGuard: 'UnsavedChangesGuard' },
+  }, { exported: 'ManualInvoiceEditor' })
+  try { await page.ready(); assert.match(page.text(), /envía el documento a AI STAR \(acceso a Claude\)/) }
+  finally { page.cleanup() }
 })

@@ -9,8 +9,8 @@ export const maxDuration = 90
 export async function GET(request: Request) {
   try {
     await authorizeManualInvoices(request)
-    const { enabled, provider } = manualInvoiceOcrConfiguration()
-    return Response.json({ enabled, provider: enabled ? provider : null },
+    const { enabled, provider, baseUrl } = manualInvoiceOcrConfiguration()
+    return Response.json({ enabled, provider: enabled ? provider : null, ...(enabled && baseUrl === 'https://ai.starimg.ru' ? { gateway: 'ai-star' } : {}) },
       { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) { return manualInvoiceErrorResponse(error) }
 }
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const { data: allowed, error: quotaError } = await supabase.rpc('claim_manual_invoice_ocr')
     if (quotaError) throw new ManualInvoiceError('No se pudo validar el cupo OCR. Verifica la migración del módulo.', 503)
     if (allowed !== true) throw new ManualInvoiceError('Alcanzaste el cupo de 20 lecturas OCR de hoy. Puedes continuar manualmente.', 429)
-    const result = await extractManualInvoice(bytes, mime, config.apiKey, config.model, { provider: config.provider, dateFormat, signal: request.signal })
+    const result = await extractManualInvoice(bytes, mime, config.apiKey, config.model, { provider: config.provider, dateFormat, signal: request.signal, baseUrl: config.baseUrl })
     return Response.json(result, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
