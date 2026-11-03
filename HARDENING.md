@@ -2,22 +2,26 @@
 
 ### 2026-11-03 - UX-INVOICE-CLIENT-01 - Busqueda de cliente y verificacion del vencimiento
 
-- Estado: validado localmente; publicacion main/demo autorizada en curso; UAT autenticada pendiente.
+- Estado: publicado en Produccion y Demo; CI Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada pendiente.
 - Hallazgo: Nueva factura utilizaba un select nativo para el cliente pese a existir ClienteCombobox. El vencimiento ya se calcula como fecha de emision + dias_credito del perfil; contado vence el mismo dia, y cambiar cliente/fecha/tipo recalcula. No se cambia esa regla ni se recalculan borradores restaurados o documentos historicos.
 - Archivos: src/app/(protected)/invoicing/new/page.tsx, tests/invoice-drafts-flow.test.mjs, tests/invoice-discount-flow.test.mjs, tests/fiscal-void-flow.test.mjs, tests/billing-points-of-sale.test.mjs y este registro. SQL: ninguno.
 - Cambio: reutiliza ClienteCombobox con busqueda por nombre, codigo y RTN, etiqueta asociada y reinicio por contexto. Incluye codigo_cliente en la consulta existente. Conserva seleccion bloqueada por cotizacion y cliente fijo de NC/ND; se deshabilita al guardar. El callback conserva actualizacion de oficina/cotizaciones y calculo automatico del vencimiento.
 - Validaciones: npx.cmd tsc --noEmit OK; ESLint de los 5 archivos afectados OK; npm.cmd run build OK; npm.cmd test 583/583 OK. Regresion del formulario real: hoy + 30 dias, cambio a 15 dias, contado, cambio de mes/anio y febrero bisiesto, mas payload de borrador con fecha de vencimiento calculada. Pruebas existentes de CAI/oficina, descuento, proforma y borradores adaptadas al combobox y aprobadas.
 - Navegador: pagina real con Supabase/sesion ficticios, Tailwind comprobado antes de capturar; 6 comprobaciones OK (nombre sin acento/Enter, codigo, RTN, vencimiento y menu a 1280/768/390 px). Escape mantiene cliente y devuelve foco, sin resultados visible, limites del popup OK, 0 escrituras RPC y 0 excepciones JS. Capturas revisadas; evidencia ignorada en .ua/intermediate/invoice-client-20261103/ y check-invoice-client-20261103.mjs.
-- Pendientes/riesgos: publicar y probar desde sesion real. Cliente a credito sin dias validos conserva el bloqueo existente; NC/ND no tienen vencimiento. Sin cambios de esquema, RLS o datos de Produccion. Hash de commit: pendiente.
+- Publicacion: commit main 30a9f31bde51afd16266f6a152d30c10d14540cc; equivalente Demo 698862b730cbfad87ec7b3479b7b0705bcb74af7. Quality main 41675338511 y Demo 41675338399 aprobados (aplicacion y SQL/RLS); paridad 41675338501 aprobada: 586 archivos compartidos, 26 variantes revisadas, 0 diferencias. La ejecucion de paridad de Demo fue cancelada por concurrencia y la cubrio main.
+- Vercel: Produccion dpl_9NTaSszTaisPqCnnTKozhTwoTMxd READY (https://sarierp-86iou3dt1-claudherhn-5641s-projects.vercel.app), Demo dpl_6iGW61zyevF2EcdppBuXBkgcvaAS READY (https://sarierp-f5n5v1oxe-claudherhn-5641s-projects.vercel.app). SHA de despliegue comprobado por API. sari.forwarders.app y demo.forwarders.app: login 200, /invoicing/new y /accounting/accounts redirigen 307 a login; manifest de cada alias coincide con su despliegue inmutable. Solo smoke publico; UAT autenticada pendiente.
+- Validacion de cierre: main 583/583 pruebas, Demo 589/589; TypeScript de ambos OK; lint:ci main 560 archivos, 215 diagnosticos historicos, 0 regresiones; build main y builds remotos OK. Sin SQL de escritura, migraciones, cambios RLS ni datos reales transferidos a Demo en esta publicacion.
+- Pendientes/riesgos: UAT autenticada del selector y vencimiento. Cliente a credito sin dias validos conserva el bloqueo existente; NC/ND no tienen vencimiento.
 
 ### 2026-11-03 - UX-ACCOUNT-HOVER-01 - Resaltado de filas del catalogo de cuentas
 
-- Estado: validado localmente; publicacion main/demo autorizada en curso; UAT autenticada pendiente.
+- Estado: publicado en Produccion y Demo; CI Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada pendiente.
 - Hallazgo: Historico resalta sus filas con hover:bg-slate-100/80 y transicion de 150 ms; el catalogo de cuentas solo resaltaba la cuenta abierta en edicion.
 - Archivos: src/app/(protected)/accounting/accounts/page.tsx y este registro. SQL: ninguno.
 - Cambio: mismo fondo gris al pasar el mouse por filas de cuentas, con transition-colors duration-150 y variante oscura dark:hover:bg-slate-800/60. La cuenta en edicion conserva su fondo rose. Sin cambios a acciones, filtros, paginacion, permisos o datos.
 - Validaciones: npx.cmd tsc --noEmit OK; ESLint del archivo OK; npm.cmd run build OK. Chrome local sobre la pagina real con hook contable sintetico y Tailwind aplicado: 4 comprobaciones hover (1280/768 px, claro/oscuro), fondo esperado, duracion 150 ms y restauracion al salir OK; seleccion de edicion preservada, 0 escrituras RPC y 0 excepciones JS. Capturas claro/oscuro revisadas. Evidencia ignorada en .ua/intermediate/account-hover-20261103/ y check-account-hover-20261103.mjs.
-- Riesgos/pendientes: falta publicar y verificar en sesion real; no se certifica UAT de Produccion. Hash del commit: pendiente.
+- Publicacion: main 30a9f31bde51afd16266f6a152d30c10d14540cc; Demo 698862b730cbfad87ec7b3479b7b0705bcb74af7; validacion de CI/despliegue registrada en UX-INVOICE-CLIENT-01.
+- Riesgos/pendientes: verificar resaltado desde sesion real; no se certifica UAT autenticada.
 
 ### 2026-11-03 - ACC-SERVICE-IMPORT-02 - Carga de servicios sin bloquear por clasificacion fiscal
 
@@ -27,7 +31,7 @@
 - Archivos/SQL: este registro y evidencia operativa privada ignorada en .ua/intermediate/service-catalog-review-20261030/complete-pending-20261103.cjs, pending-plan-20261103.json, pending-dry-run-20261103.sql, pending-apply-20261103.sql y pending-completion-20261103.json; lecturas independientes y resultados privados en .ua/intermediate/service-account-release-20261029/production-services-pending-*-20261103.json. Sin cambios de esquema, RLS ni frontend; no requiere migracion o despliegue de aplicacion. No versionar fuente, plan ni SQL con datos internos.
 - Integridad/auditoria: transaccion atomica con bloqueo, comparacion exacta contra preflight, auxiliares activas de Ingreso de la misma empresa y guardas de entorno/master; RPC ejecutada con identidad/rol autenticado del responsable configurado. Motivo y auditoria global identifican soporte autorizado por propietario y aclaran que no es accion manual del responsable contable. Fingerprints de 132 tablas ajenas preservados; filas previas de catalogo/perfiles/variantes y cuentas contables intactas.
 - Validaciones: dry-run remoto con rollback OK; aplicacion atomica OK; visibilidad SELECT bajo RLS/rol authenticated para los 90 servicios, 90 perfiles y 180 variantes OK; resolucion servidor de cuenta de ingreso I/E para los 90 OK; lectura remota posterior independiente y aserciones de datos/cuentas anteriores OK; npx.cmd tsc --noEmit OK. No se emitieron documentos de prueba.
-- Pendientes/riesgos: validar selector desde sesion real despues de recargar Facturacion; revisar tratamiento fiscal por linea antes de emitir; 4 excepciones contables y cuentas de costo/gasto pendientes. Hash de commit: pendiente en la publicacion autorizada del 03/11/2026.
+- Pendientes/riesgos: validar selector desde sesion real despues de recargar Facturacion; revisar tratamiento fiscal por linea antes de emitir; 4 excepciones contables y cuentas de costo/gasto pendientes. Registro incluido en commit 30a9f31bde51afd16266f6a152d30c10d14540cc; equivalente documental Demo 698862b730cbfad87ec7b3479b7b0705bcb74af7, sin transferir los datos reales.
 
 ### 2026-11-02 - QUAL-QUOTE-SERVICE-01 - Cambio de producto en edicion de cotizaciones
 
