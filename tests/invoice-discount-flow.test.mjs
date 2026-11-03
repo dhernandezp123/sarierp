@@ -7,7 +7,7 @@ test('formulario real envía descuento de línea y presenta total neto con ISV',
  const app=mountPage('src/app/(protected)/invoicing/new/page.tsx',{'../../../../lib/supabase/client':{supabase:client},'@/src/lib/supabase/client':{supabase:client},'@/src/lib/company-settings':{loadCurrentCompanySettings:async()=>({data:{currency:'HNL',default_currency:'HNL'},error:null})},'@/src/components/ui/UnsavedChangesGuard':{UnsavedChangesGuard:'Guard',requestFormNavigation(){},markFormSaved(){}}})
  try{
   await app.ready();await app.tick();app.render()
-  app.find(n=>n.type==='select'&&app.text(n).includes('Cliente SPS')).props.onChange({target:{value:'cliente'}});app.render();await app.tick();app.render()
+  app.find(n=>n.props?.id==='invoice-client').props.onChange('cliente');app.render();await app.tick();app.render()
   app.find(n=>n.type==='input'&&n.props.placeholder==='Descripción del servicio...').props.onChange({target:{value:'Flete con descuento'}});app.render()
   app.find(n=>n.type==='input'&&n.props.type==='number'&&n.props.step==='0.01'&&!n.props['aria-label']&&n.props.value==='0').props.onChange({target:{value:'150'}});app.render()
   app.find(n=>n.props?.['aria-label']==='Descuento de línea').props.onChange({target:{value:''}});app.render()

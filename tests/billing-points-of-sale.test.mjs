@@ -69,7 +69,7 @@ test('factura real deriva CAI de la oficina del cliente y descarta respuestas an
   try {
     await app.ready(); await app.tick(); app.render()
     assert.equal(reads.length, 0, 'Sin cliente no se elige una oficina arbitraria')
-    const chooseClient = value => app.find(node => node.type === 'select' && app.text(node).includes('Cliente SPS')).props.onChange({ target: { value } })
+    const chooseClient = value => app.find(node => node.props?.id === 'invoice-client').props.onChange(value)
     chooseClient('sps'); app.render(); await app.tick(); app.render()
     assert.equal(reads[0].point_of_sale, 'San Pedro Sula')
     assert.equal(app.find(node => node.type === 'select' && node.props.id === 'invoice-point-of-sale'), undefined)

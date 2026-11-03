@@ -6,6 +6,7 @@ import { calculateInvoiceFiscal, convertMoney, invoiceLineAmounts, type TaxTreat
 
 import { formatDate, formatMoney, toDateInputValue } from '@/src/lib/format'
 import { NumberInput } from '@/src/components/ui/NumberInput'
+import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -55,6 +56,7 @@ type InvoiceItem = {
 type Cliente = {
   billing_office?: { name: string; is_active: boolean } | null
   id: string
+  codigo_cliente?: string | null
   nombre: string
   rtn: string | null
   direccion: string | null
@@ -356,7 +358,7 @@ export default function NewInvoicePage() {
       setInvoiceType(docType === 'proforma' ? 'Proforma' : 'Factura'); setParentInvoice(null)
       setDraftLoading(Boolean(requestedDraft || correctionSource)); setDraftError('')
       const [clientesRes, settingsRes, pointsRes, accessRes] = await Promise.all([
-        supabase.from('clientes').select('id, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito, billing_office:billing_offices!clientes_billing_office_fk(name,is_active)').order('nombre'),
+        supabase.from('clientes').select('id, codigo_cliente, nombre, rtn, direccion, email:email_1, condicion_pago, dias_credito, billing_office:billing_offices!clientes_billing_office_fk(name,is_active)').order('nombre'),
         loadCurrentCompanySettings(supabase),
         loadBillingPointsOfSale(supabase),
         supabase.rpc('get_my_billing_office_access'),
@@ -874,8 +876,8 @@ export default function NewInvoicePage() {
                 <p className="mt-1 text-xs text-slate-500">La oficina corresponde al perfil del cliente; las notas conservan la oficina de su factura original.</p>
               </div>
               {/* Cliente (bloqueado si viene de parent) */}
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+              <div className="min-w-0">
+                <label htmlFor="invoice-client" className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                   Cliente <span className="text-red-500">*</span>
                 </label>
                 {clienteLocked ? (
@@ -883,23 +885,21 @@ export default function NewInvoicePage() {
                     {selectedCliente?.nombre || '—'}
                   </div>
                 ) : (
-                  <select
+                  <ClienteCombobox
+                    key={context}
+                    id="invoice-client"
+                    clientes={clientes}
                     value={clienteId}
-                    onChange={(e) => {
-                      const nextClientId = e.target.value
+                    onChange={(nextClientId) => {
                       const nextClient = clientes.find((client) => client.id === nextClientId) || null
                       setClienteId(nextClientId)
                       setQuotations([])
                       setDueDate(calculateDueDate(issueDate, nextClient, invoiceType))
                     }}
-                    disabled={Boolean(quotationId)}
+                    disabled={Boolean(quotationId) || saving}
+                    placeholder="Buscar cliente por nombre, código o RTN…"
                     className={`${fieldClass} ${reqClass(submitted, clienteId)} disabled:bg-slate-50 disabled:opacity-70 dark:disabled:bg-slate-800`}
-                  >
-                    <option value="">Seleccionar cliente...</option>
-                    {clientes.map((c) => (
-                      <option key={c.id} value={c.id}>{c.nombre}</option>
-                    ))}
-                  </select>
+                  />
                 )}
               </div>
 
