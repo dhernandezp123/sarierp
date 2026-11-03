@@ -1,5 +1,16 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 2026-11-03 - UX-OCR-CLAUDE-03 - Compatibilidad con la clave AI STAR del cliente
+
+- Estado: adaptacion validada localmente; destinatario AI STAR, configuracion Vercel y despliegue Produccion/Demo autorizados expresamente por el usuario. Publicacion en curso.
+- Hallazgo: tras reparar el runtime PDF, el reintento ya alcanza al proveedor pero devuelve 502 con mensaje de credenciales rechazadas. El usuario confirma que la clave de Vercel proviene del panel de 10 millones de tokens. El OCR estaba enviandola a `api.anthropic.com`, mientras el proveedor AI STAR documenta su propio Base URL y autenticacion Bearer; la configuracion anterior de Claude Code utilizaba ese proveedor.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`, `src/app/api/manual-invoices/ocr/route.ts`, `src/components/invoicing/ManualInvoiceEditor.tsx`, `tests/manual-invoice-ai.test.mjs`, `tests/manual-invoice-routes.test.mjs`, `docs/manual-sari-usa-invoices.md` y este registro. SQL: ninguno. No modifica el lector PDF, dependencias ni empaquetado ya reparados.
+- Cambio propuesto: variable de servidor `MANUAL_INVOICE_OCR_BASE_URL` opcional, con default API oficial Anthropic. Admite solamente origen HTTPS oficial o `https://ai.starimg.ru`, sin credenciales/query/hash en URL ni redirecciones. AI STAR usa `/v1/messages` y `Authorization: Bearer`; Anthropic oficial conserva `x-api-key`. El formulario no puede seleccionar el destino. El scanner identifica al receptor AI STAR cuando corresponde. Se conservan autorizacion, cuota, archivos, esquema, fechas, revision y respaldo local.
+- Evidencia del proveedor: https://ai.starimg.ru/help, instrucciones publicas de error 401 y configuracion Claude Code; el catalogo publico incluye `claude-sonnet-5-5`. Pruebas locales usan exclusivamente respuestas y claves ficticias; no se han transmitido claves reales ni facturas a AI STAR durante esta adaptacion.
+- Validaciones: enfocadas 17/17 OK, incluida ruta con ambos destinos y rechazo de destino enviado en formulario; suite completa 600/600, TypeScript, ESLint de archivos afectados y build/postbuild de PDF aislado OK. Chrome con pagina real y respuestas ficticias: flujo de lectura/error/cancelacion/respaldo conservado, aviso AI STAR visible dentro del viewport a 1280/768/390 px; cero excepciones y escrituras. Evidencia ignorada `.ua/intermediate/ocr-ai-star-*`. No se ejecuto ninguna solicitud autenticada al proveedor.
+- Riesgos/pendientes: usuario confirma expresamente AI STAR como destinatario de la clave configurada y las facturas, autoriza la variable en Vercel Production y publicacion Produccion/Demo. Verificar credenciales/capacidades reales con una prueba pequena autorizada antes de documentos reales. Compatibilidad local simulada no certifica saldo, disponibilidad ni extraccion del proveedor. Claude Code conserva autenticacion por suscripcion; no se restaura su configuracion API global.
+- Commit: pendiente.
+
 ### 2026-11-03 - UX-OCR-CLAUDE-02 - Dependencia nativa PDF incluida en el despliegue
 
 - Estado: publicado en Produccion y Demo; runtime PDF aislado validado en ambos builds Linux. CI, SQL/RLS, paridad y smoke publico aprobados; reintento autenticado del PDF original pendiente.

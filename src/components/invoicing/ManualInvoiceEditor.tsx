@@ -45,7 +45,7 @@ export function ManualInvoiceEditor() {
   const [ocrProgress, setOcrProgress] = useState<OcrProgress>({ message: '', percent: 0 })
   const [recognizedText, setRecognizedText] = useState('')
   const scanController = useRef<AbortController | null>(null)
-  const [aiAvailability, setAiAvailability] = useState<{ context: string; provider: 'anthropic' | 'openai' | null } | null>(null)
+  const [aiAvailability, setAiAvailability] = useState<{ context: string; provider: 'anthropic' | 'openai' | null; gateway?: 'ai-star' } | null>(null)
   const aiProvider = aiAvailability?.context === context ? aiAvailability.provider : null
   const [busy, setBusy] = useState<'ocr' | 'save' | 'pdf' | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
@@ -99,7 +99,8 @@ export function ManualInvoiceEditor() {
     const controller = new AbortController()
     void fetch('/api/manual-invoices/ocr', { cache: 'no-store', signal: controller.signal })
       .then(readResponse).then((body) => {
-        if (!controller.signal.aborted) setAiAvailability({ context, provider: body.enabled && (body.provider === 'anthropic' || body.provider === 'openai') ? body.provider : null })
+        if (!controller.signal.aborted) setAiAvailability({ context, provider: body.enabled && (body.provider === 'anthropic' || body.provider === 'openai') ? body.provider : null,
+          gateway: body.gateway === 'ai-star' ? 'ai-star' : undefined })
       }).catch(() => { /* The local reader remains available when AI is disabled or unavailable. */ })
     return () => { controller.abort(); scanController.current?.abort() }
   }, [context])
@@ -263,7 +264,7 @@ export function ManualInvoiceEditor() {
             {busy === 'ocr' && <button className={secondaryButtonClass} onClick={() => scanController.current?.abort()}>Cancelar lectura</button>}
           </div>
           <p className="mt-2 text-sm text-slate-500">El formato se guarda con la factura y se aplica al PDF. Cambiarlo conserva las fechas ingresadas; para reinterpretar el original, vuelve a leerlo con OCR.</p>
-          {aiProvider && <p className="mt-2 text-sm text-slate-500">La lectura con IA envía el documento a {aiProvider === 'anthropic' ? 'Claude (Anthropic)' : 'OpenAI'} para extraer los datos. La lectura en este dispositivo es gratuita y conserva el archivo en tu navegador. Revisa los campos antes de guardar.</p>}
+          {aiProvider && <p className="mt-2 text-sm text-slate-500">La lectura con IA envía el documento a {aiAvailability?.gateway === 'ai-star' ? 'AI STAR (acceso a Claude)' : aiProvider === 'anthropic' ? 'Claude (Anthropic)' : 'OpenAI'} para extraer los datos. La lectura en este dispositivo es gratuita y conserva el archivo en tu navegador. Revisa los campos antes de guardar.</p>}
           {file && <p className="mt-2 break-all text-sm">Archivo cargado: {file.name}</p>}
           {busy === 'ocr' && <div className="mt-3 space-y-1"><p role="status" className="text-sm">{ocrProgress.message} {ocrProgress.percent}%</p><progress aria-label="Progreso de lectura" className="h-2 w-full" max={100} value={ocrProgress.percent} /></div>}
         </div>
