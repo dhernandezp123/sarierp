@@ -1,5 +1,15 @@
 # Sari Express ERP — Hardening y Trial
 
+### 2026-11-03 - UX-OCR-CLAUDE-02 - Dependencia nativa PDF incluida en el despliegue
+
+- Estado: correccion validada localmente; publicacion de reparacion del OCR en curso, reintento autenticado pendiente.
+- Hallazgo: POST `/api/manual-invoices/ocr` devolvia 500 al validar PDFs. Logs de Production registran `Cannot find module '@napi-rs/canvas'` desde PDF.js; el manifiesto `.nft.json` incluia PDF.js/worker pero no Canvas ni su binding nativo. Reproduccion aislando esa dependencia: `ReferenceError: DOMMatrix is not defined`, antes de cuota y llamada a Claude. La importacion quedaba fuera del manejo de errores del lector.
+- Archivos: `next.config.ts`, `package.json`, `scripts/validate-invoice-ocr-runtime.mjs`, `src/lib/server/manual-invoice-pdf.ts`, `tests/manual-invoice-pdf-limit.test.mjs`, `docs/manual-sari-usa-invoices.md` y este registro. SQL: ninguno. Sin nuevas dependencias: Canvas ya pertenece a las dependencias opcionales del PDF.js fijado.
+- Cambio: tracing explicito de `@napi-rs/canvas` y los paquetes de binding por plataforma para la ruta OCR. `postbuild` comprueba el manifiesto, copia solo los archivos PDF/Canvas trazados a un directorio temporal fuera del checkout y abre un PDF sintetico en un proceso independiente; sin acceso a node_modules del proyecto ni llamadas API. Un fallo bloquea el build. La inicializacion del lector ahora devuelve 503 con alternativa foto/lectura local en lugar de un 500 generico, con diagnostico seguro sin documentos ni claves.
+- Validaciones: prueba del artefacto anterior falla como corresponde por Canvas ausente. Build con paquete corregido y apertura real del PDF sintetico desde el paquete aislado OK; regresiones enfocadas 14/14, suite completa 597/597, TypeScript y ESLint de archivos afectados OK. Reproduccion sin dependencia ahora produce el 503 explicativo esperado, sin enviar archivos ni consumir API.
+- Riesgos/pendientes: desplegar y reintentar el PDF reportado con sesion real; la prueba de empaquetado no certifica acceso/saldo del proveedor ni exactitud de extraccion. Conserva autorizacion, cuota, limites de archivo/paginas, politica de revision y configuracion del proveedor. No se enviaron originales a servicios externos en estas pruebas.
+- Commit: pendiente.
+
 ### 2026-11-03 - UX-OCR-CLAUDE-01 - Lectura de facturas SARI USA con Claude y respaldo local
 
 - Estado: publicado en Produccion y Demo; Quality, SQL/RLS, paridad y smoke publico aprobados. UAT autenticada y acceso/saldo de Anthropic pendientes.

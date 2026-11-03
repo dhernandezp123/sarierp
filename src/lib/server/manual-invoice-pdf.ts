@@ -4,11 +4,17 @@ import { ManualInvoiceError } from './manual-invoices'
 
 /** Inspect the PDF before sending it to a paid provider; never render or execute PDF actions. */
 export async function validateInvoicePdf(bytes: Buffer, signal: AbortSignal) {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  const requireFromProject = createRequire(`${process.cwd()}/package.json`)
-  pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(requireFromProject.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')).href
-  const task = pdfjs.getDocument({ data: new Uint8Array(bytes), enableXfa: false,
-    stopAtErrors: true, useSystemFonts: false, maxImageSize: 8_000_000 })
+  let task: import('pdfjs-dist').PDFDocumentLoadingTask
+  try {
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const requireFromProject = createRequire(`${process.cwd()}/package.json`)
+    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(requireFromProject.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')).href
+    task = pdfjs.getDocument({ data: new Uint8Array(bytes), enableXfa: false,
+      stopAtErrors: true, useSystemFonts: false, maxImageSize: 8_000_000 })
+  } catch {
+    console.error('manual_invoice_pdf_init_failed')
+    throw new ManualInvoiceError('No se pudo iniciar el lector PDF del servidor. Puedes usar una foto o la lectura en este dispositivo.', 503)
+  }
   const stop = () => { void task.destroy().catch(() => {}) }
   const boundedSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)])
   boundedSignal.addEventListener('abort', stop, { once: true })
