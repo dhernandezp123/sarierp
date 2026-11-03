@@ -67,7 +67,8 @@ test('OCR API rejects fake files and exhausted quotas before invoking a provider
     server.rpc = async () => { claims++; return { data: false, error: null } }
     const { POST } = loadTs('src/app/api/manual-invoices/ocr/route.ts', {
       '@/src/lib/supabase/server': { createClient: async () => server },
-      '@/src/lib/server/manual-invoice-ocr': { extractManualInvoice: async () => { providerCalls++; return {} } },
+      '@/src/lib/server/manual-invoice-ocr': { ...loadTs('src/lib/server/manual-invoice-ocr.ts', { '@/src/lib/supabase/server': {} }), extractManualInvoice: async () => { providerCalls++; return {} } },
+      '@/src/lib/server/manual-invoice-pdf': { validateInvoicePdf: async () => {} },
     })
     for (const [bytes, expected] of [['<html>fake PDF</html>', 415], ['%PDF-1.7', 429]]) {
       const form = new FormData(); form.set('file', new File([bytes], 'scan.pdf', { type: 'application/pdf' }))
@@ -79,4 +80,39 @@ test('OCR API rejects fake files and exhausted quotas before invoking a provider
     if (previousKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = previousKey
     if (previousEnabled === undefined) delete process.env.MANUAL_INVOICE_OCR_ENABLED; else process.env.MANUAL_INVOICE_OCR_ENABLED = previousEnabled
   }
+})
+
+test('Claude route exposes only availability, validates date selection, and passes server credentials after quota', async () => {
+  const names = ['MANUAL_INVOICE_OCR_PROVIDER', 'MANUAL_INVOICE_OCR_ENABLED', 'MANUAL_INVOICE_OCR_MODEL', 'ANTHROPIC_API_KEY']
+  const previous = Object.fromEntries(names.map(name => [name, process.env[name]]))
+  Object.assign(process.env, { MANUAL_INVOICE_OCR_PROVIDER: 'anthropic', MANUAL_INVOICE_OCR_ENABLED: 'true', MANUAL_INVOICE_OCR_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'synthetic-secret' })
+  const calls = []
+  try {
+    const server = authorizedServer()
+    server.rpc = async name => { calls.push(name); return { data: true, error: null } }
+    const { GET, POST } = loadTs('src/app/api/manual-invoices/ocr/route.ts', {
+      '@/src/lib/supabase/server': { createClient: async () => server },
+      '@/src/lib/server/manual-invoice-pdf': { validateInvoicePdf: async () => { calls.push('validate-pdf') } },
+      '@/src/lib/server/manual-invoice-ocr': {
+        ...loadTs('src/lib/server/manual-invoice-ocr.ts', { '@/src/lib/supabase/server': {} }),
+        extractManualInvoice: async (bytes, mime, key, model, options) => {
+          calls.push('provider'); assert.equal(key, 'synthetic-secret'); assert.equal(model, 'claude-sonnet-5-5')
+          assert.equal(options.provider, 'anthropic'); assert.equal(options.dateFormat, 'dmy')
+          assert.ok(options.signal instanceof AbortSignal)
+          return { data: { ...blankManualInvoice(), date_format: 'dmy' }, warnings: [], source_total: '' }
+        },
+      },
+    })
+    const status = await GET(new Request('https://sari.forwarders.app/api/manual-invoices/ocr', { headers: headers() }))
+    assert.equal(status.headers.get('cache-control'), 'no-store')
+    assert.deepEqual(await status.json(), { enabled: true, provider: 'anthropic' })
+    for (const [dateFormat, expected] of [['invalid', 400], ['dmy', 200]]) {
+      const form = new FormData(); form.set('file', new File(['%PDF-1.7'], 'synthetic.pdf', { type: 'application/pdf' })); form.set('date_format', dateFormat)
+      const response = await POST(new Request('https://sari.forwarders.app/api/manual-invoices/ocr', { method: 'POST', headers: headers(), body: form }))
+      assert.equal(response.status, expected)
+    }
+    assert.deepEqual(calls, ['validate-pdf', 'claim_manual_invoice_ocr', 'provider'])
+    delete process.env.ANTHROPIC_API_KEY
+    assert.deepEqual(await (await GET(new Request('https://sari.forwarders.app/api/manual-invoices/ocr', { headers: headers() }))).json(), { enabled: false, provider: null })
+  } finally { for (const name of names) { if (previous[name] === undefined) delete process.env[name]; else process.env[name] = previous[name] } }
 })
