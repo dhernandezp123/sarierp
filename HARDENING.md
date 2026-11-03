@@ -14677,7 +14677,7 @@ Agregar una entrada por fix:
 
 ### 03/11/2026 - OCR-422-01 - Lectura OCR no se descarta por un campo inválido
 
-- Estado: validado localmente; publicación en Production en curso con este commit.
+- Estado: validado localmente y publicado en Production; reintento autenticado con 131929.pdf pendiente.
 - Hallazgo: `POST /api/manual-invoices/ocr` devolvía 422 («El OCR devolvió datos
   que requieren una nueva lectura») con la factura 131929. Anthropic respondía,
   pero un solo campo con salto de línea (dirección Bill to en varias líneas),
@@ -14693,3 +14693,8 @@ Agregar una entrada por fix:
   48/48, incluido el caso nuevo de campos multilínea/largos/ilegibles.
 - Riesgos / pendientes: reintentar 131929.pdf en Production; si persiste el 422,
   revisar el motivo en el log `manual_invoice_ocr_invalid`.
+- Commit funcional: `2692cdef6f1b1a1daa1e6183d079b95e38671861`, en `origin/main`.
+- Publicación: Vercel Production `dpl_GtTYSbPiLoGY2pA7x5weEwui8rkR`, `READY`;
+  URL `https://sarierp-2epdr7odz-claudherhn-5641s-projects.vercel.app`. Alias
+  `sari.forwarders.app` verificado contra ese despliegue; smoke sin sesión:
+  `/manual-invoices` 307 a login. No se ejecutó SQL.
