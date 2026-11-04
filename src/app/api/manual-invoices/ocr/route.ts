@@ -28,21 +28,29 @@ export async function POST(request: Request) {
     let form: FormData
     try { form = await new Response(new Uint8Array(body), { headers: { 'Content-Type': contentType } }).formData() }
     catch { throw new ManualInvoiceError('El formulario de carga no es válido.', 400) }
-    const file = form.get('file')
+    const files = form.getAll('file')
     const dateFormat = form.get('date_format') ?? 'mdy'
     if (dateFormat !== 'mdy' && dateFormat !== 'dmy') throw new ManualInvoiceError('Selecciona MM/DD/YYYY o DD/MM/YYYY para las fechas.', 400)
-    if (!(file instanceof File) || file.size <= 0 || file.size > MANUAL_INVOICE_MAX_BYTES || form.getAll('file').length !== 1) {
+    const totalSize = files.reduce((sum, file) => sum + (file instanceof File ? file.size : 0), 0)
+    if (!files.length || files.length > 5 || files.some((file) => !(file instanceof File) || file.size <= 0)
+      || totalSize > MANUAL_INVOICE_MAX_BYTES) {
       throw new ManualInvoiceError('Carga un solo archivo de hasta 3 MB.', 400)
     }
-    const bytes = Buffer.from(await file.arrayBuffer())
-    const mime = manualInvoiceMime(bytes)
-    if (!mime || (file.type && file.type !== mime)) throw new ManualInvoiceError('Solo se aceptan PDF, JPG, PNG o WEBP válidos.', 415)
-    if (mime === 'application/pdf') await validateInvoicePdf(bytes, request.signal)
+    const pages: { bytes: Buffer; mime: string }[] = []
+    for (const file of files as File[]) {
+      const bytes = Buffer.from(await file.arrayBuffer())
+      const mime = manualInvoiceMime(bytes)
+      if (!mime || (file.type && file.type !== mime)) throw new ManualInvoiceError('Solo se aceptan PDF, JPG, PNG o WEBP válidos.', 415)
+      // Several files are only the rendered pages of one invoice; a PDF must arrive alone.
+      if (mime === 'application/pdf' && files.length > 1) throw new ManualInvoiceError('Carga un solo archivo de hasta 3 MB.', 400)
+      pages.push({ bytes, mime })
+    }
+    if (pages[0].mime === 'application/pdf') await validateInvoicePdf(pages[0].bytes, request.signal)
     // Atomic per-user daily quota is enforced in PostgreSQL across server instances.
     const { data: allowed, error: quotaError } = await supabase.rpc('claim_manual_invoice_ocr')
     if (quotaError) throw new ManualInvoiceError('No se pudo validar el cupo OCR. Verifica la migración del módulo.', 503)
     if (allowed !== true) throw new ManualInvoiceError('Alcanzaste el cupo de 20 lecturas OCR de hoy. Puedes continuar manualmente.', 429)
-    const result = await extractManualInvoice(bytes, mime, config.apiKey, config.model, { provider: config.provider, dateFormat, signal: request.signal, baseUrl: config.baseUrl })
+    const result = await extractManualInvoice(pages[0].bytes, pages[0].mime, config.apiKey, config.model, { provider: config.provider, dateFormat, signal: request.signal, baseUrl: config.baseUrl, pages })
     return Response.json(result, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {

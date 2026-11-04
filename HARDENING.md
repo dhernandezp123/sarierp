@@ -14759,3 +14759,22 @@ Agregar una entrada por fix:
 - Publicación (OCR-422-03 y OCR-ISSUER-01): commits `dd7c9e1` y `b305807`; Vercel
   Production `dpl_EUjq9EvR2XP3izu846aaPiPKFUsA`, `READY`, alias
   `sari.forwarders.app` verificado; smoke sin sesión `/manual-invoices` 307 a login.
+
+### 03/11/2026 - OCR-PDF-01 - PDF multipágina enviado como imágenes por página
+
+- Estado: validado localmente; publicación en Production con este commit.
+- Hallazgo: con el PDF de 2 páginas de 131929 la lectura devolvía campos vacíos
+  («No se identificó una factura legible»). El log mostró 568 tokens de entrada:
+  el gateway AI STAR no entrega bloques `document` PDF al modelo; con imágenes
+  sí funciona (la página 1 sola se leyó y avisó que faltaba la página 2).
+- Archivos: `src/lib/browser/manual-invoice-ai.ts`,
+  `src/app/api/manual-invoices/ocr/route.ts`, `src/lib/server/manual-invoice-ocr.ts`,
+  `tests/manual-invoice-ai.test.mjs` y este registro. SQL: ninguno.
+- Cambio: en «Leer con IA» el navegador renderiza cada página del PDF (máx. 5)
+  a JPEG de 1500 px de ancho, con calidad decreciente hasta que el conjunto quepa
+  en 3 MB. La API acepta un PDF/imagen o hasta 5 imágenes de página y las envía
+  en orden como bloques de imagen; las instrucciones indican que son una sola
+  factura. El cupo diario sigue contando una lectura por documento.
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 52/52.
+  El render en navegador no tiene prueba automatizada: requiere prueba manual.
+- Riesgos / pendientes: leer 131929.pdf completo en Production y comparar cargos y total.

@@ -230,3 +230,13 @@ test('an occasional prose reply is retried once with a stricter JSON prompt', as
   assert.equal(fetchMock.mock.callCount(), 2)
   assert.match(JSON.parse(fetchMock.mock.calls[1].arguments[1].body).messages[0].content[1].text, /objeto JSON válido/)
 })
+
+test('rendered PDF pages are sent to Claude as ordered image blocks', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  fetchMock.mock.mockImplementation(async () => claude(invoice()))
+  const pages = [{ bytes: Buffer.from('page-1'), mime: 'image/jpeg' }, { bytes: Buffer.from('page-2'), mime: 'image/jpeg' }]
+  await extractManualInvoice(pages[0].bytes, 'image/jpeg', 'test', 'claude-sonnet-5-5', { provider: 'anthropic', pages })
+  const content = JSON.parse(fetchMock.mock.calls[0].arguments[1].body).messages[0].content
+  assert.deepEqual(content.slice(0, 2).map((block) => [block.type, Buffer.from(block.source.data, 'base64').toString()]), [['image', 'page-1'], ['image', 'page-2']])
+  assert.equal(content[2].type, 'text')
+})
