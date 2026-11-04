@@ -2,12 +2,15 @@
 
 ### 04/11/2026 - UX-MANUAL-HISTORY-01 - Acciones PDF desde historial
 
-- Estado: implementado y validado localmente. Publicacion y UAT autenticada pendientes.
+- Estado: publicado en Produccion y Demo; smoke publico aprobado. UAT autenticada de impresion/descarga pendiente.
 - Cambio: iconos accesibles para editar, abrir/descargar PDF en otra pestana e imprimir cada version guardada; resaltado de fila al pasar el mouse. Genera desde el snapshot guardado sin reemplazar el editor ni consultar el emisor actual. Reutiliza el generador PDF y el patron existente de impresion en pestana reservada durante el clic.
 - Archivos: `src/components/invoicing/ManualInvoiceEditor.tsx` y este registro. SQL: ninguno.
 - Controles: bloquea acciones durante generacion, avisa si el navegador bloquea ventanas, descarta resultados si cambia el contexto y libera URLs al cerrar la pestana o tras 30 minutos.
 - Validaciones: `npx.cmd tsc --noEmit`, ESLint del componente, suite completa 605/605 y build de produccion/postbuild PDF aislado aprobados; `git diff --check` sin errores. Sin prueba autenticada de navegador.
-- Riesgos/pendientes: impresion automatica depende del visor del navegador; este conserva su control nativo. Verificar apertura/descarga/impresion con sesion real. Sin commit ni despliegue en esta tarea.
+- Publicacion: main `28f3ca5b5af2752b90760f31961f702457ef76ec`; Demo `ee0f2163cd66cf21a310b1c7e7bfaa3602f429c4`. Vercel confirma Deployment has completed para ambos commits: Production `2F967amBa67bDXGxQUtNMvHg5F9e`, Demo `4y3RbSMbNhJBMR1K5QhicuTUkaLQ`, verificado mediante estados GitHub de Vercel. CLI Vercel sin sesion; no se requirio autenticar ni alterar credenciales.
+- Postflight: 8 comprobaciones HTTP entre sari.forwarders.app y demo.forwarders.app: login 200, scanner 307 a login, APIs historial/OCR 401 sin sesion. Componente con hash identico en ambas ramas. Evidencia ignorada `.ua/intermediate/history-actions-*`.
+- CI: Quality main `41843806254` aprobado (aplicacion y SQL/RLS); Demo `41843806351` SQL/RLS aprobado, aplicacion detenida en Reviewed parity with Production source. Environment parity `41843806141` falla por diferencias anteriores del OCR: ruta, lector navegador, extractor servidor, validador y migracion de emisor opcional presentes solo en main. El cambio del historial no agrega diferencias; no se sincroniza ni aplica SQL ajeno a esta publicacion.
+- Riesgos/pendientes: corregir por separado la paridad previa de OCR/emisor en Demo. Impresion automatica depende del visor del navegador; este conserva su control nativo. Verificar apertura/descarga/impresion con sesion real. Analisis Venex ajeno excluido; sin cambios de SQL ni datos de negocio.
 
 ### 2026-11-03 - UX-OCR-CLAUDE-03 - Compatibilidad con la clave AI STAR del cliente
 
