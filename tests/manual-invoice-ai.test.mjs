@@ -96,11 +96,22 @@ test('Claude refusals, truncated responses, malformed fields and impossible date
   const fetchMock = t.mock.method(globalThis, 'fetch')
   const responses = [claude(invoice(), { stop_reason: 'max_tokens' }), claude(invoice(), { stop_reason: 'refusal' }),
     claude(invoice(), { content: [{ type: 'thinking', text: JSON.stringify(invoice()) }] }),
-    claude({ ...invoice(), issue_date: '2026-02-30' }), claude({ ...invoice(), hbl: 'X'.repeat(51) })]
+    claude({ ...invoice(), issue_date: '2026-02-30' })]
   for (const response of responses) {
-    fetchMock.mock.mockImplementation(async () => response)
+    fetchMock.mock.mockImplementation(async () => response.clone())
     await assert.rejects(() => extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' }), error => error.status === 422)
   }
+})
+
+test('multi-line, overlong and unreadable OCR fields are cleaned or blanked with warnings instead of discarding the reading', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  fetchMock.mock.mockImplementation(async () => claude({ ...invoice(), bill_to_address: 'COLONIA SATELITE\nCALLE 3', hbl: 'X'.repeat(51),
+    due_date: '10/28/2026', items: [{ description: 'Freight\nOcean', amount: '10.00' }, { description: 'Fee', amount: 'diez' }] }))
+  const result = await extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' })
+  assert.equal(result.data.bill_to_address, 'COLONIA SATELITE CALLE 3')
+  assert.equal(result.data.hbl, ''); assert.ok(result.warnings.some(w => w.includes('HAWB/HBL')))
+  assert.equal(result.data.due_date, ''); assert.ok(result.warnings.some(w => w.includes('Vencimiento')))
+  assert.equal(result.data.items[0].description, 'Freight Ocean'); assert.equal(result.data.items[1].amount, '')
 })
 
 test('totals and missing amounts produce deterministic warnings without correcting the printed invoice', async (t) => {
@@ -197,4 +208,35 @@ test('editor identifies AI STAR as document recipient when the server selects th
   }, { exported: 'ManualInvoiceEditor' })
   try { await page.ready(); assert.match(page.text(), /envía el documento a AI STAR \(acceso a Claude\)/) }
   finally { page.cleanup() }
+})
+
+test('gateway responses with Markdown fences or surrounding prose are still parsed', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  for (const wrap of [(json) => '```json\n' + json + '\n```', (json) => 'Aquí están los datos:\n' + json + '\nListo.']) {
+    fetchMock.mock.mockImplementation(async () => Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: wrap(JSON.stringify(invoice())) }] }))
+    const result = await extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' })
+    assert.equal(result.data.invoice_number, invoice().invoice_number)
+  }
+  fetchMock.mock.mockImplementation(async () => Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'No puedo leerlo.' }] }))
+  await assert.rejects(() => extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' }), error => error.status === 422)
+})
+
+test('an occasional prose reply is retried once with a stricter JSON prompt', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  const replies = [Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Veo una factura de dos páginas.' }] }), claude(invoice())]
+  fetchMock.mock.mockImplementation(async () => replies.shift())
+  const result = await extractManualInvoice(Buffer.from('synthetic'), 'application/pdf', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' })
+  assert.equal(result.data.invoice_number, invoice().invoice_number)
+  assert.equal(fetchMock.mock.callCount(), 2)
+  assert.match(JSON.parse(fetchMock.mock.calls[1].arguments[1].body).messages[0].content[1].text, /objeto JSON válido/)
+})
+
+test('rendered PDF pages are sent to Claude as ordered image blocks', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  fetchMock.mock.mockImplementation(async () => claude(invoice()))
+  const pages = [{ bytes: Buffer.from('page-1'), mime: 'image/jpeg' }, { bytes: Buffer.from('page-2'), mime: 'image/jpeg' }]
+  await extractManualInvoice(pages[0].bytes, 'image/jpeg', 'test', 'claude-sonnet-5-5', { provider: 'anthropic', pages })
+  const content = JSON.parse(fetchMock.mock.calls[0].arguments[1].body).messages[0].content
+  assert.deepEqual(content.slice(0, 2).map((block) => [block.type, Buffer.from(block.source.data, 'base64').toString()]), [['image', 'page-1'], ['image', 'page-2']])
+  assert.equal(content[2].type, 'text')
 })

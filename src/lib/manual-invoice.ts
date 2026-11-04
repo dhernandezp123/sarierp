@@ -35,7 +35,7 @@ export function validateManualInvoiceIssuer(value: unknown): ManualInvoiceIssuer
   for (const key of ['name','address','phone','email','website'] as const) {
     if (typeof source[key] !== 'string' || source[key].length > 500 || /[\u0000-\u001f\u007f]/.test(source[key])) throw new Error('Revisa los datos del emisor SARI USA.')
     result[key] = source[key].trim()
-    if (key !== 'website' && !result[key]) throw new Error('Completa el emisor SARI USA en Configuración de empresa.')
+    if (key !== 'website' && key !== 'email' && !result[key]) throw new Error('Completa el emisor SARI USA en Configuración de empresa.')
   }
   return result
 }

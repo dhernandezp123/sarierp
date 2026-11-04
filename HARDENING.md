@@ -1,5 +1,15 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 04/11/2026 - ENV-OCR-PARITY-01 - Sincronizacion de OCR y emisor con Production
+
+- Estado: sincronizado en Demo; paridad local sin diferencias. Migracion ejecutada en Demo, registro y comprobacion final en curso; publicacion/CI pendientes.
+- Hallazgo: Environment parity fallo en main `28f3ca5` porque cuatro archivos compartidos y la migracion del emisor estaban atrasados en Demo. El cambio de acciones del historial ya era identico.
+- Archivos: `src/app/api/manual-invoices/ocr/route.ts`, `src/lib/browser/manual-invoice-ai.ts`, `src/lib/server/manual-invoice-ocr.ts`, `src/lib/manual-invoice.ts`, `tests/manual-invoice-ai.test.mjs`, `tests/manual-invoice.test.mjs`, migracion `20261103120000_manual_invoice_issuer_optional_email.sql` y este registro. Se sincronizan exactamente desde main `6d87c64`; no se modifica la migracion ya publicada.
+- Cambio: incluye limpieza de campos OCR, JSON envuelto en Markdown/prosa, un reintento acotado y paginas PDF enviadas como imagenes ordenadas. Correo del emisor opcional en cliente y trigger; nombre, direccion y telefono obligatorios. Conserva las 26 variantes revisadas de Demo, permisos, aislamiento de tenant y ausencia de claves de Production en Demo.
+- Base Demo: referencia `wlssekvxpfxhwedsjhpz`; comprobacion previa confirma migracion ausente y validacion de correo obligatorio. Se ejecuta solo el archivo indicado, sin db push ni migraciones ajenas. No se modifica Production ni registros de negocio.
+- Validaciones: paridad local 589 archivos compartidos, 26 variantes revisadas, cero diferencias; TypeScript, ESLint de archivos sincronizados y 611/611 pruebas OK. Build, CI y comprobacion final de la funcion pendientes.
+- Riesgos/pendientes: comprobar registro de migracion y funcion, build y CI remotos; UAT autenticada OCR/guardar factura. No se realizan llamadas reales al proveedor ni se transmiten facturas para estas pruebas. Commit: pendiente al registrar este cambio.
+
 ### 04/11/2026 - UX-MANUAL-HISTORY-01 - Acciones PDF desde historial
 
 - Estado: publicado en Produccion y Demo; smoke publico aprobado. UAT autenticada de impresion/descarga pendiente.
