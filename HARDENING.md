@@ -14790,3 +14790,52 @@ Agregar una entrada por fix:
 - Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 52/52.
   El render en navegador no tiene prueba automatizada: requiere prueba manual.
 - Riesgos / pendientes: leer 131929.pdf completo en Production y comparar cargos y total.
+
+### 04/11/2026 - FLOW-038 - Seleccionar primera tarifa FCL con cargos anticipados
+
+- Estado: revisado y revalidado para publicacion exclusivamente en Production;
+  migracion remota y UAT autenticado pendientes. Demo excluido expresamente por
+  el usuario para evitar nuevos deployments. Commit: pendiente al registrar.
+- Hallazgo: agregar DTHC o entrega local antes de seleccionar la primera tarifa
+  FCL activaba el resguardo de reemplazo de flete. La RPC exigía que ya existieran
+  líneas de flete/EXW y rechazaba la selección con «Las líneas de flete cambiaron».
+- Archivos y SQL:
+  - `supabase/migrations/20261104120000_fcl_initial_agent_selection.sql`.
+  - `supabase/tests/fcl_initial_agent_selection.sql`.
+  - `scripts/validate-audit-sql.mjs` y este registro.
+- Cambio: la primera selección FCL conserva los cargos existentes y agrega solo
+  las líneas de flete/EXW faltantes. Si una línea ya existe, exige coincidencia
+  única de tipo, descripción, cantidad y moneda; actualiza únicamente costo y
+  proveedor, conservando ID, venta, ISV, total y notas. Duplicados e
+  incompatibilidades abortan la transacción. Selecciones posteriores mantienen
+  los resguardos de composición existentes. No cambia el comportamiento de otras
+  modalidades, los permisos ni los snapshots ofrecidos. La auditoría registra
+  si fue primera selección y cuántas líneas se agregaron.
+- Validaciones ejecutadas:
+  - Fallo original reproducido con la nueva prueba antes de modificar la RPC.
+  - Migración aplicada exclusivamente a `supabase_db_sarierp_accounting27_replay`,
+    con historial base de 146 migraciones hasta `20261027220000`.
+  - `fcl_initial_agent_selection.sql`: aprobado con `ROLLBACK`; cargos de destino
+    idénticos, dos tipos de contenedor, EXW, flete previo parcial, reintento sin
+    duplicados, cambio de agente conservando venta, selección única, snapshots
+    intactos, rollback por cantidad/moneda/duplicados, denegación a Ventas,
+    usuario inactivo, otra empresa y anon.
+  - `air_consolidated_agent_selection.sql`, `aud01_pricing_write_permissions.sql`
+    y `quotation_commercial_options.sql`: aprobadas con `ROLLBACK`.
+  - `npx.cmd tsc --noEmit`, ESLint del runner y `git diff --check`: aprobados.
+  - `npm.cmd test`: 605/605 pruebas aprobadas.
+  - Revalidacion de release 04/11/2026: migracion y las cuatro regresiones SQL
+    anteriores repetidas en el contenedor aislado; 605/605 pruebas, TypeScript,
+    ESLint del runner y diff check OK. Production confirma migracion ausente.
+- Límites / pendientes:
+  - `phase3_commercial_tenant_isolation.sql` es incompatible con el guard de
+    transiciones vigente: falla con «Usa la acción de transición y recarga la
+    cotización». Se reprodujo el mismo fallo con la RPC anterior dentro de una
+    transacción revertida; no es una regresión de este cambio. AUD-01 y la nueva
+    prueba verifican los permisos pertinentes.
+  - Aplicar únicamente la migración nueva en Production; no se modificó la base
+    remota. Probar en Cards y Tabla: agregar DTHC/entrega, seleccionar la primera
+    tarifa, cambiar agente, recargar y revisar venta/ISV y PDF.
+  - La paridad con Demo quedara pendiente por esta migracion mientras Demo
+    permanezca sin actualizar por decision explicita del usuario. No se
+    deshabilita el control ni se copia SQL o configuracion a Demo.

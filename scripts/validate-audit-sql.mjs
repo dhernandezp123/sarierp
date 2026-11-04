@@ -27,6 +27,8 @@ const files = [
   'invoice_drafts_and_master_review.sql',
   'finance_reporting_and_banks.sql',
   'agent_quote_internal_notes.sql',
+  'fcl_initial_agent_selection.sql',
+  'air_consolidated_agent_selection.sql',
   'customs_only_service.sql',
   'demo_request_server.sql',
   'sales_activity_execution_status.sql',
