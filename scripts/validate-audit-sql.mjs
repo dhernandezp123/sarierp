@@ -25,6 +25,7 @@ const files = [
   'fiscal_discounts.sql',
   'fiscal_void_approval.sql',
   'invoice_drafts_and_master_review.sql',
+  'invoice_courtesy_permissions.sql',
   'finance_reporting_and_banks.sql',
   'agent_quote_internal_notes.sql',
   'fcl_initial_agent_selection.sql',

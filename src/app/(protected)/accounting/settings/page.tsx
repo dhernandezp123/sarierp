@@ -1,5 +1,6 @@
 'use client'
 import { InvoiceMasterSettings } from '@/src/components/invoicing/InvoiceMasterSettings'
+import { InvoiceCourtesyPermissions } from '@/src/components/invoicing/InvoiceCourtesyPermissions'
 import { BillingOfficeAccessSettings } from '@/src/components/invoicing/BillingOfficeAccessSettings'
 import { useRef,useState } from 'react'
 import { toast } from 'sonner'
@@ -36,6 +37,7 @@ export default function AccountingSettingsPage(){
   finally{lock.current=false;setBusy(false)}
  }
  return <div className="space-y-6"><FinancePageHeader eyebrow="Contabilidad" title="Configuración contable" description="Maestros de facturación, oficinas autorizadas y períodos contables." icon={Settings}/><AccountingNav/><div className="grid items-start gap-6 xl:grid-cols-2"><InvoiceMasterSettings/><BillingOfficeAccessSettings/></div>
+ <InvoiceCourtesyPermissions/>
  {error&&<p role="alert" className="text-red-600">{error} <button onClick={()=>void reload()}>Reintentar</button></p>}{loading&&<p>Cargando…</p>}
  {data&&form&&<><form className={`${cardClass} space-y-4`} onSubmit={e=>{e.preventDefault();void save()}}><fieldset disabled={busy} className="space-y-4"><legend className="text-base font-bold">Cuentas operativas y activación</legend>
  <p className="text-sm text-slate-500">La contabilidad se prepara sin saldos iniciales. Define las cuentas, los períodos y la fecha de inicio cuando Contabilidad la apruebe. La moneda de los libros es HNL; los documentos conservan su moneda original.</p>

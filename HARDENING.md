@@ -1,5 +1,17 @@
 # Sari Express ERP — Hardening y Trial
 
+### 04/11/2026 - GOV-COURTESY-01 - Reglas y autorizadores de cortesias (fase 1)
+
+- Estado: permisos aplicados y verificados en Production; interfaz validada localmente, publicacion en curso. UAT autenticada pendiente. Demo excluido por instruccion vigente del usuario.
+- Alcance: designacion explicita para revisar cortesias, adicional al master de Contabilidad actual. No incorpora automaticamente a todos los Admin; no permite borrar lineas ni modifica emision, descuentos, facturas, CxC o envios de correo. El flujo por cada cortesia corresponde a fase 2.
+- Identidades verificadas en Production, solo lectura: Admin Pruebas activo/aprobado y Zonia Flores activa/aprobada, master actual; Mauricio Rivera aun no existe. Aprovisionamiento inicial por ID y con origen de despliegue autorizado, nunca por nombre ni suplantando sesion de usuario.
+- Archivos: migracion `20261104140000_invoice_courtesy_review_permissions.sql`, prueba `supabase/tests/invoice_courtesy_permissions.sql`, `scripts/validate-audit-sql.mjs`, `src/components/invoicing/InvoiceCourtesyPermissions.tsx`, `src/app/(protected)/accounting/settings/page.tsx`, `tests/invoice-courtesy-permissions.test.mjs`, `docs/gerencia-implementacion-fase1.md`, revision previa y este registro.
+- Controles: grants sin escrituras directas, RLS por tenant, consultas y cambios autorizados en servidor, revocacion inmediata del permiso efectivo, motivo y auditoria inmutable, confirmacion y bloqueo de duplicados. El permiso master por si solo no permite gestionar designaciones; administracion gestiona la lista.
+- Validaciones: nueva migracion y regresion SQL ejecutadas en transaccion revertida de `supabase_db_sarierp_accounting27_replay`; autorizacion, revocacion, master, otra empresa, usuario pendiente/inactivo/Cliente, auditoria e idempotencia OK. UI 4/4: motivo/confirmacion, rechazo conservando lista, lectura sin administracion para Contabilidad y doble confirmacion/desmontaje sin efectos tardios.
+- Validacion completa: 609/609 pruebas, TypeScript, ESLint de archivos afectados y build/postbuild PDF aislado OK. Chrome con componente real y usuarios/RPC ficticios: 7 comprobaciones, 1280/768/390 px sin overflow, confirmacion, fallo que conserva la lista y revocacion exitosa; sin excepciones ni escrituras reales. El fixture requirio corregir paginacion repetida y usar build/start estable por recargas HMR; no se altero el producto por ese problema.
+- Production: aplicada y registrada solo `20261104140000`; aprovisionamiento atomico de Admin Pruebas con origen Despliegue autorizado y actor nulo, sin suplantar una sesion. Verificacion de solo lectura bajo contexto de perfiles: Admin Pruebas y Zonia autorizados; un permiso explicito y un master, un evento de designacion, RLS activo y anon bloqueado. Huellas de `is_invoice_master`, `issue_invoice_draft` y `create_invoice_from_quotation` identicas antes/despues. Sin cambios en facturas/asientos ni correos.
+- Pendientes: verificar CI/despliegue de interfaz y UAT autenticada. Solicitudes individuales, avisos, scheduler y reportes nuevos permanecen en fases posteriores. Mauricio requiere crear su usuario e incorporarlo expresamente. Commit: pendiente al registrar. Evidencia ignorada `.ua/intermediate/courtesy-phase1-*`.
+
 ### 04/11/2026 - UX-MANUAL-HISTORY-01 - Acciones PDF desde historial
 
 - Estado: publicado en Produccion y Demo; smoke publico aprobado. UAT autenticada de impresion/descarga pendiente.
