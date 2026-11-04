@@ -14733,3 +14733,21 @@ Agregar una entrada por fix:
 - Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 50/50.
 - Riesgos / pendientes: publicar y reintentar 131929.pdf varias veces. La causa
   de fondo es el gateway; con clave directa de Anthropic el formato es garantizado.
+
+### 03/11/2026 - OCR-ISSUER-01 - Correo del emisor SARI USA opcional
+
+- Estado: código validado localmente; SQL y publicación pendientes.
+- Hallazgo: el generador no emitía el PDF («Completa el emisor SARI USA») porque
+  exigía correo del emisor, que la factura SARI USA original no imprime y que la
+  empresa no tiene. Configuración de empresa ya tenía razón social, dirección,
+  teléfono y sitio web.
+- Archivos: `src/lib/manual-invoice.ts`, `tests/manual-invoice.test.mjs`,
+  `supabase/migrations/20261103120000_manual_invoice_issuer_optional_email.sql`
+  y este registro.
+- Cambio: el correo pasa a opcional en el validador del navegador y en el trigger
+  `capture_manual_invoice_issuer`; razón social, dirección y teléfono siguen
+  siendo obligatorios. El PDF ya omite líneas vacías.
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 51/51.
+- Riesgos / pendientes: aplicar la migración en Production (sin ella, generar el
+  PDF funciona pero guardar en historial seguirá fallando) y publicar con
+  `vercel deploy --prod`; luego generar y guardar 131929.

@@ -137,3 +137,10 @@ test('OCR distinguishes exhausted credits from rate limits and hides provider er
     }
   } finally { globalThis.fetch = previousFetch }
 })
+
+test('SARI USA issuer email is optional like the printed invoice header', async () => {
+  const { validateManualInvoiceIssuer } = invoice
+  const issuer = validateManualInvoiceIssuer({ name: 'SARI EXPRESS FORWARDERS, INC', address: '11200 NW 107th Street', phone: '(305) 827-5453', email: '', website: '' })
+  assert.equal(issuer.email, '')
+  assert.throws(() => validateManualInvoiceIssuer({ name: 'SARI', address: 'Miami', phone: '', email: 'a@b.com', website: '' }), /Completa el emisor/)
+})
