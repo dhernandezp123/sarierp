@@ -93,8 +93,11 @@ export async function extractManualInvoice(bytes: Buffer, mime: string, apiKey: 
   const text = provider === 'anthropic' ? result.content?.filter((item) => item.type === 'text').map((item) => item.text ?? '').join('') : result.output?.filter((item) => item.type === 'message').flatMap((item) => item.content ?? [])
     .filter((item) => item.type === 'output_text').map((item) => item.text ?? '').join('')
   let parsed: Record<string, unknown>
-  try { parsed = JSON.parse(text ?? '') as Record<string, unknown> }
-  catch { throw new ManualInvoiceError('El OCR devolvió datos que requieren una nueva lectura. Intenta otra foto o utiliza la captura manual.', 422) }
+  try { parsed = parseOcrJson(text ?? '') }
+  catch {
+    console.warn('manual_invoice_ocr_unparsable', { provider, model, gateway: aiStar ? 'ai_star' : 'direct', stop_reason: result.stop_reason,
+      text_length: (text ?? '').length, content_types: result.content?.map((item) => item.type) })
+    throw new ManualInvoiceError('El OCR devolvió datos que requieren una nueva lectura. Intenta otra foto o utiliza la captura manual.', 422) }
   try {
     const { source, warnings: cleanupWarnings } = sanitizeOcrInvoice(parsed)
     const data = validateManualInvoice({ ...source, date_format: dateFormat }, false)
@@ -114,7 +117,22 @@ export async function extractManualInvoice(bytes: Buffer, mime: string, apiKey: 
   }
 }
 
-const singleLine = (value: unknown) => typeof value === 'string'
+/** Gateways may ignore structured outputs and wrap the JSON in Markdown fences or prose. */
+export function parseOcrJson(text: string): Record<string, unknown> {
+  const trimmed = text.trim()
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]
+  const start = trimmed.indexOf('{'), end = trimmed.lastIndexOf('}')
+  for (const candidate of [trimmed, fenced, start >= 0 && end > start ? trimmed.slice(start, end + 1) : undefined]) {
+    if (!candidate) continue
+    try {
+      const value = JSON.parse(candidate.trim())
+      if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
+    } catch { /* try the next candidate */ }
+  }
+  throw new Error('OCR response is not a JSON object')
+}
+
+const singleLine =(value: unknown) => typeof value === 'string'
   ? value.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
   : ''
 

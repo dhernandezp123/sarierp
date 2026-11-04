@@ -209,3 +209,14 @@ test('editor identifies AI STAR as document recipient when the server selects th
   try { await page.ready(); assert.match(page.text(), /envía el documento a AI STAR \(acceso a Claude\)/) }
   finally { page.cleanup() }
 })
+
+test('gateway responses with Markdown fences or surrounding prose are still parsed', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  for (const wrap of [(json) => '```json\n' + json + '\n```', (json) => 'Aquí están los datos:\n' + json + '\nListo.']) {
+    fetchMock.mock.mockImplementation(async () => Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: wrap(JSON.stringify(invoice())) }] }))
+    const result = await extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' })
+    assert.equal(result.data.invoice_number, invoice().invoice_number)
+  }
+  fetchMock.mock.mockImplementation(async () => Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'No puedo leerlo.' }] }))
+  await assert.rejects(() => extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' }), error => error.status === 422)
+})

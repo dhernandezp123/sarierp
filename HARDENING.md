@@ -14698,3 +14698,21 @@ Agregar una entrada por fix:
   URL `https://sarierp-2epdr7odz-claudherhn-5641s-projects.vercel.app`. Alias
   `sari.forwarders.app` verificado contra ese despliegue; smoke sin sesión:
   `/manual-invoices` 307 a login. No se ejecutó SQL.
+
+### 03/11/2026 - OCR-422-02 - Respuesta OCR vía gateway con JSON envuelto
+
+- Estado: validado localmente; publicación en Production en curso con este commit.
+- Hallazgo: tras OCR-422-01 la factura 131929 seguía en 422 sin log
+  `manual_invoice_ocr_invalid`; el fallo estaba en `JSON.parse`. Con el gateway
+  AI STAR (`9940f56`) la respuesta puede llegar envuelta en bloque Markdown o con
+  texto alrededor, porque el gateway no garantiza structured outputs.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`,
+  `tests/manual-invoice-ai.test.mjs` y este registro. SQL: ninguno.
+- Cambio: `parseOcrJson` acepta JSON directo, en bloque ```json``` o rodeado de
+  texto; respuestas sin objeto JSON siguen en 422 y registran
+  `manual_invoice_ocr_unparsable` (gateway, stop_reason, longitud y tipos de
+  contenido; sin datos del documento).
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 49/49.
+- Riesgos / pendientes: reintentar 131929.pdf en Production. AI STAR es un
+  intermediario de terceros que recibe las facturas: confirmar que su uso está
+  autorizado para estos datos.
