@@ -1,5 +1,14 @@
 # Sari Express ERP — Hardening, Demo y Pilot
 
+### 04/11/2026 - UX-MANUAL-HISTORY-01 - Acciones PDF desde historial
+
+- Estado: implementado y validado localmente. Publicacion y UAT autenticada pendientes.
+- Cambio: iconos accesibles para editar, abrir/descargar PDF en otra pestana e imprimir cada version guardada; resaltado de fila al pasar el mouse. Genera desde el snapshot guardado sin reemplazar el editor ni consultar el emisor actual. Reutiliza el generador PDF y el patron existente de impresion en pestana reservada durante el clic.
+- Archivos: `src/components/invoicing/ManualInvoiceEditor.tsx` y este registro. SQL: ninguno.
+- Controles: bloquea acciones durante generacion, avisa si el navegador bloquea ventanas, descarta resultados si cambia el contexto y libera URLs al cerrar la pestana o tras 30 minutos.
+- Validaciones: `npx.cmd tsc --noEmit`, ESLint del componente, suite completa 605/605 y build de produccion/postbuild PDF aislado aprobados; `git diff --check` sin errores. Sin prueba autenticada de navegador.
+- Riesgos/pendientes: impresion automatica depende del visor del navegador; este conserva su control nativo. Verificar apertura/descarga/impresion con sesion real. Sin commit ni despliegue en esta tarea.
+
 ### 2026-11-03 - UX-OCR-CLAUDE-03 - Compatibilidad con la clave AI STAR del cliente
 
 - Estado: adaptacion validada localmente; destinatario AI STAR, configuracion Vercel y despliegue Produccion/Demo autorizados expresamente por el usuario. Publicacion en curso.

@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useUser } from '@/src/hooks/useUser'
 import { mergeManualInvoicePage } from '@/src/lib/manual-invoice-history'
-import { Download, Eye, FileScan, Loader2, Plus, Save, Trash2 } from 'lucide-react'
+import { Download, Eye, FileScan, Loader2, Plus, Printer, Save, SquarePen, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { UnsavedChangesGuard } from '@/src/components/ui/UnsavedChangesGuard'
@@ -33,6 +33,7 @@ export function ManualInvoiceEditor() {
   const activeHistoryContext = useRef<string | null>(context)
   const historyRows = useRef<SavedManualInvoice[]>([])
   const historyQuery = useRef('')
+  const historyPdfBusy = useRef(false)
   const [historySearch, setHistorySearch] = useState('')
   const [appliedHistorySearch, setAppliedHistorySearch] = useState('')
   const [historyTotal, setHistoryTotal] = useState(0)
@@ -201,6 +202,43 @@ export function ManualInvoiceEditor() {
     } catch (error) { pdfWindow?.close(); toast.error(error instanceof Error ? error.message : 'No se pudo generar el PDF.') }
     finally { setBusy(null) }
   }
+  async function openHistoryPdf(document: SavedManualInvoice, print = false) {
+    if (busy || historyPdfBusy.current) return
+    historyPdfBusy.current = true
+    const pdfWindow = window.open('about:blank', '_blank')
+    if (!pdfWindow) {
+      historyPdfBusy.current = false
+      toast.error('El navegador bloqueó la pestaña. Permite las ventanas emergentes para abrir el PDF.')
+      return
+    }
+    pdfWindow.opener = null
+    const requestedContext = context
+    setBusy('pdf')
+    try {
+      const checked = validateManualInvoice(document.data)
+      const { createManualInvoiceBlob } = await import('@/src/components/pdf/manual-invoice-pdf')
+      const blob = await createManualInvoiceBlob(checked)
+      if (pdfWindow.closed || activeHistoryContext.current !== requestedContext) { pdfWindow.close(); return }
+      const url = URL.createObjectURL(blob)
+      let released = false
+      const release = () => {
+        if (released) return
+        released = true
+        URL.revokeObjectURL(url); window.clearInterval(monitor); window.clearTimeout(expiry)
+      }
+      const monitor = window.setInterval(() => { if (pdfWindow.closed) release() }, 1000)
+      const expiry = window.setTimeout(release, 30 * 60 * 1000)
+      if (print) pdfWindow.addEventListener('load', () => {
+        if (pdfWindow.closed) return
+        try { pdfWindow.focus(); pdfWindow.print() }
+        catch { toast.info('Usa el icono de impresión del visor PDF para imprimir.') }
+      }, { once: true })
+      pdfWindow.location.replace(url)
+    } catch (error) {
+      pdfWindow.close()
+      toast.error(error instanceof Error ? error.message : 'No se pudo generar el PDF guardado.')
+    } finally { historyPdfBusy.current = false; setBusy(null) }
+  }
   function openSaved(document: SavedManualInvoice) {
     replaceDocument(() => {
       try {
@@ -244,7 +282,11 @@ export function ManualInvoiceEditor() {
           {!loadingHistory && !historyError && <p className="mb-3 text-sm text-slate-500">Mostrando {history.length} de {historyTotal} versiones.</p>}
           {loadingHistory ? <p role="status">Cargando historial…</p> : historyError ? <p role="alert" className="text-red-600">{historyError}</p> : history.length ?
             <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="p-3">Factura</th><th className="p-3">Cliente</th><th className="p-3">Total</th><th className="p-3">Guardada</th><th className="p-3">Documento</th></tr></thead>
-              <tbody>{history.map((document) => <tr key={document.id} className="border-b border-slate-200 dark:border-slate-800"><td className="p-3">{document.invoice_number}</td><td className="p-3">{document.client_name}</td><td className="whitespace-nowrap p-3">{formatMoney(document.total, 'USD')}</td><td className="whitespace-nowrap p-3">{formatDateTime(document.created_at)}</td><td className="p-3"><button className={secondaryButtonClass} disabled={Boolean(busy)} onClick={() => openSaved(document)}>Abrir</button></td></tr>)}</tbody></table></div>
+              <tbody>{history.map((document) => <tr key={document.id} className="border-b border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"><td className="p-3">{document.invoice_number}</td><td className="p-3">{document.client_name}</td><td className="whitespace-nowrap p-3">{formatMoney(document.total, 'USD')}</td><td className="whitespace-nowrap p-3">{formatDateTime(document.created_at)}</td><td className="p-3"><div className="flex items-center gap-2">
+                <button type="button" className={secondaryButtonClass} title="Abrir para editar" aria-label={`Editar factura ${document.invoice_number}`} disabled={Boolean(busy)} onClick={() => openSaved(document)}><SquarePen size={16} aria-hidden="true" /></button>
+                <button type="button" className={secondaryButtonClass} title="Abrir / descargar PDF en otra pestaña" aria-label={`Abrir o descargar PDF de factura ${document.invoice_number} en otra pestaña`} disabled={Boolean(busy)} onClick={() => void openHistoryPdf(document)}><Download size={16} aria-hidden="true" /></button>
+                <button type="button" className={secondaryButtonClass} title="Imprimir factura" aria-label={`Imprimir factura ${document.invoice_number}`} disabled={Boolean(busy)} onClick={() => void openHistoryPdf(document, true)}><Printer size={16} aria-hidden="true" /></button>
+              </div></td></tr>)}</tbody></table></div>
             : <p className="text-sm text-slate-500">{appliedHistorySearch ? 'No hay versiones que coincidan con la busqueda.' : 'Todavía no hay facturas guardadas.'}</p>}
           {!historyError && historyHasMore && <button type="button" disabled={loadingHistory || Boolean(busy)} onClick={() => void reloadHistory(true, historyOffset)} className={secondaryButtonClass}>Cargar mas versiones</button>}
         </div>
