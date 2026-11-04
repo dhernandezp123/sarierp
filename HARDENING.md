@@ -14719,7 +14719,7 @@ Agregar una entrada por fix:
 
 ### 03/11/2026 - OCR-422-03 - Reintento ante respuesta en prosa y facturas multipágina
 
-- Estado: validado localmente; publicación en Production pendiente de `vercel deploy --prod`.
+- Estado: publicado en Production con el despliegue de OCR-ISSUER-01; reintento con PDF de 2 páginas pendiente.
 - Hallazgo: con OCR-422-02 publicado, la misma factura 131929 (2 páginas) se leyó
   bien a las 18:52:09 y falló a las 18:52:54: `manual_invoice_ocr_unparsable`
   vía AI STAR, `end_turn`, 431 caracteres sin JSON. El gateway no garantiza
@@ -14736,7 +14736,7 @@ Agregar una entrada por fix:
 
 ### 03/11/2026 - OCR-ISSUER-01 - Correo del emisor SARI USA opcional
 
-- Estado: código validado localmente; SQL y publicación pendientes.
+- Estado: SQL aplicado y publicado en Production; prueba autenticada de generar y guardar 131929 pendiente.
 - Hallazgo: el generador no emitía el PDF («Completa el emisor SARI USA») porque
   exigía correo del emisor, que la factura SARI USA original no imprime y que la
   empresa no tiene. Configuración de empresa ya tenía razón social, dirección,
@@ -14751,3 +14751,11 @@ Agregar una entrada por fix:
 - Riesgos / pendientes: aplicar la migración en Production (sin ella, generar el
   PDF funciona pero guardar en historial seguirá fallando) y publicar con
   `vercel deploy --prod`; luego generar y guardar 131929.
+- SQL: solo `20261103120000_manual_invoice_issuer_optional_email.sql`, ejecutado con
+  `supabase db query --linked -f` y registrado con `migration repair --status applied`.
+  Verificado en `pg_proc`: el trigger ya no exige `usa_email`. No se aplicó
+  `20261002120000_sari_outlook_intake.sql`, que `db push --dry-run` reporta
+  pendiente fuera de orden; requiere revisión aparte.
+- Publicación (OCR-422-03 y OCR-ISSUER-01): commits `dd7c9e1` y `b305807`; Vercel
+  Production `dpl_EUjq9EvR2XP3izu846aaPiPKFUsA`, `READY`, alias
+  `sari.forwarders.app` verificado; smoke sin sesión `/manual-invoices` 307 a login.
