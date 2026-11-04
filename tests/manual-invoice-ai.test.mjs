@@ -98,7 +98,7 @@ test('Claude refusals, truncated responses, malformed fields and impossible date
     claude(invoice(), { content: [{ type: 'thinking', text: JSON.stringify(invoice()) }] }),
     claude({ ...invoice(), issue_date: '2026-02-30' })]
   for (const response of responses) {
-    fetchMock.mock.mockImplementation(async () => response)
+    fetchMock.mock.mockImplementation(async () => response.clone())
     await assert.rejects(() => extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' }), error => error.status === 422)
   }
 })
@@ -219,4 +219,14 @@ test('gateway responses with Markdown fences or surrounding prose are still pars
   }
   fetchMock.mock.mockImplementation(async () => Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'No puedo leerlo.' }] }))
   await assert.rejects(() => extractManualInvoice(Buffer.from('synthetic'), 'image/png', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' }), error => error.status === 422)
+})
+
+test('an occasional prose reply is retried once with a stricter JSON prompt', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch')
+  const replies = [Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Veo una factura de dos páginas.' }] }), claude(invoice())]
+  fetchMock.mock.mockImplementation(async () => replies.shift())
+  const result = await extractManualInvoice(Buffer.from('synthetic'), 'application/pdf', 'test', 'claude-sonnet-5-5', { provider: 'anthropic' })
+  assert.equal(result.data.invoice_number, invoice().invoice_number)
+  assert.equal(fetchMock.mock.callCount(), 2)
+  assert.match(JSON.parse(fetchMock.mock.calls[1].arguments[1].body).messages[0].content[1].text, /objeto JSON válido/)
 })

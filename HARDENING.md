@@ -14716,3 +14716,20 @@ Agregar una entrada por fix:
 - Riesgos / pendientes: reintentar 131929.pdf en Production. AI STAR es un
   intermediario de terceros que recibe las facturas: confirmar que su uso está
   autorizado para estos datos.
+
+### 03/11/2026 - OCR-422-03 - Reintento ante respuesta en prosa y facturas multipágina
+
+- Estado: validado localmente; publicación en Production pendiente de `vercel deploy --prod`.
+- Hallazgo: con OCR-422-02 publicado, la misma factura 131929 (2 páginas) se leyó
+  bien a las 18:52:09 y falló a las 18:52:54: `manual_invoice_ocr_unparsable`
+  vía AI STAR, `end_turn`, 431 caracteres sin JSON. El gateway no garantiza
+  structured outputs y el modelo responde a veces en prosa.
+- Archivos: `src/lib/server/manual-invoice-ocr.ts`,
+  `tests/manual-invoice-ai.test.mjs` y este registro. SQL: ninguno.
+- Cambio: si la respuesta no contiene JSON, se reintenta una vez con instrucción
+  explícita de claves JSON; el log incluye `attempt`. Las instrucciones aclaran
+  que una factura puede continuar en varias páginas (PAGE 1 OF 2) y sus cargos
+  se combinan. El reintento consume una llamada más al proveedor, sin cupo extra.
+- Validaciones: `npx tsc --noEmit` aprobado; `node --test tests/manual-invoice*.test.mjs` 50/50.
+- Riesgos / pendientes: publicar y reintentar 131929.pdf varias veces. La causa
+  de fondo es el gateway; con clave directa de Anthropic el formato es garantizado.
