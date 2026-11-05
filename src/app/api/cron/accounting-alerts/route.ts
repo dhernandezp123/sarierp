@@ -1,9 +1,8 @@
 import {NextResponse} from 'next/server'
 import {createClient} from '@supabase/supabase-js'
-import {validAccountingCron,accountingReminderRequest} from '@/src/lib/server/accounting-reminders'
+import {validAccountingCron,accountingReminderRequest,loadAccountingEmailBranding} from '@/src/lib/server/accounting-reminders'
 import {readEmailEnvironment} from '@/src/lib/server/email-environment'
 import {deliverEmail} from '@/src/lib/server/email-delivery'
-import {loadTenantEmailBranding} from '@/src/lib/company-settings'
 export const runtime='nodejs'
 export const maxDuration=300
 export async function GET(request:Request){
@@ -30,10 +29,9 @@ export async function GET(request:Request){
     const check=await admin.rpc('get_accounting_email_dispatch',{p_id:job.id})
     if(check.error||!check.data){held++;return}
     const row=check.data
-    const branding=await loadTenantEmailBranding(admin,row.tenant_id)
-    if(branding.error||!branding.data){held++;return}
-    const company=branding.data.trade_name?.trim()||branding.data.legal_name?.trim()||'Empresa logística'
-    const delivery=await deliverEmail(admin,{table:'accounting_customer_reminders',tenantId:row.tenant_id,identity:{invoice_id:row.invoice_id,stage:row.stage,recipient_email:row.recipient_email},values:{recipient_email:row.recipient_email,cliente_id:row.cliente_id||null},request:{...accountingReminderRequest(row,sender,company),...(branding.data.email?.trim()?{reply_to:branding.data.email.trim()}:{})},key:`accounting/${job.id}`,apiKey})
+    let branding
+    try{branding=await loadAccountingEmailBranding(admin,row.tenant_id)}catch{held++;return}
+    const delivery=await deliverEmail(admin,{table:'accounting_customer_reminders',tenantId:row.tenant_id,identity:{invoice_id:row.invoice_id,stage:row.stage,recipient_email:row.recipient_email},values:{recipient_email:row.recipient_email,cliente_id:row.cliente_id||null},request:{...accountingReminderRequest(row,sender,branding),...(branding.email?.trim()?{reply_to:branding.email.trim()}:{})},key:`accounting/${job.id}`,apiKey})
     if(delivery.body.sent)sent++;else if(!delivery.body.alreadySent)held++
    }))
   }

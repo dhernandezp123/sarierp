@@ -18,7 +18,7 @@ async function run({auth=`Bearer ${secret}`,environment='production',verified='p
  Object.assign(process.env,{CRON_SECRET:secret,VERCEL_ENV:environment,NEXT_PUBLIC_SUPABASE_URL:'https://db.example.invalid',SUPABASE_SERVICE_ROLE_KEY:'fake',ACCOUNTING_ALERTS_EMAIL_ENABLED:String(enabled),OUTBOUND_EMAIL_ENABLED:'true',RESEND_API_KEY:'fake',RESEND_FROM_EMAIL:'sender@example.invalid'})
  try{
   const db={async rpc(name){calls.push(name);return {data:name==='get_accounting_email_dispatch'?dispatch:{created:2},error:null}},from(){const q={select:()=>q,eq:()=>q,order:()=>q,limit:async()=>({data:jobs,error:null})};return q}}
-  const {GET}=loadTs('src/app/api/cron/accounting-alerts/route.ts',{'server-only':{},'@/src/lib/company-settings':{loadTenantEmailBranding:async()=>({data:{trade_name:'Empresa ficticia'},error:null})},'@supabase/supabase-js':{createClient:()=>{calls.push('client');return db}},'@/src/lib/server/email-environment':{readEmailEnvironment:async()=>verified},'@/src/lib/server/email-delivery':{deliverEmail:async(_db,options)=>{deliveries.push(options);return {body:{sent:true}}}}})
+  const {GET}=loadTs('src/app/api/cron/accounting-alerts/route.ts',{'server-only':{},'@/src/lib/server/accounting-reminders':{validAccountingCron,accountingReminderRequest,loadAccountingEmailBranding:async()=>({trade_name:'Empresa ficticia',origin:'https://fixture.forwarders.app',logo_url:'/logo.png'})},'@supabase/supabase-js':{createClient:()=>{calls.push('client');return db}},'@/src/lib/server/email-environment':{readEmailEnvironment:async()=>verified},'@/src/lib/server/email-delivery':{deliverEmail:async(_db,options)=>{deliveries.push(options);return {body:{sent:true}}}}})
   const response=await GET(new Request('https://scheduler.example.invalid/api/cron/accounting-alerts',{headers:auth?{authorization:auth}:{}}))
   return {response,body:await response.json(),calls,deliveries}
  }finally{for(const [name,value] of Object.entries(before))if(value===undefined)delete process.env[name];else process.env[name]=value}
@@ -33,4 +33,14 @@ test('avisos internos funcionan manteniendo correos desactivados',async()=>{
 test('se revalida cada destinatario y saldo justo antes del transporte idempotente',async()=>{
  const r=await run({enabled:true});assert.equal(r.deliveries.length,1);assert.ok(r.calls.includes('get_accounting_email_dispatch'));assert.equal(r.deliveries[0].table,'accounting_customer_reminders');assert.equal(r.deliveries[0].identity.invoice_id,'invoice')
  const obsolete=await run({enabled:true,dispatch:null});assert.equal(obsolete.deliveries.length,0);assert.equal(obsolete.body.email.held,1)
+})
+test('correo HTML usa marca de la empresa, logo absoluto y escape; prueba identificada sin cobro real',()=>{
+ const request=accountingReminderRequest(row,'sender@example.invalid',{origin:'https://sari.forwarders.app',trade_name:'Sari <script>',logo_url:'/logo/sari-logo.png',primary_color:'#0038BD',secondary_color:'#07111F',address:'Dirección ficticia',phone:'0000-0000',email:'billing@example.invalid'},{test:true,clientName:'Cliente <img onerror=bad>'})
+ assert.match(request.subject,/^\[PRUEBA\]/);assert.match(request.html,/PRUEBA CONTROLADA — SIN COBRO REAL/)
+ assert.match(request.html,/src="https:\/\/sari.forwarders.app\/logo\/sari-logo.png"/)
+ assert.match(request.html,/#0038BD/);assert.match(request.html,/Dirección ficticia/)
+ assert.ok(!request.html.includes('<script>'));assert.ok(!request.html.includes('<img onerror=bad>'))
+ assert.match(request.text,/no es una factura/)
+ const unsafe=accountingReminderRequest(row,'sender@example.invalid',{origin:'https://fixture.forwarders.app',logo_url:'javascript:bad',primary_color:'red;position:fixed'})
+ assert.ok(!unsafe.html.includes('javascript:'));assert.ok(!unsafe.html.includes('position:fixed'))
 })

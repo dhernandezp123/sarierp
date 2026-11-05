@@ -28,6 +28,7 @@ const files = [
   'invoice_courtesy_permissions.sql',
   'invoice_line_courtesies.sql',
   'accounting_alerts_and_client_activity.sql',
+  'accounting_controlled_email_tests.sql',
   'finance_reporting_and_banks.sql',
   'agent_quote_internal_notes.sql',
   'fcl_initial_agent_selection.sql',

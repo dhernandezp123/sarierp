@@ -1,6 +1,6 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
-import type { CompanyBranding } from '@/src/lib/company-branding'
+import { COMPANY_BRANDING_SELECT, type CompanyBranding } from '@/src/lib/company-branding'
 
 type CompanySettingsResult<T> = {
   data: T | null
@@ -74,4 +74,16 @@ export async function loadTenantEmailBranding(
     .single()
 
   return { data: data as TenantEmailBranding | null, error }
+}
+
+/** Server caller must authorize tenant before loading full reminder branding. */
+export async function loadTenantAccountingEmailBranding(client: Pick<SupabaseClient, 'from'>, tenantId: string) {
+  const [company, tenant] = await Promise.all([
+    client.from('company_settings').select(COMPANY_BRANDING_SELECT).eq('tenant_id', tenantId).single(),
+    client.from('tenants').select('slug').eq('id', tenantId).single(),
+  ])
+  if (company.error || tenant.error || !company.data || !tenant.data || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(tenant.data.slug)) {
+    throw new Error('No se pudo verificar la marca de la empresa.')
+  }
+  return { ...company.data, origin: `https://${tenant.data.slug}.forwarders.app` } as Partial<CompanyBranding> & { origin: string }
 }
