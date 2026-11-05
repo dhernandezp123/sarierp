@@ -31,7 +31,7 @@ export async function GET(request:Request){
     const row=check.data
     let branding
     try{branding=await loadAccountingEmailBranding(admin,row.tenant_id)}catch{held++;return}
-    const delivery=await deliverEmail(admin,{table:'accounting_customer_reminders',tenantId:row.tenant_id,identity:{invoice_id:row.invoice_id,stage:row.stage,recipient_email:row.recipient_email},values:{recipient_email:row.recipient_email,cliente_id:row.cliente_id||null},request:{...accountingReminderRequest(row,sender,branding),...(branding.email?.trim()?{reply_to:branding.email.trim()}:{})},key:`accounting/${job.id}`,apiKey})
+    const delivery=await deliverEmail(admin,{table:'accounting_customer_reminders',tenantId:row.tenant_id,identity:{invoice_id:row.invoice_id,stage:row.stage,recipient_email:row.recipient_email},values:{recipient_email:row.recipient_email,cliente_id:row.cliente_id||null},request:accountingReminderRequest(row,sender,branding),key:`accounting/${job.id}`,apiKey})
     if(delivery.body.sent)sent++;else if(!delivery.body.alreadySent)held++
    }))
   }

@@ -43,7 +43,7 @@ export async function POST(request:Request){
   const branding=await loadAccountingEmailBranding(c.admin,c.tenantId)
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Tegucigalpa',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]))
   const mail=accountingReminderRequest({recipient_email:recipient,invoice_number:'PRUEBA-SIN-VALIDEZ',currency:'HNL',balance:1234.56,due_date:`${parts.year}-${parts.month}-${parts.day}`},c.sender,branding,{test:true,clientName:client.data!.nombre})
-  const result=await deliverEmail(c.admin,{table:'accounting_email_tests',tenantId:c.tenantId,identity:{request_id:input.requestId!,cliente_id:input.clientId!,recipient_email:recipient},values:{recipient_email:recipient,authorization_reason:reason},request:{...mail,...(branding.email?.trim()?{reply_to:branding.email.trim()}:{})},key:`accounting-controlled-test/${input.requestId}`,apiKey:c.apiKey})
+  const result=await deliverEmail(c.admin,{table:'accounting_email_tests',tenantId:c.tenantId,identity:{request_id:input.requestId!,cliente_id:input.clientId!,recipient_email:recipient},values:{recipient_email:recipient,authorization_reason:reason},request:mail,key:`accounting-controlled-test/${input.requestId}`,apiKey:c.apiKey})
   return NextResponse.json(result.body,{status:result.status})
  }catch{return NextResponse.json({error:'No se pudo completar la prueba. Consulta la auditoría antes de reenviar.'},{status:503})}
 }

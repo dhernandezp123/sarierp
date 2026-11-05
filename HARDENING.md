@@ -1,5 +1,13 @@
 # Sari Express ERP — Hardening y Trial
 
+### 05/11/2026 - UX-ACCOUNTING-EMAIL-05 - Diseno del recordatorio contable
+
+- Estado: implementado y validado localmente; publicacion y comprobacion del nuevo diseno en Gmail pendientes. La entrega del diseno anterior fue confirmada por el usuario. No se envio otro correo ni se activaron avisos automaticos; Demo excluido.
+- Cambio: logo centrado, jerarquia visual y acentos rojos para Sari, resumen de factura y saldo, bloque de consultas con el texto solicitado y correo zonia.contabilidad@sarihn.com; sin telefono. Reply-To de Sari dirigido a Zonia. Otros tenants conservan su identidad y contacto propios.
+- Archivos: `src/lib/server/accounting-reminders.ts`, rutas cron `accounting-alerts/route.ts` y `accounting-alerts/test/route.ts`, `tests/accounting-reminders.test.mjs` y este registro. SQL: ninguno; sin dependencias nuevas.
+- Validaciones: 625/625 pruebas Node aprobadas; TypeScript, ESLint enfocado, build/postbuild del runtime PDF y diff --check aprobados. Render de la plantilla real en Chrome a 1280/768/390 px: logo cargado y centrado, enlace de Zonia, ausencia de telefono y sin overflow; captura movil revisada.
+- Configuracion Production verificada mediante lectura: anticipos 7/3/0 dias, vencidas cada 7 dias, email y portal de clientes apagados. No se modifico el calendario. PDF adjunto aun no implementado; existe generador reutilizable de la factura emitida. Commit pendiente.
+
 ### 05/11/2026 - GOV-CLIENTS-04B - Branding contable y prueba controlada autorizada
 
 - Estado: plantilla HTML y prueba de operador implementadas; auditoria aplicada/registrada en Production, validacion del transporte de Production en curso. No se activan correos automaticos ni se modifican contactos del cliente. Demo excluido.
