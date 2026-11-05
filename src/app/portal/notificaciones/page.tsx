@@ -102,7 +102,9 @@ export default function NotificacionesPage() {
     if (!n.read_at) await markAsRead(n.id)
 
     // Navigate to related entity
-    if (n.entity_type === 'miami_packages' && n.entity_id) {
+    if (n.entity_type === 'invoices' && n.entity_id) {
+      router.push(`/portal/facturas/${n.entity_id}`)
+    } else if (n.entity_type === 'miami_packages' && n.entity_id) {
       router.push(`/portal/paquetes/${n.entity_id}`)
     } else if (n.entity_type === 'shipments' && n.entity_id) {
       router.push(`/portal/envios/${n.entity_id}`)

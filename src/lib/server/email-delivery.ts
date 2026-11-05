@@ -24,7 +24,7 @@ type Delivery = {
 }
 type Result = { status: number; body: { ok: boolean; sent?: boolean; alreadySent?: boolean; inProgress?: boolean; uncertain?: boolean; error?: string } }
 type Options = {
-  table: 'client_email_deliveries' | 'support_notification_outbox'
+  table: 'client_email_deliveries' | 'support_notification_outbox' | 'accounting_customer_reminders'
   tenantId: string
   identity: Record<string, string>
   values: Record<string, string | null>

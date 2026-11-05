@@ -78,6 +78,12 @@ export async function proxy(req: NextRequest) {
   clearTenantHeaders(requestHeaders)
   const pathname = req.nextUrl.pathname
 
+  // El cron es global y autentica su secreto en la ruta; no depende del dominio
+  // personalizado del tenant. Las cabeceras de tenant siguen descartadas.
+  if (pathname === '/api/cron/accounting-alerts') {
+    return NextResponse.next({ request: { headers: requestHeaders } })
+  }
+
   const localTenantHostname = process.env.LOCAL_TENANT_HOSTNAME
     || (process.env.NODE_ENV === 'production' ? null : 'sari.forwarders.app')
   const hostResolution = resolveTenantHost(req.headers.get('host'), {

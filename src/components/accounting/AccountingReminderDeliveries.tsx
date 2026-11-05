@@ -1,0 +1,15 @@
+'use client'
+import {useEffect,useState} from 'react'
+import {useUser} from '@/src/hooks/useUser'
+import {supabase} from '@/src/lib/supabase/client'
+import {Pagination} from '@/src/components/ui/Pagination'
+import {formatDateTime} from '@/src/lib/format'
+import {cardClass,secondaryButtonClass} from '@/src/lib/ui-classes'
+type Delivery={id:string;recipient_email:string;status:string;attempts:number;created_at:string;sent_at:string|null;resend_message_id:string|null}
+const labels:Record<string,string>={pending:'Pendiente',processing:'En curso',sent:'Enviado',failed:'Rechazado',uncertain:'Requiere conciliación',skipped:'Cancelado antes de enviar'}
+export function AccountingReminderDeliveries(){const {user,profile}=useUser();return <Deliveries key={`${user?.id}:${profile?.tenant_id}:${profile?.rol}`}/>}
+function Deliveries(){
+ const [result,setResult]=useState<{rows:Delivery[];total:number}|null>(null),[error,setError]=useState(''),[page,setPage]=useState(1),[size,setSize]=useState(25),[refresh,setRefresh]=useState(0)
+ useEffect(()=>{let active=true;void Promise.resolve(supabase.from('accounting_customer_reminders').select('id,recipient_email,status,attempts,created_at,sent_at,resend_message_id',{count:'exact'}).order('created_at',{ascending:false}).order('id').range((page-1)*size,page*size-1)).then(({data,error,count})=>{if(!active)return;if(error||count===null)throw new Error('No se pudo consultar la auditoría de correos.');setResult({rows:data||[],total:count});setError('')}).catch(e=>{if(active){setError((e as Error).message);setResult(null)}});return()=>{active=false}},[page,size,refresh])
+ return <section className={`${cardClass} space-y-3`}><div className="flex flex-wrap justify-between gap-2"><h2 className="font-semibold">Auditoría de recordatorios por correo</h2><button className={secondaryButtonClass} onClick={()=>{setResult(null);setRefresh(n=>n+1)}}>Actualizar entregas</button></div><p className="text-xs text-slate-500">Un resultado incierto se retiene para conciliación; no se vuelve a enviar automáticamente. «Enviado» requiere evidencia de aceptación del proveedor, no confirma lectura.</p>{error?<p role="alert" className="text-red-600">{error}</p>:!result?<p>Consultando entregas…</p>:<><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{['Creado','Destinatario','Estado','Intentos','Aceptación del proveedor'].map(t=><th key={t} className="p-2 text-left">{t}</th>)}</tr></thead><tbody>{result.rows.map(r=><tr key={r.id} className="border-t"><td className="p-2 whitespace-nowrap">{formatDateTime(r.created_at)}</td><td className="p-2 break-all">{r.recipient_email}</td><td className="p-2">{labels[r.status]||r.status}</td><td className="p-2">{r.attempts}</td><td className="p-2 break-all">{r.resend_message_id||'Sin aceptación confirmada'}</td></tr>)}</tbody></table></div>{!result.rows.length&&<p>Sin recordatorios en cola ni enviados.</p>}<Pagination page={page} pageSize={size} total={result.total} onPageChange={p=>{setPage(p);setResult(null)}} onPageSizeChange={s=>{setSize(s);setPage(1);setResult(null)}}/></>}</section>
+}

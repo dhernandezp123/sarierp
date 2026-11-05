@@ -6,7 +6,7 @@ import { mountPage } from './page-harness.mjs'
 const { draftEditorSignature, draftItemPayload, draftEditorFromInvoice } = loadTs('src/lib/invoice-drafts.ts')
 const { blankFiscalOptions } = loadTs('src/components/invoicing/InvoiceFiscalOptions.tsx', { '@/src/hooks/useUser': { useUser: () => ({}) }, '@/src/lib/supabase/client': { supabase: {} } })
 const clientRow = { id: 'client', nombre: 'Cliente ficticio', rtn: '00000000000000', condicion_pago: 'Contado', dias_credito: 0, billing_office: { name: 'SPS', is_active: true } }
-function fixture({ query = '', saved = null, failSave = false, deferSave, master = false, officeAllowed = true, clients = [clientRow] } = {}) {
+function fixture({ query = '', saved = null, failSave = false, deferSave, master = false, officeAllowed = true, clients = [clientRow], courtesies = [] } = {}) {
   const before = globalThis.window; globalThis.window = { setTimeout, clearTimeout }
   const writes = [], messages = [], routes = [], drafts = new Map(saved ? [[saved.id, saved]] : [])
   let current = { user: { id: 'finance' }, profile: { id: 'finance', tenant_id: 'tenant', rol: 'Contabilidad', status: 'Aprobado', is_active: true } }, fail = failSave, issued = false
@@ -17,6 +17,7 @@ function fixture({ query = '', saved = null, failSave = false, deferSave, master
     single: async () => ({ data: table === 'invoice_drafts' ? drafts.get(filters.find(([k]) => k === 'id')?.[1]) || null : null, error: null }),
   }; return q }, async rpc(name,args) {
     if (name === 'is_invoice_master') return { data: master, error: null }
+    if (name === 'get_invoice_courtesies') return { data: { requests: courtesies, total: courtesies.length }, error: null }
     if (name === 'get_billing_points_of_sale') return { data: ['SPS'], error: null }
     if (name === 'get_my_billing_office_access') return { data: [{ name: 'SPS', allowed: officeAllowed }], error: null }
     writes.push({ name,args })
@@ -152,6 +153,19 @@ test('la corrección aprobada se emite con su revisión exacta sin guardar y anu
     assert.deepEqual(f.writes[0].args,{p_id:'draft-approved',p_revision:3}); assert.equal(f.routes[0],'/invoicing/issued')
   } finally { f.cleanup() }
 })
+test('emitir un borrador sin cambios conserva la revision y la cortesia aprobada', async()=>{
+ const saved=savedCorrection();saved.status='Borrador';saved.source_invoice_id=null
+ saved.editor_state.items.push({...saved.editor_state.items[0],id:'courtesy',description:'BL por cortesia',unit_price:'20',amount:20})
+ const f=fixture({query:'draft=draft-approved',saved,courtesies:[{id:'request',draft_revision:3,line_key:'courtesy',status:'Aprobada',is_current:true,approval_effective:true}]})
+ try{
+  await f.ready();assert.ok(f.app.text().includes('Cortesía aprobada'))
+  f.app.button('Emitir factura').props.onClick();f.app.render()
+  f.app.find(n=>n.type==='ConfirmDialog'&&n.props.title==='Emitir factura').props.onConfirm();await f.app.tick();f.app.render()
+  assert.deepEqual(f.writes.map(w=>w.name),['issue_invoice_draft'])
+  assert.deepEqual(f.writes[0].args,{p_id:'draft-approved',p_revision:3})
+ }finally{f.cleanup()}
+})
+
 test('firmas comparan JSON sin depender del orden y una copia de corrección conserva moneda, ISV y equivalencia sin reconvertir precios', () => {
   assert.equal(draftEditorSignature({ b:2,a:{x:1,y:2} }),draftEditorSignature({ a:{y:2,x:1},b:2 }))
   const state = draftEditorFromInvoice({ cliente_id: 'client',currency:'USD',exchange_rate:26,fiscal_mode:'Exonerada',reference_equivalence:{currency:'HNL',rate:26,operation:'multiply'},orden_compra_exenta:'OCE-TEST' },[{id:'line',description:'Flete',quantity:2,unit_price:25,amount:50,isv_rate:0,discount_amount:0,tax_treatment:'Exonerada'}],blankFiscalOptions(),'2026-10-28')

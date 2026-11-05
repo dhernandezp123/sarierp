@@ -162,6 +162,7 @@ export default function ClientesPage() {
               className="h-11 min-w-[280px] flex-1 rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-950"
             />
 
+              {['Admin','Ventas','Contabilidad'].includes(profile?.rol||'')&&<Link href="/clientes/activity" className="inline-flex h-11 items-center rounded-xl border px-4 text-sm font-semibold">Actividad de clientes</Link>}
               {canCreateClient && <button
                 type="button"
                 onClick={() => router.push('/clientes/nuevo')}

@@ -366,6 +366,7 @@ ${summaryCards || '<p>Sin movimientos para este período.</p>'}
         actions={<>
           <Link href="/invoicing/voids" className={financeActionClass}>Anulaciones</Link>
           <Link href="/invoicing/drafts" className={financeActionClass}>Borradores y correcciones</Link>
+          <Link href="/invoicing/courtesies" className={financeActionClass}>Cortesías</Link>
           <Link href="/invoicing/new?doc_type=proforma" className={financeActionClass}>Nueva proforma</Link>
           {['Admin', 'Finanzas', 'Contabilidad'].includes(profile?.rol || '') && (
             <button type="button" onClick={openEC} className={financeActionClass}>
