@@ -9,7 +9,7 @@
 - Validaciones: 625/625 pruebas Node y 44 archivos SQL/RLS aprobados; TypeScript y ESLint enfocado OK. Correo real renderizado con logo publico HTTP 200, escritorio/movil 1280/390 sin overflow; capturas revisadas. Build/postbuild final OCR aprobados. Migracion con huellas de diez tablas fiscales/comerciales/contables conservadas.
 - Prueba local: proveedor rechazo la clave local de Resend (API key is invalid), estado failed, sin ID de aceptacion y sin entrega. Se conserva el mismo request_id para reintento unico con transporte Production tras confirmacion de no aceptacion. No se reemplaza ni se expone ninguna clave.
 - Riesgos/pendientes: comprobar aceptacion y entrega real con credencial del servidor; mantener ACCOUNTING_ALERTS_EMAIL_ENABLED=false y canales de clientes apagados. El estado sent confirma aceptacion, no bandeja de entrada. Prueba de email no reemplaza UAT de Gerencia/Zonia/Operaciones.
-- Commit: pendiente de publicacion de esta ampliacion.
+- Commit funcional: 58833fced071ff9274431b81bf0b246d7d148572. Publicacion solo main; evidencia de entrega por request_id en auditoria separada.
 
 ### 05/11/2026 - GOV-COURTESY-02 / GOV-ALERTS-03 / GOV-CLIENTS-04 / FIN-EXPENSES-05 - Fases restantes de Gerencia
 
