@@ -1,5 +1,13 @@
 # Sari Express ERP — Hardening y Trial
 
+### 05/11/2026 - UX-ACCOUNTING-EMAIL-06 - Leyenda de correo automatico
+
+- Estado: implementado; validacion y publicacion Production en curso. Demo excluido. No requiere SQL ni modifica el calendario o la activacion de avisos.
+- Cambio: leyenda al pie de HTML y texto alternativo indicando generacion automatica, no responder y utilizar los canales de contacto anteriores. Conserva el bloque de consultas y correo de Zonia.
+- Archivos: `src/lib/server/accounting-reminders.ts`, `tests/accounting-reminders.test.mjs` y este registro. Sin dependencias nuevas.
+- Validaciones: 625/625 pruebas Node, TypeScript, ESLint del helper, build/postbuild del runtime PDF y diff --check aprobados. Publicacion pendiente al registrar; no se envia otro correo de prueba. Commit pendiente.
+- Evidencia anterior: diseno UX-ACCOUNTING-EMAIL-05 publicado en Production con commit 5375e3d; prueba adicional autorizada aceptada en un intento, auditoria 82a8e18a-df63-46f3-9905-eb4521d62a60. Usuario confirma recepcion y conformidad antes de solicitar esta leyenda.
+
 ### 05/11/2026 - UX-ACCOUNTING-EMAIL-05 - Diseno del recordatorio contable
 
 - Estado: implementado y validado localmente; publicacion y comprobacion del nuevo diseno en Gmail pendientes. La entrega del diseno anterior fue confirmada por el usuario. No se envio otro correo ni se activaron avisos automaticos; Demo excluido.

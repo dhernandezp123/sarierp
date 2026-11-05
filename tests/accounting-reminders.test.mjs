@@ -42,6 +42,8 @@ test('correo HTML usa marca de la empresa, logo absoluto y escape; prueba identi
  assert.equal(request.reply_to,'zonia.contabilidad@sarihn.com')
  assert.match(request.html,/Ejecutivo de Ventas asignado/)
  assert.match(request.html,/mailto:zonia\.contabilidad@sarihn\.com/)
+ assert.match(request.html,/Este correo es generado automáticamente por el sistema/)
+ assert.match(request.text,/Por favor, no respondas a este mensaje/)
  assert.ok(!request.html.includes('0000-0000'));assert.ok(!request.text.includes('0000-0000'))
  assert.ok(!request.html.includes('<script>'));assert.ok(!request.html.includes('<img onerror=bad>'))
  assert.match(request.text,/no es una factura/)
