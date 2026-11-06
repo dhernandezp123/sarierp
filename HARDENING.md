@@ -1,5 +1,13 @@
 # Sari Express ERP — Hardening y Trial
 
+### 06/11/2026 - UX-CLIENT-ACTIVITY-08 - Barra compacta y menu de exportacion
+
+- Estado: implementado y validado localmente; commit, publicacion y UAT autenticada pendientes. Demo sin cambios.
+- Cambio: elimina antiguedad en dias de tabla, filtros, orden y reportes; conserva fecha de registro e inactividad. Cuatro controles de ancho fijo 144-208 px y alto 36 px en una fila; acciones de restablecer/actualizar con iconos. En pantallas pequenas la fila tiene scroll horizontal propio, sin ensanchar la pagina. Leyenda resumida al pie de resultados.
+- Exportacion: icono Printer con lista PDF/Excel/CSV. Opcion compact del componente reutilizado FinancialReportExport, predeterminada false para conservar las otras pantallas; cierre al seleccionar, Escape o clic exterior, foco de teclado y bloqueo durante generacion. Exporta la misma lista completa filtrada de seis columnas, sin antiguedad.
+- Archivos: `src/app/(protected)/clientes/activity/page.tsx`, `src/lib/client-activity-report.ts`, `src/components/invoicing/FinancialReportExport.tsx`, `tests/client-activity-report.test.mjs` y este registro. SQL: ninguno; sin dependencias nuevas.
+- Validaciones: 630/630 pruebas Node, TypeScript, ESLint, build/postbuild PDF y diff --check aprobados. Chrome con build estable y datos ficticios: controles en misma fila y anchos/altos verificados, Enter abre, Escape y clic exterior cierran, descargas reales PDF/Excel con filtros y filas fuera de pagina, busqueda, reset, error/reintento y 1440/768/390 sin overflow. Captura escritorio revisada. No se consultaron datos reales ni se enviaron correos. Commit pendiente.
+
 ### 06/11/2026 - UX-CLIENT-ACTIVITY-07 - Filtros y exportacion de actividad de clientes
 
 - Estado: implementado y validado localmente. Publicacion y UAT autenticada pendientes; Demo sin cambios.

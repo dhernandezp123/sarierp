@@ -1,21 +1,12 @@
-import {calendarDaysUntil,formatDate,parseDateValue} from './format'
+import {formatDate} from './format'
 import type {ReportPdfData} from '@/src/components/pdf/report-pdf'
 
 export type ClientActivityRow={id:string;name:string;created_date:string|null;last_quotation:string|null;last_operation:string|null;last_movement:string|null;inactivity_days:number|null}
-export const activityOrders={inactive_desc:'Mayor inactividad',inactive_asc:'Menor inactividad',name_asc:'Nombre: A–Z',name_desc:'Nombre: Z–A',oldest:'Mayor antigüedad',newest:'Menor antigüedad'} as const
+export const activityOrders={inactive_desc:'Mayor inactividad',inactive_asc:'Menor inactividad',name_asc:'Nombre: A–Z',name_desc:'Nombre: Z–A'} as const
 export const activityRanges={all:'Todos',recent:'0–29 días',month:'30–59 días',two_months:'60–89 días',quarter:'90–179 días',half_year:'180–364 días',year:'365 días o más',unknown:'Sin fecha base'} as const
 export const activityKinds={all:'Todos',no_quotes:'Sin cotizaciones',no_movement:'Sin movimiento efectivo',with_movement:'Con movimiento efectivo'} as const
-export type ActivityFilters={search:string;inactivity:keyof typeof activityRanges;age:keyof typeof activityRanges;kind:keyof typeof activityKinds;order:keyof typeof activityOrders}
-export const defaultActivityFilters:ActivityFilters={search:'',inactivity:'all',age:'all',kind:'all',order:'inactive_desc'}
-export function activityToday(generatedAt:string){
- const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Tegucigalpa',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(generatedAt)).map(p=>[p.type,p.value]))
- return `${parts.year}-${parts.month}-${parts.day}`
-}
-export function clientAgeDays(row:ClientActivityRow,today:string){
- const base=parseDateValue(row.created_date)
- const days=base?calendarDaysUntil(today,base):null
- return days===null?null:Math.max(0,days)
-}
+export type ActivityFilters={search:string;inactivity:keyof typeof activityRanges;kind:keyof typeof activityKinds;order:keyof typeof activityOrders}
+export const defaultActivityFilters:ActivityFilters={search:'',inactivity:'all',kind:'all',order:'inactive_desc'}
 function inRange(days:number|null,range:keyof typeof activityRanges){
  if(range==='all')return true
  if(range==='unknown')return days===null
@@ -24,15 +15,14 @@ function inRange(days:number|null,range:keyof typeof activityRanges){
  return days>=min&&days<=max
 }
 const normalize=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es').trim()
-export function filterClientActivity(rows:ClientActivityRow[],filters:ActivityFilters,today:string){
+export function filterClientActivity(rows:ClientActivityRow[],filters:ActivityFilters){
  const query=normalize(filters.search),collator=new Intl.Collator('es',{sensitivity:'base',numeric:true})
  const nullable=(a:number|null,b:number|null,direction:number)=>a===null?(b===null?0:1):b===null?-1:(a-b)*direction
- return rows.filter(row=>(!query||normalize(row.name).includes(query))&&inRange(row.inactivity_days,filters.inactivity)&&inRange(clientAgeDays(row,today),filters.age)&&
+ return rows.filter(row=>(!query||normalize(row.name).includes(query))&&inRange(row.inactivity_days,filters.inactivity)&&
   (filters.kind==='all'||filters.kind==='no_quotes'&&!row.last_quotation||filters.kind==='no_movement'&&!row.last_movement||filters.kind==='with_movement'&&!!row.last_movement))
  .sort((a,b)=>{
   let result=0
   if(filters.order==='name_asc'||filters.order==='name_desc')result=collator.compare(a.name,b.name)*(filters.order==='name_asc'?1:-1)
-  else if(filters.order==='oldest'||filters.order==='newest')result=nullable(clientAgeDays(a,today),clientAgeDays(b,today),filters.order==='oldest'?-1:1)
   else result=nullable(a.inactivity_days,b.inactivity_days,filters.order==='inactive_desc'?-1:1)
   return result||collator.compare(a.name,b.name)||a.id.localeCompare(b.id)
  })
@@ -60,10 +50,9 @@ export async function loadClientActivity(fetchPage:(offset:number,limit:number)=
  return {rows,thresholds}
 }
 export function clientActivityReport(rows:ClientActivityRow[],filters:ActivityFilters,generatedAt:string):ReportPdfData{
- const today=activityToday(generatedAt)
  return {title:'Actividad de clientes',subtitle:'Seguimiento comercial · Uso interno',complete:true,generatedAt,
-  filters:[`Nombre: ${filters.search.trim()||'Todos'}`,`Inactividad: ${activityRanges[filters.inactivity]}`,`Antigüedad: ${activityRanges[filters.age]}`,`Actividad: ${activityKinds[filters.kind]}`,`Orden: ${activityOrders[filters.order]}`,'Antigüedad desde el registro. Inactividad sin cotizar ni movimiento efectivo; editar el perfil no reinicia el contador.'],
+  filters:[`Nombre: ${filters.search.trim()||'Todos'}`,`Inactividad: ${activityRanges[filters.inactivity]}`,`Actividad: ${activityKinds[filters.kind]}`,`Orden: ${activityOrders[filters.order]}`,'Inactividad sin cotizar ni movimiento efectivo; editar el perfil no reinicia el contador.'],
   metrics:[{label:'Clientes filtrados',value:String(rows.length)}],
-  columns:[{key:'name',label:'Cliente',width:'22%'},{key:'registered',label:'Registro',width:'11%'},{key:'age',label:'Antigüedad (días)',width:'10%'},{key:'quotation',label:'Última cotización',width:'14%'},{key:'operation',label:'Última operación registrada',width:'15%'},{key:'movement',label:'Último movimiento efectivo',width:'17%'},{key:'inactive',label:'Inactividad (días)',width:'11%'}],
-  rows:rows.map(row=>({name:row.name,registered:formatDate(row.created_date,'Sin fecha'),age:clientAgeDays(row,today)??'Sin fecha base',quotation:formatDate(row.last_quotation,'Sin cotizaciones'),operation:formatDate(row.last_operation,'Sin operaciones'),movement:formatDate(row.last_movement,'Sin movimiento'),inactive:row.inactivity_days??'Sin fecha base'}))}
+  columns:[{key:'name',label:'Cliente',width:'26%'},{key:'registered',label:'Registro',width:'12%'},{key:'quotation',label:'Última cotización',width:'15%'},{key:'operation',label:'Última operación registrada',width:'16%'},{key:'movement',label:'Último movimiento efectivo',width:'18%'},{key:'inactive',label:'Inactividad (días)',width:'13%'}],
+  rows:rows.map(row=>({name:row.name,registered:formatDate(row.created_date,'Sin fecha'),quotation:formatDate(row.last_quotation,'Sin cotizaciones'),operation:formatDate(row.last_operation,'Sin operaciones'),movement:formatDate(row.last_movement,'Sin movimiento'),inactive:row.inactivity_days??'Sin fecha base'}))}
 }

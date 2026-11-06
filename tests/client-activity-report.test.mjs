@@ -6,22 +6,18 @@ import React from 'react'
 import * as renderer from '@react-pdf/renderer'
 import {inflateSync} from 'node:zlib'
 const lib=loadTs('src/lib/client-activity-report.ts')
-const generatedAt='2026-11-06T03:00:00Z',today='2026-11-05'
+const generatedAt='2026-11-06T03:00:00Z'
 const row=(id,extra={})=>({id,name:`Cliente ${id}`,created_date:'2026-10-01',last_quotation:null,last_operation:null,last_movement:null,inactivity_days:35,...extra})
-const filter=(rows,extra={})=>lib.filterClientActivity(rows,{...lib.defaultActivityFilters,...extra},today)
+const filter=(rows,extra={})=>lib.filterClientActivity(rows,{...lib.defaultActivityFilters,...extra})
 
-test('búsqueda sin acentos, orden alfabético y antigüedad son distintos de inactividad; nulos al final',()=>{
+test('búsqueda sin acentos, orden alfabético e inactividad; nulos al final',()=>{
  const rows=[row('b',{name:'Álvaro',created_date:'2020-01-01',inactivity_days:0,last_movement:'2026-11-05'}),row('a',{name:'Zeta',inactivity_days:90}),row('c',{name:'Beta',created_date:null,inactivity_days:null})]
  assert.deepEqual(filter(rows,{search:' ALVARO '}).map(r=>r.id),['b'])
  assert.deepEqual(filter(rows,{order:'name_asc'}).map(r=>r.id),['b','c','a'])
  assert.deepEqual(filter(rows,{order:'name_desc'}).map(r=>r.id),['a','c','b'])
  assert.deepEqual(filter(rows,{order:'inactive_asc'}).map(r=>r.id),['b','a','c'])
- assert.deepEqual(filter(rows,{order:'oldest'}).map(r=>r.id),['b','a','c'])
- assert.deepEqual(filter(rows,{age:'year',inactivity:'recent'}).map(r=>r.id),['b'])
  assert.deepEqual(filter(rows,{kind:'with_movement'}).map(r=>r.id),['b'])
  assert.deepEqual(filter(rows,{inactivity:'unknown'}).map(r=>r.id),['c'])
- assert.equal(lib.activityToday(generatedAt),today)
- assert.equal(lib.clientAgeDays(row('x',{created_date:'2026-11-04'}),today),1)
  for(const [range,days]of [['recent',29],['month',30],['two_months',60],['quarter',90],['half_year',180],['year',365]])assert.equal(filter([row('edge',{inactivity_days:days})],{inactivity:range}).length,1)
 })
 
@@ -56,8 +52,8 @@ test('pantalla exporta todo el filtro más allá de la página visible, reinicia
   assert.equal(app.find(n=>n.type==='Pagination').props.page,1)
   assert.equal(app.find(n=>n.type==='Export').props.data.rows.length,6)
   assert.match(app.find(n=>n.type==='Export').props.data.filters.join('\n'),/Cliente 12/)
-  app.button('Restablecer filtros').props.onClick();app.render();assert.equal(app.find(n=>n.type==='Export').props.data.rows.length,125)
-  fail=true;app.button('Actualizar').props.onClick();app.render();assert.equal(app.find(n=>n.type==='Export'),undefined)
+  app.find(n=>n.props?.['aria-label']==='Restablecer filtros').props.onClick();app.render();assert.equal(app.find(n=>n.type==='Export').props.data.rows.length,125)
+  fail=true;app.find(n=>n.props?.['aria-label']==='Actualizar').props.onClick();app.render();assert.equal(app.find(n=>n.type==='Export'),undefined)
   await app.tick();app.render();assert.match(app.text(),/No se pudo consultar/)
   fail=false;app.button('Reintentar').props.onClick();app.render();await app.tick();app.render();assert.equal(app.find(n=>n.type==='Export').props.data.rows.length,125)
  }finally{app.cleanup()}
@@ -70,7 +66,7 @@ test('reporte comparte filtro y orden con la tabla y Excel conserva filtros, fec
  assert.equal(data.rows[0].registered,'01/10/2026');assert.match(data.filters.join('\n'),/Z–A/)
  const {financialExcelRows}=loadTs('src/lib/financial-export.ts'),{createStyledXlsx}=loadTs('src/lib/xlsx.ts')
  const xml=new TextDecoder().decode(createStyledXlsx(financialExcelRows(data,{}),data.title))
- assert.match(xml,/CLIENTE100/);assert.match(xml,/CLIENTE000/);assert.match(xml,/Antigüedad/)
+ assert.match(xml,/CLIENTE100/);assert.match(xml,/CLIENTE000/);assert.doesNotMatch(xml,/Antigüedad/);assert.equal(data.columns.length,6);assert.equal(data.rows[0].age,undefined)
 })
 
 test('PDF real pagina y contiene la última fila del resultado completo',async()=>{
