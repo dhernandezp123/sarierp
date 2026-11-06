@@ -1,5 +1,14 @@
 # Sari Express ERP — Hardening y Trial
 
+### 06/11/2026 - UX-CLIENT-ACTIVITY-07 - Filtros y exportacion de actividad de clientes
+
+- Estado: implementado y validado localmente. Publicacion y UAT autenticada pendientes; Demo sin cambios.
+- Cambio: busqueda por nombre insensible a acentos/mayusculas, orden alfabetico A-Z/Z-A, mayor/menor inactividad y antiguedad; filtros separados de antiguedad desde el registro e inactividad por rangos de dias y tipo de actividad (sin cotizacion, sin/con movimiento efectivo). Restablecimiento, conteo filtrado y nuevas columnas Registro/Antiguedad.
+- Exportacion: PDF y Excel reales mediante FinancialReportExport existente, con branding, filtros, orden y todos los resultados filtrados, aunque no esten en la pagina visible. CSV adicional del componente reutilizado. Solo uso interno.
+- Archivos: `src/app/(protected)/clientes/activity/page.tsx`, `src/lib/client-activity-report.ts`, `tests/client-activity-report.test.mjs` y este registro. SQL: ninguno; RPC get_client_activity existente ya entrega created_date y restringe empresa, roles y cartera de Ventas. Sin dependencias nuevas.
+- Controles: cargar todas las paginas autorizadas antes de filtrar/exportar; fallos, totales cambiantes, filas duplicadas o carga incompleta bloquean resultados/exportacion. Cancelacion al desmontar/cambiar usuario, empresa o rol. No se consulta directorio global ni se exportan seller_id u otros campos privados del RPC. Fecha base de antiguedad de Honduras.
+- Validaciones: 630/630 pruebas Node aprobadas, incluidas carga multipagina, filtros combinados/limites, antiguedad vs inactividad, recuperacion de error, UI real con exportacion fuera de pagina, Excel y PDF multipagina con ultima fila. TypeScript, ESLint, diff --check y build/postbuild del runtime PDF aprobados. Chrome con pantalla real y RPC/branding ficticios: 125 filas en dos paginas RPC, busqueda sin acentos, filtros combinados, Excel/PDF descargados con filas fuera de pagina y sin resultados excluidos, reset/error/reintento; 1440/768/390 sin overflow. Capturas escritorio/movil revisadas. El fixture dev produjo errores historicos del recargador HMR; la comprobacion final con build/start aislado paso sin excepciones. Sin consulta ni escritura de datos reales desde el navegador. Commit pendiente.
+
 ### 05/11/2026 - UX-ACCOUNTING-EMAIL-06 - Leyenda de correo automatico
 
 - Estado: implementado; validacion y publicacion Production en curso. Demo excluido. No requiere SQL ni modifica el calendario o la activacion de avisos.
