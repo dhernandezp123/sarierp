@@ -1,5 +1,15 @@
 # Sari Express ERP — Hardening y Trial
 
+### 09/11/2026 - UX-GLOBAL-SEARCH-01 - Buscador central del ERP
+
+- Estado: implementado y validado localmente; publicacion autorizada el 09/11/2026 en preparacion. UAT autenticada por rol/tenant pendiente. Commit de publicacion pendiente.
+- Cambio: acceso central en header (lupa en movil), Dialog reutilizado con foco/Escape, busqueda diferida 300 ms desde dos caracteres, enlaces directos y hasta ocho coincidencias por tipo con aviso de limite. Consulta numeros, referencias, nombres, rutas y notas comerciales/internas de cotizaciones, bookings, instrucciones, clientes, agentes, proveedores y documentos de facturacion. Pricing abre su comparador existente. No indexa adjuntos, PDFs ni todas las columnas/tablas del ERP.
+- Acceso: cliente Supabase autenticado existente con RLS, tenant explicito en todas las consultas y filtro de rutas segun rol; perfil aprobado/activo del usuario actual. Sin service role, RPC nueva, migraciones ni cambios de permisos. Cancelacion y descarte de respuestas al cambiar texto, cerrar o cambiar contexto de usuario/tenant/rol. Errores por fuente visibles con reintento; no se presentan como ausencia de coincidencias.
+- Archivos: `src/components/layout/GlobalSearch.tsx`, `src/components/layout/topbar.tsx`, `src/lib/global-search.ts`, `tests/global-search.test.mjs` y este registro. SQL: ninguno; sin dependencias nuevas.
+- Validaciones: TypeScript final, ESLint enfocado, diff --check, build/postbuild PDF y suite completa 638/638 aprobados. Chrome con componente real y datos ficticios: referencia en pricing_notes encuentra cotizacion con enlace directo, foco inicial, Escape con retorno de foco, errores por fuente y reintento; 1280/768/390 sin overflow. Capturas de escritorio/movil revisadas. Los fallos previos por memoria no se reprodujeron en la validacion final.
+- Pendientes: verificar con sesiones reales RLS y visibilidad de resultados/enlaces para cada rol y tenant y navegacion al detalle en produccion. Las pruebas con cliente simulado no certifican RLS ni UAT. No se consultaron ni modificaron datos reales.
+
+
 ### 06/11/2026 - UX-CLIENT-ACTIVITY-08 - Barra compacta y menu de exportacion
 
 - Estado: implementado y validado localmente; commit, publicacion y UAT autenticada pendientes. Demo sin cambios.

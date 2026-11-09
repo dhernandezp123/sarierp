@@ -16,6 +16,7 @@ import ReferenceInsuranceCalculatorDialog from '@/src/components/quotations/Refe
 import { useTenant } from '@/src/components/tenant/TenantProvider'
 import { canAccessPath } from '@/src/lib/permissions'
 import { canManagePlatform } from '@/src/lib/platform-admin'
+import GlobalSearch from '@/src/components/layout/GlobalSearch'
 
 // Acciones rapidas disponibles segun rol; con `href` navegan y con
 // `action` abren un modal sin salir de la pagina actual.
@@ -235,7 +236,9 @@ export default function Topbar({ onOpenMobileNav, mobileNavOpen = false }: { onO
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5">
+      <GlobalSearch />
+
+      <div className="flex shrink-0 items-center gap-1.5">
         {visibleActions.length > 0 && (
           <div ref={quickRef} className="relative">
             <button
