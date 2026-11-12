@@ -14918,3 +14918,14 @@ Agregar una entrada por fix:
   - La paridad con Demo quedara pendiente por esta migracion mientras Demo
     permanezca sin actualizar por decision explicita del usuario. No se
     deshabilita el control ni se copia SQL o configuracion a Demo.
+
+### 12/11/2026 - UX-MIAMI-INS-03 - Importe de seguro compacto y protegido del scroll
+
+- Estado: validado localmente para publicacion autorizada; despliegue y UAT autenticada pendientes.
+- Hallazgo: el valor comercial/FOB ocupaba todo el ancho y el input numerico nativo podia cambiar al desplazar la pagina con el campo enfocado.
+- Cambio: FormField con ancho maximo de 240 px y NumberInput en QuotationInsuranceSection. NumberInput compartido libera el foco al recibir la rueda, sin cancelar el scroll de pagina; conserva el callback onWheel del consumidor.
+- Archivos: src/components/quotations/QuotationInsuranceSection.tsx, src/components/ui/NumberInput.tsx, tests/number-input.test.mjs, HARDENING.md. SQL: ninguno.
+- Validaciones: 21/21 pruebas dirigidas (NumberInput y miami-insurance*) con concurrencia 1; ESLint de ambos componentes correcto; git diff --check correcto. Build compilo pero fallo en su etapa TypeScript por falta de memoria; npx tsc --noEmit paso en el reintento final secuencial.
+- Evidencia adicional de release: componente real con React y Tailwind, datos ficticios en Chrome a 1280/1042/768/390 px: ancho 240 px, sin overflow, rueda desplaza 160 px sin modificar 2365.80 y libera foco. Suite general: 607 pruebas OK y 7 archivos interrumpidos por memoria; esos 7 archivos repetidos por separado dieron 29/29 OK (636 pruebas en total). Evidencia privada fuera de Git en .ua/intermediate/miami-insurance-browser-20261112/. Se publica desde origin/main aislado, sin cambios de Compras ni migraciones locales.
+- Pendientes/riesgos: UAT autenticada del formulario completo en Production; el scroll retira el foco del campo. La proteccion compartida cubre consumidores de NumberInput, no todos los inputs numericos legacy. No cambia calculos, impuestos ni persistencia del seguro.
+- Commit: pendiente; sin despliegue.
