@@ -1,5 +1,19 @@
 # Sari Express ERP — Hardening y Trial
 
+### 12/11/2026 - ACC-PURCHASE-SERVICE-02 - Servicio unico en Compras e ISV separado
+
+- Estado: implementado y validado localmente; release Production autorizado. Migracion/despliegue remoto y UAT autenticada pendientes.
+- Compras muestra un concepto por servicio, sin duplicados I/E. Checkbox Gravado / lleva ISV y tasa 15/18 cuando aplica. Boleta de Compra nunca permite credito fiscal. Facturacion conserva sus variantes y cuentas de ingreso.
+- Decision del usuario (12/11): cuando falta asignacion de compra se conserva la cuenta manual o predeterminada del documento/proveedor. No se exige completar las cuentas de gasto para publicar este ajuste. Una cuenta de compra configurada y valida es fija e independiente del impuesto; configuraciones contradictorias o invalidas bloquean la emision. Limpiar el servicio restablece el default del documento. Seleccionar otro servicio sin asignacion conserva un override manual existente.
+- Servidor: migracion 20261112120000_purchase_unique_service_account.sql reemplaza solo create_purchase_document. Conserva permisos, tenant, idempotencia, calculos, descuentos, snapshots, Cuentas por Pagar y flujo fiscal. Valida pertenencia del servicio incluso con cuenta manual; asignacion ausente admite fallback, asignacion invalida/ambigua no. No cambia cuentas, perfiles, asignaciones ni documentos emitidos.
+- Archivos: src/app/(protected)/accounting/purchases/page.tsx, src/components/invoicing/InvoiceLineSettings.tsx, src/lib/service-accounting.ts, tests/service-accounting.test.mjs, tests/purchase-service-flow.test.mjs, supabase/tests/service_accounting_assignments.sql, supabase/migrations/20261112120000_purchase_unique_service_account.sql y este registro. Sin dependencias nuevas.
+- Validaciones locales: TypeScript y ESLint enfocado OK; 11 pruebas dirigidas y suite completa 639/639 con concurrencia 1. Build local intentado: worker Turbopack interrumpido (10054) bajo presion de memoria; se exige build remoto de Quality antes de Production. Cinco suites SQL en replica Docker supabase_db_sarierp_gerencia20261104: service_accounting_assignments, supplier_default_expense_account, purchase_optional_supplier_identity, accounting_financial_sources, fiscal_discounts. Rollback con hashes/conteos de funcion, compras, partidas y asignaciones sin cambios. Incluye 0/15/18%, Boleta sin credito, asiento balanceado, defaults del documento/proveedor, falta total de cuenta, overrides, cuenta de ingreso invalida y servicio de otro tenant.
+- Navegador: pagina real de Compras con sesion/DB ficticias en Chrome a 1280/768/390 px, sin overflow; selector unico, cuenta manual/predeterminada, cuenta fija 0/15/18, bloqueo por ambiguedad, limpiar servicio y payload de Boleta sin credito comprobados. No se emitieron documentos reales. Evidencia privada en .ua/intermediate/purchase-service-close-20261112/.
+- Conciliacion Production actualizada en solo lectura: 95 perfiles / 190 variantes; cero cuentas de compra asignadas. El fallback autorizado evita bloquearlos. El Excel define principalmente cuentas de ingreso; no se infieren cuentas de gasto ni se alteran jerarquias. Servicios faltantes, diferencias de categoria y compatibilidad SubCuenta/Auxiliar quedan como configuracion separada del ajuste de Compras, sin cambios de datos.
+- Pendientes: aplicar esta unica migracion en Production, confirmar CI/build/despliegue/smoke; UAT autenticada completa de emision/PDF/asiento. Trial queda fuera del release. docs/venex-tracking-analysis.md no pertenece a este cambio.
+- Commit: pendiente.
+
+
 ### 09/11/2026 - UX-GLOBAL-SEARCH-01 - Buscador central del ERP
 
 - Estado: implementado y validado localmente; publicacion autorizada el 09/11/2026 en preparacion. UAT autenticada por rol/tenant pendiente. Commit de publicacion pendiente.
@@ -14921,11 +14935,11 @@ Agregar una entrada por fix:
 
 ### 12/11/2026 - UX-MIAMI-INS-03 - Importe de seguro compacto y protegido del scroll
 
-- Estado: validado localmente para publicacion autorizada; despliegue y UAT autenticada pendientes.
+- Estado: publicado en Production el 12/11/2026. Validacion visual sintetica y smoke publico aprobados; UAT autenticada pendiente.
 - Hallazgo: el valor comercial/FOB ocupaba todo el ancho y el input numerico nativo podia cambiar al desplazar la pagina con el campo enfocado.
 - Cambio: FormField con ancho maximo de 240 px y NumberInput en QuotationInsuranceSection. NumberInput compartido libera el foco al recibir la rueda, sin cancelar el scroll de pagina; conserva el callback onWheel del consumidor.
 - Archivos: src/components/quotations/QuotationInsuranceSection.tsx, src/components/ui/NumberInput.tsx, tests/number-input.test.mjs, HARDENING.md. SQL: ninguno.
 - Validaciones: 21/21 pruebas dirigidas (NumberInput y miami-insurance*) con concurrencia 1; ESLint de ambos componentes correcto; git diff --check correcto. Build compilo pero fallo en su etapa TypeScript por falta de memoria; npx tsc --noEmit paso en el reintento final secuencial.
 - Evidencia adicional de release: componente real con React y Tailwind, datos ficticios en Chrome a 1280/1042/768/390 px: ancho 240 px, sin overflow, rueda desplaza 160 px sin modificar 2365.80 y libera foco. Suite general: 607 pruebas OK y 7 archivos interrumpidos por memoria; esos 7 archivos repetidos por separado dieron 29/29 OK (636 pruebas en total). Evidencia privada fuera de Git en .ua/intermediate/miami-insurance-browser-20261112/. Se publica desde origin/main aislado, sin cambios de Compras ni migraciones locales.
 - Pendientes/riesgos: UAT autenticada del formulario completo en Production; el scroll retira el foco del campo. La proteccion compartida cubre consumidores de NumberInput, no todos los inputs numericos legacy. No cambia calculos, impuestos ni persistencia del seguro.
-- Commit: pendiente; sin despliegue.
+- Commit funcional publicado: 7c681be8bcfd19a1a33390210f07c6871aa337e8. Vercel 8Zgdmkswpj86Cb91uceUaW5Zq2Pa: despliegue Production success; URL sarierp-o2b8gtyhw-claudherhn-5641s-projects.vercel.app. Quality 43294231967: application/database success, 635/635 tests, TypeScript, lint, build/postbuild aprobados. Smoke sari.forwarders.app: /login 200, /quotations/new 307 al login. Sin migracion SQL ni escrituras de datos reales. Environment parity 43294232199 falla por diferencias main/Trial; Trial no actualizado. CLI Vercel inspect no disponible por token invalido; estado confirmado mediante GitHub deployment 7747970801 y status Vercel.

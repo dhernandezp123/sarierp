@@ -5,6 +5,28 @@ const { serviceAssignmentCounts, serviceAssignmentStatus, eligibleServiceAccount
 const { draftItemPayload, draftEditorFromInvoice } = loadTs('src/lib/invoice-drafts.ts')
 const account = (id,kind='Ingreso',patch={}) => ({id,code:id,name:'ADUANA',kind,active:true,postable:true,account_level:'Auxiliar',...patch})
 const accounts = [account('I'),account('E'),account('C','Costo')]
+const { purchaseServiceAccount } = loadTs('src/lib/service-accounting.ts')
+const { serviceCatalogChoices } = loadTs('src/lib/service-accounting.ts')
+test('selector de compras muestra un servicio por concepto sin perder variantes de facturación',()=>{
+  const concepts=[{kind:'service',code:'delivery',label:'Delivery'}]
+  const profiles=[{id:'p',source_kind:'service',source_code:'delivery'}]
+  const variants=['I','E'].map(tax_variant=>({profile_id:'p',tax_variant,expense_applicable:true,income_applicable:true}))
+  assert.deepEqual(serviceCatalogChoices(concepts,profiles,variants,'expense'),concepts)
+  assert.equal(serviceCatalogChoices(concepts,profiles,variants,'income').length,2)
+  assert.equal(serviceCatalogChoices(concepts,profiles,variants.map(v=>({...v,expense_applicable:false})),'expense').length,0)
+  assert.deepEqual(serviceCatalogChoices(concepts,[],[],'expense'),concepts)
+})
+test('compra conserva una cuenta entre I/E y bloquea asignaciones ambiguas o inválidas',()=>{
+  const rows = ['I','E'].map(tax_variant=>({tax_variant,expense_applicable:true,expense_account_id:'C'}))
+  assert.equal(purchaseServiceAccount(rows,accounts).account.id,'C')
+  assert.equal(purchaseServiceAccount([rows[0]],accounts).account.id,'C')
+  assert.deepEqual(purchaseServiceAccount([],accounts),{account:undefined,error:''})
+  assert.deepEqual(purchaseServiceAccount(rows.map(r=>({...r,expense_account_id:null})),accounts),{account:undefined,error:''})
+  assert.ok(purchaseServiceAccount(rows,[account('C','Ingreso')]).error)
+  assert.ok(purchaseServiceAccount(rows,[account('C','Costo',{active:false})]).error)
+  assert.ok(purchaseServiceAccount([rows[0],{...rows[1],expense_account_id:'D'}],accounts).error)
+  assert.deepEqual(purchaseServiceAccount(rows.map(r=>({...r,expense_applicable:false})),accounts),{account:undefined,error:''})
+})
 const variant = (tax_variant,patch={}) => ({tax_variant,income_applicable:true,expense_applicable:true,income_account_id:tax_variant,expense_account_id:null,...patch})
 
 test('pendientes cuenta conceptos únicos aunque falten ingreso, gasto y clasificación a la vez',()=>{

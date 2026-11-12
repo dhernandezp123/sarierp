@@ -10,6 +10,25 @@ export type ServiceAccountingVariant = {
   income_applicable: boolean; expense_applicable: boolean
 }
 export const serviceTaxLabels: Record<ServiceTaxVariant, string> = { I: 'I · Gravada', E: 'E · Exenta', Exonerada: 'Exonerada' }
+export function serviceCatalogChoices(concepts: ServiceConcept[], profiles: ServiceAccountingProfile[], variants: ServiceAccountingVariant[], side: 'income' | 'expense'): (ServiceConcept & { tax_variant?: ServiceTaxVariant })[] {
+  return concepts.flatMap(concept => {
+    const profile = profiles.find(p => p.source_kind === concept.kind && p.source_code === concept.code)
+    const rows = variants.filter(v => v.profile_id === profile?.id)
+    if (side === 'expense') return rows.length && !rows.some(v => v.expense_applicable) ? [] : [concept]
+    return rows.length ? rows.filter(v => v.income_applicable).map(v => ({ ...concept, tax_variant: v.tax_variant })) : [concept]
+  })
+}
+// A purchase service has one expense account, independent of its tax rate.
+// Conflicting legacy mappings must be reconciled explicitly, never guessed.
+export function purchaseServiceAccount(variants: ServiceAccountingVariant[], accounts: AccountingAccount[]) {
+  const applicable = variants.filter(v => v.expense_applicable)
+  const ids = new Set(applicable.map(v => v.expense_account_id).filter((id): id is string => Boolean(id)))
+  if (ids.size === 0) return { account: undefined, error: '' }
+  if (ids.size > 1) return { account: undefined, error: 'El servicio tiene cuentas de compra diferentes por impuesto. Revisa su asignación contable.' }
+  const account = accounts.find(a => ids.has(a.id))
+  if (!eligibleServiceAccount(account, 'expense')) return { account: undefined, error: 'Configura una cuenta auxiliar de costo/gasto para este servicio antes de emitir.' }
+  return { account, error: '' }
+}
 export function fiscalAccountVariant(treatment: string | undefined, rate: number): ServiceTaxVariant {
   return treatment === 'Exonerada' ? 'Exonerada' : treatment === 'Exenta' ? 'E' : rate > 0 ? 'I' : 'E'
 }
