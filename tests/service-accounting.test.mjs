@@ -7,12 +7,12 @@ const account = (id,kind='Ingreso',patch={}) => ({id,code:id,name:'ADUANA',kind,
 const accounts = [account('I'),account('E'),account('C','Costo')]
 const { purchaseServiceAccount } = loadTs('src/lib/service-accounting.ts')
 const { serviceCatalogChoices } = loadTs('src/lib/service-accounting.ts')
-test('selector de compras muestra un servicio por concepto sin perder variantes de facturación',()=>{
+test('compras y facturación muestran un servicio por concepto sin opciones I/E',()=>{
   const concepts=[{kind:'service',code:'delivery',label:'Delivery'}]
   const profiles=[{id:'p',source_kind:'service',source_code:'delivery'}]
   const variants=['I','E'].map(tax_variant=>({profile_id:'p',tax_variant,expense_applicable:true,income_applicable:true}))
   assert.deepEqual(serviceCatalogChoices(concepts,profiles,variants,'expense'),concepts)
-  assert.equal(serviceCatalogChoices(concepts,profiles,variants,'income').length,2)
+  assert.deepEqual(serviceCatalogChoices(concepts,profiles,variants,'income'),concepts)
   assert.equal(serviceCatalogChoices(concepts,profiles,variants.map(v=>({...v,expense_applicable:false})),'expense').length,0)
   assert.deepEqual(serviceCatalogChoices(concepts,[],[],'expense'),concepts)
 })
@@ -27,7 +27,7 @@ test('compra conserva una cuenta entre I/E y bloquea asignaciones ambiguas o inv
   assert.ok(purchaseServiceAccount([rows[0],{...rows[1],expense_account_id:'D'}],accounts).error)
   assert.deepEqual(purchaseServiceAccount(rows.map(r=>({...r,expense_applicable:false})),accounts),{account:undefined,error:''})
 })
-const variant = (tax_variant,patch={}) => ({tax_variant,income_applicable:true,expense_applicable:true,income_account_id:tax_variant,expense_account_id:null,...patch})
+const variant = (tax_variant,patch={}) => ({tax_variant,income_applicable:true,expense_applicable:true,income_account_id:'I',expense_account_id:null,...patch})
 
 test('pendientes cuenta conceptos únicos aunque falten ingreso, gasto y clasificación a la vez',()=>{
   assert.deepEqual(serviceAssignmentCounts([{variants:[]},{variants:[]}],accounts),{total:2,pending:2,income:2,expense:2,classification:2})
@@ -36,16 +36,18 @@ test('pendientes cuenta conceptos únicos aunque falten ingreso, gasto y clasifi
 })
 test('solo exige variantes seleccionadas y lados aplicables; no supone que toda cuenta final sea auxiliar',()=>{
   assert.equal(serviceAssignmentStatus([variant('I',{expense_applicable:false})],accounts).pending,false)
-  assert.equal(eligibleServiceAccount(account('x','Ingreso',{account_level:'SubCuenta'}),'income'),false)
+  assert.equal(eligibleServiceAccount(account('x','Ingreso',{account_level:'SubCuenta'}),'income'),true)
+  assert.equal(eligibleServiceAccount(account('x','Ingreso',{account_level:'SubCuenta',postable:false}),'income'),false)
+  assert.equal(eligibleServiceAccount(account('x','Ingreso',{account_level:'Mayor'}),'income'),false)
   for(const patch of [{active:false},{postable:false},{kind:'Gasto'}]) assert.equal(serviceAssignmentStatus([variant('I',{expense_applicable:false})],[account('I','Ingreso',patch)]).income,true)
   assert.equal(eligibleServiceAccount(account('G','Gasto'),'expense'),true)
   assert.equal(eligibleServiceAccount(account('A','Activo'),'expense'),false)
 })
-test('I, E y exonerada permanecen independientes incluso con nombres iguales',()=>{
+test('tratamientos fiscales siguen distintos y cuentas legacy contradictorias quedan pendientes',()=>{
   assert.equal(fiscalAccountVariant('Gravada',15),'I')
   assert.equal(fiscalAccountVariant('Exenta',15),'E')
   assert.equal(fiscalAccountVariant('Exonerada',0),'Exonerada')
-  const rows = [variant('I',{expense_applicable:false}),variant('E',{expense_applicable:false}),variant('Exonerada',{income_account_id:null,expense_applicable:false})]
+  const rows = [variant('I',{expense_applicable:false}),variant('E',{income_account_id:'E',expense_applicable:false}),variant('Exonerada',{income_account_id:null,expense_applicable:false})]
   assert.equal(serviceAssignmentStatus(rows,accounts).income,true)
   assert.equal(rows[0].income_account_id,'I'); assert.equal(rows[1].income_account_id,'E')
 })

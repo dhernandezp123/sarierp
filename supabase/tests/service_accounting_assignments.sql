@@ -78,11 +78,11 @@ insert into public.proveedores(id,tenant_id,nombre,tipo,rtn,moneda) values('be27
 set local role authenticated;
 create temp table service_input as select jsonb_build_array(
  jsonb_build_object('tax_variant','I','income_applicable',true,'expense_applicable',true,'income_account_id',(select id from public.accounting_accounts where code='41991'),'expense_account_id',null),
- jsonb_build_object('tax_variant','E','income_applicable',true,'expense_applicable',true,'income_account_id',(select id from public.accounting_accounts where code='41992'),'expense_account_id',null),
+ jsonb_build_object('tax_variant','E','income_applicable',true,'expense_applicable',true,'income_account_id',(select id from public.accounting_accounts where code='41991'),'expense_account_id',null),
  jsonb_build_object('tax_variant','Exonerada','income_applicable',true,'expense_applicable',false,'income_account_id',null,'expense_account_id',null)) variants;
 select pg_temp.assert_true(public.save_service_accounting('service','fixture_docs',0,(select variants from service_input),'Preparación ficticia con costos pendientes')=1,'First revision');
 select pg_temp.assert_true((select count(*)=1 from public.service_accounting_profiles),'RLS hides other tenant profiles');
-select pg_temp.assert_true((select count(*)=3 and count(distinct income_account_id)=2 and count(expense_account_id)=0 from public.service_accounting_variants),'I/E independent and no guessed cost or exonerated income');
+select pg_temp.assert_true((select count(*)=3 and count(distinct income_account_id)=1 and count(expense_account_id)=0 from public.service_accounting_variants),'One income account shared by I/E; no guessed cost');
 create temp table service_variant_ids as select id,tax_variant from public.service_accounting_variants;
 select pg_temp.expect_error($c$select public.save_service_accounting('service','fixture_docs',0,(select variants from service_input),'Versión vieja')$c$,'recarga');
 select pg_temp.expect_error($c$select public.save_service_accounting('service','foreign_fixture',0,'[]','Otro tenant')$c$,'no disponible');
@@ -93,6 +93,7 @@ select pg_temp.expect_error($c$select public.save_service_accounting('service','
 select pg_temp.expect_error($c$update public.service_accounting_profiles set revision=99$c$,'permission denied');
 select pg_temp.expect_error($c$delete from public.service_accounting_variants$c$,'permission denied');
 select pg_temp.assert_true((select revision=1 from public.service_accounting_profiles),'Invalid changes are atomic');
+select pg_temp.expect_error($c$select public.save_service_accounting('service','fixture_docs',1,jsonb_set((select variants from service_input),'{1,income_account_id}',to_jsonb((select id::text from public.accounting_accounts where code='41992'))),'Intento de separar cuenta por ISV')$c$,'una sola cuenta');
 select pg_temp.assert_true(not has_function_privilege('anon','public.save_service_accounting(text,text,integer,jsonb,text)','execute') and not has_function_privilege('authenticated','public.resolve_service_account(text,text,text,text)','execute'),'RPC and internal-helper privileges');
 reset role;
 delete from public.invoice_master_settings where tenant_id='be270000-0000-4000-8000-000000000100';
@@ -111,18 +112,19 @@ insert into public.invoice_master_settings(tenant_id,profile_id,assignment_sourc
 select set_config('request.jwt.claims','{"sub":"be270000-0000-4000-8000-000000000001","role":"authenticated","app_metadata":{"demo_access_grant_id":"be279900-0000-4000-8000-000000000099"}}',true);
 set local role authenticated;
 select public.save_service_accounting('product','other_origin_fcl',0,jsonb_build_array((select variants->1 from service_input)),'Familia de flete definida independientemente');
-select public.save_service_accounting('service','other_origin_fcl',0,jsonb_build_array((select variants->0 from service_input)),'Cargo homónimo no hereda la familia');
+select public.save_service_accounting('service','other_origin_fcl',0,jsonb_build_array(jsonb_set((select variants->0 from service_input),'{income_account_id}','null')),'Cargo homónimo no hereda la familia');
 select pg_temp.assert_true((select count(*)=2 from public.service_accounting_profiles where source_code='other_origin_fcl'),'Same code in distinct catalogs stays distinct');
 update service_input set variants=jsonb_set(jsonb_set(variants,'{0,expense_account_id}',to_jsonb((select id::text from public.accounting_accounts where code='52991'))),'{1,expense_account_id}',to_jsonb((select id::text from public.accounting_accounts where code='52991')));
 select pg_temp.assert_true(public.save_service_accounting('service','fixture_docs',1,(select variants from service_input),'Costo ficticio aprobado')=2,'Master completes partial assignment');
 select pg_temp.assert_true(not exists(select 1 from service_variant_ids old left join public.service_accounting_variants current using(id,tax_variant) where current.id is null),'Each variant retains its identity across edits');
 create temp table service_invoice as select * from public.create_manual_invoice_with_items(
- '{"invoice_type":"Factura","cliente_id":"be270200-0000-4000-8000-000000000001","currency":"HNL"}',
+ jsonb_build_object('invoice_type','Factura','cliente_id','be270200-0000-4000-8000-000000000001','currency','HNL','issue_date',current_date,'due_date',current_date+45),
  '[{"description":"Servicio gravado ficticio","quantity":1,"unit_price":100,"isv_rate":15,"service_catalog_kind":"service","service_catalog_code":"fixture_docs"},{"description":"Servicio exento ficticio","quantity":1,"unit_price":50,"isv_rate":0,"service_catalog_kind":"service","service_catalog_code":"fixture_docs"}]');
 update public.invoices set status='Aprobada' where id=(select invoice_id from service_invoice);
-select pg_temp.assert_true((select count(*)=2 and count(distinct income_account_id)=2 and bool_and(service_catalog_code='fixture_docs') from public.invoice_items where invoice_id=(select invoice_id from service_invoice)),'Invoice freezes exact service and independent account IDs');
-select pg_temp.assert_true((select sum(l.credit)=100 from public.journal_lines l join public.accounting_accounts a on a.id=l.account_id join public.journal_entries e on e.id=l.entry_id where e.source_id=(select invoice_id from service_invoice) and a.code='41991'),'Taxable income posts into assigned account');
-select pg_temp.assert_true((select sum(l.credit)=50 from public.journal_lines l join public.accounting_accounts a on a.id=l.account_id join public.journal_entries e on e.id=l.entry_id where e.source_id=(select invoice_id from service_invoice) and a.code='41992'),'Exempt income posts into its separate account');
+select pg_temp.assert_true((select due_date=current_date+45 and payment_condition='Credito' and credit_days=45 from public.invoices where id=(select invoice_id from service_invoice)),'Actual invoice issuance preserves manual due date and document terms');
+select pg_temp.assert_true((select count(*)=2 and count(distinct income_account_id)=1 and bool_and(service_catalog_code='fixture_docs') from public.invoice_items where invoice_id=(select invoice_id from service_invoice)),'Invoice freezes exact service and the same income account across taxes');
+select pg_temp.assert_true((select sum(l.credit)=150 from public.journal_lines l join public.accounting_accounts a on a.id=l.account_id join public.journal_entries e on e.id=l.entry_id where e.source_id=(select invoice_id from service_invoice) and a.code='41991'),'Taxable income posts into assigned account');
+select pg_temp.assert_true((select coalesce(sum(l.credit),0)=0 from public.journal_lines l join public.accounting_accounts a on a.id=l.account_id join public.journal_entries e on e.id=l.entry_id where e.source_id=(select invoice_id from service_invoice) and a.code='41992'),'Exempt line does not switch to a different income account');
 select pg_temp.assert_true((select sum(debit)=165 and sum(credit)=165 from public.journal_lines where entry_id in(select id from public.journal_entries where source_id=(select invoice_id from service_invoice))),'Journal balanced with final taxes');
 create temp table service_purchase as select public.create_purchase_document('be279900-0000-4000-8000-000000000004',jsonb_build_object('document_type','Factura de proveedor','supplier_id','be279900-0000-4000-8000-000000000003','currency','HNL','issue_date',current_date,'document_number','TEST-SERVICE-PURCHASE'),
  '[{"description":"Costo ficticio","quantity":1,"unit_price":80,"tax_rate":0,"service_catalog_kind":"service","service_catalog_code":"fixture_docs","service_tax_variant":"E"}]') id;
@@ -144,7 +146,7 @@ reset role;
 update public.service_accounting_variants v set expense_account_id=(select id from public.accounting_accounts where code='41991' and tenant_id=public.current_tenant_id()) from public.service_accounting_profiles p where p.id=v.profile_id and p.tenant_id=public.current_tenant_id() and p.source_code='fixture_docs' and v.tax_variant='E';
 set local role authenticated;
 select pg_temp.expect_error($c$select public.create_purchase_document('be279900-0000-4000-8000-000000000016',jsonb_build_object('document_type','Factura de proveedor','supplier_id','be279900-0000-4000-8000-000000000003','currency','HNL','issue_date',current_date,'document_number','TEST-AMBIGUOUS-SERVICE'),
- '[{"description":"Ambiguo","quantity":1,"unit_price":80,"tax_rate":15,"service_catalog_kind":"service","service_catalog_code":"fixture_docs"}]')$c$,'cuenta de compra');
+ '[{"description":"Ambiguo","quantity":1,"unit_price":80,"tax_rate":15,"service_catalog_kind":"service","service_catalog_code":"fixture_docs"}]')$c$,'una sola cuenta');
 rollback to savepoint purchase_ambiguous;
 savepoint purchase_invalid_mapping;
 reset role;
@@ -177,7 +179,7 @@ select pg_temp.expect_error($c$select public.create_purchase_document('be279900-
 select pg_temp.expect_error($c$select public.create_purchase_document('be279900-0000-4000-8000-000000000019',jsonb_build_object('document_type','Factura de proveedor','supplier_id','be279900-0000-4000-8000-000000000003','currency','HNL','issue_date',current_date,'document_number','TEST-SERVICE-OVERRIDE'),
  jsonb_build_array(jsonb_build_object('description','Override prohibido','quantity',1,'unit_price',100,'tax_rate',0,'service_catalog_kind','service','service_catalog_code','fixture_docs','account_id',(select id from public.accounting_accounts where code='41991'))))$c$,'debe coincidir');
 create temp table service_before as select to_jsonb(i) value from public.invoice_items i where invoice_id=(select invoice_id from service_invoice);
-select public.save_service_accounting('service','fixture_docs',2,jsonb_set((select variants from service_input),'{0,income_account_id}',to_jsonb((select id::text from public.accounting_accounts where code='41992'))),'Cambio futuro ficticio');
+select public.save_service_accounting('service','fixture_docs',2,jsonb_set(jsonb_set((select variants from service_input),'{0,income_account_id}',to_jsonb((select id::text from public.accounting_accounts where code='41992'))),'{1,income_account_id}',to_jsonb((select id::text from public.accounting_accounts where code='41992'))),'Cambio futuro ficticio');
 select pg_temp.assert_true(not exists(select 1 from service_before b full join (select to_jsonb(i) value from public.invoice_items i where invoice_id=(select invoice_id from service_invoice))n using(value) where b.value is null or n.value is null),'Changing configuration does not rewrite issued lines');
 select public.save_accounting_settings(false,current_date-1,(select jsonb_object_agg(purpose,account_id) from public.accounting_mappings));
 create temp table pending_service_invoice as select * from public.create_manual_invoice_with_items('{"invoice_type":"Factura","cliente_id":"be270200-0000-4000-8000-000000000001","currency":"HNL"}',
@@ -189,7 +191,7 @@ select pg_temp.assert_true((select income_account_id is null from public.invoice
 select pg_temp.expect_error($c$select public.post_invoice_journal((select invoice_id from pending_service_invoice))$c$,'sin cuenta de ingreso guardada');
 select pg_temp.assert_true(not exists(select 1 from public.journal_entries where source_id=(select invoice_id from pending_service_invoice)),'No silent fallback to the global income account');
 reset role;
-select pg_temp.assert_true(public.resolve_service_account('service','fixture_docs','Exonerada','income') is null,'Exoneration never inherits exempt account');
+select pg_temp.assert_true(public.resolve_service_account('service','fixture_docs','Exonerada','income')=(select id from public.accounting_accounts where code='41992'),'Exoneration preserves the same service income account');
 insert into public.quotations(id,tenant_id,quotation_number,cliente_id,created_by,status,quote_type,service_product) values('be279100-0000-4000-8000-000000000001','be270000-0000-4000-8000-000000000100','TEST-SERVICE-QUOTE','be270200-0000-4000-8000-000000000001','be270000-0000-4000-8000-000000000001','Borrador','FCL','other_origin_fcl');
 insert into public.pricing_items(id,tenant_id,quotation_id,description,quantity,sale_amount,item_type,rate_code,currency) values
 ('be279100-0000-4000-8000-000000000002','be270000-0000-4000-8000-000000000100','be279100-0000-4000-8000-000000000001','Cargo',1,10,'origin_charge','origin_charge:fixture_docs:id','HNL'),

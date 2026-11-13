@@ -5,13 +5,13 @@ import { useUser } from '@/src/hooks/useUser'
 import { useServiceAccounting } from '@/src/hooks/useServiceAccounting'
 import { readAllReportRows } from '@/src/lib/report-query'
 import type { AccountingAccount } from '@/src/lib/accounting'
-import { serviceCatalogChoices, purchaseServiceAccount, eligibleServiceAccount, pricingServiceReference, serviceTaxLabels, type ServiceConcept, type ServiceAccountingProfile, type ServiceAccountingVariant, type ServiceTaxVariant, type ServiceSourceKind } from '@/src/lib/service-accounting'
+import { serviceCatalogChoices, serviceSideAccount, eligibleServiceAccount, pricingServiceReference, serviceTaxLabels, type ServiceConcept, type ServiceAccountingProfile, type ServiceAccountingVariant, type ServiceTaxVariant, type ServiceSourceKind } from '@/src/lib/service-accounting'
 import { CompactSelect } from '@/src/components/ui/CompactSelect'
 import { fieldClass, fieldLabelClass, fieldStackClass } from '@/src/lib/ui-classes'
 
 type Reference = { kind:ServiceSourceKind;code:string }
 type Source = { rateCode?:string|null;itemType?:string|null;product?:string|null }
-export type ServiceChoice = ServiceConcept & { tax_variant?:ServiceTaxVariant; expense_account_id?:string }
+export type ServiceChoice = ServiceConcept & { tax_variant?:ServiceTaxVariant; expense_account_id?:string; income_account_id?:string }
 const CatalogContext = createContext<{ concepts:ServiceConcept[];profiles:ServiceAccountingProfile[];variants:ServiceAccountingVariant[];accounts:AccountingAccount[];ready:boolean }>({concepts:[],profiles:[],variants:[],accounts:[],ready:false})
 export function InvoiceLineSettingsProvider({children}:{children:ReactNode}) {
   const {user,profile} = useUser(), identity = `${user?.id}:${profile?.tenant_id}`
@@ -32,13 +32,13 @@ export function ServiceCatalogSelect({reference,variant,side='income',disabled=f
   const choices = serviceCatalogChoices(concepts,profiles,variants,side)
   const key = (choice:ServiceChoice)=>JSON.stringify([choice.kind,choice.code,choice.tax_variant||''])
   const selected = choices.find(c=>c.kind===reference?.kind&&c.code===reference.code&&(c.tax_variant===variant||!c.tax_variant))
-  return <CompactSelect aria-label="Servicio de catálogo" searchable disabled={disabled||!ready} value={selected?key(selected):''} onValueChange={value=>{if(!value){onClear?.();return}const choice=choices.find(c=>key(c)===value);if(choice){const profile=profiles.find(p=>p.source_kind===choice.kind&&p.source_code===choice.code);const purchase=purchaseServiceAccount(variants.filter(v=>v.profile_id===profile?.id),accounts);onSelect(side==='expense'?{...choice,expense_account_id:purchase.account?.id}:choice)}}} options={[{value:'',label:'Captura manual / seleccionar servicio'},...choices.map(c=>({value:key(c),label:`${c.label}${c.tax_variant?` · ${serviceTaxLabels[c.tax_variant]}`:''}`,description:`${c.code} · ${c.kind==='product'?'Familia de flete':'Servicio'}${!c.tax_variant&&side==='income'?' · Clasificación pendiente':''}`}))]} />
+  return <CompactSelect aria-label="Servicio de catálogo" searchable disabled={disabled||!ready} value={selected?key(selected):''} onValueChange={value=>{if(!value){onClear?.();return}const choice=choices.find(c=>key(c)===value);if(choice){const profile=profiles.find(p=>p.source_kind===choice.kind&&p.source_code===choice.code);const assigned=serviceSideAccount(variants.filter(v=>v.profile_id===profile?.id),accounts,side);onSelect({...choice,[`${side}_account_id`]:assigned.account?.id})}}} options={[{value:'',label:'Captura manual / seleccionar servicio'},...choices.map(c=>({value:key(c),label:`${c.label}${c.tax_variant?` · ${serviceTaxLabels[c.tax_variant]}`:''}`,description:`${c.code} · ${c.kind==='product'?'Familia de flete':'Servicio'}${!profiles.some(p=>p.source_kind===c.kind&&p.source_code===c.code)?' · Clasificación pendiente':''}`}))]} />
 }
 export function ServiceLineAccountSelect({accountId,onAccount,reference,variant,side='income',manualAccounts,disabled=false}:{accountId:string;onAccount:(id:string)=>void;reference?:Reference;variant:ServiceTaxVariant;side?:'income'|'expense';manualAccounts?:AccountingAccount[];disabled?:boolean}) {
   const catalog = useContext(CatalogContext)
   const profile = catalog.profiles.find(p=>p.source_kind===reference?.kind&&p.source_code===reference.code)
-  const purchase = purchaseServiceAccount(catalog.variants.filter(v=>v.profile_id===profile?.id),catalog.accounts)
-  if (side==='expense'&&reference&&(purchase.account||purchase.error)) return <div className="space-y-1"><select aria-label="Cuenta contable del servicio" className={fieldClass} required disabled={disabled||!catalog.ready} value={purchase.account?.id||''} onChange={()=>{}}><option value={purchase.account?.id||''}>{purchase.account ? purchase.account.code+' · '+purchase.account.name : 'Asignación pendiente'}</option></select>{purchase.error&&<p role="alert" className="text-xs text-amber-700 dark:text-amber-300">{purchase.error} <a className="underline" href="/accounting/settings">Revisar configuración</a></p>}</div>
+  const assigned = serviceSideAccount(catalog.variants.filter(v=>v.profile_id===profile?.id),catalog.accounts,side)
+  if (reference&&(assigned.account||assigned.error)) return <div className="space-y-1"><select aria-label="Cuenta contable del servicio" className={fieldClass} required disabled={disabled||!catalog.ready} value={assigned.account?.id||''} onChange={()=>{}}><option value={assigned.account?.id||''}>{assigned.account ? assigned.account.code+' · '+assigned.account.name : 'Asignación pendiente'}</option></select>{assigned.error&&<p role="alert" className="text-xs text-amber-700 dark:text-amber-300">{assigned.error} <a className="underline" href="/accounting/settings">Revisar configuración</a></p>}</div>
   const mapping = catalog.variants.find(v=>v.profile_id===profile?.id&&v.tax_variant===variant)
   const mappedId = mapping?.[`${side}_account_id`]
   const account = catalog.accounts.find(a=>a.id===mappedId)

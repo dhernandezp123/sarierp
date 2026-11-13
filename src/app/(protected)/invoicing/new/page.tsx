@@ -691,6 +691,10 @@ export default function NewInvoicePage() {
       toast.error('La nota de crédito no puede superar el saldo pendiente de la factura')
       return
     }
+    if (!IS_NOTE[invoiceType] && dueDate && dueDate < issueDate) {
+      toast.error('El vencimiento no puede ser anterior a la fecha de emisión')
+      return
+    }
     if (!IS_NOTE[invoiceType] && paymentTerms.condition === 'Credito' && paymentTerms.creditDays <= 0) {
       toast.error('El cliente está configurado a crédito pero no tiene días de crédito válidos')
       return
@@ -993,14 +997,17 @@ export default function NewInvoicePage() {
               {!isNote && (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                    Fecha de vencimiento ({paymentTerms.condition === 'Credito' ? `Crédito · ${paymentTerms.creditDays} días` : 'Contado'})
+                    Fecha de vencimiento (plazo del cliente: {paymentTerms.condition === 'Credito' ? `Crédito · ${paymentTerms.creditDays} días` : 'Contado'})
                   </label>
                   <input
                     type="date"
                     value={dueDate}
-                    readOnly
-                    className={`${fieldClass} bg-slate-50 dark:bg-slate-800`}
+                    min={issueDate || undefined}
+                    onChange={e => setDueDate(e.target.value)}
+                    disabled={saving}
+                    className={fieldClass}
                   />
+                  <p className="mt-1 text-xs text-slate-500">Puedes ajustar el vencimiento de este documento sin cambiar las condiciones del cliente.</p>
                 </div>
               )}
 
@@ -1182,10 +1189,10 @@ export default function NewInvoicePage() {
                   </label>
                   <div className="space-y-1">
                     <label className="flex gap-1 text-xs"><input type="checkbox" aria-label="Línea gravable" checked={it.isv_rate > 0 && fiscalOptions.mode !== 'Exonerada' && fiscalOptions.mode !== 'Exenta'} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} onChange={e => { updateItem(it.id, 'isv_rate', e.target.checked ? 15 : 0); updateItem(it.id, 'tax_treatment', e.target.checked ? 'Gravada' : 'Exenta') }} />Gravable</label>
-                    <select aria-label="Tasa ISV de línea" value={it.isv_rate} onChange={e => updateItem(it.id, 'isv_rate', Number(e.target.value))} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} className={fieldClass}>
-                      <option value={15}>15%</option><option value={18}>18%</option><option value={0}>Sin ISV</option>
-                    </select>
-                    {it.isv_rate === 0 && <select aria-label="Motivo sin ISV" className={fieldClass} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} value={it.tax_treatment || 'Exenta'} onChange={e=>updateItem(it.id,'tax_treatment',e.target.value)}><option value="Exenta">Exenta</option><option value="Exonerada">Exonerada</option></select>}
+                    {it.isv_rate > 0 && !['Exenta','Exonerada'].includes(fiscalOptions.mode) && <select aria-label="Tasa ISV de línea" value={it.isv_rate} onChange={e => updateItem(it.id, 'isv_rate', Number(e.target.value))} disabled={Boolean(it.source_pricing_item_id)} className={fieldClass}>
+                      <option value={15}>15%</option><option value={18}>18%</option>
+                    </select>}
+                    {(it.isv_rate === 0 || ['Exenta','Exonerada'].includes(fiscalOptions.mode)) && <select aria-label="Motivo sin ISV" className={fieldClass} disabled={Boolean(it.source_pricing_item_id) || ['Exenta','Exonerada'].includes(fiscalOptions.mode)} value={['Exenta','Exonerada'].includes(fiscalOptions.mode)?fiscalOptions.mode:it.tax_treatment || 'Exenta'} onChange={e=>updateItem(it.id,'tax_treatment',e.target.value)}><option value="Exenta">Exenta</option><option value="Exonerada">Exonerada</option></select>}
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-sm font-medium dark:border-slate-700 dark:bg-slate-800 dark:text-white">
                     <span className="mb-1 block text-[10px] font-normal text-slate-500 lg:hidden">Importe neto</span>
@@ -1214,8 +1221,7 @@ export default function NewInvoicePage() {
                     <span>Se aplica antes del ISV.</span>
                   </label>
                   <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} disabled={saving} readonlyService={Boolean(it.source_pricing_item_id)} reference={it.service_catalog_kind&&it.service_catalog_code?{kind:it.service_catalog_kind,code:it.service_catalog_code}:undefined} source={{rateCode:it.source_rate_code,itemType:it.source_item_type,product:it.source_product}} variant={fiscalAccountVariant(['Exenta','Exonerada'].includes(fiscalOptions.mode)?fiscalOptions.mode:it.tax_treatment,it.isv_rate)} onClearService={()=>setItems(previous=>previous.map(item=>item.id===it.id?{...item,service_catalog_kind:undefined,service_catalog_code:undefined}:item))} onService={service => {
-                    const variant = service.tax_variant || (service.taxable ? 'I' : 'E')
-                    setItems(previous=>previous.map(item=>item.id===it.id?{...item,description:service.label,isv_rate:variant==='I'?15:0,tax_treatment:variant==='I'?'Gravada':variant==='E'?'Exenta':'Exonerada',income_account_id:'',service_catalog_kind:service.kind,service_catalog_code:service.code}:item))
+                    setItems(previous=>previous.map(item=>item.id===it.id?{...item,description:service.label,income_account_id:service.income_account_id || '',service_catalog_kind:service.kind,service_catalog_code:service.code}:item))
                   }}/>
                 </div>
               ))}
