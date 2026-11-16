@@ -459,12 +459,12 @@ export function MiamiQuotationSection({
               </h3>
 
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Calcula el flete aéreo usando la tarifa por KG.
+                Calcula el flete con el mayor entre peso real y volumétrico (divisor 6000).
               </p>
 
               <div className="grid gap-4 md:grid-cols-[220px_minmax(240px,360px)] md:items-end">
                 <div className="flex flex-col gap-1.5">
-                  <label className={fieldLabelClass}>Kilogramos</label>
+                  <label className={fieldLabelClass}>Peso real (kg)</label>
                   <input
                     type="number"
                     value={miami.miamiCalc.kg}
@@ -487,6 +487,10 @@ export function MiamiQuotationSection({
                   </p>
                   <p className="mt-1 text-lg font-bold text-blue-900 dark:text-blue-100">
                     USD {miami.airEstimated.toFixed(2)}
+                  </p>
+                  <p className="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                    Peso volumétrico: {miami.airVolumetricKg.toFixed(2)} kg.
+                    Peso facturable: {miami.airChargeableKg.toFixed(2)} kg.
                   </p>
                 </div>
               </div>

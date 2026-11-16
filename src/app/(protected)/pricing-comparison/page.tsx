@@ -1,5 +1,7 @@
 'use client'
 
+import { calculateMiamiAir } from '@/src/lib/miami-air-calculator'
+
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AlertTriangle, CheckCircle2, ChevronDown, FileText, LayoutGrid, Pencil, Plus, Save, Table2, X } from 'lucide-react'
@@ -1951,7 +1953,9 @@ function PricingComparisonContent() {
     if (!ensureQuoteIsEditable()) return
 
     const airRate = getRateAmount('consolidado_aereo_kg')
-    const airFreight = totalCargoKg * airRate
+    const weights = getAirConsolidatedWeights()
+    const result = calculateMiamiAir(weights.actualWeightKg, totalCargoCbm || Number(selectedQuote.volumen_cbm || 0), airRate, surchargeRules)
+    const airFreight = result.freight
 
     const { error } = await supabase
       .from('pricing_items')
@@ -1959,7 +1963,7 @@ function PricingComparisonContent() {
         sale_amount: airFreight,
         tax_amount: 0,
         total_amount: airFreight,
-        notes: `Recalculado: KG ${totalCargoKg.toFixed(
+        notes: `Recalculado: KG facturable ${result.chargeableWeightKg.toFixed(
           2
         )} x tarifa USD ${airRate.toFixed(2)}.`,
       })

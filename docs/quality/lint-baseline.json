@@ -89,7 +89,7 @@
     "[\"src/components/ui/CarrierCombobox.tsx\",\"react-hooks/set-state-in-effect\",2,\"Error: Calling setState synchronously within an effect can trigger cascading renders\"]": 2,
     "[\"src/components/ui/CotizacionCombobox.tsx\",\"react-hooks/set-state-in-effect\",2,\"Error: Calling setState synchronously within an effect can trigger cascading renders\"]": 2,
     "[\"src/hooks/useMiamiCarriers.ts\",\"react-hooks/set-state-in-effect\",2,\"Error: Calling setState synchronously within an effect can trigger cascading renders\"]": 1,
-    "[\"src/hooks/useMiamiQuotation.ts\",\"react-hooks/exhaustive-deps\",1,\"The 'getClientRate' function makes the dependencies of useEffect Hook (at line 584) change on every render. To fix this, wrap the definition of 'getClientRate' in its own useCallback() Hook.\"]": 1,
+    "[\"src/hooks/useMiamiQuotation.ts\",\"react-hooks/exhaustive-deps\",1,\"The 'getClientRate' function makes the dependencies of useEffect Hook (at line 555) change on every render. To fix this, wrap the definition of 'getClientRate' in its own useCallback() Hook.\"]": 1,
     "[\"src/hooks/useMiamiQuotation.ts\",\"react-hooks/immutability\",2,\"Error: Cannot access variable before it is declared\"]": 3,
     "[\"src/hooks/useMiamiQuotation.ts\",\"react-hooks/set-state-in-effect\",2,\"Error: Calling setState synchronously within an effect can trigger cascading renders\"]": 3
   }

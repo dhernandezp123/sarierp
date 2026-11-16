@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { supabase } from '@/src/lib/supabase/client'
+import { calculateMiamiAir } from '@/src/lib/miami-air-calculator'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import { usesClientRates } from '@/src/lib/quotation-products'
 import { getCompanyTradeName } from '@/src/lib/company-branding'
@@ -260,40 +261,10 @@ export function useMiamiQuotation({
     serviceProduct === 'miami_lcl' || serviceProduct === 'miami_air'
   const canUseMiamiCalculator = isMiamiFlow && !!clienteId && clientRates.length > 0
 
-  const airSmallMinimumRule = surchargeRules.find(
-    (rule) => rule.code === 'miami_air_min_small'
-  )
-  const airLargeMinimumRule = surchargeRules.find(
-    (rule) => rule.code === 'miami_air_min_large'
-  )
-  const airSmallMinimum = Number(airSmallMinimumRule?.fixed_amount || 0)
-  const airLargeMinimum = Number(airLargeMinimumRule?.fixed_amount || 0)
-  const airSmallThresholdKg = Number(airSmallMinimumRule?.minimum_amount || 0)
-  const airLargeThresholdKg = Number(airLargeMinimumRule?.minimum_amount || 0)
-
-  const airChargeableKg = Number(miamiCalc.kg || 0)
-  const airCalculated   = airChargeableKg * miamiAirKgRate
-
-  let airEstimated       = airCalculated
-  let airMinimumApplied  = 0
-
-  if (
-    airChargeableKg > 0 &&
-    airSmallThresholdKg > 0 &&
-    airChargeableKg < airSmallThresholdKg
-  ) {
-    airEstimated      = Math.max(airCalculated, airSmallMinimum)
-    airMinimumApplied = airSmallMinimum
-  } else if (
-    airChargeableKg > 0 &&
-    airSmallThresholdKg > 0 &&
-    airLargeThresholdKg > 0 &&
-    airChargeableKg >= airSmallThresholdKg &&
-    airChargeableKg <= airLargeThresholdKg
-  ) {
-    airEstimated      = Math.max(airCalculated, airLargeMinimum)
-    airMinimumApplied = airLargeMinimum
-  }
+  const airResult = calculateMiamiAir(Number(miamiCalc.kg || 0), totalCargoCbm, miamiAirKgRate, surchargeRules)
+  const airChargeableKg = airResult.chargeableWeightKg
+  const airEstimated = airResult.freight
+  const airMinimumApplied = airResult.minimumApplied
 
   const pickupRate =
     getClientRateAmount('recolectas_internas') ||
@@ -627,6 +598,7 @@ export function useMiamiQuotation({
     airEstimated,
     airChargeableKg,
     airMinimumApplied,
+    airVolumetricKg: airResult.volumetricWeightKg,
     pickupRate,
     bunkerRule,
     bunkerAmount,
