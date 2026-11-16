@@ -14958,3 +14958,5 @@ Agregar una entrada por fix:
 - Archivos: src/lib/miami-air-calculator.ts, tests/miami-air-calculator.test.mjs, HARDENING.md. SQL: ninguno. Creacion, edicion y recalculo consumen el calculador compartido.
 - Validaciones: TypeScript y ESLint de archivos afectados aprobados; 7/7 pruebas dirigidas aprobadas, incluidos 52.2 kg sin volumen = USD 270, 150 kg = USD 405, 30 kg = USD 375, 1 CBM = USD 450 y carga cero. Build/postbuild aprobados (115 paginas); git diff --check aprobado.
 - Pendientes: despliegue y UAT autenticada; no se modificaron cotizaciones reales ni se ampliaron validaciones de formularios para admitir lineas sin volumen. Sin commit.
+
+- Preparacion de release 16/11: commit funcional 5b4ba73 aplicado sobre origin/main 661ab77 en checkout aislado. TypeScript y lint:ci aprobados (595 archivos, 215 diagnosticos historicos, cero regresiones). Se actualizo solo la ubicacion 584 -> 555 del aviso existente en docs/quality/lint-baseline.json; no se agregaron reglas ni tolerancias. Commits locales ajenos y Venex excluidos. Suite completa del checkout de release 642/642 aprobada con concurrencia 1.
