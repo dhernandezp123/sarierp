@@ -137,6 +137,7 @@ export function canAccessPath(role: string | null | undefined, path: string) {
   // The tenant Admin wildcard never grants access to the platform console.
   if (matchesPath(path, '/platform')) return false
   if (matchesPath(path, '/reports/client-operations')) return canViewClientOperationsReport(role)
+  if (matchesPath(path, '/accounting/purchase-requests') || matchesPath(path, '/accounting/purchase-orders')) return ['Admin','Contabilidad'].includes(role)
 
   if (role === 'Contabilidad') {
     if (matchesPath(path, '/clientes/nuevo')) return false

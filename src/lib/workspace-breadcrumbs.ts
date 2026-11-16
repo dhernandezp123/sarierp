@@ -9,7 +9,7 @@ const roots:Record<string,WorkspaceCrumb>={
   'cost-validation':{label:'Validación de costos',href:'/cost-validation'},support:{label:'Soporte',href:'/support'},profile:{label:'Mi perfil'},
 }
 const leaves:Record<string,Record<string,string>>={
- accounting:{accounts:'Catálogo de cuentas',journal:'Asientos contables',purchases:'Compras y documentos',receivables:'Cuentas por cobrar','supplier-statements':'Estado de proveedores',banks:'Caja y bancos',voids:'Anulaciones',books:'Libros y balances',assets:'Activos',settings:'Configuración y períodos'},
+ accounting:{accounts:'Catálogo de cuentas',journal:'Asientos contables',purchases:'Compras y documentos','purchase-requests':'Solicitudes de compra','purchase-orders':'Órdenes de compra',receivables:'Cuentas por cobrar','supplier-statements':'Estado de proveedores',banks:'Caja y bancos',voids:'Anulaciones',books:'Libros y balances',assets:'Activos',settings:'Configuración y períodos'},
  invoicing:{new:'Preparar documento',drafts:'Borradores',collections:'Cobranza y recibos',statements:'Estados de cuenta',voids:'Anulaciones'},
  settings:{company:'Empresa y facturación',cai:'Rangos CAI','mail-intake':'Recepción de correo',connections:'Conexiones'},
  reports:{'client-operations':'Operaciones por cliente'},admin:{users:'Usuarios'},

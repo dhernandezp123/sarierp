@@ -17,7 +17,7 @@ export type FiscalLayoutData = {
   equivalence?: string | null; original_amount?: string | null
   reference?: { number?: string | null; cai?: string | null; issue_date?: string | null; reason?: string | null } | null
   fiscal?: { cai?: string | null; from?: string | null; to?: string | null; deadline?: string | null; office?: string | null; location?: string | null } | null
-  signature?: boolean; retention?: boolean; invoice_legend?: boolean; footer_note?: string | null
+  signature?: boolean; retention?: boolean; invoice_legend?: boolean; footer_note?: string | null; copy_legend?: string
   cancellation?: { reason?: string | null; date?: string | null }
 }
 
@@ -136,7 +136,7 @@ export function FiscalDocumentLayout({ data, logo }: { data: FiscalLayoutData; l
       {data.footer_note && <Text style={styles.footerNote}>{data.footer_note}</Text>}
       <Text fixed style={styles.footer} render={({ pageNumber, totalPages }) => [
         ...(data.invoice_legend ? ['LA FACTURA ES BENEFICIO DE TODOS, EXÍJALA'] : []),
-        data.party_label === 'PROVEEDOR' ? 'Original: Contribuyente Adquirente · Copia: Proveedor' : data.retention ? 'Original: Sujeto retenido · Copia: Obligado Tributario Emisor' : 'Original: Cliente · Copia: Obligado Tributario Emisor',
+        data.copy_legend ?? (data.party_label === 'PROVEEDOR' ? 'Original: Contribuyente Adquirente · Copia: Proveedor' : data.retention ? 'Original: Sujeto retenido · Copia: Obligado Tributario Emisor' : 'Original: Cliente · Copia: Obligado Tributario Emisor'),
         `Generado con Forwarders · Impresión: ${printedAt} · Página ${pageNumber} de ${totalPages}`,
       ].join('\n')} />
     </Page>

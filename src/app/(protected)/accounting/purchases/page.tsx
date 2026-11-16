@@ -7,6 +7,7 @@ import { supabase } from '@/src/lib/supabase/client'
 import { useAccounting } from '@/src/hooks/useAccounting'
 import { readAllReportRows } from '@/src/lib/report-query'
 import { SupplierPayableDialog } from '@/src/components/accounting/SupplierPayableDialog'
+import { PurchaseNavigation } from '@/src/components/accounting/PurchaseNavigation'
 import { AccountingNav } from '@/src/components/accounting/AccountingNav'
 import { NumberInput } from '@/src/components/ui/NumberInput'
 import { FinancePageHeader, financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
@@ -96,7 +97,7 @@ export default function PurchasesPage(){
  const shownLineTotal=(l:ReturnType<typeof blankLine>)=>{try{const t=lineTotal(l);return formatMoney(typeof t==='number'?t:t.net+t.tax,documentCurrency)}catch{return '—'}}
  const reference=(l:ReturnType<typeof blankLine>)=>l.service_catalog_kind&&l.service_catalog_code?{kind:l.service_catalog_kind,code:l.service_catalog_code}:undefined
  const variant=(l:ReturnType<typeof blankLine>)=>l.service_tax_variant||(Number(l.tax_rate)>0?'I':'E')
- return <div className="space-y-6"><FinancePageHeader eyebrow="Contabilidad" title="Compras y documentos fiscales" description="Compras, documentos fiscales de proveedores y su contabilización." icon={ReceiptText}/><AccountingNav/>
+ return <div className="space-y-6"><FinancePageHeader eyebrow="Contabilidad" title="Compras y documentos fiscales" description="Compras, documentos fiscales de proveedores y su contabilización." icon={ReceiptText}/><AccountingNav/><PurchaseNavigation/>
  {(error||readError)&&<p role="alert" className="text-red-600">{error||readError} <button className={financeLinkClass} onClick={()=>void load()}>Reintentar</button></p>}{loading&&<p>Cargando configuración…</p>}
  {data&&current&&<><div className="flex flex-wrap gap-3"><button className={primaryButtonClass} disabled={busy} onClick={newDocument}>Registrar documento</button><Link className={secondaryButtonClass} href="/suppliers">Proveedores</Link><Link className={secondaryButtonClass} href="/accounts-payable">Cuentas por pagar</Link></div>
  {editor===context&&<form className={`${cardClass} space-y-8`} onSubmit={e=>{e.preventDefault();void save()}}><fieldset disabled={busy} className="space-y-8"><legend className="sr-only">Nuevo documento</legend>
