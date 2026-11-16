@@ -14976,3 +14976,11 @@ Agregar una entrada por fix:
 - Pendientes: despliegue y UAT autenticada; no se modificaron cotizaciones reales ni se ampliaron validaciones de formularios para admitir lineas sin volumen. Sin commit.
 
 - Preparacion de release 16/11: commit funcional 5b4ba73 aplicado sobre origin/main 661ab77 en checkout aislado. TypeScript y lint:ci aprobados (595 archivos, 215 diagnosticos historicos, cero regresiones). Se actualizo solo la ubicacion 584 -> 555 del aviso existente en docs/quality/lint-baseline.json; no se agregaron reglas ni tolerancias. Commits locales ajenos y Venex excluidos. Suite completa del checkout de release 642/642 aprobada con concurrencia 1.
+
+### 16/11/2026 - ACC-INVOICE-SERVICE-03 / ACC-DUE-DATE-01 - Preparacion de release aislado
+
+- Estado: commit 4ddb667 sobre Production e8f1b99; pendiente de aplicar SQL y publicar Production. Solo paquete contable, sin Pricing suppliers, SEC-026/027, Venex ni propuesta de ordenes.
+- Validacion actual: 645/645 pruebas en checkout aislado; npx tsc --noEmit y lint:ci aprobados (596 archivos, 215 diagnosticos historicos, cero regresiones). Ocho suites SQL en replica Docker terminaron con rollback y huella de funciones/datos identica.
+- Production: preflight confirma migracion 20261113120000 ausente y RLS activo; ensayo de migracion exacta y transaccion final con ROLLBACK aprobado. ACL, propietario, search_path y SECURITY DEFINER conservados; ocho huellas de tablas sin cambios. Aplicacion final preparada con guardas de versiones, hashes de funciones y registro atomico de la migracion.
+- Build local aislado: compila y TypeScript pasa; falta entorno Supabase y el enlace de dependencias afecta el tracing del postbuild OCR. Se valida build/postbuild en CI con dependencias independientes antes de Production; no se cambia codigo de OCR. Solo se retiro una linea vacia final de la migracion aun no aplicada.
+- Pendientes: CI completo del SHA exacto, migracion y despliegue Production, smoke y UAT autenticada de emision/PDF/asiento. Evidencia privada en .ua/intermediate/invoice-services-evidence-20261116/.
