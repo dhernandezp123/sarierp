@@ -15035,3 +15035,12 @@ Agregar una entrada por fix:
 - Navegador Chrome con sección y hook reales y perfil real, DB/sesión ficticias: cálculo cambia SPS/TGU en ambos productos, ruta conservada; confirmación de cambios sin guardar y payload RPC TGU; 1280/768/390 px sin overflow, selector alto 40 px. Evidencia local `.ua/intermediate/miami-destination-20261117/` y logs SQL/primera suite en `.ua/intermediate/purchasing-20261116/miami-destination-*`.
 - Pendiente: aplicar exclusivamente esta migración al publicar, preflight del release aislado, despliegue y UAT autenticada. No se consultaron/modificaron tarifas reales de CBM: sus tarifas TGU deben configurarse con los valores comerciales autorizados. Venex fuera de alcance.
 - Commit: pendiente.
+
+### 17/11/2026 - UX-CLIENT-RATE-ZERO-01 - Borrar cero en tarifas del cliente
+
+- Estado: implementado y validado localmente; publicación y UAT autenticada pendientes.
+- Causa: fletes y Otros cargos del perfil usaban input numérico nativo mientras `updateClientRateAmount` convertía vacío a cero, reponiendo el cero al escribir.
+- Cambio: ambos bloques usan el `NumberInput` compartido, que conserva el texto durante la edición y normaliza al perder foco. Mantiene clases/ancho compacto de 80 px, precisión step 0.01, permisos y RPC de guardado. La key incluye destino y código para no trasladar un borrador de texto entre SPS/TGU. Etiquetas accesibles identifican cada tarifa. Sin cambios al componente compartido, cálculos o SQL.
+- Archivo: `src/app/(protected)/clientes/[id]/page.tsx`.
+- Validación: TypeScript aprobado; 16/16 pruebas existentes de NumberInput, acceso/historial de tarifas y selección Miami aprobadas. Chrome con perfil real y DB/sesión ficticias: borrar cero con teclado, capturar 25.50, normalizar a 25.5 al salir y guardar ambos importes mediante `replace_client_rates` en SPS; ambos campos conservan 80 px, sin errores JavaScript. Evidencia `.ua/intermediate/miami-destination-20261117/rate-zero-browser-report.json`. Lint:ci sin regresiones (213 diagnósticos existentes), build/postbuild OCR y diff --check aprobados.
+- Pendiente: publicación y UAT autenticada. No se modificaron tarifas reales. Commit pendiente; Venex fuera de alcance.

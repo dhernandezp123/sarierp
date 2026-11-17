@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { NumberInput } from '@/src/components/ui/NumberInput'
 import { FormField } from '@/src/components/ui/form-field'
 import { miamiRateDestinationOptions, miamiRateLabel, normalizeMiamiRateDestination, selectMiamiDestinationRates, type MiamiRateDestination } from '@/src/lib/miami-rate-destination'
 import { Trash2 } from 'lucide-react'
@@ -794,7 +795,9 @@ export default function ClienteProfilePage() {
                             </div>
                             <div className="flex shrink-0 items-center gap-1.5">
                               <span className="text-xs text-slate-400 dark:text-slate-500">USD</span>
-                              <input
+                              <NumberInput
+                                key={`${rateDestination}:${rate.code}`}
+                                aria-label={`Tarifa ${miamiRateLabel(rate.label, rateDestination)}`}
                                 type="number"
                                 step="0.01"
                                 value={clientRates[rate.code]?.amount ?? ''}
@@ -836,7 +839,9 @@ export default function ClienteProfilePage() {
                             </div>
                             <div className="flex shrink-0 items-center gap-1.5">
                               <span className="text-xs text-slate-400 dark:text-slate-500">USD</span>
-                              <input
+                              <NumberInput
+                                key={`${rateDestination}:${rate.code}`}
+                                aria-label={`Tarifa ${miamiRateLabel(rate.label, rateDestination)}`}
                                 type="number"
                                 step="0.01"
                                 value={clientRates[rate.code]?.amount ?? ''}
