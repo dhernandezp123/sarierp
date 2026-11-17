@@ -1,6 +1,8 @@
 'use client'
 
 import { NumberInput } from '@/src/components/ui/NumberInput'
+import { miamiRateDestinationOptions, miamiRateLabel } from '@/src/lib/miami-rate-destination'
+import { FormField } from '@/src/components/ui/form-field'
 
 import type React from 'react'
 import { useState } from 'react'
@@ -16,6 +18,7 @@ import {
 
 type MiamiQuotationFormData = {
   cliente_id: string
+  miami_rate_destination?: string
   service_product: string
   incoterm: string
   puerto_origen: string
@@ -78,6 +81,11 @@ export function MiamiQuotationSection({
 
   return (
     <>
+      <FormField label="Destino de la tarifa Miami" className="mt-4 w-full sm:w-64" hint="Aplica solo a esta cotización. La sede y la preferencia habitual del cliente se conservan.">
+        <select name="miami_rate_destination" aria-label="Destino de la tarifa Miami" value={miami.miamiRateDestination} onChange={handleChange} className={fieldClass} disabled={!formData.cliente_id}>
+          {miamiRateDestinationOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </FormField>
       <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">
         Este producto usa tarifas automáticas del cliente y no requiere comparación manual de agentes.
       </div>
@@ -111,7 +119,7 @@ export function MiamiQuotationSection({
                   className="space-y-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-blue-900/40 dark:bg-slate-950/70"
                 >
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                    {rate.rate_label}
+                    {miamiRateLabel(rate.rate_label, miami.miamiRateDestination)}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     USD {Number(rate.amount || 0).toFixed(2)} / {rate.unit || 'flat'}
@@ -131,9 +139,10 @@ export function MiamiQuotationSection({
 
       {formData.cliente_id && !miami.canUseMiamiCalculator && (
         <p role="status" className="mt-4 rounded-xl border border-amber-200 p-4 text-sm text-amber-800 dark:text-amber-200">
-          Este cliente no tiene tarifas Miami activas. Puedes completar la carga, pero para calcular y guardar la tarifa necesita tarifas activas.
+          {miami.ratesLoading ? 'Cargando tarifas del cliente…' : miami.ratesError || `Faltan tarifas de flete o mínimos para ${miami.miamiRateDestination}. Configúralas en el perfil del cliente antes de calcular y guardar.`}
         </p>
       )}
+      {miami.ratesError && <button type="button" onClick={miami.reloadClientRates} className="mt-2 text-sm font-semibold text-red-700 underline">Reintentar tarifas</button>}
       {miami.isMiamiFlow && (
         <div className="mt-4 space-y-5 rounded-2xl border border-blue-200 bg-blue-50/60 p-6 dark:border-blue-900/50 dark:bg-blue-950/20">
           <div className={cardClass}>

@@ -14,6 +14,7 @@ export type ClientRate = {
   valid_from: string | null
   valid_to: string | null
   notes: string | null
+  miami_rate_destination?: string | null
 }
 
 export type SurchargeRule = {

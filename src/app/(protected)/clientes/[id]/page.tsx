@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { FormField } from '@/src/components/ui/form-field'
+import { miamiRateDestinationOptions, miamiRateLabel, normalizeMiamiRateDestination, selectMiamiDestinationRates, type MiamiRateDestination } from '@/src/lib/miami-rate-destination'
 import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -54,6 +56,12 @@ export default function ClienteProfilePage() {
   const [clientNotes, setClientNotes] = useState<any[]>([])
   const [clientRates, setClientRates] = useState<Record<string, ClientRate>>({})
   const [clientRateCatalog, setClientRateCatalog] = useState(defaultClientRateCatalog)
+  const [rateDestination, setRateDestination] = useState<MiamiRateDestination>('SPS')
+  const [ratesLoading, setRatesLoading] = useState(false)
+  const [ratesLoadError, setRatesLoadError] = useState(false)
+  const [ratesDirty, setRatesDirty] = useState(false)
+  const [pendingDestination, setPendingDestination] = useState<MiamiRateDestination | null>(null)
+  const ratesRequest = useRef(0)
   const [savingRates, setSavingRates] = useState(false)
   const [rateHistoryVersion, setRateHistoryVersion] = useState(0)
   const [newNote, setNewNote] = useState('')
@@ -96,7 +104,9 @@ export default function ClienteProfilePage() {
     }
 
     setCliente(data)
-    await loadClientRates(data?.preferred_miami_rate_destination || 'SPS')
+    const preferred = normalizeMiamiRateDestination(data?.preferred_miami_rate_destination)
+    setRateDestination(preferred)
+    await loadClientRates(preferred)
     setLoading(false)
   }
 
@@ -160,8 +170,12 @@ export default function ClienteProfilePage() {
     await fetchClientNotes()
   }
 
-  const loadClientRates = async (activeDestination = 'SPS') => {
+  const loadClientRates = async (activeDestination: MiamiRateDestination = 'SPS') => {
     if (!id) return
+    const request = ++ratesRequest.current
+    setRatesLoading(true)
+    setRatesLoadError(false)
+    setClientRates({})
 
     const { data, error } = await supabase
       .from('client_rates')
@@ -170,22 +184,27 @@ export default function ClienteProfilePage() {
       .eq('is_active', true)
       .or(`miami_rate_destination.is.null,miami_rate_destination.eq.${activeDestination}`)
 
+    if (request !== ratesRequest.current) return
+    setRatesLoading(false)
     if (error) {
+      setRatesLoadError(true)
       toast.error('No se pudieron cargar las tarifas')
       return
     }
 
     const mapped = Object.fromEntries(
-      (data || []).map((rate) => [rate.rate_code, rate])
+      selectMiamiDestinationRates((data || []) as ClientRate[], activeDestination).map((rate) => [rate.rate_code, rate])
     ) as Record<string, ClientRate>
 
     setClientRates(mapped)
+    setRatesDirty(false)
   }
 
   const updateClientRateAmount = (code: string, amount: string) => {
     const catalogItem = clientRateCatalog.find((item) => item.code === code)
     if (!catalogItem) return
 
+    setRatesDirty(true)
     setClientRates((prev) => ({
       ...prev,
       [code]: {
@@ -206,7 +225,7 @@ export default function ClienteProfilePage() {
   }
 
   const saveClientRates = async () => {
-    if (!id) return
+    if (!id || ratesLoading || ratesLoadError) return
     if (!canManageRates) {
       toast.error('No tienes permiso para modificar tarifas del cliente')
       return
@@ -214,8 +233,7 @@ export default function ClienteProfilePage() {
 
     setSavingRates(true)
 
-    const activeDestination =
-      cliente?.preferred_miami_rate_destination === 'TGU' ? 'TGU' : 'SPS'
+    const activeDestination = rateDestination
 
     const rows = clientRateCatalog.map((item) => {
       const existing = clientRates[item.code]
@@ -737,7 +755,17 @@ export default function ClienteProfilePage() {
               </p>
             </div>
 
-            <fieldset disabled={!canManageRates || savingRates} className="grid min-w-0 gap-0 lg:grid-cols-2 lg:divide-x lg:divide-slate-200 dark:lg:divide-slate-700/60">
+            <div className="px-6 py-4">
+              <FormField label="Tarifario a consultar o editar" className="w-full sm:w-64" hint="La preferencia habitual del cliente se conserva. Los otros cargos sin destino son compartidos.">
+                <select aria-label="Tarifario del cliente" className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900" value={rateDestination} disabled={savingRates || ratesLoading}
+                  onChange={e => { const next = normalizeMiamiRateDestination(e.target.value); if (ratesDirty) setPendingDestination(next); else { setRateDestination(next); void loadClientRates(next) } }}>
+                  {miamiRateDestinationOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </FormField>
+              {ratesLoading && <p role="status" className="mt-2 text-sm">Cargando tarifas…</p>}
+              {ratesLoadError && <button className="mt-2 text-sm text-red-600 underline" onClick={() => void loadClientRates(rateDestination)}>No se pudieron cargar las tarifas. Reintentar</button>}
+            </div>
+            <fieldset disabled={!canManageRates || savingRates || ratesLoading || ratesLoadError} className="grid min-w-0 gap-0 lg:grid-cols-2 lg:divide-x lg:divide-slate-200 dark:lg:divide-slate-700/60">
               <legend className="sr-only">Tarifas del cliente</legend>
               <div className="divide-y divide-slate-200 dark:divide-slate-700/60">
                 {Array.from(new Set(clientRateCatalog.map((r) => r.category)))
@@ -758,7 +786,7 @@ export default function ClienteProfilePage() {
                           >
                             <div className="flex min-w-0 items-center gap-2">
                               <span className="truncate text-sm text-slate-700 dark:text-slate-300">
-                                {rate.label}
+                                {miamiRateLabel(rate.label, rateDestination)}
                               </span>
                               <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">
                                 {rate.unit}
@@ -800,7 +828,7 @@ export default function ClienteProfilePage() {
                           >
                             <div className="flex min-w-0 items-center gap-2">
                               <span className="truncate text-sm text-slate-700 dark:text-slate-300">
-                                {rate.label}
+                                {miamiRateLabel(rate.label, rateDestination)}
                               </span>
                               <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:bg-slate-800 dark:text-slate-500">
                                 {rate.unit}
@@ -833,7 +861,7 @@ export default function ClienteProfilePage() {
               {canManageRates && <button
                 type="button"
                 onClick={saveClientRates}
-                disabled={savingRates}
+                disabled={savingRates || ratesLoading || ratesLoadError}
                 className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
               >
                 {savingRates ? 'Guardando...' : 'Guardar tarifas'}
@@ -946,6 +974,7 @@ export default function ClienteProfilePage() {
           </div>
         )}
       </div>
+      <ConfirmDialog open={pendingDestination !== null} onOpenChange={open => { if (!open) setPendingDestination(null) }} title="Cambiar de tarifario" description="Hay cambios sin guardar. Si continúas, se descartarán los cambios de este tarifario." confirmLabel="Descartar y cambiar" onConfirm={() => { if (pendingDestination) { setRateDestination(pendingDestination); void loadClientRates(pendingDestination) } }} />
       <ConfirmDialog
         open={archiveDialogOpen}
         onOpenChange={setArchiveDialogOpen}

@@ -325,6 +325,7 @@ export default function NewQuotationPage() {
         : sourceQuote.quote_type || ''
       setFormData({
         cliente_id: toFormString(sourceQuote.cliente_id),
+        miami_rate_destination: sourceQuote.miami_rate_destination || '',
         trade_direction: sourceQuote.trade_direction || 'import',
         service_product: sourceQuote.service_product || '',
         quote_type: copyQuoteType,
@@ -541,6 +542,7 @@ export default function NewQuotationPage() {
     const updatedData = {
       ...formData,
       cliente_id: clienteId,
+      miami_rate_destination: clienteId === formData.cliente_id ? formData.miami_rate_destination : '',
       requires_insurance: clienteId === formData.cliente_id ? formData.requires_insurance : null,
       insurance_taxable: clienteId === formData.cliente_id && formData.insurance_taxable,
       contact_name: selectedCliente?.contacto || '',
@@ -653,6 +655,10 @@ export default function NewQuotationPage() {
     try {
       setLoading(true)
 
+      if (miami.isMiamiFlow && !miami.canUseMiamiCalculator) {
+        toast.error(miami.ratesError || `Configura las tarifas de ${miami.miamiRateDestination} antes de guardar.`)
+        return
+      }
       const quotationId = crypto.randomUUID()
       const automaticPricing = isCustomsFlow
         ? { items: buildCustomsPricingItems(quotationId, customsCharges, miami.taxRatePercent, companyBranding?.trade_name || 'Sari Express', profile?.id), error: null, insurance: null }
@@ -663,6 +669,7 @@ export default function NewQuotationPage() {
       }
       const quotationPayload = {
         id: quotationId,
+        miami_rate_destination: miami.isMiamiFlow ? miami.miamiRateDestination : null,
         cliente_id: formData.cliente_id,
 
         trade_direction: formData.trade_direction,
@@ -938,6 +945,7 @@ export default function NewQuotationPage() {
 
   const miami = useMiamiQuotation({
     clienteId: formData.cliente_id,
+    rateDestination: formData.miami_rate_destination || clientes.find(cliente => cliente.id === formData.cliente_id)?.preferred_miami_rate_destination,
     serviceProduct: formData.service_product,
     incoterm: formData.incoterm,
     totalCargoFt3,
@@ -1018,6 +1026,7 @@ export default function NewQuotationPage() {
 
     return {
       ...formData,
+      miami_rate_destination: miami.isMiamiFlow ? miami.miamiRateDestination : null,
       id: 'preview',
       requires_insurance: requiresCargoInsurance,
       quotation_number: 'PREVIEW',

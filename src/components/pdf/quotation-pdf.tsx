@@ -1,3 +1,4 @@
+import { miamiRateDestinationLabel } from '@/src/lib/miami-rate-destination'
 import {
   Page,
   Text,
@@ -1028,6 +1029,8 @@ function QuotationPDFPages({
                     <Text style={styles.label}>Destino:</Text>
                     <Text style={styles.value}>{quotation.destino || 'N/A'}</Text>
                   </View>
+
+                  {['miami_lcl', 'miami_air'].includes(quotation.service_product) && quotation.miami_rate_destination && <View style={styles.row}><Text style={styles.label}>Tarifa destino:</Text><Text style={styles.value}>{miamiRateDestinationLabel(quotation.miami_rate_destination)}</Text></View>}
 
                   <View style={styles.row}>
                     <Text style={styles.label}>Incoterm:</Text>

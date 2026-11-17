@@ -1,5 +1,6 @@
 'use client'
 
+import { miamiRateDestinationLabel } from '@/src/lib/miami-rate-destination'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -2458,6 +2459,7 @@ const combinedTimeline: CommercialTimelineEvent[] = [
 
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Destino</p>
+                  {['miami_lcl', 'miami_air'].includes(quotation.service_product) && quotation.miami_rate_destination && <p className="text-xs text-slate-500">Tarifa: {miamiRateDestinationLabel(quotation.miami_rate_destination)}</p>}
                   <p className="font-semibold text-slate-900 dark:text-white">
                     {quotation.destino || 'N/A'}
                   </p>

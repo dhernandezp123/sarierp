@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { supabase } from '@/src/lib/supabase/client'
+import { normalizeMiamiRateDestination, selectMiamiDestinationRates, hasMiamiFreightRates } from '@/src/lib/miami-rate-destination'
 import { calculateMiamiAir } from '@/src/lib/miami-air-calculator'
 import { calculateMiamiLcl } from '@/src/lib/miami-lcl-calculator'
 import { usesClientRates } from '@/src/lib/quotation-products'
@@ -26,6 +26,7 @@ import {
 
 type UseMiamiQuotationParams = {
   clienteId: string
+  rateDestination?: string
   serviceProduct: string
   incoterm: string
   totalCargoFt3: number
@@ -47,6 +48,7 @@ type MiamiExistingPricingItem = {
 
 export function useMiamiQuotation({
   clienteId,
+  rateDestination,
   serviceProduct,
   incoterm,
   totalCargoFt3,
@@ -55,7 +57,17 @@ export function useMiamiQuotation({
   createdBy,
   initialPricingItems = [],
 }: UseMiamiQuotationParams) {
-  const [clientRates, setClientRates] = useState<ClientRate[]>([])
+  const miamiRateDestination = normalizeMiamiRateDestination(rateDestination)
+  const [rateSnapshot, setRateSnapshot] = useState<{ clientId: string; rates: ClientRate[] } | null>(null)
+  const [ratesError, setRatesError] = useState('')
+  const [ratesRevision, setRatesRevision] = useState(0)
+  const reloadClientRates = useCallback(() => {
+    setRateSnapshot(null)
+    setRatesError('')
+    setRatesRevision(value => value + 1)
+  }, [])
+  const clientRates = useMemo(() => selectMiamiDestinationRates(rateSnapshot?.clientId === clienteId ? rateSnapshot.rates : [], miamiRateDestination), [rateSnapshot, clienteId, miamiRateDestination])
+  const ratesLoading = !!clienteId && usesClientRates(serviceProduct) && rateSnapshot?.clientId !== clienteId
   const [surchargeRules, setSurchargeRules] = useState<SurchargeRule[]>([])
   const [taxRatePercent, setTaxRatePercent] = useState(DEFAULT_TAX_RATE_PERCENT)
   const [supplierName, setSupplierName] = useState(getCompanyTradeName(null))
@@ -90,14 +102,28 @@ export function useMiamiQuotation({
   useEffect(() => {
     loadCompanyDefaults()
     loadSurchargeRules(serviceProduct)
+  }, [serviceProduct])
 
+  useEffect(() => {
+    let active = true
+    setRatesError('')
     if (!clienteId || !usesClientRates(serviceProduct)) {
-      setClientRates([])
+      setRateSnapshot(null)
       return
     }
-
-    loadClientRates(clienteId)
-  }, [clienteId, serviceProduct])
+    supabase.from('client_rates').select('*').eq('cliente_id', clienteId).eq('is_active', true)
+      .order('category', { ascending: true }).order('rate_label', { ascending: true })
+      .then(({ data, error }) => {
+        if (!active) return
+        setRateSnapshot({ clientId: clienteId, rates: error ? [] : (data || []) as ClientRate[] })
+        if (error) setRatesError('No se pudieron cargar las tarifas del cliente.')
+      }, () => {
+        if (!active) return
+        setRateSnapshot({ clientId: clienteId, rates: [] })
+        setRatesError('No se pudieron cargar las tarifas del cliente.')
+      })
+    return () => { active = false }
+  }, [clienteId, serviceProduct, ratesRevision])
 
   useEffect(() => {
     let active = true
@@ -120,23 +146,6 @@ export function useMiamiQuotation({
 
     setTaxRatePercent(normalizeTaxRatePercent(data?.default_tax_rate))
     setSupplierName(getCompanyTradeName(data))
-  }
-
-  const loadClientRates = async (clientId: string) => {
-    const { data, error } = await supabase
-      .from('client_rates')
-      .select('*')
-      .eq('cliente_id', clientId)
-      .eq('is_active', true)
-      .order('category', { ascending: true })
-      .order('rate_label', { ascending: true })
-
-    if (error) {
-      toast.error('No se pudieron cargar las tarifas del cliente')
-      return
-    }
-
-    setClientRates((data || []) as ClientRate[])
   }
 
   const loadSurchargeRules = async (product: string) => {
@@ -164,8 +173,8 @@ export function useMiamiQuotation({
     return Number(rate?.amount || 0)
   }
 
-  const getClientRate = (code: string) =>
-    clientRates.find((item) => item.rate_code === code)
+  const getClientRate = useCallback((code: string) =>
+    clientRates.find((item) => item.rate_code === code), [clientRates])
 
   const automaticRateCodes = new Set([
     'small_maritimo_min_lcl_1000_lbs_45_ft3',
@@ -259,7 +268,7 @@ export function useMiamiQuotation({
 
   const isMiamiFlow =
     serviceProduct === 'miami_lcl' || serviceProduct === 'miami_air'
-  const canUseMiamiCalculator = isMiamiFlow && !!clienteId && clientRates.length > 0
+  const canUseMiamiCalculator = isMiamiFlow && !!clienteId && !ratesLoading && !ratesError && hasMiamiFreightRates(clientRates, serviceProduct)
 
   const airResult = calculateMiamiAir(Number(miamiCalc.kg || 0), totalCargoCbm, miamiAirKgRate, surchargeRules)
   const airChargeableKg = airResult.chargeableWeightKg
@@ -565,6 +574,10 @@ export function useMiamiQuotation({
   ])
 
   return {
+    miamiRateDestination,
+    ratesLoading,
+    ratesError,
+    reloadClientRates,
     supplierName,
     clientRates,
     surchargeRules,

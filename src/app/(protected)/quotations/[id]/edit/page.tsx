@@ -132,6 +132,7 @@ export default function EditQuotationPage() {
 
   const [formData, setFormData] = useState({
     cliente_id: '',
+    miami_rate_destination: '',
     status: '',
     service_product: '',
     quote_type: '',
@@ -237,7 +238,7 @@ export default function EditQuotationPage() {
   const fetchClientes = async () => {
     const { data, error } = await supabase
       .from('clientes')
-      .select('id, codigo_cliente, nombre, email_1, telefono, origen_frecuente')
+      .select('id, codigo_cliente, nombre, email_1, telefono, origen_frecuente, preferred_miami_rate_destination')
       .is('deleted_at', null)
       .order('nombre', { ascending: true })
 
@@ -266,6 +267,7 @@ export default function EditQuotationPage() {
     loadedCargo.current.quoteType = data.quote_type || ''
     setFormData({
       cliente_id: data.cliente_id || '',
+      miami_rate_destination: data.miami_rate_destination || '',
       status: data.status || '',
       service_product: data.service_product || '',
       quote_type: data.quote_type || '',
@@ -458,6 +460,7 @@ export default function EditQuotationPage() {
     setFormData((current) => ({
       ...current,
       cliente_id: clienteId,
+      miami_rate_destination: '',
       contact_name: selectedCliente?.contacto || '',
       contact_email: selectedCliente?.email_1 || '',
       contact_phone: selectedCliente?.telefono || '',
@@ -647,6 +650,7 @@ export default function EditQuotationPage() {
     try {
       const quotationPayload = {
         cliente_id: formData.cliente_id,
+        miami_rate_destination: miami.isMiamiFlow ? miami.miamiRateDestination : null,
         service_product: formData.service_product || null,
         quote_type: formData.quote_type,
         valid_until: formData.valid_until || null,
@@ -844,6 +848,7 @@ export default function EditQuotationPage() {
 
   const miami = useMiamiQuotation({
     clienteId: formData.cliente_id,
+    rateDestination: formData.miami_rate_destination || clientes.find(cliente => cliente.id === formData.cliente_id)?.preferred_miami_rate_destination,
     serviceProduct: formData.service_product,
     incoterm: formData.incoterm,
     totalCargoFt3,
