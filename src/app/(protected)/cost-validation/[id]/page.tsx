@@ -1,4 +1,5 @@
 'use client'
+import { FinanceNumberInput as NumberInput } from '@/src/components/ui/FinanceNumberInput'
 
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import Link from 'next/link'
@@ -172,7 +173,7 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
     <section className={cardClass}>
       <h2 className="text-xl font-bold">Registrar factura de proveedor</h2>
       <p className="mt-2 text-sm">Selecciona el cargo cotizado y ajusta cantidad e importe a la factura recibida. Puedes registrar varias facturas por cargo.</p>
-      <form onSubmit={saveInvoice} className="mt-4 grid gap-3 md:grid-cols-2">
+      <form onSubmit={saveInvoice} className="mt-4 finance-field-row gap-3 ">
         <Field label="Cargo cotizado"><select className={fieldClassSm} value={form.pricing_item_id} disabled={busy} onChange={e => selectPricing(e.target.value)}>
           <option value="">Sin vínculo — pendiente de conciliación</option>
           {data.pricing.map(p => <option key={p.id} value={p.id}>{p.description} · {p.supplier || 'Sin proveedor'} · {p.currency}</option>)}
@@ -180,8 +181,8 @@ function CostValidation({ quotationId, userId }: { quotationId: string; userId: 
         <Field label="Proveedor"><input className={fieldClassSm} value={form.supplier} disabled={busy} onChange={e => setForm({ ...form, supplier: e.target.value })} /></Field>
         <Field label="Número de factura"><input className={fieldClassSm} value={form.invoice_number} disabled={busy} onChange={e => setForm({ ...form, invoice_number: e.target.value })} /></Field>
         <Field label="Descripción del cargo"><input required className={fieldClassSm} value={form.description} disabled={busy} onChange={e => setForm({ ...form, description: e.target.value })} /></Field>
-        <Field label="Cantidad facturada"><input required type="number" min="0.000001" step="any" className={fieldClassSm} value={form.quantity} disabled={busy} onChange={e => setForm({ ...form, quantity: e.target.value })} /></Field>
-        <Field label="Costo unitario sin impuesto"><input required type="number" min="0" step="any" className={fieldClassSm} value={form.unit_cost} disabled={busy} onChange={e => setForm({ ...form, unit_cost: e.target.value })} /></Field>
+        <Field label="Cantidad facturada"><NumberInput numericKind="quantity" required type="number" min="0.000001" step="any"  value={form.quantity} disabled={busy} onChange={e => setForm({ ...form, quantity: e.target.value })} /></Field>
+        <Field label="Costo unitario sin impuesto"><NumberInput numericKind="money" required type="number" min="0" step="any"  value={form.unit_cost} disabled={busy} onChange={e => setForm({ ...form, unit_cost: e.target.value })} /></Field>
         <Field label="Moneda"><select className={fieldClassSm} value={form.currency} disabled={busy || !!form.pricing_item_id} onChange={e => setForm({ ...form, currency: e.target.value })}>
           {[...new Set(['USD', 'HNL', ...data.pricing.map(p => costCurrency(p.currency))])].filter(c => c !== 'Sin moneda').map(c => <option key={c}>{c}</option>)}
         </select></Field>

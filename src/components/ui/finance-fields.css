@@ -1,0 +1,22 @@
+/* Financial form geometry: shared control + content-aware row, including nested controls. */
+.finance-number { --finance-number-width: 100%; }
+.finance-field-row { display:flex; flex-wrap:wrap; align-items:flex-start; gap:1rem; }
+.finance-field-row > * { min-width:0; flex:1 1 16rem; }
+.finance-field-row > button { flex:0 0 auto; align-self:flex-end; }
+.finance-field-row > [data-finance-full] { flex-basis:100%; }
+.finance-field-row > :has(input[type="date"], input[type="month"]) { flex:0 1 11rem; }
+@media (min-width:640px) {
+  .finance-number:is([data-finance-numeric="quantity"], [data-finance-numeric="percentage"], [data-finance-numeric="integer"]) { --finance-number-width:7rem; }
+  .finance-number:is([data-finance-numeric="money"], [data-finance-numeric="exchange"]) { --finance-number-width:10rem; }
+  .finance-number[data-finance-numeric="code"] { --finance-number-width:12rem; }
+  .finance-field-row > :has([data-finance-numeric]) { flex:0 1 auto; width:10rem; }
+  .finance-field-row > :has([data-finance-numeric="quantity"], [data-finance-numeric="percentage"], [data-finance-numeric="integer"]) { width:7rem; }
+  .finance-field-row > :has([data-finance-numeric="code"]) { width:12rem; }
+  .finance-field-row > [data-finance-size="quantity"] { flex:0 1 7rem; width:7rem; }
+  .finance-field-row > [data-finance-size="money"] { flex:0 1 10rem; width:10rem; }
+  .finance-field-row > [data-finance-size="choice"] { flex:0 1 11rem; width:11rem; }
+}
+.finance-number[data-finance-presentation="featured"] { --finance-number-width:100%; max-width:20rem !important; }
+@media (max-width:639px) {
+  .finance-field-row > * { flex-basis:100%; width:100%; }
+}

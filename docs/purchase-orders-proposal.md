@@ -11,7 +11,7 @@ Propuesta funcional del 13/11/2026. Primera versión implementada localmente el 
 - La factura desde orden utiliza `create_purchase_document`, con cantidades parciales, descuentos proporcionales y precios/impuestos aprobados. Un reintento no consume dos veces cantidades ni crea otra deuda. Los precios distintos requieren revisar la orden antes de facturar; no se ajustan silenciosamente en la conversión.
 - La anulación fiscal existente recupera cantidades pendientes sin borrar la trazabilidad. Cancelar una orden parcialmente facturada cancela únicamente su remanente; las facturas vinculadas siguen su propio proceso fiscal.
 - Modelo implementado: `purchase_workflow_documents` distingue Solicitud/Orden y guarda snapshots y líneas JSON, como los documentos de compra existentes; `purchase_workflow_events` registra auditoría/idempotencia y `purchase_order_allocations` controla el remanente por línea. Las escrituras se realizan mediante RPC; RLS protege lectura por empresa y permisos. Este modelo reemplaza la separación en cuatro tablas planteada inicialmente, sin duplicar el motor de documentos recibidos.
-- En esta entrega: HNL/USD, equivalencia informativa, condición de pago y vencimiento independientes del proveedor, medios previstos, referencia y CAI del proveedor, fiscalidad mixta/exenta/exonerada/gravada, cuentas y servicios del catálogo, notas internas separadas del PDF.
+- En esta entrega: HNL/USD, equivalencia informativa, condición de pago y vencimiento independientes del proveedor, medios previstos, referencia y CAI del proveedor, fiscalidad mixta/exenta/exonerada/gravada y notas internas separadas del PDF. Ajuste local del 17/11: el detalle utiliza cuentas de gasto del catálogo contable, sin selector de servicios/productos comerciales; publicación de este ajuste pendiente.
 - Pendientes de etapas posteriores: recepción física de mercadería y carga de adjuntos privados. La primera versión no envía correos ni registra pagos desde una solicitud/orden. Las otras monedas y conversión de precios se mantienen como ampliaciones; las facturas vinculadas conservan moneda y tipo de cambio de la orden.
 
 ## Flujo propuesto
@@ -38,7 +38,7 @@ La navegación propuesta es Contabilidad → Compras → pestañas Documentos, S
 | Proveedor | Selección del catálogo existente, contacto y condiciones; conservar snapshot al aprobar. Proveedor opcional en solicitud inicial y obligatorio en orden. |
 | Documento | Número interno, solicitud origen, fecha de emisión y oficina/punto de venta de la empresa; no confundir con punto de emisión de la factura del proveedor. |
 | Fiscal | Mixta/según líneas, Gravada, Exenta y Exonerada. Checkbox Gravable por línea y tasa 15/18 cuando aplique. Distinguir Exenta de Exonerada y permitir respaldo privado. |
-| Líneas | Servicio único, descripción, cantidad, precio, descuento, cuenta de costo/gasto y subtotal/impuesto/total. No utilizar cuentas de ingreso como cuentas de compra. |
+| Líneas | Cuenta de gasto activa que admita movimientos, descripción del gasto, cantidad, costo unitario, descuento y subtotal/impuesto/total. No utilizar el catálogo comercial ni cuentas de ingreso para esta captura. |
 | Condición de pago | Contado o Crédito; días y vencimiento del documento. Los valores del proveedor son defaults, sin modificar su perfil al ajustar una orden. |
 | Medio de pago previsto | Transferencia, Cheque, Efectivo u Otro; referencia y observación. Un medio previsto no registra pago realizado. |
 | Documento del proveedor | Referencia de cotización/factura, CAI de la factura y fecha; opcionales en solicitud/orden y validados al registrar la factura recibida. |
@@ -65,7 +65,7 @@ La navegación propuesta es Contabilidad → Compras → pestañas Documentos, S
 | Necesidad | Implementación existente |
 | --- | --- |
 | Registrar la compra fiscal | `src/app/(protected)/accounting/purchases/page.tsx`, RPC `create_purchase_document` |
-| Proveedores y cuentas | `SupplierExpenseAccountSelect`, `service-accounting.ts`, `useServiceAccounting` |
+| Proveedores y cuentas | Catálogo existente de proveedores y cuentas contables; `purchaseExpenseAccounts` / `selectPurchaseExpenseAccount` en `purchase-workflow.ts` para solicitudes y órdenes. |
 | Oficina emisora | `BillingOfficeSelect`, permisos existentes de oficinas |
 | Cálculos y monedas | `invoiceLineAmounts`, `calculateInvoiceFiscal`, `convertMoney`, `tax.ts`; factorizar las opciones visuales de `InvoiceFiscalOptions` para compra sin reutilizar permisos de cliente |
 | Deuda y ajustes | `src/lib/supplier-payables.ts`, `SupplierPayableDetail`, RPC actuales de Cuentas por Pagar |

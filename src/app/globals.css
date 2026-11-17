@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../components/ui/finance-fields.css";
 
 /* Rich breadcrumbs supplied by a page replace the shell fallback, including
    during loading/navigation. display:none also removes the duplicate from AT. */

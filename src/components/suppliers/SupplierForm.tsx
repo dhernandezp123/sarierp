@@ -1,4 +1,5 @@
 'use client'
+import { FinanceNumberInput as NumberInput } from '@/src/components/ui/FinanceNumberInput'
 
 import { useEffect, useRef, useState } from 'react'
 import { useAccounting } from '@/src/hooks/useAccounting'
@@ -166,7 +167,7 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
 
       <section className={cardClass}>
         <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Condiciones de pago</h2>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="finance-field-row gap-4 ">
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Moneda</label>
             <select value={form.moneda} onChange={set('moneda')} className={fieldClass}>
@@ -175,7 +176,7 @@ export function SupplierForm({onCreated,onCancel,onSavingChange}: {onCreated:(id
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-500">Terminos de pago (dias)</label>
-            <input type="number" min="0" value={form.terminos_pago} onChange={set('terminos_pago')} className={fieldClass} />
+            <NumberInput numericKind="integer" type="number" min="0" value={form.terminos_pago} onChange={set('terminos_pago')}  />
           </div>
           <FormField label="Dirección" className="md:col-span-2"><input maxLength={1000} value={form.direccion} onChange={set('direccion')} className={fieldClass}/></FormField>
           <FormField as="div" label="Cuenta de gasto predeterminada" hint="Se propone en compras nuevas y puede cambiarse por documento o línea." className="md:col-span-2"><SupplierExpenseAccountSelect accounts={accounting.data?.accounts||[]} value={form.default_expense_account_id} onChange={id=>setForm(p=>({...p,default_expense_account_id:id}))} disabled={saving||accounting.loading}/>{accounting.error&&<span role="alert" className="text-xs text-red-600">{accounting.error}</span>}</FormField>

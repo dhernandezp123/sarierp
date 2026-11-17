@@ -1,4 +1,5 @@
 'use client'
+import { FinanceNumberInput as NumberInput } from '@/src/components/ui/FinanceNumberInput'
 
 import { formatSupplierAmount, loadSupplierPayables, supplierPayableIssue, supplierPayableSummary, type SupplierPayable } from '@/src/lib/supplier-payables'
 import { formatDate as fmtDate, formatMoney as fmtMoney } from '@/src/lib/format'
@@ -362,7 +363,7 @@ export default function SupplierDetailPage() {
         {editMode ? (
           <>
             <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Editar proveedor</h2>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="finance-field-row gap-3 ">
               <div className="md:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-slate-500">Nombre</label>
                 <input value={editForm.nombre || ''} onChange={setEF('nombre')} className={fieldClass} />
@@ -378,7 +379,7 @@ export default function SupplierDetailPage() {
               ))}
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Terminos (dias)</label>
-                <input type="number" min="0" value={editForm.terminos_pago ?? 30} onChange={setEF('terminos_pago')} className={fieldClass} />
+                <NumberInput numericKind="integer" type="number" min="0" value={editForm.terminos_pago ?? 30} onChange={setEF('terminos_pago')}  />
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="is_active" checked={editForm.is_active ?? true}
@@ -451,7 +452,7 @@ export default function SupplierDetailPage() {
         {showCPForm && (
           <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
             <h3 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-200">Nueva cuenta por pagar</h3>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="finance-field-row gap-3 ">
               <div className="md:col-span-2">
                 <label className="mb-1 block text-xs font-medium text-slate-500">Cotizacion aprobada relacionada</label>
                 <select value={cpForm.quotation_id} onChange={setCP('quotation_id')} className={fieldClass}>
@@ -477,7 +478,7 @@ export default function SupplierDetailPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Monto <span className="text-red-400">*</span></label>
-                <input type="number" step="0.01" min="0" value={cpForm.monto} onChange={setCP('monto')} className={fieldClass} placeholder="0.00" />
+                <NumberInput numericKind="money" type="number" step="0.01" min="0" value={cpForm.monto} onChange={setCP('monto')}  placeholder="0.00" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Moneda</label>
@@ -489,7 +490,7 @@ export default function SupplierDetailPage() {
                 <label className="mb-1 block text-xs font-medium text-slate-500">Fecha factura</label>
                 <input type="date" value={cpForm.fecha_factura} onChange={setCP('fecha_factura')} className={fieldClass} />
               </div>
-              {cpForm.moneda !== 'HNL' && <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>HNL por {cpForm.moneda}</span><input type="number" min="0.000001" max="1000000" step="0.000001" value={cpForm.tipo_cambio} onChange={setCP('tipo_cambio')} className={fieldClass}/></label>}
+              {cpForm.moneda !== 'HNL' && <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>HNL por {cpForm.moneda}</span><NumberInput numericKind="exchange" type="number" min="0.000001" max="1000000" step="0.000001" value={cpForm.tipo_cambio} onChange={setCP('tipo_cambio')} /></label>}
               <label className="flex min-w-0 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Cuenta de costo / gasto / activo</span><select value={cpForm.expense_account_id} onChange={setCP('expense_account_id')} className={fieldClass}><option value="">Cuenta de compras configurada</option>{accounting?.accounts.filter(a=>a.active&&a.postable&&['Activo','Costo','Gasto'].includes(a.kind)).map(a=><option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select></label>
               <p className="text-sm md:col-span-2">Para varias cuentas por línea, ISV acreditable o boleta fiscal, usa <Link className="text-blue-700 underline" href="/accounting/purchases">Compras y documentos</Link>.</p>
               <div>

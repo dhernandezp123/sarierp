@@ -6,11 +6,11 @@ import { fieldLabelClass, fieldStackClass, formSectionTitleClass } from '@/src/l
  * Usa `as="div"` cuando el control ya tiene su propia etiqueta accesible
  * (CompactSelect, combobox) y no debe recibir los clics de la etiqueta.
  */
-export function FormField({ label, required = false, hint, className = '', as = 'label', children }: {
-  label: ReactNode; required?: boolean; hint?: ReactNode; className?: string; as?: 'label' | 'div'; children: ReactNode
+export function FormField({ label, required = false, hint, className = '', as = 'label', financeSize, children }: {
+  label: ReactNode; required?: boolean; hint?: ReactNode; className?: string; as?: 'label' | 'div'; financeSize?: 'quantity' | 'money' | 'choice'; children: ReactNode
 }) {
   const Tag = as
-  return <Tag className={`${fieldStackClass} ${className}`}>
+  return <Tag className={`${fieldStackClass} ${className}`} data-finance-size={financeSize}>
     <span className={fieldLabelClass}>{label}{required && <span className="text-red-400"> *</span>}</span>
     {children}
     {hint && <span className="text-xs text-slate-500 dark:text-slate-400">{hint}</span>}

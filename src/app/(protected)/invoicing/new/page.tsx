@@ -5,7 +5,7 @@ import { InvoiceLineSettings, InvoiceLineSettingsProvider } from '@/src/componen
 import { calculateInvoiceFiscal, convertMoney, invoiceLineAmounts, type TaxTreatment } from '@/src/lib/invoice-fiscal'
 
 import { formatDate, formatMoney, toDateInputValue } from '@/src/lib/format'
-import { NumberInput } from '@/src/components/ui/NumberInput'
+import { FinanceNumberInput as NumberInput } from '@/src/components/ui/FinanceNumberInput'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
 import { financeLinkClass } from '@/src/components/invoicing/FinanceWorkspace'
 
@@ -874,7 +874,7 @@ export default function NewInvoicePage() {
         <div className="min-w-0 space-y-6 xl:col-span-2">
           <section className={cardClass}>
             <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-white">Datos generales</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="finance-field-row gap-4 ">
               {/* Tipo (bloqueado si viene de NC/ND parent) */}
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
@@ -1035,12 +1035,12 @@ export default function NewInvoicePage() {
                     {isFiscal && <span className="ml-1 text-red-500">*</span>}
                     {isFiscal && <span className="ml-1 text-xs font-normal text-slate-400">— SAR exige total en HNL</span>}
                   </label>
-                  <NumberInput type="number"
+                  <NumberInput numericKind="exchange" invalid={Boolean(submitted && isFiscal && (!exchangeRate || parseFloat(exchangeRate) <= 0))} type="number"
                     value={exchangeRate}
                     onChange={(e) => setExchangeRate(e.target.value)}
                     min="1"
                     step="0.0001"
-                    className={`${fieldClass} ${submitted && isFiscal && (!exchangeRate || parseFloat(exchangeRate) <= 0) ? 'border-red-400' : ''}`}
+
                   />
                 </div>
               )}
@@ -1168,23 +1168,23 @@ export default function NewInvoicePage() {
                   />
                   </label>
                   <label className="flex min-w-0 flex-col gap-1.5 min-w-0 text-xs"><span className={fieldLabelClass}>Cantidad</span>
-                  <NumberInput type="number"
+                  <NumberInput numericKind="quantity" type="number"
                     value={it.quantity}
                     onChange={(e) => updateItem(it.id, 'quantity', e.target.value)}
                     min="0"
                     step="1"
                     readOnly={Boolean(it.source_pricing_item_id)}
-                    className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
+
                   />
                   </label>
                   <label className="flex min-w-0 flex-col gap-1.5 min-w-0 text-xs"><span className={fieldLabelClass}>Precio unitario {currency}</span>
-                  <NumberInput type="number"
+                  <NumberInput numericKind="money" type="number"
                     value={it.unit_price}
                     onChange={(e) => updateItem(it.id, 'unit_price', e.target.value)}
                     min="0"
                     step="0.01"
                     readOnly={Boolean(it.source_pricing_item_id)}
-                    className={`${fieldClass} text-right text-sm read-only:bg-slate-50 read-only:text-slate-600 dark:read-only:bg-slate-800`}
+
                   />
                   </label>
                   <div className="space-y-1">
@@ -1217,7 +1217,7 @@ export default function NewInvoicePage() {
                     </button>
                   )}
                   <label className="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">Descuento de esta línea {conversionNeeded?sourceCurrency:currency}
-                    <NumberInput type="number" aria-label="Descuento de línea" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} className={fieldClass+' max-w-40 text-right'}/>
+                    <NumberInput numericKind="money" type="number" aria-label="Descuento de línea" min="0" step="0.01" value={it.discount_amount??'0'} onChange={e=>updateItem(it.id,'discount_amount',e.target.value)} />
                     <span>Se aplica antes del ISV.</span>
                   </label>
                   <InvoiceLineSettings accountId={it.income_account_id || ''} onAccount={account => updateItem(it.id,'income_account_id',account)} disabled={saving} readonlyService={Boolean(it.source_pricing_item_id)} reference={it.service_catalog_kind&&it.service_catalog_code?{kind:it.service_catalog_kind,code:it.service_catalog_code}:undefined} source={{rateCode:it.source_rate_code,itemType:it.source_item_type,product:it.source_product}} variant={fiscalAccountVariant(['Exenta','Exonerada'].includes(fiscalOptions.mode)?fiscalOptions.mode:it.tax_treatment,it.isv_rate)} onClearService={()=>setItems(previous=>previous.map(item=>item.id===it.id?{...item,service_catalog_kind:undefined,service_catalog_code:undefined}:item))} onService={service => {

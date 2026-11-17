@@ -2,6 +2,20 @@ import { invoiceLineAmounts, calculateInvoiceFiscal, roundMoney, type FiscalMode
 import { calculateTaxAmount } from './tax'
 import type { FiscalIssuer } from '@/src/components/pdf/FiscalDocumentLayout'
 import { parseDateValue, toDateInputValue } from './format'
+import type { AccountingAccount } from './accounting'
+
+export function purchaseExpenseAccounts(accounts: AccountingAccount[]) {
+  return accounts.filter(account => account.kind === 'Gasto' && account.active && account.postable)
+}
+
+export function selectPurchaseExpenseAccount(line: PurchaseWorkflowLine, id: string, accounts: AccountingAccount[]) {
+  const account = purchaseExpenseAccounts(accounts).find(a => a.id === id)
+  if (id && !account) throw new Error('Selecciona una cuenta de gasto activa que admita movimientos.')
+  const previous = accounts.find(a => a.id === line.account_id)
+  return { ...line, account_id: account?.id || null,
+    description: !line.description.trim() || line.description === previous?.name ? account?.name || '' : line.description,
+    service_catalog_kind: null, service_catalog_code: null }
+}
 
 export type PurchaseWorkflowKind = 'Solicitud' | 'Orden'
 export type PurchaseWorkflowStatus = 'Borrador' | 'Pendiente' | 'Aprobada' | 'Rechazada' | 'Cancelada' | 'Parcialmente facturada' | 'Facturada'

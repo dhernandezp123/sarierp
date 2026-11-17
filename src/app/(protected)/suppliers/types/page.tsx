@@ -7,7 +7,7 @@ import { useSupplierTypes, SUPPLIER_TYPES_UPDATED, type SupplierType } from '@/s
 import { useInvoiceMaster } from '@/src/hooks/useInvoiceMaster'
 import { supabase } from '@/src/lib/supabase/client'
 import { FormField, FormSection } from '@/src/components/ui/form-field'
-import { NumberInput } from '@/src/components/ui/NumberInput'
+import { FinanceNumberInput as NumberInput } from '@/src/components/ui/FinanceNumberInput'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
 
@@ -40,10 +40,10 @@ export default function SupplierTypesPage() {
       <Link href="/suppliers" className={secondaryButtonClass}>Ver proveedores</Link></header>
     {isMaster&&<section className={cardClass}><FormSection title={editing?'Editar tipo':'Nuevo tipo'} description="El código identifica el tipo y permanece fijo. El nombre puede actualizarse.">
       <form onSubmit={e=>{e.preventDefault();void persist(editing,form,true)}} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="finance-field-row gap-4  ">
           <FormField label="Código" required><input required maxLength={80} disabled={Boolean(editing)||saving} value={form.code} onChange={e=>setForm(p=>({...p,code:e.target.value}))} className={fieldClass} placeholder="Ej. servicios_generales"/></FormField>
           <FormField label="Nombre" required><input required maxLength={100} disabled={saving} value={form.label} onChange={e=>setForm(p=>({...p,label:e.target.value}))} className={fieldClass} placeholder="Ej. Servicios generales"/></FormField>
-          <FormField label="Orden"><NumberInput min={0} max={100000} step={1} value={form.order} onChange={e=>setForm(p=>({...p,order:e.target.value}))} className={fieldClass}/></FormField>
+          <FormField label="Orden"><NumberInput numericKind="integer" min={0} max={100000} step={1} value={form.order} onChange={e=>setForm(p=>({...p,order:e.target.value}))} /></FormField>
         </div>
         <div className="flex flex-wrap items-center gap-3"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.active} onChange={e=>setForm(p=>({...p,active:e.target.checked}))}/>Activo</label>
           <button type="submit" disabled={saving||catalog.loading||Boolean(catalog.error)} className={primaryButtonClass}><Plus size={16}/>{saving?'Guardando…':'Guardar tipo'}</button>

@@ -6,6 +6,41 @@ import { mountPage } from './page-harness.mjs'
 const workflow = loadTs('src/lib/purchase-workflow.ts')
 const {canAccessPath} = loadTs('src/lib/permissions.ts')
 const {workspaceBreadcrumbs} = loadTs('src/lib/workspace-breadcrumbs.ts')
+const expenseAccounts = [
+  {id:'expense',code:'61901',name:'Mantenimiento de fotocopiadora',kind:'Gasto',active:true,postable:true},
+  {id:'income',code:'41101',name:'Flete',kind:'Ingreso',active:true,postable:true},
+  {id:'group',code:'61',name:'Gastos',kind:'Gasto',active:true,postable:false},
+  {id:'inactive',code:'61902',name:'Gasto inactivo',kind:'Gasto',active:false,postable:true},
+  {id:'asset',code:'11101',name:'Equipo',kind:'Activo',active:true,postable:true},
+]
+test('purchase expense picker excludes income, grouping and inactive accounts',()=>{
+  assert.deepEqual(workflow.purchaseExpenseAccounts(expenseAccounts).map(a=>a.id),['expense'])
+  const line=workflow.selectPurchaseExpenseAccount({...workflow.newPurchaseWorkflowLine(),service_catalog_kind:'service',service_catalog_code:'freight'},'expense',expenseAccounts)
+  assert.equal(line.account_id,'expense');assert.equal(line.description,'Mantenimiento de fotocopiadora')
+  assert.equal(line.service_catalog_kind,null);assert.equal(line.service_catalog_code,null)
+  assert.throws(()=>workflow.selectPurchaseExpenseAccount(line,'income',expenseAccounts))
+  assert.equal(workflow.selectPurchaseExpenseAccount({...line,description:'Detalle escrito por el usuario'},'',expenseAccounts).description,'Detalle escrito por el usuario')
+})
+test('real purchasing editor selects an expense account and sends no commercial service reference',async()=>{
+  const writes=[]
+  const app=mountPage('src/components/accounting/PurchaseWorkflowPage.tsx',{
+    '@/src/lib/supabase/client':{supabase:{}},
+    '@/src/components/pdf/purchase-workflow-pdf':{PurchaseWorkflowPdf:'PurchaseWorkflowPdf'},
+    '@/src/components/pdf/PdfDownloadButton':{PdfDownloadButton:'PdfDownloadButton'},
+    '@/src/components/ui/UnsavedChangesGuard':{UnsavedChangesGuard:'Guard',markFormSaved(){},requestFormNavigation(fn){fn()}},
+  },{exported:'PurchaseWorkflowEditor',props:{kind:'Solicitud',suppliers:[],accounts:expenseAccounts,busy:false,onCancel(){},onSave:form=>writes.push(form)}})
+  try {
+    await app.ready()
+    const picker=app.find(n=>n.props?.['aria-label']==='Cuenta de gasto')
+    assert.deepEqual(picker.props.options.filter(o=>o.value).map(o=>o.value),['expense'])
+    assert.equal(app.find(n=>n.props?.['aria-label']==='Servicio de catálogo'),undefined)
+    picker.props.onValueChange('expense');app.render()
+    assert.ok(app.find(n=>n.type==='input'&&n.props.value==='Mantenimiento de fotocopiadora'))
+    app.find(n=>n.type==='form').props.onSubmit({preventDefault(){}})
+    assert.equal(writes[0].items[0].account_id,'expense')
+    assert.equal(writes[0].items[0].service_catalog_code,null)
+  } finally {app.cleanup()}
+})
 const base = { id:'order', kind:'Orden', document_number:'OC-FIXTURE', status:'Aprobada', revision:3,
   supplier_snapshot:{name:'Proveedor ficticio'}, currency:'HNL', total:115, issue_date:'2026-11-16',due_date:'2026-12-16',
   items:[{id:'line',description:'Compra ficticia',quantity:3,unit_price:100,discount_amount:1,tax_rate:15,tax_treatment:'Gravada'}],

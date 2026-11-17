@@ -1,4 +1,5 @@
 'use client'
+import { FinanceMoneyTextInput } from '@/src/components/ui/FinanceNumberInput'
 
 import { supabase } from '@/src/lib/supabase/client'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
@@ -321,7 +322,7 @@ export function ManualInvoiceEditor() {
             <div className={cardClass}><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">Description of Charges</h3><button aria-label="Agregar cargo" className={secondaryButtonClass} disabled={Boolean(busy) || data.items.length >= 100} onClick={() => change({ ...data, items: [...data.items, { description: '', amount: '' }] })}><Plus size={16} /></button></div>
               <div className="space-y-3">{data.items.map((item, index) => <div key={index} className="flex flex-wrap items-end gap-2">
                 <label className="flex min-w-[180px] flex-1 flex-col gap-1.5 text-sm"><span className={fieldLabelClass}>Descripción {index + 1}</span><input value={item.description} maxLength={180} disabled={Boolean(busy)} className={`${fieldClassSm} !bg-amber-50 dark:!bg-amber-950/30`} onChange={(event) => change({ ...data, items: data.items.map((line, n) => n === index ? { ...line, description: event.target.value } : line) })} /></label>
-                <label className="flex min-w-0 flex-col gap-1.5 w-32 text-sm"><span className={fieldLabelClass}>Importe USD</span><input inputMode="decimal" value={item.amount} disabled={Boolean(busy)} maxLength={20} placeholder="3,300.00" className={`${fieldClassSm} !bg-amber-50 dark:!bg-amber-950/30`} onChange={(event) => change({ ...data, items: data.items.map((line, n) => n === index ? { ...line, amount: event.target.value } : line) })} /></label>
+                <label className="flex min-w-0 flex-col gap-1.5 w-full sm:w-40 text-sm"><span className={fieldLabelClass}>Importe USD</span><FinanceMoneyTextInput value={item.amount} disabled={Boolean(busy)} maxLength={20} placeholder="3,300.00" onChange={(event) => change({ ...data, items: data.items.map((line, n) => n === index ? { ...line, amount: event.target.value } : line) })} /></label>
                 <button className="rounded-lg p-2 text-red-600 hover:bg-red-50" aria-label={`Eliminar cargo ${index + 1}`} disabled={Boolean(busy) || data.items.length === 1} onClick={() => change({ ...data, items: data.items.filter((_, n) => n !== index) })}><Trash2 size={18} /></button>
               </div>)}</div>
               <label className="flex min-w-0 flex-col gap-1.5 mt-4 text-sm"><span className={fieldLabelClass}>Warehouse Receipts (un WR por línea, sin el prefijo WR #)</span><textarea rows={5} disabled={Boolean(busy)} className={`${fieldClassSm} h-auto py-2 !bg-amber-50 dark:!bg-amber-950/30`} value={data.warehouse_receipts.join('\n')} onChange={(event) => change({ ...data, warehouse_receipts: event.target.value.split('\n') })} /></label>

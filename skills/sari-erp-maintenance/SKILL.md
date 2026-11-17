@@ -73,3 +73,7 @@ Registra cada fix en `HARDENING.md` con ID, estado, archivos/SQL, validaciones,
 pendientes y hash cuando exista. Informa qué quedó comprobado y qué requiere UAT;
 no declares completado un flujo que no se haya probado. Describe los límites
 reales de cobertura de una revisión, aunque TypeScript y build estén verdes.
+
+Los campos financieros deben usar el estándar técnico `FinanceNumberInput` de las
+convenciones de UI. Ejecuta `npm run check:finance-ui`; no añadas exclusiones ni
+controles numéricos genéricos para eludir el verificador de CI/prebuild.
