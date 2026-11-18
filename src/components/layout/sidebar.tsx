@@ -18,7 +18,7 @@ import {
   LayoutDashboard, LogOut, Users, FileText, ActivitySquare, CalendarClock,
   Scale, DollarSign, BarChart3, Building2, Database, Route, Bell, Receipt,
   Package, ClipboardList, Warehouse, ShieldCheck, ShoppingBag, CreditCard,
-  ShieldAlert, Mail, LifeBuoy, ChevronDown, Plus, type LucideIcon,
+  ShieldAlert, Mail, LifeBuoy, UserRound, CalendarDays, IdCard, ChevronDown, Plus, type LucideIcon,
 } from 'lucide-react'
 
 type NavItem = { label: string; href: string; icon: LucideIcon; exact?: boolean }
@@ -271,6 +271,12 @@ export default function Sidebar({ role }: { role?: string }) {
   ]
 
 
+  const hrItems = [
+    { label: 'Empleados', href: '/rrhh', icon: UserRound, exact: true },
+    { label: 'Vacaciones y permisos', href: '/rrhh/solicitudes', icon: CalendarDays },
+    { label: 'Mi ficha', href: '/rrhh/mi-ficha', icon: IdCard },
+  ]
+
   const generalPaths = ['/dashboard', '/alerts', '/reports']
   const groups = [
     { id: 'commercial', label: 'Comercial', items: navItems.filter((item) => ![...generalPaths, '/quotations/new', '/support'].includes(item.href)) },
@@ -278,6 +284,7 @@ export default function Sidebar({ role }: { role?: string }) {
     { id: 'operations', label: 'Operaciones', items: operationsItems },
     { id: 'miami', label: 'Bodega Miami', items: miamiItems },
     { id: 'finance', label: 'Finanzas', items: [...financialItems, ...purchaseItems] },
+    { id: 'hr', label: 'Recursos Humanos', items: hrItems },
     { id: 'admin', label: 'Administración', items: adminItems },
   ].map((group) => ({ ...group, items: group.items.filter((item) => canAccessPath(currentRole, item.href)) }))
     .filter((group) => group.items.length)
