@@ -18,7 +18,7 @@ import {
   LayoutDashboard, LogOut, Users, FileText, ActivitySquare, CalendarClock,
   Scale, DollarSign, BarChart3, Building2, Database, Route, Bell, Receipt,
   Package, ClipboardList, Warehouse, ShieldCheck, ShoppingBag, CreditCard,
-  ShieldAlert, Mail, LifeBuoy, UserRound, CalendarDays, IdCard, ChevronDown, Plus, type LucideIcon,
+  ShieldAlert, Mail, LifeBuoy, UserRound, CalendarDays, IdCard, CalendarCog, ChevronDown, Plus, type LucideIcon,
 } from 'lucide-react'
 
 type NavItem = { label: string; href: string; icon: LucideIcon; exact?: boolean }
@@ -274,6 +274,7 @@ export default function Sidebar({ role }: { role?: string }) {
   const hrItems = [
     { label: 'Empleados', href: '/rrhh', icon: UserRound, exact: true },
     { label: 'Vacaciones y permisos', href: '/rrhh/solicitudes', icon: CalendarDays },
+    { label: 'Calendario y reglas', href: '/rrhh/configuracion', icon: CalendarCog },
     { label: 'Mi ficha', href: '/rrhh/mi-ficha', icon: IdCard },
   ]
 

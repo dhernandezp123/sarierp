@@ -12,7 +12,7 @@ const leaves:Record<string,Record<string,string>>={
  accounting:{accounts:'Catálogo de cuentas',journal:'Asientos contables',purchases:'Compras y documentos','purchase-requests':'Solicitudes de compra','purchase-orders':'Órdenes de compra',receivables:'Cuentas por cobrar','supplier-statements':'Estado de proveedores',banks:'Caja y bancos',voids:'Anulaciones',books:'Libros y balances',assets:'Activos',settings:'Configuración y períodos'},
  invoicing:{new:'Preparar documento',drafts:'Borradores',collections:'Cobranza y recibos',statements:'Estados de cuenta',voids:'Anulaciones'},
  settings:{company:'Empresa y facturación',cai:'Rangos CAI','mail-intake':'Recepción de correo',connections:'Conexiones'},
- rrhh:{solicitudes:'Vacaciones y permisos','mi-ficha':'Mi ficha'},
+ rrhh:{solicitudes:'Vacaciones y permisos','mi-ficha':'Mi ficha',configuracion:'Calendario y reglas'},
  reports:{'client-operations':'Operaciones por cliente'},admin:{users:'Usuarios'},
  operations:{'shipping-instructions':'Instrucciones de embarque',bookings:'Bookings',garantias:'Garantías'},
  miami:{inventario:'Inventario',embarques:'Embarques',manifiestos:'Manifiestos',ingreso:'Ingreso individual'},

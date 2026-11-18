@@ -84,8 +84,7 @@ select pg_temp.assert_true(public.hr_request_leave('e401aaaa-0000-4000-8000-0000
 select pg_temp.expect_error(format($$select public.hr_request_leave('e401aaaa-0000-4000-8000-000000000001', %L, 'Vacaciones', '2026-11-16', '2026-11-19')$$, (select id from ids where name='emp')), 'otros datos', 'identificador reutilizado');
 select pg_temp.expect_error(format($$select public.hr_request_leave(gen_random_uuid(), %L, 'Permiso con goce', '2026-11-18', '2026-11-18')$$, (select id from ids where name='emp')), 'esas fechas', 'sin traslapes');
 select pg_temp.expect_error(format($$select public.hr_request_leave(gen_random_uuid(), %L, 'Vacaciones', '2026-11-23', '2026-11-30')$$, (select id from ids where name='emp')), 'Saldo', 'pendientes reservan saldo');
-select pg_temp.expect_error(format($$select public.hr_request_leave(gen_random_uuid(), %L, 'Vacaciones', '2026-12-30', '2027-01-04')$$, (select id from ids where name='emp')), 'año calendario', 'no cruza años');
-select pg_temp.expect_error(format($$select public.hr_request_leave(gen_random_uuid(), %L, 'Permiso con goce', '2026-11-21', '2026-11-22')$$, (select id from ids where name='emp')), 'habiles', 'fin de semana no cuenta');
+select pg_temp.expect_error(format($$select public.hr_request_leave(gen_random_uuid(), %L, 'Permiso con goce', '2026-11-21', '2026-11-22')$$, (select id from ids where name='emp')), 'laborables', 'fin de semana no cuenta');
 select pg_temp.expect_error(format($$select public.hr_request_leave(gen_random_uuid(), %L, 'Vacaciones', '2026-12-01', '2026-12-01')$$, (select id from ids where name='boss')), 'no disponible', 'no solicita por otro empleado');
 select pg_temp.expect_error(format($$select public.hr_review_leave(%L, 'Aprobada')$$, (select id from ids where name='r1')), 'No autorizado', 'empleado no se aprueba');
 select pg_temp.as_user(3);

@@ -7,11 +7,11 @@ import { useUser } from '@/src/hooks/useUser'
 import { readAllReportRows } from '@/src/lib/report-query'
 import { formatDate } from '@/src/lib/format'
 import { cardClass, primaryButtonClass } from '@/src/lib/ui-classes'
-import { canManageHr, canUseHrSelfService, employeeFullName, vacationBalance, type HrEmployee, type HrLeaveRequest } from '@/src/lib/hr'
+import { canManageHr, canUseHrSelfService, employeeFullName, vacationTotals, workScheduleLabel, type HrEmployee, type HrLeaveRequest, type HrVacationPeriod } from '@/src/lib/hr'
 import { FinancePageHeader, FinanceMetric } from '@/src/components/invoicing/FinanceWorkspace'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
-import { HrNavigation, LeaveRequestDialog, LeaveStatusBadge, formatLeaveRange, useScopedLoad } from './HrShared'
+import { HrNavigation, LeaveFlags, LeaveRequestDialog, LeaveStatusBadge, VacationPeriodsTable, formatLeaveRange, useScopedLoad } from './HrShared'
 
 export function MyHrPage() {
   const { user, profile, loading: userLoading } = useUser()
@@ -20,18 +20,21 @@ export function MyHrPage() {
   const loader = useCallback(async () => {
     const { data: employee, error } = await supabase.from('hr_employees').select('*').eq('tenant_id', tenant).eq('profile_id', userId).maybeSingle<HrEmployee>()
     if (error) throw new Error('No se pudo cargar tu ficha. Reintenta la consulta.')
-    if (!employee) return { employee: null, requests: [] as HrLeaveRequest[], manager: null as string | null }
-    const [requests, manager] = await Promise.all([
+    if (!employee) return { employee: null, requests: [] as HrLeaveRequest[], periods: [] as HrVacationPeriod[], manager: null as string | null }
+    const [requests, periods, manager] = await Promise.all([
       readAllReportRows<HrLeaveRequest>((a, b) => supabase.from('hr_leave_requests').select('*').eq('employee_id', employee.id).order('start_date', { ascending: false }).order('id').range(a, b), { label: 'tus solicitudes' }),
+      supabase.rpc('hr_vacation_periods', { p_employee_id: employee.id }).then(result => {
+        if (result.error) throw new Error('No se pudo cargar tu saldo de vacaciones. Reintenta la consulta.')
+        return result.data as HrVacationPeriod[]
+      }),
       // RLS no expone la ficha del jefe; la RPC devuelve solo su nombre.
       employee.manager_id ? supabase.rpc('hr_employee_manager_name', { p_employee_id: employee.id }).then(result => (result.data as string | null) || null) : Promise.resolve(null),
     ])
-    return { employee, requests, manager }
+    return { employee, requests, periods, manager }
   }, [tenant, userId])
   const { data, error, loading, reload } = useScopedLoad(context, allowed && !!tenant && !!userId, loader)
   const [requesting, setRequesting] = useState(false)
   const [cancelling, setCancelling] = useState<HrLeaveRequest | null>(null)
-  const year = new Date().getFullYear()
 
   async function cancel(request: HrLeaveRequest) {
     setCancelling(null)
@@ -43,7 +46,8 @@ export function MyHrPage() {
 
   if (userLoading) return null
   if (!allowed) return <div className={cardClass}>Tu usuario no tiene acceso al autoservicio de Recursos Humanos.</div>
-  const employee = data?.employee, balance = employee ? vacationBalance(employee, data.requests, year) : null
+  const employee = data?.employee, totals = employee ? vacationTotals(data.periods) : null
+  const pending = data?.periods.reduce((sum, period) => sum + period.pending, 0) ?? 0
 
   return <div className="space-y-6">
     <FinancePageHeader eyebrow="Recursos Humanos" title="Mi ficha" icon={IdCard} description="Tus datos laborales, saldo de vacaciones y solicitudes."
@@ -53,12 +57,18 @@ export function MyHrPage() {
     {loading ? <p className="py-10 text-center text-sm text-slate-500">Cargando tu ficha…</p>
       : !employee ? <div className={cardClass}><EmptyState title="Tu usuario no tiene ficha vinculada" description="Pide a Administración que vincule tu usuario del ERP a tu ficha de empleado." /></div>
         : <>
-          {balance && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <FinanceMetric label={`Vacaciones ${year}`} value={`${balance.allowance} días`} icon={CalendarDays} />
-            <FinanceMetric label="Tomadas" value={`${balance.used} días`} icon={CalendarCheck} tone="emerald" />
-            <FinanceMetric label="Pendientes de aprobación" value={`${balance.pending} días`} icon={CalendarClock} tone="amber" />
-            <FinanceMetric label="Disponibles" value={`${balance.available} días`} icon={CalendarPlus} />
+          {totals && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <FinanceMetric label="Disponibles" value={`${totals.available} días`} icon={CalendarPlus} detail="Períodos ganados, menos lo tomado y lo reservado" />
+            <FinanceMetric label="Pendientes de aprobación" value={`${pending} días`} icon={CalendarClock} tone="amber" />
+            <FinanceMetric label="Anticipo usado" value={`${totals.advance} días`} icon={CalendarCheck} tone="rose" detail={totals.advance ? 'Se descontará del próximo período' : undefined} />
+            <FinanceMetric label="Próximo período" value={totals.nextEarnedOn ? formatDate(totals.nextEarnedOn) : '—'} icon={CalendarDays}
+              detail={totals.nextEntitlement ? `${totals.nextEntitlement} días laborables como mínimo (Art. 346)` : undefined} />
           </div>}
+          <section className={cardClass}>
+            <h2 className="mb-1 text-sm font-semibold text-slate-900 dark:text-white">Mis períodos de vacaciones</h2>
+            <p className="mb-4 text-xs text-slate-500">Jornada: {workScheduleLabel(employee.work_schedule)}. Se gana un período en cada aniversario de ingreso.</p>
+            <VacationPeriodsTable periods={data.periods} />
+          </section>
           <section className={cardClass}>
             <h2 className="mb-4 text-sm font-semibold text-slate-900 dark:text-white">{employeeFullName(employee)} · {employee.employee_code}</h2>
             <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
@@ -77,7 +87,7 @@ export function MyHrPage() {
                 <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700">
                   <th className="py-2 pr-4">Tipo</th><th className="py-2 pr-4">Fechas</th><th className="py-2 pr-4 text-right">Días</th><th className="py-2 pr-4">Estado</th><th className="py-2" /></tr></thead>
                 <tbody>{data.requests.map(request => <tr key={request.id} className="border-b border-slate-100 align-top dark:border-slate-800">
-                  <td className="py-3 pr-4">{request.leave_type}{request.reason && <p className="text-xs text-slate-500">{request.reason}</p>}</td>
+                  <td className="py-3 pr-4">{request.leave_type}<LeaveFlags request={request} />{request.reason && <p className="text-xs text-slate-500">{request.reason}</p>}</td>
                   <td className="py-3 pr-4 whitespace-nowrap">{formatLeaveRange(request.start_date, request.end_date)}</td>
                   <td className="py-3 pr-4 text-right">{request.business_days}</td>
                   <td className="py-3 pr-4"><LeaveStatusBadge status={request.status} />{request.review_notes && <p className="mt-1 text-xs text-slate-500">{request.review_notes}</p>}</td>
@@ -86,7 +96,7 @@ export function MyHrPage() {
               </table></div>}
           </section>
         </>}
-    {requesting && employee && balance && <LeaveRequestDialog employeeId={employee.id} employeeName={employeeFullName(employee)} availableFor={target => vacationBalance(employee, data.requests, target).available}
+    {requesting && employee && <LeaveRequestDialog employeeId={employee.id} employeeName={employeeFullName(employee)}
       onClose={() => setRequesting(false)} onSaved={() => { setRequesting(false); void reload() }} />}
     <ConfirmDialog open={!!cancelling} onOpenChange={open => { if (!open) setCancelling(null) }} title="Cancelar solicitud"
       description={cancelling ? `${cancelling.leave_type} · ${formatLeaveRange(cancelling.start_date, cancelling.end_date)}. Los días reservados vuelven a tu saldo.` : ''}

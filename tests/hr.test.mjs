@@ -7,11 +7,10 @@ const permissions = loadTs('src/lib/permissions.ts')
 const crumbs = loadTs('src/lib/workspace-breadcrumbs.ts')
 
 test('RRHH: Admin administra y cualquier usuario interno accede solo a su ficha', () => {
-  for (const path of ['/rrhh', '/rrhh/solicitudes', '/rrhh/mi-ficha']) assert.equal(permissions.canAccessPath('Admin', path), true, path)
+  for (const path of ['/rrhh', '/rrhh/solicitudes', '/rrhh/configuracion', '/rrhh/mi-ficha']) assert.equal(permissions.canAccessPath('Admin', path), true, path)
   for (const role of ['Ventas', 'Pricing', 'Operaciones', 'Contabilidad', 'Finanzas']) {
     assert.equal(permissions.canAccessPath(role, '/rrhh/mi-ficha'), true, role)
-    assert.equal(permissions.canAccessPath(role, '/rrhh'), false, role)
-    assert.equal(permissions.canAccessPath(role, '/rrhh/solicitudes'), false, role)
+    for (const path of ['/rrhh', '/rrhh/solicitudes', '/rrhh/configuracion']) assert.equal(permissions.canAccessPath(role, path), false, `${role} ${path}`)
   }
   for (const role of ['Cliente', 'Desconocido', '', null]) assert.equal(permissions.canAccessPath(role, '/rrhh/mi-ficha'), false, String(role))
 })
@@ -26,49 +25,44 @@ test('RRHH: permisos de UI exigen perfil aprobado y activo', () => {
   assert.equal(hr.canUseHrSelfService(null), false)
 })
 
-test('RRHH: días hábiles excluyen fines de semana', () => {
-  assert.equal(hr.hrBusinessDays('2026-11-16', '2026-11-20'), 5) // lunes a viernes
-  assert.equal(hr.hrBusinessDays('2026-11-20', '2026-11-23'), 2) // viernes a lunes
-  assert.equal(hr.hrBusinessDays('2026-11-21', '2026-11-22'), 0) // fin de semana
-  assert.equal(hr.hrBusinessDays('2026-11-20', '2026-11-19'), 0)
-  assert.equal(hr.hrBusinessDays('2026-12-28', '2027-01-01'), 5)
+test('RRHH: escala legal del Art. 346', () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 12].map(hr.legalVacationDays), [10, 12, 15, 20, 20, 20])
 })
 
-test('RRHH: saldo de vacaciones reserva pendientes y solo cuenta el año', () => {
-  const employee = { id: 'e1', vacation_days_per_year: 10 }
-  const base = { reason: '', review_notes: '', reviewed_at: null, created_at: '' }
-  const requests = [
-    { ...base, id: 'a', employee_id: 'e1', leave_type: 'Vacaciones', status: 'Aprobada', start_date: '2026-03-02', end_date: '2026-03-04', business_days: 3 },
-    { ...base, id: 'b', employee_id: 'e1', leave_type: 'Vacaciones', status: 'Pendiente', start_date: '2026-12-01', end_date: '2026-12-02', business_days: 2 },
-    { ...base, id: 'c', employee_id: 'e1', leave_type: 'Vacaciones', status: 'Rechazada', start_date: '2026-05-04', end_date: '2026-05-08', business_days: 5 },
-    { ...base, id: 'd', employee_id: 'e1', leave_type: 'Incapacidad', status: 'Aprobada', start_date: '2026-06-01', end_date: '2026-06-05', business_days: 5 },
-    { ...base, id: 'e', employee_id: 'e1', leave_type: 'Vacaciones', status: 'Aprobada', start_date: '2025-06-02', end_date: '2025-06-06', business_days: 5 },
-    { ...base, id: 'f', employee_id: 'e2', leave_type: 'Vacaciones', status: 'Aprobada', start_date: '2026-06-01', end_date: '2026-06-05', business_days: 5 },
+test('RRHH: totales por período descuentan el anticipo del siguiente', () => {
+  const base = { ends_on: '', entitlement: 0, adjustments: 0, approved: 0, pending: 0, accumulated: false, overdue_unscheduled: false, expired_unused: false }
+  const periods = [
+    { ...base, period_number: 1, earned_on: '2025-03-01', is_earned: true, available: 2 },
+    { ...base, period_number: 2, earned_on: '2026-03-01', is_earned: true, available: 4 },
+    { ...base, period_number: 3, earned_on: '2027-03-01', is_earned: false, available: -3 },
   ]
-  assert.deepEqual(hr.vacationBalance(employee, requests, 2026), { allowance: 10, used: 3, pending: 2, available: 5 })
+  assert.deepEqual(hr.vacationTotals(periods), { available: 3, advance: 3, nextEarnedOn: '2027-03-01', nextEntitlement: 15 })
+  assert.deepEqual(hr.vacationTotals([{ ...base, period_number: 1, earned_on: '2027-01-06', is_earned: false, available: 0 }]),
+    { available: 0, advance: 0, nextEarnedOn: '2027-01-06', nextEntitlement: 10 })
 })
 
-test('RRHH: el saldo se calcula por el año de la solicitud, no por el año en curso', () => {
-  const employee = { id: 'e1', vacation_days_per_year: 10 }
-  const base = { employee_id: 'e1', leave_type: 'Vacaciones', status: 'Aprobada', reason: '', review_notes: '', reviewed_at: null, created_at: '' }
-  const requests = [{ ...base, id: 'a', start_date: '2026-02-02', end_date: '2026-02-13', business_days: 10 }]
-  assert.equal(hr.vacationBalance(employee, requests, 2026).available, 0)
-  const available2027 = hr.vacationBalance(employee, requests, 2027).available
-  assert.equal(available2027, 10)
-  assert.equal(hr.validateLeaveRequest({ leave_type: 'Vacaciones', start_date: '2027-01-04', end_date: '2027-01-08' }, available2027), '')
+test('RRHH: Pascua y sugerencias del Art. 339', () => {
+  assert.equal(hr.easterSunday(2026), '2026-04-05')
+  assert.equal(hr.easterSunday(2027), '2027-03-28')
+  assert.equal(hr.easterSunday(2025), '2025-04-20')
+  const days = hr.suggestedHolidays(2026)
+  assert.equal(days.length, 11)
+  assert.deepEqual(days.filter(item => /Santo|Gloria/.test(item.name)).map(item => item.date), ['2026-04-02', '2026-04-03', '2026-04-04'])
+  assert.deepEqual(days.map(item => item.date), [...days.map(item => item.date)].sort())
+  // Semana Santa que cruza de mes.
+  assert.deepEqual(hr.suggestedHolidays(2027).filter(item => /Santo|Gloria/.test(item.name)).map(item => item.date), ['2027-03-25', '2027-03-26', '2027-03-27'])
 })
 
-test('RRHH: validación de solicitud', () => {
-  assert.match(hr.validateLeaveRequest({ leave_type: 'Vacaciones', start_date: '', end_date: '' }, 10), /fechas/)
-  assert.match(hr.validateLeaveRequest({ leave_type: 'Vacaciones', start_date: '2026-11-20', end_date: '2026-11-19' }, 10), /anterior/)
-  assert.match(hr.validateLeaveRequest({ leave_type: 'Vacaciones', start_date: '2026-12-30', end_date: '2027-01-04' }, 10), /año calendario/)
-  assert.match(hr.validateLeaveRequest({ leave_type: 'Permiso con goce', start_date: '2026-11-21', end_date: '2026-11-22' }, 10), /días hábiles/)
-  assert.match(hr.validateLeaveRequest({ leave_type: 'Vacaciones', start_date: '2026-11-16', end_date: '2026-11-20' }, 4), /Saldo insuficiente/)
-  assert.equal(hr.validateLeaveRequest({ leave_type: 'Incapacidad', start_date: '2026-11-16', end_date: '2026-11-20' }, 0), '')
-  assert.equal(hr.validateLeaveRequest({ leave_type: 'Vacaciones', start_date: '2026-11-16', end_date: '2026-11-20' }, 5), '')
+test('RRHH: jornada y validación de fechas', () => {
+  assert.equal(hr.workScheduleLabel('L-S medio'), 'Lunes a viernes y sábado medio día')
+  assert.equal(hr.workScheduleLabel(undefined), 'Lunes a viernes')
+  assert.match(hr.validateLeaveDates('', ''), /fechas/)
+  assert.match(hr.validateLeaveDates('2026-11-20', '2026-11-19'), /anterior/)
+  assert.equal(hr.validateLeaveDates('2026-12-30', '2027-01-04'), '')
 })
 
 test('RRHH: breadcrumbs no enlazan la raíz restringida', () => {
   assert.deepEqual(crumbs.workspaceBreadcrumbs('/rrhh/mi-ficha').map(crumb => crumb.label), ['Inicio', 'Recursos Humanos', 'Mi ficha'])
   assert.equal(crumbs.workspaceBreadcrumbs('/rrhh/mi-ficha')[1].href, undefined)
+  assert.equal(crumbs.workspaceBreadcrumbs('/rrhh/configuracion').at(-1).label, 'Calendario y reglas')
 })

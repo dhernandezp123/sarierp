@@ -1,13 +1,13 @@
 'use client'
 import { useCallback, useMemo, useState } from 'react'
-import { Plus, UserRound } from 'lucide-react'
+import { CalendarRange, Plus, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { readAllReportRows } from '@/src/lib/report-query'
 import { formatDate, toDateInputValue } from '@/src/lib/format'
 import { cardClass, fieldClass, fieldClassSm, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
-import { HR_CONTRACT_TYPES, canManageHr, employeeFullName, vacationBalance, type HrContractType, type HrEmployee, type HrLeaveRequest } from '@/src/lib/hr'
+import { HR_CONTRACT_TYPES, HR_WORK_SCHEDULES, canManageHr, employeeFullName, workScheduleLabel, type HrContractType, type HrEmployee, type HrVacationSummary, type HrWorkSchedule } from '@/src/lib/hr'
 import { FinancePageHeader } from '@/src/components/invoicing/FinanceWorkspace'
 import { FormField, FormSection } from '@/src/components/ui/form-field'
 import { CompactSelect } from '@/src/components/ui/CompactSelect'
@@ -15,21 +15,22 @@ import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/src/components/ui/dialog'
 import { HrNavigation, LeaveRequestDialog, useScopedLoad } from './HrShared'
+import { VacationDetailDialog } from './VacationDetailDialog'
 
 type LinkableProfile = { id: string; nombre: string | null; apellido: string | null; email: string | null; rol: string }
-type Resources = { employees: HrEmployee[]; requests: HrLeaveRequest[]; profiles: LinkableProfile[] }
-type EmployeeForm = Omit<HrEmployee, 'id' | 'tenant_id' | 'revision' | 'vacation_days_per_year' | 'birth_date' | 'termination_date' | 'profile_id' | 'manager_id'>
-  & { vacation_days_per_year: string; birth_date: string; termination_date: string; profile_id: string; manager_id: string }
+type Resources = { employees: HrEmployee[]; summary: Map<string, HrVacationSummary>; profiles: LinkableProfile[] }
+type EmployeeForm = Omit<HrEmployee, 'id' | 'tenant_id' | 'revision' | 'vacation_days_override' | 'birth_date' | 'termination_date' | 'profile_id' | 'manager_id'>
+  & { vacation_days_override: string; birth_date: string; termination_date: string; profile_id: string; manager_id: string }
 
 const emptyForm = (): EmployeeForm => ({
   employee_code: '', first_name: '', last_name: '', national_id: '', birth_date: '', email: '', phone: '', address: '',
   emergency_contact_name: '', emergency_contact_phone: '', department: '', job_title: '', manager_id: '',
-  hire_date: toDateInputValue(), contract_type: 'Indefinido', status: 'Activo', termination_date: '', vacation_days_per_year: '10', profile_id: '',
+  hire_date: toDateInputValue(), contract_type: 'Indefinido', status: 'Activo', termination_date: '', work_schedule: 'L-V', vacation_days_override: '', profile_id: '',
 })
 
 const toForm = (employee: HrEmployee): EmployeeForm => ({
   ...employee, birth_date: employee.birth_date || '', termination_date: employee.termination_date || '',
-  profile_id: employee.profile_id || '', manager_id: employee.manager_id || '', vacation_days_per_year: String(employee.vacation_days_per_year),
+  profile_id: employee.profile_id || '', manager_id: employee.manager_id || '', vacation_days_override: employee.vacation_days_override == null ? '' : String(employee.vacation_days_override),
 })
 
 export function EmployeesPage() {
@@ -37,18 +38,21 @@ export function EmployeesPage() {
   const manager = canManageHr(profile), tenant = profile?.tenant_id || ''
   const context = `${user?.id}:${tenant}:${profile?.rol}:${profile?.status}:${profile?.is_active}`
   const loader = useCallback(async (): Promise<Resources> => {
-    const [employees, requests, profiles] = await Promise.all([
+    const [employees, summary, profiles] = await Promise.all([
       readAllReportRows<HrEmployee>((a, b) => supabase.from('hr_employees').select('*').eq('tenant_id', tenant).order('last_name').order('id').range(a, b), { label: 'empleados' }),
-      readAllReportRows<HrLeaveRequest>((a, b) => supabase.from('hr_leave_requests').select('*').eq('tenant_id', tenant).in('status', ['Pendiente', 'Aprobada']).eq('leave_type', 'Vacaciones').order('id').range(a, b), { label: 'vacaciones' }),
+      supabase.rpc('hr_vacation_summary').then(({ data: rows, error: rpcError }) => {
+        if (rpcError) throw new Error('No se pudo cargar el saldo de vacaciones. Reintenta la consulta.')
+        return new Map(((rows || []) as HrVacationSummary[]).map(row => [row.employee_id, row]))
+      }),
       readAllReportRows<LinkableProfile>((a, b) => supabase.from('profiles').select('id,nombre,apellido,email,rol').eq('tenant_id', tenant).neq('rol', 'Cliente').order('nombre').order('id').range(a, b), { label: 'usuarios' }),
     ])
-    return { employees, requests, profiles }
+    return { employees, summary, profiles }
   }, [tenant])
   const { data, error, loading, reload } = useScopedLoad(context, manager && !!tenant, loader)
   const [query, setQuery] = useState(''), [status, setStatus] = useState('Activo'), [page, setPage] = useState(1), [size, setSize] = useState(25)
   const [editor, setEditor] = useState<{ employee?: HrEmployee } | null>(null)
   const [leaveFor, setLeaveFor] = useState<HrEmployee | null>(null)
-  const year = new Date().getFullYear()
+  const [vacationsFor, setVacationsFor] = useState<HrEmployee | null>(null)
 
   const filtered = useMemo(() => {
     const term = query.trim().toLocaleLowerCase('es')
@@ -78,18 +82,25 @@ export function EmployeesPage() {
           : <div className="overflow-x-auto"><table className="w-full text-sm">
             <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-700">
               <th className="py-2 pr-4">Código</th><th className="py-2 pr-4">Empleado</th><th className="py-2 pr-4">Puesto</th><th className="py-2 pr-4">Jefe directo</th>
-              <th className="py-2 pr-4">Ingreso</th><th className="py-2 pr-4 text-right">Vacaciones {year}</th><th className="py-2" /></tr></thead>
+              <th className="py-2 pr-4">Ingreso</th><th className="py-2 pr-4 text-right">Vacaciones disponibles</th><th className="py-2" /></tr></thead>
             <tbody>{visible.map(employee => {
-              const balance = vacationBalance(employee, data?.requests || [], year)
+              const balance = data?.summary.get(employee.id)
               return <tr key={employee.id} className="border-b border-slate-100 dark:border-slate-800">
                 <td className="py-3 pr-4 font-mono text-xs">{employee.employee_code}</td>
                 <td className="py-3 pr-4"><p className="font-medium text-slate-900 dark:text-white">{employeeFullName(employee)}</p>
-                  <p className="text-xs text-slate-500">{employee.status === 'Inactivo' ? `Baja ${formatDate(employee.termination_date)}` : employee.profile_id ? 'Con usuario ERP' : 'Sin usuario ERP'}</p></td>
+                  <p className="text-xs text-slate-500">{employee.status === 'Inactivo' ? `Baja ${formatDate(employee.termination_date)}` : `${workScheduleLabel(employee.work_schedule)} · ${employee.profile_id ? 'con usuario ERP' : 'sin usuario ERP'}`}</p></td>
                 <td className="py-3 pr-4">{employee.job_title || '—'}<p className="text-xs text-slate-500">{employee.department}</p></td>
                 <td className="py-3 pr-4">{employee.manager_id ? names.get(employee.manager_id) : '—'}</td>
                 <td className="py-3 pr-4">{formatDate(employee.hire_date)}</td>
-                <td className="py-3 pr-4 text-right">{balance.available} / {balance.allowance}{balance.pending > 0 && <p className="text-xs text-amber-600">{balance.pending} pendiente(s)</p>}</td>
+                <td className="py-3 pr-4 text-right">{balance ? <>{balance.available} día(s)
+                  <span className="mt-1 flex flex-wrap justify-end gap-1 text-[11px] font-semibold">
+                    {balance.expired_unused && <span className="rounded-full bg-rose-50 px-2 py-0.5 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">Vencido con saldo</span>}
+                    {balance.overdue_unscheduled && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Sin programar</span>}
+                    {balance.advance_used > 0 && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">Anticipo {balance.advance_used}</span>}
+                  </span>
+                  {balance.earned_periods === 0 && <span className="block text-xs text-slate-500">Antes del primer aniversario</span>}</> : '—'}</td>
                 <td className="py-3 text-right"><div className="flex justify-end gap-2">
+                  <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-[#B3282D] hover:underline dark:text-rose-300" onClick={() => setVacationsFor(employee)}><CalendarRange size={14} aria-hidden="true" />Vacaciones</button>
                   {employee.status === 'Activo' && <button type="button" className="text-sm font-medium text-[#B3282D] hover:underline dark:text-rose-300" onClick={() => setLeaveFor(employee)}>Solicitud</button>}
                   <button type="button" className="text-sm font-medium text-[#B3282D] hover:underline dark:text-rose-300" onClick={() => setEditor({ employee })}>Editar</button>
                 </div></td>
@@ -101,8 +112,9 @@ export function EmployeesPage() {
     </div>
     {editor && data && <EmployeeDialog employee={editor.employee} employees={data.employees} profiles={data.profiles}
       onClose={() => setEditor(null)} onSaved={() => { setEditor(null); void reload() }} />}
-    {leaveFor && data && <LeaveRequestDialog employeeId={leaveFor.id} employeeName={employeeFullName(leaveFor)}
-      availableFor={target => vacationBalance(leaveFor, data.requests, target).available} onClose={() => setLeaveFor(null)} onSaved={() => { setLeaveFor(null); void reload() }} />}
+    {leaveFor && <LeaveRequestDialog employeeId={leaveFor.id} employeeName={employeeFullName(leaveFor)}
+      onClose={() => setLeaveFor(null)} onSaved={() => { setLeaveFor(null); void reload() }} />}
+    {vacationsFor && <VacationDetailDialog employee={vacationsFor} onClose={() => setVacationsFor(null)} onChanged={() => void reload()} />}
   </div>
 }
 
@@ -117,7 +129,7 @@ function EmployeeDialog({ employee, employees, profiles, onClose, onSaved }: {
     : !form.hire_date ? 'Indica la fecha de ingreso'
       : form.status === 'Inactivo' && !form.termination_date ? 'Indica la fecha de salida'
         : form.termination_date && form.termination_date < form.hire_date ? 'La salida no puede ser anterior al ingreso'
-          : !/^\d{1,2}(\.\d)?$/.test(form.vacation_days_per_year) || Number(form.vacation_days_per_year) > 60 ? 'Días de vacaciones entre 0 y 60' : ''
+          : form.vacation_days_override && (Number(form.vacation_days_override) < 10 || Number(form.vacation_days_override) > 60) ? 'El mínimo por período debe estar entre 10 y 60 días' : ''
 
   async function save() {
     if (problem || busy) return
@@ -154,8 +166,10 @@ function EmployeeDialog({ employee, employees, profiles, onClose, onSaved }: {
             {text('hire_date', 'Fecha de ingreso', true, 'date')}
             <FormField label="Tipo de contrato" required as="div"><CompactSelect aria-label="Tipo de contrato" value={form.contract_type} disabled={busy}
               onValueChange={value => set('contract_type', value as HrContractType)} options={HR_CONTRACT_TYPES.map(value => ({ value, label: value }))} /></FormField>
-            <FormField label="Vacaciones por año (días hábiles)" required hint="Según antigüedad y política interna."><input inputMode="decimal" className={fieldClass} disabled={busy}
-              value={form.vacation_days_per_year} onChange={event => set('vacation_days_per_year', event.target.value)} /></FormField>
+            <FormField label="Jornada laboral" required as="div" hint="Define qué días consumen vacaciones. El sábado de medio día cuenta 1 día (Art. 346)."><CompactSelect aria-label="Jornada laboral" value={form.work_schedule} disabled={busy}
+              onValueChange={value => set('work_schedule', value as HrWorkSchedule)} options={HR_WORK_SCHEDULES.map(item => ({ value: item.value, label: item.label }))} /></FormField>
+            <FormField label="Mínimo de vacaciones por período" hint="Opcional; solo puede mejorar la escala legal 10/12/15/20. Rige para los períodos que se ganen desde hoy; para períodos ya ganados registra un ajuste."><input inputMode="numeric" className={fieldClass} disabled={busy}
+              placeholder="Escala legal" value={form.vacation_days_override} onChange={event => set('vacation_days_override', event.target.value.replace(/\D/g, '').slice(0, 2))} /></FormField>
           </div>
         </FormSection>
         <FormSection title="Estado y acceso">
