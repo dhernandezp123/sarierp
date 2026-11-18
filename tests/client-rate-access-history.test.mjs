@@ -40,8 +40,10 @@ test('historial distingue cero de ausencia y presenta cambios fiscales y vigenci
  assert.deepEqual(getClientRateChanges({amount:0},{amount:0}),[])
 })
 
-const event={event_id:'e1',changed_at:'2026-11-02T18:00:00Z',actor_id:'master',actor_name:'Zonia Prueba',rate_code:'freight',destination:'SPS',
+const rateEvent={event_id:'e1',changed_at:'2026-11-02T18:00:00Z',actor_id:'master',actor_name:'Zonia Prueba',rate_code:'freight',destination:'SPS',
  before_values:{rate_label:'Flete',amount:15,currency:'USD'},after_values:{rate_label:'Flete',amount:0,currency:'USD'},total_count:26}
+
+const event={event_id:'batch',changed_at:rateEvent.changed_at,actor_id:rateEvent.actor_id,actor_name:rateEvent.actor_name,changes:[rateEvent],total_count:26}
 
 test('la ficha real habilita guardar solo para Contabilidad con permiso individual',async()=>{
  for(const master of [false,true]) {
@@ -73,14 +75,15 @@ test('historial real pagina en servidor, conserva autor y admite recuperar error
  const app=mountPage('src/components/clientes/ClientRateHistory.tsx',{
   '@/src/hooks/useUser':{useUser:()=>({profile:{id:'master',tenant_id:'tenant',rol:'Contabilidad',status:'Aprobado',is_active:true}})},
   '@/src/lib/supabase/client':{supabase:{rpc:async(name,args)=>{calls.push({name,args});return{data:fail?null:[event],error:fail?{message:'offline'}:null}}}},
- },{exported:'ClientRateHistory',props:{clienteId:'client',refreshKey:0}})
+ },{expand:type=>type.name==='BatchRows',exported:'ClientRateHistory',props:{clienteId:'client',refreshKey:0}})
  try{
-  await app.ready();assert.match(app.text(),/No se pudo cargar/)
+  await app.ready();assert.equal(app.find(n=>n.type==='details'),undefined);app.button('Ver historial').props.onClick();app.render();assert.match(app.text(),/No se pudo cargar/)
   fail=false;app.button('Reintentar').props.onClick();await app.ready()
   assert.match(app.text(),/Zonia Prueba/);assert.match(app.text(),/USD 0\.00/)
+  app.button('Ver historial completo').props.onClick();await app.ready()
   const pagination=app.find(n=>n.type==='Pagination');assert.equal(pagination.props.total,26)
   pagination.props.onPageChange(2);await app.ready()
-  assert.deepEqual(calls.at(-1),{name:'get_client_rate_history',args:{p_cliente_id:'client',p_limit:25,p_offset:25}})
+  assert.deepEqual(calls.at(-1),{name:'get_client_rate_history_batches',args:{p_cliente_id:'client',p_limit:25,p_offset:25,p_from:null,p_to:null,p_actor:null,p_rate:null}})
  }finally{app.cleanup()}
 })
 
@@ -89,12 +92,33 @@ test('cambiar cliente oculta el historial anterior y descarta su respuesta tardi
  const app=mountPage('src/components/clientes/ClientRateHistory.tsx',{
   '@/src/hooks/useUser':{useUser:()=>({profile:{id:'master',tenant_id:'tenant',rol:'Contabilidad',status:'Aprobado',is_active:true}})},
   '@/src/lib/supabase/client':{supabase:{rpc:()=>new Promise(resolve=>pending.push(resolve))}},
- },{exported:'ClientRateHistory',props})
+ },{expand:type=>type.name==='BatchRows',exported:'ClientRateHistory',props})
  try{
   app.render();props.clienteId='second';app.render()
   pending[0]({data:[event],error:null});await app.tick();app.render()
   assert.doesNotMatch(app.text(),/Zonia Prueba/)
   pending[1]({data:[{...event,actor_name:'Otro autor'}],error:null});await app.tick();app.render()
-  assert.match(app.text(),/Otro autor/);assert.doesNotMatch(app.text(),/Zonia Prueba/)
+  app.button('Ver historial').props.onClick();app.render();assert.match(app.text(),/Otro autor/);assert.doesNotMatch(app.text(),/Zonia Prueba/)
+ }finally{app.cleanup()}
+})
+
+
+test('filtros reinician paginacion y cerrar el panel vuelve al resumen',async()=>{
+ const calls=[];const props={clienteId:'client',refreshKey:0}
+ const app=mountPage('src/components/clientes/ClientRateHistory.tsx',{
+  '@/src/lib/supabase/client':{supabase:{rpc:async(name,args)=>{calls.push(args);return{data:[event],error:null}}}},
+ },{expand:type=>type.name==='BatchRows',exported:'ClientRateHistory',props})
+ try{
+  await app.ready();assert.equal(calls[0].p_limit,5)
+  app.button('Ver historial').props.onClick();app.render()
+  app.button('Ver historial completo').props.onClick();await app.ready()
+  app.find(n=>n.type==='Pagination').props.onPageChange(2);await app.ready()
+  app.find(n=>n.type==='input'&&n.props['aria-label']==='Usuario').props.onChange({target:{value:'Zonia'}});app.render()
+  app.find(n=>n.type==='form').props.onSubmit({preventDefault(){}});await app.ready()
+  assert.equal(calls.at(-1).p_offset,0);assert.equal(calls.at(-1).p_actor,'Zonia')
+  app.button('Limpiar filtros').props.onClick();await app.ready();assert.equal(calls.at(-1).p_actor,null)
+  const dialog=app.find(n=>typeof n.type==='function'&&n.type.name==='Dialog')
+  dialog.props.onOpenChange(false);app.render();assert.equal(app.find(n=>typeof n.type==='function'&&n.type.name==='Dialog').props.open,false)
+  props.refreshKey=1;app.render();assert.equal(app.button('Ver historial').props['aria-expanded'],false)
  }finally{app.cleanup()}
 })

@@ -44,3 +44,12 @@ export function getClientRateChanges(before: ClientRateSnapshot | null, after: C
     return [{ field, label, before: display(before, field), after: display(after, field) }]
   })
 }
+
+export type ClientRateBatch = {
+  event_id: string
+  changed_at: string
+  actor_id: string | null
+  actor_name: string
+  changes: Pick<ClientRateEvent, 'event_id' | 'rate_code' | 'destination' | 'before_values' | 'after_values'>[]
+  total_count: number | string
+}

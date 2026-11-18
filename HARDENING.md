@@ -1,5 +1,15 @@
 # Sari Express ERP — Hardening y Trial
 
+### 18/11/2026 - UX-CLIENT-RATE-HISTORY-01 - Historial compacto por guardado
+
+- Estado: implementado y validado localmente; migracion y publicacion en Production/Demo pendientes. Sin modificar importes ni eliminar auditoria.
+- UI: historial cerrado inicialmente con ultima actualizacion; ultimos cinco guardados al abrir; detalle antes/despues bajo demanda; dialogo completo con filtros de fecha (Honduras), usuario y tarifa y paginacion de guardados completos. Reinicia vistas al cambiar cliente, usuario o version y descarta respuestas obsoletas.
+- Archivos: src/components/clientes/ClientRateHistory.tsx, src/lib/client-rate-history.ts, tests/client-rate-access-history.test.mjs, scripts/validate-audit-sql.mjs, supabase/migrations/20261118130000_compact_client_rate_history.sql, supabase/tests/compact_client_rate_history.sql y HARDENING.md.
+- SQL: nueva RPC get_client_rate_history_batches; agrupa por transaccion y autor antes de paginar. Conserva get_client_rate_history, snapshots, eventos originales y omision de guardados identicos. Verifica sesion aprobada/activa, acceso al cliente y tenant; anonimo sin EXECUTE. El filtro por tarifa conserva el guardado completo para contexto.
+- Validaciones: TypeScript y ESLint de archivos modificados OK; suite general 676/676 y prueba adicional de filtros/cierre aprobada (7/7 pruebas focales); build y postbuild OCR OK; check:finance-ui OK. Migracion y suite SQL en PostgreSQL local aislado con rollback: agrupacion/paginacion, filtros, fechas inclusivas en Honduras, guardados identicos, cero, total, otro tenant, usuario inactivo y anonimo OK.
+- Navegador: componente real con sesion y RPC ficticias en fixture de produccion local; cinco movimientos inicialmente cerrados, detalle antes/despues, filtros, limpieza y paginacion comprobados a 1280/768/390 px sin overflow. Captura movil revisada; fuente fallback del fixture. El primer fixture dev no activo interacciones; se uso build de produccion. Escape cierra y devuelve el foco al boton; error/reintento comprobados. Seis comprobaciones aprobadas, cero excepciones JavaScript. Evidencia privada en .ua/intermediate/compact-rate-* y client-rates-compact-* (ignorado).
+- Pendiente: aplicar migracion antes de publicar frontend; UAT autenticada en ambientes destino. Commit pendiente.
+
 ### 13/11/2026 - ACC-INVOICE-SERVICE-03 / ACC-DUE-DATE-01 - Servicio unico en Facturacion y vencimiento manual
 
 - Estado: implementado y validado localmente; SQL local aprobado con rollback. Publicacion, aplicacion de migracion en Production/Trial y UAT autenticada pendientes. Sin cambios de datos reales ni alteracion de documentos emitidos. Commit pendiente al registrar.
