@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { FormField } from '@/src/components/ui/form-field'
 import { fieldClassSm, secondaryButtonClass } from '@/src/lib/ui-classes'
 import { formatDateTime } from '@/src/lib/format'
-import { getClientRateChanges, type ClientRateBatch } from '@/src/lib/client-rate-history'
+import { getClientRateChanges, getClientRateBatchSummary, type ClientRateBatch } from '@/src/lib/client-rate-history'
 
 const emptyFilters = { from: '', to: '', actor: '', rate: '' }
 type Filters = typeof emptyFilters
@@ -20,7 +20,7 @@ function BatchRows({ rows }: { rows: ClientRateBatch[] }) {
     <details key={batch.event_id} className="group p-4">
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4">
         <span className="min-w-0 break-words text-sm">
-          <span className="font-semibold">{batch.actor_name}</span> · {batch.changes.length === 1 ? '1 tarifa modificada' : `${batch.changes.length} tarifas modificadas`}
+          <span className="font-semibold">{batch.actor_name}</span> · {getClientRateBatchSummary(batch)}
           <time dateTime={batch.changed_at} className="mt-1 block text-xs text-slate-500">{formatDateTime(batch.changed_at)}</time>
         </span>
         <span className="text-xs font-medium text-slate-500"><span className="group-open:hidden">Ver cambios</span><span className="hidden group-open:inline">Ocultar cambios</span></span>
@@ -102,7 +102,7 @@ export function ClientRateHistory({ clienteId, refreshKey }: { clienteId: string
       <button type="button" className={secondaryButtonClass} aria-expanded={expanded} aria-controls={id} onClick={() => setView({ owner, expanded: !expanded, full: false })}>{expanded ? 'Ocultar historial' : 'Ver historial'}</button>
     </div>
     {expanded && <div id={id} className="border-t border-slate-100 dark:border-slate-800">
-      <p className="px-4 pt-3 text-xs text-slate-500">Últimos 5 movimientos. Cada movimiento agrupa los cambios de un guardado.</p>
+      <p className="px-4 pt-3 text-xs text-slate-500">Últimos 5 movimientos. Las altas son tarifas registradas; no equivalen a modificaciones de tarifas existentes.</p>
       {renderRows(currentPreview)}
       <div className="px-4 pb-4"><button ref={fullButton} type="button" className={secondaryButtonClass} onClick={() => setView({ owner, expanded: true, full: true })}>Ver historial completo</button></div>
     </div>}

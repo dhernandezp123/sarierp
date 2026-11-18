@@ -65,7 +65,7 @@ test('la ficha real habilita guardar solo para Contabilidad con permiso individu
    await app.ready();app.button('Tarifas').props.onClick();app.render()
    assert.equal(app.find(n=>n.type==='fieldset').props.disabled,!master)
    assert.equal(!!app.button('Guardar tarifas'),master)
-   if(master){await app.button('Guardar tarifas').props.onClick();assert.equal(calls[0].name,'replace_client_rates')}
+   if(master){app.find(n=>n.type==='input'&&n.props.type==='number').props.onChange({target:{value:'25'}});app.render();await app.button('Guardar tarifas').props.onClick();assert.equal(calls[0].name,'replace_client_rates')}
   }finally{app.cleanup()}
  }
 })

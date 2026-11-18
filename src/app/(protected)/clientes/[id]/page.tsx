@@ -60,7 +60,10 @@ export default function ClienteProfilePage() {
   const [rateDestination, setRateDestination] = useState<MiamiRateDestination>('SPS')
   const [ratesLoading, setRatesLoading] = useState(false)
   const [ratesLoadError, setRatesLoadError] = useState(false)
-  const [ratesDirty, setRatesDirty] = useState(false)
+  const [initialClientRates, setInitialClientRates] = useState<Record<string, ClientRate>>({})
+  const editedRateCodes = Object.keys(clientRates).filter(code => !initialClientRates[code]
+    || Number(clientRates[code].amount) !== Number(initialClientRates[code].amount))
+  const ratesDirty = editedRateCodes.length > 0
   const [pendingDestination, setPendingDestination] = useState<MiamiRateDestination | null>(null)
   const ratesRequest = useRef(0)
   const [savingRates, setSavingRates] = useState(false)
@@ -177,6 +180,7 @@ export default function ClienteProfilePage() {
     setRatesLoading(true)
     setRatesLoadError(false)
     setClientRates({})
+    setInitialClientRates({})
 
     const { data, error } = await supabase
       .from('client_rates')
@@ -198,88 +202,67 @@ export default function ClienteProfilePage() {
     ) as Record<string, ClientRate>
 
     setClientRates(mapped)
-    setRatesDirty(false)
+    setInitialClientRates(mapped)
   }
 
   const updateClientRateAmount = (code: string, amount: string) => {
     const catalogItem = clientRateCatalog.find((item) => item.code === code)
     if (!catalogItem) return
 
-    setRatesDirty(true)
-    setClientRates((prev) => ({
-      ...prev,
-      [code]: {
-        ...(prev[code] || {}),
-        cliente_id: id,
-        rate_code: catalogItem.code,
-        rate_label: catalogItem.label,
-        category: catalogItem.category,
-        unit: catalogItem.unit,
-        currency: 'USD',
-        amount: amount === '' ? 0 : Number(amount),
-        is_active: true,
-        valid_from: null,
-        valid_to: null,
-        notes: null,
-      },
-    }))
+    setClientRates(prev => {
+      // An untouched empty cell stays absent; entering 0 explicitly creates a rate.
+      if (amount === '' && !initialClientRates[code]) {
+        const next = { ...prev }
+        delete next[code]
+        return next
+      }
+      const existing = prev[code] || initialClientRates[code]
+      return { ...prev, [code]: existing
+        ? { ...existing, amount: amount === '' ? 0 : Number(amount) }
+        : { cliente_id: id, rate_code: catalogItem.code, rate_label: catalogItem.label,
+          category: catalogItem.category, unit: catalogItem.unit, currency: 'USD',
+          amount: Number(amount), is_active: true, valid_from: null, valid_to: null, notes: null } }
+    })
   }
 
   const saveClientRates = async () => {
-    if (!id || ratesLoading || ratesLoadError) return
+    if (!id || savingRates || ratesLoading || ratesLoadError) return
     if (!canManageRates) {
       toast.error('No tienes permiso para modificar tarifas del cliente')
       return
     }
-
-    setSavingRates(true)
-
-    const activeDestination = rateDestination
-
-    const rows = clientRateCatalog.map((item) => {
-      const existing = clientRates[item.code]
-      const isDestinationRate = item.isDestinationRate
-
-      return {
-        cliente_id: id,
-        rate_code: item.code,
-        rate_label: item.label,
-        category: item.category,
-        unit: item.unit,
-        currency: existing?.currency || 'USD',
-        amount: existing?.amount || 0,
-        is_active: true,
-        valid_from: existing?.valid_from || null,
-        valid_to: existing?.valid_to || null,
-        miami_rate_destination: isDestinationRate ? activeDestination : null,
-        notes: existing?.notes || null,
-      }
-    })
-
-    const destinationRateCodes = clientRateCatalog
-      .filter((item) => item.isDestinationRate)
-      .map((item) => item.code)
-    const globalRateCodes = clientRateCatalog
-      .filter((item) => !item.isDestinationRate)
-      .map((item) => item.code)
-    const { error: replaceRatesError } = await supabase.rpc('replace_client_rates', {
-      p_cliente_id: id,
-      p_destination: activeDestination,
-      p_destination_rate_codes: destinationRateCodes,
-      p_global_rate_codes: globalRateCodes,
-      p_rows: rows,
-    })
-
-    if (replaceRatesError) {
-      toast.error(replaceRatesError.message || 'No se pudieron guardar las tarifas')
-      setSavingRates(false)
+    if (!ratesDirty) {
+      toast.info('No hay cambios de tarifas para guardar')
       return
     }
-
-    toast.success('Tarifas del cliente guardadas')
-    setRateHistoryVersion((version) => version + 1)
-    await loadClientRates(activeDestination)
-    setSavingRates(false)
+    const activeDestination = rateDestination
+    const editedItems = clientRateCatalog.filter(item => editedRateCodes.includes(item.code))
+    const rows = editedItems.map(item => ({
+      ...clientRates[item.code],
+      cliente_id: id,
+      miami_rate_destination: item.isDestinationRate ? activeDestination : null,
+    }))
+    setSavingRates(true)
+    try {
+      const { error } = await supabase.rpc('replace_client_rates', {
+        p_cliente_id: id,
+        p_destination: activeDestination,
+        p_destination_rate_codes: editedItems.filter(item => item.isDestinationRate).map(item => item.code),
+        p_global_rate_codes: editedItems.filter(item => !item.isDestinationRate).map(item => item.code),
+        p_rows: rows,
+      })
+      if (error) {
+        toast.error(error.message || 'No se pudieron guardar las tarifas')
+        return
+      }
+      toast.success('Tarifas del cliente guardadas')
+      setRateHistoryVersion(version => version + 1)
+      await loadClientRates(activeDestination)
+    } catch {
+      toast.error('No se pudieron guardar las tarifas. Puedes reintentar.')
+    } finally {
+      setSavingRates(false)
+    }
   }
 
   const archiveClient = async () => {

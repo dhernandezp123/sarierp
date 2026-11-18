@@ -124,7 +124,10 @@ test('real client profile edits TGU without changing SPS preference, protects un
     assert.equal(calls[0].name,'replace_client_rates')
     assert.equal(calls[0].args.p_destination,'TGU')
     assert.equal(calls[0].args.p_rows.find(r=>r.rate_code==='consolidado_aereo_kg').amount,4.5)
-    assert.equal(calls[0].args.p_rows.find(r=>r.rate_code==='documentos_manejo').miami_rate_destination,null)
+    assert.equal(calls[0].args.p_rows.some(r=>r.rate_code==='documentos_manejo'),false)
+    assert.deepEqual(calls[0].args.p_destination_rate_codes,['consolidado_aereo_kg'])
+    assert.deepEqual(calls[0].args.p_global_rate_codes,[])
+    assert.equal(calls[0].args.p_rows.length,1)
     assert.deepEqual(reads,['SPS','TGU','TGU'])
   }finally{page.cleanup()}
 })

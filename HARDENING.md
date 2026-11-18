@@ -1,5 +1,17 @@
 # Sari Express ERP — Hardening y Trial
 
+### 18/11/2026 - UX-CLIENT-RATE-SPARSE-01 - Guardar solo tarifas editadas y distinguir altas
+
+- Estado: implementado en release aislado desde origin/main; publicacion pendiente. No se eliminan tarifas ni eventos historicos y no se requiere migracion: reutiliza replace_client_rates con listas de codigos y filas limitadas a lo editado.
+- Causa confirmada en Production con consulta read-only: IMEXPO tenia un guardado inicial de 116 altas (111 en cero, 5 con importe), todas sin valor anterior. El formulario enviaba el catalogo entero; el historial lo llamaba modificaciones. El fix anterior de agrupacion no cubria este caso.
+- Guardado: compara con el snapshot cargado; sin cambios o al volver al importe original no llama la RPC. Solo reemplaza los codigos editados del destino seleccionado o globales correspondientes. Cero explicito se guarda; celda nueva vacia no crea una tarifa. Conserva notas, unidad, moneda y vigencias de tarifas existentes. Fallo de red libera el formulario y mantiene el subconjunto para reintentar.
+- Historial: diferencia altas, modificaciones y bajas. Las altas muestran cuantos importes son distintos de cero y cuantos son cero; no supone que los ceros historicos fueran editados o no. Los 116 registros de IMEXPO permanecen auditados sin presentarlos como 116 modificaciones.
+- Archivos: src/app/(protected)/clientes/[id]/page.tsx, src/components/clientes/ClientRateHistory.tsx, src/lib/client-rate-history.ts, tests/client-rate-access-history.test.mjs, tests/miami-rate-destination.test.mjs, tests/client-rate-sparse-save.test.mjs, supabase/tests/client_rate_sparse_save.sql, scripts/validate-audit-sql.mjs y HARDENING.md.
+- Validaciones: 17 pruebas focales OK; suite general 671/671 OK; TypeScript OK; suites SQL locales sparse/compact/access con rollback OK (IDs/notas/vigencias no tocados, SPS/TGU/globales, cero y no-op sin auditoria). Navegador con pagina real y fixture de 116 tarifas: cinco editadas -> cinco enviadas; sin cambios -> cero RPC; cero explicito, vaciar celda nueva, revertir importe y error/reintento OK. Historial sintetico de IMEXPO clasifica 116 altas y no modificaciones. Sin excepciones JS ni overflow a 1280/768/390; captura movil revisada. Tailwind real, fuente Arial e iconos simulados. Evidencia ignorada en .ua/intermediate/client-rate-sparse-evidence-20261118/.
+- Regresion antigua actualizada: test TGU esperaba reenviar un cargo global no tocado; ahora exige una sola fila TGU y cero codigos globales. Lint previo: 610 archivos, 213 diagnosticos historicos, cero regresiones; lint final/build de Quality pendientes.
+- Pendiente: Quality, publicacion Production y smoke. UAT autenticada pendiente; no escribir tarifas reales de prueba en IMEXPO. Demo/Trial fuera de este release. Commit pendiente.
+
+
 ### 18/11/2026 - UX-CLIENT-RATE-HISTORY-01 - Historial compacto por guardado
 
 - Estado: implementado y validado localmente; migracion y publicacion en Production/Demo pendientes. Sin modificar importes ni eliminar auditoria.
