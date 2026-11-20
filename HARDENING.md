@@ -1,5 +1,18 @@
 # Sari Express ERP — Hardening y Trial
 
+### 20/11/2026 - FLOW-PURCHASE-ORDER-SLIP-01 - Boleta de Compra desde orden
+
+- Estado: implementado y validado localmente; pendiente aplicar migracion, despliegue y UAT autenticada/visual. No se modifica Production ni Trial.
+- Flujo: Registrar compra desde orden permite Factura de proveedor o Boleta de Compra. La factura conserva numero obligatorio y CAI opcional; la boleta oculta y descarta ambas referencias del proveedor y usa el correlativo/CAI vigente de nuestra oficina. Avisa que no respalda credito fiscal de ISV. Conserva importes aprobados, descuentos, cuenta por pagar, vinculo y cantidades parciales de la orden.
+- SQL: nueva migracion supabase/migrations/20261120140000_purchase_order_purchase_slips.sql reemplaza manage_purchase_workflow conservando autorizacion, tenant, revision, bloqueo, idempotencia, auditoria y allocations. Acepta solo los dos tipos; llamadas antiguas sin tipo siguen siendo factura. La boleta fuerza tax_credit=false y reutiliza create_purchase_document y la anulacion fiscal existentes; sin cambios de RLS.
+- Archivos: src/components/accounting/PurchaseWorkflowPage.tsx, tests/purchase-workflow.test.mjs, supabase/tests/purchase_requests_and_orders.sql, migracion indicada y HARDENING.md. Sin dependencias nuevas; cambios concurrentes de clientes y RRHH preservados.
+- Validaciones: TypeScript, ESLint focal y check:finance-ui OK; 11 pruebas focales de flujo/PDF OK. Suite SQL completa de ordenes ampliada OK en supabase_db_sarierp_gerencia20261104, cargando esquema de ordenes y migracion nueva dentro de una transaccion terminada con ROLLBACK. Incluye factura sin numero rechazada, tipo invalido, CAI ausente, boleta parcial/final, descuentos, cuenta por pagar, cero credito fiscal, reintento sin segundo correlativo, anulacion/liberacion de cantidades, permisos y aislamiento tenant.
+- Validacion final: suite general 688/688 OK; build Next.js y postbuild OCR OK; git diff --check OK.
+- Verificacion de release: TypeScript, lint focal, checker financiero y 11 pruebas focales OK sobre worktree aislado desde origin/main. Pagina real de ordenes y modal Radix revisados con sesion/datos sinteticos a 1280/768/390 px, sin overflow ni excepciones JS; boleta oculta y envia vacias las referencias fiscales del proveedor. Tailwind y tema reales, fuente Arial e iconos simulados. Evidencia privada ignorada: .ua/intermediate/purchase-order-slip/.
+- Production: preflight read-only confirma funcion origen esperada; ensayo de migracion con rollback OK, verificando ocho tablas (incluidos CAI), ACL/owner/search_path/security-definer intactos.
+- Pendientes: aplicar migracion y desplegar, Quality de release y UAT autenticada. La oficina requiere rango CAI de Boleta de Compra vigente y permiso fiscal del usuario; no se inventa numeracion ni se omiten esos controles. Commit: pendiente.
+
+
 ### 18/11/2026 - UX-CLIENT-RATE-SPARSE-01 - Guardar solo tarifas editadas y distinguir altas
 
 - Estado: implementado en release aislado desde origin/main; publicacion pendiente. No se eliminan tarifas ni eventos historicos y no se requiere migracion: reutiliza replace_client_rates con listas de codigos y filas limitadas a lo editado.

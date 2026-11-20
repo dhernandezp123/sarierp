@@ -45,6 +45,40 @@ const base = { id:'order', kind:'Orden', document_number:'OC-FIXTURE', status:'A
   supplier_snapshot:{name:'Proveedor ficticio'}, currency:'HNL', total:115, issue_date:'2026-11-16',due_date:'2026-12-16',
   items:[{id:'line',description:'Compra ficticia',quantity:3,unit_price:100,discount_amount:1,tax_rate:15,tax_treatment:'Gravada'}],
 }
+
+test('order purchase dialog accepts a slip without inventing supplier invoice references',async()=>{
+  const writes=[]
+  const app=mountPage('src/components/accounting/PurchaseWorkflowPage.tsx',{
+    '@/src/lib/supabase/client':{supabase:{}},
+    '@/src/components/pdf/purchase-workflow-pdf':{PurchaseWorkflowPdf:'PurchaseWorkflowPdf'},
+    '@/src/components/pdf/PdfDownloadButton':{PdfDownloadButton:'PdfDownloadButton'},
+  },{exported:'PurchaseInvoiceDialog',props:{document:base,allocations:[],busy:false,onClose(){},onSave:(document,quantities)=>writes.push({document,quantities})}})
+  try {
+    await app.ready()
+    assert.equal(app.button('Registrar compra').props.disabled,true)
+    const references=app.findAll(n=>n.type==='input'&&!n.props.type)
+    assert.equal(references.length,2)
+    references[0].props.onChange({target:{value:'REAL-123'}})
+    references[1].props.onChange({target:{value:'REAL-CAI'}})
+    app.render()
+    app.find(n=>n.type==='form').props.onSubmit({preventDefault(){}})
+    assert.equal(writes[0].document.document_type,'Factura de proveedor')
+    assert.equal(writes[0].document.document_number,'REAL-123')
+    app.find(n=>n.type==='select').props.onChange({target:{value:'Boleta de Compra'}})
+    app.render()
+    assert.equal(app.findAll(n=>n.type==='input'&&!n.props.type).length,0)
+    assert.equal(app.button('Registrar compra').props.disabled,false)
+    assert.match(app.text(),/La boleta no respalda crédito fiscal de ISV/)
+    app.find(n=>n.type==='form').props.onSubmit({preventDefault(){}})
+    assert.equal(writes[1].document.document_type,'Boleta de Compra')
+    assert.equal(writes[1].document.document_number,'')
+    assert.equal(writes[1].document.source_cai,'')
+    assert.deepEqual(writes[1].quantities,[{id:'line',quantity:3}])
+    app.find(n=>n.type==='select').props.onChange({target:{value:'Factura de proveedor'}})
+    app.render()
+    assert.equal(app.findAll(n=>n.type==='input'&&!n.props.type)[0].props.value,'REAL-123')
+  } finally {app.cleanup()}
+})
 test('purchasing permission requires an approved active Admin or Contabilidad', () => {
   for(const rol of ['Admin','Contabilidad']) assert.equal(workflow.canManagePurchaseWorkflow({rol,status:'Aprobado',is_active:true}),true)
   for(const rol of ['Finanzas','Ventas','Operaciones','Pricing','Cliente']) assert.equal(workflow.canManagePurchaseWorkflow({rol,status:'Aprobado',is_active:true}),false)
