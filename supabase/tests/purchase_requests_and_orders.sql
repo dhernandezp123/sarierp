@@ -89,6 +89,28 @@ select public.create_purchase_document('5b306000-0000-4000-8000-000000000005',js
 select pg_temp.reject($c$select public.manage_purchase_workflow('5b306000-0000-4000-8000-000000000005','invoice',(select id from wf_results where n='direct'),6,jsonb_build_object('document_number','WF-COLLISION','issue_date',current_date),'[{"id":"5b305000-0000-4000-8000-000000000001","quantity":1}]')$c$);
 select pg_temp.ok((select count(*)=2 from public.purchase_order_allocations),'Unrelated purchase cannot consume order quantities');
 
+-- Supplier without an invoice: our slip uses our CAI and the same atomic allocations.
+select pg_temp.reject($c$select public.manage_purchase_workflow(gen_random_uuid(),'invoice',(select id from wf_results where n='direct'),6,jsonb_build_object('document_type','Otro','issue_date',current_date),'[{"id":"5b305000-0000-4000-8000-000000000001","quantity":1}]')$c$);
+select pg_temp.reject($c$select public.manage_purchase_workflow(gen_random_uuid(),'invoice',(select id from wf_results where n='direct'),6,jsonb_build_object('document_type','Factura de proveedor','issue_date',current_date),'[{"id":"5b305000-0000-4000-8000-000000000001","quantity":1}]')$c$);
+select pg_temp.reject($c$select public.manage_purchase_workflow(gen_random_uuid(),'invoice',(select id from wf_results where n='direct'),6,jsonb_build_object('document_type','Boleta de Compra','issue_date',current_date),'[{"id":"5b305000-0000-4000-8000-000000000001","quantity":1}]')$c$);
+select pg_temp.ok((select revision=6 from public.purchase_workflow_documents where id=(select id from wf_results where n='direct')),'Missing CAI rolls back order changes');
+reset role;
+insert into public.billing_user_office_access(tenant_id,profile_id,office_ids,revision,updated_by)
+values('5b300000-0000-4000-8000-000000000100','5b300000-0000-4000-8000-000000000001',array['5b304000-0000-4000-8000-000000000001']::uuid[],1,'5b300000-0000-4000-8000-000000000001');
+insert into public.cai_ranges(id,tenant_id,cai,point_of_sale,document_type,rango_desde,rango_hasta,fecha_limite_emision,is_active,next_number)
+values('5b308000-0000-4000-8000-000000000001','5b300000-0000-4000-8000-000000000100','TEST-ORDER-SLIP','SPS','Boleta de Compra','001-001-11-00000001','001-001-11-00000100',current_date+30,true,1);
+set local role authenticated;
+insert into wf_results select 'slip',public.manage_purchase_workflow('5b306000-0000-4000-8000-000000000006','invoice',(select id from wf_results where n='direct'),6,jsonb_build_object('document_type','Boleta de Compra','document_number','IGNORE-ME','source_cai','IGNORE-ME','issue_date',current_date,'due_date',current_date+30),'[{"id":"5b305000-0000-4000-8000-000000000001","quantity":1}]');
+select pg_temp.ok((select document_type='Boleta de Compra' and document_number='001-001-11-00000001' and source_cai='' and fiscal_snapshot->>'cai'='TEST-ORDER-SLIP' and not (items->0->>'tax_credit')::boolean and total=114.62 and payable_id is not null from public.purchase_documents where id=(select id from wf_results where n='slip')),'Slip uses issuer CAI, approved amounts and payable without tax credit');
+select pg_temp.ok((select status='Parcialmente facturada' and revision=7 from public.purchase_workflow_documents where id=(select id from wf_results where n='direct')),'Slip consumes partial order quantity');
+select pg_temp.ok(public.manage_purchase_workflow('5b306000-0000-4000-8000-000000000006','invoice',(select id from wf_results where n='direct'),6,jsonb_build_object('document_type','Boleta de Compra','document_number','IGNORE-ME','source_cai','IGNORE-ME','issue_date',current_date,'due_date',current_date+30),'[{"id":"5b305000-0000-4000-8000-000000000001","quantity":1}]')=(select id from wf_results where n='slip'),'Slip retry is idempotent');
+select pg_temp.ok((select next_number=2 from public.cai_ranges where id='5b308000-0000-4000-8000-000000000001'),'Retry consumes no second fiscal number');
+select public.review_fiscal_void(public.request_fiscal_void('purchase_documents',(select id from wf_results where n='slip'),gen_random_uuid(),'Fixture slip correction'),true,'Fixture approval',true);
+select pg_temp.ok((select status='Aprobada' and revision=8 from public.purchase_workflow_documents where id=(select id from wf_results where n='direct')),'Voided slip releases order quantity');
+insert into wf_results select 'slip_final',public.manage_purchase_workflow(gen_random_uuid(),'invoice',(select id from wf_results where n='direct'),8,jsonb_build_object('document_type','Boleta de Compra','issue_date',current_date,'due_date',current_date+30),'[{"id":"5b305000-0000-4000-8000-000000000001","quantity":3}]');
+select pg_temp.ok((select status='Facturada' from public.purchase_workflow_documents where id=(select id from wf_results where n='direct')),'Full slip closes order after void');
+select pg_temp.ok((select sum(quantity)=3 and sum(discount_amount)=1 from public.purchase_order_allocations where order_id=(select id from wf_results where n='direct') and is_active),'Slip allocations preserve quantities and discount cents');
+
 reset role;
 select set_config('request.jwt.claims','{}',true);
 update public.profiles set rol='Finanzas' where id='5b300000-0000-4000-8000-000000000001';
