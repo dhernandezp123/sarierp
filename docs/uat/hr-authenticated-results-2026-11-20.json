@@ -1,0 +1,122 @@
+{
+  "date": "20/11/2026",
+  "commit": "01aebe01fcaef958156bc6861315e409ad078c31",
+  "dirtyWorkingTree": true,
+  "environment": "localhost only; schema-only disposable database hr_uat_20261120; synthetic tenants/users; real Supabase Auth and PostgREST",
+  "limits": [
+    "No remote SQL or deployment",
+    "Auth object ownership restored to supabase_auth_admin after schema-only clone",
+    "Infrastructure ALTER DEFAULT PRIVILEGES excluded from clone; HR migrations applied with their explicit grants unchanged",
+    "Browser uses full ERP production build, proxy, protected layout, real UserProvider and Supabase client",
+    "Development router initialization error prevented dev-mode certification; production-mode browser passed",
+    "Not every case of the full UAT checklist was exercised interactively; SQL regression suites provide separate coverage"
+  ],
+  "sql": {
+    "suites": [
+      "hr_employees_and_leave.sql",
+      "hr_vacation_periods.sql"
+    ],
+    "mode": "Both migrations and each suite inside transaction with rollback on local replica",
+    "passed": true,
+    "remainingHrTablesOnReplica": 0
+  },
+  "api": {
+    "checks": [
+      "Supabase Auth login admin",
+      "Supabase Auth login employee",
+      "Supabase Auth login unlinked",
+      "Supabase Auth login other",
+      "Supabase Auth login client",
+      "Supabase Auth login inactive",
+      "Supabase Auth login pending",
+      "Admin creates employee records via PostgREST",
+      "Non-admin cannot create 8d53da92",
+      "Non-admin cannot create 2c579b1b",
+      "Non-admin cannot create 45295d70",
+      "Non-admin cannot create 7a51b19e",
+      "Non-admin cannot create 1778852b",
+      "RLS employee list admin",
+      "RLS employee list employee",
+      "RLS employee list unlinked",
+      "RLS employee list other",
+      "RLS employee list client",
+      "RLS employee list inactive",
+      "RLS employee list pending",
+      "UUID substitution blocked employee",
+      "RPC periods UUID substitution blocked employee",
+      "UUID substitution blocked other",
+      "RPC periods UUID substitution blocked other",
+      "UUID substitution blocked client",
+      "RPC periods UUID substitution blocked client",
+      "Anniversary entitlements 10/12/15/20",
+      "Request retry idempotent via API",
+      "Employee cannot self-approve",
+      "Cross tenant admin cannot approve",
+      "Approved request deducts 5 days",
+      "Suspension restores original dates despite calendar edit",
+      "Cancellation releases reservation",
+      "Cross tenant hr_leave_requests",
+      "Cross tenant hr_vacation_ledger",
+      "Cross tenant hr_leave_allocations",
+      "Cross tenant hr_vacation_minimums",
+      "Cross tenant hr_vacation_accumulations",
+      "Direct table writes denied",
+      "Anonymous access denied"
+    ],
+    "errors": []
+  },
+  "concurrency": {
+    "date": "2026-11-20T18:11:15.765Z",
+    "checks": [
+      "Approval preserves reserved 3-day advance after lowering cap 5 to 0",
+      "New request cannot expand previously reserved advance",
+      "Concurrent API requests cannot overdraw 20-day balance",
+      "Concurrent request retries return one ID",
+      "Concurrent adjustment retries return one ledger entry",
+      "Concurrent accumulation authorizes only once"
+    ],
+    "errors": []
+  },
+  "browser": {
+    "date": "2026-11-20T18:19:09.023Z",
+    "checks": [
+      "Full ERP login Admin through real Auth, proxy, protected layout and UserProvider",
+      "admin-empleados responsive 1280/768/390",
+      "admin-ficha-dialog responsive 1280/768/390",
+      "Escape closes actual employee dialog",
+      "Focus returns to origin",
+      "admin-vacaciones responsive 1280/768/390",
+      "admin-solicitudes responsive 1280/768/390",
+      "admin-configuracion responsive 1280/768/390",
+      "Real employee login and own linked record",
+      "empleado-mi-ficha responsive 1280/768/390",
+      "Employee HR navigation exposes only Mi ficha",
+      "empleado-nueva-solicitud responsive 1280/768/390",
+      "Employee creates actual request through UI and PostgREST",
+      "Employee cancels actual request through confirmation dialog",
+      "ProtectedShell redirects employee from Admin route",
+      "admin-aprobacion responsive 1280/768/390",
+      "Admin approves through actual UI; employee API confirms persisted decision"
+    ],
+    "errors": [],
+    "network": []
+  },
+  "sha256": {
+    "supabase/migrations/20261118120000_hr_employees_and_leave.sql": "cdbcecbc4fff0c7a65e2671612725bb1bb49d235f99793f65dabc9b0504200a2",
+    "supabase/migrations/20261119120000_hr_vacation_periods.sql": "fdb58c0722ada59015d8b8ac0e45f3e721e9b5f3b8d44e18cec57c5d49d8c63b",
+    "src/components/hr/EmployeesPage.tsx": "d4b33bd16d073775e0c4389566b10560c9e6b4d762fbccee36e7a65f1c014a6d",
+    "src/components/hr/HrSettingsPage.tsx": "b211e269d59003444c03e753543a147815447c30624e31fb687c8ed1199af588",
+    "src/components/hr/HrShared.tsx": "fb7281f385a75240f2c0723f5d1ed6d811de813e963d7c2accef0a5b59d5433b",
+    "src/components/hr/LeaveRequestsPage.tsx": "d262090b8d23ab83f8a76ad396dc03b794edcd1050ede3b05e06b99ea144df2d",
+    "src/components/hr/MyHrPage.tsx": "17f4387b91851b04cbc31c82dea43c2338e11d0f981a82ad89b489bd919c37bd",
+    "src/components/hr/VacationDetailDialog.tsx": "1b2f2183991dcb55b2ddd0bbd139626206eb66c8c67e334eba2777b73889954e",
+    "src/lib/hr.ts": "210105fc40ea63fbae6d21fb1aa2ff7d30281cdecf1bc1309267a60adda912cd"
+  },
+  "cleanup": {
+    "disposableDatabaseRemoved": true,
+    "uatContainersRemoved": true,
+    "appServersStopped": true,
+    "temporaryCredentialFilesRemoved": true,
+    "replicaHrTablesAfterTests": 0
+  }
+}

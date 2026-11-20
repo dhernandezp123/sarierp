@@ -168,6 +168,22 @@ select public.hr_delete_holiday((select v from d where k='m3') + 30);
 select public.hr_suspend_leave((select id from ids where name='r3'), (select v from d where k='m3') + 31, 'Urgencia');
 select pg_temp.assert_true((select business_days = 2 and cardinality(counted_dates) = 2 from public.hr_leave_requests where id = (select id from ids where name='r3')), 'suspension no recuenta el feriado eliminado');
 
+-- Cambiar la jornada tampoco reescribe los sabados ya gozados de una solicitud.
+insert into ids select 'schedule', public.hr_save_employee(null, null, jsonb_build_object(
+  'employee_code','S1','first_name','Jornada','last_name','Historica','hire_date',(select v from d where k='hire'),
+  'contract_type','Indefinido','work_schedule','L-S medio'));
+insert into ids select 'schedule-request', public.hr_request_leave(gen_random_uuid(), (select id from ids where name='schedule'),
+  'Vacaciones', (select v from d where k='m3') + 42, (select v from d where k='m3') + 50, 'Jornada original L-S');
+select public.hr_review_leave((select id from ids where name='schedule-request'), 'Aprobada', '');
+select public.hr_save_employee((select id from ids where name='schedule'), 1, jsonb_build_object(
+  'employee_code','S1','first_name','Jornada','last_name','Historica','hire_date',(select v from d where k='hire'),
+  'contract_type','Indefinido','work_schedule','L-V'));
+select public.hr_suspend_leave((select id from ids where name='schedule-request'), (select v from d where k='m3') + 49, 'Urgencia tras cambiar jornada');
+select pg_temp.assert_true((select business_days = 6 and cardinality(counted_dates) = 6
+  and ((select v from d where k='m3') + 47) = any(counted_dates)
+  from public.hr_leave_requests where id = (select id from ids where name='schedule-request')),
+  'suspension conserva sabado ya descontado aunque cambie jornada');
+
 -- Resumen para Admin.
 select pg_temp.assert_true((select advance_used = 2 and earned_periods = 4 from public.hr_vacation_summary() where employee_id = (select id from ids where name='emp')), 'resumen con anticipo tras la correccion +1');
 

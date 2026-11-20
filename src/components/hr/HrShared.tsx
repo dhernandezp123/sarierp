@@ -57,6 +57,20 @@ export function useScopedLoad<T>(context: string, enabled: boolean, loader: () =
   return { data: current?.data ?? null, error: current?.error ?? '', loading: enabled && !current, reload }
 }
 
+/**
+ * Devuelve el foco al control que abrió el diálogo. Los diálogos de RRHH se montan desde estado
+ * (sin DialogTrigger), así que Radix no tiene a dónde volver y el foco caería en <body>.
+ * Se captura el elemento activo al montar, antes de que Radix mueva el foco al diálogo.
+ */
+export function useReturnFocus() {
+  const [origin] = useState(() => (typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null))
+  return useCallback((event: Event) => {
+    if (!origin || origin === document.body) return
+    event.preventDefault()
+    setTimeout(() => { if (origin.isConnected) origin.focus() }, 0)
+  }, [origin])
+}
+
 /** Marcas legales de una solicitud: fracción (Art. 346/351), anticipo y suspensión (Art. 351). */
 export function LeaveFlags({ request }: { request: Pick<HrLeaveRequest, 'is_fractioned' | 'is_advance' | 'suspended_at' | 'original_end_date'> }) {
   const flags = [
@@ -98,6 +112,7 @@ export function VacationPeriodsTable({ periods }: { periods: HrVacationPeriod[] 
 function useLeavePreview(employeeId: string, leaveType: string, start: string, end: string) {
   const key = `${employeeId}|${leaveType}|${start}|${end}`
   const [state, setState] = useState<{ key: string; preview: HrLeavePreview | null; error: string } | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const formProblem = validateLeaveDates(start, end)
   useEffect(() => {
     if (formProblem) return
@@ -107,9 +122,11 @@ function useLeavePreview(employeeId: string, leaveType: string, start: string, e
       if (alive) setState({ key, preview: error ? null : data as HrLeavePreview, error: error ? 'No se pudo calcular la solicitud. Reintenta.' : '' })
     }, 300)
     return () => { alive = false; clearTimeout(timer) }
-  }, [key, employeeId, leaveType, start, end, formProblem])
+  }, [key, employeeId, leaveType, start, end, formProblem, attempt])
   const current = state?.key === key ? state : null
-  return { preview: current?.preview ?? null, error: formProblem || current?.error || current?.preview?.error || '', loading: !formProblem && !current }
+  const retry = () => { setState(null); setAttempt(value => value + 1) }
+  return { preview: current?.preview ?? null, error: formProblem || current?.error || current?.preview?.error || '', loading: !formProblem && !current,
+    canRetry: !!current?.error, retry }
 }
 
 export function LeaveRequestDialog({ employeeId, employeeName, onClose, onSaved }: {
@@ -119,7 +136,8 @@ export function LeaveRequestDialog({ employeeId, employeeName, onClose, onSaved 
   const [form, setForm] = useState({ leave_type: 'Vacaciones' as HrLeaveType, start_date: today, end_date: today, reason: '' })
   const [busy, setBusy] = useState(false)
   const requestId = useRef(crypto.randomUUID())
-  const { preview, error: problem, loading } = useLeavePreview(employeeId, form.leave_type, form.start_date, form.end_date)
+  const returnFocus = useReturnFocus()
+  const { preview, error: problem, loading, canRetry, retry } = useLeavePreview(employeeId, form.leave_type, form.start_date, form.end_date)
   const update = (patch: Partial<typeof form>) => { requestId.current = crypto.randomUUID(); setForm(current => ({ ...current, ...patch })) }
   async function submit() {
     if (problem || loading || busy) return
@@ -132,7 +150,7 @@ export function LeaveRequestDialog({ employeeId, employeeName, onClose, onSaved 
     onSaved()
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
-    <DialogContent className="sm:max-w-lg">
+    <DialogContent className="grid-cols-1 sm:max-w-lg" onCloseAutoFocus={returnFocus}>
       <DialogTitle>Nueva solicitud</DialogTitle>
       <DialogDescription>{employeeName}. Se cuentan los días laborables de su jornada; los feriados del calendario no se descuentan.</DialogDescription>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -154,7 +172,9 @@ export function LeaveRequestDialog({ employeeId, employeeName, onClose, onSaved 
           {preview.fractioned && <p className="rounded-xl bg-sky-50 px-3 py-2 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">Vacaciones fraccionadas: el Código del Trabajo prevé días consecutivos (Art. 346 y 351). Quedará registrado como excepción.</p>}
           {preview.advance && <p className="rounded-xl bg-violet-50 px-3 py-2 text-violet-800 dark:bg-violet-950/40 dark:text-violet-200">Incluye anticipo de un período aún no ganado; se descontará cuando se acredite.</p>}
         </>}
-        {problem && <p role="alert" className="text-rose-600 dark:text-rose-300">{problem}</p>}
+        {problem && <p role="alert" className="text-rose-600 dark:text-rose-300">{problem}
+          {canRetry && <button type="button" className="ml-2 underline" onClick={retry}>Reintentar cálculo</button>}
+        </p>}
       </div>
       <div className="flex justify-end gap-2">
         <button type="button" className={secondaryButtonClass} disabled={busy} onClick={onClose}>Cancelar</button>

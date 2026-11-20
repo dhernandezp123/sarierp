@@ -14,7 +14,7 @@ import { CompactSelect } from '@/src/components/ui/CompactSelect'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/src/components/ui/dialog'
-import { HrNavigation, LeaveRequestDialog, useScopedLoad } from './HrShared'
+import { HrNavigation, LeaveRequestDialog, useReturnFocus, useScopedLoad } from './HrShared'
 import { VacationDetailDialog } from './VacationDetailDialog'
 
 type LinkableProfile = { id: string; nombre: string | null; apellido: string | null; email: string | null; rol: string }
@@ -67,7 +67,7 @@ export function EmployeesPage() {
 
   return <div className="space-y-6">
     <FinancePageHeader eyebrow="Recursos Humanos" title="Empleados" icon={UserRound}
-      description="Ficha del personal, puesto, contrato y días de vacaciones por año."
+      description="Ficha del personal, puesto, jornada y vacaciones por aniversario de ingreso."
       actions={<button type="button" className={`${primaryButtonClass} inline-flex items-center gap-2`} onClick={() => setEditor({})}><Plus size={16} aria-hidden="true" />Nuevo empleado</button>} />
     <HrNavigation manager />
     <div className={cardClass}>
@@ -122,6 +122,7 @@ function EmployeeDialog({ employee, employees, profiles, onClose, onSaved }: {
   employee?: HrEmployee; employees: HrEmployee[]; profiles: LinkableProfile[]; onClose: () => void; onSaved: () => void
 }) {
   const [form, setForm] = useState<EmployeeForm>(() => employee ? toForm(employee) : emptyForm())
+  const returnFocus = useReturnFocus()
   const [busy, setBusy] = useState(false)
   const set = <K extends keyof EmployeeForm>(key: K, value: EmployeeForm[K]) => setForm(current => ({ ...current, [key]: value }))
   const linked = new Set(employees.filter(item => item.id !== employee?.id && item.profile_id).map(item => item.profile_id))
@@ -146,7 +147,7 @@ function EmployeeDialog({ employee, employees, profiles, onClose, onSaved }: {
       value={String(form[key] ?? '')} onChange={event => set(key, event.target.value as never)} /></FormField>
 
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
-    <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl">
+    <DialogContent className="grid-cols-1 max-h-[90dvh] overflow-y-auto sm:max-w-3xl" onCloseAutoFocus={returnFocus}>
       <DialogTitle>{employee ? `Editar ficha · ${employeeFullName(employee)}` : 'Nuevo empleado'}</DialogTitle>
       <DialogDescription>Los datos personales solo los ven Administración y el propio empleado, si tiene usuario vinculado.</DialogDescription>
       <div className="space-y-8">

@@ -1,0 +1,232 @@
+{
+  "date": "20/11/2026",
+  "candidateBranch": "release/hr-module-20261120",
+  "baseMain": "2241df743bf8a9f502508121b675703b7730d3ec",
+  "candidateParentBeforeValidationCommit": "751989fb162568347378f2307bc6ea7f9d44c03d",
+  "environment": "Disposable local schema-only database; synthetic users; real Supabase Auth/PostgREST; full isolated candidate ERP production build on loopback",
+  "counts": {
+    "apiGroups": 65,
+    "browserGroups": 31,
+    "fullNodeSuite": 683,
+    "focusedHrAndSessionTests": 16
+  },
+  "api": {
+    "core": [
+      "Supabase Auth login admin",
+      "Supabase Auth login employee",
+      "Supabase Auth login unlinked",
+      "Supabase Auth login other",
+      "Supabase Auth login client",
+      "Supabase Auth login inactive",
+      "Supabase Auth login pending",
+      "Admin creates employee records via PostgREST",
+      "Non-admin cannot create 9db6f796",
+      "Non-admin cannot create 474fc943",
+      "Non-admin cannot create aae30cc3",
+      "Non-admin cannot create a6b5dbb7",
+      "Non-admin cannot create a194673e",
+      "RLS employee list admin",
+      "RLS employee list employee",
+      "RLS employee list unlinked",
+      "RLS employee list other",
+      "RLS employee list client",
+      "RLS employee list inactive",
+      "RLS employee list pending",
+      "UUID substitution blocked employee",
+      "RPC periods UUID substitution blocked employee",
+      "UUID substitution blocked other",
+      "RPC periods UUID substitution blocked other",
+      "UUID substitution blocked client",
+      "RPC periods UUID substitution blocked client",
+      "Anniversary entitlements 10/12/15/20",
+      "Request retry idempotent via API",
+      "Employee cannot self-approve",
+      "Cross tenant admin cannot approve",
+      "Approved request deducts 5 days",
+      "Suspension restores original dates despite calendar edit",
+      "Cancellation releases reservation",
+      "Cross tenant hr_leave_requests",
+      "Cross tenant hr_vacation_ledger",
+      "Cross tenant hr_leave_allocations",
+      "Cross tenant hr_vacation_minimums",
+      "Cross tenant hr_vacation_accumulations",
+      "Direct table writes denied",
+      "Anonymous access denied"
+    ],
+    "extended": [
+      "employee: all 8 management RPCs return authorization denial",
+      "unlinked: all 8 management RPCs return authorization denial",
+      "client: all 8 management RPCs return authorization denial",
+      "inactive: all 8 management RPCs return authorization denial",
+      "pending: all 8 management RPCs return authorization denial",
+      "client: requests and personal balance/preview RPCs denied",
+      "inactive: requests and personal balance/preview RPCs denied",
+      "pending: requests and personal balance/preview RPCs denied",
+      "Other tenant sees no rows across all 8 HR tables",
+      "Other tenant cannot mutate employee, ledger, accumulation, suspension or review",
+      "Other tenant settings write does not create or change tenant A settings",
+      "Work schedule update preserves personal and contract fields",
+      "Saturday half-day schedule consumes one working day",
+      "Holiday and Sunday do not consume leave",
+      "Minimum increase does not rewrite already earned entitlements",
+      "Audit ledger correction reconciles to period balance",
+      "Hire date with existing movements cannot be rewritten",
+      "Concurrent overlapping requests accept exactly one through PostgREST",
+      "Rejection requires reason and persists with authorized Admin"
+    ],
+    "concurrency": [
+      "Approval preserves reserved 3-day advance after lowering cap 5 to 0",
+      "New request cannot expand previously reserved advance",
+      "Concurrent API requests cannot overdraw 20-day balance",
+      "Concurrent request retries return one ID",
+      "Concurrent adjustment retries return one ledger entry",
+      "Concurrent accumulation authorizes only once"
+    ]
+  },
+  "browser": {
+    "core": {
+      "date": "2026-11-20T18:47:08.638Z",
+      "checks": [
+        "Full ERP login Admin through real Auth, proxy, protected layout and UserProvider",
+        "admin-empleados responsive 1280/768/390",
+        "admin-ficha-dialog responsive 1280/768/390",
+        "Escape closes actual employee dialog",
+        "Focus returns to origin",
+        "admin-vacaciones responsive 1280/768/390",
+        "admin-solicitudes responsive 1280/768/390",
+        "admin-configuracion responsive 1280/768/390",
+        "Real employee login and own linked record",
+        "empleado-mi-ficha responsive 1280/768/390",
+        "Employee HR navigation exposes only Mi ficha",
+        "empleado-nueva-solicitud responsive 1280/768/390",
+        "Employee creates actual request through UI and PostgREST",
+        "Employee cancels actual request through confirmation dialog",
+        "ProtectedShell redirects employee from Admin route",
+        "admin-aprobacion responsive 1280/768/390",
+        "Admin approves through actual UI; employee API confirms persisted decision"
+      ],
+      "errors": [],
+      "network": []
+    },
+    "recovery": {
+      "date": "2026-11-20T18:46:05.750Z",
+      "checks": [
+        "Real employee login for recovery tests",
+        "Failed employee read exposes Retry; Retry restores real current record",
+        "Lost HTTP response after commit leaves one server request and a usable retry button",
+        "Retry after lost response reuses request_id and creates no duplicate",
+        "Preview retries unchanged dates after temporary network failure"
+      ],
+      "errors": [],
+      "network": []
+    },
+    "sessions": {
+      "date": "2026-11-20T18:46:39.574Z",
+      "checks": [
+        "Held real authorized employee A response before delivery",
+        "Cross-tab sign-in as unlinked B discards delayed personal data of A",
+        "Cross-tab real logout discards employee response still in flight"
+      ],
+      "errors": [],
+      "network": [
+        {
+          "url": "http://127.0.0.1:54590/rest/v1/rpc/hr_vacation_periods",
+          "status": 403
+        },
+        {
+          "url": "http://127.0.0.1:54590/rest/v1/hr_leave_requests",
+          "status": 401
+        },
+        {
+          "url": "http://127.0.0.1:54590/rest/v1/rpc/hr_vacation_periods",
+          "status": 401
+        }
+      ]
+    },
+    "focus": {
+      "date": "2026-11-20T18:46:14.061Z",
+      "checks": [
+        "EmployeeDialog returns keyboard focus to actual origin",
+        "VacationDetailDialog returns keyboard focus to actual origin",
+        "LeaveRequestDialog returns keyboard focus to actual origin",
+        "ReviewDialog returns keyboard focus to actual origin",
+        "suspension-authenticated responsive 1280/768/390",
+        "SuspendDialog returns keyboard focus to actual origin"
+      ],
+      "errors": [],
+      "network": []
+    }
+  },
+  "sql": {
+    "date": "2026-11-20T18:49:29.087Z",
+    "suites": [
+      "hr_employees_and_leave.sql",
+      "hr_vacation_periods.sql"
+    ],
+    "migrationContentMatchesPreviousUat": true,
+    "passed": true,
+    "mode": "Both HR migrations plus each SQL suite inside transaction with ROLLBACK on local replica"
+  },
+  "reconciliation": {
+    "date": "2026-11-20T18:47:24.764Z",
+    "employees": 7,
+    "periods": 35,
+    "ledgerRows": 14,
+    "requestRows": 10,
+    "checks": [
+      "Every period adjustment equals the immutable ledger sum",
+      "Approved and pending consumption equal actual allocation rows and request statuses",
+      "Every balance equals entitlement plus ledger minus approved and pending consumption"
+    ],
+    "errors": []
+  },
+  "checks": {
+    "typescript": true,
+    "focusedEslint": true,
+    "financeUi": true,
+    "nextProductionBuild": true,
+    "ocrArtifactPostbuild": true,
+    "diffWhitespace": true
+  },
+  "findings": [
+    {
+      "id": "HR-04",
+      "issue": "Preview network failure gave an error with no retry control",
+      "reproducedBeforeFix": true,
+      "fix": "Explicit Reintentar cálculo reruns preview with unchanged dates; no leave mutation; submit remains blocked until successful preview",
+      "unitRegression": "tests/hr-recovery.test.mjs",
+      "realBrowserAfterFix": true
+    }
+  ],
+  "limits": [
+    "Local technical acceptance only; no remote SQL, push or Production deployment",
+    "Two HR migration files unchanged; infrastructure ALTER DEFAULT PRIVILEGES excluded from schema-only clone and Auth ownership restored to its technical role",
+    "Expected 401/403 responses during real cross-tab session transitions are recorded separately from JavaScript exceptions",
+    "Shared node_modules junction initially broke OCR artifact tracing; existing OCR dependencies copied physically and final postbuild passed without code/version changes",
+    "Nested worktree produced a Next workspace-root warning; final candidate build and OCR artifact check passed",
+    "New API tests count groups, including matrices with multiple calls; counts do not represent independent test scenarios"
+  ],
+  "cleanup": {
+    "disposableDatabaseRemoved": true,
+    "uatContainersRemoved": true,
+    "appServersStopped": true,
+    "browserClosed": true,
+    "temporaryCredentialFilesRemoved": true,
+    "remainingHrTablesOnReplica": 0
+  },
+  "sha256Normalization": "UTF-8 with LF line endings",
+  "sha256": {
+    "src/components/hr/EmployeesPage.tsx": "3ec3fb0a9f98fcd974e16d31693747f16aadbcc0e520bb0471971990d39b33bd",
+    "src/components/hr/HrSettingsPage.tsx": "b211e269d59003444c03e753543a147815447c30624e31fb687c8ed1199af588",
+    "src/components/hr/HrShared.tsx": "5bc95b20d880e22680d8f3bcb8243d77d249708558ced103a20e83baa7af0cf9",
+    "src/components/hr/LeaveRequestsPage.tsx": "8b26c8a0c86e97b4d1af2b02c3c2da7677a1fb488d1344abab6bd2be78129ae1",
+    "src/components/hr/MyHrPage.tsx": "a36b1c955758ad5e67a558badb09374510eb084e6db24b42bd9084bcc8495a02",
+    "src/components/hr/VacationDetailDialog.tsx": "b03b7b7eb3a485f7e30329722b2e936138fff8d59b23ecc0ee5d3c13f1db6d54",
+    "src/lib/hr.ts": "210105fc40ea63fbae6d21fb1aa2ff7d30281cdecf1bc1309267a60adda912cd",
+    "tests/hr-recovery.test.mjs": "43cab11296289abacaeabaa9e9de58e01d182dbdfbdaae4a3e4f2417c013c34b",
+    "supabase/migrations/20261118120000_hr_employees_and_leave.sql": "e4d38c4b5fbc6b49bcd4d4c8e483ffd3fdffbe2f6bd8d603127d08832543123b",
+    "supabase/migrations/20261119120000_hr_vacation_periods.sql": "cb02b224ee4aaeafb0caec5f221904c73d55df944b36c664956291566a46df95",
+    "supabase/tests/hr_employees_and_leave.sql": "9f1c515fadee3933f33cdc410e58c3368d50bc32b7cacceedf492aee82e665fc",
+    "supabase/tests/hr_vacation_periods.sql": "b1803af352473a99f1782bba8838e8477e7e9ca783a0f7c757ccceb465ca269c"
+  }
+}

@@ -10,13 +10,14 @@ import { FormField, FormSection } from '@/src/components/ui/form-field'
 import { CompactSelect } from '@/src/components/ui/CompactSelect'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/src/components/ui/dialog'
-import { VacationPeriodsTable, useScopedLoad } from './HrShared'
+import { VacationPeriodsTable, useReturnFocus, useScopedLoad } from './HrShared'
 
 type Detail = { periods: HrVacationPeriod[]; ledger: HrLedgerEntry[]; accumulation: HrAccumulation | null }
 
 /** Vacaciones de un empleado para Admin: períodos, saldos históricos, ajustes y acumulación (Art. 350). */
 export function VacationDetailDialog({ employee, onClose, onChanged }: { employee: HrEmployee; onClose: () => void; onChanged: () => void }) {
   const { user, profile } = useUser()
+  const returnFocus = useReturnFocus()
   const context = `${user?.id}:${profile?.tenant_id}:${profile?.rol}:${employee.id}`
   const loader = useCallback(async (): Promise<Detail> => {
     const [periods, ledger, accumulation] = await Promise.all([
@@ -33,7 +34,7 @@ export function VacationDetailDialog({ employee, onClose, onChanged }: { employe
   const earned = data?.periods.filter(period => period.is_earned) ?? []
 
   return <Dialog open onOpenChange={open => { if (!open) onClose() }}>
-    <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-4xl">
+    <DialogContent className="grid-cols-1 max-h-[90dvh] overflow-y-auto sm:max-w-4xl" onCloseAutoFocus={returnFocus}>
       <DialogTitle>Vacaciones · {employeeFullName(employee)}</DialogTitle>
       <DialogDescription>Ingreso {formatDate(employee.hire_date)} · {workScheduleLabel(employee.work_schedule)}. Los períodos se ganan en cada aniversario (Art. 346).</DialogDescription>
       {error && <p role="alert" className="text-sm text-rose-600">{error} <button type="button" className="underline" onClick={() => void reload()}>Reintentar</button></p>}

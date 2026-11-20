@@ -14,7 +14,7 @@ import { CompactSelect } from '@/src/components/ui/CompactSelect'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/src/components/ui/dialog'
-import { HrNavigation, LeaveFlags, LeaveStatusBadge, formatLeaveRange, useScopedLoad } from './HrShared'
+import { HrNavigation, LeaveFlags, LeaveStatusBadge, formatLeaveRange, useReturnFocus, useScopedLoad } from './HrShared'
 
 type Decision = 'Aprobada' | 'Rechazada' | 'Cancelada'
 const decisionCopy: Record<Decision, { title: string; action: string; notesRequired: boolean }> = {
@@ -103,6 +103,7 @@ function ReviewDialog({ request, decision, employee, onClose, onSaved }: {
   request: HrLeaveRequest; decision: Decision; employee?: HrEmployee; onClose: () => void; onSaved: () => void
 }) {
   const [notes, setNotes] = useState(''), [busy, setBusy] = useState(false)
+  const returnFocus = useReturnFocus()
   const copy = decisionCopy[decision]
   async function confirm() {
     if (busy || (copy.notesRequired && !notes.trim())) return
@@ -114,7 +115,7 @@ function ReviewDialog({ request, decision, employee, onClose, onSaved }: {
     onSaved()
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
-    <DialogContent className="sm:max-w-md">
+    <DialogContent className="grid-cols-1 sm:max-w-md" onCloseAutoFocus={returnFocus}>
       <DialogTitle>{copy.title}</DialogTitle>
       <DialogDescription>{employeeFullName(employee)} · {request.leave_type} · {formatLeaveRange(request.start_date, request.end_date)} ({request.business_days} día(s) hábiles)</DialogDescription>
       {decision === 'Aprobada' && request.leave_type === 'Vacaciones' && <p className="text-sm text-slate-600 dark:text-slate-300">Al aprobar se revalida el saldo vigente y se asignan los días a los períodos más antiguos.<LeaveFlags request={request} /></p>}
@@ -131,6 +132,7 @@ function ReviewDialog({ request, decision, employee, onClose, onSaved }: {
 /** Art. 351: suspensión por urgencia; los días no gozados vuelven al saldo. */
 function SuspendDialog({ request, employee, onClose, onSaved }: { request: HrLeaveRequest; employee?: HrEmployee; onClose: () => void; onSaved: () => void }) {
   const [returnDate, setReturnDate] = useState(''), [notes, setNotes] = useState(''), [busy, setBusy] = useState(false)
+  const returnFocus = useReturnFocus()
   const minimum = new Date(`${request.start_date}T00:00:00`); minimum.setDate(minimum.getDate() + 1)
   const min = `${minimum.getFullYear()}-${String(minimum.getMonth() + 1).padStart(2, '0')}-${String(minimum.getDate()).padStart(2, '0')}`
   const problem = !returnDate ? 'Indica la fecha de reintegro' : returnDate < min || returnDate > request.end_date ? 'El reintegro debe ser después del primer día y dentro de la solicitud' : !notes.trim() ? 'Indica el motivo' : ''
@@ -144,7 +146,7 @@ function SuspendDialog({ request, employee, onClose, onSaved }: { request: HrLea
     onSaved()
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
-    <DialogContent className="sm:max-w-md">
+    <DialogContent className="grid-cols-1 sm:max-w-md" onCloseAutoFocus={returnFocus}>
       <DialogTitle>Suspender por urgencia</DialogTitle>
       <DialogDescription>{employeeFullName(employee)} · {formatLeaveRange(request.start_date, request.end_date)}. El trabajador conserva el derecho a reanudar los días no gozados (Art. 351); los gastos extraordinarios corren por cuenta del patrono.</DialogDescription>
       <div className="grid gap-4">
