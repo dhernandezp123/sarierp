@@ -275,6 +275,10 @@ export default function Sidebar({ role }: { role?: string }) {
     { label: 'Empleados', href: '/rrhh', icon: UserRound, exact: true },
     { label: 'Vacaciones y permisos', href: '/rrhh/solicitudes', icon: CalendarDays },
     { label: 'Calendario y reglas', href: '/rrhh/configuracion', icon: CalendarCog },
+    { label: 'Calendario de ausencias', href: '/rrhh/calendario', icon: CalendarDays },
+    { label: 'Avisos de RRHH', href: '/rrhh/avisos', icon: CalendarDays },
+    { label: 'Constancias', href: '/rrhh/documentos', icon: IdCard },
+    { label: 'Nómina y comprobantes', href: '/rrhh/nomina', icon: IdCard },
     { label: 'Mi ficha', href: '/rrhh/mi-ficha', icon: IdCard },
   ]
 

@@ -2,6 +2,7 @@
 import { useCallback, useState } from 'react'
 import { CalendarCheck, CalendarClock, CalendarDays, CalendarPlus, IdCard, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { notifyHrRequest } from '@/src/lib/hr-notify'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { readAllReportRows } from '@/src/lib/report-query'
@@ -41,6 +42,7 @@ export function MyHrPage() {
     const { error: rpcError } = await supabase.rpc('hr_review_leave', { p_id: request.id, p_decision: 'Cancelada', p_notes: '' })
     if (rpcError) { toast.error(rpcError.message); return }
     toast.success('Solicitud cancelada')
+    notifyHrRequest(request.id)
     void reload()
   }
 

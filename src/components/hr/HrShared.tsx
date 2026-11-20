@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { notifyHrRequest } from '@/src/lib/hr-notify'
 import { supabase } from '@/src/lib/supabase/client'
 import { formatDate, toDateInputValue } from '@/src/lib/format'
 import { fieldClass, primaryButtonClass, secondaryButtonClass } from '@/src/lib/ui-classes'
@@ -15,6 +16,10 @@ export function HrNavigation({ manager }: { manager: boolean }) {
   const pathname = usePathname()
   const items = [
     ...(manager ? [{ href: '/rrhh', label: 'Empleados' }, { href: '/rrhh/solicitudes', label: 'Vacaciones y permisos' }, { href: '/rrhh/configuracion', label: 'Calendario y reglas' }] : []),
+    { href: '/rrhh/calendario', label: 'Calendario de ausencias' },
+    { href: '/rrhh/avisos', label: 'Avisos' },
+    { href: '/rrhh/documentos', label: 'Constancias' },
+    { href: '/rrhh/nomina', label: manager ? 'Nómina' : 'Mis comprobantes' },
     { href: '/rrhh/mi-ficha', label: 'Mi ficha' },
   ]
   return <nav aria-label="Recursos Humanos" className="flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
@@ -142,11 +147,12 @@ export function LeaveRequestDialog({ employeeId, employeeName, onClose, onSaved 
   async function submit() {
     if (problem || loading || busy) return
     setBusy(true)
-    const { error } = await supabase.rpc('hr_request_leave', { p_request_id: requestId.current, p_employee_id: employeeId,
+    const { data: savedId, error } = await supabase.rpc('hr_request_leave', { p_request_id: requestId.current, p_employee_id: employeeId,
       p_leave_type: form.leave_type, p_start: form.start_date, p_end: form.end_date, p_reason: form.reason.trim() })
     setBusy(false)
     if (error) { toast.error(error.message); return }
     toast.success('Solicitud enviada')
+    if (typeof savedId === 'string') notifyHrRequest(savedId)
     onSaved()
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>

@@ -2,6 +2,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { CalendarDays } from 'lucide-react'
 import { toast } from 'sonner'
+import { notifyHrRequest } from '@/src/lib/hr-notify'
 import { supabase } from '@/src/lib/supabase/client'
 import { useUser } from '@/src/hooks/useUser'
 import { readAllReportRows } from '@/src/lib/report-query'
@@ -15,6 +16,8 @@ import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/src/components/ui/dialog'
 import { HrNavigation, LeaveFlags, LeaveStatusBadge, formatLeaveRange, useReturnFocus, useScopedLoad } from './HrShared'
+import { HrExportButtons } from './HrExportButtons'
+import { hrRequestRows } from '@/src/lib/hr-report'
 
 type Decision = 'Aprobada' | 'Rechazada' | 'Cancelada'
 const decisionCopy: Record<Decision, { title: string; action: string; notesRequired: boolean }> = {
@@ -52,7 +55,8 @@ export function LeaveRequestsPage() {
 
   return <div className="space-y-6">
     <FinancePageHeader eyebrow="Recursos Humanos" title="Vacaciones y permisos" icon={CalendarDays}
-      description="Revisa las solicitudes del personal. Las vacaciones pendientes reservan saldo hasta que se aprueban, rechazan o cancelan." />
+      description="Revisa las solicitudes del personal. Las vacaciones pendientes reservan saldo hasta que se aprueban, rechazan o cancelan."
+      actions={<HrExportButtons rows={() => hrRequestRows(filtered, employees)} filename="rrhh-solicitudes" disabled={loading || !!error || !filtered.length} />} />
     <HrNavigation manager />
     <div className={cardClass}>
       <div className="mb-4 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -112,6 +116,7 @@ function ReviewDialog({ request, decision, employee, onClose, onSaved }: {
     setBusy(false)
     if (error) { toast.error(error.message); return }
     toast.success(`Solicitud ${decision.toLowerCase()}`)
+    notifyHrRequest(request.id)
     onSaved()
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
@@ -143,6 +148,7 @@ function SuspendDialog({ request, employee, onClose, onSaved }: { request: HrLea
     setBusy(false)
     if (error) { toast.error(error.message); return }
     toast.success('Vacaciones suspendidas; los días no gozados volvieron al saldo')
+    notifyHrRequest(request.id)
     onSaved()
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>

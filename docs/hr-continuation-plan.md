@@ -1,68 +1,33 @@
 # Continuación de Recursos Humanos
 
-Fecha: 20/11/2026. Rama de trabajo: `feat/hr-module`.
+Actualización: 20/11/2026. Usuario autorizó continuar las fases. Confirmó correo y firma manual con carga privada; necesita las capacidades de nómina consultadas, pero no tiene reglas internas documentadas. La política inicial se registra en [nómina](hr-payroll-policy.md), con configuración y revisión obligatorias.
 
-## Fase 1 — Cierre técnico de HR-01 y HR-02 (validación local cerrada)
+## Fase 1 — Cierre de empleados, permisos y vacaciones
 
-Objetivo: dejar una versión candidata verificable de empleados, vacaciones y permisos.
+Cerrada localmente en `45e393b`: 683 pruebas Node, 65 grupos API, 31 de navegador y conciliación de 35 períodos. Incluye recuperación explícita del cálculo previo sin volver a editar fechas ni cambiar el identificador del reintento. [Evidencia](uat/hr-release-validation-2026-11-20.json).
 
-- Revisar los ajustes locales de foco y ancho de los cinco diálogos.
-- Validar TypeScript, ESLint de HR, pruebas de HR y estándar financiero.
-- Antes del commit candidato, ejecutar build y suite completa; separar cualquier fallo ajeno a HR.
-- Reconciliar la rama con `origin/main` antes de integrar: hay cambios de tarifas de clientes independientes de HR en el árbol de trabajo.
-- Separar los archivos de HR y su registro de HARDENING de los cambios de clientes; no incluir archivos por un `git add .`.
-- Ejecutar el guion [UAT autenticada](uat/hr-authenticated.md) en un ambiente local aislado con Auth y PostgREST reales.
+## Fase 2 — Integración y publicación
 
-Cierre: evidencia por caso, permisos y aislamiento entre empresas verificados, sin defectos críticos abiertos. Una prueba con Supabase simulado no cierra esta fase.
+En curso. Candidato aislado `release/hr-module-20261120`; no contiene los cambios locales ajenos a HR del árbol principal. El preflight inicial encontró Production sin HR, con migración máxima `20261118130000`; el preflight final detectó compras `20261120140000`. Integrar ese cambio y revisar el head remoto y el despliegue actual antes de publicar.
 
-Resultado al 20/11/2026: candidato aislado `release/hr-module-20261120`, basado en `origin/main` 2241df7; HR-01/02 trasladados conservando los cambios de clientes ya publicados en main y excluyendo los cambios locales ajenos a HR. Se corrigió HR-04 (reintento explícito del cálculo previo tras error de red), se completó el [checklist local](uat/hr-authenticated.md) y se guardó la [evidencia final](uat/hr-release-validation-2026-11-20.json). El historial de esa rama identifica el commit de cierre. La siguiente fase es preparar la integración y el despliegue con sus migraciones y respaldo.
+Se verificaron por separado respaldos BD, Storage y salud; el último restore disponible es histórico y no se hizo uno nuevo. Los seis archivos HR previstos tienen versiones propias y se preparan en una transacción con guardias. [Runbook](hr-release-runbook.md). SQL de HR y despliegue aún pendientes; no declarar cierre remoto basándose en UAT local.
 
-## Fase 2 — Preparación operativa y despliegue (pendiente)
+## Fase 3 — Calendario, avisos y trazabilidad
 
-- Confirmar ambiente destino y revisar migraciones efectivamente aplicadas.
-- Preparar respaldo y recuperación antes de modificar el destino.
-- Aplicar únicamente las migraciones HR-01 y HR-02 pendientes, en orden; no usar un push indiscriminado de migraciones.
-- Configurar feriados, jornada y tope de anticipos; preparar fichas, vínculos de usuarios y aperturas históricas con datos revisados por Administración.
-- Revisar la política laboral documentada antes de activar su uso operativo.
-- Integrar y desplegar el candidato validado; comprobar menú, accesos y un flujo autenticado completo.
+Implementada y validada localmente: calendario aprobado por alcance, historial de ficha, Excel/CSV completos y avisos internos transaccionales. Correo mínimo con enlace al portal, destinatario autorizado, cola idempotente, control por empresa, bloqueo Demo y cron. La recepción efectiva en buzón se verifica con el primer uso autorizado; no se enviaron mensajes de prueba a personal real.
 
-Trial continúa omitido por la decisión previa del usuario. Este plan no registra una aplicación SQL ni un despliegue ya realizado. La salida remota se presenta para aprobación con candidato, diff, resultados y pasos concretos.
+## Fase 4 — Documentos y constancias
 
-Cierre: migraciones verificadas en destino, acceso Admin/empleado funcional y saldos iniciales conciliados.
+Implementada y validada localmente: snapshots de concesión/acumulación/suspensión, PDF, firma manual y carga privada Admin con historial de versiones. Reintentos después de perder la respuesta no duplican el documento. Auth, PostgREST y Storage reales locales; aislamiento por tenant, hashes, permisos y descarga privada comprobados. PDF inspeccionado visualmente.
 
-## Fase 3 — Calendario, avisos y trazabilidad (pendiente)
+## Fase 5 — Nómina y liquidaciones
 
-- Calendario de ausencias aprobado, con filtros por período y empleado; reutilizar las solicitudes existentes.
-- Avisos de solicitudes y decisiones, con destinatarios autorizados e idempotencia; revisar primero alertas/notificaciones existentes.
-- Exportaciones de solicitudes y saldos limitadas al alcance autorizado.
-- Historial de cambios de la ficha, distinto del ledger de vacaciones ya existente.
+Circuito configurable implementado y validado localmente: contratos por vigencia, HNL/USD, cuatro frecuencias, fijo/variable/mixto, conceptos y cuentas, soporte de importes revisados, borrador, aprobación, contabilización/reversión y comprobantes propios privados. Vacaciones pagadas requieren solicitud aprobada y anticipo de tres días; liquidación requiere causal. No añade salario fijo por duplicado en vacaciones/liquidación ni ejecuta transferencias.
 
-Cierre: escrituras auditadas, aislamiento por empresa, permisos de exportación y ausencia de avisos duplicados. Definir canal y destinatarios antes de habilitar envíos externos.
+No se inventan contratos, salarios, tasas legales, exclusiones, prestaciones ni cuentas. La primera versión captura retenciones y prestaciones calculadas y revisadas por su responsable; no implementa un motor automático de cumplimiento legal ni dispersión bancaria. Completar configuración real y conciliar la primera nómina son pasos operativos pendientes. No se presenta la respuesta “aplican todas” como una regla matemática concreta ni como autorización para inventar importes.
 
-## Fase 4 — Documentos y constancias (pendiente)
+## Validación consolidada y límites
 
-- Constancias de concesión, acumulación y suspensión con datos congelados del acto correspondiente.
-- Evidencia firmada en almacenamiento privado, acceso autorizado e historial de versiones.
-- Definir con Administración el circuito de firma y conservación antes de implementar.
+[Evidencia de fases 3–5](uat/hr-phases-3-5-validation-2026-11-20.json): 690 pruebas Node antes de integrar compras, seis suites SQL en rollback, TypeScript/ESLint, estándar financiero, build/postbuild OCR, API/HTTP autenticados y navegador a 1280/768/390. Incluye corrección de altura de modales, recuperación de respuesta perdida en nómina y carga firmada, privacidad salarial y cierre de formulario tras logout en otra pestaña.
 
-Cierre: documento conciliado con la solicitud, evidencia privada recuperable y trazabilidad de firma.
-
-## Fase 5 — Nómina y liquidaciones (pendiente de definición funcional)
-
-Definir conceptos, salarios, pago de vacaciones, deducciones, liquidación e integración contable antes de programar cálculos. Esta fase no altera los saldos históricos ni las reglas vigentes por inferencia.
-
-## Evidencia de esta continuación
-
-- TypeScript: `npx.cmd tsc --noEmit`, aprobado.
-- HR: `node --test tests/hr.test.mjs`, 7/7 aprobadas.
-- Estándar financiero: `npm.cmd run check:finance-ui`, aprobado.
-- ESLint: `npx.cmd eslint src/components/hr src/lib/hr.ts`, aprobado.
-- Suite completa: `npm.cmd test`, 682/682 aprobadas sobre el árbol de trabajo actual (incluye cambios ajenos a HR).
-- Build: `npm.cmd run build`, aprobado, incluido postbuild del runtime PDF de OCR.
-- Docker disponible tras abrir Docker Desktop: ambas suites SQL de HR aprobadas con rollback en la réplica; cero tablas HR persistidas allí.
-- Auth/PostgREST reales sobre base desechable sin filas de negocio copiadas: 40 comprobaciones de acceso y flujo, más 6 de anticipo/concurrencia, aprobadas.
-- ERP completo en modo producción local: 17 comprobaciones de navegador aprobadas, sin excepciones JavaScript; login Admin/empleado, proxy, layout protegido, solicitudes y aprobación reales, con capturas a 1280/768/390 px.
-- El modo desarrollo presentó un error de inicialización del router; la aprobación de navegador corresponde al build de producción local. No se modificó código del ERP para sortearlo.
-- Evidencia actual y hashes de los archivos probados: [resultados autenticados](uat/hr-authenticated-results-2026-11-20.json). No equivale a despliegue o certificación de Production ni cierra todos los casos del checklist UAT.
-- Cierre posterior de fase 1 sobre candidato aislado: 683/683 Node, 16/16 HR/sesión enfocados, TypeScript, ESLint enfocado, estándar financiero, build y postbuild OCR aprobados. Las dos suites SQL del candidato pasan con rollback. 65 grupos API y 31 de navegador; conciliación final de 35 períodos. Detalle y límites en la evidencia final, que sustituye los pendientes locales de la ejecución inicial.
-- Limpieza: base desechable y contenedores UAT retirados; servidores locales detenidos, credenciales temporales eliminadas y réplica verificada sin tablas HR. `.next` contiene el build local de UAT y debe recompilarse con el ambiente destino antes de cualquier release; `.env.local` no se modificó.
+Los resultados locales no acreditan publicación, UAT autenticada de Production, recepción de correo ni uso en un iPad/Safari físico. Mantener esos estados por separado en el runbook y el registro de release. El `.next` local usa configuración UAT; Production se reconstruye desde fuente con sus variables propias. `.env.local` no se modificó.

@@ -1,5 +1,45 @@
 # Sari Express ERP — Hardening y Trial
 
+### 20/11/2026 - HR-05 - Calendario, historial y exportaciones
+
+- Estado: implementado y validado localmente; migración, integración y UAT de Production pendientes.
+- Archivos: `HrCalendarPage`, `HrHistoryDialog`, `HrExportButtons`, `HrShared`, `EmployeesPage`, `LeaveRequestsPage`, `hr-report.ts`, rutas RRHH, permisos, sidebar y breadcrumbs. SQL: `20261120141000_hr_activity_and_calendar.sql`; suite `hr_activity_and_calendar.sql`.
+- Comportamiento: calendario de ausencias aprobadas, alcance propio para empleados y equipo del tenant para Admin; historial de ficha con antes/después, actor y revisión; Excel/CSV del filtro completo, sin motivos médicos y con protección contra fórmulas. Auditoría de creación consolidada únicamente dentro de su transacción, sin editar historia ya confirmada. Avisos internos idempotentes y transaccionales.
+- Validaciones: suite SQL con ROLLBACK, API real Auth/PostgREST y navegador real de producción local; calendario, exportación efectiva de Excel/CSV, historial legible y tamaños 1280/768/390. Detalle final en `docs/uat/hr-phases-3-5-validation-2026-11-20.json`.
+- Riesgos/pendientes: SQL y smoke autenticado en destino; no se certifica Production con pruebas locales. Commit: el que contiene este registro.
+
+### 20/11/2026 - HR-06 - Constancias y documentos firmados privados
+
+- Estado: implementado y validado localmente; migración y publicación pendientes.
+- Archivos: `HrDocumentsPage`, PDF `hr-certificate-pdf`, `hr-documents.ts`, `server/hr-access.ts`, `/api/hr/documents`, `/api/hr/documents/[id]`, `/api/hr/certificates/[id]`, ruta Constancias. SQL: `20261120151000_hr_certificates_and_private_documents.sql`; suite `hr_certificates_and_documents.sql`.
+- Comportamiento: snapshots inmutables de concesión/acumulación/suspensión con identidad real del tenant, firma manual y carga exclusiva Admin mediante servidor; bucket privado, permisos restrictivos de escritura, verificación de bytes/MIME/tamaño/hash, versiones sin sobrescritura, URL privada de 60 segundos y comprobación de tenant/Host. Reintento después de perder la respuesta conserva la misma versión.
+- Validaciones: SQL con ROLLBACK, Storage/Auth/PostgREST reales locales, 17 grupos HTTP y pruebas de navegador con respuesta perdida después del commit; PDF renderizado e inspeccionado visualmente. Archivos de prueba explícitamente sintéticos, sin firmas ni documentos reales.
+- Riesgos/pendientes: desplegar SQL, confirmar copias independientes de BD/Storage y ejecutar smoke en destino. Un PDF emitido no demuestra firma. Commit: el que contiene este registro.
+
+### 20/11/2026 - HR-07 - Correo de RRHH con cola y bloqueo de ambiente
+
+- Estado: implementado y validado localmente; activación en destino pendiente. Usuario eligió avisos por correo y firma manual con carga privada.
+- Archivos: `hr-email.ts`, `hr-notify.ts`, `server/hr-email.ts`, motor compartido `email-delivery.ts`, `/api/hr/notify`, `/api/cron/hr-notifications`, formularios de solicitud/revisión/cancelación, `HrNoticesPage`, `HrSettingsPage`, proxy y `vercel.json`. SQL: `20261120161000_hr_email_outbox.sql`; suite `hr_email_outbox.sql`.
+- Comportamiento: destinatario congelado por evento, validación de cuenta activa y correo sin cambios, opt-in por tenant, dominio primario propio, contenido mínimo sin razones médicas ni adjuntos. Reutiliza la entrega Resend con lease e idempotencia; sin reintentos ciegos de resultados inciertos. Demostración, ambiente no verificable o veto global bloquean envíos. UI distingue pendiente, aceptación por proveedor y conciliación; aceptación no equivale a entrega al buzón. Cron diario recoge primeros intentos pendientes.
+- Validaciones: SQL con ROLLBACK; tests de contenido y bloqueo antes de proveedor; siete grupos HTTP autenticados reales, incluidos acceso ajeno, origen, UUID y cron. Cero correos externos de prueba. Se verificó presencia de nombres de variables Production, sin extraer secretos.
+- Riesgos/pendientes: producción debe conservar `CRON_SECRET`, Resend y `OUTBOUND_EMAIL_ENABLED`; resultados inciertos o leases vencidos requieren conciliación con Resend, nunca se anuncian como enviados. Commit: el que contiene este registro.
+
+### 20/11/2026 - HR-08 - Nómina configurable, liquidaciones revisadas y contabilidad
+
+- Estado: implementación validada localmente con SQL/API/HTTP/navegador; migración, configuración real y despliegue pendientes. No se declara motor automático de cumplimiento laboral/fiscal.
+- Archivos: `HrPayrollPage`, `hr-payroll.ts`, PDF `hr-payslip-pdf`, `/rrhh/nomina`, `/api/hr/payslips/[id]`, permisos/navegación, `check-finance-ui.mjs` y `docs/hr-payroll-policy.md`. SQL: `20261120171000_hr_payroll.sql`; suite `hr_payroll.sql`.
+- Comportamiento: condiciones salariales por vigencia, HNL/USD, cuatro frecuencias, fijo/variable/mixto, conceptos y cuentas explícitas; snapshots, cálculo de totales servidor y soporte por concepto. Preparación, aprobación, contabilización y reversión atómicas/idempotentes. Cruces por empleado bloqueados mediante lock. Aportes patronales separados del neto; conversión USD con cuenta explícita de redondeo. Pago de vacaciones vinculado a aprobación y anticipo de tres días; liquidación requiere causal y conceptos revisados. PDF propio para empleado, sin acceso a salarios del equipo ni cuentas. No ejecuta transferencias bancarias.
+- Validaciones: suite SQL con ROLLBACK y diez grupos Auth/PostgREST reales, incluyendo concurrencia de creación/contabilización, cruce de períodos, publicación solo aprobada y asiento real balanceado. Campos numéricos usan `FinanceNumberInput` y se agregan al verificador financiero.
+- Riesgos/pendientes: completar contratos, cuentas y reglas/valores legales con responsable de nómina antes de emitir. No se inventan salarios, tasas ni exenciones; retenciones y prestaciones se capturan con cálculo revisado. Las correcciones posteriores de vacaciones pagadas requieren conciliación. La dispersión bancaria y automatización normativa tienen alcance propio. Commit: el que contiene este registro.
+
+### 20/11/2026 - HR-09 - Desmontar formularios privados al cambiar de sesión
+
+- Estado: implementado y validado localmente, publicación pendiente.
+- Archivos: `src/app/(protected)/rrhh/layout.tsx`.
+- Comportamiento: el layout HR usa una clave por usuario, tenant y permisos; cambiar ese contexto desmonta también modales y borradores privados, además de descartar cargas obsoletas. Así un formulario abierto no conserva datos del usuario anterior.
+- Validaciones: TypeScript/ESLint, build y cierre de un formulario salarial abierto al cerrar sesión desde otra pestaña real del navegador; evidencia final en el archivo de validación de fases 3–5.
+- Riesgos/pendientes: desplegar junto a las rutas HR; RLS y autorización servidor siguen siendo controles obligatorios. Commit: el que contiene este registro.
+
 ### 18/11/2026 - UX-CLIENT-RATE-SPARSE-01 - Guardar solo tarifas editadas y distinguir altas
 
 - Estado: implementado en release aislado desde origin/main; publicacion pendiente. No se eliminan tarifas ni eventos historicos y no se requiere migracion: reutiliza replace_client_rates con listas de codigos y filas limitadas a lo editado.

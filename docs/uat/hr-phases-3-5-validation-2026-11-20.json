@@ -1,0 +1,287 @@
+{
+  "at": "2026-11-20T22:08:52.461Z",
+  "branch": "release/hr-module-20261120",
+  "base": "2241df743bf8a9f502508121b675703b7730d3ec",
+  "scope": "HR only; unrelated client and purchasing work excluded",
+  "environment": "Production-mode localhost; disposable synthetic database, real Auth, PostgREST and private Storage; external email blocked in Demo",
+  "checks": {
+    "typescript": "passed after final UI change",
+    "eslint": "passed focused HR/routes/security/shared changes",
+    "financeUi": "passed; payroll file included in scanner",
+    "node": {
+      "passed": 690,
+      "failed": 0
+    },
+    "build": "passed, including OCR packaged runtime postbuild",
+    "sql": {
+      "suites": [
+        "hr_employees_and_leave.sql",
+        "hr_vacation_periods.sql",
+        "hr_activity_and_calendar.sql",
+        "hr_certificates_and_documents.sql",
+        "hr_email_outbox.sql",
+        "hr_payroll.sql"
+      ],
+      "result": "passed on replica inside rollback-only transactions"
+    },
+    "phase34Api": {
+      "at": "2026-11-20T20:57:13.785Z",
+      "groups": 13,
+      "checks": [
+        "Retry of existing request generates no duplicate internal notice",
+        "Real PostgREST join exposes only employee notices with readable notification payloads",
+        "Other tenant cannot read notice recipient bookkeeping",
+        "Employee calendar includes own approved absence only",
+        "Calendar overlap and tenant boundary exclude the other company",
+        "Client, inactive and pending profiles cannot use calendar RPC",
+        "Employee history consolidates creation and records actual before/after update",
+        "Administrative history is hidden from employee and other tenant",
+        "Certificate snapshot remains frozen after employee record edit",
+        "Certificate RLS blocks Client, inactive, pending and other tenant",
+        "Upload finalization RPC is inaccessible even to authenticated Admin outside server",
+        "Real Storage confirms HR bucket is private",
+        "Real Storage refuses direct authenticated Admin upload"
+      ],
+      "errors": []
+    },
+    "documentsHttp": {
+      "at": "2026-11-20T21:03:05.110Z",
+      "groups": 17,
+      "checks": [
+        "Anonymous certificate HTTP route requires a real session",
+        "Actual private PDF renders frozen employee/company data without Sari defaults from another tenant",
+        "Certificate HTTP route rejects Client, inactive and pending profiles",
+        "Other-tenant HTTP request cannot retrieve certificate UUID",
+        "HTTP tenant host mismatch is rejected before document lookup",
+        "Employee cannot register a signed version",
+        "Admin cannot upload a signed file against another tenant certificate",
+        "Misleading PDF multipart MIME with invalid bytes is rejected",
+        "Manual signature attestation is required",
+        "Cookie-authenticated upload rejects cross-origin request",
+        "Server uploads synthetic PDF into real private Storage and finalizes version",
+        "HTTP upload retry returns same document ID without duplicate version",
+        "A new upload preserves a separate version",
+        "Employee metadata exposes both versions with server-computed SHA256",
+        "Authorized employee receives a short-lived private URL and exact original bytes",
+        "Other tenant cannot issue a signed download URL",
+        "Direct Storage download refuses another tenant and anonymous access"
+      ],
+      "errors": []
+    },
+    "phase34Browser": {
+      "at": "2026-11-20T22:02:13.950Z",
+      "groups": 14,
+      "checks": [
+        "Real Admin downloads authorized Excel and CSV balances through UI",
+        "history-admin responsive 1280/768/390",
+        "calendar-admin responsive 1280/768/390",
+        "Admin calendar renders approved absences without other tenant",
+        "notices-admin responsive 1280/768/390",
+        "Admin reads and marks only own transactional HR notices",
+        "documents-admin responsive 1280/768/390",
+        "signed-upload-dialog responsive 1280/768/390",
+        "Lost signed-upload response occurs after one committed private version",
+        "UI upload retry keeps the same intent and creates no duplicate version",
+        "documents-employee responsive 1280/768/390",
+        "Employee sees own signed versions without upload permission",
+        "calendar-employee responsive 1280/768/390",
+        "notices-employee responsive 1280/768/390"
+      ],
+      "errors": []
+    },
+    "mailHttp": {
+      "at": "2026-11-20T22:01:25.931Z",
+      "groups": 7,
+      "checks": [
+        "Anonymous cannot dispatch HR notices",
+        "Client, pending and inactive cannot dispatch notices",
+        "Cross-origin dispatch blocked",
+        "Invalid UUID rejected",
+        "Unknown resource cannot dispatch",
+        "Real admin and linked employee route verifies resource but vetoes all external mail in local Demo",
+        "Cron is not an unauthenticated sending endpoint"
+      ],
+      "errors": []
+    },
+    "payrollApi": {
+      "at": "2026-11-20T21:47:31.528Z",
+      "groups": 10,
+      "checks": [
+        "Salary term retry returns immutable original revision",
+        "Concurrent identical payroll requests produce one draft",
+        "Server computes fixed salary, variable earnings, deductions and separate employer contributions",
+        "Employee cannot read draft salary output",
+        "Employee, client, inactive and pending cannot approve payroll",
+        "Other tenant cannot inspect or approve payroll UUID",
+        "Overlapping payroll for same employee cannot create another payable",
+        "Approved own payslip is available without ledger accounts or other salaries",
+        "Concurrent posting is atomic and creates one journal",
+        "Actual accounting journal reconciles gross plus employer contributions"
+      ],
+      "errors": []
+    },
+    "payslipHttp": {
+      "at": "2026-11-20T21:53:55.180Z",
+      "groups": 5,
+      "checks": [
+        "Anonymous cannot download payslip",
+        "Actual private PDF preserves company/employee snapshots, gross, net and separate employer contributions",
+        "Client, inactive and pending cannot download payslips",
+        "Other tenant cannot retrieve payslip UUID",
+        "Invalid private document identifier rejected"
+      ],
+      "errors": []
+    },
+    "payrollBrowser": {
+      "at": "2026-11-20T21:57:37.142Z",
+      "groups": 11,
+      "checks": [
+        "payroll-admin responsive 1280/768/390",
+        "salary-terms responsive 1280/768/390",
+        "Existing effective salary history is visible only to Administration",
+        "payroll-concepts responsive 1280/768/390",
+        "payroll-draft responsive 1280/768/390",
+        "payroll-settlement responsive 1280/768/390",
+        "Real payroll form recovers a lost committed response without creating duplicate drafts",
+        "payroll-review responsive 1280/768/390",
+        "Administration reviews server-calculated cents and approves from the real screen",
+        "payslips-employee responsive 1280/768/390",
+        "Employee sees approved own payslips without salary setup, legal review notes or payroll controls"
+      ],
+      "errors": []
+    },
+    "sessionModal": {
+      "at": "2026-11-20T21:59:42.190Z",
+      "groups": 1,
+      "checks": [
+        "Signing out in a second real browser tab removes the open private salary modal from the first tab"
+      ],
+      "errors": []
+    }
+  },
+  "reconciliation": {
+    "vacation": {
+      "date": "2026-11-20T22:02:27.164Z",
+      "employees": 3,
+      "periods": 15,
+      "ledgerRows": 3,
+      "requestRows": 4,
+      "checks": [
+        "Every period adjustment equals the immutable ledger sum",
+        "Approved and pending consumption equal actual allocation rows and request statuses",
+        "Every balance equals entitlement plus ledger minus approved and pending consumption"
+      ],
+      "errors": []
+    },
+    "payroll": {
+      "at": "2026-11-20T22:01:22.986Z",
+      "runs": 3,
+      "entries": 3,
+      "activePayrolls": 2,
+      "checks": [
+        "Exactly one active payroll survives browser response-loss/retry; earlier failed-fixture drafts remain explicitly annulled",
+        "Every synthetic payroll total equals its immutable employee entries and every posted journal balances in cents"
+      ]
+    }
+  },
+  "visualReview": [
+    "calendar, employee history, private signed upload and payroll forms at 1280/768/390",
+    "Payroll modal bounded to 90dvh after detecting vertical overflow",
+    "Actual certificate and payslip PDFs rendered and inspected"
+  ],
+  "email": {
+    "externalTestEmails": 0,
+    "productionEnvNamesPresent": [
+      "CRON_SECRET",
+      "RESEND_API_KEY",
+      "RESEND_FROM_EMAIL",
+      "OUTBOUND_EMAIL_ENABLED",
+      "SUPABASE_SERVICE_ROLE_KEY"
+    ],
+    "providerDeliveryUat": "No test message sent to real staff"
+  },
+  "production": {
+    "sqlApplied": false,
+    "deployed": false,
+    "preflight": "Verified production target fwspgdzvlbtbgiupvrzo; no HR tables or bucket, latest remote migration 20261118130000 at preflight",
+    "backup": {
+      "databaseRun": "44778930181",
+      "storageRun": "43731317743",
+      "healthRun": "44779216460",
+      "lastRestoreRun": "42292324814",
+      "restoreAt": "2026-11-06T20:54:48Z",
+      "freshRestoreExecuted": false,
+      "newSensitiveDocumentTransfersStarted": false,
+      "storageDiscovery": "Existing backup enumerates all S3 buckets; HR bucket does not need a hardcoded addition"
+    }
+  },
+  "limitations": [
+    "Local authenticated UAT is not Production UAT or physical Safari/iPadOS proof",
+    "No real employees, salaries, statutory rates, opening balances or account mappings invented",
+    "Statutory calculations and settlement eligibility require reviewed input; automatic legal compliance and bank disbursement not implemented",
+    "Production activation, HR data setup and provider delivery verification remain separate release/operational steps"
+  ],
+  "sha256": {
+    "scripts/check-finance-ui.mjs": "f414bc6ac4020c7c76622fca4d228d2eb7f6f103094223034cce63985c2c267e",
+    "scripts/validate-audit-sql.mjs": "dceac65247acdc646f022b7762af085c4abb81a7e8c5f139b68df94a1e386b66",
+    "src/app/(protected)/rrhh/avisos/page.tsx": "0f7c9cd8cd582de31fd4bfc34de05fa91c56fa17960aa50acb673c7bcf06b7df",
+    "src/app/(protected)/rrhh/calendario/page.tsx": "7bc8d5453f1cbce7062a0c5c93b60b0940157ed7d0bd7c84dc0b7a46ee121b19",
+    "src/app/(protected)/rrhh/configuracion/page.tsx": "4eb4a5edbb1140b360199eebfe3b3168f518f105d0f9aa147e6fd3e9cadf6b78",
+    "src/app/(protected)/rrhh/documentos/page.tsx": "d2a18dfe33d03fa316aa85a45ac4fc9166d00f05af997451676a0e9995d87bdb",
+    "src/app/(protected)/rrhh/layout.tsx": "43a939d8d90d14fb453f3ea9f640e8943a7d5d6b2bba6f9799d8bd022b2ab88e",
+    "src/app/(protected)/rrhh/mi-ficha/page.tsx": "f45b1d9eefe1e5e9ee39effc236378293ac3542e6746b2f8ea8da7992d4076cb",
+    "src/app/(protected)/rrhh/nomina/page.tsx": "ef5370023244987f59cafa52d0af2f46d6455b35917f86dc77a7c7621dc98dfc",
+    "src/app/(protected)/rrhh/page.tsx": "c750eb7edbb31b61ba0c791a1a999b492dbc294b3537c836c1c57e6f8543940a",
+    "src/app/(protected)/rrhh/solicitudes/page.tsx": "c5e7f590b8ccf2ec5abfc09af537e2244e49e08ef9541249467c54725fa14e88",
+    "src/app/api/cron/hr-notifications/route.ts": "da6ae374207ba142ef544d28d7b94e618cfa32536a456f0d17a84aa8cfda6b05",
+    "src/app/api/hr/certificates/[id]/route.ts": "94e93b18c96bc15adc3e401f2b86fe62df6be617fda65355b1b2d501bc054216",
+    "src/app/api/hr/documents/[id]/route.ts": "be79ff425246c2939f4144dafa9f3447dd7e76cc732b45dd201034f75ded9d1d",
+    "src/app/api/hr/documents/route.ts": "953c91d43066445820cd76c844f330b7ca014fb4d9c0a26352b716026b3d933f",
+    "src/app/api/hr/notify/route.ts": "9b039509eeaca679f6e59bbfadca23fb0c6af9338538ce8db5f60c582fa268a6",
+    "src/app/api/hr/payslips/[id]/route.ts": "97f0dbb00638bd234b5b41a6f8b5d5fd3d02178c35924e0a9e33ae46c5f4dc24",
+    "src/components/hr/EmployeesPage.tsx": "ddb34cbae59d889f2e1e2c1bfe509b959ef595db7b790392d45279a4710b7ae2",
+    "src/components/hr/HrCalendarPage.tsx": "51212a1ec60b9cbc72bbc0c2679505818a774721367bac325840b16e3530c5b9",
+    "src/components/hr/HrDocumentsPage.tsx": "fba78d738d84793ecd02b8c1875e7e003f6486eac9328d5c25095c616f3acbce",
+    "src/components/hr/HrExportButtons.tsx": "3a4e1984499ecc3dc0affe01a8c14add44c7727fbcf49e18faaa682fc317d40b",
+    "src/components/hr/HrHistoryDialog.tsx": "4b83d8ba7bf347eb5a0635e936085b0e8211d547bf355ca3afd436efa58b106c",
+    "src/components/hr/HrNoticesPage.tsx": "ee811de5139707af263fc26eff783a6583852c7f40b1274669b5793ee9a9ce54",
+    "src/components/hr/HrPayrollPage.tsx": "2967a9cabb3cfc501477d235cdb53e1a08f6ebeb9c82700ab2835096249acf04",
+    "src/components/hr/HrSettingsPage.tsx": "423da44e3be994f84b37561faee5e0556c34c809050833113f92a6879dca2af9",
+    "src/components/hr/HrShared.tsx": "bbd62866e0b4b8ea97a34a513fe184dc8e008bd46481437a093a342fa8ab802a",
+    "src/components/hr/LeaveRequestsPage.tsx": "08fb99d5e87944876146d50eb0707c7d3df06630e7a96dcd48f46ce038bb6fe7",
+    "src/components/hr/MyHrPage.tsx": "8e77d7e37c785499a0bda51273e5e76c2004ed020977f909a0bc658a708e2392",
+    "src/components/hr/VacationDetailDialog.tsx": "1b2f2183991dcb55b2ddd0bbd139626206eb66c8c67e334eba2777b73889954e",
+    "src/components/layout/sidebar.tsx": "5824d5f8a719a08fe94a956fbb721238c51de79bc6de456916861e5acdd67613",
+    "src/components/pdf/hr-certificate-pdf.tsx": "09d6d05eedfa73c0c5759abd373060e2fb85146a1ff43a47557cbca974af53bc",
+    "src/components/pdf/hr-payslip-pdf.tsx": "07198392e009a8917dc21ea932c21184851abe7adeb1b05bd685db6f94ac29a9",
+    "src/lib/hr-documents.ts": "65fdd25b236bafdab1dab77370dd92c7e6926895bec729f694cf075f83f560ab",
+    "src/lib/hr-email.ts": "19944272c8c6c5370c41b710a447db612c0bf5854aff4d13c901e6794a96181c",
+    "src/lib/hr-notify.ts": "4ad9a6f0b33b13a78f92db0c714578f4bfbffa63e67b7721e0c44256e301daa5",
+    "src/lib/hr-payroll.ts": "2f7b491bff851de1931b8c98fbe0870e174942a355c61359e7b85dcbfd4d1d7e",
+    "src/lib/hr-report.ts": "e7897354d4b80a6137a5131c2f57dea7e7c9e85d5a8c73299715c204b990aedc",
+    "src/lib/hr.ts": "5e429988ab545b1e217285e5ce053e7242065063c5f8f3fd5a2c37f54266148f",
+    "src/lib/permissions.ts": "e2f32d972a759739fc94b727f47df25867338b50b69b0d1ccf0e86bbed6dfa7c",
+    "src/lib/server/email-delivery.ts": "b72448de8b4844e4ad4680e2ebe61661c5c53ada51d63706b89dd80940e2b38d",
+    "src/lib/server/hr-access.ts": "a50b9236127768d652dabd6d00d24f2347f81c80f793d4abbfcb28944afbc81e",
+    "src/lib/server/hr-email.ts": "c1eaf7584638d7114dd94718ce6b09e1239f5a3c46db0afcbe0494fdaf0ca6e9",
+    "src/lib/workspace-breadcrumbs.ts": "567f948cde3a29b6b9dec456e2d8ffc52ce078f2ea987642320d0d018edf8f73",
+    "src/proxy.ts": "30ee03b74131a5085755d304b9e48ef22fe6cc54b3f3cec422dd6bcac8f08973",
+    "supabase/migrations/20261118120000_hr_employees_and_leave.sql": "cdbcecbc4fff0c7a65e2671612725bb1bb49d235f99793f65dabc9b0504200a2",
+    "supabase/migrations/20261119120000_hr_vacation_periods.sql": "fdb58c0722ada59015d8b8ac0e45f3e721e9b5f3b8d44e18cec57c5d49d8c63b",
+    "supabase/migrations/20261120141000_hr_activity_and_calendar.sql": "f5c07b519ade7783240b4c965c25645d02c148d032706f26b5abc8e04f6cc5b4",
+    "supabase/migrations/20261120151000_hr_certificates_and_private_documents.sql": "64100f5a03ca59cd015d148e2340fe88ca8b356eb4ef2f54561604c6467ebd85",
+    "supabase/migrations/20261120161000_hr_email_outbox.sql": "55b198caaf0e0e389965f0622b348823609de71614b4e1bc1536c011359025d3",
+    "supabase/migrations/20261120171000_hr_payroll.sql": "c73b2a526f7fcf792c5014cc9afa4ea8c56d965c090b248c2f73b221a88a858d",
+    "supabase/tests/hr_activity_and_calendar.sql": "06aea025a1918acf9004e5484468c74afa6f8c2b89df3fd493de3a98d5c3b14f",
+    "supabase/tests/hr_certificates_and_documents.sql": "b0cd38ccf8c8aae76d88904f10abc207ad43dbe85a616b8686d26d26967ca792",
+    "supabase/tests/hr_email_outbox.sql": "76b806bc80f8f900cc51560a1a1d1e0eee19b842fd8ea6e75806d48fd4f24f8c",
+    "supabase/tests/hr_employees_and_leave.sql": "c4e1af77db3c642f13d0375f8fceb72599e4ebce8a1a265f863a09a039ccbcea",
+    "supabase/tests/hr_payroll.sql": "659ffc5fcf5e3a9416dea38334d174039d4b968036bef41697923f90840c8130",
+    "supabase/tests/hr_vacation_periods.sql": "924a47d7075e6d0147781ca1a92eb7de7f07905708ba150863f74232d0173400",
+    "tests/hr-documents.test.mjs": "4a55837a54d79dc4a509034c7753852eb4ab63885c1cc1a77382221bbd3b4051",
+    "tests/hr-email.test.mjs": "d2cdd578728e3dda63bb56023352105e4a0e42cc4d76ff660d4a6fbc4a9935bc",
+    "tests/hr-recovery.test.mjs": "43cab11296289abacaeabaa9e9de58e01d182dbdfbdaae4a3e4f2417c013c34b",
+    "tests/hr-report.test.mjs": "8e5999d94ddc85e95eec057943cf658e502f524a01f8eac079fa633e22929ddf",
+    "vercel.json": "1d39590ad2b3548eed6c7a85abb9bba9c4d4214ae5e1cbf6335a933341e03bf0"
+  }
+}

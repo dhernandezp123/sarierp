@@ -1,0 +1,82 @@
+\set ON_ERROR_STOP on
+begin;
+create function pg_temp.ok(value boolean,message text) returns void language plpgsql as $$begin if not coalesce(value,false) then raise exception 'ASSERTION FAILED: %',message;end if;end $$;
+create function pg_temp.expect(command text,message text) returns void language plpgsql as $$begin begin execute command;exception when others then if position(message in sqlerrm)>0 then return;end if;raise;end;raise exception 'Expected failure: %',message;end $$;
+create function pg_temp.as_user(n integer) returns void language plpgsql as $$begin perform set_config('request.jwt.claims',jsonb_build_object('sub','e4080000-0000-4000-8000-'||lpad(n::text,12,'0'),'role','authenticated')::text,true);end $$;
+insert into public.tenants(id,slug,name) values('e4080000-0000-4000-8000-000000000100','hr08-a','HR08 A'),('e4080000-0000-4000-8000-000000000200','hr08-b','HR08 B');
+insert into auth.users(id,aud,role,email,raw_user_meta_data) select ('e4080000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'authenticated','authenticated','hr08-'||n||'@example.invalid','{}'::jsonb from generate_series(1,4)n;
+update public.profiles set rol=(case right(id::text,1) when '2' then 'Ventas' when '4' then 'Contabilidad' else 'Admin' end)::public.user_role,status='Aprobado',is_active=true,is_platform_admin=false,
+ tenant_id=case right(id::text,1) when '3' then 'e4080000-0000-4000-8000-000000000200'::uuid else 'e4080000-0000-4000-8000-000000000100'::uuid end where id::text like 'e4080000-%';
+create temp table ids(name text primary key,id uuid);grant all on ids to authenticated;
+create temp table payload(run jsonb,people jsonb);grant all on payload to authenticated;
+set local role authenticated;select pg_temp.as_user(1);
+select public.import_accounting_accounts('[{"code":"5101","name":"Sueldos","kind":"Gasto"},{"code":"5102","name":"Aportes","kind":"Gasto"},{"code":"2101","name":"Salarios por pagar","kind":"Pasivo"},{"code":"2102","name":"Retenciones","kind":"Pasivo"},{"code":"2103","name":"Aportes por pagar","kind":"Pasivo"}]');
+select public.manage_accounting_period(date_trunc('year',current_date)::date,(date_trunc('year',current_date)+interval '1 year' - interval '1 day')::date);
+insert into ids select 'employee',public.hr_save_employee(null,null,jsonb_build_object('employee_code','HR08','first_name','Empleado','last_name','Sintético','hire_date',current_date-interval '2 years','contract_type','Indefinido','profile_id','e4080000-0000-4000-8000-000000000002'));
+insert into ids select 'base',public.hr_save_payroll_concept(null,null,jsonb_build_object('code','SALARIO_BASE','name','Salario contractual','kind','Ingreso','debit_account_id',(select id from public.accounting_accounts where code='5101')));
+insert into ids select 'deduction',public.hr_save_payroll_concept(null,null,jsonb_build_object('code','RETENCION','name','Retención verificada','kind','Deducción','credit_account_id',(select id from public.accounting_accounts where code='2102')));
+insert into ids select 'employer',public.hr_save_payroll_concept(null,null,jsonb_build_object('code','APORTE','name','Aporte patronal verificado','kind','Aporte patronal','debit_account_id',(select id from public.accounting_accounts where code='5102'),'credit_account_id',(select id from public.accounting_accounts where code='2103')));
+insert into ids select 'benefit',public.hr_save_payroll_concept(null,null,jsonb_build_object('code','PRESTACION','name','Prestación revisada','kind','Ingreso','debit_account_id',(select id from public.accounting_accounts where code='5101')));
+insert into payload select jsonb_build_object('kind','Nómina','starts_on',current_date-6,'ends_on',current_date,'pay_date',current_date,'currency','HNL','exchange_rate',1,'payable_account_id',(select id from public.accounting_accounts where code='2101'),'review_source','Datos sintéticos: retenciones y aportes revisados; no representan tasas legales ni datos de Sari','review_confirmed',true),
+ jsonb_build_array(jsonb_build_object('employee_id',(select id from ids where name='employee'),'paid_days',7,'items',jsonb_build_array(jsonb_build_object('concept_id',(select id from ids where name='deduction'),'amount',200,'source','Cálculo sintético de deducciones revisado'),jsonb_build_object('concept_id',(select id from ids where name='employer'),'amount',300,'source','Cálculo sintético de aportes revisado'))));
+select pg_temp.expect($$select public.hr_create_payroll(gen_random_uuid(),run,people) from payload$$,'Faltan condiciones');
+insert into ids select 'terms',public.hr_add_compensation((select id from ids where name='employee'),jsonb_build_object('effective_from',current_date-30,'currency','HNL','salary_mode','Mixto','monthly_salary',30000,'frequency','Semanal','source','Contrato sintético: base mensual y complementos variables revisados'));
+select pg_temp.ok(public.hr_add_compensation((select id from ids where name='employee'),jsonb_build_object('effective_from',current_date-30,'currency','HNL','salary_mode','Mixto','monthly_salary',30000,'frequency','Semanal','source','Contrato sintético: base mensual y complementos variables revisados'))=(select id from ids where name='terms'),'reintento del contrato no duplica ni sobrescribe vigencia');
+insert into ids select 'run',public.hr_create_payroll('e408aaaa-0000-4000-8000-000000000001',run,people) from payload;
+select pg_temp.ok((select gross=7000 and deductions=200 and employer=300 and net=6800 from public.hr_payroll_runs where id=(select id from ids where name='run')),'base /30, deducciones y aportes patronales separados');
+select pg_temp.ok((select public.hr_create_payroll('e408aaaa-0000-4000-8000-000000000001',run,people)=(select id from ids where name='run') from payload),'reintento idempotente');
+select pg_temp.expect($$select public.hr_create_payroll('e408aaaa-0000-4000-8000-000000000001',run||'{"review_source":"Otra revisión del mismo período sintético"}',people) from payload$$,'otro contenido');
+select pg_temp.expect($$select public.hr_create_payroll(gen_random_uuid(),run,people) from payload$$,'Ya existe');
+select pg_temp.expect($$select public.hr_review_payroll((select id from ids where name='run'),'Contabilizar','')$$,'Aprueba');
+select pg_temp.expect($$update public.hr_payroll_runs set net=0$$,'permission denied');
+select pg_temp.expect($$select public.hr_add_compensation((select id from ids where name='employee'),jsonb_build_object('effective_from',current_date-1,'currency','HNL','salary_mode','Fijo','monthly_salary',35000,'frequency','Mensual','source','Cambiar contrato de forma retroactiva'))$$,'se cruza');
+select pg_temp.as_user(2);
+select pg_temp.ok((select count(*)=0 from public.hr_compensation),'empleado no ve contratos salariales administrativos');
+select pg_temp.ok((select count(*)=0 from public.hr_payslips()),'borrador no se publica al empleado');
+select pg_temp.expect($$select public.hr_review_payroll((select id from ids where name='run'),'Aprobar','')$$,'No autorizado');
+select pg_temp.as_user(4);
+select pg_temp.ok((select count(*)=0 from public.hr_payroll_runs),'Contabilidad no recibe acceso salarial general por su rol');
+select pg_temp.as_user(1);
+select public.hr_review_payroll((select id from ids where name='run'),'Aprobar','');
+insert into ids select 'journal',public.hr_review_payroll((select id from ids where name='run'),'Contabilizar','');
+select pg_temp.ok(public.hr_review_payroll((select id from ids where name='run'),'Contabilizar','')=(select id from ids where name='journal'),'contabilización idempotente');
+select pg_temp.ok((select sum(debit)=7300 and sum(credit)=7300 from public.journal_lines where entry_id=(select id from ids where name='journal')),'asiento balancea bruto más aportes');
+select pg_temp.ok((select credit=6800 from public.journal_lines where entry_id=(select id from ids where name='journal') and account_code='2101'),'salario neto se reconoce por pagar');
+select pg_temp.as_user(2);
+select pg_temp.ok((select count(*)=1 from public.hr_payslips()),'empleado consulta su comprobante aprobado');
+select pg_temp.ok((select value->'employee'->>'name'='Empleado Sintético' and not(value::text like '%debit_account_id%') from public.hr_payslips()value),'comprobante propio no expone cuentas ni otros contratos');
+select pg_temp.as_user(3);
+select pg_temp.ok((select count(*)=0 from public.hr_payslips()),'tenant ajeno no ve comprobantes');
+select pg_temp.expect($$select public.hr_review_payroll((select id from ids where name='run'),'Revertir','Motivo suficientemente documentado')$$,'no disponible');
+select pg_temp.as_user(1);
+insert into ids select 'reversal',public.hr_review_payroll((select id from ids where name='run'),'Revertir','Anulación de prueba sintética de nómina');
+select pg_temp.ok(public.hr_review_payroll((select id from ids where name='run'),'Revertir','Anulación de prueba sintética de nómina')=(select id from ids where name='reversal'),'reversión idempotente');
+select pg_temp.ok((select sum(debit)-sum(credit)=0 from public.journal_lines where entry_id in ((select id from ids where name='journal'),(select id from ids where name='reversal'))),'reversión conserva partida doble');
+select pg_temp.as_user(2);select pg_temp.ok((select count(*)=0 from public.hr_payslips()),'anulado deja de presentarse como aprobado');select pg_temp.as_user(1);
+-- La liquidación conserva su cálculo revisado sin añadir un salario automático.
+update payload set run=run||'{"kind":"Liquidación","settlement_cause":"Causal sintética revisada, prestaciones proporcionales sin preaviso ni cesantía"}',people=jsonb_build_array(jsonb_build_object('employee_id',(select id from ids where name='employee'),'paid_days',0,'items',jsonb_build_array(jsonb_build_object('concept_id',(select id from ids where name='benefit'),'amount',1500,'source','Liquidación sintética: causal, promedio y pagos previos revisados'))));
+insert into ids select 'settlement',public.hr_create_payroll(gen_random_uuid(),run,people) from payload;
+select pg_temp.ok((select gross=1500 and net=1500 from public.hr_payroll_runs where id=(select id from ids where name='settlement')),'liquidación solo usa conceptos explícitos');
+select pg_temp.expect($$select public.hr_create_payroll(gen_random_uuid(),run||'{"review_confirmed":false}',people) from payload$$,'Confirma');
+-- Vacaciones: aprobación real, anticipo legal y comprobación antes de aprobar el pago.
+insert into ids select 'leave',public.hr_request_leave(gen_random_uuid(),(select id from ids where name='employee'),'Vacaciones',date_trunc('week',current_date)::date+14,date_trunc('week',current_date)::date+15,'Vacaciones sintéticas de prueba');
+select public.hr_review_leave((select id from ids where name='leave'),'Aprobada','Autorización sintética');
+update payload set run=run||jsonb_build_object('kind','Vacaciones','leave_request_id',(select id from ids where name='leave'),'starts_on',date_trunc('week',current_date)::date+14,'ends_on',date_trunc('week',current_date)::date+15);
+select pg_temp.expect($$select public.hr_create_payroll(gen_random_uuid(),run||jsonb_build_object('pay_date',(run->>'starts_on')::date-1),people) from payload$$,'tres días');
+insert into ids select 'vacation-pay',public.hr_create_payroll(gen_random_uuid(),run,people) from payload;
+select pg_temp.ok((select net=1500 from public.hr_payroll_runs where id=(select id from ids where name='vacation-pay')),'pago de vacaciones no suma salario automático');
+select public.hr_review_leave((select id from ids where name='leave'),'Cancelada','Cancelar vacaciones antes del pago');
+select pg_temp.expect($$select public.hr_review_payroll((select id from ids where name='vacation-pay'),'Aprobar','')$$,'vacaciones cambiaron');
+-- Variable en USD, conversión y ajuste explícito de un centavo; nominal no cambia.
+insert into ids select 'usd-employee',public.hr_save_employee(null,null,jsonb_build_object('employee_code','HR08USD','first_name','Variable','last_name','USD','hire_date',current_date-interval '2 years','contract_type','Indefinido'));
+select public.hr_add_compensation((select id from ids where name='usd-employee'),jsonb_build_object('effective_from',current_date-30,'currency','USD','salary_mode','Variable','monthly_salary',0,'frequency','Mensual','source','Contrato variable sintético, importes revisados por período'));
+update payload set run=run||jsonb_build_object('kind','Nómina','starts_on',current_date,'ends_on',current_date,'currency','USD','exchange_rate',26.4567,'leave_request_id',null,'rounding_account_id',(select id from public.accounting_accounts where code='5102')),
+ people=jsonb_build_array(jsonb_build_object('employee_id',(select id from ids where name='usd-employee'),'paid_days',0,'items',jsonb_build_array(jsonb_build_object('concept_id',(select id from ids where name='benefit'),'amount',1000.01,'source','Ingreso variable sintético confirmado'),jsonb_build_object('concept_id',(select id from ids where name='deduction'),'amount',200.02,'source','Deducción variable sintética confirmada'))));
+select pg_temp.expect($$select public.hr_create_payroll(gen_random_uuid(),run||'{"rounding_account_id":null}',people) from payload$$,'redondeo');
+insert into ids select 'usd-run',public.hr_create_payroll(gen_random_uuid(),run,people) from payload;
+select public.hr_review_payroll((select id from ids where name='usd-run'),'Aprobar','');
+select public.hr_review_payroll((select id from ids where name='usd-run'),'Contabilizar','');
+select pg_temp.ok((select net=799.99 and exchange_rounding=-0.01 from public.hr_payroll_runs where id=(select id from ids where name='usd-run')),'neto USD conserva centavos y diferencia cambiaria auditada');
+select pg_temp.ok((select sum(debit)=sum(credit) from public.journal_lines where entry_id=(select journal_entry_id from public.hr_payroll_runs where id=(select id from ids where name='usd-run'))),'asiento USD balanceado con cuenta elegida');
+reset role;
+rollback;

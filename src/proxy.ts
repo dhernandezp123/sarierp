@@ -80,7 +80,7 @@ export async function proxy(req: NextRequest) {
 
   // El cron es global y autentica su secreto en la ruta; no depende del dominio
   // personalizado del tenant. Las cabeceras de tenant siguen descartadas.
-  if (pathname === '/api/cron/accounting-alerts') {
+  if (pathname === '/api/cron/accounting-alerts' || pathname === '/api/cron/hr-notifications') {
     return NextResponse.next({ request: { headers: requestHeaders } })
   }
 

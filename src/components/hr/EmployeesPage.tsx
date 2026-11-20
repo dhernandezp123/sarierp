@@ -16,6 +16,9 @@ import { Pagination } from '@/src/components/ui/Pagination'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/src/components/ui/dialog'
 import { HrNavigation, LeaveRequestDialog, useReturnFocus, useScopedLoad } from './HrShared'
 import { VacationDetailDialog } from './VacationDetailDialog'
+import { HrHistoryDialog } from './HrHistoryDialog'
+import { HrExportButtons } from './HrExportButtons'
+import { hrBalanceRows } from '@/src/lib/hr-report'
 
 type LinkableProfile = { id: string; nombre: string | null; apellido: string | null; email: string | null; rol: string }
 type Resources = { employees: HrEmployee[]; summary: Map<string, HrVacationSummary>; profiles: LinkableProfile[] }
@@ -53,6 +56,7 @@ export function EmployeesPage() {
   const [editor, setEditor] = useState<{ employee?: HrEmployee } | null>(null)
   const [leaveFor, setLeaveFor] = useState<HrEmployee | null>(null)
   const [vacationsFor, setVacationsFor] = useState<HrEmployee | null>(null)
+  const [historyFor, setHistoryFor] = useState<HrEmployee | null>(null)
 
   const filtered = useMemo(() => {
     const term = query.trim().toLocaleLowerCase('es')
@@ -68,7 +72,8 @@ export function EmployeesPage() {
   return <div className="space-y-6">
     <FinancePageHeader eyebrow="Recursos Humanos" title="Empleados" icon={UserRound}
       description="Ficha del personal, puesto, jornada y vacaciones por aniversario de ingreso."
-      actions={<button type="button" className={`${primaryButtonClass} inline-flex items-center gap-2`} onClick={() => setEditor({})}><Plus size={16} aria-hidden="true" />Nuevo empleado</button>} />
+      actions={<div className="flex flex-wrap gap-2"><HrExportButtons rows={() => hrBalanceRows(filtered, data!.summary)} filename="rrhh-saldos" disabled={loading || !!error || !filtered.length} />
+        <button type="button" className={`${primaryButtonClass} inline-flex items-center gap-2`} onClick={() => setEditor({})}><Plus size={16} aria-hidden="true" />Nuevo empleado</button></div>} />
     <HrNavigation manager />
     <div className={cardClass}>
       <div className="mb-4 grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -103,6 +108,7 @@ export function EmployeesPage() {
                   <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-[#B3282D] hover:underline dark:text-rose-300" onClick={() => setVacationsFor(employee)}><CalendarRange size={14} aria-hidden="true" />Vacaciones</button>
                   {employee.status === 'Activo' && <button type="button" className="text-sm font-medium text-[#B3282D] hover:underline dark:text-rose-300" onClick={() => setLeaveFor(employee)}>Solicitud</button>}
                   <button type="button" className="text-sm font-medium text-[#B3282D] hover:underline dark:text-rose-300" onClick={() => setEditor({ employee })}>Editar</button>
+                  <button type="button" className="text-sm font-medium text-[#B3282D] hover:underline dark:text-rose-300" onClick={() => setHistoryFor(employee)}>Historial</button>
                 </div></td>
               </tr>
             })}</tbody>
@@ -115,6 +121,10 @@ export function EmployeesPage() {
     {leaveFor && <LeaveRequestDialog employeeId={leaveFor.id} employeeName={employeeFullName(leaveFor)}
       onClose={() => setLeaveFor(null)} onSaved={() => { setLeaveFor(null); void reload() }} />}
     {vacationsFor && <VacationDetailDialog employee={vacationsFor} onClose={() => setVacationsFor(null)} onChanged={() => void reload()} />}
+    {historyFor && <HrHistoryDialog employee={historyFor} names={new Map([
+      ...(data?.employees ?? []).map(e => [e.id, employeeFullName(e)] as const),
+      ...(data?.profiles ?? []).map(p => [p.id, `${p.nombre ?? ''} ${p.apellido ?? ''}`.trim() || p.email || 'Usuario ERP'] as const),
+    ])} onClose={() => setHistoryFor(null)} />}
   </div>
 }
 

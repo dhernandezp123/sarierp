@@ -23,11 +23,11 @@ export function HrSettingsPage() {
   const context = `${user?.id}:${tenant}:${profile?.rol}:${profile?.status}:${profile?.is_active}`
   const loader = useCallback(async () => {
     const [settings, holidays] = await Promise.all([
-      supabase.from('hr_settings').select('max_advance_days').eq('tenant_id', tenant).maybeSingle<{ max_advance_days: number }>(),
+      supabase.from('hr_settings').select('max_advance_days,email_enabled').eq('tenant_id', tenant).maybeSingle<{ max_advance_days: number; email_enabled: boolean }>(),
       readAllReportRows<HrHoliday>((a, b) => supabase.from('hr_holidays').select('id,holiday_date,name').eq('tenant_id', tenant).order('holiday_date').order('id').range(a, b), { label: 'feriados' }),
     ])
     if (settings.error) throw new Error('No se pudo cargar la configuración de RRHH. Reintenta la consulta.')
-    return { maxAdvance: settings.data?.max_advance_days ?? 0, holidays }
+    return { maxAdvance: settings.data?.max_advance_days ?? 0, emailEnabled: settings.data?.email_enabled ?? true, holidays }
   }, [tenant])
   const { data, error, loading, reload } = useScopedLoad(context, manager && !!tenant, loader)
 
@@ -41,9 +41,25 @@ export function HrSettingsPage() {
     {error && <p role="alert" className="text-sm text-rose-600">{error} <button type="button" className="underline" onClick={() => void reload()}>Reintentar</button></p>}
     {loading ? <p className="py-10 text-center text-sm text-slate-500">Cargando…</p> : data && <>
       <AdvanceSettings key={data.maxAdvance} current={data.maxAdvance} onSaved={() => void reload()} />
+      <EmailSettings key={String(data.emailEnabled)} current={data.emailEnabled} onSaved={() => void reload()} />
       <HolidayCalendar holidays={data.holidays} onChanged={() => void reload()} />
     </>}
   </div>
+}
+
+function EmailSettings({ current, onSaved }: { current: boolean; onSaved: () => void }) {
+  const [busy, setBusy] = useState(false)
+  async function save() {
+    setBusy(true)
+    const result = await supabase.rpc('hr_save_email_settings', { p_enabled: !current })
+    setBusy(false)
+    if (result.error) { toast.error('No se pudo guardar la preferencia de correo.'); return }
+    toast.success('Preferencia de correo actualizada'); onSaved()
+  }
+  return <section className={cardClass}><FormSection title="Avisos por correo" description="Se envía un enlace para consultar solicitudes y decisiones. Los documentos firmados permanecen privados. Demo y el bloqueo global de correo impiden envíos. Al desactivar se detiene también la cola pendiente.">
+    <p className="mb-3 text-sm">Correo de RRHH: {current ? 'Activado' : 'Desactivado'}</p>
+    <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => void save()}>{busy ? 'Guardando…' : current ? 'Desactivar correo' : 'Activar correo'}</button>
+  </FormSection></section>
 }
 
 function AdvanceSettings({ current, onSaved }: { current: number; onSaved: () => void }) {
