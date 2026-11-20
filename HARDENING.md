@@ -1,5 +1,17 @@
 # Sari Express ERP — Hardening y Trial
 
+### 20/11/2026 - HR-RELEASE-01 - Publicación verificada de HR-01 a HR-09
+
+- Estado: código y SQL publicados en Production; configuración con datos reales y UAT operativa autenticada pendientes. No se declara nómina legal automática ni conciliación de pagos bancarios.
+- Código: PR [#1](https://github.com/dhernandezp123/sarierp/pull/1), candidato `893c97fa00620a4bce5bb4d8b907b8198428fb3c`, integración `a3d13c44cbd639d1a1c943ac77557fa1e911485e`. Árbol validado e integrado idéntico: `2b06b89e63f945971e577207d3c6a1ed905b9e90`. Compras 0d2184a se conserva íntegro; cambios locales ajenos del árbol principal preservados.
+- Validación: 691 Node, TypeScript, ESLint/estándar financiero, build/postbuild OCR; siete suites SQL HR/compras locales en rollback. Quality PR [44827684587](https://github.com/dhernandezp123/sarierp/actions/runs/44827684587) y main [44828646626](https://github.com/dhernandezp123/sarierp/actions/runs/44828646626), ambos application/database exitosos.
+- SQL: aplicadas únicamente las seis versiones HR del runbook en una transacción con guardias. Hash SHA-256 de cada fuente instalada coincide con el manifiesto. Las 19 tablas HR tienen RLS y ninguna admite INSERT/UPDATE/DELETE directo de authenticated. Bucket privado PDF/PNG/JPEG de 10 MB y RPC sensibles solo service_role. No se cargaron empleados, nóminas ni documentos sintéticos a Production.
+- Despliegue: `dpl_ZSSpD3qCFCb1vZbJj9wjwdjgFGRq`, READY/Production y alias `sari.forwarders.app`; estado GitHub Vercel del SHA integrado apunta a ese ID. Smoke público: login, ocho rutas protegidas incluidas compras, tres endpoints privados, rechazos de mutaciones anónimas/cron y assets OK. Cron HR registrado `15 12 * * *`; aceptación/recepción real de correo y autenticación positiva del cron no se certifican con ese smoke.
+- Respaldo: BD previo [44827716879](https://github.com/dhernandezp123/sarierp-backups/actions/runs/44827716879), cifrado/subido/verificado, exitoso; Storage no se transfirió en ese job. Último snapshot Storage completo 43731317743 y restore histórico 42292324814. No se ejecutó restore nuevo ni transferencia nueva de documentos reales.
+- Evidencia: `docs/uat/hr-production-release-2026-11-20.json`, validación local de fases 3–5, política de nómina y runbook. Secretos de Vercel permanecen protegidos; el intento de comprobación local del cron no puede leerlos, por lo que no se rotaron ni debilitaron para probarlo.
+- Limpieza: retirados contenedores, volumen, base, credenciales y perfil Chrome sintéticos; servidores UAT detenidos. Réplica original conserva ambiente Demo, historial 20261105120000 y cero tablas HR persistidas. `.env.local` intacto. El `.next` local es UAT, no un artefacto de Production.
+- Pendiente operativo: fichas/vínculos reales, feriados/jornadas, saldos iniciales conciliados, contratos, conceptos/cuentas e importes legales revisados; primer aviso recibido y primera nómina real conciliada. Las entradas previas registran el estado anterior a esta publicación. Commit de evidencia: el que contiene este registro.
+
 ### 20/11/2026 - HR-05 - Calendario, historial y exportaciones
 
 - Estado: implementado y validado localmente; migración, integración y UAT de Production pendientes.

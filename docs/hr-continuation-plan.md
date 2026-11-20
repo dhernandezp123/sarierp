@@ -6,23 +6,23 @@ Actualización: 20/11/2026. Usuario autorizó continuar las fases. Confirmó cor
 
 Cerrada localmente en `45e393b`: 683 pruebas Node, 65 grupos API, 31 de navegador y conciliación de 35 períodos. Incluye recuperación explícita del cálculo previo sin volver a editar fechas ni cambiar el identificador del reintento. [Evidencia](uat/hr-release-validation-2026-11-20.json).
 
-## Fase 2 — Integración y publicación
+## Fase 2 — Integración y publicación técnica cerrada; puesta en marcha pendiente
 
-En curso. Candidato aislado `release/hr-module-20261120`; no contiene los cambios locales ajenos a HR del árbol principal. El preflight inicial encontró Production sin HR, con migración máxima `20261118130000`; el preflight final detectó compras `20261120140000`. Ese cambio se integró en c305ffb, preservando íntegros sus archivos. Revisar de nuevo el head remoto y despliegue antes de publicar.
+Publicado en Production desde a3d13c4 mediante PR #1, con CI completo exitoso y smoke público. [Evidencia remota](uat/hr-production-release-2026-11-20.json). Candidato aislado `release/hr-module-20261120`; no contiene los cambios locales ajenos a HR del árbol principal. El preflight inicial encontró Production sin HR, con migración máxima `20261118130000`; el preflight final detectó compras `20261120140000`. Ese cambio se integró en c305ffb, preservando íntegros sus archivos. Revisar de nuevo el head remoto y despliegue antes de publicar.
 
-Se verificaron por separado respaldos BD, Storage y salud; el último restore disponible es histórico y no se hizo uno nuevo. Los seis archivos HR previstos tienen versiones propias y se preparan en una transacción con guardias. [Runbook](hr-release-runbook.md). SQL de HR y despliegue aún pendientes; no declarar cierre remoto basándose en UAT local.
+Se verificaron por separado respaldos BD, Storage y salud; el último restore disponible es histórico y no se hizo uno nuevo. Los seis archivos HR previstos tienen versiones propias y se preparan en una transacción con guardias. [Runbook](hr-release-runbook.md). Las seis migraciones HR y el despliegue se verificaron en destino; RLS, bucket privado y hashes de fuentes instaladas comprobados. Falta UAT autenticada con datos reales de Sari.
 
 ## Fase 3 — Calendario, avisos y trazabilidad
 
-Implementada y validada localmente: calendario aprobado por alcance, historial de ficha, Excel/CSV completos y avisos internos transaccionales. Correo mínimo con enlace al portal, destinatario autorizado, cola idempotente, control por empresa, bloqueo Demo y cron. La recepción efectiva en buzón se verifica con el primer uso autorizado; no se enviaron mensajes de prueba a personal real.
+Publicada y validada técnicamente en Production, con UAT local autenticada: calendario aprobado por alcance, historial de ficha, Excel/CSV completos y avisos internos transaccionales. Correo mínimo con enlace al portal, destinatario autorizado, cola idempotente, control por empresa, bloqueo Demo y cron. La recepción efectiva en buzón se verifica con el primer uso autorizado; no se enviaron mensajes de prueba a personal real.
 
 ## Fase 4 — Documentos y constancias
 
-Implementada y validada localmente: snapshots de concesión/acumulación/suspensión, PDF, firma manual y carga privada Admin con historial de versiones. Reintentos después de perder la respuesta no duplican el documento. Auth, PostgREST y Storage reales locales; aislamiento por tenant, hashes, permisos y descarga privada comprobados. PDF inspeccionado visualmente.
+Publicada y validada técnicamente en Production, con UAT local autenticada: snapshots de concesión/acumulación/suspensión, PDF, firma manual y carga privada Admin con historial de versiones. Reintentos después de perder la respuesta no duplican el documento. Auth, PostgREST y Storage reales locales; aislamiento por tenant, hashes, permisos y descarga privada comprobados. PDF inspeccionado visualmente.
 
 ## Fase 5 — Nómina y liquidaciones
 
-Circuito configurable implementado y validado localmente: contratos por vigencia, HNL/USD, cuatro frecuencias, fijo/variable/mixto, conceptos y cuentas, soporte de importes revisados, borrador, aprobación, contabilización/reversión y comprobantes propios privados. Vacaciones pagadas requieren solicitud aprobada y anticipo de tres días; liquidación requiere causal. No añade salario fijo por duplicado en vacaciones/liquidación ni ejecuta transferencias.
+Circuito configurable publicado en Production y validado localmente: contratos por vigencia, HNL/USD, cuatro frecuencias, fijo/variable/mixto, conceptos y cuentas, soporte de importes revisados, borrador, aprobación, contabilización/reversión y comprobantes propios privados. Vacaciones pagadas requieren solicitud aprobada y anticipo de tres días; liquidación requiere causal. No añade salario fijo por duplicado en vacaciones/liquidación ni ejecuta transferencias.
 
 No se inventan contratos, salarios, tasas legales, exclusiones, prestaciones ni cuentas. La primera versión captura retenciones y prestaciones calculadas y revisadas por su responsable; no implementa un motor automático de cumplimiento legal ni dispersión bancaria. Completar configuración real y conciliar la primera nómina son pasos operativos pendientes. No se presenta la respuesta “aplican todas” como una regla matemática concreta ni como autorización para inventar importes.
 

@@ -1,5 +1,7 @@
 # Release HR — Production
 
+Publicado el 20/11/2026 desde a3d13c4. SQL de seis versiones aplicado y hashes/RLS/Storage comprobados; CI y smoke público exitosos. [Registro de publicación](uat/hr-production-release-2026-11-20.json). El procedimiento siguiente se conserva como registro y recuperación; no volver a ejecutar la instalación sobre HR ya aplicado. La configuración real y UAT operativa siguen pendientes.
+
 Candidato aislado: `release/hr-module-20261120`, basado inicialmente en `origin/main` 2241df7 e integrado con compras 0d2184a mediante c305ffb. El árbol principal con trabajo concurrente de clientes/compras no forma parte del candidato. No ejecutar `git add .` ni un `supabase db push` general.
 
 ## Evidencia previa
@@ -11,7 +13,7 @@ Candidato aislado: `release/hr-module-20261120`, basado inicialmente en `origin/
 
 ## Respaldo y recuperación
 
-Se revisaron separadamente los jobs de BD y Storage del repositorio existente `dhernandezp123/sarierp-backups`: BD [44778930181](https://github.com/dhernandezp123/sarierp-backups/actions/runs/44778930181), Storage completo [43731317743](https://github.com/dhernandezp123/sarierp-backups/actions/runs/43731317743), salud [44779216460](https://github.com/dhernandezp123/sarierp-backups/actions/runs/44779216460). El job de BD no equivale a un respaldo de Storage. El último restore verificado es [42292324814](https://github.com/dhernandezp123/sarierp-backups/actions/runs/42292324814), del 06/11/2026; no se ejecutó un restore nuevo en este trabajo.
+Se revisaron separadamente los jobs de BD y Storage del repositorio existente `dhernandezp123/sarierp-backups`: BD previo al cambio [44827716879](https://github.com/dhernandezp123/sarierp-backups/actions/runs/44827716879), Storage completo [43731317743](https://github.com/dhernandezp123/sarierp-backups/actions/runs/43731317743), salud posterior [44827887541](https://github.com/dhernandezp123/sarierp-backups/actions/runs/44827887541). El job de BD no equivale a un respaldo de Storage. El último restore verificado es [42292324814](https://github.com/dhernandezp123/sarierp-backups/actions/runs/42292324814), del 06/11/2026; no se ejecutó un restore nuevo en este trabajo.
 
 El script existente enumera todos los buckets S3, de modo que incorpora `hr-signed-documents` en el siguiente snapshot sin añadirlo a una lista fija. La salud usa marcadores de finalización y comprueba archivo/checksum. No se inició una transferencia nueva de documentos reales a runners externos. Refrescar la verificación de salud y respaldar BD antes de aplicar según la ventana de cambio; un restore nuevo de documentos sensibles conserva su requisito de autorización.
 
