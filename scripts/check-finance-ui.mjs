@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
-export const roots = ['src/app/(protected)/accounting', 'src/app/(protected)/invoicing', 'src/app/(protected)/accounts-payable', 'src/app/(protected)/cost-validation', 'src/app/(protected)/financial-dashboard', 'src/app/(protected)/suppliers', 'src/app/(protected)/settings/cai', 'src/components/accounting', 'src/components/invoicing', 'src/components/suppliers']
+export const roots = ['src/app/(protected)/accounting', 'src/app/(protected)/invoicing', 'src/app/(protected)/accounts-payable', 'src/app/(protected)/cost-validation', 'src/app/(protected)/financial-dashboard', 'src/app/(protected)/suppliers', 'src/app/(protected)/settings/cai', 'src/components/accounting', 'src/components/invoicing', 'src/components/suppliers', 'src/components/hr/HrPayrollPage.tsx']
 
 /** No baseline exemptions: every financial numeric field uses the shared geometry. */
 export function auditFinanceSource(source, filename = 'fixture.tsx') {
@@ -47,6 +47,7 @@ export function checkFinanceTree(base = process.cwd()) {
   const errors = []
   function scan(dir) {
     if (!fs.existsSync(dir)) return
+    if (fs.statSync(dir).isFile()) { errors.push(...auditFinanceSource(fs.readFileSync(dir, 'utf8'), path.relative(base, dir))); return }
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const filename = path.join(dir, entry.name)
       if (entry.isDirectory()) scan(filename)

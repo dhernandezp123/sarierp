@@ -137,6 +137,9 @@ export function canAccessPath(role: string | null | undefined, path: string) {
   // The tenant Admin wildcard never grants access to the platform console.
   if (matchesPath(path, '/platform')) return false
   if (matchesPath(path, '/reports/client-operations')) return canViewClientOperationsReport(role)
+  // RRHH: Admin administra; cualquier usuario interno usa su autoservicio.
+  if (['/rrhh/mi-ficha', '/rrhh/calendario', '/rrhh/avisos', '/rrhh/documentos', '/rrhh/nomina'].some(route => matchesPath(path, route))) return role !== 'Cliente' && role in rolePermissions
+  if (matchesPath(path, '/rrhh')) return role === 'Admin'
   if (matchesPath(path, '/accounting/purchase-requests') || matchesPath(path, '/accounting/purchase-orders')) return ['Admin','Contabilidad'].includes(role)
 
   if (role === 'Contabilidad') {

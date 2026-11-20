@@ -8,7 +8,7 @@ export function isSidebarItemActive(pathname: string, href: string, exact = fals
 }
 
 export function sidebarGroupOrder(role?: string | null) {
-  const groups = ['commercial', 'pricing', 'operations', 'miami', 'finance', 'admin']
+  const groups = ['commercial', 'pricing', 'operations', 'miami', 'finance', 'hr', 'admin']
   const first = role === 'Pricing' ? ['pricing']
     : role === 'Operaciones' ? ['operations', 'miami']
       : role === 'Finanzas' || role === 'Contabilidad' ? ['finance'] : ['commercial']
