@@ -1,11 +1,11 @@
 # Release HR — Production
 
-Candidato aislado: `release/hr-module-20261120`, basado en `origin/main` 2241df7. El árbol principal con trabajo concurrente de clientes/compras no forma parte del candidato. No ejecutar `git add .` ni un `supabase db push` general.
+Candidato aislado: `release/hr-module-20261120`, basado inicialmente en `origin/main` 2241df7 e integrado con compras 0d2184a mediante c305ffb. El árbol principal con trabajo concurrente de clientes/compras no forma parte del candidato. No ejecutar `git add .` ni un `supabase db push` general.
 
 ## Evidencia previa
 
 - [Validación local final](uat/hr-phases-3-5-validation-2026-11-20.json), [cierre HR-01/02](uat/hr-release-validation-2026-11-20.json), [política configurable de nómina](hr-payroll-policy.md).
-- TypeScript, ESLint enfocado, estándar financiero y 690 pruebas Node; build de producción local con postbuild OCR; seis suites SQL en rollback; Auth/PostgREST/Storage reales locales y navegador 1280/768/390. Ver resultados y límites exactos en la evidencia.
+- TypeScript, ESLint enfocado, estándar financiero y 691 pruebas Node; build de producción local con postbuild OCR; siete suites SQL HR/compras en rollback; Auth/PostgREST/Storage reales locales y navegador 1280/768/390. Ver resultados y límites exactos en la evidencia.
 - Production identificado: proyecto Supabase `fwspgdzvlbtbgiupvrzo`, dominio `sari.forwarders.app`. En el preflight no había tablas/migraciones HR ni bucket de firmas; última migración `20261120140000` (compras, publicada durante este trabajo). Repetir antes de aplicar.
 - Variables de Production presentes: servicio Supabase, Resend, `OUTBOUND_EMAIL_ENABLED`, `CRON_SECRET`. Verificar vigencia sin mostrar sus valores. El ambiente verificado de la base es el control definitivo para correo; Demo siempre lo bloquea.
 

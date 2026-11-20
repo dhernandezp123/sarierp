@@ -8,7 +8,7 @@ Cerrada localmente en `45e393b`: 683 pruebas Node, 65 grupos API, 31 de navegado
 
 ## Fase 2 — Integración y publicación
 
-En curso. Candidato aislado `release/hr-module-20261120`; no contiene los cambios locales ajenos a HR del árbol principal. El preflight inicial encontró Production sin HR, con migración máxima `20261118130000`; el preflight final detectó compras `20261120140000`. Integrar ese cambio y revisar el head remoto y el despliegue actual antes de publicar.
+En curso. Candidato aislado `release/hr-module-20261120`; no contiene los cambios locales ajenos a HR del árbol principal. El preflight inicial encontró Production sin HR, con migración máxima `20261118130000`; el preflight final detectó compras `20261120140000`. Ese cambio se integró en c305ffb, preservando íntegros sus archivos. Revisar de nuevo el head remoto y despliegue antes de publicar.
 
 Se verificaron por separado respaldos BD, Storage y salud; el último restore disponible es histórico y no se hizo uno nuevo. Los seis archivos HR previstos tienen versiones propias y se preparan en una transacción con guardias. [Runbook](hr-release-runbook.md). SQL de HR y despliegue aún pendientes; no declarar cierre remoto basándose en UAT local.
 
@@ -28,6 +28,6 @@ No se inventan contratos, salarios, tasas legales, exclusiones, prestaciones ni 
 
 ## Validación consolidada y límites
 
-[Evidencia de fases 3–5](uat/hr-phases-3-5-validation-2026-11-20.json): 690 pruebas Node antes de integrar compras, seis suites SQL en rollback, TypeScript/ESLint, estándar financiero, build/postbuild OCR, API/HTTP autenticados y navegador a 1280/768/390. Incluye corrección de altura de modales, recuperación de respuesta perdida en nómina y carga firmada, privacidad salarial y cierre de formulario tras logout en otra pestaña.
+[Evidencia de fases 3–5](uat/hr-phases-3-5-validation-2026-11-20.json): 691 pruebas Node después de integrar compras, siete suites SQL HR/compras en rollback, TypeScript/ESLint, estándar financiero, build/postbuild OCR, API/HTTP autenticados y navegador a 1280/768/390. Incluye corrección de altura de modales, recuperación de respuesta perdida en nómina y carga firmada, privacidad salarial y cierre de formulario tras logout en otra pestaña.
 
 Los resultados locales no acreditan publicación, UAT autenticada de Production, recepción de correo ni uso en un iPad/Safari físico. Mantener esos estados por separado en el runbook y el registro de release. El `.next` local usa configuración UAT; Production se reconstruye desde fuente con sus variables propias. `.env.local` no se modificó.

@@ -159,10 +159,13 @@ begin
  if not public.hr_is_manager() then raise exception 'No autorizado' using errcode='42501';end if;
  select * into r from public.hr_payroll_runs where id=p_id and tenant_id=public.current_tenant_id() for update;
  if not found then raise exception 'Nómina no disponible' using errcode='42501';end if;
+ if r.kind='Vacaciones' and r.status in ('Borrador','Aprobada') and p_action in ('Aprobar','Contabilizar') then
+  perform 1 from public.hr_leave_requests where id=r.leave_request_id and tenant_id=r.tenant_id and status='Aprobada' and start_date=r.starts_on and end_date=r.ends_on for share;
+  if not found then raise exception 'Las vacaciones cambiaron; anula el borrador y revisa el pago';end if;
+ end if;
  if p_action='Aprobar' then
   if r.status in ('Aprobada','Contabilizada') then return r.id;end if;
   if r.status<>'Borrador' then raise exception 'La nómina no es un borrador';end if;
-  if r.kind='Vacaciones' and not exists(select 1 from public.hr_leave_requests where id=r.leave_request_id and tenant_id=r.tenant_id and status='Aprobada' and start_date=r.starts_on and end_date=r.ends_on) then raise exception 'Las vacaciones cambiaron; anula el borrador y revisa el pago';end if;
   update public.hr_payroll_runs set status='Aprobada',approved_by=auth.uid(),approved_at=now() where id=r.id;
  elsif p_action='Anular' then
   if r.status='Anulada' then return r.id;end if;
@@ -178,6 +181,11 @@ begin
  elsif p_action='Contabilizar' then
   if r.status='Contabilizada' then return r.journal_entry_id;end if;
   if r.status<>'Aprobada' then raise exception 'Aprueba la nómina antes de contabilizar';end if;
+  if not exists(select 1 from public.accounting_accounts a where a.id=r.payable_account_id and a.tenant_id=r.tenant_id and a.kind='Pasivo' and a.active and a.postable)
+   or exists(select 1 from public.hr_payroll_entries e cross join lateral jsonb_array_elements(e.items)i where e.run_id=r.id and (
+    (i->'concept'->>'debit_account_id' is not null and not exists(select 1 from public.accounting_accounts a where a.id=(i->'concept'->>'debit_account_id')::uuid and a.tenant_id=r.tenant_id and a.kind='Gasto' and a.active and a.postable))
+    or (i->'concept'->>'credit_account_id' is not null and not exists(select 1 from public.accounting_accounts a where a.id=(i->'concept'->>'credit_account_id')::uuid and a.tenant_id=r.tenant_id and a.kind in ('Pasivo','Activo') and a.active and a.postable))
+   )) then raise exception 'Las cuentas del borrador cambiaron o ya no están disponibles; revisa la nómina';end if;
   -- Agrupar por cuenta antes de convertir moneda evita residuos por empleado.
   select jsonb_agg(jsonb_build_object('account_id',a.account_id,'debit',round(a.debit*r.exchange_rate,2),'credit',round(a.credit*r.exchange_rate,2),'description',r.kind||' de RRHH')) into lines from (
    select account_id,sum(debit)debit,sum(credit)credit from (
@@ -188,7 +196,7 @@ begin
   )a;
   select coalesce(sum((l->>'debit')::numeric-(l->>'credit')::numeric),0) into difference from jsonb_array_elements(lines)l;
   if difference<>0 then
-   if r.rounding_account_id is null or abs(difference)>jsonb_array_length(lines)*0.01 then raise exception 'Revisa la cuenta de redondeo y el balance cambiario';end if;
+   if not exists(select 1 from public.accounting_accounts a where a.id=r.rounding_account_id and a.tenant_id=r.tenant_id and a.kind in ('Gasto','Ingreso') and a.active and a.postable) or abs(difference)>jsonb_array_length(lines)*0.01 then raise exception 'Revisa la cuenta de redondeo y el balance cambiario';end if;
    lines:=lines||jsonb_build_array(jsonb_build_object('account_id',r.rounding_account_id,'debit',greatest(-difference,0),'credit',greatest(difference,0),'description','Redondeo de conversión de nómina a HNL'));
   end if;
   select jsonb_agg(l) into lines from jsonb_array_elements(lines)l where (l->>'debit')::numeric>0 or (l->>'credit')::numeric>0;

@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-20T22:08:52.461Z",
+  "at": "2026-11-20T22:16:33.481Z",
   "branch": "release/hr-module-20261120",
   "base": "2241df743bf8a9f502508121b675703b7730d3ec",
   "scope": "HR only; unrelated client and purchasing work excluded",
@@ -9,12 +9,13 @@
     "eslint": "passed focused HR/routes/security/shared changes",
     "financeUi": "passed; payroll file included in scanner",
     "node": {
-      "passed": 690,
+      "passed": 691,
       "failed": 0
     },
     "build": "passed, including OCR packaged runtime postbuild",
     "sql": {
       "suites": [
+        "purchase_requests_and_orders.sql",
         "hr_employees_and_leave.sql",
         "hr_vacation_periods.sql",
         "hr_activity_and_calendar.sql",
@@ -157,6 +158,15 @@
         "Signing out in a second real browser tab removes the open private salary modal from the first tab"
       ],
       "errors": []
+    },
+    "payrollFinalPost": {
+      "at": "2026-11-20T22:15:55.477Z",
+      "checks": [
+        "Final function version revalidates current account mapping and posts the approved browser-created payroll",
+        "Concurrent retry returns the same final journal"
+      ],
+      "runId": "8425a094-f448-4efe-9270-dfa642fc2ff3",
+      "journalId": "fb12afab-794e-47d5-bb38-f91cffeddbda"
     }
   },
   "reconciliation": {
@@ -174,7 +184,7 @@
       "errors": []
     },
     "payroll": {
-      "at": "2026-11-20T22:01:22.986Z",
+      "at": "2026-11-20T22:15:57.355Z",
       "runs": 3,
       "entries": 3,
       "activePayrolls": 2,
@@ -203,7 +213,7 @@
   "production": {
     "sqlApplied": false,
     "deployed": false,
-    "preflight": "Verified production target fwspgdzvlbtbgiupvrzo; no HR tables or bucket, latest remote migration 20261118130000 at preflight",
+    "preflight": "Refreshed: production, HR tables 0, HR migrations [], no HR bucket; latest migration 20261120140000 (published purchase slips). Guard updated to that version.",
     "backup": {
       "databaseRun": "44778930181",
       "storageRun": "43731317743",
@@ -271,17 +281,40 @@
     "supabase/migrations/20261120141000_hr_activity_and_calendar.sql": "f5c07b519ade7783240b4c965c25645d02c148d032706f26b5abc8e04f6cc5b4",
     "supabase/migrations/20261120151000_hr_certificates_and_private_documents.sql": "64100f5a03ca59cd015d148e2340fe88ca8b356eb4ef2f54561604c6467ebd85",
     "supabase/migrations/20261120161000_hr_email_outbox.sql": "55b198caaf0e0e389965f0622b348823609de71614b4e1bc1536c011359025d3",
-    "supabase/migrations/20261120171000_hr_payroll.sql": "c73b2a526f7fcf792c5014cc9afa4ea8c56d965c090b248c2f73b221a88a858d",
+    "supabase/migrations/20261120171000_hr_payroll.sql": "8d15ffb062b8bcd8e2671856cb1cfeb05eeb6751e987545e06bde82e2a2f7a78",
     "supabase/tests/hr_activity_and_calendar.sql": "06aea025a1918acf9004e5484468c74afa6f8c2b89df3fd493de3a98d5c3b14f",
     "supabase/tests/hr_certificates_and_documents.sql": "b0cd38ccf8c8aae76d88904f10abc207ad43dbe85a616b8686d26d26967ca792",
     "supabase/tests/hr_email_outbox.sql": "76b806bc80f8f900cc51560a1a1d1e0eee19b842fd8ea6e75806d48fd4f24f8c",
     "supabase/tests/hr_employees_and_leave.sql": "c4e1af77db3c642f13d0375f8fceb72599e4ebce8a1a265f863a09a039ccbcea",
-    "supabase/tests/hr_payroll.sql": "659ffc5fcf5e3a9416dea38334d174039d4b968036bef41697923f90840c8130",
+    "supabase/tests/hr_payroll.sql": "73729d69c7dcd4bb491eeeaa468b883fa9a3674149cc7eae269890fab8936e94",
     "supabase/tests/hr_vacation_periods.sql": "924a47d7075e6d0147781ca1a92eb7de7f07905708ba150863f74232d0173400",
     "tests/hr-documents.test.mjs": "4a55837a54d79dc4a509034c7753852eb4ab63885c1cc1a77382221bbd3b4051",
     "tests/hr-email.test.mjs": "d2cdd578728e3dda63bb56023352105e4a0e42cc4d76ff660d4a6fbc4a9935bc",
     "tests/hr-recovery.test.mjs": "43cab11296289abacaeabaa9e9de58e01d182dbdfbdaae4a3e4f2417c013c34b",
     "tests/hr-report.test.mjs": "8e5999d94ddc85e95eec057943cf658e502f524a01f8eac079fa633e22929ddf",
-    "vercel.json": "1d39590ad2b3548eed6c7a85abb9bba9c4d4214ae5e1cbf6335a933341e03bf0"
+    "vercel.json": "1d39590ad2b3548eed6c7a85abb9bba9c4d4214ae5e1cbf6335a933341e03bf0",
+    "scripts/prepare-hr-release.mjs": "a759641e45529ab9f27354d59c66088205c1201efa945968a2c3625a75e56bc3"
+  },
+  "integration": {
+    "main": "0d2184ae5e5820f848773c30bdce4382de41a3b7",
+    "featureCommit": "33344d2",
+    "mergeCommit": "c305ffb",
+    "purchaseChangesPreserved": true,
+    "localNode": {
+      "passed": 691,
+      "failed": 0
+    },
+    "sqlCompatibility": "purchase_requests_and_orders.sql and all six HR suites passed together; old replica bootstrapped purchase schema inside ROLLBACK",
+    "localBuild": "passed integrated source, including finance standard and OCR postbuild"
+  },
+  "releasePackage": {
+    "at": "2026-11-20T22:15:18.304Z",
+    "checks": [
+      "Demo deployment veto before writes",
+      "Complete six-migration transaction and migration history registration",
+      "Private Storage bucket and service-only RPC checks",
+      "Rollback preserved original environment, history and zero HR tables"
+    ],
+    "productionModified": false
   }
 }

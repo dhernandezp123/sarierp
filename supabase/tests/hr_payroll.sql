@@ -38,6 +38,14 @@ select pg_temp.as_user(4);
 select pg_temp.ok((select count(*)=0 from public.hr_payroll_runs),'Contabilidad no recibe acceso salarial general por su rol');
 select pg_temp.as_user(1);
 select public.hr_review_payroll((select id from ids where name='run'),'Aprobar','');
+reset role;
+update public.accounting_accounts set kind='Ingreso' where tenant_id='e4080000-0000-4000-8000-000000000100' and code='5101';
+set local role authenticated;
+select pg_temp.expect($$select public.hr_review_payroll((select id from ids where name='run'),'Contabilizar','')$$,'cuentas del borrador cambiaron');
+select pg_temp.ok((select journal_entry_id is null and status='Aprobada' from public.hr_payroll_runs where id=(select id from ids where name='run')),'cambio de cuenta no deja asiento parcial');
+reset role;
+update public.accounting_accounts set kind='Gasto' where tenant_id='e4080000-0000-4000-8000-000000000100' and code='5101';
+set local role authenticated;
 insert into ids select 'journal',public.hr_review_payroll((select id from ids where name='run'),'Contabilizar','');
 select pg_temp.ok(public.hr_review_payroll((select id from ids where name='run'),'Contabilizar','')=(select id from ids where name='journal'),'contabilización idempotente');
 select pg_temp.ok((select sum(debit)=7300 and sum(credit)=7300 from public.journal_lines where entry_id=(select id from ids where name='journal')),'asiento balancea bruto más aportes');
@@ -65,8 +73,10 @@ update payload set run=run||jsonb_build_object('kind','Vacaciones','leave_reques
 select pg_temp.expect($$select public.hr_create_payroll(gen_random_uuid(),run||jsonb_build_object('pay_date',(run->>'starts_on')::date-1),people) from payload$$,'tres días');
 insert into ids select 'vacation-pay',public.hr_create_payroll(gen_random_uuid(),run,people) from payload;
 select pg_temp.ok((select net=1500 from public.hr_payroll_runs where id=(select id from ids where name='vacation-pay')),'pago de vacaciones no suma salario automático');
+select public.hr_review_payroll((select id from ids where name='vacation-pay'),'Aprobar','');
 select public.hr_review_leave((select id from ids where name='leave'),'Cancelada','Cancelar vacaciones antes del pago');
 select pg_temp.expect($$select public.hr_review_payroll((select id from ids where name='vacation-pay'),'Aprobar','')$$,'vacaciones cambiaron');
+select pg_temp.expect($$select public.hr_review_payroll((select id from ids where name='vacation-pay'),'Contabilizar','')$$,'vacaciones cambiaron');
 -- Variable en USD, conversión y ajuste explícito de un centavo; nominal no cambia.
 insert into ids select 'usd-employee',public.hr_save_employee(null,null,jsonb_build_object('employee_code','HR08USD','first_name','Variable','last_name','USD','hire_date',current_date-interval '2 years','contract_type','Indefinido'));
 select public.hr_add_compensation((select id from ids where name='usd-employee'),jsonb_build_object('effective_from',current_date-30,'currency','USD','salary_mode','Variable','monthly_salary',0,'frequency','Mensual','source','Contrato variable sintético, importes revisados por período'));
