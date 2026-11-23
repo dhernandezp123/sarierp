@@ -1,5 +1,15 @@
 # Sari Express ERP — Hardening y Trial
 
+### 23/11/2026 - FLOW-BL-RETURNING-01 - Creacion MBL/HBL con respuesta del documento
+
+- Estado: correccion preparada y validada localmente; pendiente aplicar migracion y UAT autenticada en Production.
+- Hallazgo confirmado: Admin activo/aprobado recibe 42501 al guardar MBL. El editor ejecuta insert().select('id, bl_number').single(); la policy SELECT bills_of_lading_select_policy llama can_access_bill_of_lading(id), cuyo SELECT STABLE sobre la misma tabla no ve la nueva fila en el snapshot de la sentencia INSERT ... RETURNING. Reproduccion local del error exacto antes del cambio.
+- Cambio: supabase/migrations/20261123200000_bl_insert_returning_rls.sql altera solamente esa policy SELECT para evaluar can_manage_operations() y tenant_id=current_tenant_id() sobre la fila. Conserva Admin/Operaciones aprobados y activos, tenant_isolation_guard restrictivo, permisos SQL, triggers de pertenencia/hierarquia, numeracion HBL y proteccion de documentos emitidos. Sin cambios en frontend ni datos reales.
+- Archivos: migracion indicada; supabase/tests/bl_insert_returning_rls.sql; scripts/validate-audit-sql.mjs; HARDENING.md.
+- Validacion SQL: regresion local en supabase_db_sarierp_gerencia20261104 con ROLLBACK. Admin y Operaciones crean MBL y HBL con INSERT RETURNING id,bl_number; HBL conserva correlativo y requiere MBL padre. Ventas/Pricing/Contabilidad/Cliente, Admin inactivo/pendiente, otro tenant y anonimo no pueden crear; lectura aislada por rol/tenant. TypeScript del release OK; CI pendiente.
+- Pendiente: aplicar solo esta migracion, verificar policy/permisos y huellas antes/despues, y probar guardado con sesion real de Admin. Commit pendiente; no crear documentos reales de prueba.
+
+
 ### 23/11/2026 - FLOW-ADMIN-BOOKING-01 - Admin completa el expediente hasta Booking
 
 - Estado: implementado y validado localmente; pendiente aplicar migracion, publicar frontend y UAT autenticada en Production. Sin cambios en datos reales ni Demo/Trial.
