@@ -1,5 +1,16 @@
 # Sari Express ERP — Hardening y Trial
 
+### 23/11/2026 - FLOW-ADMIN-BOOKING-01 - Admin completa el expediente hasta Booking
+
+- Estado: implementado y validado localmente; pendiente aplicar migracion, publicar frontend y UAT autenticada en Production. Sin cambios en datos reales ni Demo/Trial.
+- Hallazgo: SARIHN-2609-0267-AP / RT0033 fue creada por Admin y permanecia sin sales_submitted_at ni aceptacion. La UI y las RPC reservaban el envio a Ventas propietaria y la aceptacion a Operaciones, dejando a Admin sin forma de habilitar Validar SI y Crear Booking aunque el proveedor estaba completo.
+- Cambio: Admin puede enviar expedientes propios o ajenos pendientes, incluso asignados, y aceptar explicitamente con el boton Aceptar y asumir expediente. La aceptacion mantiene responsable, aceptante y shipment sincronizados y registra el responsable anterior y la intervencion de Admin. El selector conserva visible al responsable Admin. Validar SI y Crear Booking reutilizan sus RPC existentes.
+- Archivos: src/app/(protected)/operations/shipping-instructions/[id]/page.tsx; src/lib/shipping-instruction-state.ts; tests/admin-shipping-handoff.test.mjs; supabase/tests/admin_shipping_instruction_handoff.sql; scripts/validate-audit-sql.mjs; HARDENING.md.
+- SQL: supabase/migrations/20261123190000_admin_shipping_instruction_handoff.sql reemplaza save_shipping_instruction_sales_initial y accept_shipping_instruction_handoff. Conserva aprobacion/actividad, ownership para Ventas, asignacion para Operaciones, control de version, auditoria, bloqueos por cierre/cancelacion y agrega filtro explicito de tenant en ambas lecturas y actualizacion del shipment. No modifica politicas RLS ni funciones historicas.
+- Validaciones: 697/697 pruebas de Node OK en el release aislado sobre origin/main (692/692 en el checkout de desarrollo), incluidas ocho focales de acceso/estado; TypeScript, ESLint focal, check:finance-ui y build/postbuild OK. Regresion SQL final OK en supabase_db_sarierp_gerencia20261104 con migracion y fixtures dentro de una transaccion terminada en ROLLBACK: Admin creador y no creador, SI asignada, aceptacion, validacion y creacion efectiva de Booking; sincronizacion del shipment; rechazo de revision obsoleta, cancelacion, Ventas sin permiso, operativo ajeno, Admin inactivo y acceso/RPC de Admin de otro tenant.
+- Pendiente: validar botones en navegador con sesion real; aplicar unicamente esta migracion y desplegar frontend antes de intentar desbloquear RT0033. La prueba SQL local no modifica ni certifica Production. Ensayo de migracion en Production con ROLLBACK aprobado: ambiente, dominio, revision de funciones, ACL, search_path y huellas de cotizacion/SI intactos. Lint completo del release: 661 archivos, 213 diagnosticos historicos, cero regresiones. Commit pendiente; cambios concurrentes de clientes, compras y RRHH preservados.
+
+
 ### 23/11/2026 - HR-RELEASE-02 - Publicación verificada de cálculos HR-10
 
 - Estado: HR-10 publicado en Production. PR [#2](https://github.com/dhernandezp123/sarierp/pull/2), candidato `ef74cad647e13add84623387846035fc64fad539`, integración `58809cc534357ea55958ea0b219980fa28de0e5d`; árbol revisado e integrado idéntico `3042727c283acf087008ff833430df3f06ab315e`. Las entradas inferiores conservan el estado histórico previo al despliegue.

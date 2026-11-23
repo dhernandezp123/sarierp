@@ -38,6 +38,7 @@ import { operationsReturnHref } from '@/src/lib/operations-navigation'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
 import {
   getShippingInstructionClient,
+  getShippingInstructionHandoffAccess,
   mergeShippingInstructionMutation,
 } from '@/src/lib/shipping-instruction-state'
 
@@ -81,7 +82,6 @@ type OperationalTimelineEvent = {
 }
 
 const SI_READY_FOR_BOOKING = 'Listo para Booking'
-const SI_PENDING_VALIDATION = 'Pendiente Validación'
 const SI_VALIDATED = 'Validada'
 const SI_CANCELLED = 'Cancelada'
 
@@ -460,11 +460,8 @@ export default function RoutingDetailPage() {
   const canManageRouting = profile?.rol === 'Admin' || profile?.rol === 'Operaciones'
   const canViewRouting =
     !!routing && (canManageRouting || routing.created_by === user?.id)
-  const canSalesEditInitialInfo =
-    profile?.rol === 'Ventas' &&
-    routing?.created_by === user?.id &&
-    !routing?.sales_submitted_at &&
-    routing?.operational_status === SI_PENDING_VALIDATION
+  const { canSubmit: canSalesEditInitialInfo, canAccept: canAcceptHandoff } =
+    getShippingInstructionHandoffAccess(profile?.rol, user?.id, routing)
   const visibleOperationalEvents = isTimelineExpanded
     ? operationalEvents
     : operationalEvents.slice(0, 3)
@@ -482,14 +479,11 @@ export default function RoutingDetailPage() {
     ? `${assignedOperationsUser.nombre || ''} ${assignedOperationsUser.apellido || ''}`.trim()
       || assignedOperationsUser.email
       || 'Operativo asignado'
-    : routing?.operations_assigned_to
+    : routing?.operations_assigned_to === user?.id && profile?.rol === 'Admin'
+      ? 'Administrador (tú)'
+      : routing?.operations_assigned_to
       ? 'Operativo asignado'
       : 'Sin asignar'
-  const canAcceptHandoff =
-    profile?.rol === 'Operaciones' &&
-    Boolean(routing?.sales_submitted_at) &&
-    !routing?.operations_accepted_at &&
-    (!routing?.operations_assigned_to || routing.operations_assigned_to === user?.id)
 
   const loadRouting = async () => {
     // TODO: Reforzar esta misma regla en Supabase RLS para shipping_instructions.
@@ -1518,6 +1512,11 @@ export default function RoutingDetailPage() {
               className="h-9 min-w-[200px] rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"
             >
               <option value="">Sin asignar</option>
+              {routing.operations_assigned_to && !assignedOperationsUser && (
+                <option value={routing.operations_assigned_to} disabled>
+                  {assignedOperationsName}
+                </option>
+              )}
               {operationsUsers.map((u) => (
                 <option key={u.id} value={u.id}>
                   {`${u.nombre || ''} ${u.apellido || ''}`.trim() || u.email}
@@ -1698,7 +1697,7 @@ export default function RoutingDetailPage() {
             <div>
               <p className="font-semibold">Handoff pendiente</p>
               <p className="mt-1">
-                El operativo responsable debe aceptar el expediente antes de validarlo o crear el booking.
+                El responsable de Operaciones o Admin debe aceptar el expediente antes de validarlo o crear el booking.
               </p>
             </div>
             {canAcceptHandoff ? (
@@ -1708,13 +1707,12 @@ export default function RoutingDetailPage() {
                 disabled={accepting}
                 className="shrink-0 rounded-xl bg-amber-900 px-4 py-2 font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100"
               >
-                {accepting ? 'Aceptando...' : 'Aceptar expediente'}
+                {accepting ? 'Aceptando...' : profile?.rol === 'Admin'
+                  ? 'Aceptar y asumir expediente' : 'Aceptar expediente'}
               </button>
             ) : (
               <span className="shrink-0 font-semibold">
-                {profile?.rol === 'Admin'
-                  ? 'Debe aceptarlo el operativo asignado.'
-                  : `Asignado a ${assignedOperationsName}.`}
+                {`Asignado a ${assignedOperationsName}.`}
               </span>
             )}
           </div>
@@ -2237,7 +2235,7 @@ export default function RoutingDetailPage() {
               disabled={saving}
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
             >
-              {saving ? 'Enviando...' : 'Enviar a Operaciones'}
+              {saving ? 'Enviando...' : 'Enviar expediente a Operaciones'}
             </button>
           )}
 
