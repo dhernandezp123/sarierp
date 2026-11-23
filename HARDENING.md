@@ -1,5 +1,15 @@
 # Sari Express ERP — Hardening y Trial
 
+### 23/11/2026 - FLOW-BL-SOURCE-01 - Ceros no informados en fuentes de carga del MBL
+
+- Estado: implementado y validado localmente; pendiente migracion y publicacion. UAT autenticada pendiente.
+- Hallazgo: el MBL de una cotizacion FCL con peso/volumen/bultos cotizados en cero y sin quotation_cargo_lines recibe BL_SOURCE_REVIEW_REQUIRED aunque contiene su carga real. buildQuotationCargoDefaults omite esos ceros, pero get_unresolved_bl_source_differences los trataba como valores informados. La UI no mostraba diferencias que el servidor exigia justificar.
+- Cambio: supabase/migrations/20261123210000_bl_missing_quotation_cargo_sources.sql reemplaza solo el comparador para tratar los tres fallbacks finales en cero de la cotizacion como fuente ausente. Mantiene fuentes positivas, comparacion HBL contra MBL, excepciones exactas y requisitos de validacion documental; conserva los valores reales del BL y de la cotizacion. Sin cambios de permisos/RLS/frontend.
+- Archivos: migracion indicada; supabase/tests/bl_missing_quotation_cargo_sources.sql; scripts/validate-audit-sql.mjs; HARDENING.md.
+- Validaciones: reproduccion local falla con funcion anterior; regresion SQL corregida OK con ROLLBACK en supabase_db_sarierp_gerencia20261104. Admin valida MBL con fuentes en cero conservando carga; fuentes positivas y HBL discrepantes siguen bloqueados; justificaciones exactas resuelven diferencias y se invalidan al cambiar la fuente; fallback positivo gross_weight sigue activo; BL sin peso positivo sigue bloqueado. TypeScript OK. Ensayo Production con ROLLBACK OK: las tres diferencias falsas desaparecen; MBL/cotizacion/excepciones y privilegios intactos. Quality pendiente.
+- Pendiente: ensayo con rollback y aplicacion acotada en Production, huellas de documento/cotizacion/excepciones y permisos antes/despues; luego reintentar Validar en la sesion real de Admin. No modificar ni validar automaticamente el documento real. Commit pendiente.
+
+
 ### 23/11/2026 - FLOW-BL-RETURNING-01 - Creacion MBL/HBL con respuesta del documento
 
 - Estado: correccion preparada y validada localmente; pendiente aplicar migracion y UAT autenticada en Production.
