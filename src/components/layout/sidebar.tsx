@@ -279,6 +279,7 @@ export default function Sidebar({ role }: { role?: string }) {
     { label: 'Avisos de RRHH', href: '/rrhh/avisos', icon: CalendarDays },
     { label: 'Constancias', href: '/rrhh/documentos', icon: IdCard },
     { label: 'Nómina y comprobantes', href: '/rrhh/nomina', icon: IdCard },
+    { label: 'Calcular prestaciones', href: '/rrhh/calculos', icon: IdCard },
     { label: 'Mi ficha', href: '/rrhh/mi-ficha', icon: IdCard },
   ]
 

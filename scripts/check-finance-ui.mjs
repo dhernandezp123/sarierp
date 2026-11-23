@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
-export const roots = ['src/app/(protected)/accounting', 'src/app/(protected)/invoicing', 'src/app/(protected)/accounts-payable', 'src/app/(protected)/cost-validation', 'src/app/(protected)/financial-dashboard', 'src/app/(protected)/suppliers', 'src/app/(protected)/settings/cai', 'src/components/accounting', 'src/components/invoicing', 'src/components/suppliers', 'src/components/hr/HrPayrollPage.tsx']
+export const roots = ['src/app/(protected)/accounting', 'src/app/(protected)/invoicing', 'src/app/(protected)/accounts-payable', 'src/app/(protected)/cost-validation', 'src/app/(protected)/financial-dashboard', 'src/app/(protected)/suppliers', 'src/app/(protected)/settings/cai', 'src/components/accounting', 'src/components/invoicing', 'src/components/suppliers', 'src/components/hr/HrPayrollPage.tsx', 'src/components/hr/HrBenefitsPage.tsx']
 
 /** No baseline exemptions: every financial numeric field uses the shared geometry. */
 export function auditFinanceSource(source, filename = 'fixture.tsx') {

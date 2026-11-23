@@ -20,7 +20,7 @@ const files = [
   'accounting_engine.sql',
   'accounting_catalog_structure.sql',
   'service_accounting_assignments.sql', 'invoice_due_date_override.sql', 'purchase_requests_and_orders.sql', 'supplier_type_catalog.sql', 'supplier_default_expense_account.sql', 'purchase_optional_supplier_identity.sql', 'hr_employees_and_leave.sql', 'hr_vacation_periods.sql',
-  'hr_activity_and_calendar.sql', 'hr_certificates_and_documents.sql', 'hr_email_outbox.sql', 'hr_payroll.sql',
+  'hr_activity_and_calendar.sql', 'hr_certificates_and_documents.sql', 'hr_email_outbox.sql', 'hr_payroll.sql', 'hr_automatic_benefits.sql',
   'accounting_financial_sources.sql',
   'fixed_assets.sql',
   'accounting_currency.sql',
