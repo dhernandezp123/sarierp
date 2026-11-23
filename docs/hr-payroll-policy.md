@@ -1,5 +1,7 @@
 # Nómina y liquidaciones: política inicial y activación
 
+Actualización 23/11/2026: el cálculo automático de vacaciones y liquidaciones se añade en [Política de cálculo de prestaciones](hr-benefit-calculation-policy.md). Esa política sustituye la limitación manual descrita aquí para las prestaciones y regímenes expresamente cubiertos; las retenciones, aportes y salarios pendientes conservan su revisión configurable.
+
 Fecha: 20/11/2026. Sari confirmó que necesita moneda/frecuencia configurables, salario fijo y variable, conceptos, deducciones, vacaciones, liquidaciones y cuentas contables. No dispone todavía de una política interna documentada. Este documento registra el alcance implementado y los datos que Administración debe completar; no certifica importes legales individuales.
 
 ## Condiciones por empleado

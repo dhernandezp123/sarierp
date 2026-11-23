@@ -1,5 +1,11 @@
 # Release HR — Production
 
+## Ampliación HR-10 del 23/11/2026
+
+El cálculo de prestaciones añade exclusivamente `20261123120000_hr_automatic_benefits.sql` sobre HR-08 ya instalado. `node scripts/prepare-hr-benefit-release.mjs` genera SQL y manifiesto en `.ua/intermediate/`: valida ambiente/tenant, versión previa `20261120171000`, hash de HR-08, ausencia de instalación parcial y RLS/permisos; registra fuente y recarga PostgREST en la misma transacción. No conecta ni aplica. Revisar y ensayar con rollback antes de confirmar; si la respuesta se pierde, consultar historial/hash antes de reintentar. El paquete histórico de seis migraciones que sigue abajo no debe ejecutarse nuevamente.
+
+Publicar desde la rama aislada `feat/hr-benefit-calculations-20261123`, con CI de aplicación/base de datos aprobado. Aplicar solo el paquete HR-10 después del respaldo revisado, comprobar huella instalada y conservación de datos/RPC previas, e integrar la aplicación para que Vercel reconstruya con sus variables de Production. No reutilizar `.next` UAT ni ejecutar `db push --include-all`. Smoke añade `/rrhh/calculos` y `/api/hr/benefits/:id`; ambos requieren sesión. La conciliación de un caso real y los datos salariales permanecen como activación operativa separada.
+
 Publicado el 20/11/2026 desde a3d13c4. SQL de seis versiones aplicado y hashes/RLS/Storage comprobados; CI y smoke público exitosos. [Registro de publicación](uat/hr-production-release-2026-11-20.json). El procedimiento siguiente se conserva como registro y recuperación; no volver a ejecutar la instalación sobre HR ya aplicado. La configuración real y UAT operativa siguen pendientes.
 
 Candidato aislado: `release/hr-module-20261120`, basado inicialmente en `origin/main` 2241df7 e integrado con compras 0d2184a mediante c305ffb. El árbol principal con trabajo concurrente de clientes/compras no forma parte del candidato. No ejecutar `git add .` ni un `supabase db push` general.

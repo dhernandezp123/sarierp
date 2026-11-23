@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/src/com
 export function HrNavigation({ manager }: { manager: boolean }) {
   const pathname = usePathname()
   const items = [
-    ...(manager ? [{ href: '/rrhh', label: 'Empleados' }, { href: '/rrhh/solicitudes', label: 'Vacaciones y permisos' }, { href: '/rrhh/configuracion', label: 'Calendario y reglas' }] : []),
+    ...(manager ? [{ href: '/rrhh', label: 'Empleados' }, { href: '/rrhh/solicitudes', label: 'Vacaciones y permisos' }, { href: '/rrhh/configuracion', label: 'Calendario y reglas' }, { href: '/rrhh/calculos', label: 'Calcular prestaciones' }] : []),
     { href: '/rrhh/calendario', label: 'Calendario de ausencias' },
     { href: '/rrhh/avisos', label: 'Avisos' },
     { href: '/rrhh/documentos', label: 'Constancias' },
