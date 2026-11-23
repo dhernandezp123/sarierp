@@ -2,6 +2,8 @@
 
 ## Ampliación HR-10 del 23/11/2026
 
+Publicado: PR #2 / `58809cc`, migración HR-10 instalada y verificada y Vercel Production READY. [Evidencia del release](uat/hr-benefit-production-release-2026-11-23.json). El paquete siguiente queda para registro/recuperación; no reaplicarlo sobre HR-10 existente.
+
 El cálculo de prestaciones añade exclusivamente `20261123120000_hr_automatic_benefits.sql` sobre HR-08 ya instalado. `node scripts/prepare-hr-benefit-release.mjs` genera SQL y manifiesto en `.ua/intermediate/`: valida ambiente/tenant, versión previa `20261120171000`, hash de HR-08, ausencia de instalación parcial y RLS/permisos; registra fuente y recarga PostgREST en la misma transacción. No conecta ni aplica. Revisar y ensayar con rollback antes de confirmar; si la respuesta se pierde, consultar historial/hash antes de reintentar. El paquete histórico de seis migraciones que sigue abajo no debe ejecutarse nuevamente.
 
 Publicar desde la rama aislada `feat/hr-benefit-calculations-20261123`, con CI de aplicación/base de datos aprobado. Aplicar solo el paquete HR-10 después del respaldo revisado, comprobar huella instalada y conservación de datos/RPC previas, e integrar la aplicación para que Vercel reconstruya con sus variables de Production. No reutilizar `.next` UAT ni ejecutar `db push --include-all`. Smoke añade `/rrhh/calculos` y `/api/hr/benefits/:id`; ambos requieren sesión. La conciliación de un caso real y los datos salariales permanecen como activación operativa separada.
