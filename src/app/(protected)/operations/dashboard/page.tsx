@@ -28,6 +28,7 @@ import {
   type BookingOperationalState,
 } from '@/src/lib/booking-operational-state'
 import { formatDate } from '@/src/lib/format'
+import { effectiveRemainingFreeDays } from '@/src/lib/booking-transit'
 import {
   buildOperationsControlTower,
   filterOperationsControlTower,
@@ -222,7 +223,9 @@ function getFreeDaysDisplay(booking: BookingRow) {
     Boolean(booking.actual_eta) ||
     isArrived(booking.shipment_status) ||
     isFinalStatus(booking.shipment_status)
-  const remaining = Number(booking.remaining_free_days)
+  // Calculado desde el arribo real; null no se trata como 0 días.
+  const remainingValue = effectiveRemainingFreeDays(booking)
+  const remaining = remainingValue === null ? Number.NaN : Number(remainingValue)
   const hasExpiringValue =
     Number.isFinite(remaining) && remaining >= 0 && remaining <= 7
 
@@ -729,7 +732,7 @@ export default function OperationsDashboardPage() {
           etd: booking.actual_etd || booking.etd,
           eta: booking.eta,
           actualEta: booking.actual_eta,
-          remainingFreeDays: booking.remaining_free_days,
+          remainingFreeDays: effectiveRemainingFreeDays(booking),
           createdAt: booking.created_at,
           updatedAt: booking.updated_at,
           lastEvent: lastEvent
@@ -884,7 +887,7 @@ export default function OperationsDashboardPage() {
               actual_etd: previewBooking.actual_etd,
               actual_eta: previewBooking.actual_eta,
               free_days: previewBooking.free_days,
-              remaining_free_days: previewBooking.remaining_free_days,
+              remaining_free_days: effectiveRemainingFreeDays(previewBooking),
               origin: previewQuotation?.origen || null,
               destination: previewQuotation?.destino || null,
               containers: previewBooking.booking_containers || [],

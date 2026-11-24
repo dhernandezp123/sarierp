@@ -17,6 +17,7 @@ import {
 } from '@/src/components/operations/OperationsWorkspace'
 import { UnsavedChangesGuard, requestFormNavigation } from '@/src/components/ui/UnsavedChangesGuard'
 import { formatDate } from '@/src/lib/format'
+import { effectiveRemainingFreeDays, lastFreeDay, realTransitDays } from '@/src/lib/booking-transit'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
@@ -286,6 +287,8 @@ const fieldHintClass = {
     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   referencia:
     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  calculado:
+    'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
 } as const
 
 type FieldHint = keyof typeof fieldHintClass
@@ -293,6 +296,7 @@ const fieldHintLabel: Record<FieldHint, string> = {
   cotizacion: 'Cotización',
   shipping: 'SI',
   referencia: 'Referencia',
+  calculado: 'Calculado',
 }
 
 // Campos editables del booking; definen "cambios sin guardar" junto con los contenedores.
@@ -814,9 +818,11 @@ export default function RoutingBookingChildPage() {
         house_bl: booking.house_bl,
         tracking_url: booking.tracking_url,
         estimated_transit_days: booking.estimated_transit_days,
-        real_transit_days: booking.real_transit_days,
+        // Con salida y arribo reales el dato se calcula; sin ellos se respeta la captura manual.
+        real_transit_days: realTransitDays(booking.actual_etd, booking.actual_eta) ?? booking.real_transit_days,
         free_days: booking.free_days,
-        remaining_free_days: booking.remaining_free_days,
+        // Con arribo real y días libres se guarda el valor calculado del día.
+        remaining_free_days: effectiveRemainingFreeDays(booking),
         freight_terms: booking.freight_terms,
         release_type: booking.release_type,
         hbl_freight_visibility: booking.hbl_freight_visibility,
@@ -995,6 +1001,7 @@ export default function RoutingBookingChildPage() {
 
     setPendingAction(null)
     toast.success(`Estado actualizado a ${pendingAction.targetStatus}`)
+    if (pendingAction.targetStatus === 'Finalizado') await closeOperationIfComplete()
 
     if (result?.warnings?.length) {
       toast.warning('Transición completada con advertencias', {
@@ -1003,6 +1010,38 @@ export default function RoutingBookingChildPage() {
     }
 
     await loadTimeline(booking.id)
+  }
+
+  // Cierre único: al finalizar el último booking activo se cierra la operación
+  // con la misma RPC de la SI (que vuelve a validar bookings y contenedores).
+  const closeOperationIfComplete = async () => {
+    const { data: siblings, error: siblingsError } = await supabase
+      .from('bookings')
+      .select('shipment_status')
+      .eq('shipping_instruction_id', id)
+    if (siblingsError) return
+    const active = (siblings || []).filter((item) => item.shipment_status !== 'Cancelada')
+    if (active.length === 0 || active.some((item) => item.shipment_status !== 'Finalizado')) {
+      toast.info('La operación se cerrará cuando se finalicen los demás bookings.')
+      return
+    }
+    const { data: current } = await supabase
+      .from('shipping_instructions')
+      .select('updated_at, operational_status')
+      .eq('id', id)
+      .single()
+    if (!current || current.operational_status === 'Finalizado') return
+    const { error } = await supabase.rpc('finalize_shipping_instruction_canonical', {
+      p_shipping_instruction_id: id,
+      p_expected_updated_at: current.updated_at,
+    })
+    if (error) {
+      toast.warning('El booking se finalizó, pero la operación no se pudo cerrar', {
+        description: `${error.message}. Ciérrala desde la Shipping Instruction.`,
+      })
+      return
+    }
+    toast.success('Operación cerrada; Finanzas ya puede revisar los costos')
   }
 
   const addOperationalNote = async ({
@@ -1416,7 +1455,7 @@ export default function RoutingBookingChildPage() {
             label: 'Finalizar booking',
             targetStatus: 'Finalizado',
             description:
-              'Valida contenedores, entrega y requisitos obligatorios antes del cierre.',
+              'Valida contenedores, entrega y requisitos obligatorios. Si es el último booking activo, también cierra la operación.',
           }
         : {
             kind: 'delivery' as const,
@@ -1425,6 +1464,10 @@ export default function RoutingBookingChildPage() {
               'Registra la entrega antes de habilitar la finalización del booking.',
           }
       : bookingTransitionActions[booking.shipment_status || 'Booking Solicitado']
+  const computedTransitDays = realTransitDays(booking.actual_etd, booking.actual_eta)
+  const freeDaysComputed = booking.free_days !== null && booking.free_days !== undefined && Boolean(booking.actual_eta)
+  const remainingFreeDaysValue = effectiveRemainingFreeDays(booking)
+  const lastFreeDayDate = lastFreeDay(booking)
   const isArrived = ['Arribado', 'Finalizado'].includes(booking.shipment_status || '')
   const documentationItems = buildDocumentationWorkspace({
     shippingInstructionId: id,
@@ -1579,7 +1622,7 @@ export default function RoutingBookingChildPage() {
           port_of_loading: quotation?.origen || null,
           port_of_discharge: quotation?.destino || null,
           free_days: booking.free_days,
-          remaining_free_days: booking.remaining_free_days,
+          remaining_free_days: remainingFreeDaysValue,
           freight_terms: booking.freight_terms,
           release_type: booking.release_type,
           consignee: consigneeName,
@@ -1868,19 +1911,30 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Días de tránsito reales">
-              <input
-                type="number"
-                value={booking.real_transit_days ?? ''}
-                onChange={(e) =>
-                  setBooking({
-                    ...booking,
-                    real_transit_days: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-                className={fieldClass}
-              />
-            </Field>
+            {computedTransitDays !== null ? (
+              <Field label="Días de tránsito reales" readonlySource="calculado">
+                <input
+                  value={computedTransitDays}
+                  readOnly
+                  title="Salida real → arribo real"
+                  className={cn(readonlyFieldClass, 'tabular-nums')}
+                />
+              </Field>
+            ) : (
+              <Field label="Días de tránsito reales">
+                <input
+                  type="number"
+                  value={booking.real_transit_days ?? ''}
+                  onChange={(e) =>
+                    setBooking({
+                      ...booking,
+                      real_transit_days: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className={fieldClass}
+                />
+              </Field>
+            )}
           </SectionCard>
 
           <SectionCard title="Fechas operativas">
@@ -2254,19 +2308,35 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Días libres restantes">
-              <input
-                type="number"
-                value={booking.remaining_free_days ?? ''}
-                onChange={(e) =>
-                  setBooking({
-                    ...booking,
-                    remaining_free_days: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-                className={fieldClass}
-              />
-            </Field>
+            {freeDaysComputed ? (
+              <Field label="Días libres restantes" readonlySource="calculado">
+                <input
+                  value={remainingFreeDaysValue ?? ''}
+                  readOnly
+                  title={lastFreeDayDate ? `Último día libre: ${formatDate(lastFreeDayDate)}` : undefined}
+                  className={cn(readonlyFieldClass, 'tabular-nums', (remainingFreeDaysValue ?? 1) <= 0 && 'text-red-700 dark:text-red-300')}
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {(remainingFreeDaysValue ?? 1) <= 0
+                    ? `En demora desde el ${formatDate(lastFreeDayDate ? new Date(lastFreeDayDate.getTime() + 86_400_000) : null)}`
+                    : `Último día libre: ${formatDate(lastFreeDayDate)} (el día de arribo cuenta como día 1)`}
+                </p>
+              </Field>
+            ) : (
+              <Field label="Días libres restantes">
+                <input
+                  type="number"
+                  value={booking.remaining_free_days ?? ''}
+                  onChange={(e) =>
+                    setBooking({
+                      ...booking,
+                      remaining_free_days: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className={fieldClass}
+                />
+              </Field>
+            )}
           </SectionCard>
 
           <section className={cardClass}>

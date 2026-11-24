@@ -265,6 +265,17 @@ type RoutingPrimaryAction = {
   title?: string
 }
 
+// Mismos campos que exige validate_shipping_instruction.
+function hasCompleteSupplier(routing: {
+  supplier_name?: string | null
+  supplier_contact?: string | null
+  supplier_email?: string | null
+  supplier_address?: string | null
+}) {
+  return [routing.supplier_name, routing.supplier_contact, routing.supplier_email, routing.supplier_address]
+    .every((value) => Boolean(value?.trim()))
+}
+
 function Info({ label, value }: { label: string; value?: string | number | null }) {
   return (
     <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
@@ -960,16 +971,7 @@ export default function RoutingDetailPage() {
       return
     }
 
-    const requiredFields = [
-      routing.supplier_name,
-      routing.supplier_contact,
-      routing.supplier_email,
-      routing.supplier_address,
-    ]
-
-    const hasMissingFields = requiredFields.some(
-      (field) => !field || field === ''
-    )
+    const hasMissingFields = !hasCompleteSupplier(routing)
 
     if (hasMissingFields) {
       toast.error('Completa los datos obligatorios antes de validar.')
@@ -1021,9 +1023,12 @@ export default function RoutingDetailPage() {
     toast.success('Shipping Instructions listas para booking')
   }
 
-  const acceptOperationsHandoff = async (target: ShippingInstruction | null = routing) => {
+  const acceptOperationsHandoff = async (
+    target: ShippingInstruction | null = routing,
+    { quiet = false }: { quiet?: boolean } = {}
+  ): Promise<ShippingInstruction | null> => {
     const routing = target
-    if (!routing || !canAcceptHandoff) return
+    if (!routing || !canAcceptHandoff) return null
 
     setAccepting(true)
     const { data, error } = await supabase.rpc(
@@ -1041,20 +1046,27 @@ export default function RoutingDetailPage() {
           ? 'La Shipping Instruction cambió en otra sesión. Recarga antes de aceptar.'
           : error.message || 'No se pudo aceptar el expediente'
       )
-      return
+      return null
     }
 
     const result = data as {
       shipping_instruction?: ShippingInstruction
     } | null
 
-    if (result?.shipping_instruction) {
-      applyRoutingMutation(result.shipping_instruction!)
-    } else {
-      await loadRouting()
-    }
+    const accepted = result?.shipping_instruction
+      ? applyRoutingMutation(result.shipping_instruction)
+      : await loadRouting()
     await loadOperationalTimeline(routing, bookings)
-    toast.success('Expediente aceptado; ahora puedes validarlo')
+    if (!quiet) toast.success('Expediente aceptado; ahora puedes validarlo')
+    return accepted
+  }
+
+  // Aceptar y validar en un solo paso cuando el proveedor ya está completo; si
+  // la validación falla, el expediente queda aceptado y se valida después.
+  const acceptAndValidate = async (current: ShippingInstruction) => {
+    const ready = hasCompleteSupplier(current)
+    const accepted = await acceptOperationsHandoff(current, { quiet: ready })
+    if (accepted && ready) await validateRouting(accepted)
   }
 
   const assignOperationsUser = async (userId: string, target: ShippingInstruction | null = routing) => {
@@ -1526,7 +1538,7 @@ export default function RoutingDetailPage() {
   const primaryAction: RoutingPrimaryAction | null = primaryActionKind === 'submit'
     ? { kind: 'submit', label: saving ? 'Enviando...' : 'Enviar expediente a Operaciones', icon: Send, disabled: saving }
     : primaryActionKind === 'accept'
-      ? { kind: 'accept', label: accepting ? 'Aceptando...' : profile?.rol === 'Admin' ? 'Aceptar y asumir expediente' : 'Aceptar expediente', icon: UserCheck, disabled: accepting }
+      ? { kind: 'accept', label: accepting || validating ? 'Procesando...' : hasCompleteSupplier(routing) ? 'Aceptar y validar' : profile?.rol === 'Admin' ? 'Aceptar y asumir expediente' : 'Aceptar expediente', icon: UserCheck, disabled: accepting || validating }
       : primaryActionKind === 'validate'
         ? { kind: 'validate', label: validating ? 'Validando...' : 'Validar SI', icon: ShieldCheck, disabled: validating || !routing.operations_accepted_at, title: !routing.operations_accepted_at ? 'Acepta el expediente antes de validarlo' : undefined }
         : primaryActionKind === 'finalize'
@@ -1536,13 +1548,14 @@ export default function RoutingDetailPage() {
             : null
   const runPrimaryAction = (kind: RoutingPrimaryAction['kind']) => {
     if (kind === 'submit') return void saveSalesInitialInfo(true)
-    if (kind === 'accept') return void runWithSavedRouting(acceptOperationsHandoff)
+    if (kind === 'accept') return void runWithSavedRouting(acceptAndValidate)
     if (kind === 'validate') return void runWithSavedRouting(validateRouting)
     if (kind === 'finalize') return void runWithSavedRouting(finalizeRouting)
     return void runWithSavedRouting(async () => { await handleOpenBooking() })
   }
   const PrimaryIcon = primaryAction?.icon
-  const canFinalizeAsSecondary = canManageRouting && !isRoutingCancelled && !isRoutingFinalized && !allBookingsClosed && bookings.length > 0
+  // Cerrar exige todos los bookings activos finalizados; antes de eso el botón fallaría.
+  const finalizePendingBookings = canManageRouting && !isRoutingCancelled && !isRoutingFinalized && bookings.length > 0 && !allBookingsClosed
   const statusTone = operationStatusPresentation(displayStatus).tone
   const noteLabelClass = 'text-xs font-semibold'
 
@@ -1685,7 +1698,9 @@ export default function RoutingDetailPage() {
             <p className="font-semibold">Expediente pendiente de aceptación</p>
             <p className="mt-0.5">
               {canAcceptHandoff
-                ? 'Acéptalo con el botón principal de la barra inferior para poder validarlo y crear el booking.'
+                ? hasCompleteSupplier(routing)
+                  ? 'Con el botón principal de la barra inferior se acepta y se valida en un solo paso.'
+                  : 'Acéptalo con el botón principal de la barra inferior; para validarlo completa proveedor, contacto, email y dirección.'
                 : `Está asignado a ${assignedOperationsName}; solo esa persona o Admin puede aceptarlo.`}
             </p>
           </CostNotice>
@@ -2030,7 +2045,7 @@ export default function RoutingDetailPage() {
         </div>
       </section>
 
-      {(canSave || primaryAction || canCancelRouting || canFinalizeAsSecondary || isRoutingFinalized) && (
+      {(canSave || primaryAction || canCancelRouting || isRoutingFinalized) && (
         <div id="si-actions" className="scroll-mt-28">
           <OperationSaveBar
             dirty={isDirty}
@@ -2047,11 +2062,10 @@ export default function RoutingDetailPage() {
                 Cancelar SI
               </button>
             )}
-            {canFinalizeAsSecondary && (
-              <button type="button" onClick={() => void runWithSavedRouting(finalizeRouting)} disabled={finalizing} className={operationSecondaryButtonClass}>
-                <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
-                {finalizing ? 'Finalizando...' : 'Finalizar operación'}
-              </button>
+            {finalizePendingBookings && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                La operación se cierra al finalizar su último booking.
+              </span>
             )}
             {primaryAction && PrimaryIcon && (
               <button type="button" onClick={() => runPrimaryAction(primaryAction.kind)} disabled={primaryAction.disabled} title={primaryAction.title} className={operationPrimaryButtonClass}>

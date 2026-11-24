@@ -21,6 +21,7 @@ import {
 import { portalDeadline } from '@/src/lib/portal'
 import { PortalError } from '@/src/components/portal/PortalFeedback'
 import { supabase } from '@/src/lib/supabase/client'
+import { effectiveRemainingFreeDays } from '@/src/lib/booking-transit'
 import {
   resolveBookingDocumentSummary,
   type StructuredBillOfLading,
@@ -362,7 +363,7 @@ function BookingCard({
             {booking.actual_etd && <InfoRow label="Salida real" value={fmt(booking.actual_etd)} />}
             {booking.actual_eta && <InfoRow label="Llegada real" value={fmt(booking.actual_eta)} />}
             <InfoRow label="Días libres" value={booking.free_days} />
-            <InfoRow label="Free days restantes" value={booking.remaining_free_days} />
+            <InfoRow label="Días libres restantes" value={effectiveRemainingFreeDays(booking)} />
           </section>
 
           <section className="rounded-xl bg-slate-50 px-4 dark:bg-slate-800/40">
