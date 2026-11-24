@@ -246,9 +246,9 @@ export function BookingTimeline({
           <button
             type="button"
             onClick={() => setShowNoteForm((current) => !current)}
-            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700"
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
-            <MessageSquarePlus className="mr-2 inline h-4 w-4" />
+            <MessageSquarePlus aria-hidden="true" className="mr-2 inline h-4 w-4" />
             Nueva nota
           </button>
         </div>

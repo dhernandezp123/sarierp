@@ -101,11 +101,11 @@ export function DocumentationWorkspace({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-3">
           <div className="rounded-xl bg-blue-50 p-2.5 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300">
-            <FileStack className="h-5 w-5" />
+            <FileStack aria-hidden="true" className="h-5 w-5" />
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-              Documentation Workspace
+              Documentación del embarque
             </p>
             <h2 className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">
               Expediente documental · {reference}
@@ -145,7 +145,7 @@ export function DocumentationWorkspace({
           </div>
           <Link
             href={suggestedAction.href}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-300 bg-white px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-200 dark:hover:bg-blue-950/40"
           >
             {suggestedAction.label}
             <ArrowRight className="h-4 w-4" />

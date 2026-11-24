@@ -146,6 +146,21 @@ const cutoffOptions = [
   ['OTHER', 'Otro'],
 ] as const
 
+const readinessStatusLabel: Record<string, string> = {
+  COMPLETED: 'Completo',
+  BLOCKED: 'Pendiente',
+  AUTHORIZED_EXCEPTION: 'Autorizado por excepción',
+  NOT_APPLICABLE: 'No aplica',
+}
+
+const readinessModeLabel: Record<string, string> = {
+  SEA_FCL: 'Marítimo FCL',
+  SEA_LCL: 'Marítimo LCL',
+  AIR: 'Aéreo',
+  ROAD_FTL: 'Terrestre FTL',
+  ROAD_LTL: 'Terrestre LTL',
+}
+
 const manualRequirementCodes = new Set(['CUSTOMS_FILING', 'CARGO_RECEIVED'])
 const exceptionRequirementCodes = new Set([
   'SHIPPING_INSTRUCTIONS_SENT',
@@ -630,7 +645,7 @@ export function BookingReadinessPanel({
               </h2>
             </div>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Evaluación canónica · {evaluation?.mode || 'UNKNOWN'} ·{' '}
+              {readinessModeLabel[evaluation?.mode || ''] || 'Modalidad sin definir'} ·{' '}
               {readinessPercent}% de requisitos satisfechos
             </p>
           </div>
@@ -643,8 +658,8 @@ export function BookingReadinessPanel({
               }`}
             >
               {evaluation?.ready
-                ? 'LISTO PARA EMBARCAR'
-                : `${evaluation?.blocking_count || 0} BLOQUEO(S)`}
+                ? 'Listo para embarcar'
+                : `${evaluation?.blocking_count || 0} bloqueo${evaluation?.blocking_count === 1 ? '' : 's'}`}
             </span>
             <button
               type="button"
@@ -668,18 +683,13 @@ export function BookingReadinessPanel({
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">
                     {requirement.label}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {requirement.code}
-                  </p>
                 </div>
                 <span
                   className={`rounded-full px-2 py-1 text-[11px] font-bold ${statusClasses(
                     requirement.status
                   )}`}
                 >
-                  {requirement.status === 'AUTHORIZED_EXCEPTION'
-                    ? 'AUTORIZADO POR EXCEPCIÓN'
-                    : requirement.status}
+                  {readinessStatusLabel[requirement.status] || requirement.status}
                 </span>
               </div>
               {canManage &&
@@ -748,7 +758,7 @@ export function BookingReadinessPanel({
             <button
               type="button"
               onClick={() => setCutoffOpen(true)}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Agregar cut-off
             </button>

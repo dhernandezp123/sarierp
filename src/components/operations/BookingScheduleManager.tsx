@@ -408,7 +408,7 @@ export function BookingScheduleManager({
               <button
                 type="button"
                 onClick={() => openAction('revise')}
-                className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               >
                 Revisar itinerario
               </button>

@@ -3,7 +3,16 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Download, FileText, Lock, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, Download, FileText, Lock, Package, Ship, Trash2, Upload } from 'lucide-react'
+import { FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
+import {
+  OperationSaveBar,
+  OperationStatusBadge,
+  operationPrimaryButtonClass,
+  operationSecondaryButtonClass,
+} from '@/src/components/operations/OperationsWorkspace'
+import { UnsavedChangesGuard, requestFormNavigation } from '@/src/components/ui/UnsavedChangesGuard'
+import { formatDate } from '@/src/lib/format'
 import { PdfDownloadButton } from '@/src/components/pdf/PdfDownloadButton'
 import { toast } from 'sonner'
 import { useUser } from '@/src/hooks/useUser'
@@ -277,6 +286,29 @@ const fieldHintClass = {
 } as const
 
 type FieldHint = keyof typeof fieldHintClass
+const fieldHintLabel: Record<FieldHint, string> = {
+  cotizacion: 'Cotización',
+  shipping: 'SI',
+  referencia: 'Referencia',
+}
+
+// Campos editables del booking; definen "cambios sin guardar" junto con los contenedores.
+const editableBookingFields = [
+  'master_bl', 'house_bl', 'tracking_url', 'estimated_transit_days',
+  'real_transit_days', 'free_days', 'remaining_free_days', 'freight_terms',
+  'release_type', 'hbl_freight_visibility', 'printed_at_destination',
+  'operational_comments',
+] as const
+
+function bookingSnapshot(booking: object | null) {
+  if (!booking) return ''
+  const values = booking as Record<string, unknown>
+  return JSON.stringify(editableBookingFields.map((field) => values[field] ?? null))
+}
+
+function containersSnapshot(rows: Array<{ container_type: string; quantity: number | ''; notes: string }>) {
+  return JSON.stringify(rows.map((row) => [row.container_type, Number(row.quantity || 0), row.notes]))
+}
 
 function resolveJoin<T>(value: T | T[] | null): T | null {
   if (!value) return null
@@ -323,7 +355,7 @@ function Field({
               fieldHintClass[readonlySource]
             )}
           >
-            {readonlySource === 'cotizacion' ? 'cotizacion' : readonlySource}
+            {fieldHintLabel[readonlySource]}
           </span>
         )}
       </label>
@@ -427,6 +459,8 @@ export default function RoutingBookingChildPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingContainers, setSavingContainers] = useState(false)
+  const [savedBookingSnapshot, setSavedBookingSnapshot] = useState('')
+  const [savedContainersSnapshot, setSavedContainersSnapshot] = useState('')
   const [bookingDocuments, setBookingDocuments] = useState<BookingDocument[]>([])
   const [documentUserNames, setDocumentUserNames] = useState<Record<string, string>>({})
   const [documentType, setDocumentType] = useState(bookingDocumentTypes[0])
@@ -697,9 +731,10 @@ export default function RoutingBookingChildPage() {
 
     setRouting(routingData as RoutingData)
     setBooking(bookingData as BookingData)
+    setSavedBookingSnapshot(bookingSnapshot(bookingData))
     setAvailableContainers(quotedContainers)
     setAssignedInOtherBookings(Object.values(groupContainers(assignedByOthers)))
-    setContainerRows(
+    const loadedContainerRows = (
       ((currentContainersData || []) as StoredBookingContainerData[]).map(
         (container) => ({
           id: container.id,
@@ -709,6 +744,8 @@ export default function RoutingBookingChildPage() {
         })
       )
     )
+    setContainerRows(loadedContainerRows)
+    setSavedContainersSnapshot(containersSnapshot(loadedContainerRows))
     await loadBookingDocuments((bookingData as BookingData).id)
     await loadBillsOfLading((bookingData as BookingData).id)
     await loadTimeline((bookingData as BookingData).id)
@@ -754,8 +791,8 @@ export default function RoutingBookingChildPage() {
     }
   }
 
-  const saveBooking = async () => {
-    if (!booking) return
+  const saveBooking = async (notify = true) => {
+    if (!booking) return false
 
     setSaving(true)
 
@@ -786,22 +823,38 @@ export default function RoutingBookingChildPage() {
         toast.error(
           'Este booking fue modificado por otro usuario. Recarga la página antes de guardar nuevamente.'
         )
-        return
+        return false
       }
 
       toast.error(error.message || 'No se pudo guardar el booking')
-      return
+      return false
     }
 
     const updatedBooking = Array.isArray(data) ? data[0] : data
     if (updatedBooking) {
       setBooking(updatedBooking as BookingData)
+      setSavedBookingSnapshot(bookingSnapshot(updatedBooking))
     }
 
-    toast.success('Booking actualizado')
+    if (notify) toast.success('Booking actualizado')
+    return true
+  }
+
+  const bookingDirty = Boolean(booking && savedBookingSnapshot) && bookingSnapshot(booking) !== savedBookingSnapshot
+  const containersDirty = Boolean(booking) && containersSnapshot(containerRows) !== savedContainersSnapshot
+  const isDirty = bookingDirty || containersDirty
+
+  // Un solo guardado para los datos del booking y sus contenedores.
+  const saveAllChanges = async () => {
+    if (bookingDirty && !(await saveBooking(false))) return false
+    if (containersDirty && !(await saveBookingContainers(false))) return false
+    toast.success('Cambios guardados')
+    return true
   }
 
   const openBookingAction = async (action: BookingAction) => {
+    // Las transiciones validan los datos guardados: se guarda primero lo editado.
+    if (isDirty && !(await saveAllChanges())) return
     setPendingAction(action)
     setActionOccurredAt(toLocalDateTimeInput())
     setActionLocation('')
@@ -1071,9 +1124,9 @@ export default function RoutingBookingChildPage() {
     return true
   }
 
-  const saveBookingContainers = async () => {
-    if (!booking) return
-    if (!validateContainerRows()) return
+  const saveBookingContainers = async (notify = true) => {
+    if (!booking) return false
+    if (!validateContainerRows()) return false
 
     setSavingContainers(true)
 
@@ -1093,7 +1146,7 @@ export default function RoutingBookingChildPage() {
     if (replaceError) {
       setSavingContainers(false)
       toast.error(replaceError.message || 'No se pudieron guardar los contenedores del booking')
-      return
+      return false
     }
 
     setSavingContainers(false)
@@ -1111,8 +1164,9 @@ export default function RoutingBookingChildPage() {
         ),
       },
     })
-    toast.success('Contenedores del booking guardados')
+    if (notify) toast.success('Contenedores del booking guardados')
     await loadData()
+    return true
   }
 
   const uploadBookingDocument = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1480,50 +1534,40 @@ export default function RoutingBookingChildPage() {
           issued_by_name: profile ? `${profile.nombre || ''} ${profile.apellido || ''}`.trim() : null,
         }
         return (
-          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                {bookingTitle}
-              </h1>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Shipping Instruction {routing.routing_number}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {contextualAction && (
+          <div className="mb-6">
+            <UnsavedChangesGuard dirty={isDirty} />
+            <FinancePageHeader
+              eyebrow="Operaciones · Booking"
+              icon={Ship}
+              title={<span className="flex flex-wrap items-center gap-3">{bookingTitle}<OperationStatusBadge status={operationalState.displayStatus} /></span>}
+              description={<>SI {routing.routing_number}{client?.nombre ? ` · ${client.nombre}` : ''}{booking.carrier ? ` · ${booking.carrier}` : ''}</>}
+              actions={<>
+                {isArrived && (
+                  <PdfDownloadButton
+                    document={<ArrivalNoticePdf data={arrivalNoticeData} company={companyBranding} />}
+                    fileName={`Aviso-Llegada-${booking.booking_number || bookingId}.pdf`}
+                    className={financeActionClass}
+                  >
+                    {({ loading: pdfLoading }) => (
+                      <>
+                        <Download aria-hidden="true" className="h-4 w-4" />
+                        {pdfLoading ? 'Generando...' : 'Aviso de llegada'}
+                      </>
+                    )}
+                  </PdfDownloadButton>
+                )}
                 <button
                   type="button"
-                  onClick={() => void openBookingAction(contextualAction)}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  onClick={() => requestFormNavigation(() => router.push(returnHref))}
+                  className={financeActionClass}
                 >
-                  {contextualAction.label}
+                  <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+                  {returnHref.startsWith('/operations/dashboard')
+                    ? 'Volver al Control Tower'
+                    : 'Volver a la SI'}
                 </button>
-              )}
-              {isArrived && (
-                <PdfDownloadButton
-                  document={<ArrivalNoticePdf data={arrivalNoticeData} company={companyBranding} />}
-                  fileName={`Aviso-Llegada-${booking.booking_number || bookingId}.pdf`}
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-                >
-                  {({ loading: pdfLoading }) => (
-                    <>
-                      <Download className="h-4 w-4" />
-                      {pdfLoading ? 'Generando...' : 'Aviso de Llegada'}
-                    </>
-                  )}
-                </PdfDownloadButton>
-              )}
-              <button
-                type="button"
-                onClick={() => router.push(returnHref)}
-                className={secondaryButtonClass}
-              >
-                {returnHref.startsWith('/operations/dashboard')
-                  ? 'Volver al Control Tower'
-                  : 'Volver a SI'}
-              </button>
-            </div>
+              </>}
+            />
           </div>
         )
       })()}
@@ -1546,8 +1590,8 @@ export default function RoutingBookingChildPage() {
         />
 
         <div id="booking-data" className="grid scroll-mt-24 gap-6 lg:grid-cols-2">
-          <SectionCard title="Referencia Operativa">
-            <Field label="Carrier / Naviera" readonlySource="referencia">
+          <SectionCard title="Referencia operativa">
+            <Field label="Naviera" readonlySource="referencia">
               <input value={booking.carrier || ''} readOnly className={readonlyFieldClass} />
             </Field>
 
@@ -1555,11 +1599,11 @@ export default function RoutingBookingChildPage() {
               <input value={incotermReference} readOnly className={readonlyFieldClass} />
             </Field>
 
-            <Field label="Transit Time" readonlySource="cotizacion">
+            <Field label="Tiempo de tránsito" readonlySource="cotizacion">
               <input value={selectedAgentTransit} readOnly className={readonlyFieldClass} />
             </Field>
 
-            <Field label="Booking Number">
+            <Field label="Número de booking">
               <input
                 value={booking.booking_number || ''}
                 readOnly
@@ -1567,7 +1611,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Carrier Booking">
+            <Field label="Referencia de la naviera">
               <input
                 value={booking.carrier_booking || ''}
                 readOnly
@@ -1588,7 +1632,7 @@ export default function RoutingBookingChildPage() {
             </Field>
           </SectionCard>
 
-          <SectionCard title="Documentacion">
+          <SectionCard title="Números de BL">
             <Field label="Master BL">
               <input
                 value={booking.master_bl || ''}
@@ -1607,8 +1651,8 @@ export default function RoutingBookingChildPage() {
           </SectionCard>
         </div>
 
-        <SectionCard title="BL / Routing" gridClassName="md:grid-cols-2 lg:grid-cols-4">
-          <Field label="Freight Terms">
+        <SectionCard title="Instrucciones de BL" gridClassName="md:grid-cols-2 lg:grid-cols-4">
+          <Field label="Términos de flete">
             <select
               value={booking.freight_terms || ''}
               onChange={(e) => setBooking({ ...booking, freight_terms: e.target.value })}
@@ -1620,7 +1664,7 @@ export default function RoutingBookingChildPage() {
             </select>
           </Field>
 
-          <Field label="Release Type">
+          <Field label="Tipo de liberación">
             <select
               value={booking.release_type || ''}
               onChange={(e) => setBooking({ ...booking, release_type: e.target.value })}
@@ -1632,7 +1676,7 @@ export default function RoutingBookingChildPage() {
             </select>
           </Field>
 
-          <Field label="HBL Freight Visibility">
+          <Field label="Flete en el HBL">
             <select
               value={booking.hbl_freight_visibility || ''}
               onChange={(e) =>
@@ -1660,7 +1704,7 @@ export default function RoutingBookingChildPage() {
               htmlFor="printed-at-destination"
               className="text-sm text-slate-700 dark:text-slate-300"
             >
-              Printed at Destination
+              BL impreso en destino
             </label>
           </div>
 
@@ -1674,11 +1718,11 @@ export default function RoutingBookingChildPage() {
             <input value={shipperName} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Shipper Contact" readonlySource="shipping">
+          <Field label="Contacto del shipper" readonlySource="shipping">
             <input value={shipperContact} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Shipper Email" readonlySource="shipping">
+          <Field label="Email del shipper" readonlySource="shipping">
             <input value={shipperEmail} readOnly className={readonlyFieldClass} />
           </Field>
 
@@ -1692,30 +1736,30 @@ export default function RoutingBookingChildPage() {
             <input value={consigneeName} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Tax ID" readonlySource="cotizacion">
+          <Field label="RTN del consignee" readonlySource="cotizacion">
             <input value={consigneeTaxId} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Address" readonlySource="cotizacion">
+          <Field label="Dirección del consignee" readonlySource="cotizacion">
             <input value={consigneeAddress} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Contact" readonlySource="cotizacion">
+          <Field label="Contacto del consignee" readonlySource="cotizacion">
             <input value={consigneeContact} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Email" readonlySource="cotizacion">
+          <Field label="Email del consignee" readonlySource="cotizacion">
             <input value={consigneeEmail} readOnly className={readonlyFieldClass} />
           </Field>
 
-          <Field label="Consignee Phone" readonlySource="cotizacion">
+          <Field label="Teléfono del consignee" readonlySource="cotizacion">
             <input value={consigneePhone} readOnly className={readonlyFieldClass} />
           </Field>
         </SectionCard>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Navegacion / Transito">
-            <Field label="Carrier">
+          <SectionCard title="Navegación y tránsito">
+            <Field label="Naviera">
               <input
                 value={booking.carrier || ''}
                 readOnly
@@ -1723,7 +1767,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Vessel Name">
+            <Field label="Buque">
               <input
                 value={booking.vessel_name || ''}
                 readOnly
@@ -1731,7 +1775,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Voyage">
+            <Field label="Viaje">
               <input
                 value={booking.voyage || ''}
                 readOnly
@@ -1739,7 +1783,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Estimated Transit Days">
+            <Field label="Días de tránsito estimados">
               <input
                 type="number"
                 value={booking.estimated_transit_days ?? ''}
@@ -1753,7 +1797,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Real Transit Days">
+            <Field label="Días de tránsito reales">
               <input
                 type="number"
                 value={booking.real_transit_days ?? ''}
@@ -1768,58 +1812,52 @@ export default function RoutingBookingChildPage() {
             </Field>
           </SectionCard>
 
-          <SectionCard title="Fechas Operativas">
-            <Field label="ETD">
+          <SectionCard title="Fechas operativas">
+            <Field label="ETD vigente">
               <input
-                type="date"
-                value={booking.etd || ''}
+                value={formatDate(booking.etd, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="ETA">
+            <Field label="ETA vigente">
               <input
-                type="date"
-                value={booking.eta || ''}
+                value={formatDate(booking.eta, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="Original ETD">
+            <Field label="ETD original">
               <input
-                type="date"
-                value={booking.original_etd || ''}
+                value={formatDate(booking.original_etd, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="Original ETA">
+            <Field label="ETA original">
               <input
-                type="date"
-                value={booking.original_eta || ''}
+                value={formatDate(booking.original_eta, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="Actual ETD">
+            <Field label="Salida real">
               <input
-                type="date"
-                value={booking.actual_etd || ''}
+                value={formatDate(booking.actual_etd, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
 
-            <Field label="Actual ETA">
+            <Field label="Arribo real">
               <input
-                type="date"
-                value={booking.actual_eta || ''}
+                value={formatDate(booking.actual_eta, '—')}
                 readOnly
-                className={readonlyFieldClass}
+                className={cn(readonlyFieldClass, 'tabular-nums')}
               />
             </Field>
           </SectionCard>
@@ -1852,7 +1890,7 @@ export default function RoutingBookingChildPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                Contenedores asignados a este booking
+                Contenedores del booking
               </h2>
               <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
                 <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/70">
@@ -1885,7 +1923,7 @@ export default function RoutingBookingChildPage() {
             <button
               type="button"
               onClick={addContainerRow}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               Agregar contenedor
             </button>
@@ -1970,16 +2008,11 @@ export default function RoutingBookingChildPage() {
             </table>
           </div>
 
-          <div className="mt-5 flex justify-end">
-            <button
-              type="button"
-              onClick={saveBookingContainers}
-              disabled={savingContainers}
-              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {savingContainers ? 'Guardando...' : 'Guardar contenedores'}
-            </button>
-          </div>
+          {containersDirty && (
+            <p className="mt-4 text-xs font-medium text-amber-700 dark:text-amber-300">
+              Los cambios en contenedores se guardan con “Guardar cambios” en la barra inferior.
+            </p>
+          )}
         </section>
 
         <section className={cardClass}>
@@ -1989,7 +2022,7 @@ export default function RoutingBookingChildPage() {
                 Documentos
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Bucket esperado en Supabase Storage: {BOOKING_DOCUMENT_BUCKET}
+                Adjunta la confirmación de booking, BL, facturas y demás soportes.
               </p>
             </div>
           </div>
@@ -2034,9 +2067,9 @@ export default function RoutingBookingChildPage() {
                 <button
                   type="submit"
                   disabled={uploadingDocument}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  <Upload className="h-4 w-4" />
+                  <Upload aria-hidden="true" className="h-4 w-4" />
                   {uploadingDocument ? 'Subiendo...' : 'Subir documento'}
                 </button>
               </div>
@@ -2127,8 +2160,8 @@ export default function RoutingBookingChildPage() {
         </section>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <SectionCard title="Tracking y Control">
-            <Field label="Tracking URL">
+          <SectionCard title="Seguimiento y días libres">
+            <Field label="Enlace de seguimiento">
               <input
                 value={booking.tracking_url || ''}
                 onChange={(e) => setBooking({ ...booking, tracking_url: e.target.value })}
@@ -2136,7 +2169,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Free Days">
+            <Field label="Días libres">
               <input
                 type="number"
                 value={booking.free_days ?? ''}
@@ -2150,7 +2183,7 @@ export default function RoutingBookingChildPage() {
               />
             </Field>
 
-            <Field label="Remaining Free Days">
+            <Field label="Días libres restantes">
               <input
                 type="number"
                 value={booking.remaining_free_days ?? ''}
@@ -2181,16 +2214,6 @@ export default function RoutingBookingChildPage() {
         </div>
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <button
-          type="button"
-          onClick={saveBooking}
-          disabled={saving}
-          className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? 'Guardando...' : 'Guardar Booking'}
-        </button>
-      </div>
 
       <div className="mt-6">
         <BookingTimeline
@@ -2205,17 +2228,17 @@ export default function RoutingBookingChildPage() {
       <section id="booking-bills" className={`${cardClass} mt-6 scroll-mt-24`}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            Bills of Lading
+            Bills of Lading (BL)
           </h2>
           {hasBookingReference && (
             <button
               type="button"
               onClick={() =>
-                router.push(
+                requestFormNavigation(() => router.push(
                   `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/new?type=MBL`
-                )
+                ))
               }
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              className={operationSecondaryButtonClass}
             >
               + Crear MBL
             </button>
@@ -2262,9 +2285,9 @@ export default function RoutingBookingChildPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              router.push(
+                              requestFormNavigation(() => router.push(
                                 `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/new?type=HBL&parentBlId=${mbl.id}`
-                              )
+                              ))
                             }
                             className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
                           >
@@ -2274,9 +2297,9 @@ export default function RoutingBookingChildPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            router.push(
+                            requestFormNavigation(() => router.push(
                               `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${mbl.id}`
-                            )
+                            ))
                           }
                           className={secondaryButtonClass}
                         >
@@ -2308,9 +2331,9 @@ export default function RoutingBookingChildPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                router.push(
+                                requestFormNavigation(() => router.push(
                                   `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${hbl.id}`
-                                )
+                                ))
                               }
                               className={secondaryButtonClass}
                             >
@@ -2326,6 +2349,25 @@ export default function RoutingBookingChildPage() {
           </div>
         )}
       </section>
+
+      <OperationSaveBar
+        dirty={isDirty}
+        saving={saving || savingContainers}
+        onSave={() => void saveAllChanges()}
+      >
+        {contextualAction && (
+          <button
+            type="button"
+            onClick={() => void openBookingAction(contextualAction)}
+            disabled={saving || savingContainers}
+            title={contextualAction.description}
+            className={operationPrimaryButtonClass}
+          >
+            <Package aria-hidden="true" className="h-4 w-4" />
+            {contextualAction.label}
+          </button>
+        )}
+      </OperationSaveBar>
 
       <Dialog
         open={Boolean(pendingAction)}
