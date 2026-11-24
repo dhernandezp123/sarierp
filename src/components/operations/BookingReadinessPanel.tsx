@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  CalendarClock,
   Clock3,
   RefreshCw,
   Scale,
@@ -13,12 +14,13 @@ import { supabase } from '@/src/lib/supabase/client'
 import { cardClass, fieldClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import { OperationDialogContent } from '@/src/components/operations/OperationDialog'
+import { operationPrimaryButtonClass, operationSecondaryButtonClass } from '@/src/components/operations/OperationsWorkspace'
 
 export type ReadinessRequirement = {
   id: string | null
@@ -996,7 +998,7 @@ export function BookingReadinessPanel({
       )}
 
       <Dialog open={cutoffOpen} onOpenChange={setCutoffOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <OperationDialogContent size="lg" icon={CalendarClock} tone="sky" eyebrow="Readiness · Cut-offs">
           <DialogHeader>
             <DialogTitle>Agregar o reemplazar cut-off</DialogTitle>
             <DialogDescription>
@@ -1122,7 +1124,7 @@ export function BookingReadinessPanel({
             <button
               type="button"
               onClick={() => setCutoffOpen(false)}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold"
+              className={operationSecondaryButtonClass}
             >
               Cancelar
             </button>
@@ -1130,12 +1132,12 @@ export function BookingReadinessPanel({
               type="button"
               onClick={() => void saveCutoff()}
               disabled={saving}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className={operationPrimaryButtonClass}
             >
               {saving ? 'Guardando...' : 'Guardar cut-off'}
             </button>
           </DialogFooter>
-        </DialogContent>
+        </OperationDialogContent>
       </Dialog>
 
       <Dialog
@@ -1150,7 +1152,7 @@ export function BookingReadinessPanel({
           }
         }}
       >
-        <DialogContent>
+        <OperationDialogContent icon={ShieldCheck} tone="amber" eyebrow="Readiness">
           <DialogHeader>
             <DialogTitle>Confirmar acción operativa</DialogTitle>
             <DialogDescription>
@@ -1185,7 +1187,7 @@ export function BookingReadinessPanel({
                 setRequirementAction(null)
                 setVgmAction(null)
               }}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold"
+              className={operationSecondaryButtonClass}
             >
               Cancelar
             </button>
@@ -1199,12 +1201,12 @@ export function BookingReadinessPanel({
                     : void runVgmReasonAction()
               }
               disabled={saving}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+              className={operationPrimaryButtonClass}
             >
-              Confirmar
+              {saving ? 'Procesando...' : 'Confirmar'}
             </button>
           </DialogFooter>
-        </DialogContent>
+        </OperationDialogContent>
       </Dialog>
 
       <Dialog
@@ -1213,7 +1215,7 @@ export function BookingReadinessPanel({
           if (!open) setVgmContainer(null)
         }}
       >
-        <DialogContent>
+        <OperationDialogContent icon={Scale} tone="sky" eyebrow="Readiness · VGM">
           <DialogHeader>
             <DialogTitle>Registrar VGM</DialogTitle>
             <DialogDescription>
@@ -1291,7 +1293,7 @@ export function BookingReadinessPanel({
             <button
               type="button"
               onClick={() => setVgmContainer(null)}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold"
+              className={operationSecondaryButtonClass}
             >
               Cancelar
             </button>
@@ -1299,12 +1301,12 @@ export function BookingReadinessPanel({
               type="button"
               onClick={() => void saveVgmDraft()}
               disabled={saving}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className={operationPrimaryButtonClass}
             >
-              Guardar borrador
+              {saving ? 'Guardando...' : 'Guardar borrador'}
             </button>
           </DialogFooter>
-        </DialogContent>
+        </OperationDialogContent>
       </Dialog>
     </div>
   )

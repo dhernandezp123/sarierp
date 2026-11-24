@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { SidePanel } from '@/src/components/ui/side-panel'
+import { OperationQuickView } from '@/src/components/operations/OperationQuickView'
 import Link from 'next/link'
 import {
   AlertTriangle,
@@ -383,6 +385,9 @@ export default function OperationsDashboardPage() {
   const [queueFilter, setQueueFilter] = useState<OperationsQueueFilter>('all')
   const [queueSearch, setQueueSearch] = useState('')
   const [urlStateReady, setUrlStateReady] = useState(false)
+  // Vista rápida: el booking abierto vive en la URL (?preview=) para que Atrás la cierre.
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  const previewPushed = useRef(false)
 
   const loadDashboard = async () => {
     setLoading(true)
@@ -516,6 +521,7 @@ export default function OperationsDashboardPage() {
       const initial = initialOperationsQueueState()
       setQueueFilter(initial.filter)
       setQueueSearch(initial.search)
+      setPreviewId(new URLSearchParams(window.location.search).get('preview'))
       setUrlStateReady(true)
     }, 0)
     return () => window.clearTimeout(timeout)
@@ -526,9 +532,37 @@ export default function OperationsDashboardPage() {
     window.history.replaceState(
       null,
       '',
-      `${operationsDashboardHref(queueFilter, queueSearch)}${window.location.hash}`
+      `${dashboardUrl(queueFilter, queueSearch, new URLSearchParams(window.location.search).get('preview'))}${window.location.hash}`
     )
   }, [queueFilter, queueSearch, urlStateReady])
+
+  useEffect(() => {
+    const syncPreview = () => {
+      previewPushed.current = false
+      setPreviewId(new URLSearchParams(window.location.search).get('preview'))
+    }
+    window.addEventListener('popstate', syncPreview)
+    return () => window.removeEventListener('popstate', syncPreview)
+  }, [])
+
+  const openPreview = (bookingId: string) => {
+    const url = dashboardUrl(queueFilter, queueSearch, bookingId)
+    if (previewId) window.history.replaceState(null, '', url)
+    else {
+      window.history.pushState(null, '', url)
+      previewPushed.current = true
+    }
+    setPreviewId(bookingId)
+  }
+  const closePreview = () => {
+    setPreviewId(null)
+    if (previewPushed.current) {
+      previewPushed.current = false
+      window.history.back()
+    } else {
+      window.history.replaceState(null, '', dashboardUrl(queueFilter, queueSearch, null))
+    }
+  }
 
   const dashboard = useMemo(() => {
     const readinessByBookingId = new Map(
@@ -795,6 +829,12 @@ export default function OperationsDashboardPage() {
     )
   }
 
+  const previewItem = previewId ? dashboard.controlTower.find((entry) => entry.id === previewId) || null : null
+  const previewBooking = previewId ? bookings.find((entry) => entry.id === previewId) || null : null
+  const previewReadiness = previewBooking ? readinessOverview.find((entry) => entry.booking_id === previewBooking.id) || null : null
+  const previewReturnTo = dashboardUrl(queueFilter, queueSearch, previewId)
+  const previewQuotation = previewBooking ? resolveJoin(resolveJoin(previewBooking.shipping_instruction)?.quotation || null) : null
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -816,7 +856,48 @@ export default function OperationsDashboardPage() {
         search={queueSearch}
         onFilterChange={setQueueFilter}
         onSearchChange={setQueueSearch}
+        onPreview={(item) => openPreview(item.id)}
       />
+
+      <SidePanel
+        open={Boolean(previewId)}
+        onClose={closePreview}
+        size="lg"
+        eyebrow="Control Tower · Vista rápida"
+        title={previewItem?.bookingLabel || 'Operación'}
+        description={previewItem ? `${previewItem.routingNumber} · ${previewItem.clientName}` : undefined}
+      >
+        {previewItem && previewBooking ? (
+          <OperationQuickView
+            item={previewItem}
+            state={operationalStateFor(previewBooking, previewReadiness)}
+            readiness={previewReadiness}
+            actionHref={operationsWorkHref(previewItem, previewReturnTo)}
+            bookingHref={`/operations/shipping-instructions/${previewItem.shippingInstructionId}/bookings/${previewItem.id}?returnTo=${encodeURIComponent(previewReturnTo)}`}
+            siHref={`/operations/shipping-instructions/${previewItem.shippingInstructionId}?returnTo=${encodeURIComponent(previewReturnTo)}`}
+            booking={{
+              carrier: previewBooking.carrier,
+              vessel_name: previewBooking.vessel_name,
+              voyage: previewBooking.voyage,
+              etd: previewBooking.etd,
+              eta: previewBooking.eta,
+              actual_etd: previewBooking.actual_etd,
+              actual_eta: previewBooking.actual_eta,
+              free_days: previewBooking.free_days,
+              remaining_free_days: previewBooking.remaining_free_days,
+              origin: previewQuotation?.origen || null,
+              destination: previewQuotation?.destino || null,
+              containers: previewBooking.booking_containers || [],
+              documents: previewBooking.booking_documents || [],
+              bills: previewBooking.bills_of_lading || [],
+            }}
+          />
+        ) : (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Esta operación ya no está en la cola activa. Actualiza el tablero o búscala en Bookings.
+          </p>
+        )}
+      </SidePanel>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-9">
         <MetricCard
@@ -871,7 +952,7 @@ export default function OperationsDashboardPage() {
         />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
         <EtaTable bookings={dashboard.etaCritical} />
         <FreeDaysTable bookings={dashboard.freeDaysExpiring} />
         <PendingConfirmationTable bookings={dashboard.pendingConfirmation} />
@@ -886,6 +967,12 @@ export default function OperationsDashboardPage() {
       </div>
     </div>
   )
+}
+
+function dashboardUrl(filter: OperationsQueueFilter, search: string, preview: string | null) {
+  const href = operationsDashboardHref(filter, search)
+  if (!preview) return href
+  return `${href}${href.includes('?') ? '&' : '?'}preview=${encodeURIComponent(preview)}`
 }
 
 function operationsWorkHref(item: OperationsWorkItem, returnTo: string) {
@@ -918,7 +1005,9 @@ function OperationsControlTower({
   search,
   onFilterChange,
   onSearchChange,
+  onPreview,
 }: {
+  onPreview: (item: OperationsWorkItem) => void
   items: OperationsWorkItem[]
   totalItems: number
   filter: OperationsQueueFilter
@@ -990,10 +1079,12 @@ function OperationsControlTower({
         ) : (
           <div className="mt-3 grid gap-3 lg:grid-cols-3">
             {nextActions.map((item, index) => (
-              <Link
+              <button
+                type="button"
                 key={item.id}
-                href={operationsWorkHref(item, returnTo)}
-                className={`group rounded-xl border p-4 transition hover:-translate-y-0.5 hover:shadow-md ${
+                onClick={() => onPreview(item)}
+                aria-label={`Vista rápida de ${item.bookingLabel}: ${item.reason}`}
+                className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
                   item.level === 'immediate'
                     ? 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20'
                     : item.level === 'pending'
@@ -1019,7 +1110,7 @@ function OperationsControlTower({
                 <p className="mt-2 text-xs font-semibold text-blue-700 dark:text-blue-300">
                   {item.nextAction}
                 </p>
-              </Link>
+              </button>
             ))}
           </div>
         )}
@@ -1053,7 +1144,14 @@ function OperationsControlTower({
                     </span>
                   </td>
                   <td className="pr-4">
-                    <p className="font-semibold text-slate-900 dark:text-white">{item.bookingLabel}</p>
+                    <button
+                      type="button"
+                      onClick={() => onPreview(item)}
+                      title="Vista rápida"
+                      className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-[#B3282D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 dark:text-white dark:decoration-slate-600"
+                    >
+                      {item.bookingLabel}
+                    </button>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {item.routingNumber} · {item.clientName}
                     </p>
@@ -1152,7 +1250,7 @@ function DashboardPanel({
   children: React.ReactNode
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]">
+    <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220] sm:p-6">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
           {title}
@@ -1161,7 +1259,7 @@ function DashboardPanel({
           {description}
         </p>
       </div>
-      <div className="overflow-x-auto">{children}</div>
+      <div className="relative overflow-x-auto">{children}</div>
     </section>
   )
 }

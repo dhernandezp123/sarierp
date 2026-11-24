@@ -1,13 +1,17 @@
 'use client'
 
 import type React from 'react'
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { SidePanel } from '@/src/components/ui/side-panel'
+import { BillOfLadingEditor } from '@/src/components/operations/BillOfLadingEditor'
+import { OperationDialogContent } from '@/src/components/operations/OperationDialog'
 import { ArrowLeft, Download, FileText, Lock, Package, Ship, Trash2, Upload } from 'lucide-react'
 import { FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
 import {
   OperationSaveBar,
   OperationStatusBadge,
+  operationDangerSolidButtonClass,
   operationPrimaryButtonClass,
   operationSecondaryButtonClass,
 } from '@/src/components/operations/OperationsWorkspace'
@@ -22,7 +26,6 @@ import { supabase } from '@/src/lib/supabase/client'
 import ArrivalNoticePdf, { type ArrivalNoticeData } from '@/src/components/pdf/arrival-notice-pdf'
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
@@ -438,6 +441,12 @@ export default function RoutingBookingChildPage() {
   const { profile } = useUser()
   const id = params.id
   const bookingId = params.bookingId
+  const searchParams = useSearchParams()
+  // El BL abierto vive en la URL (?bl=...): Atrás lo cierra y el enlace se puede compartir.
+  const blPanelId = searchParams.get('bl')
+  const blPanelType = searchParams.get('blType') === 'HBL' ? 'HBL' : 'MBL'
+  const blPanelParent = searchParams.get('parentBlId')
+  const blPanelPushed = useRef(false)
   const returnHref = typeof window === 'undefined'
     ? '/operations/shipping-instructions'
     : operationsReturnHref(
@@ -1470,6 +1479,67 @@ export default function RoutingBookingChildPage() {
         }
       : null,
   })
+  const blPageHref = (targetBlId: string, type?: 'MBL' | 'HBL', parentBlId?: string | null) => {
+    const query = new URLSearchParams()
+    if (targetBlId === 'new') {
+      query.set('type', type || 'MBL')
+      if (parentBlId) query.set('parentBlId', parentBlId)
+    }
+    return `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${targetBlId}${query.size ? `?${query}` : ''}`
+  }
+  const setBlPanelUrl = (mode: 'push' | 'replace', targetBlId: string | null, type?: 'MBL' | 'HBL', parentBlId?: string | null) => {
+    const url = new URL(window.location.href)
+    for (const key of ['bl', 'blType', 'parentBlId']) url.searchParams.delete(key)
+    if (targetBlId) {
+      url.searchParams.set('bl', targetBlId)
+      if (targetBlId === 'new') {
+        url.searchParams.set('blType', type || 'MBL')
+        if (parentBlId) url.searchParams.set('parentBlId', parentBlId)
+      }
+    }
+    const next = url.pathname + url.search + url.hash
+    if (mode === 'push') window.history.pushState(null, '', next)
+    else window.history.replaceState(null, '', next)
+  }
+  const openBlPanel = (targetBlId: string, type?: 'MBL' | 'HBL', parentBlId?: string | null) => {
+    setBlPanelUrl(blPanelId ? 'replace' : 'push', targetBlId, type, parentBlId)
+    blPanelPushed.current = blPanelPushed.current || !blPanelId
+  }
+  // Si el panel se abrió desde esta pantalla, cerrar equivale a Atrás; si se
+  // llegó por enlace directo, solo se quita el parámetro. Con cambios sin
+  // guardar en el Booking no se usa Atrás, para no disparar su aviso de salida.
+  const closeBlPanel = () => {
+    if (blPanelPushed.current && !isDirty) {
+      blPanelPushed.current = false
+      window.history.back()
+    } else {
+      blPanelPushed.current = false
+      setBlPanelUrl('replace', null)
+    }
+    void refreshAfterBlChange()
+  }
+  // Enlaces del expediente documental hacia un BL se abren en el panel.
+  const openBlFromHref = (href: string) => {
+    const match = href.match(/\/bl\/([^/?#]+)(?:\?(.*))?$/)
+    if (!match) return false
+    const query = new URLSearchParams(match[2] || '')
+    openBlPanel(match[1], query.get('type') === 'HBL' ? 'HBL' : 'MBL', query.get('parentBlId'))
+    return true
+  }
+  // Al guardar en el panel se refresca la lista de BL; los números de BL del
+  // booking los sincroniza el editor, así que se recarga la versión del booking.
+  const refreshAfterBlChange = async () => {
+    await loadBillsOfLading(bookingId)
+    const { data } = await supabase
+      .from('bookings')
+      .select('master_bl, house_bl, updated_at')
+      .eq('id', bookingId)
+      .single()
+    if (!data) return
+    setBooking((current) => current ? { ...current, ...data } : current)
+    if (!isDirty) setSavedBookingSnapshot(bookingSnapshot({ ...booking, ...data }))
+  }
+
   const bookingPath = `/operations/shipping-instructions/${id}/bookings/${bookingId}`
   const returnQuery = returnHref.startsWith('/operations/dashboard')
     ? `?returnTo=${encodeURIComponent(returnHref)}`
@@ -1574,6 +1644,7 @@ export default function RoutingBookingChildPage() {
 
       <div className="space-y-6">
         <DocumentationWorkspace
+          onAction={openBlFromHref}
           items={documentationItems}
           reference={bookingReference || routing.routing_number}
           operationalAction={
@@ -2234,9 +2305,7 @@ export default function RoutingBookingChildPage() {
             <button
               type="button"
               onClick={() =>
-                requestFormNavigation(() => router.push(
-                  `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/new?type=MBL`
-                ))
+                openBlPanel('new', 'MBL')
               }
               className={operationSecondaryButtonClass}
             >
@@ -2285,9 +2354,7 @@ export default function RoutingBookingChildPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              requestFormNavigation(() => router.push(
-                                `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/new?type=HBL&parentBlId=${mbl.id}`
-                              ))
+                              openBlPanel('new', 'HBL', mbl.id)
                             }
                             className="rounded-xl border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
                           >
@@ -2297,9 +2364,7 @@ export default function RoutingBookingChildPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            requestFormNavigation(() => router.push(
-                              `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${mbl.id}`
-                            ))
+                            openBlPanel(mbl.id)
                           }
                           className={secondaryButtonClass}
                         >
@@ -2331,9 +2396,7 @@ export default function RoutingBookingChildPage() {
                             <button
                               type="button"
                               onClick={() =>
-                                requestFormNavigation(() => router.push(
-                                  `/operations/shipping-instructions/${id}/bookings/${bookingId}/bl/${hbl.id}`
-                                ))
+                                openBlPanel(hbl.id)
                               }
                               className={secondaryButtonClass}
                             >
@@ -2349,6 +2412,37 @@ export default function RoutingBookingChildPage() {
           </div>
         )}
       </section>
+
+      <SidePanel
+        open={Boolean(blPanelId)}
+        onClose={closeBlPanel}
+        eyebrow={`Operaciones · Booking ${bookingReference || ''}`.trim()}
+        title={blPanelId === 'new'
+          ? `Nuevo ${blPanelType === 'HBL' ? houseDocumentLabel : 'MBL'}`
+          : (() => {
+              const bill = billsOfLading.find((item) => item.id === blPanelId)
+              return bill ? `${bill.bl_type === 'HBL' ? houseDocumentLabel : 'MBL'} · ${bill.bl_number || 'Sin número'}` : 'Bill of Lading'
+            })()}
+        description={`SI ${routing.routing_number}${client?.nombre ? ` · ${client.nombre}` : ''}`}
+        actions={blPanelId && blPanelId !== 'new' ? (
+          <a href={blPageHref(blPanelId)} className={financeActionClass}>Abrir en página</a>
+        ) : undefined}
+      >
+        {blPanelId && (
+          <BillOfLadingEditor
+            key={blPanelId}
+            embedded
+            shippingInstructionId={id}
+            bookingId={bookingId}
+            blId={blPanelId}
+            type={blPanelType}
+            parentBlId={blPanelParent}
+            onClose={closeBlPanel}
+            onCreated={(newBlId) => setBlPanelUrl('replace', newBlId)}
+            onChanged={() => void refreshAfterBlChange()}
+          />
+        )}
+      </SidePanel>
 
       <OperationSaveBar
         dirty={isDirty}
@@ -2378,7 +2472,7 @@ export default function RoutingBookingChildPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <OperationDialogContent icon={Package} tone="sky" eyebrow={`Booking ${bookingReference || routing.routing_number}`}>
           <DialogHeader>
             <DialogTitle>{pendingAction?.label}</DialogTitle>
             <DialogDescription>
@@ -2461,7 +2555,7 @@ export default function RoutingBookingChildPage() {
               type="button"
               onClick={() => setPendingAction(null)}
               disabled={runningAction}
-              className={secondaryButtonClass}
+              className={operationSecondaryButtonClass}
             >
               Cancelar
             </button>
@@ -2469,12 +2563,12 @@ export default function RoutingBookingChildPage() {
               type="button"
               onClick={runBookingAction}
               disabled={runningAction}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              className={operationPrimaryButtonClass}
             >
               {runningAction ? 'Procesando...' : pendingAction?.label}
             </button>
           </DialogFooter>
-        </DialogContent>
+        </OperationDialogContent>
       </Dialog>
       <ConfirmDialog
         open={containerPendingRemoval !== null}
@@ -2499,7 +2593,7 @@ export default function RoutingBookingChildPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <OperationDialogContent size="sm" icon={Trash2} tone="red" eyebrow="Documentos del booking">
           <DialogHeader>
             <DialogTitle>Eliminar documento</DialogTitle>
             <DialogDescription>
@@ -2519,12 +2613,12 @@ export default function RoutingBookingChildPage() {
                 </p>
               </div>
 
-              <div className="flex justify-end gap-3">
+              <DialogFooter>
                 <button
                   type="button"
                   onClick={() => setDocumentPendingDelete(null)}
                   disabled={Boolean(deletingDocumentId)}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className={operationSecondaryButtonClass}
                 >
                   Cancelar
                 </button>
@@ -2533,16 +2627,16 @@ export default function RoutingBookingChildPage() {
                   type="button"
                   onClick={() => deleteBookingDocument(documentPendingDelete)}
                   disabled={Boolean(deletingDocumentId)}
-                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                  className={operationDangerSolidButtonClass}
                 >
                   {deletingDocumentId
                     ? 'Eliminando...'
                     : 'Eliminar documento'}
                 </button>
-              </div>
+              </DialogFooter>
             </div>
           )}
-        </DialogContent>
+        </OperationDialogContent>
       </Dialog>
     </div>
   )

@@ -47,6 +47,7 @@ import {
   OperationStatusBadge,
   OperationStepper,
   operationDangerButtonClass,
+  operationDangerSolidButtonClass,
   operationPrimaryButtonClass,
   operationSecondaryButtonClass,
   operationStatusPresentation,
@@ -65,11 +66,12 @@ import {
 } from '@/src/lib/company-branding'
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import { OperationDialogContent } from '@/src/components/operations/OperationDialog'
 import { formatDate } from '@/src/lib/format'
 import { operationsReturnHref } from '@/src/lib/operations-navigation'
 import { loadCurrentCompanySettings } from '@/src/lib/company-settings'
@@ -2072,7 +2074,7 @@ export default function RoutingDetailPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <OperationDialogContent icon={Ban} tone="red" eyebrow={`SI ${routing.routing_number}`}>
           <DialogHeader>
             <DialogTitle>Cancelar Shipping Instruction</DialogTitle>
             <DialogDescription>
@@ -2081,10 +2083,11 @@ export default function RoutingDetailPage() {
           </DialogHeader>
 
           <div className="space-y-3">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-              Motivo de cancelación
+            <label htmlFor="si-cancel-reason" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Motivo de cancelación *
             </label>
             <textarea
+              id="si-cancel-reason"
               value={cancelReason}
               onChange={(event) => setCancelReason(event.target.value)}
               rows={4}
@@ -2093,25 +2096,25 @@ export default function RoutingDetailPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <button
               type="button"
               onClick={() => setCancelDialogOpen(false)}
               disabled={cancelling}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className={operationSecondaryButtonClass}
             >
-              Cancelar
+              Volver
             </button>
             <button
               type="button"
               onClick={cancelRouting}
-              disabled={cancelling}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              disabled={cancelling || !cancelReason.trim()}
+              className={operationDangerSolidButtonClass}
             >
               {cancelling ? 'Cancelando...' : 'Confirmar cancelación'}
             </button>
-          </div>
-        </DialogContent>
+          </DialogFooter>
+        </OperationDialogContent>
       </Dialog>
     </div>
   )
