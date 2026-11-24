@@ -21,7 +21,10 @@ const tones = {
   rose: 'bg-rose-50 text-[#B3282D] dark:bg-rose-950/40 dark:text-rose-300',
   amber: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
   emerald: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  sky: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  red: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
 }
+export type FinanceTone = keyof typeof tones
 export function FinanceMetric({ label, value, detail, icon: Icon, tone = 'slate' }: { label: string; value: string; detail?: string; icon: LucideIcon; tone?: keyof typeof tones }) {
   return <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
     <div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</p><span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', tones[tone])}><Icon aria-hidden="true" className="h-[18px] w-[18px]" /></span></div>

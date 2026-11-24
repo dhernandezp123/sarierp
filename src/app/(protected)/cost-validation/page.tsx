@@ -1,15 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { toast } from 'sonner'
+import { ArrowRight, CheckCircle2, ClipboardCheck, Clock3, Layers, PackageCheck, Search, ShieldOff } from 'lucide-react'
 
 import { useUser } from '../../../hooks/useUser'
 import { supabase } from '../../../lib/supabase/client'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
-import { EmptyState } from '@/src/components/ui/EmptyState'
-import { ShieldOff, ClipboardCheck } from 'lucide-react'
+import { Pagination } from '@/src/components/ui/Pagination'
+import { FinanceEmptyState, FinanceMetric, FinancePageHeader } from '@/src/components/invoicing/FinanceWorkspace'
+import { CostStatusBadge, financialStatusTone, operationalStatusTone } from '@/src/components/pricing/CostStatus'
 import { aggregateBookingStatus } from '@/src/lib/booking-status'
+import { operationsAreComplete } from '@/src/lib/billing-readiness'
+import { cardClass, fieldClassSm } from '@/src/lib/ui-classes'
+import { cn } from '@/src/lib/utils'
 
 type CostValidationBooking = {
   id: string
@@ -23,6 +28,7 @@ type ShipmentCostValidationItem = {
   id: string
   shipment_number: string
   operational_status: string | null
+  closed_at: string | null
   bookings: CostValidationBooking[]
   quotation:
     | {
@@ -37,9 +43,33 @@ type ShipmentCostValidationItem = {
     | null
 }
 
+type Focus = 'pending' | 'ready' | 'validated' | 'all'
+
+const focusTabs: { id: Focus; label: string }[] = [
+  { id: 'pending', label: 'Pendientes' },
+  { id: 'ready', label: 'Listas para revisar' },
+  { id: 'validated', label: 'Validadas' },
+  { id: 'all', label: 'Todas' },
+]
+
+const emptyByFocus: Record<Focus, { title: string; description: string }> = {
+  pending: { title: 'Sin validaciones pendientes', description: 'Todas las operaciones vinculadas tienen sus costos validados.' },
+  ready: { title: 'Sin operaciones listas para revisar', description: 'Ninguna operación cerrada tiene la validación de costos pendiente.' },
+  validated: { title: 'Sin operaciones validadas', description: 'Todavía no hay operaciones con costos validados por Finanzas.' },
+  all: { title: 'Sin operaciones vinculadas', description: 'No hay operaciones vinculadas a cotizaciones disponibles.' },
+}
+
+const bookingLabel = (bookings: CostValidationBooking[]) => bookings.length === 0
+  ? 'Sin bookings'
+  : bookings.length === 1
+    ? bookings[0].booking_number || bookings[0].carrier_booking || 'Pendiente'
+    : `${bookings.length} bookings`
+
+const carriersOf = (bookings: CostValidationBooking[]) =>
+  Array.from(new Set(bookings.map((booking) => booking.carrier).filter(Boolean))).join(', ') || 'N/A'
+
 export default function CostValidationPage() {
   const { profile, loading: userLoading } = useUser()
-  const router = useRouter()
   const role = profile?.rol || ''
   const isAdmin = role === 'Admin'
   const isFinance = role === 'Finanzas' || role === 'Contabilidad'
@@ -47,6 +77,10 @@ export default function CostValidationPage() {
 
   const [shipments, setShipments] = useState<ShipmentCostValidationItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [focus, setFocus] = useState<Focus>('pending')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
 
   useEffect(() => {
     if (userLoading) return
@@ -59,18 +93,6 @@ export default function CostValidationPage() {
     fetchShipments()
   }, [userLoading, canViewCostValidation])
 
-  const AccessDenied = () => (
-    <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-16 text-center shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800">
-        <ShieldOff className="h-7 w-7 text-slate-500 dark:text-slate-400" />
-      </div>
-      <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Acceso restringido</h2>
-      <p className="mt-2 max-w-sm text-sm text-slate-500 dark:text-slate-400">
-        Solo usuarios con rol Finanzas o Administrador pueden acceder a este módulo.
-      </p>
-    </div>
-  )
-
   const fetchShipments = async () => {
     setLoading(true)
 
@@ -80,6 +102,7 @@ export default function CostValidationPage() {
         id,
         shipment_number,
         operational_status,
+        closed_at,
         shipping_instruction:shipping_instructions!inner (
           deleted_at
         ),
@@ -134,14 +157,55 @@ export default function CostValidationPage() {
     setLoading(false)
   }
 
+  const rows = useMemo(() => shipments.map((shipment) => {
+    const operational = aggregateBookingStatus(shipment.bookings, shipment.operational_status || 'Sin bookings')
+    const validated = shipment.quotation?.financial_validation_status === 'Validado'
+    return { shipment, operational, validated, ready: !validated && operationsAreComplete([shipment]) }
+  }), [shipments])
+
+  const counts = useMemo(() => ({
+    all: rows.length,
+    pending: rows.filter((row) => !row.validated).length,
+    ready: rows.filter((row) => row.ready).length,
+    validated: rows.filter((row) => row.validated).length,
+  }), [rows])
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase('es')
+    return rows.filter((row) => {
+      if (focus === 'pending' && row.validated) return false
+      if (focus === 'ready' && !row.ready) return false
+      if (focus === 'validated' && !row.validated) return false
+      if (!term) return true
+      const { shipment } = row
+      return [
+        shipment.shipment_number,
+        shipment.quotation?.quotation_number,
+        shipment.quotation?.cliente?.nombre,
+        ...shipment.bookings.flatMap((booking) => [booking.booking_number, booking.carrier_booking, booking.carrier]),
+      ].some((value) => value?.toLocaleLowerCase('es').includes(term))
+    })
+  }, [rows, focus, search])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  const header = <FinancePageHeader
+    eyebrow="Finanzas · Costos"
+    icon={ClipboardCheck}
+    title="Validación de Costos Operativos"
+    description="Compara costos cotizados contra facturas reales de proveedores por operación."
+  />
+
   if (userLoading || loading) {
     return (
-      <div className="space-y-6">
-        <div>
-          <div className="h-8 w-72 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-700" />
-          <div className="mt-2 h-4 w-96 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+      <div className="space-y-6" role="status" aria-label="Cargando validación de costos">
+        {header}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <div key={i} className="h-[104px] animate-pulse rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#0b1220]" />)}
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-[#0b1220]">
+        <div className={cardClass}>
           <TableSkeleton rows={5} cols={8} />
         </div>
       </div>
@@ -149,125 +213,146 @@ export default function CostValidationPage() {
   }
 
   if (!canViewCostValidation) {
-    return <AccessDenied />
+    return (
+      <div className="space-y-6">
+        {header}
+        <FinanceEmptyState
+          icon={ShieldOff}
+          title="Acceso restringido"
+          description="Solo usuarios con rol Finanzas, Contabilidad o Administrador pueden acceder a este módulo."
+        />
+      </div>
+    )
   }
+
+  const empty = search.trim()
+    ? { title: 'Sin coincidencias', description: 'Ninguna operación coincide con la búsqueda en esta vista.' }
+    : emptyByFocus[focus]
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-4xl font-bold">
-          Validación de Costos Operativos
-        </h1>
+      {header}
 
-        <p className="mt-2 text-gray-500">
-          Compara costos cotizados contra facturas reales de proveedores por
-          operación.
-        </p>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <FinanceMetric label="Pendientes de validar" value={String(counts.pending)} detail="Operaciones con costos sin validar" icon={Clock3} tone="amber" />
+        <FinanceMetric label="Listas para revisar" value={String(counts.ready)} detail="Operación cerrada, validación pendiente" icon={PackageCheck} tone="sky" />
+        <FinanceMetric label="Validadas" value={String(counts.validated)} detail="Costos confirmados por Finanzas" icon={CheckCircle2} tone="emerald" />
+        <FinanceMetric label="Operaciones vinculadas" value={String(counts.all)} detail="Con cotización e instrucción activa" icon={Layers} tone="slate" />
       </div>
 
-      <div className="rounded-2xl border bg-white p-6">
-        <h2 className="mb-4 text-xl font-bold">
-          Operaciones vinculadas a cotizaciones
-        </h2>
-
-        {shipments.length === 0 ? (
-          <EmptyState
-            icon={<ClipboardCheck className="h-6 w-6" />}
-            title="Sin operaciones pendientes"
-            description="No hay operaciones vinculadas a cotizaciones disponibles."
-          />
-        ) : (
-          <div className="overflow-x-auto rounded-xl border">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-white">
-                <tr>
-                  <th className="p-3 text-left">RT</th>
-                  <th className="p-3 text-left">Booking</th>
-                  <th className="p-3 text-left">Cotización</th>
-                  <th className="p-3 text-left">Cliente</th>
-                  <th className="p-3 text-left">Carrier</th>
-                  <th className="p-3 text-left">Estado operativo</th>
-                  <th className="p-3 text-left">Estado financiero</th>
-                  <th className="p-3 text-right">Acción</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {shipments.map((shipment) => {
-                  const quotation = shipment.quotation
-
-                  return (
-                    <tr
-                      key={shipment.id}
-                      className="border-b hover:bg-slate-50"
-                    >
-                      <td className="p-3 font-semibold">
-                        {shipment.shipment_number || 'N/A'}
-                      </td>
-
-                      <td className="p-3">
-                        {shipment.bookings.length === 0
-                          ? 'Sin bookings'
-                          : shipment.bookings.length === 1
-                            ? shipment.bookings[0].booking_number ||
-                              shipment.bookings[0].carrier_booking ||
-                              'Pendiente'
-                            : `${shipment.bookings.length} bookings`}
-                      </td>
-
-                      <td className="p-3">
-                        {quotation?.quotation_number || 'Sin número'}
-                      </td>
-
-                      <td className="p-3">
-                        {quotation?.cliente?.nombre || 'Sin cliente'}
-                      </td>
-
-                      <td className="p-3">
-                        {Array.from(
-                          new Set(
-                            shipment.bookings
-                              .map((booking) => booking.carrier)
-                              .filter(Boolean)
-                          )
-                        ).join(', ') || 'N/A'}
-                      </td>
-
-                      <td className="p-3">
-                        {aggregateBookingStatus(
-                          shipment.bookings,
-                          shipment.operational_status || 'Sin bookings'
-                        )}
-                      </td>
-
-                      <td className="p-3">
-                        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                          {quotation?.financial_validation_status ||
-                            'Pendiente'}
-                        </span>
-                      </td>
-
-                      <td className="p-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            quotation?.id &&
-                            router.push(`/cost-validation/${quotation.id}`)
-                          }
-                          disabled={!quotation?.id}
-                          className="rounded-xl border px-4 py-2 font-semibold hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Validar Costos
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700/60 dark:bg-[#0b1220]" aria-labelledby="cost-validation-list">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-100 p-4 dark:border-slate-800 sm:p-5">
+          <div className="min-w-0">
+            <h2 id="cost-validation-list" className="text-base font-semibold text-slate-900 dark:text-white">Operaciones vinculadas a cotizaciones</h2>
+            <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por estado">
+              {focusTabs.map((tab) => {
+                const active = focus === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => { setFocus(tab.id); setPage(1) }}
+                    className={cn(
+                      'inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200',
+                      active
+                        ? 'border-[#B3282D] bg-[#B3282D] text-white dark:border-rose-400 dark:bg-rose-500/20 dark:text-rose-100'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                    )}
+                  >
+                    {tab.label}
+                    <span className={cn('rounded-full px-1.5 py-px text-[11px] tabular-nums', active ? 'bg-white/20' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400')}>{counts[tab.id]}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
+          <label className="relative w-full sm:w-72">
+            <span className="sr-only">Buscar operación</span>
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => { setSearch(event.target.value); setPage(1) }}
+              placeholder="RT, booking, cotización, cliente…"
+              className={`${fieldClassSm} pl-9`}
+            />
+          </label>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="p-4 sm:p-5">
+            <FinanceEmptyState icon={ClipboardCheck} title={empty.title} description={empty.description}>
+              {(search.trim() || focus !== 'all') && (
+                <button type="button" onClick={() => { setSearch(''); setFocus('all'); setPage(1) }} className="mt-5 text-sm font-semibold text-[#B3282D] underline-offset-4 hover:underline dark:text-rose-300">
+                  Mostrar todas
+                </button>
+              )}
+            </FinanceEmptyState>
+          </div>
+        ) : (
+          <>
+            <div className="relative overflow-x-auto" tabIndex={0} role="region" aria-label="Tabla de operaciones, desplazamiento horizontal">
+              <table className="w-full min-w-[960px] text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-left dark:border-slate-700 dark:bg-slate-900/60">
+                  <tr>
+                    {['RT', 'Booking', 'Cotización', 'Cliente', 'Carrier', 'Estado operativo', 'Estado financiero'].map((label) => (
+                      <th key={label} scope="col" className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</th>
+                    ))}
+                    <th scope="col" className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Acción</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {pageRows.map(({ shipment, operational, validated, ready }) => {
+                    const quotation = shipment.quotation
+                    const href = quotation?.id ? `/cost-validation/${quotation.id}` : null
+                    const financial = quotation?.financial_validation_status || 'Pendiente'
+
+                    return (
+                      <tr key={shipment.id} className={cn('transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40', ready && 'bg-sky-50/40 dark:bg-sky-950/10')}>
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold text-slate-900 dark:text-white">
+                          {href ? <Link href={href} className="text-[#B3282D] underline-offset-4 hover:underline dark:text-rose-300">{shipment.shipment_number || 'N/A'}</Link> : shipment.shipment_number || 'N/A'}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-700 dark:text-slate-300">{bookingLabel(shipment.bookings)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{quotation?.quotation_number || 'Sin número'}</td>
+                        <td className="max-w-56 px-4 py-3 text-slate-700 dark:text-slate-300"><span className="line-clamp-2">{quotation?.cliente?.nombre || 'Sin cliente'}</span></td>
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{carriersOf(shipment.bookings)}</td>
+                        <td className="whitespace-nowrap px-4 py-3"><CostStatusBadge tone={operationalStatusTone(operational)}>{operational}</CostStatusBadge></td>
+                        <td className="px-4 py-3">
+                          <CostStatusBadge tone={financialStatusTone(financial)} icon={validated ? CheckCircle2 : Clock3}>{financial}</CostStatusBadge>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {href ? (
+                            <Link
+                              href={href}
+                              className={cn(
+                                'inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200',
+                                validated
+                                  ? 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                                  : 'border border-rose-200 bg-rose-50 text-[#B3282D] hover:border-rose-300 hover:bg-rose-100 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200 dark:hover:bg-rose-950/50'
+                              )}
+                            >
+                              {validated ? 'Ver costos' : 'Validar costos'}<ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+                            </Link>
+                          ) : <span className="text-xs text-slate-400">Sin cotización</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={currentPage}
+              pageSize={pageSize}
+              total={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+            />
+          </>
         )}
-      </div>
+      </section>
     </div>
   )
 }
