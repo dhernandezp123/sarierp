@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronsUpDown, LoaderCircle, Search, UsersRound, X } from 'lucide-react'
+import { Check, ChevronsUpDown, LoaderCircle, Plus, Search, UsersRound, X } from 'lucide-react'
 import { cn } from '@/src/lib/utils'
 import { clientInitials, searchClients, type ClientOption } from '@/src/lib/client-search'
 import { useDropdownPosition } from './useComboboxPortal'
@@ -11,9 +11,11 @@ type ClienteComboboxProps = {
   clientes: ClientOption[]; value: string; onChange: (id: string) => void
   id?: string; placeholder?: string; className?: string; disabled?: boolean; loading?: boolean; renderInline?: boolean
   'aria-label'?: string; 'aria-describedby'?: string
+  /** Si se indica, el listado ofrece crear un cliente con el texto buscado. */
+  onCreateRequest?: (query: string) => void
 }
 
-export function ClienteCombobox({ clientes, value, onChange, id, placeholder = 'Seleccionar cliente', className, disabled = false, loading = false, renderInline = false, 'aria-label': ariaLabel, 'aria-describedby': describedBy }: ClienteComboboxProps) {
+export function ClienteCombobox({ clientes, value, onChange, id, placeholder = 'Seleccionar cliente', className, disabled = false, loading = false, renderInline = false, 'aria-label': ariaLabel, 'aria-describedby': describedBy, onCreateRequest }: ClienteComboboxProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlighted, setHighlighted] = useState(0)
@@ -48,6 +50,12 @@ export function ClienteCombobox({ clientes, value, onChange, id, placeholder = '
     if (disabled || loading) return
     onChange(client.id); close(true)
   }
+  function requestCreate() {
+    if (!onCreateRequest) return
+    const name = query.trim()
+    close(false)
+    onCreateRequest(name)
+  }
   function handleKeyDown(event: KeyboardEvent) {
     if (disabled || loading) return
     if (!expanded) {
@@ -59,7 +67,7 @@ export function ClienteCombobox({ clientes, value, onChange, id, placeholder = '
     switch (event.key) {
       case 'ArrowDown': event.preventDefault(); setHighlighted(Math.min(active + 1, Math.max(0, filtered.length - 1))); break
       case 'ArrowUp': event.preventDefault(); setHighlighted(Math.max(active - 1, 0)); break
-      case 'Enter': event.preventDefault(); if (filtered[active]) select(filtered[active]); break
+      case 'Enter': event.preventDefault(); if (filtered[active]) select(filtered[active]); else requestCreate(); break
       case 'Escape': event.preventDefault(); close(true); break
       case 'Tab': close(true); break
     }
@@ -80,7 +88,8 @@ export function ClienteCombobox({ clientes, value, onChange, id, placeholder = '
         </li>
       })}
     </ul>
-    {!filtered.length && <div role="status" className="px-5 py-6 text-center"><UsersRound aria-hidden="true" className="mx-auto mb-2 h-6 w-6 text-slate-300" /><p className="text-sm font-medium text-slate-700 dark:text-slate-200">No encontramos clientes</p><p className="mt-1 text-xs text-slate-500">Prueba otro nombre, código o RTN.</p></div>}
+    {!filtered.length && <div role="status" className="px-5 py-6 text-center"><UsersRound aria-hidden="true" className="mx-auto mb-2 h-6 w-6 text-slate-300" /><p className="text-sm font-medium text-slate-700 dark:text-slate-200">No encontramos clientes</p><p className="mt-1 text-xs text-slate-500">{onCreateRequest ? 'Puedes crearlo sin salir de esta pantalla.' : 'Prueba otro nombre, código o RTN.'}</p></div>}
+    {onCreateRequest && <button type="button" onClick={requestCreate} className="flex shrink-0 items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm font-semibold text-[#B3282D] transition hover:bg-rose-50 focus-visible:bg-rose-50 focus-visible:outline-none dark:border-slate-800 dark:text-rose-300 dark:hover:bg-rose-950/30"><Plus aria-hidden="true" className="h-4 w-4 shrink-0" /><span className="min-w-0 truncate">{query.trim() ? `Crear cliente «${query.trim()}»` : 'Crear cliente nuevo'}</span></button>}
     <div className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-950/40"><span role="status" aria-live="polite">{filtered.length} {filtered.length === 1 ? 'cliente' : 'clientes'}</span><span aria-hidden="true" className="hidden sm:inline">↑↓ Navegar · Enter Elegir</span></div>
   </div>
 

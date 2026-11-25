@@ -25,6 +25,7 @@ async function form({product='miami_lcl',clientPolicy=false,saleRate=1,company=s
     '@/src/lib/quotation-create':{createQuotation:async(_client,input)=>{saves.push(input);if(creationError)throw Error('RPC rechazó la creación');return{id:input.quotation.id,quotation_number:'TEST'}}},
     '@/src/components/quotations/MiamiQuotationSection':{MiamiQuotationSection:'MiamiQuotationSection'},
     '@/src/components/ui/ClienteCombobox':{ClienteCombobox:'ClienteCombobox'},
+    '@/src/components/clientes/NewClientDialog':{__esModule:true,default:'NewClientDialog'},
     '@/src/components/ui/UnsavedChangesGuard':{UnsavedChangesGuard:'Guard',markFormSaved(){}},
     '@/src/hooks/useMiamiQuotation':{useMiamiQuotation:({rateDestination})=>({miamiRateDestination:normalizeMiamiRateDestination(rateDestination),isMiamiFlow:true,lclEstimated:500,airEstimated:500,canUseMiamiCalculator:true,buildMiamiPricingItems:id=>[freight(id)],buildMiamiPreviewItems:()=>[freight('preview')]})},
     '@react-pdf/renderer':{pdf:element=>{previews.push(element.props);return{toBlob:async()=>new Blob(['demo'])}}},

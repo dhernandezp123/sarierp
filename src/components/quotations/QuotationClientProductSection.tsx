@@ -16,6 +16,7 @@ export function QuotationClientProductSection({
   onServiceProductChange,
   serviceProductOptions,
   reqClass,
+  onCreateClient,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   clientes: any[]
@@ -25,6 +26,8 @@ export function QuotationClientProductSection({
   onServiceProductChange: (event: ChangeEvent<HTMLSelectElement>) => void
   serviceProductOptions: { value: string; label: string }[]
   reqClass: (value: string) => string
+  /** Crear cliente sin salir de la cotización (opcional según el rol). */
+  onCreateClient?: (name: string) => void
 }) {
   return (
     <FormSection
@@ -39,6 +42,7 @@ export function QuotationClientProductSection({
               clientes={clientes}
               value={formData.cliente_id}
               onChange={onClientChange}
+              onCreateRequest={onCreateClient}
               placeholder="Seleccionar cliente"
               className={`${fieldClass} ${reqClass(formData.cliente_id)}`}
             />

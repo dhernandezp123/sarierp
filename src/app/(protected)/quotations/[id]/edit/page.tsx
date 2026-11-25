@@ -29,6 +29,7 @@ import { createNotification } from '@/src/lib/notifications'
 import { UnsavedChangesGuard, markFormSaved } from '@/src/components/ui/UnsavedChangesGuard'
 import { ConfirmDialog } from '@/src/components/ui/ConfirmDialog'
 import { ClienteCombobox } from '@/src/components/ui/ClienteCombobox'
+import NewClientDialog, { type CreatedClient } from '@/src/components/clientes/NewClientDialog'
 import { canTransition } from '@/src/lib/quotation-status'
 import { quotationRevision } from '@/src/lib/quotation-transition'
 import {
@@ -452,10 +453,25 @@ export default function EditQuotationPage() {
     })
   }
 
-  const handleClienteChange = (clienteId: string) => {
+  // Cliente creado desde el selector: se carga completo, se agrega a la lista y se selecciona.
+  const [newClientName, setNewClientName] = useState<string | null>(null)
+  const canCreateClient = Boolean(profile?.rol) && profile?.rol !== 'Contabilidad'
+  const handleClientCreated = async (created: CreatedClient) => {
+    const { data } = await supabase
+      .from('clientes')
+      .select('id, codigo_cliente, nombre, email_1, telefono, origen_frecuente, preferred_miami_rate_destination')
+      .eq('id', created.id)
+      .maybeSingle()
+    const row = data || created
+    setClientes((current) => [row, ...current.filter((cliente) => cliente.id !== row.id)])
+    handleClienteChange(row.id, row)
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleClienteChange = (clienteId: string, knownCliente?: any) => {
     if (clienteId === formData.cliente_id) return
 
-    const selectedCliente = clientes.find((cliente) => cliente.id === clienteId)
+    const selectedCliente = knownCliente || clientes.find((cliente) => cliente.id === clienteId)
 
     setFormData((current) => ({
       ...current,
@@ -984,6 +1000,12 @@ export default function EditQuotationPage() {
   return (
     <>
       <UnsavedChangesGuard />
+      <NewClientDialog
+        open={newClientName !== null}
+        onOpenChange={(open) => { if (!open) setNewClientName(null) }}
+        initialName={newClientName || ''}
+        onCreated={handleClientCreated}
+      />
       <div className="max-w-6xl space-y-6">
         <Breadcrumbs
           items={[
@@ -1028,6 +1050,7 @@ export default function EditQuotationPage() {
                   clientes={clientes}
                   value={formData.cliente_id}
                   onChange={handleClienteChange}
+                  onCreateRequest={canCreateClient ? (name) => setNewClientName(name) : undefined}
                   placeholder="Seleccionar otro cliente"
                   className={fieldClass}
                 />
