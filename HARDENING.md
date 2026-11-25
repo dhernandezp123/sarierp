@@ -15326,7 +15326,7 @@ Agregar una entrada por fix:
 
 ### 25/11/2026 - UX-SALES-01 - Ventas: accesibilidad básica en Cotizaciones, Mi día y estado de la cotización
 
-- Estado: implementado en la rama `feat/sales-a11y-block1`; sin publicar. Sin SQL. Alcance reducido tras la revisión del análisis de Ventas: no toca cierre, SI, reglas comerciales ni el diseño general de métricas y encabezados.
+- Estado: publicado en Production el 25/11/2026 (PR #9, fast-forward de `main` a `8dc79e6`; despliegue Vercel Production exitoso). Smoke anónimo: `/` y `/login` 200; `/historico`, `/ventas` y `/clientes` 404 sin sesión (rutas protegidas). Sin SQL. Alcance reducido tras la revisión del análisis de Ventas: no toca cierre, SI, reglas comerciales ni el diseño general de métricas y encabezados.
 - Causa: en Cotizaciones (`/historico`) solo el clic en la fila abría el detalle (no había un enlace accesible con teclado) y los filtros de fecha no tenían etiqueta; en Mi día el selector Lista/Calendario no anunciaba la vista activa; el botón de estado de la cotización ya era un botón con `aria-expanded`, pero se leía como una etiqueta (problema de descubrimiento, no de semántica).
 - Corrección del análisis previo: el listado de Clientes sí se puede abrir con teclado mediante "Ver perfil", por lo que no se modificó.
 - Cambio: el número de cotización es un enlace que conserva los filtros en `returnTo` (la fila sigue respondiendo al clic); filtros "Desde" y "Hasta" con etiqueta visible y "Hasta" con mínimo igual a "Desde"; hover de filas en modo oscuro. Mi día: grupo con nombre y `aria-pressed` en Lista/Calendario. Detalle de cotización: el botón de estado muestra el texto "Cambiar", tiene borde y foco visibles y `title`.
