@@ -2,17 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ExternalLink, FileText, RefreshCw, Route } from 'lucide-react'
+import { Clock3, FileText, PackageCheck, RefreshCw, Route, Search, Ship } from 'lucide-react'
+import { FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
+import { OperationFilterMetric, OperationStatusBadge, operationTableHeadClass } from '@/src/components/operations/OperationsWorkspace'
 
 import { useUser } from '@/src/hooks/useUser'
 import { canViewClientOperationsReport } from '@/src/lib/permissions'
 import { supabase } from '@/src/lib/supabase/client'
-import {
-  fieldClass,
-  cardClass,
-  secondaryButtonClass,
-  fieldLabelClass,
-} from '@/src/lib/ui-classes'
+import { fieldClass, cardClass, fieldLabelClass } from '@/src/lib/ui-classes'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import { EmptyState } from '@/src/components/ui/EmptyState'
 import { Pagination } from '@/src/components/ui/Pagination'
@@ -77,41 +74,13 @@ function resolveStatus(item: RoutingItem): string {
   return item.display_status || resolveShippingInstructionStatus(item)
 }
 
-function getStatusBadge(status: string) {
-  switch (status) {
-    case 'Pendiente Validación':
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-    case 'Listo para Booking':
-      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-    case 'Booking Solicitado':
-    case 'En Booking':
-      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-    case 'Booking Confirmado':
-    case 'Parcialmente Confirmado':
-    case 'Documentación Pendiente':
-    case 'Listo para Embarque':
-      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
-    case 'Embarcado':
-    case 'En Tránsito':
-      return 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
-    case 'Arribo Parcial':
-    case 'Arribado':
-    case 'Finalizado':
-      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-    case 'Cancelada':
-      return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-    default:
-      return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-  }
-}
-
 function formatContainer(item: RoutingItem): string {
   const type = item.container_type?.trim()
   const qty  = item.container_qty
   if (type && /^\d+\s*x\s+/i.test(type)) return type
   if (qty && type) return `${qty} x ${type}`
   if (type) return type
-  return 'N/A'
+  return '—'
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -204,81 +173,63 @@ export default function RoutingInboxPage() {
   const hasActiveFilters =
     debouncedSearch !== '' || statusFilter !== 'Todos' || assignFilter !== 'Todos'
 
+  const toggleStatus = (value: string) => {
+    setStatusFilter((current) => (current === value ? 'Todos' : value))
+    setPage(1)
+  }
+
   return (
     <div className="space-y-6">
+      <FinancePageHeader
+        eyebrow="Operaciones"
+        icon={Route}
+        title="Shipping Instructions"
+        description="Expedientes que Ventas envía a Operaciones antes del booking."
+        actions={<>
+          {canViewClientOperationsReport(profile?.rol) && (
+            <Link href="/reports/client-operations" className={financeActionClass}>
+              <FileText aria-hidden="true" className="h-4 w-4" />Reporte por cliente
+            </Link>
+          )}
+          <button type="button" onClick={() => void loadRouting()} disabled={loading} className={financeActionClass}>
+            <RefreshCw aria-hidden="true" className={`h-4 w-4 ${loading ? 'animate-spin motion-reduce:animate-none' : ''}`} />
+            Actualizar
+          </button>
+        </>}
+      />
 
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Shipping Instructions
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Instrucciones operativas enviadas por Ventas antes del booking.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-        {canViewClientOperationsReport(profile?.rol) && <Link href="/reports/client-operations" className={`${secondaryButtonClass} inline-flex items-center gap-2`}><FileText className="h-4 w-4" />Reporte por cliente</Link>}
-        <button
-          type="button"
-          onClick={() => void loadRouting()}
-          disabled={loading}
-          className={`${secondaryButtonClass} inline-flex items-center justify-center gap-2 self-start`}
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
-          />
-          Actualizar
-        </button>
-        </div>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <OperationFilterMetric label="Total" value={metrics.total} icon={Route} active={statusFilter === 'Todos'} onClick={() => { setStatusFilter('Todos'); setPage(1) }} />
+        <OperationFilterMetric label="Pendientes de validación" value={metrics.pendientes} icon={Clock3} tone="amber" active={statusFilter === 'Pendiente Validación'} onClick={() => toggleStatus('Pendiente Validación')} />
+        <OperationFilterMetric label="Listas para booking" value={metrics.listos} icon={PackageCheck} tone="emerald" active={statusFilter === 'Listo para Booking'} onClick={() => toggleStatus('Listo para Booking')} />
+        <OperationFilterMetric label="En booking" value={metrics.enBooking} icon={Ship} tone="sky" active={statusFilter === 'En Booking'} onClick={() => toggleStatus('En Booking')} />
       </div>
 
-      {/* Métricas */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Total" value={metrics.total} />
-        <MetricCard label="Pendientes validación" value={metrics.pendientes} color="amber" />
-        <MetricCard label="Listos para booking"   value={metrics.listos}     color="emerald" />
-        <MetricCard label="En booking"            value={metrics.enBooking}  color="blue" />
-      </div>
-
-      {/* Filtros */}
       <div className="grid gap-3 lg:grid-cols-3">
         <label className="flex min-w-0 flex-col gap-1.5">
-          <span className={fieldLabelClass}>
-            Buscar
+          <span className={fieldLabelClass}>Buscar</span>
+          <span className="relative">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+              placeholder="RT, cotización, cliente o agente"
+              className={`${fieldClass} pl-9`}
+            />
           </span>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            placeholder="RT, cotización, cliente o agente"
-            className={fieldClass}
-          />
         </label>
         <label className="flex min-w-0 flex-col gap-1.5">
-          <span className={fieldLabelClass}>
-            Asignación
-          </span>
-          <select
-            value={assignFilter}
-            onChange={(e) => { setAssignFilter(e.target.value); setPage(1) }}
-            className={fieldClass}
-          >
+          <span className={fieldLabelClass}>Asignación</span>
+          <select value={assignFilter} onChange={(e) => { setAssignFilter(e.target.value); setPage(1) }} className={fieldClass}>
             <option value="Todos">Toda la asignación</option>
             <option value="Sin asignar">Sin asignar</option>
             <option value="Mis asignados">Mis asignados</option>
           </select>
         </label>
         <label className="flex min-w-0 flex-col gap-1.5">
-          <span className={fieldLabelClass}>
-            Estado
-          </span>
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-            className={fieldClass}
-          >
+          <span className={fieldLabelClass}>Estado</span>
+          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }} className={fieldClass}>
             <option value="Todos">Todos los estados</option>
             {shippingInstructionFilterStatuses.map((s) => (
               <option key={s} value={s}>{s}</option>
@@ -287,22 +238,17 @@ export default function RoutingInboxPage() {
         </label>
       </div>
 
-      {/* Tabla */}
       <div className={`${cardClass} overflow-hidden p-0`}>
         {loading ? (
           <div className="p-6">
-            <TableSkeleton rows={6} cols={10} />
+            <TableSkeleton rows={6} cols={9} />
           </div>
         ) : errorMessage ? (
           <div className="flex flex-col items-start gap-3 p-6">
             <p role="alert" className="text-sm text-red-600 dark:text-red-400">
               No se pudieron cargar las Shipping Instructions. {errorMessage}
             </p>
-            <button
-              type="button"
-              onClick={() => void loadRouting()}
-              className={secondaryButtonClass}
-            >
+            <button type="button" onClick={() => void loadRouting()} className={financeActionClass}>
               Reintentar
             </button>
           </div>
@@ -321,85 +267,45 @@ export default function RoutingInboxPage() {
             />
           )
         ) : (
-          <div
-            className="overflow-x-auto"
-            role="region"
-            aria-label="Listado de Shipping Instructions"
-            tabIndex={0}
-          >
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-900 dark:bg-[#081120]">
-                  {['SI', 'Cotización', 'Cliente', 'Ruta', 'Agente', 'Contenedor', 'Fecha', 'Asignado a', 'Estado', ''].map((h) => (
-                    <th
-                      key={h}
-                      scope="col"
-                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-300"
-                    >
-                      {h}
-                    </th>
+          <div className="relative overflow-x-auto" role="region" aria-label="Listado de Shipping Instructions" tabIndex={0}>
+            <table className="w-full min-w-[960px] text-sm">
+              <thead className={operationTableHeadClass}>
+                <tr>
+                  {['SI', 'Cliente', 'Ruta', 'Agente', 'Contenedores', 'Creada', 'Responsable', 'Estado'].map((h) => (
+                    <th key={h} scope="col" className="px-4 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {routingList.map((item) => {
-                  const status  = resolveStatus(item)
-                  const badge   = getStatusBadge(status)
+                  const status = resolveStatus(item)
                   const assigned = item.assigned_user
                     ? `${item.assigned_user.nombre || ''} ${item.assigned_user.apellido || ''}`.trim()
-                    : 'Sin asignar'
-
+                    : ''
                   return (
-                    <tr
-                      key={item.id}
-                      className="border-b border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
-                    >
-                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
+                    <tr key={item.id} className="border-b border-slate-100 transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40">
+                      <th scope="row" className="whitespace-nowrap px-4 py-3 text-left">
                         <Link
                           href={`/operations/shipping-instructions/${item.id}`}
-                          className="rounded-sm text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-300"
+                          className="rounded-sm font-semibold text-[#B3282D] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 dark:text-rose-300"
                         >
                           {item.routing_number || item.id}
                         </Link>
-                      </td>
+                        <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">{item.quotation?.quotation_number || '—'}</span>
+                      </th>
+                      <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{item.cliente?.nombre || '—'}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                        {item.quotation?.quotation_number || 'N/A'}
+                        {[item.origin_address, item.destination_address].filter(Boolean).join(' → ') || '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-700 dark:text-slate-200">
-                        {item.cliente?.nombre || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                        {[item.origin_address, item.destination_address]
-                          .filter(Boolean)
-                          .join(' → ') || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                        {item.agent_name || 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                        {formatContainer(item)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400">
-                        {formatDate(item.created_at)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                        {assigned}
-                      </td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{item.agent_name || '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">{formatContainer(item)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-500 dark:text-slate-400">{formatDate(item.created_at)}</td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge}`}>
-                          {status}
-                        </span>
+                        {assigned
+                          ? <span className="text-slate-700 dark:text-slate-200">{assigned}</span>
+                          : <span className="font-semibold text-amber-700 dark:text-amber-300">Sin asignar</span>}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/operations/shipping-instructions/${item.id}`}
-                          aria-label={`Abrir Shipping Instruction ${item.routing_number || item.id}`}
-                          title="Abrir SI"
-                          className={`${secondaryButtonClass} inline-flex h-8 w-8 items-center justify-center p-0`}
-                        >
-                          <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" />
-                        </Link>
-                      </td>
+                      <td className="px-4 py-3"><OperationStatusBadge status={status} className="whitespace-nowrap" /></td>
                     </tr>
                   )
                 })}
@@ -419,38 +325,6 @@ export default function RoutingInboxPage() {
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-// ─── MetricCard ───────────────────────────────────────────────────────────────
-
-function MetricCard({
-  label,
-  value,
-  color = 'slate',
-}: {
-  label: string
-  value: number
-  color?: 'slate' | 'amber' | 'emerald' | 'blue'
-}) {
-  const colors = {
-    slate:   'border-slate-200 bg-white dark:border-slate-700/60 dark:bg-[#0b1220]',
-    amber:   'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20',
-    emerald: 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20',
-    blue:    'border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-950/20',
-  }
-  const valueColors = {
-    slate:   'text-slate-900 dark:text-white',
-    amber:   'text-amber-700 dark:text-amber-300',
-    emerald: 'text-emerald-700 dark:text-emerald-300',
-    blue:    'text-blue-700 dark:text-blue-300',
-  }
-
-  return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${colors[color]}`}>
-      <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
-      <p className={`mt-2 text-3xl font-bold ${valueColors[color]}`}>{value}</p>
     </div>
   )
 }

@@ -190,6 +190,10 @@ function SectionCard({ title, children, cols = 2 }: { title: string; children: R
   )
 }
 
+function containersSnapshot(rows: BLContainer[]) {
+  return JSON.stringify(rows.map((c) => [c.container_number, c.seal_number, c.container_type, Number(c.quantity || 0), c.gross_weight_kg, c.measurement_cbm, c.notes]))
+}
+
 type BLContainer = {
   id?: string
   container_number: string
@@ -444,6 +448,7 @@ export function BillOfLadingEditor({
   const [printingDraft, setPrintingDraft] = useState(false)
   const [containers, setContainers] = useState<BLContainer[]>([])
   const [savingContainers, setSavingContainers] = useState(false)
+  const savedContainersRef = useRef('')
   const [containerPendingRemoval, setContainerPendingRemoval] = useState<{
     index: number
     label: string
@@ -628,7 +633,7 @@ export function BillOfLadingEditor({
         .eq('bl_id', blId)
         .order('created_at', { ascending: true })
 
-      setContainers(
+      const loadedContainers: BLContainer[] = (
         (containerData || []).map((c) => ({
           id: c.id,
           container_number: c.container_number || '',
@@ -640,6 +645,8 @@ export function BillOfLadingEditor({
           notes: c.notes || '',
         }))
       )
+      setContainers(loadedContainers)
+      savedContainersRef.current = containersSnapshot(loadedContainers)
 
       const loadedForm: BLForm = {
         bl_type: blData.bl_type as 'MBL' | 'HBL',
@@ -942,6 +949,10 @@ export function BillOfLadingEditor({
 
     // Log amendment
     await logAmendment(form)
+
+    if (containersSnapshot(containers) !== savedContainersRef.current) {
+      await saveContainers()
+    }
   }
 
   const logAmendment = async (currentForm: BLForm) => {
@@ -1028,6 +1039,7 @@ export function BillOfLadingEditor({
     }
 
     setSavingContainers(false)
+    savedContainersRef.current = containersSnapshot(containers)
     toast.success('Contenedores guardados')
     notifySaved()
   }
@@ -1607,7 +1619,7 @@ export function BillOfLadingEditor({
         <Field label="Fecha BL">
           <input type="date" value={form.bl_date} onChange={set('bl_date')} className={fieldClass} />
         </Field>
-        <Field label="Tipo de Liberación">
+        <Field label="Tipo de liberación">
           <select value={form.release_type} onChange={set('release_type')} className={fieldClass}>
             <option value="">Seleccionar...</option>
             <option value="Express Release">Express Release</option>
@@ -1621,7 +1633,7 @@ export function BillOfLadingEditor({
           </select>
         </Field>
         {form.bl_type === 'HBL' && (
-          <Field label="Visibilidad Flete en HBL">
+          <Field label="Flete en el HBL">
             <select value={form.hbl_freight_visibility} onChange={set('hbl_freight_visibility')} className={fieldClass}>
               <option value="No Freight Charges">No Freight Charges</option>
               <option value="As Arranged">As Arranged</option>
@@ -1697,16 +1709,16 @@ export function BillOfLadingEditor({
 
       {/* Ruta */}
       <SectionCard title="Ruta" cols={2}>
-        <Field label="Place of Receipt">
+        <Field label="Lugar de recepción">
           <input value={form.place_of_receipt} onChange={set('place_of_receipt')} className={fieldClass} />
         </Field>
-        <Field label="Port of Loading">
+        <Field label="Puerto de carga">
           <input value={form.port_of_loading} onChange={set('port_of_loading')} className={fieldClass} />
         </Field>
-        <Field label="Port of Discharge">
+        <Field label="Puerto de descarga">
           <input value={form.port_of_discharge} onChange={set('port_of_discharge')} className={fieldClass} />
         </Field>
-        <Field label="Place of Delivery">
+        <Field label="Lugar de entrega">
           <input value={form.place_of_delivery} onChange={set('place_of_delivery')} className={fieldClass} />
         </Field>
       </SectionCard>
@@ -1720,21 +1732,21 @@ export function BillOfLadingEditor({
         }
         cols={2}
       >
-        <Field label={tipoTransporte === 'Terrestre' ? 'Transportista' : 'Carrier / Aerolínea'}>
+        <Field label={tipoTransporte === 'Terrestre' ? 'Transportista' : tipoTransporte === 'Aéreo' ? 'Aerolínea' : 'Naviera'}>
           <input value={form.carrier} onChange={set('carrier')} className={fieldClass} />
         </Field>
         {tipoTransporte === 'Terrestre' ? (
           <>
-            <Field label="Placa del Camión">
+            <Field label="Placa del camión">
               <input value={form.placa_camion} onChange={set('placa_camion')} className={fieldClass} placeholder="Ej. HN-1234" />
             </Field>
-            <Field label="Nombre del Operador">
+            <Field label="Nombre del operador">
               <input value={form.nombre_operador} onChange={set('nombre_operador')} className={fieldClass} placeholder="Nombre completo del conductor" />
             </Field>
           </>
         ) : (
           <>
-            <Field label={tipoTransporte === 'Aéreo' ? 'Número de vuelo' : 'Nombre del Buque'}>
+            <Field label={tipoTransporte === 'Aéreo' ? 'Número de vuelo' : 'Buque'}>
               <input
                 value={tipoTransporte === 'Aéreo' ? form.voyage : form.vessel_name}
                 onChange={tipoTransporte === 'Aéreo' ? set('voyage') : set('vessel_name')}
@@ -1742,7 +1754,7 @@ export function BillOfLadingEditor({
               />
             </Field>
             {tipoTransporte !== 'Aéreo' && (
-              <Field label="Voyage">
+              <Field label="Viaje">
                 <input value={form.voyage} onChange={set('voyage')} className={fieldClass} />
               </Field>
             )}
@@ -1757,7 +1769,7 @@ export function BillOfLadingEditor({
       </SectionCard>
 
       {/* Mercancía */}
-      <SectionCard title="Descripción de Mercancía" cols={2}>
+      <SectionCard title="Descripción de la mercancía" cols={2}>
         <div className="md:col-span-2">
           <Field label="Descripción">
             <textarea
@@ -1768,16 +1780,16 @@ export function BillOfLadingEditor({
             />
           </Field>
         </div>
-        <Field label="Marcas y Números">
+        <Field label="Marcas y números">
           <input value={form.marks_and_numbers} onChange={set('marks_and_numbers')} className={fieldClass} />
         </Field>
-        <Field label="Cantidad de Bultos">
+        <Field label="Cantidad de bultos">
           <input type="number" min={0} value={form.number_of_packages} onChange={set('number_of_packages')} className={fieldClass} />
         </Field>
-        <Field label="Tipo de Bulto">
+        <Field label="Tipo de bulto">
           <input value={form.package_type} onChange={set('package_type')} className={fieldClass} placeholder="Cajas, Pallets, etc." />
         </Field>
-        <Field label="Peso Bruto (KG)">
+        <Field label="Peso bruto (KG)">
           <input type="number" step="0.01" min={0} value={form.gross_weight_kg} onChange={set('gross_weight_kg')} className={fieldClass} />
         </Field>
         <Field label="Volumen (CBM)">
@@ -1806,20 +1818,12 @@ export function BillOfLadingEditor({
                 <Plus className="h-3.5 w-3.5" />
                 Agregar
               </button>
-              <button
-                type="button"
-                onClick={saveContainers}
-                disabled={savingContainers}
-                className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {savingContainers ? 'Guardando...' : 'Guardar contenedores'}
-              </button>
             </div>
           </div>
 
           {containers.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Sin contenedores. Usa &quot;Agregar&quot; para FCL.
+              Sin contenedores. Usa &quot;Agregar&quot; para FCL; se guardan con el botón Guardar del documento.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -1952,11 +1956,11 @@ export function BillOfLadingEditor({
 
       {/* Fechas de emisión / liberación (solo en edición) */}
       {!isNew && (
-        <SectionCard title="Fechas de Control" cols={3}>
-          <Field label="Fecha de Emisión">
+        <SectionCard title="Fechas de control" cols={3}>
+          <Field label="Fecha de emisión">
             <input type="date" value={form.issue_date} disabled className={fieldClass} />
           </Field>
-          <Field label="Fecha de Liberación">
+          <Field label="Fecha de liberación">
             <input type="date" value={form.release_date} disabled className={fieldClass} />
           </Field>
         </SectionCard>
@@ -1985,10 +1989,10 @@ export function BillOfLadingEditor({
           <button
             type="button"
             onClick={saveBL}
-            disabled={saving || isDocumentLocked}
+            disabled={saving || savingContainers || isDocumentLocked}
             className={`${primaryButtonClass} disabled:opacity-50`}
           >
-            {saving ? 'Guardando...' : isNew ? `Crear ${blLabel}` : 'Guardar'}
+            {saving || savingContainers ? 'Guardando...' : isNew ? `Crear ${blLabel}` : 'Guardar'}
           </button>
 
           {canSendDraft && (

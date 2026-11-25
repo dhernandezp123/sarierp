@@ -15,9 +15,13 @@ import {
   PackageOpen,
   RefreshCw,
   Search,
+  Radar,
   Ship,
+  type LucideIcon,
 } from 'lucide-react'
 import { supabase } from '@/src/lib/supabase/client'
+import { FinancePageHeader, financeActionClass } from '@/src/components/invoicing/FinanceWorkspace'
+import { OperationFilterMetric } from '@/src/components/operations/OperationsWorkspace'
 import { TableSkeleton } from '@/src/components/ui/TableSkeleton'
 import {
   aggregateBookingStatus,
@@ -840,16 +844,8 @@ export default function OperationsDashboardPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <OperationsDashboardHeader />
-        <button
-          type="button"
-          onClick={() => void loadDashboard()}
-          className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800"
-        >
-          <RefreshCw aria-hidden="true" className="h-4 w-4" />
-          Actualizar
-        </button>
+      <div className="mb-6">
+        <OperationsDashboardHeader onRefresh={() => void loadDashboard()} />
       </div>
 
       <OperationsControlTower
@@ -906,51 +902,51 @@ export default function OperationsDashboardPage() {
         <MetricCard
           title="Bookings activos"
           value={dashboard.metrics.activeBookings}
-          icon={<ClipboardList className="h-5 w-5" />}
+          icon={ClipboardList}
         />
         <MetricCard
           title="Bookings en tránsito"
           value={dashboard.metrics.inTransitBookings}
-          icon={<Ship className="h-5 w-5" />}
+          icon={Ship}
         />
         <MetricCard
           title="Arribados este mes"
           value={dashboard.metrics.arrivedThisMonth}
-          icon={<CheckCircle2 className="h-5 w-5" />}
+          icon={CheckCircle2}
         />
         <MetricCard
           title="SI abiertos"
           value={dashboard.metrics.openRoutings}
-          icon={<CalendarDays className="h-5 w-5" />}
+          icon={CalendarDays}
         />
         <MetricCard
           title="Bookings con documentos pendientes"
           value={dashboard.metrics.pendingDocuments}
-          icon={<FileWarning className="h-5 w-5" />}
+          icon={FileWarning}
           danger={dashboard.metrics.pendingDocuments > 0}
         />
         <MetricCard
           title="Bookings no listos"
           value={dashboard.metrics.notReady}
-          icon={<AlertTriangle className="h-5 w-5" />}
+          icon={AlertTriangle}
           danger={dashboard.metrics.notReady > 0}
         />
         <MetricCard
           title="Sin asignar"
           value={dashboard.metrics.unassigned}
-          icon={<AlertTriangle className="h-5 w-5" />}
+          icon={AlertTriangle}
           danger={dashboard.metrics.unassigned > 0}
         />
         <MetricCard
           title="Estados por conciliar"
           value={dashboard.metrics.statusDrifts}
-          icon={<RefreshCw className="h-5 w-5" />}
+          icon={RefreshCw}
           danger={dashboard.metrics.statusDrifts > 0}
         />
         <MetricCard
           title="Cut-offs vencidos"
           value={dashboard.metrics.overdueCutoffs}
-          icon={<Clock3 className="h-5 w-5" />}
+          icon={Clock3}
           danger={dashboard.metrics.overdueCutoffs > 0}
         />
       </div>
@@ -1026,7 +1022,7 @@ function OperationsControlTower({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700 dark:bg-blue-950/60 dark:text-blue-200">
+            <span className="rounded-full bg-rose-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-[#B3282D] dark:bg-rose-950/40 dark:text-rose-200">
               Cola priorizada
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -1034,7 +1030,7 @@ function OperationsControlTower({
             </span>
           </div>
           <h2 className="mt-3 text-xl font-bold text-slate-900 dark:text-white">
-            Control Tower
+            Qué atender primero
           </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Riesgo, aging y siguiente acción en una sola cola operativa.
@@ -1058,9 +1054,10 @@ function OperationsControlTower({
             key={option.value}
             type="button"
             onClick={() => onFilterChange(option.value)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+            aria-pressed={filter === option.value}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 ${
               filter === option.value
-                ? 'border-blue-600 bg-blue-600 text-white'
+                ? 'border-[#B3282D] bg-rose-50 text-[#B3282D] dark:border-rose-400 dark:bg-rose-950/40 dark:text-rose-200'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
             }`}
           >
@@ -1188,20 +1185,20 @@ function OperationsControlTower({
   )
 }
 
-function OperationsDashboardHeader() {
+function OperationsDashboardHeader({ onRefresh }: { onRefresh?: () => void }) {
   return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-        Centro de control
-      </p>
-      <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">
-        Dashboard Operativo
-      </h1>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Seguimiento diario de bookings, ETAs, free days, documentos y
-        contenedores.
-      </p>
-    </div>
+    <FinancePageHeader
+      eyebrow="Operaciones"
+      icon={Radar}
+      title="Control Tower"
+      description="Seguimiento diario de bookings, ETAs, días libres, documentos y contenedores."
+      actions={onRefresh ? (
+        <button type="button" onClick={onRefresh} className={financeActionClass}>
+          <RefreshCw aria-hidden="true" className="h-4 w-4" />
+          Actualizar
+        </button>
+      ) : undefined}
+    />
   )
 }
 
@@ -1213,34 +1210,10 @@ function MetricCard({
 }: {
   title: string
   value: number
-  icon: React.ReactNode
+  icon: LucideIcon
   danger?: boolean
 }) {
-  return (
-    <div
-      className={`rounded-2xl border p-5 shadow-sm ${
-        danger
-          ? 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30'
-          : 'border-slate-200 bg-white dark:border-slate-700/60 dark:bg-[#0b1220]'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
-        <div
-          className={`rounded-xl p-2 ${
-            danger
-              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
-              : 'bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-200'
-          }`}
-        >
-          {icon}
-        </div>
-      </div>
-      <p className="mt-3 text-3xl font-bold text-slate-900 dark:text-white">
-        {value}
-      </p>
-    </div>
-  )
+  return <OperationFilterMetric label={title} value={value} icon={icon} tone={danger ? 'amber' : 'slate'} />
 }
 
 function DashboardPanel({

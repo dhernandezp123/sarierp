@@ -115,3 +115,45 @@ export function OperationSaveBar({ dirty, saving, onSave, disabled, saveLabel = 
     </div>
   </div>
 }
+
+const metricIconTones: Record<OperationTone, string> = {
+  slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  sky: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  amber: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+  emerald: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  red: 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300',
+}
+
+/**
+ * Métrica de listado que además filtra: es un botón con estado presionado,
+ * así el indicador y el filtro son la misma acción (color + texto + borde).
+ */
+export function OperationFilterMetric({ label, value, detail, icon: Icon, tone = 'slate', active, onClick }: {
+  label: string
+  value: string | number
+  detail?: string
+  icon: LucideIcon
+  tone?: OperationTone
+  active?: boolean
+  onClick?: () => void
+}) {
+  const content = <>
+    <span className="flex items-center justify-between gap-3">
+      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
+      <span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', metricIconTones[tone])}><Icon aria-hidden="true" className="h-[18px] w-[18px]" /></span>
+    </span>
+    <span className="mt-3 block text-2xl font-bold tracking-tight text-slate-950 tabular-nums dark:text-white">{value}</span>
+    {detail && <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">{detail}</span>}
+  </>
+  const base = 'block w-full rounded-2xl border bg-white p-5 text-left shadow-sm dark:bg-[#0b1220]'
+  if (!onClick) return <div className={cn(base, 'border-slate-200/80 dark:border-slate-800')}>{content}</div>
+  return <button
+    type="button"
+    aria-pressed={Boolean(active)}
+    onClick={onClick}
+    className={cn(base, 'transition hover:border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 dark:hover:border-slate-700',
+      active ? 'border-[#B3282D] ring-2 ring-rose-100 dark:border-rose-400 dark:ring-rose-950/60' : 'border-slate-200/80 dark:border-slate-800')}
+  >{content}</button>
+}
+
+export const operationTableHeadClass = 'border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400'
