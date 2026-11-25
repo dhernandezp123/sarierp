@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '@/src/hooks/useUser'
@@ -203,11 +204,12 @@ export default function HistoricoPage() {
   const [page, setPage] = useState(() => Math.max(1, Math.min(100000, Number.parseInt(searchParams.get('page') || '1', 10) || 1)))
   const [pageSize, setPageSize] = useState(() => [25, 50, 100].includes(Number(searchParams.get('pageSize'))) ? Number(searchParams.get('pageSize')) : 25)
 
+  // Los filtros viajan en returnTo para volver al mismo listado desde el detalle.
+  const listReturnTo = () => '/historico?' + new URLSearchParams({ status: statusFilter, from: dateFrom, to: dateTo, search: searchTerm, page: String(page), pageSize: String(pageSize) }).toString()
+  const quotationHref = (id: string) => '/quotations/' + id + '?returnTo=' + encodeURIComponent(listReturnTo())
   const openQuotation = (id: string) => {
-    const query = new URLSearchParams({ status: statusFilter, from: dateFrom, to: dateTo, search: searchTerm, page: String(page), pageSize: String(pageSize) })
-    const returnTo = '/historico?' + query.toString()
-    window.history.replaceState(null, '', returnTo)
-    router.push('/quotations/' + id + '?returnTo=' + encodeURIComponent(returnTo))
+    window.history.replaceState(null, '', listReturnTo())
+    router.push(quotationHref(id))
   }
 
   const fetchQuotations = useCallback(async () => {
@@ -315,20 +317,27 @@ export default function HistoricoPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-                className={`${fieldClass} h-11 w-full md:w-[170px]`}
-              />
+            <div className="flex items-end gap-2">
+              <label className="flex w-full flex-col gap-1 md:w-[170px]">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Desde</span>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                  className={`${fieldClass} h-11 w-full`}
+                />
+              </label>
 
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-                className={`${fieldClass} h-11 w-full md:w-[170px]`}
-              />
+              <label className="flex w-full flex-col gap-1 md:w-[170px]">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Hasta</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                  className={`${fieldClass} h-11 w-full`}
+                />
+              </label>
             </div>
 
             <div>
@@ -465,7 +474,7 @@ export default function HistoricoPage() {
                   <TableRow
                     key={quote.id}
                     onClick={() => openQuotation(quote.id)}
-                    className="cursor-pointer transition-all duration-150 hover:bg-slate-100/80"
+                    className="cursor-pointer transition-all duration-150 hover:bg-slate-100/80 dark:hover:bg-slate-800/40"
                   >
 
                     <TableCell className="px-4 py-3 whitespace-nowrap">
@@ -473,7 +482,17 @@ export default function HistoricoPage() {
                     </TableCell>
 
                     <TableCell className="px-4 py-3 font-bold whitespace-nowrap">
-                      {quote.quotation_number || 'Sin número'}
+                      {/* Enlace real: la fila responde al clic y el número también al teclado. */}
+                      <Link
+                        href={quotationHref(quote.id)}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          window.history.replaceState(null, '', listReturnTo())
+                        }}
+                        className="rounded-sm text-[#B3282D] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 dark:text-rose-300"
+                      >
+                        {quote.quotation_number || 'Sin número'}
+                      </Link>
                     </TableCell>
 
                     <TableCell className="px-4 py-3 min-w-[220px]">

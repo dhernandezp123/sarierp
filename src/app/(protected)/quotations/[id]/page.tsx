@@ -1831,10 +1831,13 @@ const combinedTimeline: CommercialTimelineEvent[] = [
                   aria-expanded={openStatusMenu}
                   aria-controls="quotation-status-actions"
                   onClick={() => setOpenStatusMenu(!openStatusMenu)}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
+                  title="Cambiar estado"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 dark:border-slate-600 dark:bg-[#0b1220] dark:text-slate-200 dark:hover:bg-slate-800"
                 >
                   <span>{quotation?.status || 'Sin estado'}</span>
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  {/* Texto visible: el estado también es la acción para cambiarlo. */}
+                  <span className="border-l border-slate-200 pl-1.5 font-medium text-[#B3282D] dark:border-slate-700 dark:text-rose-300">Cambiar</span>
+                  <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
                 </button>
               ) : (
                 <Badge>{quotation?.status || 'Sin estado'}</Badge>
