@@ -161,10 +161,12 @@ const TRACKED_FIELDS: (keyof BLForm)[] = [
 const STATUS_FLOW: Record<string, { next: string; label: string; color: string } | null> = {
   'MBL Draft': { next: 'MBL Validado', label: 'Validar MBL', color: 'bg-emerald-600 hover:bg-emerald-700' },
   'MBL Validado': null,
-  'HBL Draft': { next: 'Pendiente Aprobación Cliente', label: 'Enviar al Cliente', color: 'bg-violet-600 hover:bg-violet-700' },
-  'Pendiente Aprobación Cliente': { next: 'Aprobado por Cliente', label: 'Registrar Aprobación', color: 'bg-blue-600 hover:bg-blue-700' },
-  'Aprobado por Cliente': { next: 'Emitido', label: 'Emitir HBL', color: 'bg-emerald-600 hover:bg-emerald-700' },
-  'Emitido': { next: 'Liberado', label: 'Registrar Liberación', color: 'bg-slate-700 hover:bg-slate-800' },
+  // UX-OPS-04: Draft -> Aprobado -> Emitido. El envío al cliente queda en el
+  // registro de envíos y la liberación es un registro opcional, no un paso.
+  'HBL Draft': { next: 'Aprobado por Cliente', label: 'Registrar aprobación del cliente', color: 'bg-[#B3282D] hover:bg-[#9a2227]' },
+  'Pendiente Aprobación Cliente': { next: 'Aprobado por Cliente', label: 'Registrar aprobación del cliente', color: 'bg-[#B3282D] hover:bg-[#9a2227]' },
+  'Aprobado por Cliente': { next: 'Emitido', label: 'Emitir HBL', color: 'bg-[#B3282D] hover:bg-[#9a2227]' },
+  'Emitido': null,
   'Liberado': null,
 }
 
@@ -1050,8 +1052,8 @@ export function BillOfLadingEditor({
     setContainerPendingRemoval(null)
   }
 
-  const advanceStatus = async () => {
-    const transition = STATUS_FLOW[form.status]
+  const advanceStatus = async (override?: { next: string; label: string; color: string }) => {
+    const transition = override || STATUS_FLOW[form.status]
     if (!transition) return
 
     const readiness = getBlReadiness(form, tipoTransporte, transition.next)
@@ -2004,11 +2006,23 @@ export function BillOfLadingEditor({
         {!isNew && transition && (
           <button
             type="button"
-            onClick={advanceStatus}
+            onClick={() => void advanceStatus()}
             disabled={transitioning}
             className={`rounded-xl px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 ${transition.color}`}
           >
             {transitioning ? 'Procesando...' : transition.label}
+          </button>
+        )}
+
+        {!isNew && form.status === 'Emitido' && form.bl_type === 'HBL' && (
+          <button
+            type="button"
+            onClick={() => void advanceStatus({ next: 'Liberado', label: 'Registrar liberación', color: '' })}
+            disabled={transitioning}
+            title="Registro opcional: deja constancia de la fecha de liberación de la carga"
+            className={`${secondaryButtonClass} disabled:opacity-50`}
+          >
+            Registrar liberación
           </button>
         )}
 

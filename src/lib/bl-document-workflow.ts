@@ -436,7 +436,8 @@ export function getBlReadiness(
     required.push({ field: 'draft_file_url', label: 'Draft MBL del agente' })
   }
 
-  if (form.bl_type === 'HBL' && nextStatus === 'Pendiente Aprobación Cliente') {
+  // La aprobación puede registrarse directo desde el draft (UX-OPS-04).
+  if (form.bl_type === 'HBL' && ['Pendiente Aprobación Cliente', 'Aprobado por Cliente'].includes(nextStatus)) {
     required.push({ field: 'parent_bl_id', label: 'MBL padre validado' })
     warnings.push({ field: 'consignee_email', label: 'Email del consignee' })
   }

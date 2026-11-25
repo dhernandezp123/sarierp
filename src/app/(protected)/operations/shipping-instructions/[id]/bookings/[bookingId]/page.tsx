@@ -203,62 +203,65 @@ type BillOfLading = {
   created_at: string | null
 }
 
+type BookingFlowStep = 'confirm' | 'ready' | 'departure' | 'arrival' | 'deliver_finalize'
+
 type BookingAction = {
-  kind: 'transition' | 'delivery'
+  step: BookingFlowStep
   label: string
-  targetStatus?: string
   description: string
+  /** Salida, arribo y entrega piden fecha, ubicación y notas; el resto es un clic. */
+  physical: boolean
+  successMessage: string
 }
 
-const bookingTransitionActions: Record<string, BookingAction> = {
-  'Pendiente Validación': {
-    kind: 'transition',
-    label: 'Solicitar booking',
-    targetStatus: 'Booking Solicitado',
-    description: 'Inicia formalmente la gestión del booking.',
-  },
-  'Listo para Booking': {
-    kind: 'transition',
-    label: 'Solicitar booking',
-    targetStatus: 'Booking Solicitado',
-    description: 'Inicia formalmente la gestión del booking.',
-  },
-  'Booking Solicitado': {
-    kind: 'transition',
+const bookingFlowActions: Record<BookingFlowStep, BookingAction> = {
+  confirm: {
+    step: 'confirm',
     label: 'Confirmar booking',
-    targetStatus: 'Booking Confirmado',
-    description: 'Valida los datos mínimos y registra la confirmación.',
+    description: 'Valida referencia, naviera, ETD/ETA y contenedores, y confirma el booking.',
+    physical: false,
+    successMessage: 'Booking confirmado',
   },
-  'Booking Confirmado': {
-    kind: 'transition',
-    label: 'Marcar documentación pendiente',
-    targetStatus: 'Documentación Pendiente',
-    description: 'Continúa a la preparación documental del embarque.',
-  },
-  'Documentación Pendiente': {
-    kind: 'transition',
+  ready: {
+    step: 'ready',
     label: 'Marcar listo para embarque',
-    targetStatus: 'Listo para Embarque',
-    description: 'Valida nave, viaje, contenedores y documentos mínimos.',
+    description: 'Valida buque, viaje, contenedores, documentos mínimos y readiness.',
+    physical: false,
+    successMessage: 'Booking listo para embarque',
   },
-  'Listo para Embarque': {
-    kind: 'transition',
-    label: 'Registrar embarque',
-    targetStatus: 'Embarcado',
-    description: 'Registra la fecha real de embarque y el evento ON BOARD.',
+  departure: {
+    step: 'departure',
+    label: 'Registrar salida',
+    description: 'Registra la salida real del buque: el booking queda embarcado y en tránsito.',
+    physical: true,
+    successMessage: 'Salida registrada; booking en tránsito',
   },
-  Embarcado: {
-    kind: 'transition',
-    label: 'Marcar en tránsito',
-    targetStatus: 'En Tránsito',
-    description: 'Registra la salida real de la nave.',
-  },
-  'En Tránsito': {
-    kind: 'transition',
+  arrival: {
+    step: 'arrival',
     label: 'Registrar arribo',
-    targetStatus: 'Arribado',
     description: 'Registra el arribo real de este booking.',
+    physical: true,
+    successMessage: 'Arribo registrado',
   },
+  deliver_finalize: {
+    step: 'deliver_finalize',
+    label: 'Registrar entrega y finalizar',
+    description: 'Registra la entrega y cierra el booking. Si es el último booking activo, también cierra la operación.',
+    physical: true,
+    successMessage: 'Entrega registrada y booking finalizado',
+  },
+}
+
+const bookingStepByStatus: Record<string, BookingFlowStep> = {
+  'Pendiente Validación': 'confirm',
+  'Listo para Booking': 'confirm',
+  'Booking Solicitado': 'confirm',
+  'Booking Confirmado': 'ready',
+  'Documentación Pendiente': 'ready',
+  'Listo para Embarque': 'departure',
+  Embarcado: 'departure',
+  'En Tránsito': 'arrival',
+  Arribado: 'deliver_finalize',
 }
 
 const BOOKING_DOCUMENT_BUCKET = 'booking-documents'
@@ -868,8 +871,19 @@ export default function RoutingBookingChildPage() {
   }
 
   const openBookingAction = async (action: BookingAction) => {
-    // Las transiciones validan los datos guardados: se guarda primero lo editado.
-    if (isDirty && !(await saveAllChanges())) return
+    // Los pasos validan los datos guardados: se guarda primero lo editado.
+    let expectedUpdatedAt = booking?.updated_at || null
+    if (isDirty) {
+      if (!(await saveAllChanges())) return
+      const { data: current } = await supabase.from('bookings').select('updated_at').eq('id', bookingId).single()
+      expectedUpdatedAt = current?.updated_at || expectedUpdatedAt
+    }
+
+    if (!action.physical) {
+      await runBookingStep(action, { expectedUpdatedAt })
+      return
+    }
+
     setPendingAction(action)
     setActionOccurredAt(toLocalDateTimeInput())
     setActionLocation('')
@@ -877,14 +891,8 @@ export default function RoutingBookingChildPage() {
     setActionError('')
     setActionReadiness(null)
 
-    if (
-      action.kind === 'transition' &&
-      ['Listo para Embarque', 'Embarcado'].includes(action.targetStatus || '')
-    ) {
-      const { data, error } = await supabase.rpc(
-        'evaluate_booking_readiness',
-        { p_booking_id: bookingId }
-      )
+    if (action.step === 'departure') {
+      const { data, error } = await supabase.rpc('evaluate_booking_readiness', { p_booking_id: bookingId })
       if (!error && data) {
         const current = data as BookingReadinessEvaluation
         setActionReadiness(current)
@@ -894,64 +902,63 @@ export default function RoutingBookingChildPage() {
   }
 
   const runBookingAction = async () => {
-    if (!booking || !pendingAction) return
-
+    if (!pendingAction) return
     const parsedOccurredAt = new Date(actionOccurredAt)
     if (Number.isNaN(parsedOccurredAt.getTime())) {
       setActionError('Indica una fecha y hora de ocurrencia válida.')
       return
     }
+    await runBookingStep(pendingAction, {
+      occurredAt: parsedOccurredAt.toISOString(),
+      location: actionLocation.trim() || null,
+      notes: actionNotes.trim() || null,
+    })
+  }
 
+  // Confirmar la referencia confirma el booking si ya cumple naviera, ETD/ETA y
+  // contenedores; si falta algo, se informa sin tratarlo como error.
+  const confirmAfterReference = async () => {
+    const { data: current } = await supabase
+      .from('bookings')
+      .select('shipment_status, updated_at')
+      .eq('id', bookingId)
+      .single()
+    if (!current || bookingStepByStatus[current.shipment_status || 'Booking Solicitado'] !== 'confirm') {
+      await loadData()
+      return
+    }
+    await runBookingStep(bookingFlowActions.confirm, { expectedUpdatedAt: current.updated_at, softFailure: true })
+    await loadData()
+  }
+
+  // Un paso de negocio puede aplicar varias transiciones (todas con sus validaciones).
+  const runBookingStep = async (
+    action: BookingAction,
+    options: { expectedUpdatedAt?: string | null; occurredAt?: string; location?: string | null; notes?: string | null; softFailure?: boolean } = {}
+  ) => {
+    if (!booking) return
     setRunningAction(true)
     setActionError('')
 
-    if (pendingAction.kind === 'delivery') {
-      const { error } = await supabase.rpc('record_operational_event', {
-        p_shipping_instruction_id: id,
-        p_booking_id: booking.id,
-        p_booking_container_id: null,
-        p_event_code: 'DELIVERED',
-        p_event_label: 'Entrega registrada',
-        p_occurred_at: parsedOccurredAt.toISOString(),
-        p_location: actionLocation.trim() || null,
-        p_notes: actionNotes.trim() || null,
-        p_metadata: {},
-      })
-
-      setRunningAction(false)
-
-      if (error) {
-        setActionError(error.message || 'No se pudo registrar la entrega.')
-        return
-      }
-
-      setPendingAction(null)
-      toast.success('Entrega registrada')
-      await loadTimeline(booking.id)
-      return
-    }
-
-    const { data, error } = await supabase.rpc('transition_booking_status', {
+    const { data, error } = await supabase.rpc('advance_booking_flow', {
       p_booking_id: booking.id,
-      p_expected_updated_at: booking.updated_at,
-      p_target_status: pendingAction.targetStatus,
-      p_occurred_at: parsedOccurredAt.toISOString(),
-      p_location: actionLocation.trim() || null,
-      p_notes: actionNotes.trim() || null,
-      p_metadata: {},
+      p_expected_updated_at: options.expectedUpdatedAt ?? booking.updated_at,
+      p_step: action.step,
+      p_occurred_at: options.occurredAt || new Date().toISOString(),
+      p_location: options.location ?? null,
+      p_notes: options.notes ?? null,
     })
 
     setRunningAction(false)
 
     if (error) {
-      const conflict =
-        error.code === '40001' ||
-        error.message?.includes('BOOKING_VERSION_CONFLICT')
+      const conflict = error.code === '40001' || error.message?.includes('BOOKING_VERSION_CONFLICT')
       const message = conflict
         ? 'Este booking cambió en otra sesión. Recarga la página antes de continuar.'
-        : error.message || 'No se pudo cambiar el estado del booking.'
-
-      setActionError(message)
+        : error.message || 'No se pudo avanzar el booking.'
+      if (action.physical) setActionError(message)
+      else if (options.softFailure) toast.info('Referencia confirmada; el booking se confirmará cuando esté completo', { description: message })
+      else toast.error(`No se pudo: ${action.label.toLowerCase()}`, { description: message })
       return
     }
 
@@ -969,46 +976,39 @@ export default function RoutingBookingChildPage() {
     } | null
 
     if (result?.transitioned === false) {
-      const missingRequirements = (
-        result.error?.missing_requirements || []
-      )
-        .filter((requirement) => requirement.blocking)
-        .map((requirement) => requirement.label)
       const blockers = [
-        ...missingRequirements,
+        ...(result.error?.missing_requirements || [])
+          .filter((requirement) => requirement.blocking)
+          .map((requirement) => requirement.label),
         ...(result.error?.overdue_cutoffs || []).map(
           (cutoff) => `Cut-off vencido: ${cutoff.label || 'sin etiqueta'}`
         ),
         ...(result.error?.missing_vgm_containers || []).map(
-          (container) =>
-            `VGM pendiente: ${container.container_reference || 'contenedor sin referencia'}`
+          (container) => `VGM pendiente: ${container.container_reference || 'contenedor sin referencia'}`
         ),
       ]
+      const message = blockers.length > 0 ? blockers.join(' · ') : 'El booking no cumple los requisitos de readiness.'
       setActionReadiness(result.readiness || null)
       setReadinessEvaluation(result.readiness || null)
-      setActionError(
-        blockers.length > 0
-          ? blockers.join(' · ')
-          : 'El booking no cumple los requisitos de readiness.'
-      )
-      await loadTimeline(booking.id)
+      if (action.physical) setActionError(message)
+      else {
+        toast.error('Faltan requisitos para avanzar', { description: message })
+        document.getElementById('booking-readiness')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      await loadData()
       return
     }
 
     if (result?.booking) {
       setBooking(result.booking)
+      setSavedBookingSnapshot(bookingSnapshot(result.booking))
     }
-
     setPendingAction(null)
-    toast.success(`Estado actualizado a ${pendingAction.targetStatus}`)
-    if (pendingAction.targetStatus === 'Finalizado') await closeOperationIfComplete()
-
+    toast.success(action.successMessage)
     if (result?.warnings?.length) {
-      toast.warning('Transición completada con advertencias', {
-        description: result.warnings.join(' '),
-      })
+      toast.warning('Avance completado con advertencias', { description: result.warnings.join(' ') })
     }
-
+    if (action.step === 'deliver_finalize') await closeOperationIfComplete()
     await loadTimeline(booking.id)
   }
 
@@ -1445,25 +1445,14 @@ export default function RoutingBookingChildPage() {
   const hasDeliveredEvent = timelineEvents.some(
     (event) => event.booking_id === booking.id && event.event_code === 'DELIVERED'
   )
-  const contextualAction =
-    booking.booking_lifecycle_status !== 'ACTIVE'
-      ? undefined
-      : booking.shipment_status === 'Arribado'
-      ? hasDeliveredEvent
-        ? {
-            kind: 'transition' as const,
-            label: 'Finalizar booking',
-            targetStatus: 'Finalizado',
-            description:
-              'Valida contenedores, entrega y requisitos obligatorios. Si es el último booking activo, también cierra la operación.',
-          }
-        : {
-            kind: 'delivery' as const,
-            label: 'Registrar entrega',
-            description:
-              'Registra la entrega antes de habilitar la finalización del booking.',
-          }
-      : bookingTransitionActions[booking.shipment_status || 'Booking Solicitado']
+  const contextualStep = booking.booking_lifecycle_status === 'ACTIVE'
+    ? bookingStepByStatus[booking.shipment_status || 'Booking Solicitado']
+    : undefined
+  const contextualAction = contextualStep
+    ? contextualStep === 'deliver_finalize' && hasDeliveredEvent
+      ? { ...bookingFlowActions.deliver_finalize, label: 'Finalizar booking' }
+      : bookingFlowActions[contextualStep]
+    : undefined
   const computedTransitDays = realTransitDays(booking.actual_etd, booking.actual_eta)
   const freeDaysComputed = booking.free_days !== null && booking.free_days !== undefined && Boolean(booking.actual_eta)
   const remainingFreeDaysValue = effectiveRemainingFreeDays(booking)
@@ -1993,6 +1982,7 @@ export default function RoutingBookingChildPage() {
             booking={booking as ScheduleBooking}
             userRole={profile?.rol}
             onChanged={loadData}
+            onReferenceConfirmed={confirmAfterReference}
             onReplaced={(newBookingId) =>
               router.push(
                 `/operations/shipping-instructions/${id}/bookings/${newBookingId}`
@@ -2550,10 +2540,7 @@ export default function RoutingBookingChildPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {pendingAction?.kind === 'transition' &&
-            ['Listo para Embarque', 'Embarcado'].includes(
-              pendingAction.targetStatus || ''
-            ) && (
+          {pendingAction?.step === 'departure' && (
               <div
                 className={`rounded-xl border p-3 text-sm ${
                   (actionReadiness || readinessEvaluation)?.ready

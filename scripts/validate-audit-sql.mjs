@@ -10,6 +10,7 @@ const files = [
   'bl_missing_quotation_cargo_sources.sql',
   'bl_insert_returning_rls.sql',
   'admin_shipping_instruction_handoff.sql',
+  'operations_simplified_flow.sql',
   'miami_quotation_rate_destination.sql',
   'platform_admin_console.sql',
   'accounting_access.sql',

@@ -138,6 +138,46 @@ test('un HBL exige MBL padre antes de enviarse al cliente', () => {
   assert.deepEqual(result.blocking.map(({ field }) => field), ['parent_bl_id'])
 })
 
+test('al aprobar un HBL directo desde el draft tambien exige MBL padre', () => {
+  const result = getBlReadiness(
+    {
+      bl_type: 'HBL',
+      parent_bl_id: null,
+      bl_number: 'SARI-HBL-001',
+      draft_file_url: '',
+      shipper: 'Proveedor',
+      shipper_address: 'Shanghai',
+      consignee: 'Cliente',
+      consignee_address: 'San Pedro Sula',
+      consignee_email: 'cliente@example.com',
+      notify_party: '',
+      notify_party_address: '',
+      notify_party_tax_id: '',
+      notify_party_contact: '',
+      notify_party_email: '',
+      place_of_receipt: '',
+      port_of_loading: 'Shanghai',
+      port_of_discharge: 'Puerto Cortés',
+      place_of_delivery: '',
+      carrier: 'MAERSK',
+      vessel_name: 'VESSEL ONE',
+      voyage: '001S',
+      etd: '2026-09-20',
+      eta: '2026-10-10',
+      description_of_goods: 'Repuestos',
+      marks_and_numbers: '',
+      number_of_packages: '10',
+      package_type: 'Caja',
+      gross_weight_kg: '100',
+      measurement_cbm: '2',
+    },
+    'Marítimo',
+    'Aprobado por Cliente'
+  )
+
+  assert.deepEqual(result.blocking.map(({ field }) => field), ['parent_bl_id'])
+})
+
 test('detecta diferencias del HBL contra MBL y partes comerciales sin bloquear excepciones', () => {
   const warnings = getBlConsistencyWarnings(
     {

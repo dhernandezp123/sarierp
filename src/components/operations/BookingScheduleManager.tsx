@@ -169,11 +169,14 @@ export function BookingScheduleManager({
   userRole,
   onChanged,
   onReplaced,
+  onReferenceConfirmed,
 }: {
   booking: ScheduleBooking
   userRole?: string | null
   onChanged: () => Promise<void>
   onReplaced: (newBookingId: string) => void
+  /** Tras confirmar la referencia, la pantalla puede confirmar el booking. */
+  onReferenceConfirmed?: () => Promise<void>
 }) {
   const [revisions, setRevisions] = useState<ScheduleRevision[]>([])
   const [userNames, setUserNames] = useState<Record<string, string>>({})
@@ -375,7 +378,8 @@ export function BookingScheduleManager({
       return
     }
 
-    await onChanged()
+    if (action === 'confirm' && onReferenceConfirmed) await onReferenceConfirmed()
+    else await onChanged()
     await loadHistory()
   }
 

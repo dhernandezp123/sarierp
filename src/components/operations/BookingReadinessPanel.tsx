@@ -7,6 +7,7 @@ import {
   Clock3,
   RefreshCw,
   Scale,
+  Send,
   ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -123,12 +124,34 @@ type CutoffForm = {
   reason: string
 }
 
-type VgmForm = {
+type VgmRow = {
   grossMass: string
   unit: 'KG' | 'LB'
   method: string
   weighedAt: string
-  notes: string
+}
+
+const vgmMethodOptions = [
+  ['METHOD_1', 'Método 1 (contenedor lleno)'],
+  ['METHOD_2', 'Método 2 (suma de carga)'],
+  ['CARRIER_PROVIDED', 'Provista por naviera'],
+  ['OTHER', 'Otro'],
+] as const
+
+const vgmStatusLabel: Record<string, string> = {
+  DRAFT: 'Borrador',
+  VERIFIED: 'Verificada',
+  SUBMITTED: 'Enviada',
+  ACCEPTED: 'Aceptada',
+  REJECTED: 'Rechazada',
+}
+
+function vgmMethodLabel(value: string) {
+  return vgmMethodOptions.find(([option]) => option === value)?.[1] || value
+}
+
+function emptyVgmRow(): VgmRow {
+  return { grossMass: '', unit: 'KG', method: 'METHOD_2', weighedAt: localDateTimeValue() }
 }
 
 const cutoffOptions = [
@@ -271,14 +294,7 @@ export function BookingReadinessPanel({
     kind: 'complete' | 'waive'
     requirement: ReadinessRequirement
   } | null>(null)
-  const [vgmContainer, setVgmContainer] = useState<BookingContainer | null>(null)
-  const [vgmForm, setVgmForm] = useState<VgmForm>(() => ({
-    grossMass: '',
-    unit: 'KG',
-    method: 'METHOD_2',
-    weighedAt: localDateTimeValue(),
-    notes: '',
-  }))
+  const [vgmRows, setVgmRows] = useState<Record<string, VgmRow>>({})
   const [vgmAction, setVgmAction] = useState<{
     kind: 'submit' | 'reject' | 'supersede'
     record: VgmRecord
@@ -367,6 +383,15 @@ export function BookingReadinessPanel({
       return acc
     }, {})
   }, [vgmRecords])
+
+  const pendingVgmContainers = containers.filter((container) => {
+    if (!container.id || Number(container.quantity) !== 1) return false
+    const record = activeVgmByContainer[container.id]
+    return !record || !['SUBMITTED', 'ACCEPTED'].includes(record.status)
+  })
+  const readyVgmRows = pendingVgmContainers
+    .map((container) => ({ containerId: container.id!, row: vgmRows[container.id!] }))
+    .filter((item): item is { containerId: string; row: VgmRow } => Boolean(item.row && Number(item.row.grossMass) > 0))
 
   const readinessPercent = useMemo(() => {
     const applicable =
@@ -525,62 +550,43 @@ export function BookingReadinessPanel({
     await load()
   }
 
-  const saveVgmDraft = async () => {
-    if (!vgmContainer?.id || !vgmForm.grossMass) {
-      toast.error('Selecciona el contenedor e ingresa la masa')
+  // Una sola acción: borrador, verificación y envío de todas las filas completas.
+  const submitVgmBatch = async () => {
+    if (readyVgmRows.length === 0) {
+      toast.error('Ingresa la masa bruta de al menos un contenedor')
       return
     }
-
     setSaving(true)
-    const { error } = await supabase.rpc('save_container_vgm_draft', {
+    const { data, error } = await supabase.rpc('submit_booking_vgm_batch', {
       p_booking_id: bookingId,
-      p_booking_container_id: vgmContainer.id,
-      p_gross_mass: Number(vgmForm.grossMass),
-      p_unit: vgmForm.unit,
-      p_verification_method: vgmForm.method,
-      p_weighed_at: vgmForm.weighedAt
-        ? new Date(vgmForm.weighedAt).toISOString()
-        : null,
-      p_verified_by_name: null,
-      p_document_id: null,
-      p_notes: vgmForm.notes.trim() || null,
-      p_metadata: {},
+      p_rows: readyVgmRows.map(({ containerId, row }) => ({
+        booking_container_id: containerId,
+        gross_mass: Number(row.grossMass),
+        unit: row.unit,
+        verification_method: row.method,
+        weighed_at: row.weighedAt ? new Date(row.weighedAt).toISOString() : null,
+      })),
+      p_submission_reference: null,
     })
     setSaving(false)
 
     if (error) {
-      toast.error('No se pudo guardar la VGM', {
-        description: error.message,
-      })
+      toast.error('No se envió ninguna VGM', { description: error.message })
       return
     }
 
-    setVgmContainer(null)
-    toast.success('VGM guardada como borrador')
+    const sent = Number((data as { submitted?: number } | null)?.submitted || 0)
+    setVgmRows({})
+    toast.success(sent === 1 ? 'VGM enviada' : `${sent} VGM enviadas`)
     await load()
   }
 
-  const transitionVgm = async (
-    record: VgmRecord,
-    target: 'verify' | 'submit' | 'accept'
-  ) => {
+  const acceptVgm = async (record: VgmRecord) => {
     setSaving(true)
-    const result =
-      target === 'verify'
-        ? await supabase.rpc('verify_container_vgm', {
-            p_vgm_id: record.id,
-            p_expected_updated_at: record.updated_at,
-          })
-        : target === 'submit'
-          ? await supabase.rpc('submit_container_vgm', {
-              p_vgm_id: record.id,
-              p_expected_updated_at: record.updated_at,
-              p_submission_reference: null,
-            })
-          : await supabase.rpc('accept_container_vgm', {
-              p_vgm_id: record.id,
-              p_expected_updated_at: record.updated_at,
-            })
+    const result = await supabase.rpc('accept_container_vgm', {
+      p_vgm_id: record.id,
+      p_expected_updated_at: record.updated_at,
+    })
     setSaving(false)
 
     if (result.error) {
@@ -866,134 +872,146 @@ export function BookingReadinessPanel({
 
       {evaluation?.mode === 'SEA_FCL' && (
         <section className={cardClass}>
-          <div className="flex items-center gap-2">
-            <Scale className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-              VGM por contenedor
-            </h2>
-          </div>
-          <p className="mt-1 text-sm text-slate-500">
-            Cada fila debe representar exactamente un contenedor físico.
-          </p>
-
-          <div className="mt-4 space-y-3">
-            {containers.filter((container) => container.id).length === 0 ? (
-              <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-950/60">
-                Asigna contenedores antes de registrar VGM.
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Scale aria-hidden="true" className="h-5 w-5 text-sky-600 dark:text-sky-300" />
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  VGM por contenedor
+                </h2>
+              </div>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Completa la masa de cada contenedor y envía todas juntas. La verificación queda registrada con el método de pesaje y tu usuario.
               </p>
-            ) : (
-              containers
-                .filter((container) => container.id)
-                .map((container) => {
-                  const record = activeVgmByContainer[container.id!]
-                  return (
-                    <div
-                      key={container.id}
-                      className="rounded-xl border border-slate-200 p-4 dark:border-slate-800"
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div>
-                          <p className="font-semibold text-slate-900 dark:text-white">
-                            {containerLabel(container)}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {container.container_type} · cantidad {container.quantity}
-                          </p>
-                          {record ? (
-                            <div className="mt-2 text-sm text-slate-700 dark:text-slate-300">
-                              <span className="font-semibold">
-                                {Number(record.gross_mass).toLocaleString('en-US')}{' '}
-                                {record.unit}
-                              </span>{' '}
-                              · {record.verification_method} · versión{' '}
-                              {record.version_number}
-                              <span
-                                className={`ml-2 rounded-full px-2 py-1 text-[11px] font-bold ${statusClasses(
-                                  record.status
-                                )}`}
-                              >
-                                {record.status}
-                              </span>
-                              {record.submitted_at && (
-                                <p className="mt-1 text-xs text-slate-500">
-                                  Enviada: {formatDateTime(record.submitted_at)}
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="mt-2 text-sm font-medium text-red-600">
-                              Sin VGM activa
-                            </p>
-                          )}
-                        </div>
-                        {canManage && (
-                          <div className="flex flex-wrap gap-2">
-                            {!record && Number(container.quantity) === 1 && (
-                              <button
-                                type="button"
-                                onClick={() => setVgmContainer(container)}
-                                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
-                              >
-                                Registrar VGM
-                              </button>
-                            )}
-                            {record?.status === 'DRAFT' && (
-                              <button
-                                type="button"
-                                onClick={() => void transitionVgm(record, 'verify')}
-                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"
-                              >
-                                Verificar
-                              </button>
-                            )}
-                            {record?.status === 'VERIFIED' && (
-                              <button
-                                type="button"
-                                onClick={() => void transitionVgm(record, 'submit')}
-                                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white"
-                              >
-                                Enviar
-                              </button>
-                            )}
-                            {record?.status === 'SUBMITTED' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => void transitionVgm(record, 'accept')}
-                                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"
-                                >
-                                  Aceptar
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setVgmAction({ kind: 'reject', record })
-                                  }
-                                  className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600"
-                                >
-                                  Rechazar
-                                </button>
-                              </>
-                            )}
-                            {record && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setVgmAction({ kind: 'supersede', record })
-                                }
-                                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
-                              >
-                                Corregir
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
+            </div>
+            {canManage && pendingVgmContainers.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void submitVgmBatch()}
+                disabled={saving || readyVgmRows.length === 0}
+                className={operationPrimaryButtonClass}
+              >
+                <Send aria-hidden="true" className="h-4 w-4" />
+                {saving ? 'Enviando...' : `Enviar VGM${readyVgmRows.length ? ` (${readyVgmRows.length})` : ''}`}
+              </button>
             )}
           </div>
+
+          {containers.filter((container) => container.id).length === 0 ? (
+            <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-950/60 dark:text-slate-400">
+              Asigna contenedores antes de registrar VGM.
+            </p>
+          ) : (
+            <div className="relative mt-4 overflow-x-auto" role="region" aria-label="VGM por contenedor" tabIndex={0}>
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <tr>
+                    <th scope="col" className="py-2 pr-3">Contenedor</th>
+                    <th scope="col" className="pr-3">Estado</th>
+                    <th scope="col" className="pr-3">Masa bruta</th>
+                    <th scope="col" className="pr-3">Unidad</th>
+                    <th scope="col" className="pr-3">Método</th>
+                    <th scope="col" className="pr-3">Fecha de pesaje</th>
+                    <th scope="col"><span className="sr-only">Acciones</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {containers
+                    .filter((container) => container.id)
+                    .map((container) => {
+                      const record = activeVgmByContainer[container.id!]
+                      const sent = record && ['SUBMITTED', 'ACCEPTED'].includes(record.status)
+                      const editable = canManage && !sent && Number(container.quantity) === 1
+                      const row = vgmRows[container.id!] || emptyVgmRow()
+                      const setRow = (patch: Partial<VgmRow>) =>
+                        setVgmRows((current) => ({ ...current, [container.id!]: { ...(current[container.id!] || emptyVgmRow()), ...patch } }))
+                      return (
+                        <tr key={container.id} className="border-t border-slate-100 align-middle dark:border-slate-800">
+                          <th scope="row" className="py-2 pr-3 text-left font-semibold text-slate-900 dark:text-white">
+                            {containerLabel(container)}
+                            <span className="block text-xs font-normal text-slate-500 dark:text-slate-400">{container.container_type}</span>
+                          </th>
+                          <td className="pr-3">
+                            <span className={`whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-bold ${statusClasses(record?.status || 'BLOCKED')}`}>
+                              {record ? vgmStatusLabel[record.status] || record.status : 'Sin VGM'}
+                            </span>
+                          </td>
+                          {editable ? (
+                            <>
+                              <td className="py-2 pr-3">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  inputMode="decimal"
+                                  aria-label={`Masa bruta de ${containerLabel(container)}`}
+                                  value={row.grossMass}
+                                  onChange={(event) => setRow({ grossMass: event.target.value })}
+                                  className={`${fieldClass} h-10 w-32 tabular-nums`}
+                                />
+                              </td>
+                              <td className="pr-3">
+                                <select aria-label="Unidad" value={row.unit} onChange={(event) => setRow({ unit: event.target.value as 'KG' | 'LB' })} className={`${fieldClass} h-10 w-24`}>
+                                  <option value="KG">KG</option>
+                                  <option value="LB">LB</option>
+                                </select>
+                              </td>
+                              <td className="pr-3">
+                                <select aria-label="Método" value={row.method} onChange={(event) => setRow({ method: event.target.value })} className={`${fieldClass} h-10 w-44`}>
+                                  {vgmMethodOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                </select>
+                              </td>
+                              <td className="pr-3">
+                                <input
+                                  type="datetime-local"
+                                  aria-label="Fecha de pesaje"
+                                  value={row.weighedAt}
+                                  onChange={(event) => setRow({ weighedAt: event.target.value })}
+                                  className={`${fieldClass} h-10 w-52`}
+                                />
+                              </td>
+                            </>
+                          ) : (
+                            <td colSpan={4} className="py-2 pr-3 text-slate-700 dark:text-slate-300">
+                              {record ? (
+                                <span className="tabular-nums">
+                                  <span className="font-semibold">{Number(record.gross_mass).toLocaleString('en-US')} {record.unit}</span>
+                                  {' · '}{vgmMethodLabel(record.verification_method)}
+                                  {record.submitted_at ? ` · enviada ${formatDateTime(record.submitted_at)}` : ''}
+                                </span>
+                              ) : Number(container.quantity) !== 1 ? (
+                                <span className="text-amber-700 dark:text-amber-300">Divide la fila en contenedores de 1 unidad para registrar VGM.</span>
+                              ) : '—'}
+                            </td>
+                          )}
+                          <td className="py-2 text-right">
+                            {canManage && record && (
+                              <div className="flex flex-wrap justify-end gap-2">
+                                {record.status === 'SUBMITTED' && (
+                                  <>
+                                    <button type="button" onClick={() => void acceptVgm(record)} className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
+                                      Aceptada por naviera
+                                    </button>
+                                    <button type="button" onClick={() => setVgmAction({ kind: 'reject', record })} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30">
+                                      Rechazada
+                                    </button>
+                                  </>
+                                )}
+                                {sent && (
+                                  <button type="button" onClick={() => setVgmAction({ kind: 'supersede', record })} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                                    Corregir
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
 
@@ -1209,105 +1227,7 @@ export function BookingReadinessPanel({
         </OperationDialogContent>
       </Dialog>
 
-      <Dialog
-        open={Boolean(vgmContainer)}
-        onOpenChange={(open) => {
-          if (!open) setVgmContainer(null)
-        }}
-      >
-        <OperationDialogContent icon={Scale} tone="sky" eyebrow="Readiness · VGM">
-          <DialogHeader>
-            <DialogTitle>Registrar VGM</DialogTitle>
-            <DialogDescription>
-              {containerLabel(vgmContainer || undefined)}. Se creará una versión
-              auditable en estado DRAFT.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
-              <span className={fieldLabelClass}>Masa bruta verificada</span>
-              <input
-                type="number"
-                min="0.001"
-                step="0.001"
-                value={vgmForm.grossMass}
-                onChange={(event) =>
-                  setVgmForm((current) => ({
-                    ...current,
-                    grossMass: event.target.value,
-                  }))
-                }
-                className={fieldClass}
-              />
-            </label>
-            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
-              <span className={fieldLabelClass}>Unidad</span>
-              <select
-                value={vgmForm.unit}
-                onChange={(event) =>
-                  setVgmForm((current) => ({
-                    ...current,
-                    unit: event.target.value as 'KG' | 'LB',
-                  }))
-                }
-                className={fieldClass}
-              >
-                <option value="KG">KG</option>
-                <option value="LB">LB</option>
-              </select>
-            </label>
-            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
-              <span className={fieldLabelClass}>Método</span>
-              <select
-                value={vgmForm.method}
-                onChange={(event) =>
-                  setVgmForm((current) => ({
-                    ...current,
-                    method: event.target.value,
-                  }))
-                }
-                className={fieldClass}
-              >
-                <option value="METHOD_1">Método 1</option>
-                <option value="METHOD_2">Método 2</option>
-                <option value="CARRIER_PROVIDED">Provista por carrier</option>
-                <option value="OTHER">Otro</option>
-              </select>
-            </label>
-            <label className="flex min-w-0 flex-col gap-1.5 text-sm">
-              <span className={fieldLabelClass}>Fecha de pesaje</span>
-              <input
-                type="datetime-local"
-                value={vgmForm.weighedAt}
-                onChange={(event) =>
-                  setVgmForm((current) => ({
-                    ...current,
-                    weighedAt: event.target.value,
-                  }))
-                }
-                className={fieldClass}
-              />
-            </label>
-          </div>
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setVgmContainer(null)}
-              className={operationSecondaryButtonClass}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => void saveVgmDraft()}
-              disabled={saving}
-              className={operationPrimaryButtonClass}
-            >
-              {saving ? 'Guardando...' : 'Guardar borrador'}
-            </button>
-          </DialogFooter>
-        </OperationDialogContent>
-      </Dialog>
+
     </div>
   )
 }
