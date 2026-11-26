@@ -222,6 +222,13 @@ La migración `20261126150000_demo_quotation_catalogs_and_miami_rates.sql`
 instala los datos de referencia de Demo y agrega tarifas ficticias faltantes
 para Atlas cuando su dataset está preparado. Conserva las tarifas preexistentes.
 
+Para mostrar Facturación, usa el cliente ficticio **Atlas Forwarding Demo**.
+Su oficina asignada es San Pedro Sula. Abre Facturación → Nuevo documento
+y elige Proforma o Factura. Las oficinas de San Pedro Sula y Tegucigalpa
+tienen un rango de factura ficticio cada una. Al crear otro cliente, elige
+su oficina de facturación para que el formulario pueda recuperar el emisor.
+Los PDF llevan la marca de ambiente Demo y carecen de validez fiscal.
+
 Entrega solamente:
 
 - la URL del deployment demo;

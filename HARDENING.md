@@ -17165,6 +17165,14 @@ Agregar una entrada por fix:
 - Validación: TypeScript, `check:finance-ui`, lint:ci sin regresiones y suite completa 704/704. Pruebas nuevas sobre la página real de Nueva cotización: Ventas ve la opción, el diálogo abre con el nombre buscado y el cliente creado queda seleccionado con su contacto; Contabilidad no ve la opción. Chrome headless con selector y diálogo reales sobre datos simulados: opción con el texto buscado, Enter sin resultados abre el alta con nombre precargado, el cliente creado queda seleccionado y se muestra el aviso, sin excepciones JavaScript.
 - Pendiente: UAT autenticada (alta real y RLS de `clientes`). `createClienteRecord` sigue localizando el cliente recién creado por vendedor y nombre (comportamiento previo); con dos clientes homónimos del mismo vendedor creados casi al mismo tiempo podría tomar el más reciente. Hash de commit: `8696a21`.
 
+## DEMO-BILLING-01 · Facturación ficticia de Atlas (26/11/2026)
+
+- Estado: configuración aplicada en Demo y facturación manual probada con sesión Admin. Oficinas ficticias SPS y TGU, cada una con un rango de Factura Demo. Atlas quedó asignado a SPS. Se preservaron la factura previa de tipo proforma y las 11 tarifas existentes.
+- SQL: `supabase/migrations/20261126170000_demo_billing_fixtures.sql`. Guarda de proyecto y dataset Atlas, campos vacíos de las oficinas y rangos excluyentes de Demo. Conserva documentos, correlativos consumidos y rangos preexistentes.
+- Regresión: `supabase/tests/demo_billing_fixtures.sql` incluida en `scripts/validate-demo-sql.mjs`. Ensayo remoto con rollback aprobó proforma sin consumo de CAI, emisión, cálculo con 15% de ISV, saldo por cobrar e idempotencia. TypeScript, sintaxis del runner y diff aprobados.
+- UAT: Proforma DEMO-PRO-202611-001 y Factura 901-001-01-00000001, HNL 172.50 cada una. Factura aprobada, con saldo por cobrar HNL 172.50 confirmado en la sesión del navegador. PDF de ambos documentos descargados y verificados con marca de Demo y sin validez. La cuenta de prueba quedó deshabilitada.
+- Operación: `docs/demo-runbook.md` indica cómo abrir el flujo con Atlas. Alcance de la prueba en pantalla: proforma y factura manual de SPS. No se probaron pagos, notas fiscales ni facturación desde una cotización en esta entrega. El commit que incluye el registro contiene la migración aplicada.
+
 ## DEMO-CATALOG-01 · Catálogos de cotización y tarifas Miami (26/11/2026)
 
 - Estado: aplicado y verificado con sesión Admin en Demo. Se preservaron las 13 cotizaciones y las tarifas previas.
