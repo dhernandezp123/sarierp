@@ -15352,3 +15352,12 @@ Archivos: src/components/marketing/{ConnectedOperationHero,ForwardersLanding,Pro
 La portada muestra los importes de la captura real. El tour sigue a la portada; el ejemplo diferencia el margen cotizado del margen final tras un costo adicional ficticio de USD 250.00. La navegación por fragmento selecciona la etapa o vista correspondiente. En móvil, Solicitar demo está visible e Ingresar está en el menú.
 
 Validaciones: npx tsc --noEmit, ESLint sobre marketing, 704/704 pruebas, check:finance-ui y build/postbuild OCR aprobados. Chrome a 320, 390 y 1440 px: sin desbordamiento horizontal, captura visible desde y=618, 557 y 284 px respectivamente, enlaces de etapa y menú verificados. Formulario con tres campos requeridos; validación, error, reintento y éxito probados con transporte local simulado. Contrastes calculados para los pares principales: blanco/azul #0038BD 9.13:1; ámbar #FFB44B/azul noche #09172B 10.16:1. Vista previa local, sin envío de leads reales.
+
+### 25/11/2026 - QA-SQL-TZ-01 - Prueba de constancias RRHH dependiente de la hora
+
+- Estado: corregido y validado localmente; pendiente CI del PR.
+- Causa: `hr_prepare_document_upload` rechaza fechas de firma posteriores a la fecha de Honduras (`now() at time zone 'America/Tegucigalpa'`), pero `supabase/tests/hr_certificates_and_documents.sql` enviaba `current_date` con la sesión en UTC. Entre las 18:00 y las 24:00 de Tegucigalpa, en UTC ya es el día siguiente: la firma quedaba "en el futuro" y el job `database` fallaba ("Archivo o fecha de firma inválidos"). Ocurrió en Quality de main `be739ae` (run 45747868426) y en el PR #12 (run 45748530176).
+- Cambio: la prueba fija `set local time zone 'America/Tegucigalpa'` al iniciar la transacción, el mismo criterio que el runner ya aplica a las suites fiscales. Sin cambios en la función, las migraciones ni el código de la app.
+- Archivo: `supabase/tests/hr_certificates_and_documents.sql`.
+- Validación: se reprodujo en la ventana horaria afectada (UTC 26/11, Honduras 25/11) sobre una base local de Supabase, con las migraciones pendientes y la prueba dentro de una transacción revertida. La versión original falla con el mismo error que CI y la corregida pasa completa. Se verificó que la base quedó sin residuos.
+- Riesgos/pendiente: otras suites HR usan `current_date`, pero sus funciones no comparan contra la fecha de Honduras; no se modificaron. Commit: ver historial de la rama `fix/hr-documents-test-timezone`.

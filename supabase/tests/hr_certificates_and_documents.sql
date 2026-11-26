@@ -1,5 +1,8 @@
 \set ON_ERROR_STOP on
 begin;
+-- La firma se valida contra la fecha de Honduras; current_date debe usar la misma zona
+-- para que la prueba no falle entre las 18:00 y las 24:00 de Tegucigalpa (UTC ya es otro dia).
+set local time zone 'America/Tegucigalpa';
 create function pg_temp.ok(value boolean,message text) returns void language plpgsql as $$
 begin if not coalesce(value,false) then raise exception 'ASSERTION FAILED: %',message;end if;end $$;
 create function pg_temp.denied(command text) returns void language plpgsql as $$
