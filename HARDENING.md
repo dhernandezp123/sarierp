@@ -15342,3 +15342,13 @@ Agregar una entrada por fix:
 - Archivos: `src/components/ui/ClienteCombobox.tsx`, `src/components/clientes/NewClientDialog.tsx`, `src/components/quotations/QuotationClientProductSection.tsx`, `src/app/(protected)/quotations/new/page.tsx`, `src/app/(protected)/quotations/[id]/edit/page.tsx`, `tests/quotation-inline-client.test.mjs`, `tests/miami-insurance-create.test.mjs` (mock del diálogo).
 - Validación: TypeScript, `check:finance-ui`, lint:ci sin regresiones y suite completa 704/704. Pruebas nuevas sobre la página real de Nueva cotización: Ventas ve la opción, el diálogo abre con el nombre buscado y el cliente creado queda seleccionado con su contacto; Contabilidad no ve la opción. Chrome headless con selector y diálogo reales sobre datos simulados: opción con el texto buscado, Enter sin resultados abre el alta con nombre precargado, el cliente creado queda seleccionado y se muestra el aviso, sin excepciones JavaScript.
 - Pendiente: UAT autenticada (alta real y RLS de `clientes`). `createClienteRecord` sigue localizando el cliente recién creado por vendedor y nombre (comportamiento previo); con dos clientes homónimos del mismo vendedor creados casi al mismo tiempo podría tomar el más reciente. Hash de commit: `8696a21`.
+
+## UX-LANDING-MARGEN-01 · Portada comercial y solicitud de demo (25/11/2026)
+
+Estado: implementado y verificado localmente en feat/landing-commercial, base 1819a34. Publicación y medición de conversión pendientes. Sin commit de entrega todavía.
+
+Archivos: src/components/marketing/{ConnectedOperationHero,ForwardersLanding,ProductShowcase,OperationJourney,MarginStory,LandingHeader,LandingContact,DemoConversionPanel}.tsx, landing-content.ts y useLandingTab.ts en el mismo directorio. Recortes del expediente ficticio en public/product/resumen-cotizacion-{demo,movil}.webp. SQL: ninguno.
+
+La portada muestra los importes de la captura real. El tour sigue a la portada; el ejemplo diferencia el margen cotizado del margen final tras un costo adicional ficticio de USD 250.00. La navegación por fragmento selecciona la etapa o vista correspondiente. En móvil, Solicitar demo está visible e Ingresar está en el menú.
+
+Validaciones: npx tsc --noEmit, ESLint sobre marketing, 704/704 pruebas, check:finance-ui y build/postbuild OCR aprobados. Chrome a 320, 390 y 1440 px: sin desbordamiento horizontal, captura visible desde y=618, 557 y 284 px respectivamente, enlaces de etapa y menú verificados. Formulario con tres campos requeridos; validación, error, reintento y éxito probados con transporte local simulado. Contrastes calculados para los pares principales: blanco/azul #0038BD 9.13:1; ámbar #FFB44B/azul noche #09172B 10.16:1. Vista previa local, sin envío de leads reales.

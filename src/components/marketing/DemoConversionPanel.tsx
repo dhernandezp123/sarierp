@@ -16,7 +16,7 @@ export function DemoConversionPanel() {
         <div className="relative">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#FFB44B]">Una demo con contexto</p>
           <h2 className="mt-4 font-display text-3xl font-semibold leading-tight tracking-[-0.035em] text-white sm:text-4xl">
-            Ve Forwarders.app con tu operación, no con un discurso genérico.
+            Ve cómo funcionaría con tus embarques.
           </h2>
           <p className="mt-5 max-w-xl text-base leading-7 text-slate-300">Cuéntanos quién eres. Revisemos cómo cotizas, coordinas tus embarques y controlas tus costos.</p>
           <ol className="mt-8 space-y-5">

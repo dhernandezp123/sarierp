@@ -2,9 +2,11 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs'
 import { JourneyStagePanel } from './JourneyStagePanel'
+import { useLandingTab } from './useLandingTab'
 import { operationJourney } from './landing-content'
 
 export function OperationJourney() {
+  const [stageId, selectStage] = useLandingTab('etapa', operationJourney)
   return (
     <section id="workflow" className="overflow-hidden bg-white px-5 py-16 sm:px-8 lg:py-24">
       <div className="mx-auto max-w-7xl">
@@ -12,15 +14,16 @@ export function OperationJourney() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0038BD]">Un embarque, ocho decisiones conectadas</p>
             <h2 className="mt-4 max-w-xl font-display text-3xl font-semibold leading-tight tracking-[-0.035em] text-[#07111F] sm:text-4xl lg:text-5xl">
-              El expediente avanza. El contexto no vuelve a empezar.
+              De la tarifa del agente al cierre del embarque.
             </h2>
           </div>
           <p className="max-w-2xl text-base leading-8 text-slate-600 lg:pb-1">
-            Selecciona cualquier etapa para ver qué decide cada equipo, qué información viaja conectada y qué resultado recibe el siguiente paso.
+            Ventas entrega la cotización aprobada a Operaciones. Finanzas recibe ese mismo expediente para cotejar los cargos registrados con lo vendido.
           </p>
         </div>
 
-        <Tabs defaultValue={operationJourney[0].id} className="mt-10 gap-5">
+        {operationJourney.map(stage => <span className="block" key={stage.id} id={`etapa-${stage.id}`} aria-hidden="true" />)}
+        <Tabs value={stageId} onValueChange={selectStage} className="mt-10 gap-5">
           <TabsList aria-label="Seleccionar etapa de la operación" className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-[#F7F9FC] p-2 sm:grid-cols-4 xl:grid-cols-8">
             {operationJourney.map((stage) => (
               <TabsTrigger

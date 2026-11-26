@@ -102,7 +102,6 @@ export function LandingContact() {
   return (
     <div className="min-w-0 rounded-3xl border border-white/10 bg-white/[0.055] p-5 shadow-2xl shadow-black/15 sm:p-7">
       <div className="mb-6 border-b border-white/10 pb-5">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#FFB44B]">Agenda en 1 minuto</p>
         <h3 className="mt-2 text-xl font-semibold tracking-tight text-white">Solicita una demo con tu flujo.</h3>
         <p className="mt-2 text-xs leading-5 text-slate-400">Sesión personalizada 1 a 1 para evaluar tus modalidades y operación.</p>
       </div>
@@ -223,7 +222,7 @@ export function LandingContact() {
           className="inline-flex h-12 items-center justify-center rounded-xl bg-[#0757E8] px-6 text-sm font-bold text-white shadow-lg shadow-[#0038BD]/25 transition hover:bg-[#0A4BC4] disabled:cursor-wait disabled:opacity-70"
         >
           {submitting ? <LoaderCircle className="mr-2 animate-spin motion-reduce:animate-none" size={17} aria-hidden="true" /> : null}
-          {submitting ? 'Enviando solicitud…' : 'Agendar demo con mi flujo'}
+          {submitting ? 'Enviando solicitud…' : 'Solicitar demo'}
           {!submitting ? <ArrowRight className="ml-2" size={16} aria-hidden="true" /> : null}
         </button>
 

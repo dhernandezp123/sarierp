@@ -5,12 +5,13 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, Minus, Plus, X, ZoomIn } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/src/components/ui/dialog'
+import { useLandingTab } from './useLandingTab'
 import { productViews } from './landing-content'
 
 const screenshotImageProps = { width: 1920, height: 1080, quality: 90, sizes: '1920px' } as const
 
 export function ProductShowcase() {
-  const [activeId, setActiveId] = useState(productViews[0].id)
+  const [activeId, setActiveId] = useLandingTab('vista', productViews)
   const [zoomed, setZoomed] = useState(false)
   const [loadImages, setLoadImages] = useState(false)
   const showcaseRef = useRef<HTMLDivElement>(null)
@@ -34,12 +35,12 @@ export function ProductShowcase() {
   return (
     <Dialog onOpenChange={() => setZoomed(false)}>
       <Tabs value={activeId} onValueChange={setActiveId} className="gap-0">
+        {productViews.map(item => <span key={item.id} id={`vista-${item.id}`} aria-hidden="true" />)}
         <div ref={showcaseRef} className="grid overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_30px_80px_-45px_rgba(15,41,94,0.45)] lg:grid-cols-[18rem_minmax(0,1fr)]">
           <div className="min-w-0 bg-[#09172B] p-4 text-white sm:p-6 lg:p-7">
             <div className="px-1">
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#FFB44B]">Product tour</p>
-              <p className="mt-3 text-lg font-semibold tracking-tight">Sigue el trabajo dentro del producto.</p>
-              <p className="mt-2 text-xs leading-5 text-slate-400">Selecciona un módulo para explorar las seis vistas reales.</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#FFB44B]">Vistas del ERP</p>
+              <p className="mt-3 text-lg font-semibold tracking-tight">Elige un módulo.</p>
             </div>
             <div className="mt-5">
               <TabsList aria-label="Vistas del producto" className="grid h-auto w-full grid-cols-2 gap-2 border-0 bg-transparent p-0 sm:grid-cols-3 lg:flex lg:flex-col">

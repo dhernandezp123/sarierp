@@ -3,13 +3,11 @@ import { PLATFORM_ATTRIBUTION, PLATFORM_MARKETING_NAME, PLATFORM_ORIGIN } from '
 import { ClientPortalSection } from './ClientPortalSection'
 import { ConnectedOperationHero } from './ConnectedOperationHero'
 import { DemoConversionPanel } from './DemoConversionPanel'
-import { FragmentationProblem } from './FragmentationProblem'
 import { ImplementationPath } from './ImplementationPath'
 import { LandingHeader } from './LandingHeader'
 import { MarginStory } from './MarginStory'
 import { MarketingFaq } from './MarketingFaq'
 import { OperationJourney } from './OperationJourney'
-import { ProductEvidence } from './ProductEvidence'
 import { ProductShowcase } from './ProductShowcase'
 import { TeamRoleSwitcher } from './TeamRoleSwitcher'
 import { landingNavigation } from './landing-content'
@@ -22,25 +20,24 @@ export function ForwardersLanding() {
       <LandingHeader />
       <main>
         <ConnectedOperationHero />
-        <ProductEvidence />
-        <FragmentationProblem />
-        <OperationJourney />
+        <span id="beneficios" aria-hidden="true" />
 
         <section id="producto" className="bg-[#F7F9FC] px-5 py-16 sm:px-8 lg:py-20">
           <span id="funcionalidades" className="block" aria-hidden="true" />
           <div className="mx-auto max-w-7xl">
             <div className="mb-9 grid gap-5 lg:grid-cols-[0.78fr_1.22fr] lg:items-end lg:gap-20">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0038BD]">El software, sin mockups</p>
-                <h2 className="mt-3 font-display text-3xl font-semibold tracking-[-0.035em] sm:text-4xl lg:text-5xl">Sigue la operación dentro del producto.</h2>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#0038BD]">Capturas del ambiente demo</p>
+                <h2 className="mt-3 font-display text-3xl font-semibold tracking-[-0.035em] sm:text-4xl lg:text-5xl">Explora el expediente por módulo.</h2>
               </div>
-              <p className="max-w-2xl text-base leading-7 text-slate-600">Recorre seis vistas reales del ambiente Demo. Avanza desde la cotización hasta el control financiero y la visibilidad permitida al cliente.</p>
+              <p className="max-w-2xl text-base leading-7 text-slate-600">Abre una cotización, revisa el booking o consulta los costos desde la vista de Finanzas.</p>
             </div>
             <ProductShowcase />
           </div>
         </section>
 
         <MarginStory />
+        <OperationJourney />
         <TeamRoleSwitcher />
         <ClientPortalSection />
         <ImplementationPath />

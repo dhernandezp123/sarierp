@@ -294,6 +294,6 @@ export const landingQuestions = [
   {
     question: '¿Cómo se estructura el precio de la plataforma?',
     answer:
-      'El licenciamiento se adapta al volumen y alcance operativo de tu agencia. Agenda una demo para evaluar tu flujo y entregarte una propuesta comercial transparente con costos de implementación y suscripción.',
+      'El licenciamiento se adapta al volumen y alcance operativo de tu agencia. Solicita una demo para evaluar tu flujo y entregarte una propuesta comercial transparente con costos de implementación y suscripción.',
   },
 ]
