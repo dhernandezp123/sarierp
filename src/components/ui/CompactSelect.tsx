@@ -92,8 +92,8 @@ export function CompactSelect({ value, onValueChange, options, id, disabled = fa
       <ul id={listId} ref={list} role="listbox" aria-label={label} className="min-h-0 overflow-y-auto overscroll-contain">
         {filtered.map((option, index) => <li id={`${listId}-${index}`} key={option.value} role="option" aria-selected={option.value === value} aria-disabled={option.disabled || undefined}
           onPointerMove={() => { if (!option.disabled) setHighlighted(index) }} onPointerDown={event => event.preventDefault()} onClick={event => {event.preventDefault();event.stopPropagation();choose(option)}}
-          className={cn('flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm', option.disabled ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700 dark:text-slate-200', index === active && !option.disabled && 'bg-orange-50 dark:bg-orange-950/40')}>
-          <span className="min-w-0 flex-1"><span className="block break-words">{option.label}</span>{option.description && <span className="mt-0.5 block break-words text-xs text-slate-500">{option.description}</span>}</span>{option.value === value && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-300" />}
+          className={cn('flex min-h-10 items-center gap-3 rounded-lg px-3 py-2 text-sm', option.disabled ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-700 dark:text-slate-200', index === active && !option.disabled && 'bg-blue-50 dark:bg-blue-950/60')}>
+          <span className="min-w-0 flex-1"><span className="block break-words">{option.label}</span>{option.description && <span className="mt-0.5 block break-words text-xs text-slate-500">{option.description}</span>}</span>{option.value === value && <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />}
         </li>)}
       </ul>
       {!filtered.length && <p role="status" className="px-3 py-4 text-sm text-slate-500">Sin resultados.</p>}
@@ -103,7 +103,7 @@ export function CompactSelect({ value, onValueChange, options, id, disabled = fa
       id={id} type="button" role="combobox" aria-label={label} aria-expanded={expanded} aria-haspopup="listbox"
       aria-controls={expanded ? listId : undefined} aria-activedescendant={expanded && filtered.length ? `${listId}-${active}` : undefined}
       disabled={disabled} onKeyDown={keys} onClick={() => expanded ? close(false) : begin()}
-      className="flex min-h-12 w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-left text-sm text-slate-900 transition hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-900">
+      className="flex min-h-12 w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-left text-sm text-slate-900 transition hover:border-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-900">
       <span title={selected?.label} className="min-w-0 truncate">{selected?.label || placeholder}</span><ChevronDown aria-hidden="true" className={cn('h-4 w-4 shrink-0 text-slate-400 transition-transform', expanded && 'rotate-180')} />
     </button>
     {expanded && (inline ? menu : createPortal(menu, document.body))}

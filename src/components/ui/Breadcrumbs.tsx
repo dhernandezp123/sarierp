@@ -20,7 +20,7 @@ export function Breadcrumbs({ items, automatic=false }: { items: BreadcrumbItem[
           {item.href && i < trail.length - 1 ? (
             <Link
               href={item.href}
-              className="max-w-44 rounded break-words transition hover:text-[#B3282D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 dark:hover:text-rose-300 sm:max-w-none"
+              className="max-w-44 rounded break-words transition hover:text-[#B3282D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 dark:hover:text-rose-300 sm:max-w-none"
             >
               {item.label}
             </Link>
@@ -36,7 +36,7 @@ export function Breadcrumbs({ items, automatic=false }: { items: BreadcrumbItem[
               {item.label}
             </span>
           )}
-        </li>).flatMap((element,index)=>index===0&&trail.length>3?[element,<li key="expand" className="flex items-center gap-1 sm:hidden"><ChevronRight aria-hidden="true" className="h-3 w-3"/><button type="button" aria-label={expanded?'Abreviar ruta':'Mostrar ruta completa'} aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)} className="rounded px-2 py-1 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 dark:hover:bg-slate-800">…</button></li>]:[element])}</ol>
+        </li>).flatMap((element,index)=>index===0&&trail.length>3?[element,<li key="expand" className="flex items-center gap-1 sm:hidden"><ChevronRight aria-hidden="true" className="h-3 w-3"/><button type="button" aria-label={expanded?'Abreviar ruta':'Mostrar ruta completa'} aria-expanded={expanded} onClick={()=>setExpanded(v=>!v)} className="rounded px-2 py-1 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 dark:hover:bg-slate-800">…</button></li>]:[element])}</ol>
     </nav>
   )
 }

@@ -368,7 +368,7 @@ export default function HistoricoPage() {
               Cotizaciones
             </p>
 
-            <p className="mt-2 text-3xl font-bold text-slate-950">
+            <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">
               {filteredQuotations.length}
             </p>
           </div>
@@ -378,7 +378,7 @@ export default function HistoricoPage() {
               Ganadas
             </p>
 
-            <p className="mt-2 text-3xl font-bold text-slate-950">
+            <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">
               {wonQuotationsCount}
             </p>
           </div>
@@ -388,7 +388,7 @@ export default function HistoricoPage() {
               Pendientes
             </p>
 
-            <p className="mt-2 text-3xl font-bold text-slate-950">
+            <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">
               {pendingQuotationsCount}
             </p>
           </div>
@@ -398,7 +398,7 @@ export default function HistoricoPage() {
               Enviadas al Cliente
             </p>
 
-            <p className="mt-2 text-3xl font-bold text-slate-950">
+            <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">
               {sentQuotationsCount}
             </p>
           </div>

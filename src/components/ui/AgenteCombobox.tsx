@@ -258,10 +258,10 @@ export function AgenteCombobox({
         className={cn(
           className,
           'flex items-center justify-between text-left transition-colors',
-          'hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900/10',
+          'hover:border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:border-blue-400 dark:focus:ring-blue-950',
           'dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600',
           disabled && 'cursor-not-allowed opacity-50',
-          open && 'border-slate-400 ring-2 ring-slate-900/10 dark:border-slate-500'
+          open && 'border-blue-500 ring-2 ring-blue-100 dark:border-blue-400 dark:ring-blue-950'
         )}
       >
         <span className={cn('truncate', !selected && 'text-slate-400 dark:text-slate-500')}>

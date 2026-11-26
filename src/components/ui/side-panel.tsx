@@ -94,7 +94,7 @@ export function SidePanel({ open, onClose, title, description, eyebrow, actions,
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {actions}
-              <button type="button" onClick={requestClose} aria-label="Cerrar panel" className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+              <button type="button" onClick={requestClose} aria-label="Cerrar panel" className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
                 <XIcon aria-hidden="true" className="h-4 w-4" />
               </button>
             </div>
