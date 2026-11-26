@@ -36,7 +36,7 @@ export default function GlobalSearch() {
           <Search className="h-4 w-4 shrink-0" /><span className="hidden truncate md:block">Buscar cotizaciones, bookings, clientes...</span>
         </button>
       </DialogTrigger>
-      <DialogContent key={context} className="sm:max-w-2xl">
+      <DialogContent key={context} motion="none" className="sm:max-w-2xl">
         <DialogTitle>Buscar en el ERP</DialogTitle>
         <DialogDescription>Busca texto en números, referencias, nombres, rutas y notas de cotizaciones. Solo registros accesibles para tu usuario.</DialogDescription>
         <label htmlFor="global-search" className="sr-only">Texto a buscar</label>

@@ -77,10 +77,10 @@ export function SidePanel({ open, onClose, title, description, eyebrow, actions,
   return <>
     <DialogPrimitive.Root open={open} onOpenChange={(next) => { if (!next) requestClose() }}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-slate-950/30 backdrop-blur-md duration-200 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none dark:bg-black/50" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-slate-950/30 backdrop-blur-md duration-300 ease-drawer data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none dark:bg-black/50" />
         <DialogPrimitive.Content
           className={cn(
-            'fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-white/40 bg-[#F5F7FA] shadow-2xl outline-none duration-300 data-[state=open]:animate-in data-[state=open]:slide-in-from-right data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right motion-reduce:animate-none dark:border-slate-700 dark:bg-[#060b16] sm:rounded-l-3xl',
+            'fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-white/40 bg-[#F5F7FA] shadow-2xl outline-none duration-300 ease-drawer data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:slide-in-from-right data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right motion-reduce:animate-none dark:border-slate-700 dark:bg-[#060b16] sm:rounded-l-3xl',
             widths[size]
           )}
         >

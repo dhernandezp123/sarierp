@@ -56,13 +56,13 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
   if (!profile || !hasPathAccess) return null
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F5F7FA] text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
+    <div className="flex h-dvh overflow-hidden bg-[#F5F7FA] text-slate-900 transition-colors dark:bg-[#020817] dark:text-slate-100">
       <div className="hidden shrink-0 lg:block">
         <Sidebar role={profile.rol} />
       </div>
 
       <Dialog open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <DialogContent showCloseButton={false} aria-describedby={undefined}
+        <DialogContent motion="drawer-left" showCloseButton={false} aria-describedby={undefined}
           onCloseAutoFocus={(event) => { event.preventDefault(); document.getElementById('mobile-nav-trigger')?.focus() }}
           className="left-0 top-0 flex h-dvh w-64 max-w-[calc(100%-2rem)] translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none bg-[#07111F] p-0 text-white sm:max-w-64">
           <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-2">
@@ -83,8 +83,8 @@ export function ProtectedShell({ children }: { children: React.ReactNode }) {
 
         {!isPlatformAdmin && <OnboardingTutorial />}
 
-        <footer className="border-t border-slate-200 bg-[#F5F7FA] px-6 py-3 text-center text-xs text-slate-500">
-          <p className="font-semibold text-slate-700">{PLATFORM_NAME}</p>
+        <footer className="border-t border-slate-200 bg-[#F5F7FA] px-6 py-3 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-[#020817] dark:text-slate-400">
+          <p className="font-semibold text-slate-700 dark:text-slate-200">{PLATFORM_NAME}</p>
           <p>{PLATFORM_ATTRIBUTION}</p>
         </footer>
       </div>

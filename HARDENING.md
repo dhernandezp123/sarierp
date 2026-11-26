@@ -15361,3 +15361,20 @@ Validaciones: npx tsc --noEmit, ESLint sobre marketing, 704/704 pruebas, check:f
 - Archivo: `supabase/tests/hr_certificates_and_documents.sql`.
 - Validación: se reprodujo en la ventana horaria afectada (UTC 26/11, Honduras 25/11) sobre una base local de Supabase, con las migraciones pendientes y la prueba dentro de una transacción revertida. La versión original falla con el mismo error que CI y la corregida pasa completa. Se verificó que la base quedó sin residuos.
 - Riesgos/pendiente: otras suites HR usan `current_date`, pero sus funciones no comparan contra la fecha de Honduras; no se modificaron. Commit: ver historial de la rama `fix/hr-documents-test-timezone`.
+
+### 25/11/2026 - UX-DESIGN-01 - Motion base, feedback de botones y correcciones de shell
+
+- Estado: implementado y validado localmente; revisión visual en navegador, publicación y UAT pendientes.
+- Origen: análisis de diseño con las skills de Emil Kowalski instaladas en `.claude/skills/` (fuente y commit en `.claude/skills/EMIL-SKILLS-SOURCE.md`, licencia MIT). `animate-expo` y `write-swift` omitidas por no aplicar.
+- Hallazgos corregidos:
+  - La descripción de metadata con tenant mostraba "logÃ­stica" (texto mal codificado): corregido a "logística".
+  - El footer del shell protegido no tenía modo oscuro: se agregaron variantes oscuras.
+  - El shell usaba `h-screen`: cambiado a `h-dvh` (altura real en móvil).
+  - Las animaciones de los diálogos no funcionaban: `tw-animate-css` estaba instalado pero no importado, y las clases usaban `data-open:`/`data-closed:`, mientras Radix marca `data-state`. Ahora `DialogContent` acepta `motion`: `modal` (por defecto: fade + zoom 95, 200 ms al entrar, 150 ms al salir), `drawer-left` (menú móvil: desliza desde la izquierda con `ease-drawer`, 300/200 ms) y `none` (búsqueda global, de uso frecuente, abre al instante).
+  - No había curvas de animación propias: se agregaron tokens `--ease-out`, `--ease-in-out` y `--ease-drawer` en `@theme`, que reemplazan las curvas por defecto de Tailwind (`ease-out` e `ease-in-out` no se usaban en `src`).
+  - Los botones no daban feedback al presionar: se agregó `pressFeedbackClass` (escala 0.97 en `:active`, 150 ms `ease-out`, sin efecto en deshabilitados) a `primaryButtonClass`, `secondaryButtonClass` y los botones de `ConfirmDialog`.
+  - Movimiento reducido: los diálogos conservan el fade y pierden escala y desplazamiento.
+  - `side-panel.tsx` (UX-OPS-02, ya en main) tenía clases `data-[state=*]:animate-*` que tampoco funcionaban por la falta de la importación; ahora se activan: desliza desde la derecha en 300 ms con `ease-drawer` y sale en 200 ms; el overlay usa la misma duración. Ya tenía `motion-reduce:animate-none`.
+- Archivos: `src/app/globals.css`, `src/app/layout.tsx`, `src/components/ui/dialog.tsx` (combinado con `overlayClassName` de main), `src/components/ui/ConfirmDialog.tsx`, `src/lib/ui-classes.ts`, `src/components/layout/protected-shell.tsx`, `src/components/layout/GlobalSearch.tsx`, `src/components/ui/side-panel.tsx`, `.claude/skills/**`. Sin SQL ni dependencias nuevas.
+- Validación: `npx tsc --noEmit` aprobado; `npm run check:finance-ui` aprobado; eslint de los archivos modificados sin diagnósticos; `npm test` 704/704 sobre origin/main `be739ae`; `git diff --check` limpio. Se compiló `globals.css` con `@tailwindcss/postcss` y se confirmó en el CSS generado: `data-[state=open]:animate-in`, `zoom-in-95`, `slide-in-from-left`, `ease-drawer`, `ease-out` con la curva nueva, `active:not-disabled:scale-[0.97]`, `h-dvh` y la regla de movimiento reducido.
+- Riesgos/pendiente: falta probar en navegador la apertura/cierre de diálogos (Radix espera a que termine la animación de salida antes de desmontar) y el cajón móvil en un teléfono real. `compactCardClass` (solo Histórico) sigue sin modo oscuro, porque el contenido de la página tampoco lo tiene; queda para la unificación del sistema de diseño. Commit: ver historial de la rama `feat/design-motion-base`.
