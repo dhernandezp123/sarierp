@@ -17175,3 +17175,5 @@ Agregar una entrada por fix:
 - Riesgos/pendientes: UAT autenticada de los nuevos flujos de compras, RRHH, Pricing, Operaciones y Ventas. Storage sigue bloqueado en Demo por diseno; no se copian clientes, documentos, credenciales ni datos de Production. No se habilita correo ni Outlook. Hash: pendiente del commit de merge.
 
 - Revision adicional: la nueva ruta HR de main carga archivos mediante service_role; Demo la bloquea antes de autenticar o leer archivos para preservar el limite de Storage. Variante de paridad y regresion tests/demo-hr-documents.test.mjs agregadas.
+
+- Ampliacion revisada: marcas Demo en hr-certificate-pdf.tsx, hr-payslip-pdf.tsx y hr-benefit-pdf.tsx. Tres pruebas renderizadas verifican el aviso en cada pagina, incluido comprobante multipagina. Environment parity usa el manifiesto revisado de Demo para evitar depender de huellas historicas de main; sigue siendo comparacion de solo lectura. CI 45739076502 database aprobado (instalacion limpia y SQL/RLS).

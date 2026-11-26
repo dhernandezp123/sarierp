@@ -1,3 +1,4 @@
+import { DemoPdfWatermark } from './DemoPdfWatermark'
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 import { formatDate, formatDateTime } from '@/src/lib/format'
 import type { HrCertificate } from '@/src/lib/hr-documents'
@@ -12,7 +13,7 @@ export function HrCertificatePdf({ certificate: c }: { certificate: HrCertificat
     if (c.kind === 'Suspensión') fields.push(['Fin original', formatDate(String(act.original_end_date))], ['Reintegro', formatDate(String(act.return_date))], ['Motivo', String(act.reason || '—')])
     else fields.push(['Anticipo', act.is_advance ? 'Sí' : 'No'], ['Fraccionamiento', act.is_fractioned ? 'Sí' : 'No'])
   }
-  return <Document><Page size="LETTER" style={styles.page}>
+  return <Document><Page size="LETTER" style={styles.page}><DemoPdfWatermark />
     <Text style={{ fontSize: 16 }}>{company.legal_name}</Text>
     {company.rtn && <Text style={styles.muted}>RTN: {company.rtn}</Text>}{company.address && <Text style={styles.muted}>{company.address}</Text>}
     <Text style={styles.title}>Constancia de {c.kind.toLocaleLowerCase('es')}</Text>

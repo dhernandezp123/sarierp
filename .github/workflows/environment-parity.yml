@@ -27,4 +27,6 @@ jobs:
         with:
           node-version: '22'
       - name: Compare shared code and migration files
-        run: node scripts/check-environment-parity.mjs origin/main trial
+        # Reviewed sandbox variants belong to Demo; main's manifest can predate
+        # the shared features being synchronized without a Production-only edit.
+        run: node trial/scripts/check-environment-parity.mjs origin/main trial

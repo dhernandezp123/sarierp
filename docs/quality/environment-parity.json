@@ -135,6 +135,21 @@
       "reason": "Block service-role HR document uploads in sandbox, preserving private Storage boundary",
       "source_sha256": "953c91d43066445820cd76c844f330b7ca014fb4d9c0a26352b716026b3d933f",
       "trial_sha256": "d1cd65bd1ad5d9c96de55a4ef8a00d9351ddccf0015c4ca75093eca5947c81d8"
+    },
+    "src/components/pdf/hr-certificate-pdf.tsx": {
+      "reason": "Sandbox watermark on every HR PDF page",
+      "source_sha256": "09d6d05eedfa73c0c5759abd373060e2fb85146a1ff43a47557cbca974af53bc",
+      "trial_sha256": "42720536c161ae9d1c6d5cc0aeb2d1931d3c76a9b2053d5a358f6a9084404db9"
+    },
+    "src/components/pdf/hr-payslip-pdf.tsx": {
+      "reason": "Sandbox watermark on every HR PDF page",
+      "source_sha256": "07198392e009a8917dc21ea932c21184851abe7adeb1b05bd685db6f94ac29a9",
+      "trial_sha256": "5766cf756d8cedc79d9084bdea9cb9fffa20b91409d3a2511efeabe5a9b56468"
+    },
+    "src/components/pdf/hr-benefit-pdf.tsx": {
+      "reason": "Sandbox watermark on every HR PDF page",
+      "source_sha256": "f6506ac09adf0af331c8b6c5e9556a580d0ac8627811d9c5d844490a7a84baa8",
+      "trial_sha256": "a308af942e1a0bda10a7cbc4f8457bf5d95f084fb4e87ba1aae58edd86e864d2"
     }
   },
   "trial_only_source": [
