@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/src/components/ui/dialog'
+import { pressFeedbackClass } from '@/src/lib/ui-classes'
 
 export function ConfirmDialog({
   open,
@@ -39,14 +40,14 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+            className={`inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 ${pressFeedbackClass} hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800`}
           >
             {cancelLabel}
           </button>
           <button
             type="button"
             onClick={() => { onConfirm(); onOpenChange(false) }}
-            className={`inline-flex h-9 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white transition ${
+            className={`inline-flex h-9 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white ${pressFeedbackClass} ${
               danger
                 ? 'bg-red-600 hover:bg-red-700'
                 : 'bg-slate-950 hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100'

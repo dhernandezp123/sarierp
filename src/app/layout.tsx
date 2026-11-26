@@ -34,7 +34,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     applicationName: brandName,
     description: tenant
-      ? `Plataforma logÃ­stica de ${brandName}, operada con Forwarders ERP.`
+      ? `Plataforma logística de ${brandName}, operada con Forwarders ERP.`
       : 'ERP para freight forwarders: cotizaciones, pricing, operaciones, documentos y margenes en una sola plataforma.',
     icons: {
       icon: [

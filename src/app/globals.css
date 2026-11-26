@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "../components/ui/finance-fields.css";
 
 /* Rich breadcrumbs supplied by a page replace the shell fallback, including
@@ -54,6 +55,23 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  /* Motion tokens. Override Tailwind's weak defaults so `ease-out` and
+     `ease-in-out` produce intentional curves; `ease-drawer` is for panels
+     sliding in from an edge. Never use ease-in for UI. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Reduced motion: dialogs and drawers keep the fade but drop scale and slide.
+   Unlayered on purpose so it beats the tw-animate utilities. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="dialog-content"] {
+    --tw-enter-scale: 1;
+    --tw-exit-scale: 1;
+    --tw-enter-translate-x: 0;
+    --tw-exit-translate-x: 0;
+  }
 }
 
 :root {
