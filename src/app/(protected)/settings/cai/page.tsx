@@ -358,7 +358,7 @@ export default function CaiSettingsPage() {
             </div>
             <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700">
               <div
-                className={`h-2 rounded-full transition-all ${pct >= 90 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                className={`h-2 rounded-full ${pct >= 90 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                 style={{ width: `${pct}%` }}
               />
             </div>

@@ -1325,7 +1325,7 @@ function SalesWorkQueuePanel({
       ) : (
         <div className="mt-3 grid gap-3 lg:grid-cols-3">
           {nextActions.map((item, index) => {
-            const className = `group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
+            const className = `group rounded-xl border p-4 text-left ${
               item.severity === 'critical'
                 ? 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20'
                 : item.severity === 'warning'
@@ -1338,7 +1338,7 @@ function SalesWorkQueuePanel({
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     #{index + 1} · {salesWorkCategoryLabel(item.category)}
                   </span>
-                  <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5" />
+                  <ArrowRight className="h-4 w-4 text-slate-400 transition-colors duration-150 group-hover:text-slate-700 dark:group-hover:text-slate-200" />
                 </div>
                 <p className="mt-2 font-bold text-slate-900 dark:text-white">{item.entityLabel}</p>
                 <p className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100">{item.title}</p>

@@ -1084,7 +1084,7 @@ function OperationsControlTower({
                 key={item.id}
                 onClick={() => onPreview(item)}
                 aria-label={`Vista rápida de ${item.bookingLabel}: ${item.reason}`}
-                className={`group rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+                className={`group rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 ${
                   item.level === 'immediate'
                     ? 'border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-950/20'
                     : item.level === 'pending'
@@ -1096,7 +1096,7 @@ function OperationsControlTower({
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     #{index + 1} · {queueLevelLabel(item.level)}
                   </span>
-                  <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5" />
+                  <ArrowRight className="h-4 w-4 text-slate-400 transition-colors duration-150 group-hover:text-slate-700 dark:group-hover:text-slate-200" />
                 </div>
                 <p className="mt-2 font-bold text-slate-900 dark:text-white">
                   {item.bookingLabel}

@@ -474,7 +474,7 @@ export default function HistoricoPage() {
                   <TableRow
                     key={quote.id}
                     onClick={() => openQuotation(quote.id)}
-                    className="cursor-pointer transition-all duration-150 hover:bg-slate-100/80 dark:hover:bg-slate-800/40"
+                    className="cursor-pointer transition-colors duration-150 hover:bg-slate-100/80 dark:hover:bg-slate-800/40"
                   >
 
                     <TableCell className="px-4 py-3 whitespace-nowrap">

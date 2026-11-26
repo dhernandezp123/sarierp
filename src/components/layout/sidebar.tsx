@@ -317,7 +317,7 @@ export default function Sidebar({ role }: { role?: string }) {
       <div className="relative shrink-0 border-b border-white/10 px-4 pb-3 pt-3">
         <Link
           href={isPlatformAdmin ? (canManagePlatform(profile) ? '/platform' : '/support') : '/dashboard'}
-          className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-lg shadow-slate-950/10 backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.09]"
+          className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] p-3 shadow-lg shadow-slate-950/10 backdrop-blur-xl transition-colors duration-150 hover:border-white/20 hover:bg-white/[0.09]"
         >
           <span className="min-w-0">
             {isPlatformAdmin ? (
@@ -371,7 +371,7 @@ export default function Sidebar({ role }: { role?: string }) {
         {!isPlatformAdmin && <Link
           href="/profile"
           aria-current={pathname === '/profile' ? 'page' : undefined}
-          className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] p-3 shadow-sm shadow-slate-950/10 transition-all duration-300 hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.085] hover:shadow-lg hover:shadow-[#0038BD]/10"
+          className="group flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.055] p-3 shadow-sm shadow-slate-950/10 transition-colors duration-150 hover:border-white/20 hover:bg-white/[0.085]"
         >
           {profile?.avatar_url ? (
             <Image

@@ -157,11 +157,8 @@ export default function PoliticasPage() {
               <section
                 key={s.id}
                 id={s.id}
-                className="group relative overflow-hidden scroll-mt-[80px] rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-lg hover:shadow-[#0038BD]/5"
+                className="overflow-hidden scroll-mt-[80px] rounded-2xl border border-slate-200 bg-white shadow-sm"
               >
-                {/* Gradient bar — animada on hover */}
-                <div className="absolute inset-x-0 top-0 h-[3px] origin-left scale-x-0 bg-gradient-to-r from-[#0038BD] to-[#EF8E01] transition-transform duration-500 group-hover:scale-x-100" />
-
                 <div className="p-6 sm:p-8">
                   {/* Número + título */}
                   <div className="flex items-start gap-3">

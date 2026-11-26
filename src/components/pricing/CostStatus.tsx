@@ -48,7 +48,7 @@ export function CostProgress({ done, total, label, tone }: { done: number; total
   return <div>
     <div className="flex items-center justify-between gap-3 text-xs font-medium text-slate-600 dark:text-slate-300"><span>{label}</span><span className="tabular-nums">{done} de {total}</span></div>
     <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={total} aria-valuenow={done} aria-valuetext={`${done} de ${total} (${percent}%)`}>
-      <div className={cn('h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none', bar)} style={{ width: `${percent}%` }} />
+      <div className={cn('h-full rounded-full transition-[width] duration-200 motion-reduce:transition-none', bar)} style={{ width: `${percent}%` }} />
     </div>
   </div>
 }

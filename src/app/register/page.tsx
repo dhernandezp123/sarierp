@@ -191,7 +191,7 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="h-14 w-full rounded-xl bg-yellow-400 font-semibold text-slate-950 shadow-lg shadow-yellow-500/20 transition-all duration-200 hover:scale-[1.01] hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-14 w-full rounded-xl bg-yellow-400 font-semibold text-slate-950 shadow-lg shadow-yellow-500/20 transition-colors duration-150 hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? 'Enviando solicitud...' : 'Enviar solicitud'}
               </button>
