@@ -15410,3 +15410,13 @@ Validaciones: npx tsc --noEmit, ESLint sobre marketing, 704/704 pruebas, check:f
 - Archivos: `src/lib/ui-classes.ts`, `src/components/ui/{button,badge,card,table,tabs,ConfirmDialog,CompactSelect,Breadcrumbs,MultiSelect,side-panel,toggle-switch,AgenteCombobox,CarrierCombobox,CotizacionCombobox}.tsx`, `src/app/(protected)/historico/page.tsx`. Sin SQL ni dependencias.
 - Validación: `npx tsc --noEmit` aprobado; `npm run lint:ci` 211 diagnósticos existentes, 0 regresiones; `npm run check:finance-ui` aprobado; `npm test` 704/704; `git diff --check` limpio. CSS compilado con `@tailwindcss/postcss`: se generan `focus-visible:ring-blue-500`, `dark:focus-visible:ring-blue-400`, `dark:data-[state=active]:bg-white`, `data-[state=selected]:bg-blue-50` y `dark:focus-visible:ring-offset-slate-950`.
 - Riesgos/pendiente: revisión visual autenticada. Cambian algunas medidas: la X de cierre de los diálogos pasa de 28 a 32 px; las tarjetas `Card` de Pricing y Cotización pasan de 16 a 20 px de padding; las celdas de `Table` sin padding propio en Histórico pasan de 8 a 16 px horizontales. Pendiente fase 2: migrar las páginas (447 `<button>` y 101 `<table>` escritos a mano), módulo por módulo. Commit: ver historial de la rama `feat/design-cleanup`.
+
+### 25/11/2026 - UX-DESIGN-02 / UX-DESIGN-03 - Production verificada
+
+- Publicado: PR #14, integrado por fast-forward de `main` (`df9e85e..a838110`), con los hashes originales: UX-DESIGN-02 `abb3d58` y UX-DESIGN-03 `a838110`.
+- Despliegue: Vercel Production exitoso para el SHA exacto `a838110` (deployment 8076357276).
+- CI: Quality del PR (run 45753585462) y de main `a838110` (run 45754100301) exitosos, con `application` y `database` en verde.
+- Smoke anónimo forwarders.app: `/` y `/login` 200.
+- Environment parity (run 45754100262): sigue fallando, como antes. Pasa de 26 a 49 archivos: se suman los 23 de UX-DESIGN-02/03 como diferencias sin revisar frente a Trial. Trial no se actualizó por decisión del usuario.
+- Limpieza: rama `feat/design-cleanup` y worktree `.ua/intermediate/design-cleanup-20261125` borrados tras la publicación.
+- Pendiente: revisión visual autenticada en Production. Hover del sidebar y de las tarjetas de siguiente acción, foco con teclado (azul) en botones, pestañas, combobox y breadcrumbs, modo oscuro en botones, Histórico y pestañas, y las medidas nuevas (X de los diálogos, padding de `Card`, celdas de Histórico). Quitar `framer-motion` queda propuesto, sin aprobar. Fase 2: migrar las páginas a los componentes compartidos, módulo por módulo. Sin SQL ni migraciones.
