@@ -4,11 +4,15 @@ import { spawnSync } from 'node:child_process'
 if (!process.env.CI) throw new Error('This runner only targets the disposable CI stack.')
 const files = ['demo_sync_access_guards.sql', 'invoice_drafts_and_master_review.sql', 'demo_production_parity.sql', 'finance_reporting_and_banks.sql', 'cai_office_numbering.sql', 'cai_office_backfill.sql', 'cai_master_lifecycle.sql', 'tgu_confirmed_fiscal_prefix.sql', 'tgu_restore_registered_cai_prefix.sql', 'accounting_catalog_structure.sql', 'service_accounting_assignments.sql', 'supplier_type_catalog.sql', 'supplier_default_expense_account.sql', 'purchase_optional_supplier_identity.sql']
 files.push('client_rate_access_and_audit.sql')
+files.push('demo_quotation_catalogs.sql')
 for (const file of files) {
   let sql = fs.readFileSync(new URL('../supabase/tests/' + file, import.meta.url), 'utf8')
   sql = sql.replaceAll('-- APPLY_CONFIRMED_OFFICE_BINDING_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028150000_cai_office_binding.sql', import.meta.url), 'utf8'))
   sql = sql.replaceAll('-- APPLY_LATEST_TGU_CONFIRMATION_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261028180000_tgu_confirmed_fiscal_prefix.sql', import.meta.url), 'utf8'))
   sql = sql.replaceAll('-- APPLY_RESTORED_TGU_PREFIX_MIGRATION', () => fs.readFileSync(new URL('../supabase/migrations/20261029170000_restore_tgu_registered_cai_prefix.sql', import.meta.url), 'utf8'))
+  sql = sql.replaceAll('-- APPLY_DEMO_QUOTATION_CATALOG_MIGRATION', () =>
+    fs.readFileSync(new URL('../supabase/migrations/20261126150000_demo_quotation_catalogs_and_miami_rates.sql', import.meta.url), 'utf8')
+  )
   sql = sql.replace('begin;', `begin;
 ${file==='demo_production_parity.sql'?'':"set local time zone 'America/Tegucigalpa';"}
 update public.platform_environment set dataset_version='atlas-forwarding-demo-v1',dataset_seeded_at=now(),dataset_client_id='10000000-0000-4000-8000-000000000001' where singleton;`)

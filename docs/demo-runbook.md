@@ -213,6 +213,15 @@ No es necesario hacer redeploy para repetir reset/seed o rotar un slot. Sí debe
 
 ## 5. Entrega y siguiente demostración
 
+Antes de entregar credenciales, prueba **Nueva cotización** con el cliente ficticio
+Atlas. FCL debe ofrecer 20GP y 40HC, FTL debe ofrecer Dry Van 53 ft, y la ruta
+debe sugerir países y lugares adecuados a la modalidad. Verifica que las
+cotizaciones Miami marítimo y aéreo se puedan guardar para SPS y TGU.
+
+La migración `20261126150000_demo_quotation_catalogs_and_miami_rates.sql`
+instala los datos de referencia de Demo y agrega tarifas ficticias faltantes
+para Atlas cuando su dataset está preparado. Conserva las tarifas preexistentes.
+
 Entrega solamente:
 
 - la URL del deployment demo;

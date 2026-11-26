@@ -17165,6 +17165,14 @@ Agregar una entrada por fix:
 - Validación: TypeScript, `check:finance-ui`, lint:ci sin regresiones y suite completa 704/704. Pruebas nuevas sobre la página real de Nueva cotización: Ventas ve la opción, el diálogo abre con el nombre buscado y el cliente creado queda seleccionado con su contacto; Contabilidad no ve la opción. Chrome headless con selector y diálogo reales sobre datos simulados: opción con el texto buscado, Enter sin resultados abre el alta con nombre precargado, el cliente creado queda seleccionado y se muestra el aviso, sin excepciones JavaScript.
 - Pendiente: UAT autenticada (alta real y RLS de `clientes`). `createClienteRecord` sigue localizando el cliente recién creado por vendedor y nombre (comportamiento previo); con dos clientes homónimos del mismo vendedor creados casi al mismo tiempo podría tomar el más reciente. Hash de commit: `8696a21`.
 
+## DEMO-CATALOG-01 · Catálogos de cotización y tarifas Miami (26/11/2026)
+
+- Estado: aplicado y verificado con sesión Admin en Demo. Se preservaron las 13 cotizaciones y las tarifas previas.
+- SQL: `supabase/migrations/20261126150000_demo_quotation_catalogs_and_miami_rates.sql`. Agrega 13 tipos de contenedor/unidad, 10 países, 22 puertos y lugares y ocho tarifas ficticias faltantes de Atlas. La guarda exige el proyecto Demo y comprueba la identidad de Atlas antes de agregar sus tarifas.
+- Regresión: `supabase/tests/demo_quotation_catalogs.sql`, incluida en `scripts/validate-demo-sql.mjs`. Ensayo remoto con rollback comprobó idempotencia, conservación de tarifas, alcance de Atlas y acceso activo/vencido. TypeScript, sintaxis del runner y diff aprobados.
+- UAT: Chrome, login y términos con acceso temporal propio. FCL con 20GP y 40HC y FTL con Dry Van 53 ft guardados y enviados a Pricing, con sugerencias de ruta. Miami marítimo y aéreo guardados para SPS y TGU, con Pricing aprobado. PDF de Miami marítimo SPS descargado. Casos ficticios DEMO-Q-2611-0010-PI a DEMO-Q-2611-0015-PI. Cuenta de prueba deshabilitada.
+- Operación: `docs/demo-runbook.md` incorpora la comprobación previa a entregar accesos. Las tarifas añadidas son ficticias y exclusivas de Atlas en Demo. El commit que incorpora esta entrada registra el SQL aplicado.
+
 ## DEMO-SYNC-20261125 - Sincronizacion puntual main hacia Demo (25/11/2026)
 
 - Estado: integracion preparada contra main 1819a343351b61067340ade7eda5d05ddcbe97a7; publicacion y SQL remoto pendientes al crear este commit. Sin automatizacion de sincronizacion.
